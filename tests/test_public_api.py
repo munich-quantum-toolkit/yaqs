@@ -26,8 +26,14 @@ EXPECTED_PUBLIC_API = frozenset({
     "Simulator",
     "State",
     "StrongSimParams",
+    "TransformerComb",
     "WeakSimParams",
     "__version__",
+    "characterizer",
+    "construct_process_tensor",
+    "create_surrogate",
+    "generate_data",
+    "simulator",
     "version_info",
 })
 

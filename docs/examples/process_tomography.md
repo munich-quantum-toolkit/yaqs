@@ -25,8 +25,7 @@ The cells below use **noise-free** unitary evolution for a quick demonstration; 
 {class}`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` in production runs to characterise
 open-system channels.
 Given a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and a set of state preparations and measurement projections, YAQS runs the simulation in parallel,
-applies these interventions at each time point, and assembles the result into a {class}`ProcessTensor`
-object that can be used to:
+applies these interventions at each time point, and reconstructs a **process tensor comb** that can be used to:
 
 - compute the **Quantum Mutual Information** of the process (how much information the environment retains),
 - **predict the final state** for arbitrary held-out input and intervention sequences without re-running the simulator.
@@ -36,9 +35,9 @@ object that can be used to:
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, Hamiltonian
 
-# Two-site Ising chain: H = -J Σ ZZ - g Σ X
 num_sites = 2
-operator = Hamiltonian.ising(num_sites, J=1.0, g=0.5)
+hamiltonian = Hamiltonian.ising(num_sites, J=1.0, g=0.5)
+operator = hamiltonian.mpo
 
 sim_params = AnalogSimParams(
     dt=0.1,
@@ -49,61 +48,43 @@ sim_params = AnalogSimParams(
 
 ## 2. Single-step tomography
 
-Run tomography for a single evolution segment of length `t = 0.1`.
-A few dozen trajectories per preparation sequence are enough for this demonstration.
-
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.tomography.tomography import run
+from mqt.yaqs import construct_process_tensor
 
-pt_single = run(
+comb_single = construct_process_tensor(
     operator,
     sim_params,
     timesteps=[0.1],
-    num_trajectories=40,
+    num_trajectories=100,
+    return_type="dense",
 )
+
+print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
 ```
 
-The tensor has shape `(4, N)` where `4` encodes the vectorised output density matrix
-and `N = 16` is the number of input probes in the Pauli/Liouville frame for this two-qubit chain.
-
-## 3. Quantum Mutual Information
-
-The **Quantum Mutual Information** quantifies how much information is preserved by the channel between the input state ensemble and the final output:
+## 3. Multi-step tomography
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-qmi = pt_single.quantum_mutual_information(base=2)
-```
+from mqt.yaqs import construct_process_tensor
 
-For unitary channels, this value approaches the entropy of the average input state (~0.907 bits for the standard 4-state Pauli frame).
-A value near 0 indicates a fully depolarising channel that destroys all quantum and classical information.
-
-## 4. Multi-step tomography
-
-For two successive evolution segments, we can reconstruct the temporal correlation map across an intermediate time step:
-
-```{code-cell} ipython3
----
-tags: [remove-output]
----
-pt_two = run(
+comb_two = construct_process_tensor(
     operator,
     sim_params,
-    timesteps=[0.1, 0.1],       # two segments of dt each
-    num_trajectories=40,
+    timesteps=[0.1, 0.1],
+    num_trajectories=100,
+    return_type="dense",
 )
+
+print(f"Comb Choi matrix shape: {comb_two.to_matrix().shape}")
 ```
 
-## 5. Predicting held-out states
-
-Once the process tensor is available, you can predict the output for _any_ initial density matrix
-and any _arbitrary local interventions_ applied between time steps without additional simulation runs.
-The prediction uses a dual-frame polynomial sum — an efficient linear-algebraic operation:
+## 4. Predicting held-out states
 
 ```{code-cell} ipython3
 ---
@@ -111,11 +92,9 @@ tags: [remove-output]
 ---
 import numpy as np
 
-# Choose an arbitrary mixed input state
 rng = np.random.default_rng(0)
 
 def _random_rho(rng: np.random.Generator) -> np.ndarray:
-    """Sample a random 2×2 density matrix."""
     psi = rng.standard_normal(2) + 1j * rng.standard_normal(2)
     psi /= np.linalg.norm(psi)
     rho = np.outer(psi, psi.conj())
@@ -130,13 +109,10 @@ def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
     x_mat = np.array([[0, 1], [1, 0]], dtype=complex)
     return x_mat @ rho @ x_mat.conj().T
 
-rho_pred = pt_two.predict_final_state(
-    interventions=[initial_prep, x_gate_intervention]
-)
+rho_pred = comb_two.predict([initial_prep, x_gate_intervention])
+print("Predicted output density matrix:")
+print(np.round(rho_pred, 4))
 ```
-
-The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
-time step given the initial state and the local unitary intervention applied to the system between the two segments.
 
 ## Related topics
 

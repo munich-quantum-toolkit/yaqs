@@ -1234,3 +1234,79 @@ def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
 
     with pytest.raises(ValueError, match=r"Invalid token\(s\) in spec"):
         mpo.from_pauli_sum(terms=[(1.0, "X0 Y2 garbage")], length=4, n_sweeps=0)
+
+
+def _crandn(shape: tuple[int, ...]) -> NDArray[np.complex128]:
+    rng = np.random.default_rng(0)
+    return np.asarray(
+        (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)) / np.sqrt(2),
+        dtype=np.complex128,
+    )
+
+
+def test_apply_local_operator_hilbert_vs_vectorized() -> None:
+    """apply_local_operator with 2x2 Hilbert op matches 4x4 vectorized op."""
+    T = _crandn((2, 2, 1, 1))
+
+    mpo_h = MPO()
+    mpo_h.tensors = [T.copy()]
+    mpo_h.length = 1
+    mpo_h.physical_dimension = 2
+
+    mpo_v = MPO()
+    mpo_v.tensors = [T.copy()]
+    mpo_v.length = 1
+    mpo_v.physical_dimension = 2
+
+    op2 = np.array([[0.7, 0.3], [0.1, -0.4]], dtype=np.complex128)
+    op_vec = np.kron(op2, np.eye(2, dtype=np.complex128))
+
+    mpo_h.apply_local_operator(site=0, op=op2, left_action=True)
+    mpo_v.apply_local_operator(site=0, op=op_vec, left_action=True)
+
+    np.testing.assert_allclose(mpo_h.tensors[0], mpo_v.tensors[0], atol=1e-12)
+
+
+def test_partial_trace_site_matches_dense_trace() -> None:
+    """partial_trace_site produces the operator trace on a 1-site MPO."""
+    A = _crandn((2, 2))
+    T = A.reshape(2, 2, 1, 1)
+
+    mpo = MPO()
+    mpo.tensors = [T.copy()]
+    mpo.length = 1
+    mpo.physical_dimension = 2
+
+    dense_before = mpo.to_matrix()
+    mpo.partial_trace_site(0)
+    dense_after = mpo.to_matrix()
+
+    assert dense_before.shape == (2, 2)
+    assert dense_after.shape == (1, 1)
+    np.testing.assert_allclose(dense_after[0, 0], np.trace(A), atol=1e-12)
+
+
+def test_partial_trace_sites_two_site_operator() -> None:
+    """partial_trace_sites keeps the correct subsystem for a 2-site operator."""
+    A = _crandn((2, 2))
+    B = _crandn((2, 2))
+
+    mpo = MPO.from_local_ops([A, B])
+    dense_full = mpo.to_matrix()
+
+    traced = mpo.partial_trace_sites([0])
+    dense_traced = traced.to_matrix()
+
+    np.testing.assert_allclose(dense_full, np.kron(A, B), atol=1e-12)
+    np.testing.assert_allclose(dense_traced, np.trace(B) * A, atol=1e-12)
+
+
+def test_from_local_ops_tensor_product() -> None:
+    """from_local_ops builds an MPO whose matrix is the tensor product of the locals."""
+    A = _crandn((4, 4))
+    B = _crandn((4, 4))
+
+    mpo = MPO.from_local_ops([A, B])
+    dense = mpo.to_matrix()
+
+    np.testing.assert_allclose(dense, np.kron(A, B), atol=1e-12)

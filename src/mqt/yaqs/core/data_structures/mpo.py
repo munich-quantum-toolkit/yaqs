@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 from typing import TYPE_CHECKING, ClassVar, cast, overload
@@ -99,6 +100,114 @@ class MPO:
     tensors: list[ComplexTensor]
     length: int
     physical_dimension: int
+
+    def apply_local_operator(
+        self,
+        site: int,
+        op: np.ndarray,
+        *,
+        left_action: bool = True,
+    ) -> None:
+        """Apply a local operator to the physical legs of one MPO site in place."""
+        T = self.tensors[site]
+        d_out, d_in, Dl, Dr = T.shape
+        d2 = d_out * d_in
+
+        if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
+            T_view = T.reshape(d_out, d_in, Dl * Dr)
+            if left_action:
+                T_new = np.einsum("ac,cbk->abk", op, T_view)
+            else:
+                T_new = np.einsum("abk,cb->ack", T_view, op)
+            self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+            return
+
+        if op.ndim == 2:
+            if op.shape != (d2, d2):
+                msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op
+        elif op.ndim == 4:
+            if op.shape != (d_out, d_in, d_out, d_in):
+                msg = f"op tensor shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op.reshape(d2, d2)
+        else:
+            msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
+            raise ValueError(msg)
+
+        T_phys = T.reshape(d2, Dl * Dr)
+        if left_action:
+            T_new = op_mat @ T_phys
+        else:
+            T_new = T_phys.T @ op_mat
+            T_new = T_new.T
+        self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+
+    def partial_trace_site(self, site: int) -> None:
+        """Partial trace over the physical legs of a single MPO site in place."""
+        T = self.tensors[site]
+        d_out, d_in, Dl, Dr = T.shape
+        if d_out != d_in:
+            msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
+            raise ValueError(msg)
+
+        traced = np.zeros((1, 1, Dl, Dr), dtype=T.dtype)
+        for s in range(d_out):
+            traced[0, 0] += T[s, s]
+        self.tensors[site] = traced
+
+    def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
+        """Return a new MPO with all sites not in ``keep_sites`` traced out."""
+        if not keep_sites:
+            msg = "keep_sites must be non-empty."
+            raise ValueError(msg)
+
+        keep = sorted(set(keep_sites))
+        if keep[0] < 0 or keep[-1] >= self.length:
+            msg = f"keep_sites indices {keep} out of range for MPO length {self.length}."
+            raise ValueError(msg)
+
+        new = MPO()
+        new.length = self.length
+        new.physical_dimension = self.physical_dimension
+        new.tensors = [t.copy() for t in self.tensors]
+
+        for i in range(new.length):
+            if i not in keep:
+                new.partial_trace_site(i)
+
+        return new
+
+    @classmethod
+    def from_local_ops(cls, local_ops: list[np.ndarray]) -> MPO:
+        """Build an MPO that is the tensor product of given local operators."""
+        if not local_ops:
+            msg = "local_ops must contain at least one operator."
+            raise ValueError(msg)
+
+        tensors: list[np.ndarray] = []
+        d: int | None = None
+        for op in local_ops:
+            if op.ndim != 2 or op.shape[0] != op.shape[1]:
+                msg = f"Each local op must be a square matrix; got shape {op.shape}."
+                raise ValueError(msg)
+            local_d = int(op.shape[0])
+            if d is None:
+                d = local_d
+            elif d != local_d:
+                msg = f"Inconsistent local dimensions in local_ops: {d} vs {local_d}."
+                raise ValueError(msg)
+
+            T = op.reshape(local_d, local_d, 1, 1).astype(np.complex128)
+            tensors.append(T)
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = len(tensors)
+        mpo.physical_dimension = d if d is not None else 0
+        assert mpo.check_if_valid_mpo(), "Constructed MPO is invalid."
+        return mpo
 
     @classmethod
     def pauli(
@@ -1225,7 +1334,8 @@ class MPO:
             a = self.tensors[k]  # (d, d, Dl, Dm)
             b = self.tensors[k + 1]  # (d, d, Dm, Dr)
 
-            phys_dim = a.shape[0]
+            phys_dim_left = a.shape[0]
+            phys_dim_right = b.shape[0]
             bond_dim_left = a.shape[2]
             bond_dim_right = b.shape[3]
 
@@ -1235,8 +1345,8 @@ class MPO:
             # Group left legs (l,s,t) and right legs (u,v,w)
             theta = np.transpose(theta, (4, 0, 1, 2, 3, 5))
             matrix = theta.reshape(
-                bond_dim_left * phys_dim * phys_dim,
-                phys_dim * phys_dim * bond_dim_right,
+                bond_dim_left * phys_dim_left * phys_dim_left,
+                phys_dim_right * phys_dim_right * bond_dim_right,
             )
 
             u, s, vh = linalg.svd(matrix, full_matrices=False)
@@ -1246,11 +1356,11 @@ class MPO:
             s = s[:keep]
             vh = vh[:keep, :]
 
-            # Left tensor: (bond_dim_left, d, d, keep) -> (d, d, bond_dim_left, keep)
-            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(1, 2, 0, 3)
+            # Left tensor: (bond_dim_left, dL, dL, keep) -> (dL, dL, bond_dim_left, keep)
+            left = u.reshape(bond_dim_left, phys_dim_left, phys_dim_left, keep).transpose(1, 2, 0, 3)
 
-            # Right tensor: (keep, d, d, bond_dim_right) -> (d, d, keep, bond_dim_right)
-            svh = (s[:, None] * vh).reshape(keep, phys_dim, phys_dim, bond_dim_right)
+            # Right tensor: (keep, dR, dR, bond_dim_right) -> (dR, dR, keep, bond_dim_right)
+            svh = (s[:, None] * vh).reshape(keep, phys_dim_right, phys_dim_right, bond_dim_right)
             right = svh.transpose(1, 2, 0, 3)
 
             self.tensors[k] = left
@@ -1773,6 +1883,72 @@ class MPO:
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
 
         return mpo
+
+    def __add__(self, other: MPO) -> MPO:
+        """Add two MPOs via direct bond stacking.
+
+        Args:
+            other: The other MPO to add. Must have identical length.
+
+        Returns:
+            A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
+        """
+        if self.length != other.length:
+            msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
+            raise ValueError(msg)
+
+        new_mpo = MPO()
+        new_mpo.length = self.length
+        new_mpo.physical_dimension = copy.copy(self.physical_dimension)
+        new_tensors: list[np.ndarray] = []
+
+        length = self.length
+        for i in range(length):
+            a = self.tensors[i]
+            b = other.tensors[i]
+
+            p_out, p_in, la, ra = a.shape
+            _, _, lb, rb = b.shape
+
+            if i == 0:
+                new_t = np.concatenate([a, b], axis=3)
+            elif i == length - 1:
+                new_t = np.concatenate([a, b], axis=2)
+            else:
+                new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+                new_t[:, :, :la, :ra] = a
+                new_t[:, :, la:, ra:] = b
+
+            new_tensors.append(new_t)
+
+        new_mpo.tensors = new_tensors
+        return new_mpo
+
+    @classmethod
+    def mpo_sum(cls, mpos: list[MPO]) -> MPO:
+        """Efficient sequential addition of a batch of MPOs.
+
+        Args:
+            mpos: List of MPOs to sum.
+
+        Returns:
+            A new MPO directly representing the sum.
+        """
+        if not mpos:
+            msg = "mpo_sum requires at least one MPO."
+            raise ValueError(msg)
+
+        if len(mpos) == 1:
+            m = cls()
+            m.length = mpos[0].length
+            m.physical_dimension = copy.copy(mpos[0].physical_dimension)
+            m.tensors = [t.copy() for t in mpos[0].tensors]
+            return m
+
+        res = mpos[0]
+        for other in mpos[1:]:
+            res += other
+        return res
 
     def check_if_valid_mpo(self) -> bool:
         """MPO validity check.
