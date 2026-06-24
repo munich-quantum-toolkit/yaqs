@@ -204,7 +204,8 @@ def test_local_vector_for_preset_random_builds_mixed_state() -> None:
     rng = np.random.default_rng(0)
     vec = local_vector_for_preset(0, "random", 2, length=2, basis_string=None, rng=rng)
     assert np.isclose(vec[0] + vec[1], 1.0)
-    assert vec[0] >= 0.0 and vec[1] >= 0.0
+    assert vec[0] >= 0.0
+    assert vec[1] >= 0.0
 
 
 def test_local_vector_for_preset_basis_requires_string() -> None:
