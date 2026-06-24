@@ -128,7 +128,7 @@ cpus = available_cpus()
 default_workers = Simulator().max_workers
 ```
 
-{func}`~mqt.yaqs.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
+{func}`~mqt.yaqs.core.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
 
 1. `YAQS_MAX_WORKERS` (explicit user override; positive integer).
 2. `PYTEST_XDIST_WORKER` (returns `1` to avoid nested parallelism in tests).
@@ -176,7 +176,7 @@ The bar is suppressed regardless of `parallel`, so the same flag also silences s
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.parallel_utils import get_parallel_context
+from mqt.yaqs.core.parallel_utils import get_parallel_context
 
 for choice in ("auto", "fork", "spawn"):
     try:

@@ -28,6 +28,7 @@ from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
     create_surrogate,
     generate_data,
 )
+from mqt.yaqs.core.parallel_utils import ExecutionConfig
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -139,6 +140,30 @@ def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
     assert s0.rho_0.shape == (8,)
     assert s0.E_features.shape == (1, 32)
     assert s0.rho_seq.shape == (1, 8)
+
+
+def test_simulate_sequences_parallel_smoke() -> None:
+    """Parallel MCWF sequence simulation completes for a tiny batch."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+    psi_pairs_list = [[(psi0, psi0)], [(psi0, psi0)]]
+    initial_psis = [psi0.copy(), psi0.copy()]
+    cfg = ExecutionConfig(parallel=True, max_workers=2, show_progress=False)
+
+    finals = _simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.0, 0.0],
+        psi_pairs_list=psi_pairs_list,
+        initial_psis=initial_psis,
+        static_ctx=static_ctx,
+        record_step_states=False,
+        _execution=cfg,
+    )
+    assert isinstance(finals, np.ndarray)
+    assert finals.shape == (2, 8)
 
 
 def test_generate_data_and_create_surrogate_tiny_smoke() -> None:

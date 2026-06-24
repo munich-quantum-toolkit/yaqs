@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
 
-    from .parallel_utils import MPContext
+    from .core.parallel_utils import MPContext
 
 __all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceCheckResult", "EquivalenceChecker", "Representation"]
 

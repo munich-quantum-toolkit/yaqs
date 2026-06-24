@@ -20,7 +20,7 @@ from . import _lazy_exports as _lazy_exports_module
 from . import characterizer, simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
-from .characterizer import construct_process_tensor
+from .characterizer import Characterizer, construct_process_tensor
 from .characterization.memory.combs.tomography.combs import DenseComb, MPOComb
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mpo import MPO
@@ -55,6 +55,7 @@ __all__ = [
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
+    "Characterizer",
     "EquivalenceChecker",
     "Hamiltonian",
     "NoiseModel",

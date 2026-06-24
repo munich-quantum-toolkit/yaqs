@@ -15,6 +15,8 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from mqt.yaqs.core.parallel_utils import merge_execution_config
+
 from ..combs.core.encoding import _flatten_choi4_to_real32
 from ..combs.surrogates.utils import _sample_random_intervention_parts
 from .v_matrix import build_weighted_v_matrix, center_past_rows, prepare_branch_weights
@@ -904,6 +906,7 @@ def probe_process(
     return_v: bool = False,
     intervention_mode: str = "unitary_break_mp",
     unitary_ensemble: str = "haar",
+    parallel: bool | None = None,
 ) -> dict[str, Any]:
     """Probe a process via split-cut probes and return V-matrix diagnostics.
 
@@ -911,6 +914,14 @@ def probe_process(
         Dictionary with Pauli responses, entropy/spectrum metrics, and the probe set.
         Optionally includes raw ``V`` matrices when ``return_v=True``.
     """
+    if parallel is not None:
+        from ..reference.exact import ExactProbeProcess
+
+        if isinstance(process, ExactProbeProcess):
+            process._execution = merge_execution_config(  # noqa: SLF001
+                process._execution,
+                parallel=parallel,
+            )
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()

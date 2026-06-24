@@ -17,7 +17,7 @@ import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
 
-from mqt.yaqs.parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
+from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 
 from .. import linalg
 from ..methods.decompositions import merge_two_site, right_qr, split_two_site

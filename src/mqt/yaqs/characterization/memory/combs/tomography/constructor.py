@@ -16,9 +16,8 @@ Choi index sequences for ``k`` steps.
 
 **Execution model** — Same pattern as :mod:`mqt.yaqs.simulator` and
 :mod:`mqt.yaqs.characterization.memory.combs.surrogates.workflow`: build a picklable payload, optionally
-install it as :data:`~mqt.yaqs.simulator.WORKER_CTX`, then dispatch with
-:func:`~mqt.yaqs.simulator.run_backend_parallel` or run workers serially (optionally via
-``threadpoolctl`` for BLAS restraint).
+install it as :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`, then dispatch with
+:func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs` (parallel or serial).
 
 **Internals** — :func:`run_all_sequences` performs payload construction, aggregation, and
 :func:`mqt.yaqs.characterization.memory.combs.tomography.basis._finalize_sequence_averages`.
@@ -30,18 +29,17 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal
 
 # ---------------------------------------------------------------------------
 # 2) THIRD PARTY
 # ---------------------------------------------------------------------------
 import numpy as np
-from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
-# 3) LOCAL — core / simulator
+# 3) LOCAL — core / execution
 # ---------------------------------------------------------------------------
-from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
+from mqt.yaqs.core.parallel_utils import WORKER_CTX, ExecutionConfig, merge_execution_config, run_indexed_jobs
 
 from ..core.utils import (
     StochasticSolver,
@@ -65,7 +63,7 @@ from .basis import (
 from .data import SequenceData
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Iterator
 
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -74,7 +72,7 @@ if TYPE_CHECKING:
     from .basis import TomographyBasis
     from .combs import DenseComb, MPOComb
 
-_T = TypeVar("_T")
+# Re-export for worker docstrings referencing WORKER_CTX default.
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +103,7 @@ def _sequence_worker(
 
     Args:
         job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
-        payload: Optional worker payload (defaults to :data:`~mqt.yaqs.simulator.WORKER_CTX`).
+        payload: Optional worker payload (defaults to :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`).
 
     Returns:
         Tuple ``(sequence_index, trajectory_index, rho_final, weight)`` where ``rho_final`` is the
@@ -157,24 +155,6 @@ def _sequence_worker(
     return (s_idx, traj_idx, rho_final, float(weight))
 
 
-def _call_backend_serial(backend: Callable[..., _T], *args: object) -> _T:
-    """Call a backend under BLAS thread limits if available.
-
-    Args:
-        backend: Callable to execute.
-        *args: Positional arguments forwarded to ``backend``.
-
-    Returns:
-        The return value of ``backend(*args)``.
-    """
-    try:
-        from threadpoolctl import threadpool_limits  # noqa: PLC0415
-    except ImportError:
-        return backend(*args)
-    with threadpool_limits(limits=1):
-        return backend(*args)
-
-
 # ---------------------------------------------------------------------------
 # 7) ORCHESTRATION — build payload, run all ``16^k`` sequences, aggregate
 # ---------------------------------------------------------------------------
@@ -192,6 +172,7 @@ def run_all_sequences(
     basis_seed: int | None = None,
     solver: StochasticSolver | None = None,
     show_progress: bool = False,
+    _execution: ExecutionConfig | None = None,
 ) -> SequenceData:
     """Run the backend for every one of the ``16^k`` discrete Choi index sequences.
 
@@ -254,29 +235,18 @@ def run_all_sequences(
     aggregated_outputs = [np.zeros((2, 2), dtype=np.complex128) for _ in range(n_seq)]
     aggregated_weights = np.zeros(n_seq, dtype=np.float64)
 
-    if parallel and total_jobs > 1:
-        max_workers = max(1, available_cpus() - 1)
-        results_iterator = run_backend_parallel(
-            worker_fn=_sequence_worker,
-            payload=payload,
-            n_jobs=total_jobs,
-            max_workers=max_workers,
-            show_progress=show_progress,
-            desc=f"Simulating {n_seq} basis sequences (parallel)",
-        )
-        for _, (s_idx, _traj_idx, rho_final, weight) in results_iterator:
-            aggregated_outputs[s_idx] += rho_final * weight
-            aggregated_weights[s_idx] += weight
-    else:
-        disable_tqdm = not show_progress
-        for job_idx in tqdm(
-            range(total_jobs),
-            desc=f"Simulating {n_seq} basis sequences (serial)",
-            disable=disable_tqdm,
-        ):
-            (s_idx, _traj_idx, rho_final, weight) = _call_backend_serial(_sequence_worker, job_idx, payload)
-            aggregated_outputs[s_idx] += rho_final * weight
-            aggregated_weights[s_idx] += weight
+    exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
+    job_results = run_indexed_jobs(
+        _sequence_worker,
+        payload=payload,
+        n_jobs=total_jobs,
+        config=exec_cfg,
+        desc=f"Simulating {n_seq} basis sequences",
+    )
+    for job_idx in range(total_jobs):
+        s_idx, _traj_idx, rho_final, weight = job_results[job_idx]
+        aggregated_outputs[s_idx] += rho_final * weight
+        aggregated_weights[s_idx] += weight
 
     acc: dict[tuple[int, ...], list[Any]] = {}
     for i in range(n_seq):
@@ -312,6 +282,7 @@ def _construct_data(
     basis_seed: int | None = None,
     solver: StochasticSolver | None = None,
     show_progress: bool = False,
+    _execution: ExecutionConfig | None = None,
 ) -> SequenceData:
     """Validate inputs and construct `SequenceData` via exhaustive simulation.
 
@@ -353,6 +324,7 @@ def _construct_data(
         basis_seed=basis_seed,
         solver=stochastic_solver,
         show_progress=show_progress,
+        _execution=_execution,
     )
 
 
@@ -375,6 +347,7 @@ def construct_process_tensor(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
+    _execution: ExecutionConfig | None = None,
 ) -> DenseComb | MPOComb:
     """Construct a process tensor via exhaustive discrete-basis tomography.
 
@@ -398,6 +371,7 @@ def construct_process_tensor(
         num_trajectories=num_trajectories,
         basis=basis,
         basis_seed=basis_seed,
+        _execution=_execution,
     )
 
     if return_type == "dense":

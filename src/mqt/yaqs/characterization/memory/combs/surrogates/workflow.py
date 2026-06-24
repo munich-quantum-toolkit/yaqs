@@ -8,9 +8,9 @@
 :func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for
 :meth:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb.fit`.
 
-**Internals** — Same execution pattern as :mod:`mqt.yaqs.simulator`: :func:`_simulate_sequences` builds a
-process-pool payload (or uses :data:`~mqt.yaqs.simulator.WORKER_CTX`), then dispatches to
-:func:`~mqt.yaqs.simulator.run_backend_parallel` or runs workers serially. Rollout types live in
+**Internals** — Same execution pattern as :mod:`mqt.yaqs.core.parallel_utils`: :func:`_simulate_sequences` builds a
+process-pool payload (or uses :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`), then dispatches via
+:func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`. Rollout types live in
 :mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`; the model is
 :class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb`.
 """
@@ -21,22 +21,19 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 # ---------------------------------------------------------------------------
 # 2) THIRD PARTY
 # ---------------------------------------------------------------------------
 import numpy as np
-from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
-# 3) LOCAL — core / simulator
+# 3) LOCAL — core / execution
 # ---------------------------------------------------------------------------
-from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
+from mqt.yaqs.core.parallel_utils import WORKER_CTX, ExecutionConfig, merge_execution_config, run_indexed_jobs
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from torch.utils.data import TensorDataset
 
     from mqt.yaqs.analog.mcwf import MCWFContext
@@ -60,8 +57,6 @@ from ..core.utils import (
 from .data import SequenceRolloutSample, stack_rollouts
 from .model import TransformerComb
 from .utils import _random_density_matrix, _sample_random_intervention_sequence, build_initial_psi
-
-_T = TypeVar("_T")
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +85,7 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 # ---------------------------------------------------------------------------
 # 5) PARALLEL JOB PAYLOAD
 # ---------------------------------------------------------------------------
-# ``_simulate_sequences`` passes the following dict to ``run_backend_parallel`` (initializer →
+# ``_simulate_sequences`` passes the following dict to ``run_indexed_jobs`` (initializer →
 # ``WORKER_CTX``) or directly to workers in the serial path. Keys must stay stable for pickling.
 #
 #   psi_pairs               list[list[step]] per sequence where step is either
@@ -350,7 +345,7 @@ def _surrogate_final_state_worker(
 
     Args:
         job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
-        job_payload: Per-pool shared context; defaults to :data:`~mqt.yaqs.simulator.WORKER_CTX`.
+        job_payload: Per-pool shared context; defaults to :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`.
 
     Returns:
         ``(sequence_index, trajectory_index, rho_final_site0, cumulative_weight)`` where
@@ -411,7 +406,7 @@ def _surrogate_rollout_worker(
 
     Args:
         job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
-        job_payload: Shared pool context; defaults to :data:`~mqt.yaqs.simulator.WORKER_CTX`.
+        job_payload: Shared pool context; defaults to :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`.
 
     Returns:
         ``(sequence_index, trajectory_index, rho0_packed, choi_features_matrix, rho_seq_packed, weight)`` where
@@ -557,27 +552,6 @@ def _surrogate_rollout_worker(
 
 
 # ---------------------------------------------------------------------------
-# 7) SERIAL BACKEND WRAPPER — same thread cap pattern as :func:`mqt.yaqs.simulator._call_backend`
-# ---------------------------------------------------------------------------
-def _call_worker_serial(worker_fn: Callable[..., _T], *args: object) -> _T:
-    """Run one worker call under BLAS thread limits if available.
-
-    Args:
-        worker_fn: Worker function to call.
-        *args: Positional arguments forwarded to ``worker_fn``.
-
-    Returns:
-        The return value of ``worker_fn(*args)``.
-    """
-    try:
-        from threadpoolctl import threadpool_limits  # noqa: PLC0415
-    except ImportError:
-        return worker_fn(*args)
-    with threadpool_limits(limits=1):
-        return worker_fn(*args)
-
-
-# ---------------------------------------------------------------------------
 # 8) _simulate_sequences — internal primitive (feeds :func:`generate_data`)
 # ---------------------------------------------------------------------------
 def _simulate_sequences(
@@ -597,6 +571,7 @@ def _simulate_sequences(
     static_ctx_list: list[list[MCWFContext | None]] | None = None,
     context_vec: np.ndarray | None = None,
     solver: StochasticSolver | None = None,
+    _execution: ExecutionConfig | None = None,
 ) -> list[SequenceRolloutSample] | np.ndarray:
     """Simulate many intervention sequences.
 
@@ -669,80 +644,50 @@ def _simulate_sequences(
     if record_step_states:
         job_payload["e_features_rows"] = e_features_rows
 
-    if not record_step_states:
-        if parallel and num_sequences > 1:
-            max_workers = max(1, available_cpus() - 1)
-            parallel_results = run_backend_parallel(
-                worker_fn=_surrogate_final_state_worker,
-                payload=job_payload,
-                n_jobs=num_sequences,
-                max_workers=max_workers,
-                show_progress=bool(show_progress),
-                desc="Simulating sequences (final states)",
-            )
-            final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
-            for _job_idx, worker_out in parallel_results:
-                sequence_idx, _traj_idx, rho_final, _weight = worker_out
-                rho_norm = normalize_rho_from_backend_output(rho_final)
-                final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
-            if any(x is None for x in final_packed_by_index):
-                msg = "Parallel sequence simulation incomplete."
-                raise RuntimeError(msg)
-            stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
-            return np.stack(stacked_final, axis=0).astype(np.float32)
+    exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
 
-        final_packed_serial: list[np.ndarray] = []
-        for seq_idx in tqdm(
-            range(num_sequences),
+    if not record_step_states:
+        job_results = run_indexed_jobs(
+            _surrogate_final_state_worker,
+            payload=job_payload,
+            n_jobs=num_sequences,
+            config=exec_cfg,
             desc="Simulating sequences (final states)",
-            disable=(not bool(show_progress)),
-            ncols=80,
-        ):
-            _s, _t, rho_final, _w = _call_worker_serial(_surrogate_final_state_worker, seq_idx, job_payload)
+        )
+        final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
+        for seq_idx, worker_out in job_results.items():
+            sequence_idx, _traj_idx, rho_final, _weight = worker_out
             rho_norm = normalize_rho_from_backend_output(rho_final)
-            final_packed_serial.append(pack_rho8(rho_norm))
-        return np.stack(final_packed_serial, axis=0).astype(np.float32)
+            final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
+        if any(x is None for x in final_packed_by_index):
+            msg = "Parallel sequence simulation incomplete."
+            raise RuntimeError(msg)
+        stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
+        return np.stack(stacked_final, axis=0).astype(np.float32)
 
     optional_context_vec = None if context_vec is None else np.asarray(context_vec, dtype=np.float32).reshape(-1)
 
-    def rollout_one_sequence(sequence_idx: int) -> SequenceRolloutSample:
-        _s, _t, rho0, choi_mat, rho_seq, weight = _call_worker_serial(
-            _surrogate_rollout_worker, sequence_idx, job_payload
-        )
-        return SequenceRolloutSample(
+    job_results = run_indexed_jobs(
+        _surrogate_rollout_worker,
+        payload=job_payload,
+        n_jobs=num_sequences,
+        config=exec_cfg,
+        desc="Simulating sequences (rollouts)",
+    )
+    samples_by_index: list[SequenceRolloutSample | None] = [None] * num_sequences
+    for seq_idx, worker_out in job_results.items():
+        sequence_idx, _t, rho0, choi_mat, rho_seq, weight = worker_out
+        samples_by_index[sequence_idx] = SequenceRolloutSample(
             rho_0=rho0,
             E_features=choi_mat,
             rho_seq=rho_seq,
             context=None if optional_context_vec is None else optional_context_vec.copy(),
             weight=float(weight),
         )
-
-    if parallel and num_sequences > 1:
-        max_workers = max(1, available_cpus() - 1)
-        parallel_results = run_backend_parallel(
-            worker_fn=_surrogate_rollout_worker,
-            payload=job_payload,
-            n_jobs=num_sequences,
-            max_workers=max_workers,
-            show_progress=bool(show_progress),
-            desc="Simulating sequences (rollouts)",
-        )
-        samples_by_index: list[SequenceRolloutSample | None] = [None] * num_sequences
-        for _job_idx, worker_out in parallel_results:
-            sequence_idx, _t, rho0, choi_mat, rho_seq, weight = worker_out
-            samples_by_index[sequence_idx] = SequenceRolloutSample(
-                rho_0=rho0,
-                E_features=choi_mat,
-                rho_seq=rho_seq,
-                context=None if optional_context_vec is None else optional_context_vec.copy(),
-                weight=float(weight),
-            )
-        if any(s is None for s in samples_by_index):
-            msg = "Parallel sequence rollout simulation incomplete."
-            raise RuntimeError(msg)
-        return [cast("SequenceRolloutSample", s) for s in samples_by_index]
-
-    return [rollout_one_sequence(j) for j in range(num_sequences)]
+    if any(s is None for s in samples_by_index):
+        msg = "Parallel sequence rollout simulation incomplete."
+        raise RuntimeError(msg)
+    return [cast("SequenceRolloutSample", s) for s in samples_by_index]
 
 
 def simulate_final_states_with_diagnostics(
@@ -759,6 +704,7 @@ def simulate_final_states_with_diagnostics(
     operators_list: list[list[MPO]] | None = None,
     static_ctx_list: list[list[MCWFContext | None]] | None = None,
     solver: StochasticSolver | None = None,
+    _execution: ExecutionConfig | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """Like final-state :func:`_simulate_sequences` (``record_step_states=False``) but returns per-sequence diagnostics.
 
@@ -817,42 +763,25 @@ def simulate_final_states_with_diagnostics(
 
     traces_ordered: list[dict[str, Any] | None] = [None] * num_sequences
 
-    if parallel and num_sequences > 1:
-        max_workers = max(1, available_cpus() - 1)
-        parallel_results = run_backend_parallel(
-            worker_fn=_surrogate_final_state_worker_diagnostics,
-            payload=job_payload,
-            n_jobs=num_sequences,
-            max_workers=max_workers,
-            show_progress=bool(show_progress),
-            desc="Simulating sequences (final states + diagnostics)",
-        )
-        final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
-        for _job_idx, worker_out in parallel_results:
-            sequence_idx, _traj_idx, rho_final, _weight, trace = worker_out
-            rho_norm = normalize_rho_from_backend_output(rho_final)
-            final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
-            traces_ordered[sequence_idx] = trace
-        if any(x is None for x in final_packed_by_index) or any(t is None for t in traces_ordered):
-            msg = "Parallel sequence simulation incomplete."
-            raise RuntimeError(msg)
-        stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
-        return np.stack(stacked_final, axis=0).astype(np.float32), cast("list[dict[str, Any]]", traces_ordered)
-
-    final_packed_serial: list[np.ndarray] = []
-    for seq_idx in tqdm(
-        range(num_sequences),
+    exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
+    job_results = run_indexed_jobs(
+        _surrogate_final_state_worker_diagnostics,
+        payload=job_payload,
+        n_jobs=num_sequences,
+        config=exec_cfg,
         desc="Simulating sequences (final states + diagnostics)",
-        disable=(not bool(show_progress)),
-        ncols=80,
-    ):
-        _s, _t, rho_final, _w, trace = _call_worker_serial(
-            _surrogate_final_state_worker_diagnostics, seq_idx, job_payload
-        )
+    )
+    final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
+    for seq_idx, worker_out in job_results.items():
+        sequence_idx, _traj_idx, rho_final, _weight, trace = worker_out
         rho_norm = normalize_rho_from_backend_output(rho_final)
-        final_packed_serial.append(pack_rho8(rho_norm))
-        traces_ordered[seq_idx] = trace
-    return np.stack(final_packed_serial, axis=0).astype(np.float32), cast("list[dict[str, Any]]", traces_ordered)
+        final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
+        traces_ordered[sequence_idx] = trace
+    if any(x is None for x in final_packed_by_index) or any(t is None for t in traces_ordered):
+        msg = "Parallel sequence simulation incomplete."
+        raise RuntimeError(msg)
+    stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
+    return np.stack(stacked_final, axis=0).astype(np.float32), cast("list[dict[str, Any]]", traces_ordered)
 
 
 # ---------------------------------------------------------------------------
@@ -917,6 +846,7 @@ def generate_data(
     timesteps: list[float] | None = None,
     init_mode: str = "eigenstate",
     solver: StochasticSolver | None = None,
+    _execution: ExecutionConfig | None = None,
 ) -> TensorDataset:
     """Generate surrogate training data by sampling interventions and simulating rollouts.
 
@@ -990,6 +920,7 @@ def generate_data(
         static_ctx=static_ctx,
         context_vec=None,
         solver=stochastic_solver,
+        _execution=_execution,
         ),
     )
     rho0_batch, features_batch, rho_seq_batch, _ctx = stack_rollouts(samples)
@@ -1012,6 +943,7 @@ def create_surrogate(
     init_mode: str = "eigenstate",
     model_kwargs: dict[str, Any] | None = None,
     train_kwargs: dict[str, Any] | None = None,
+    _execution: ExecutionConfig | None = None,
 ) -> TransformerComb:
     """Train a surrogate model end-to-end on sampled rollout data.
 
@@ -1044,6 +976,7 @@ def create_surrogate(
         show_progress=bool(show_progress),
         timesteps=timesteps,
         init_mode=init_mode,
+        _execution=_execution,
     )
 
     resolved_model_kwargs = {} if model_kwargs is None else dict(model_kwargs)

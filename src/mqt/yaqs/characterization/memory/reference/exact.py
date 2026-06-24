@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
+
 from ..combs.core.encoding import packed_rho8_to_pauli_xyz_batch
 from ..combs.core.utils import make_mcwf_static_context
 from ..combs.surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
@@ -33,6 +35,8 @@ class ExactProbeProcess:
         sim_params: AnalogSimParams,
         initial_psi: np.ndarray,
         parallel: bool = True,
+        show_progress: bool = False,
+        _execution: ExecutionConfig | None = None,
     ) -> None:
         """Initialize exact probe backend with reusable MCWF static context.
 
@@ -41,12 +45,17 @@ class ExactProbeProcess:
             sim_params: Analog simulation parameters.
             initial_psi: Initial state vector for rollouts.
             parallel: Whether to parallelize sequence simulation.
+            show_progress: Whether to show a progress bar during simulation.
         """
         self.operator = operator
         self.sim_params = sim_params
         self.initial_psi = np.asarray(initial_psi, dtype=np.complex128).copy()
-        self.parallel = bool(parallel)
+        self._execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
         self._static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
+
+    @property
+    def parallel(self) -> bool:
+        return self._execution.parallel
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
         """Run exact backend for all (past, future) probe combinations.
@@ -69,8 +78,9 @@ class ExactProbeProcess:
             psi_pairs_list=all_pairs,
             initial_psis=initial_psis,
             static_ctx=self._static_ctx,
-            parallel=self.parallel,
-            show_progress=True,
+            parallel=self._execution.parallel,
+            show_progress=self._execution.show_progress,
+            _execution=self._execution,
             record_step_states=False,
         )
         if not isinstance(final_packed, np.ndarray):
@@ -91,6 +101,7 @@ def evaluate_exact_probe_set_with_diagnostics(
     sim_params: AnalogSimParams,
     initial_psi: np.ndarray,
     parallel: bool = True,
+    show_progress: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
     """Exact rollout with per-sequence diagnostics (branch weights, early termination).
 
@@ -106,6 +117,7 @@ def evaluate_exact_probe_set_with_diagnostics(
     all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
+    exec_cfg = merge_execution_config(None, parallel=parallel, show_progress=show_progress)
     final_packed, traces = simulate_final_states_with_diagnostics(
         operator=operator,
         sim_params=sim_params,
@@ -113,8 +125,9 @@ def evaluate_exact_probe_set_with_diagnostics(
         psi_pairs_list=all_pairs,
         initial_psis=initial_psis,
         static_ctx=make_mcwf_static_context(operator, sim_params, noise_model=None),
-        parallel=bool(parallel),
-        show_progress=True,
+        parallel=exec_cfg.parallel,
+        show_progress=exec_cfg.show_progress,
+        _execution=exec_cfg,
     )
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."

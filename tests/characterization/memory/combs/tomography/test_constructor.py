@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs import construct_process_tensor
+from mqt.yaqs import Characterizer, construct_process_tensor
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -37,3 +37,13 @@ def test_construct_process_tensor_returns_dense_and_mpo_smoke() -> None:
     mat = mpo.to_matrix()
     assert mat.shape == (8, 8)
     np.testing.assert_allclose(mat, dense.to_matrix(), atol=1e-8)
+
+
+def test_construct_process_tensor_parallel_smoke() -> None:
+    """construct_process_tensor runs with parallel execution enabled."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    dense = Characterizer(parallel=True, max_workers=2, show_progress=False).construct_process_tensor(
+        op, params, timesteps=[0.0], return_type="dense"
+    )
+    assert dense.to_matrix().shape == (8, 8)

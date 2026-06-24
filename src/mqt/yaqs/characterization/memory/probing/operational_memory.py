@@ -88,6 +88,7 @@ class OperationalMemoryMixin:
         n_futures: int,
         rng: Generator | None,
         probe_kwargs: dict[str, Any] | None = None,
+        parallel: bool | None = None,
     ) -> dict[str, Any]:
         extra = dict(probe_kwargs or {})
         key = self._memory_cache_key(
@@ -109,6 +110,7 @@ class OperationalMemoryMixin:
             n_futures=n_futures,
             rng=rng,
             return_v=True,
+            parallel=parallel,
             **extra,
         )
         self._operational_memory_cache = {"key": key, "out": out}
@@ -121,6 +123,7 @@ class OperationalMemoryMixin:
         n_pasts: int = 32,
         n_futures: int = 32,
         rng: Generator | None = None,
+        parallel: bool | None = None,
         **probe_kwargs: Any,
     ) -> float:
         c = self._resolve_cut(cut)
@@ -130,6 +133,7 @@ class OperationalMemoryMixin:
             n_futures=n_futures,
             rng=rng,
             probe_kwargs=probe_kwargs,
+            parallel=parallel,
         )
         return float(out["entropy"])
 
@@ -140,6 +144,7 @@ class OperationalMemoryMixin:
         n_pasts: int = 32,
         n_futures: int = 32,
         rng: Generator | None = None,
+        parallel: bool | None = None,
         **probe_kwargs: Any,
     ) -> np.ndarray:
         c = self._resolve_cut(cut)
@@ -149,6 +154,7 @@ class OperationalMemoryMixin:
             n_futures=n_futures,
             rng=rng,
             probe_kwargs=probe_kwargs,
+            parallel=parallel,
         )
         return np.asarray(out["singular_values_full"])
 
@@ -159,6 +165,7 @@ class OperationalMemoryMixin:
         n_pasts: int = 32,
         n_futures: int = 32,
         rng: Generator | None = None,
+        parallel: bool | None = None,
         **probe_kwargs: Any,
     ) -> int:
         """Operational memory rank from the same centered V matrix as :meth:`entropy`."""
@@ -169,6 +176,7 @@ class OperationalMemoryMixin:
             n_futures=n_futures,
             rng=rng,
             probe_kwargs=probe_kwargs,
+            parallel=parallel,
         )
         return int(out["rank"])
 

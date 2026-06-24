@@ -110,3 +110,14 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
     )
     assert weights.shape == (1, 1)
     assert float(weights[0, 0]) == 0.4
+
+
+def test_exact_probe_process_parallel_smoke() -> None:
+    """ExactProbeProcess completes a tiny parallel rollout batch."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    sim = AnalogSimParams(dt=0.1)
+    psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    process = ExactProbeProcess(operator=op, sim_params=sim, initial_psi=psi0, parallel=True, show_progress=False)
+    probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=2)
+    out = process.evaluate_probe_set(probe_set)
+    assert out.shape == (2, 2, 3)

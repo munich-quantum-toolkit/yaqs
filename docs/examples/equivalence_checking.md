@@ -91,7 +91,7 @@ are not supported for unitary equivalence on either backend. See
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
   **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
-  the machine CPU count via {func}`~mqt.yaqs.parallel_utils.available_cpus`).
+  the machine CPU count via {func}`~mqt.yaqs.core.parallel_utils.available_cpus`).
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
