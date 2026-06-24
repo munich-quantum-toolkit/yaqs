@@ -12,12 +12,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.probing.probe import (
+from mqt.yaqs.characterization.memory.diagnostics.probe import (
     branch_weights_ij,
     rollout_branch_weight,
 )
 from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
-from mqt.yaqs.characterization.memory.probing.probe import (
+from mqt.yaqs.characterization.memory.diagnostics.probe import (
     probe_process,
     sample_split_cut_probes,
 )

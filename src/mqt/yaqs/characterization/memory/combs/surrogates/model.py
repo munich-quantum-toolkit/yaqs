@@ -26,8 +26,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...probing.operational_memory import OperationalMemoryMixin
-from ...probing.probe import ProbeSet
+from ...diagnostics.operational_memory import OperationalMemoryMixin
+from ...diagnostics.probe import ProbeSet
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
 from .utils import _choi_features_from_parts
 

@@ -17,8 +17,8 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from ...probing.operational_memory import OperationalMemoryMixin
-from ...probing.probe import ProbeSet, probe_sequence
+from ...diagnostics.operational_memory import OperationalMemoryMixin
+from ...diagnostics.probe import ProbeSet, probe_sequence
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
 from ..surrogates.utils import InterventionMap
 

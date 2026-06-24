@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Diagnostics for probing process behavior across split temporal cuts."""
+"""Split-cut process diagnostics (V-matrix construction and operational memory metrics)."""
 
 from .probe import ProbeSet, analyze_v_matrix, build_v_matrix, probe_process, sample_split_cut_probes
 

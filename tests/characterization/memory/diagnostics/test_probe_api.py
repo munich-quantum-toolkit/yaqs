@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.probing.probe import ProbeSet, probe_process
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, probe_process
 
 
 def test_probe_process_uses_object_backend() -> None:

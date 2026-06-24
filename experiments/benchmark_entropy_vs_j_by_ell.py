@@ -26,7 +26,7 @@ from _benchmark_common import (
     write_summary_json,
 )
 from _benchmark_plotting import plot_entropy_vs_ell
-from mqt.yaqs.characterization.memory.probing.probe import sample_split_delayed_break_probes
+from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_delayed_break_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

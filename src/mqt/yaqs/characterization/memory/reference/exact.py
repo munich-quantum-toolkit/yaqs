@@ -18,7 +18,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 from ..combs.core.encoding import packed_rho8_to_pauli_xyz_batch
 from ..combs.core.utils import make_mcwf_static_context
 from ..combs.surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
-from ..probing.probe import ProbeSet, build_all_pairs_grid
+from ..diagnostics.probe import ProbeSet, build_all_pairs_grid
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO

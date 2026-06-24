@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 import mqt.yaqs.characterization.memory.reference.exact as exact_mod
-from mqt.yaqs.characterization.memory.probing.probe import ProbeSet
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
 from mqt.yaqs.characterization.memory.reference.exact import (
     ExactProbeProcess,
     evaluate_exact_probe_set_with_diagnostics,

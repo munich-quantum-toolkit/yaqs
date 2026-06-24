@@ -46,7 +46,7 @@ rng = np.random.default_rng(0)
 
 ## 2. Three comb backends
 
-All backends below expose the same operational memory methods via {class}`~mqt.yaqs.characterization.memory.probing.operational_memory.OperationalMemoryMixin`.
+All backends below expose the same operational memory methods via {class}`~mqt.yaqs.characterization.memory.diagnostics.operational_memory.OperationalMemoryMixin`.
 
 ```{code-cell} ipython3
 ---
@@ -105,13 +105,13 @@ When `cut` is omitted, the default interior cut `(k + 1) // 2` is used.
 
 ## 4. Low-level API — `probe_process`
 
-Use {func}`~mqt.yaqs.characterization.memory.probing.probe.probe_process` for full control and inspection of intermediate objects.
+Use {func}`~mqt.yaqs.characterization.memory.diagnostics.probe.probe_process` for full control and inspection of intermediate objects.
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.probing.probe import probe_process
+from mqt.yaqs.characterization.memory.diagnostics.probe import probe_process
 
 out = probe_process(
     process=comb_dense,
@@ -152,7 +152,7 @@ Manual V assembly (equivalent to the comb shortcut on weighted backends):
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.probing.probe import (
+from mqt.yaqs.characterization.memory.diagnostics.probe import (
     analyze_v_matrix,
     build_weighted_v_from_probe,
 )
@@ -211,7 +211,7 @@ For validation, compare comb probing against full MCWF rollouts via {mod}`~mqt.y
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.probing.probe import sample_split_cut_probes
+from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
 from mqt.yaqs.characterization.memory.reference.exact import (
     evaluate_exact_probe_set_with_diagnostics,
 )

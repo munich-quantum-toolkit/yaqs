@@ -16,7 +16,7 @@ import pytest
 
 from mqt.yaqs import construct_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.combs import DenseComb, MPOComb
-from mqt.yaqs.characterization.memory.probing.probe import (
+from mqt.yaqs.characterization.memory.diagnostics.probe import (
     analyze_v_matrix,
     build_weighted_v_from_probe,
     probe_process,
@@ -127,7 +127,7 @@ def test_dense_comb_entropy_default_cut() -> None:
 
 def test_memory_metrics_reuse_cached_v(monkeypatch: pytest.MonkeyPatch) -> None:
     """entropy, singular_values, and rank share one probe_process call per cache key."""
-    import mqt.yaqs.characterization.memory.probing.operational_memory as operational_memory_mod
+    import mqt.yaqs.characterization.memory.diagnostics.operational_memory as operational_memory_mod
 
     n_calls = {"n": 0}
     real_probe_process = operational_memory_mod.probe_process

@@ -17,8 +17,8 @@ from typing import Any
 import numpy as np
 
 from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
-from mqt.yaqs.characterization.memory.probing.probe import ProbeSet, analyze_v_matrix, sample_split_cut_probes
-from mqt.yaqs.characterization.memory.probing.v_matrix import (
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, analyze_v_matrix, sample_split_cut_probes
+from mqt.yaqs.characterization.memory.diagnostics.v_matrix import (
     build_weighted_v_matrix,
     center_past_rows,
     prepare_branch_weights,

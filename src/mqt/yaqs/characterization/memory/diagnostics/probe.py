@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Process probing diagnostics (split-cut V-matrix construction and metrics)."""
+"""Split-cut process diagnostics (V-matrix construction and metrics)."""
 
 from __future__ import annotations
 
