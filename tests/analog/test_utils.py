@@ -152,3 +152,54 @@ def test_embed_observable_sparse_1site() -> None:
 
     assert scipy.sparse.issparse(op)
     assert cast("Any", (op != expected)).nnz == 0
+
+
+def test_embed_operator_dense_adjacent_site_order() -> None:
+    """Reversed adjacent site lists transpose the local matrix before embedding."""
+    num_sites = 4
+    rng = np.random.default_rng(0)
+    local = rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))
+    forward = _embed_operator_dense({"sites": [0, 1], "matrix": local}, num_sites)
+    reversed_sites = _embed_operator_dense({"sites": [1, 0], "matrix": local}, num_sites)
+    expected_forward = embed_adjacent_two_site_operator(local, num_sites, 0)
+    expected_reversed = embed_adjacent_two_site_operator(
+        np.asarray(
+            local.reshape(2, 2, 2, 2).transpose(1, 0, 3, 2).reshape(4, 4),
+            dtype=np.complex128,
+        ),
+        num_sites,
+        0,
+    )
+    assert np.allclose(forward, expected_forward)
+    assert np.allclose(reversed_sites, expected_reversed)
+    assert not np.allclose(forward, reversed_sites)
+
+
+def test_embed_operator_sparse_adjacent_site_order() -> None:
+    """Sparse reversed adjacent site lists transpose the local matrix before embedding."""
+    num_sites = 4
+    rng = np.random.default_rng(1)
+    local = rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))
+    forward = _embed_operator_sparse({"sites": [0, 1], "matrix": local}, num_sites)
+    reversed_sites = _embed_operator_sparse({"sites": [1, 0], "matrix": local}, num_sites)
+    expected_forward = scipy.sparse.csr_matrix(embed_adjacent_two_site_operator(local, num_sites, 0))
+    expected_reversed = scipy.sparse.csr_matrix(
+        embed_adjacent_two_site_operator(
+            np.asarray(
+                local.reshape(2, 2, 2, 2).transpose(1, 0, 3, 2).reshape(4, 4),
+                dtype=np.complex128,
+            ),
+            num_sites,
+            0,
+        )
+    )
+    assert cast("Any", (forward != expected_forward)).nnz == 0
+    assert cast("Any", (reversed_sites != expected_reversed)).nnz == 0
+    assert cast("Any", (forward != reversed_sites)).nnz > 0
+
+
+def test_embed_operator_dense_rejects_non_adjacent_pair() -> None:
+    """Matrix-based two-site embedding requires neighboring sites."""
+    num_sites = 4
+    with pytest.raises(ValueError, match="adjacent"):
+        _embed_operator_dense({"sites": [0, 2], "matrix": np.eye(4, dtype=complex)}, num_sites)

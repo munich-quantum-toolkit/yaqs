@@ -66,15 +66,125 @@ def _kron_all_sparse(
 
 
 def _to_dense(op: NDArray[np.complex128] | scipy.sparse.spmatrix) -> NDArray[np.complex128]:
+    """Convert a sparse or dense matrix to a dense NumPy array.
+
+    Args:
+        op: Input operator as a dense array or SciPy sparse matrix.
+
+    Returns:
+        Dense ``complex128`` array with the same entries as ``op``.
+    """
     if issparse(op):
         return np.asarray(cast("Any", op).toarray(), dtype=np.complex128)
     return np.asarray(op, dtype=np.complex128)
 
 
 def _to_sparse_csr(op: NDArray[np.complex128] | scipy.sparse.spmatrix) -> scipy.sparse.spmatrix:
+    """Convert a dense or sparse matrix to CSR sparse format.
+
+    Args:
+        op: Input operator as a dense array or SciPy sparse matrix.
+
+    Returns:
+        CSR sparse matrix with the same entries as ``op``.
+    """
     if issparse(op):
         return cast("Any", op)
     return scipy.sparse.csr_matrix(op)
+
+
+def _transpose_adjacent_pair(
+    op: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    dim_left: int,
+    dim_right: int,
+) -> NDArray[np.complex128]:
+    """Swap tensor legs from ``(right, left)`` to ``(left, right)`` for an adjacent pair.
+
+    Args:
+        op: Local ``(dim_left * dim_right, dim_left * dim_right)`` matrix.
+        dim_left: Hilbert-space dimension of the left site in ascending site order.
+        dim_right: Hilbert-space dimension of the right site in ascending site order.
+
+    Returns:
+        Dense matrix for the swapped leg order.
+    """
+    arr = _to_dense(op).reshape(dim_right, dim_left, dim_right, dim_left)
+    swapped = arr.transpose(1, 0, 3, 2)
+    return np.asarray(swapped.reshape(dim_left * dim_right, dim_left * dim_right), dtype=np.complex128)
+
+
+def _sparse_identity(dim: int) -> scipy.sparse.spmatrix:
+    return scipy.sparse.identity(dim, format="csr", dtype=np.complex128)
+
+
+def _embed_one_site_sparse(
+    op: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    num_sites: int,
+    site: int,
+    dims: list[int],
+) -> scipy.sparse.spmatrix:
+    op_csr = _to_sparse_csr(op)
+    site_dim = dims[site]
+    if op_csr.shape != (site_dim, site_dim):
+        msg = f"op must have shape ({site_dim}, {site_dim}), got {op_csr.shape}."
+        raise ValueError(msg)
+    res = scipy.sparse.csr_matrix([[1.0]], dtype=np.complex128)
+    for k in range(num_sites):
+        local = op_csr if k == site else _sparse_identity(dims[k])
+        res = scipy.sparse.kron(local, res, format="csr")
+    return cast("scipy.sparse.spmatrix", res)
+
+
+def _embed_adjacent_two_site_sparse(
+    op: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    num_sites: int,
+    site_left: int,
+    dims: list[int],
+) -> scipy.sparse.spmatrix:
+    site_right = site_left + 1
+    pair_dim = dims[site_left] * dims[site_right]
+    op_csr = _to_sparse_csr(op)
+    if op_csr.shape != (pair_dim, pair_dim):
+        msg = f"op4 must have shape ({pair_dim}, {pair_dim}), got {op_csr.shape}."
+        raise ValueError(msg)
+    res = scipy.sparse.csr_matrix([[1.0]], dtype=np.complex128)
+    site = 0
+    while site < num_sites:
+        if site == site_left:
+            res = scipy.sparse.kron(op_csr, res, format="csr")
+            site += 2
+        else:
+            res = scipy.sparse.kron(_sparse_identity(dims[site]), res, format="csr")
+            site += 1
+    return cast("scipy.sparse.spmatrix", res)
+
+
+def _embed_two_site_factors_sparse(
+    op1: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    op2: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    num_sites: int,
+    site1: int,
+    site2: int,
+    dims: list[int],
+) -> scipy.sparse.spmatrix:
+    op1_csr = _to_sparse_csr(op1)
+    op2_csr = _to_sparse_csr(op2)
+    if op1_csr.shape != (dims[site1], dims[site1]) or op2_csr.shape != (dims[site2], dims[site2]):
+        msg = (
+            f"local operators must match site dimensions "
+            f"({dims[site1]}, {dims[site1]}) and ({dims[site2]}, {dims[site2]})."
+        )
+        raise ValueError(msg)
+    res = scipy.sparse.csr_matrix([[1.0]], dtype=np.complex128)
+    for k in range(num_sites):
+        if k == site1:
+            local = op1_csr
+        elif k == site2:
+            local = op2_csr
+        else:
+            local = _sparse_identity(dims[k])
+        res = scipy.sparse.kron(local, res, format="csr")
+    return cast("scipy.sparse.spmatrix", res)
 
 
 def _embed_generic(
@@ -107,26 +217,35 @@ def _embed_generic(
     dims = resolve_physical_dimensions(num_sites, physical_dimensions)
     if op_matrix is not None:
         if len(sites) == 1:
-            dense = embed_one_site_operator(
+            if sites[0] < 0 or sites[0] >= num_sites:
+                msg = f"site {sites[0]} out of range for length {num_sites}."
+                raise ValueError(msg)
+            if sparse:
+                return _embed_one_site_sparse(op_matrix, num_sites, sites[0], dims)
+            return embed_one_site_operator(
                 _to_dense(op_matrix),
                 num_sites,
                 sites[0],
                 physical_dimensions=dims,
             )
-            return scipy.sparse.csr_matrix(dense) if sparse else dense
 
         if len(sites) == 2:
-            s1, s2 = sorted(sites)
-            if s2 != s1 + 1:
+            s1, s2 = sites[0], sites[1]
+            if abs(s1 - s2) != 1:
                 msg = "Matrix-based 2-site op must be adjacent"
                 raise ValueError(msg)
-            dense = embed_adjacent_two_site_operator(
-                _to_dense(op_matrix),
+            site_left = min(s1, s2)
+            pair_op = op_matrix
+            if s1 > s2:
+                pair_op = _transpose_adjacent_pair(op_matrix, dims[site_left], dims[site_left + 1])
+            if sparse:
+                return _embed_adjacent_two_site_sparse(pair_op, num_sites, site_left, dims)
+            return embed_adjacent_two_site_operator(
+                _to_dense(pair_op),
                 num_sites,
-                s1,
+                site_left,
                 physical_dimensions=dims,
             )
-            return scipy.sparse.csr_matrix(dense) if sparse else dense
 
     if op_factors is not None:
         op1, op2 = op_factors
@@ -134,7 +253,9 @@ def _embed_generic(
             msg = f"Factors require exactly 2 sites, got {len(sites)}"
             raise ValueError(msg)
         s1, s2 = sites
-        dense = embed_two_site_factors(
+        if sparse:
+            return _embed_two_site_factors_sparse(op1, op2, num_sites, s1, s2, dims)
+        return embed_two_site_factors(
             _to_dense(op1),
             _to_dense(op2),
             num_sites,
@@ -142,7 +263,6 @@ def _embed_generic(
             s2,
             physical_dimensions=dims,
         )
-        return scipy.sparse.csr_matrix(dense) if sparse else dense
 
     msg = "Invalid embedding request: neither matrix nor factors provided."
     raise NotImplementedError(msg)

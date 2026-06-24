@@ -268,7 +268,16 @@ def test_normalize_density_matrix_already_normalized() -> None:
 @pytest.mark.parametrize("site", [0, 1, 2])
 @pytest.mark.parametrize("local", ["X", "Y", "Z"])
 def test_embed_one_site_matches_qiskit(length: int, site: int, local: str) -> None:
-    """One-site embedding agrees with Qiskit ``Operator`` layout."""
+    """One-site embedding agrees with Qiskit ``Operator`` layout.
+
+    Compares :func:`embed_one_site_operator` against Qiskit's ``embed_unitary`` for
+    single-qubit Pauli operators on chains of length 2--4.
+
+    Args:
+        length: Number of qubits in the chain.
+        site: Site index the local Pauli acts on.
+        local: Pauli label (``"X"``, ``"Y"``, or ``"Z"``).
+    """
     if site >= length:
         pytest.skip("site out of range for chain length")
 
@@ -281,7 +290,15 @@ def test_embed_one_site_matches_qiskit(length: int, site: int, local: str) -> No
 @pytest.mark.parametrize("length", [3, 4])
 @pytest.mark.parametrize("site_left", [0, 1, 2])
 def test_embed_adjacent_two_site_matches_qiskit(length: int, site_left: int) -> None:
-    """Adjacent two-site embedding agrees with Qiskit ``Operator`` layout."""
+    """Adjacent two-site embedding agrees with Qiskit ``Operator`` layout.
+
+    Compares :func:`embed_adjacent_two_site_operator` against Qiskit's ``embed_unitary``
+    for a CX gate on neighboring sites.
+
+    Args:
+        length: Number of qubits in the chain.
+        site_left: Left site index of the adjacent pair.
+    """
     if site_left + 1 >= length:
         pytest.skip("pair out of range for chain length")
 
@@ -292,7 +309,11 @@ def test_embed_adjacent_two_site_matches_qiskit(length: int, site_left: int) -> 
 
 
 def test_embed_matches_mps_expect_on_haar() -> None:
-    """Embedded Pauli expectations match ``MPS.expect`` on an entangled state."""
+    """Embedded Pauli expectations match ``MPS.expect`` on an entangled state.
+
+    On a Haar-random three-qubit MPS, checks that dense one-site embeddings reproduce
+    ``MPS.expect`` for ``x`` and ``z`` observables on every site.
+    """
     length = 3
     mps = MPS(length, state="haar-random", pad=4)
     psi = mps.to_vec()
@@ -306,7 +327,11 @@ def test_embed_matches_mps_expect_on_haar() -> None:
 
 
 def test_embed_one_site_non_qubit_local_dimension() -> None:
-    """One-site embedding supports local dimensions larger than two."""
+    """One-site embedding supports local dimensions larger than two.
+
+    Verifies that a single-site identity on a qutrit chain embeds to the full
+    ``3 x 3`` operator without error.
+    """
     length = 1
     local_dim = 3
     op = np.eye(local_dim, dtype=np.complex128)
@@ -315,7 +340,11 @@ def test_embed_one_site_non_qubit_local_dimension() -> None:
 
 
 def test_embed_two_site_factors_non_adjacent() -> None:
-    """Non-adjacent factor embedding matches sequential one-site products."""
+    """Non-adjacent factor embedding matches sequential one-site products.
+
+    Checks that embedding ``X_0 Z_2`` via :func:`embed_two_site_factors` agrees with
+    multiplying the individual one-site embeddings on a three-qubit chain.
+    """
     length = 3
     x = np.array([[0, 1], [1, 0]], dtype=np.complex128)
     z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
@@ -335,6 +364,12 @@ def test_embed_one_site_operator_rejects_wrong_shape() -> None:
     """One-site embedding rejects operators with the wrong local shape."""
     with pytest.raises(ValueError, match="op must have shape"):
         embed_one_site_operator(np.eye(3, dtype=np.complex128), 2, 0)
+
+
+def test_embed_one_site_operator_rejects_nonpositive_local_dim() -> None:
+    """One-site embedding rejects non-positive uniform local dimensions."""
+    with pytest.raises(ValueError, match="local_dim must be a positive integer"):
+        embed_one_site_operator(np.eye(2, dtype=np.complex128), 2, 0, local_dim=0)
 
 
 def test_embed_adjacent_two_site_operator_rejects_invalid_pair() -> None:

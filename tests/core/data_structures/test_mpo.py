@@ -39,6 +39,11 @@ _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
     """Embed a single-site operator (MPS / Qiskit site-0 LSB convention).
 
+    Args:
+        op: Local operator matrix.
+        length: Number of sites in the chain.
+        i: Site index on which ``op`` acts.
+
     Returns:
         Dense embedded operator matrix.
     """
@@ -47,6 +52,12 @@ def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
 
 def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
     """Embed a nearest-neighbor two-site product operator.
+
+    Args:
+        op1: Local operator on site ``i``.
+        op2: Local operator on site ``i + 1``.
+        length: Number of sites in the chain.
+        i: Left site index of the nearest-neighbor pair.
 
     Returns:
         Dense embedded operator matrix.

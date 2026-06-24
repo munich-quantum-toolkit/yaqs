@@ -292,6 +292,11 @@ def _resolve_site_dims(
     """Return per-site Hilbert-space dimensions for embedding helpers."""
     if physical_dimensions is not None:
         return resolve_physical_dimensions(length, physical_dimensions)
+    if not isinstance(local_dim, int) or local_dim <= 0:
+        msg = (
+            f"_resolve_site_dims: local_dim must be a positive integer, got {local_dim!r}."
+        )
+        raise ValueError(msg)
     return [local_dim] * length
 
 
