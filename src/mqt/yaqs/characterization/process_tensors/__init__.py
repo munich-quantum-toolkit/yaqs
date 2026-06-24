@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tomography.constructor import construct_process_tensor
 from .diagnostics.probe import probe_process
+from .tomography.constructor import construct_process_tensor
 
 _LAZY_EXPORTS = {
     "TransformerComb": ("mqt.yaqs.characterization.process_tensors.surrogates.model", "TransformerComb"),

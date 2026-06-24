@@ -40,7 +40,7 @@ def resolve_stochastic_solver(
     if solver is not None:
         return solver
     legacy = getattr(sim_params, "solver", None)
-    if legacy in ("MCWF", "TJM"):
+    if legacy in {"MCWF", "TJM"}:
         return legacy
     return "MCWF"
 
@@ -186,10 +186,7 @@ def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> 
     """Return a 2×2 unitary whose first column is ``psi`` (normalized computational |0⟩ → ``psi``)."""
     p = np.asarray(psi, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
-    if nrm < 1e-15:
-        p = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    else:
-        p = p / nrm
+    p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
     a, b = p[0], p[1]
     return np.array([[a, -np.conj(b)], [b, np.conj(a)]], dtype=np.complex128)
 
@@ -207,10 +204,7 @@ def _reset_backend_site_zero_to_product_ket(
     """
     p = np.asarray(psi_reset, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
-    if nrm < 1e-15:
-        p = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    else:
-        p = p / nrm
+    p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
         L = int(chain_length)

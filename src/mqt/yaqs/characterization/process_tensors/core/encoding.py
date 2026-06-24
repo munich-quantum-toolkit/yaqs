@@ -119,7 +119,7 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
 
 
 def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
-    """Pauli expectation values :math:`(x,y,z)` with :math:`x=\\mathrm{Tr}(\\rho X)` etc.
+    r"""Pauli expectation values :math:`(x,y,z)` with :math:`x=\\mathrm{Tr}(\\rho X)` etc.
 
     Uses the same :math:`X,Y,Z` as the split-cut probing pipeline (no identity component).
     """
@@ -135,15 +135,10 @@ def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
 
 
 def pauli_xyz_to_rho(xyz: np.ndarray) -> np.ndarray:
-    """Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates, :math:`\\rho=\\frac12(I+xX+yY+zZ)`."""
+    r"""Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates, :math:`\\rho=\\frac12(I+xX+yY+zZ)`."""
     t = np.asarray(xyz, dtype=np.float64).reshape(3)
     x, y, z = float(t[0]), float(t[1]), float(t[2])
-    return 0.5 * (
-        np.eye(2, dtype=np.complex128)
-        + x * PAULI_X
-        + y * PAULI_Y
-        + z * PAULI_Z
-    )
+    return 0.5 * (np.eye(2, dtype=np.complex128) + x * PAULI_X + y * PAULI_Y + z * PAULI_Z)
 
 
 def packed_rho8_to_pauli_xyz_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:

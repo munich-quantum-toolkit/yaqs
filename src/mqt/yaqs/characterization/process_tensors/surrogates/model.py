@@ -21,8 +21,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ..diagnostics.probe import ProbeSet, probe_process
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
+from ..diagnostics.probe import ProbeSet, probe_process
 from .utils import _choi_features_from_parts
 
 # Computational-basis |0⟩⟨0| (same convention as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data` rollouts).
@@ -150,7 +150,7 @@ class TransformerComb(nn.Module):
         return int(self.in_proj[0].in_features) - self._d_side
 
     def _default_rho0(self, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
-        """Packed rho8 for the physical |0⟩⟨0| reduced state (same path as training data).
+        r"""Packed rho8 for the physical |0⟩⟨0| reduced state (same path as training data).
 
         Uses :func:`~mqt.yaqs.characterization.process_tensors.core.encoding.pack_rho8` on the
         trace-1 density matrix for :math:`|0\\rangle\\langle 0|`, after
@@ -215,7 +215,7 @@ class TransformerComb(nn.Module):
         return out[:, -1, :]
 
     def entropy(self, cut: int) -> float:
-        """Cut-entropy diagnostic via split-cut process probing.
+        r"""Cut-entropy diagnostic via split-cut process probing.
 
         Analogous to the entropy of the normalized squared singular values of an MPS/MPO bond matrix
         (spectrum of the reduced density operator across the cut): build a future-response matrix at

@@ -32,12 +32,12 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL — core / simulator
 # ---------------------------------------------------------------------------
-from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 # ---------------------------------------------------------------------------
@@ -133,10 +133,7 @@ def _validate_comb_sequence_inputs(
         for i, pairs in enumerate(psi_pairs_list):
             k = len(pairs)
             if len(timesteps_rows[i]) != k + 1:
-                msg = (
-                    f"Sequence {i}: `timesteps_rows[{i}]` must have length k+1={k + 1}, "
-                    f"got {len(timesteps_rows[i])}."
-                )
+                msg = f"Sequence {i}: `timesteps_rows[{i}]` must have length k+1={k + 1}, got {len(timesteps_rows[i])}."
                 raise ValueError(msg)
     if operators_list is not None:
         if len(operators_list) != num_sequences:
@@ -145,10 +142,7 @@ def _validate_comb_sequence_inputs(
         for i, pairs in enumerate(psi_pairs_list):
             k = len(pairs)
             if len(operators_list[i]) != k + 1:
-                msg = (
-                    f"Sequence {i}: `operators_list[{i}]` must have length k+1={k + 1}, "
-                    f"got {len(operators_list[i])}."
-                )
+                msg = f"Sequence {i}: `operators_list[{i}]` must have length k+1={k + 1}, got {len(operators_list[i])}."
                 raise ValueError(msg)
     if static_ctx_list is not None:
         if len(static_ctx_list) != num_sequences:
@@ -158,8 +152,7 @@ def _validate_comb_sequence_inputs(
             k = len(pairs)
             if len(static_ctx_list[i]) != k + 1:
                 msg = (
-                    f"Sequence {i}: `static_ctx_list[{i}]` must have length k+1={k + 1}, "
-                    f"got {len(static_ctx_list[i])}."
+                    f"Sequence {i}: `static_ctx_list[{i}]` must have length k+1={k + 1}, got {len(static_ctx_list[i])}."
                 )
                 raise ValueError(msg)
 
@@ -276,7 +269,8 @@ def _final_state_rollout_core(
                 )
                 sp = 1.0
             else:
-                raise ValueError(f"Unsupported step type: {step_type!r}")
+                msg = f"Unsupported step type: {step_type!r}"
+                raise ValueError(msg)
         else:
             psi_meas, psi_prep = step
             state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
@@ -377,7 +371,8 @@ def _surrogate_final_state_worker_diagnostics(
         collect_trace=True,
     )
     if trace is None:
-        raise RuntimeError("internal: diagnostics trace missing")
+        msg = "internal: diagnostics trace missing"
+        raise RuntimeError(msg)
     rho_final = cast("np.ndarray", rho_final)
     return (sequence_idx, trajectory_idx, rho_final, float(cum_w), trace)
 
@@ -489,7 +484,8 @@ def _surrogate_rollout_worker(
                 )
                 step_prob = 1.0
             else:
-                raise ValueError(f"Unsupported step type: {step_type!r}")
+                msg_0 = f"Unsupported step type: {step_type!r}"
+                raise ValueError(msg_0)
         else:
             psi_meas, psi_prep = step
             state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)

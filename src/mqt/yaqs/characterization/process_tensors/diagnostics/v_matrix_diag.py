@@ -54,7 +54,7 @@ def build_weighted_v_matrix(
     weights_ij: np.ndarray,
     beta: float,
 ) -> np.ndarray:
-    """Construct :math:`V^{(\\beta)}_{i,(j,\\alpha)} = w_{ij}^{\\beta} f_{ij,\\alpha}` (flattened).
+    r"""Construct :math:`V^{(\\beta)}_{i,(j,\\alpha)} = w_{ij}^{\\beta} f_{ij,\\alpha}` (flattened).
 
     ``pauli_xyz_ij`` is ``(n_pasts, n_futures, 3)`` with :math:`f=(x,y,z)` Pauli expectations;
     ``weights_ij`` is ``(n_pasts, n_futures)``.
@@ -181,7 +181,9 @@ def matrix_diagnostic_metrics(
         "participation_ratio": pr,
         "sv_truncated_count": int(s.size),
         "sv_discarded_weight": float(discarded_weight),
-        "sv_discarded_weight_threshold": None if discarded_weight_threshold is None else float(discarded_weight_threshold),
+        "sv_discarded_weight_threshold": None
+        if discarded_weight_threshold is None
+        else float(discarded_weight_threshold),
         "mean_row_norm": float(np.mean(row_norms)) if row_norms.size else 0.0,
         "std_row_norm": float(np.std(row_norms, ddof=1)) if row_norms.size > 1 else 0.0,
         "mean_col_norm": float(np.mean(col_norms)) if col_norms.size else 0.0,
@@ -345,11 +347,11 @@ def analyze_weight_scheme_pair(
     mr = matrix_diagnostic_metrics(v_raw, f"{scheme_name}_raw")
     mc = matrix_diagnostic_metrics(v_centered, f"{scheme_name}_centered_past")
     dn = delta_norm_of_centered(v_raw, v_centered)
-    _drop = {"singular_values", "name"}
+    drop = {"singular_values", "name"}
     return {
         "scheme": scheme_name,
-        "metrics_raw": {k: mr[k] for k in mr if k not in _drop},
-        "metrics_centered_past": {k: mc[k] for k in mc if k not in _drop},
+        "metrics_raw": {k: mr[k] for k in mr if k not in drop},
+        "metrics_centered_past": {k: mc[k] for k in mc if k not in drop},
         "singular_values_raw": mr["singular_values"],
         "singular_values_centered_past": mc["singular_values"],
         "delta_norm": float(dn),

@@ -85,7 +85,7 @@ def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
             idx = int(np.argmax(np.abs(flat)))
             ref = flat[idx]
             if np.abs(ref) > 1e-15:
-                v = v * np.exp(-1j * np.angle(ref))
+                v *= np.exp(-1j * np.angle(ref))
             if not any(np.allclose(v, w, atol=1e-12, rtol=0.0) for w in elems):
                 elems.append(v)
                 queue.append(v)
@@ -243,11 +243,14 @@ def sample_split_gap_probes(
     g = int(gap)
     kk = int(k)
     if g < 0:
-        raise ValueError(f"gap must be >= 0, got {gap}")
+        msg = f"gap must be >= 0, got {gap}"
+        raise ValueError(msg)
     if not (1 <= c <= kk):
-        raise ValueError(f"cut must satisfy 1 <= cut <= k, got cut={cut}, k={k}")
+        msg = f"cut must satisfy 1 <= cut <= k, got cut={cut}, k={k}"
+        raise ValueError(msg)
     if c + g + 1 > kk:
-        raise ValueError(f"require cut + gap + 1 <= k, got cut={c}, gap={g}, k={kk}")
+        msg = f"require cut + gap + 1 <= k, got cut={c}, gap={g}, k={kk}"
+        raise ValueError(msg)
     if g == 0:
         return sample_split_cut_probes(
             cut=c,
@@ -263,10 +266,14 @@ def sample_split_gap_probes(
     future_full = kk - c - g
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
-        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+        msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
+        raise ValueError(
+            msg
+        )
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
-        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+        msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
+        raise ValueError(msg)
     unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
 
     past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
@@ -349,12 +356,15 @@ def sample_split_symmetric_gap_probes(
     e = int(ell)
     kk = int(k)
     if e < 0:
-        raise ValueError(f"ell must be >= 0, got {ell}")
+        msg = f"ell must be >= 0, got {ell}"
+        raise ValueError(msg)
     if not (1 <= c0 <= kk):
-        raise ValueError(f"center_cut must satisfy 1 <= center_cut <= k, got {center_cut}, k={k}")
+        msg = f"center_cut must satisfy 1 <= center_cut <= k, got {center_cut}, k={k}"
+        raise ValueError(msg)
     ell_max = min(c0 - 1, kk - c0)
     if e > ell_max:
-        raise ValueError(f"ell must satisfy 0 <= ell <= {ell_max}, got {ell}")
+        msg = f"ell must satisfy 0 <= ell <= {ell_max}, got {ell}"
+        raise ValueError(msg)
     if e == 0:
         return sample_split_cut_probes(
             cut=c0,
@@ -375,10 +385,14 @@ def sample_split_symmetric_gap_probes(
 
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
-        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+        msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
+        raise ValueError(
+            msg
+        )
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
-        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+        msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
+        raise ValueError(msg)
     unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
 
     past_pairs: list[list[Any]] = []
@@ -430,7 +444,8 @@ def sample_split_symmetric_gap_probes(
             full.append({"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)})
             full.extend(future_pairs[j])
             if len(full) != kk:
-                raise RuntimeError(f"internal: symmetric gap sequence length mismatch, got {len(full)} expected {kk}")
+                msg = f"internal: symmetric gap sequence length mismatch, got {len(full)} expected {kk}"
+                raise RuntimeError(msg)
             all_pairs.append(full)
 
     # Features are not consumed by exact evaluator, but keep placeholder arrays for consistency.
@@ -473,22 +488,29 @@ def sample_split_delayed_break_probes(
     tt = int(tau)
     kk = int(k)
     if tt < 0:
-        raise ValueError(f"tau must be >= 0, got {tau}")
+        msg = f"tau must be >= 0, got {tau}"
+        raise ValueError(msg)
     if not (1 <= c_left <= kk):
-        raise ValueError(f"left_cut must satisfy 1 <= left_cut <= k, got {left_cut}, k={k}")
+        msg = f"left_cut must satisfy 1 <= left_cut <= k, got {left_cut}, k={k}"
+        raise ValueError(msg)
     c_right = c_left + tt + 1
     if c_right > kk:
         tau_max = max(0, kk - c_left - 1)
-        raise ValueError(f"tau must satisfy 0 <= tau <= {tau_max}, got {tau}")
+        msg = f"tau must satisfy 0 <= tau <= {tau_max}, got {tau}"
+        raise ValueError(msg)
     past_full = c_left - 1
     future_tail = kk - c_right
 
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
-        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+        msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
+        raise ValueError(
+            msg
+        )
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
-        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+        msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
+        raise ValueError(msg)
     unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
 
     past_pairs: list[list[Any]] = []
@@ -524,7 +546,7 @@ def sample_split_delayed_break_probes(
     z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     sigma_ref_vec = z0 if sigma_ref is None else np.asarray(sigma_ref, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(sigma_ref_vec))
-    sigma_ref_vec = sigma_ref_vec / max(nrm, 1e-15)
+    sigma_ref_vec /= max(nrm, 1e-15)
     u_id = np.eye(2, dtype=np.complex128)
     bridge_common: list[dict[str, Any]] = [{"type": "unitary", "U": u_id} for _ in range(tt)]
 
@@ -539,7 +561,8 @@ def sample_split_delayed_break_probes(
             full.append({"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)})
             full.extend(future_pairs[j])
             if len(full) != kk:
-                raise RuntimeError(f"internal: delayed-break sequence length mismatch, got {len(full)} expected {kk}")
+                msg = f"internal: delayed-break sequence length mismatch, got {len(full)} expected {kk}"
+                raise RuntimeError(msg)
             all_pairs.append(full)
 
     past_features = np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32)
@@ -572,14 +595,12 @@ def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int
     all_pairs: list[list[Any]] = []
     for i in range(n_p):
         for j in range(n_f):
-            full: list[Any] = []
-            for t in range(c - 1):
-                full.append(probe_set.past_pairs[i][t])
+            full: list[Any] = [probe_set.past_pairs[i][t] for t in range(c - 1)]
             full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
-            for t in range(kk - c):
-                full.append(probe_set.future_pairs[j][t])
+            full.extend(probe_set.future_pairs[j][t] for t in range(kk - c))
             if len(full) != kk:
-                raise RuntimeError("internal: full sequence length mismatch")
+                msg = "internal: full sequence length mismatch"
+                raise RuntimeError(msg)
             all_pairs.append(full)
     return all_pairs, n_p, n_f
 
@@ -624,7 +645,7 @@ def analyze_v_matrix(
         thr = max(float(discarded_weight_threshold), 0.0)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
 
-        tail_cumsum = np.cumsum((s_full[::-1] ** 2))
+        tail_cumsum = np.cumsum(s_full[::-1] ** 2)
         keep = s_full.size
 
         for idx, tail_weight in enumerate(tail_cumsum, start=1):
@@ -638,9 +659,7 @@ def analyze_v_matrix(
 
         s = s_full[:keep]
         discarded_weight = float(np.sum(s_full[keep:] ** 2))
-        discarded_fraction = (
-            discarded_weight / total_weight if total_weight > 0.0 else 0.0
-        )
+        discarded_fraction = discarded_weight / total_weight if total_weight > 0.0 else 0.0
 
     kept_weight = float(np.sum(s**2))
     if kept_weight <= 0.0:
@@ -681,6 +700,7 @@ def analyze_v_matrix(
         "median_row_distance": float(np.median(tri)) if tri.size else 0.0,
     }
 
+
 def probe_process(
     *,
     process: ProbeProcess,
@@ -709,4 +729,3 @@ def probe_process(
         out["V"] = v
         out["V_centered"] = v_centered
     return out
-

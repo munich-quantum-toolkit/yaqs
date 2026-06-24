@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from ..core.encoding import packed_rho8_to_pauli_xyz_batch
 from ..core.utils import make_mcwf_static_context
 from ..surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
 from .probe import ProbeSet, build_all_pairs_grid
+
+if TYPE_CHECKING:
+    from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
 class ExactProbeProcess:
@@ -53,7 +55,8 @@ class ExactProbeProcess:
             record_step_states=False,
         )
         if not isinstance(final_packed, np.ndarray):
-            raise RuntimeError("Expected ndarray output from exact simulation.")
+            msg = "Expected ndarray output from exact simulation."
+            raise RuntimeError(msg)
         if final_packed.shape[0] != n_tot:
             msg = f"Expected {n_tot} final states from exact simulation, got {final_packed.shape[0]}."
             raise RuntimeError(msg)
@@ -91,12 +94,14 @@ def evaluate_exact_probe_set_with_diagnostics(
         show_progress=True,
     )
     if not isinstance(final_packed, np.ndarray):
-        raise RuntimeError("Expected ndarray output from exact simulation.")
-    pauli_xyz = packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
+        msg = "Expected ndarray output from exact simulation."
+        raise RuntimeError(msg)
+    pauli_xyz = (
+        packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
+    )
     w = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
             idx = ii * n_f + jj
             w[ii, jj] = float(traces[idx]["cumulative_weight_final"])
     return pauli_xyz, w, traces
-

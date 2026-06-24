@@ -94,7 +94,7 @@ def test_transformercomb_predict_final_state_batch_matches_forward_last_step() -
 
 
 def test_transformercomb_entropy_shapes_and_batched_futures() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
@@ -117,7 +117,7 @@ def test_transformercomb_entropy_shapes_and_batched_futures() -> None:
 
 
 def test_transformercomb_entropy_restores_training_mode() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
@@ -140,7 +140,10 @@ def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     torch = pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
-    from mqt.yaqs.characterization.process_tensors.core.encoding import normalize_rho_from_backend_output, pack_rho8  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors.core.encoding import (  # noqa: PLC0415
+        normalize_rho_from_backend_output,
+        pack_rho8,
+    )
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     rho0 = model._default_rho0(device=torch.device("cpu"), dtype=torch.float32)
@@ -159,7 +162,7 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
         _sample_random_intervention_parts,
     )
 
-    _emap, rho_prep, effect, J = _sample_random_intervention(rng)
+    _emap, rho_prep, effect, _J = _sample_random_intervention(rng)
     feat_from_J = _choi_features_from_parts(rho_prep, effect)
     # Also cover the direct parts sampler path.
     rho2, eff2, feat2 = _sample_random_intervention_parts(rng)
@@ -171,7 +174,7 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
 
 
 def test_transformercomb_entropy_rejects_out_of_range_cut() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
@@ -203,7 +206,7 @@ def test_transformercomb_entropy_rejects_out_of_range_cut() -> None:
 
 
 def test_transformercomb_entropy_requires_sequence_length() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 

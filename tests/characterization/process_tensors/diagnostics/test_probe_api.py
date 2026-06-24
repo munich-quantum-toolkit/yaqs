@@ -45,7 +45,7 @@ def test_exact_probe_process_builds_static_ctx_internally(monkeypatch) -> None: 
 
     calls: dict[str, object] = {}
 
-    def _fake_make_ctx(operator, sim_params, noise_model=None):  # noqa: ANN001
+    def _fake_make_ctx(operator, sim_params, noise_model=None) -> str:  # noqa: ANN001
         calls["ctx_args"] = (operator, sim_params, noise_model)
         return "CTX"
 

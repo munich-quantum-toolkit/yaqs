@@ -21,6 +21,6 @@ def test_rho_to_xyz_standard_bloch_states(psi: np.ndarray, expected_xyz: np.ndar
     rho = np.outer(psi, psi.conj())
     tr = float(np.trace(rho).real)
     if tr > 1e-15:
-        rho = rho / tr
+        rho /= tr
     xyz = rho_to_xyz(rho)
     np.testing.assert_allclose(xyz, expected_xyz, atol=1e-10, rtol=0.0)
