@@ -1,5 +1,9 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
 # SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
 
 """Encoding utilities shared by process-tensor tomography and surrogates.
 
@@ -11,9 +15,12 @@ This includes:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
 
 # Pauli matrices for single-qubit Bloch expectations Tr(rho P).
 PAULI_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
@@ -63,9 +70,9 @@ def _normalize_density_like_densecomb(rho: np.ndarray) -> np.ndarray:
     if abs(tr) > 1e-12:
         rho /= tr
 
-    w, V = np.linalg.eigh(rho)
+    w, eig_vecs = np.linalg.eigh(rho)
     w = np.clip(w, 0.0, None)
-    rho = (V * w) @ V.conj().T
+    rho = (eig_vecs * w) @ eig_vecs.conj().T
 
     tr2 = np.trace(rho)
     if abs(tr2) > 1e-15:
@@ -122,6 +129,12 @@ def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
     r"""Pauli expectation values :math:`(x,y,z)` with :math:`x=\\mathrm{Tr}(\\rho X)` etc.
 
     Uses the same :math:`X,Y,Z` as the split-cut probing pipeline (no identity component).
+
+    Args:
+        rho: Single-qubit density matrix.
+
+    Returns:
+        Float64 vector ``(x, y, z)`` of Pauli expectations.
     """
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     return np.array(
@@ -135,7 +148,16 @@ def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
 
 
 def pauli_xyz_to_rho(xyz: np.ndarray) -> np.ndarray:
-    r"""Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates, :math:`\\rho=\\frac12(I+xX+yY+zZ)`."""
+    r"""Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates.
+
+    Uses :math:`\\rho=\\frac12(I+xX+yY+zZ)`.
+
+    Args:
+        xyz: Bloch coordinates ``(x, y, z)``.
+
+    Returns:
+        Complex :math:`2\\times 2` Hermitian matrix (not necessarily physical).
+    """
     t = np.asarray(xyz, dtype=np.float64).reshape(3)
     x, y, z = float(t[0]), float(t[1]), float(t[2])
     return 0.5 * (np.eye(2, dtype=np.complex128) + x * PAULI_X + y * PAULI_Y + z * PAULI_Z)
@@ -151,6 +173,9 @@ def packed_rho8_to_pauli_xyz_batch(packed: np.ndarray, *, normalize: bool = True
 
     Returns:
         Float64 array with shape ``packed.shape[:-1] + (3,)``.
+
+    Raises:
+        ValueError: If the last dimension of ``packed`` is not 8.
     """
     p = np.asarray(packed, dtype=np.float32)
     if p.shape[-1] != 8:
@@ -165,7 +190,7 @@ def packed_rho8_to_pauli_xyz_batch(packed: np.ndarray, *, normalize: bool = True
     return out.reshape(*p.shape[:-1], 3)
 
 
-def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
+def normalize_rho_from_backend_output(rho_final: ArrayLike) -> np.ndarray:
     """Normalize a backend 2x2 output into a physical density matrix.
 
     This applies hermitization and trace normalization, then uses a conservative fast-path check

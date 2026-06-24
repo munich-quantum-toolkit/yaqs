@@ -1,3 +1,10 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Sanity checks for Pauli (x, y, z) Bloch features used in split-cut :math:`V`."""
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ from mqt.yaqs.characterization.process_tensors.core.encoding import rho_to_xyz
     ],
 )
 def test_rho_to_xyz_standard_bloch_states(psi: np.ndarray, expected_xyz: np.ndarray) -> None:
+    """Standard single-qubit states map to the expected Bloch coordinates."""
     rho = np.outer(psi, psi.conj())
     tr = float(np.trace(rho).real)
     if tr > 1e-15:

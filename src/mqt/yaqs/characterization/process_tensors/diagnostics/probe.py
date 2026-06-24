@@ -1,3 +1,10 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Process probing diagnostics (split-cut V-matrix construction and metrics)."""
 
 from __future__ import annotations
@@ -48,6 +55,11 @@ class ProbeProcess(Protocol):
 
 
 def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+    """Sample one intervention step feature row and MP pair.
+
+    Returns:
+        Tuple ``(choi_features, (psi_meas, psi_prep))``.
+    """
     rho_prep, effect, feat = _sample_random_intervention_parts(rng)
     psi_meas = _psi_from_rank1_projector(effect)
     psi_prep = _psi_from_rank1_projector(rho_prep)
@@ -55,7 +67,11 @@ def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray
 
 
 def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
-    """Sample a Haar-like random single-qubit unitary via complex QR."""
+    r"""Sample a Haar-like random single-qubit unitary via complex QR.
+
+    Returns:
+        Complex :math:`2\times 2` unitary matrix.
+    """
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     q, r = np.linalg.qr(a)
     d = np.diag(r)
@@ -68,7 +84,11 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
 
 @lru_cache(maxsize=1)
 def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
-    """Enumerate the 24 single-qubit Clifford unitaries from generators H and S."""
+    """Enumerate the 24 single-qubit Clifford unitaries from generators H and S.
+
+    Returns:
+        Tuple of 24 single-qubit Clifford unitary matrices.
+    """
     h = (1.0 / np.sqrt(2.0)) * np.asarray([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128)
     s = np.asarray([[1.0, 0.0], [0.0, 1.0j]], dtype=np.complex128)
     gens = (h, s)
@@ -95,14 +115,22 @@ def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
 
 
 def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
-    """Sample a uniformly random element from the 24 single-qubit Cliffords."""
+    r"""Sample a uniformly random element from the 24 single-qubit Cliffords.
+
+    Returns:
+        Complex :math:`2\times 2` Clifford unitary matrix.
+    """
     cliffords = _single_qubit_clifford_group()
     idx = int(rng.integers(0, len(cliffords)))
     return np.asarray(cliffords[idx], dtype=np.complex128)
 
 
 def _sample_depolarizing_pauli_unitary(rng: np.random.Generator) -> np.ndarray:
-    """Sample a Pauli unitary for a stochastic unraveling of the depolarizing channel."""
+    r"""Sample a Pauli unitary for a stochastic unraveling of the depolarizing channel.
+
+    Returns:
+        One of ``I, X, Y, Z`` as a :math:`2\times 2` unitary.
+    """
     idx = int(rng.integers(0, 4))
     if idx == 0:  # I
         return np.eye(2, dtype=np.complex128)
@@ -115,7 +143,11 @@ def _sample_depolarizing_pauli_unitary(rng: np.random.Generator) -> np.ndarray:
 
 
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
-    """Encode unitary channel Choi matrix as the standard 32-float row."""
+    """Encode unitary channel Choi matrix as the standard 32-float row.
+
+    Returns:
+        Float32 feature vector of shape ``(32,)``.
+    """
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
     vec_u = uu.reshape(4, order="F")
     choi = np.outer(vec_u, vec_u.conj()).astype(np.complex128)
@@ -153,6 +185,12 @@ def sample_split_cut_probes(
     For ``unitary_break_mp``, ``unitary_ensemble`` controls non-break unitaries:
     - ``haar`` (default): Haar-like random unitary via QR.
     - ``clifford``: uniformly random single-qubit Clifford.
+
+    Returns:
+        Probe set with sampled past/future features and pairs.
+
+    Raises:
+        ValueError: If ``cut``, ``intervention_mode``, or ``unitary_ensemble`` is invalid.
     """
     c = int(cut)
     kk = int(k)
@@ -238,6 +276,12 @@ def sample_split_gap_probes(
     ``gap`` inserts that many stochastic depolarizing slots between the break intervention
     and the remaining future region. For ``gap=0`` this reduces exactly to
     :func:`sample_split_cut_probes`.
+
+    Returns:
+        Probe set with a depolarizing memory gap after the break.
+
+    Raises:
+        ValueError: If geometry or mode parameters are invalid.
     """
     c = int(cut)
     g = int(gap)
@@ -351,6 +395,13 @@ def sample_split_symmetric_gap_probes(
     deterministic ``reset_only`` steps are inserted for every ``(i,j)`` — a repeated system clamp,
     not an exact depolarizing channel. For ``ell=0`` this reduces to ordinary split-cut probing at
     ``center_cut``.
+
+    Returns:
+        Probe set with a symmetric hard-reset memory gap.
+
+    Raises:
+        ValueError: If geometry or mode parameters are invalid.
+        RuntimeError: If an internal sequence length mismatch occurs.
     """
     c0 = int(center_cut)
     e = int(ell)
@@ -483,6 +534,13 @@ def sample_split_delayed_break_probes(
     Construction for each full sequence:
     ``past(i) + [left break: (E_m(i), sigma_ref)] + [identity]^tau + [prepare_only sigma_p(j)] + future(j)``.
     The ``tau`` bridge is common to all ``(i,j)`` entries and independent of row/column labels.
+
+    Returns:
+        Probe set with a delayed break and optional memory gap.
+
+    Raises:
+        ValueError: If geometry or mode parameters are invalid.
+        RuntimeError: If an internal sequence length mismatch occurs.
     """
     c_left = int(left_cut)
     tt = int(tau)
@@ -583,7 +641,14 @@ def sample_split_delayed_break_probes(
 
 
 def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
-    """Construct full sequence pair grid from split-cut probes."""
+    """Construct full sequence pair grid from split-cut probes.
+
+    Returns:
+        Tuple ``(all_pairs, n_pasts, n_futures)``.
+
+    Raises:
+        RuntimeError: If an internal sequence length mismatch occurs.
+    """
     if probe_set.all_pairs_grid is not None:
         npg = int(probe_set.n_pasts_grid) if probe_set.n_pasts_grid is not None else len(probe_set.past_pairs)
         nfg = int(probe_set.n_futures_grid) if probe_set.n_futures_grid is not None else len(probe_set.future_pairs)
@@ -606,7 +671,11 @@ def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int
 
 
 def build_v_matrix(pauli_xyz_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Flatten Pauli features ``(n_p, n_f, 3)`` into rows of :math:`V` (order preserved)."""
+    """Flatten Pauli features ``(n_p, n_f, 3)`` into rows of :math:`V` (order preserved).
+
+    Returns:
+        Tuple ``(v_raw, v_centered_past)``.
+    """
     n_p, n_f, d_out = pauli_xyz_ij.shape
     v = pauli_xyz_ij.reshape(n_p, n_f * d_out).astype(np.float64)
     v_centered = v - v.mean(axis=0, keepdims=True)
@@ -614,6 +683,11 @@ def build_v_matrix(pauli_xyz_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def pairwise_row_distances(v: np.ndarray) -> np.ndarray:
+    """Compute pairwise Euclidean distances between rows of ``v``.
+
+    Returns:
+        Symmetric distance matrix of shape ``(n_rows, n_rows)``.
+    """
     n = int(v.shape[0])
     d = np.zeros((n, n), dtype=np.float64)
     for i in range(n):
@@ -629,6 +703,11 @@ def analyze_v_matrix(
     discarded_weight_threshold: float | None = 1e-12,
     min_keep: int = 1,
 ) -> dict[str, Any]:
+    """Analyze raw and past-centered V matrices.
+
+    Returns:
+        Dictionary with Frobenius norms, singular-value spectrum stats, and entropy.
+    """
     fro_v_sq = float(np.linalg.norm(v, ord="fro") ** 2)
     fro_c_sq = float(np.linalg.norm(v_centered, ord="fro") ** 2)
     delta_norm = float(fro_c_sq / fro_v_sq) if fro_v_sq > 0.0 else 0.0
@@ -712,7 +791,12 @@ def probe_process(
     probe_set: ProbeSet | None = None,
     return_v: bool = False,
 ) -> dict[str, Any]:
-    """Probe a process via split-cut probes and return V-matrix diagnostics."""
+    """Probe a process via split-cut probes and return V-matrix diagnostics.
+
+    Returns:
+        Dictionary with Pauli responses, entropy/spectrum metrics, and the probe set.
+        Optionally includes raw ``V`` matrices when ``return_v=True``.
+    """
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()

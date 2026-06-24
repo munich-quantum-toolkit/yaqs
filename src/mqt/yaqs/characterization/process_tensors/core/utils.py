@@ -1,5 +1,9 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
 # SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
 
 """MCWF/TJM state evolution helpers shared by process-tensor tomography and surrogate workflows.
 
@@ -11,12 +15,12 @@ terminology.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
-from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
+from mqt.yaqs.analog.mcwf import MCWFContext, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
@@ -172,10 +176,16 @@ def _reprepare_backend_state_forced(
     Returns:
         Tuple ``(state_out, prob)`` where ``state_out`` is the updated backend state and ``prob`` is
         the projection probability.
+
+    Raises:
+        TypeError: If ``state`` is incompatible with ``solver``.
     """
     if solver == "MCWF":
-        assert isinstance(state, np.ndarray)
-        return _reprepare_site_zero_vector_forced(state, proj_state, new_state)
+        if not isinstance(state, np.ndarray):
+            msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
+            raise TypeError(msg)
+        state_vec = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
+        return _reprepare_site_zero_vector_forced(state_vec, proj_state, new_state)
     assert isinstance(state, MPS)
     new_mps = copy.deepcopy(state)
     prob = _reprepare_site_zero_forced(new_mps, proj_state, new_state)
@@ -183,7 +193,7 @@ def _reprepare_backend_state_forced(
 
 
 def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return a 2×2 unitary whose first column is ``psi`` (normalized computational |0⟩ → ``psi``)."""
+    """Return a 2x2 unitary whose first column is ``psi`` (normalized computational |0> -> ``psi``)."""
     p = np.asarray(psi, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
     p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
@@ -198,17 +208,26 @@ def _reset_backend_site_zero_to_product_ket(
     *,
     chain_length: int,
 ) -> MPS | NDArray[np.complex128]:
-    """Clamp site 0 to ``psi_reset`` and all other sites to |0⟩ (deterministic, unit weight).
+    """Clamp site 0 to ``psi_reset`` and all other sites to |0> (deterministic, unit weight).
 
     Used for hard-reset / memory-gap probes: destroys correlations and carries no branch weight.
+
+    Args:
+        state: Current backend state.
+        psi_reset: Single-qubit ket for site 0.
+        solver: Backend solver name.
+        chain_length: Number of qubits in the chain.
+
+    Returns:
+        Updated backend state with site 0 set to ``psi_reset`` and remaining sites in |0>.
     """
     p = np.asarray(psi_reset, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
     p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
-        L = int(chain_length)
-        rest_dim = 2 ** (L - 1)
+        chain_len = int(chain_length)
+        rest_dim = 2 ** (chain_len - 1)
         psi_rest = np.zeros(rest_dim, dtype=np.complex128)
         psi_rest[0] = 1.0 + 0.0j
         return np.kron(p, psi_rest).astype(np.complex128).reshape(-1)
@@ -225,7 +244,16 @@ def _apply_backend_unitary_site_zero(
     unitary: NDArray[np.complex128],
     solver: str,
 ) -> MPS | NDArray[np.complex128]:
-    """Apply a single-qubit unitary on site 0 without introducing measurement weight."""
+    """Apply a single-qubit unitary on site 0 without introducing measurement weight.
+
+    Args:
+        state: Current backend state.
+        unitary: Single-qubit unitary matrix.
+        solver: Backend solver name.
+
+    Returns:
+        Updated backend state after applying the unitary on site 0.
+    """
     u = np.asarray(unitary, dtype=np.complex128).reshape(2, 2)
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
@@ -245,7 +273,7 @@ def _evolve_backend_state(
     step_params: AnalogSimParams,
     solver: str,
     traj_idx: int = 0,
-    static_ctx: Any = None,
+    static_ctx: MCWFContext | None = None,
 ) -> MPS | NDArray[np.complex128]:
     """Evolve a backend state forward in time by one segment.
 
@@ -272,13 +300,13 @@ def _evolve_backend_state(
         if static_ctx is None:
             static_ctx = make_mcwf_static_context(operator, step_params, noise_model=noise_model)
         dynamic_ctx = copy.copy(static_ctx)
-        dynamic_ctx.psi_initial = state
+        dynamic_ctx.psi_initial = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
         dynamic_ctx.sim_params = step_params
         _, _, out = mcwf((traj_idx, dynamic_ctx))
         if out is None:
             msg = "MCWF backend returned None state."
             raise RuntimeError(msg)
-        return cast("NDArray[np.complex128]", out)
+        return out
 
     if not isinstance(state, MPS):
         msg = f"TJM solver requires MPS state, got {type(state)}."
@@ -289,7 +317,7 @@ def _evolve_backend_state(
     if out is None:
         msg = "TJM backend returned None state."
         raise RuntimeError(msg)
-    return cast("MPS", out)
+    return out
 
 
 def make_mcwf_static_context(
@@ -297,7 +325,7 @@ def make_mcwf_static_context(
     sim_params: AnalogSimParams,
     *,
     noise_model: NoiseModel | None = None,
-) -> Any:
+) -> MCWFContext:
     """Build a reusable MCWF preprocessing context.
 
     Args:

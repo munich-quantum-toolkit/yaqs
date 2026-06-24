@@ -94,11 +94,11 @@ def get_basis_states(
         sx = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
         sy = np.array([[0.0, -1j], [1j, 0.0]], dtype=np.complex128)
         sz = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
-        I = np.eye(2, dtype=np.complex128)
+        eye_mat = np.eye(2, dtype=np.complex128)
 
         states = []
         for i, r in enumerate(rs):
-            rho = 0.5 * (I + r[0] * sx + r[1] * sy + r[2] * sz)
+            rho = 0.5 * (eye_mat + r[0] * sx + r[1] * sy + r[2] * sz)
             evals, evecs = np.linalg.eigh(rho)
             psi = evecs[:, int(np.argmax(evals.real))].astype(np.complex128)
             psi /= np.linalg.norm(psi)

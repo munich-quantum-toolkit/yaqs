@@ -1,3 +1,14 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: PLC2701 -- white-box tests import private backend helpers
+
+"""Tests for process-tensor simulation utility helpers."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -8,9 +19,11 @@ from mqt.yaqs.characterization.process_tensors.core.utils import (
     _reconstruct_state,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO, MPS
+from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 
 def test_initialize_backend_state_mcwf_and_tjm() -> None:
+    """Backend state initialization dispatches to ndarray (MCWF) or MPS (TJM)."""
     op = MPO.ising(length=1, J=1.0, g=0.5)
 
     state_mcwf = _initialize_backend_state(op, solver="MCWF")
@@ -37,8 +50,6 @@ def test_get_rho_site_zero_from_mps_and_vector() -> None:
 
 def test_reconstruct_state_from_expectations() -> None:
     """Check that _reconstruct_state inverts simple Pauli expectations for |0>."""
-    from mqt.yaqs.core.libraries.gate_library import X, Y, Z
-
     psi0 = np.array([1.0, 0.0], dtype=np.complex128)
     rho0 = np.outer(psi0, psi0.conj())
 

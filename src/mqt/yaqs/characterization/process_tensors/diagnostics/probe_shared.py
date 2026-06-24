@@ -1,3 +1,10 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Build split-cut :class:`ProbeSet` from shared per-slot pools (cut-comparable probes)."""
 
 from __future__ import annotations
@@ -33,7 +40,11 @@ def draw_shared_probe_pools(
     n_futures: int,
     rng: np.random.Generator,
 ) -> SharedProbePools:
-    """Draw all pools with a single RNG stream (one call per benchmark configuration)."""
+    """Draw all pools with a single RNG stream (one call per benchmark configuration).
+
+    Returns:
+        Shared probe pools for all cuts at fixed ``k``.
+    """
     kk = int(k)
     mx = max(int(n_pasts), int(n_futures))
     full_pool: list[list[tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]]] = [
@@ -56,7 +67,14 @@ def draw_shared_probe_pools(
 
 
 def probe_set_from_shared_pools(pools: SharedProbePools, *, cut: int) -> ProbeSet:
-    """Assemble a :class:`ProbeSet` for ``cut`` from pre-drawn pools (no additional RNG)."""
+    """Assemble a :class:`ProbeSet` for ``cut`` from pre-drawn pools (no additional RNG).
+
+    Returns:
+        Probe set sliced from the shared pools at the requested cut.
+
+    Raises:
+        ValueError: If ``cut`` is out of range for ``pools.k``.
+    """
     c = int(cut)
     kk = pools.k
     n_pasts = pools.n_pasts
@@ -116,6 +134,10 @@ def build_probe_set_from_shared_pools(
     n_futures: int,
     rng: np.random.Generator,
 ) -> ProbeSet:
-    """Convenience: draw pools and assemble for ``cut`` (one RNG draw; not cut-comparable across calls)."""
+    """Convenience: draw pools and assemble for ``cut`` (one RNG draw; not cut-comparable across calls).
+
+    Returns:
+        Probe set for the requested cut.
+    """
     pools = draw_shared_probe_pools(k=k, n_pasts=n_pasts, n_futures=n_futures, rng=rng)
     return probe_set_from_shared_pools(pools, cut=cut)

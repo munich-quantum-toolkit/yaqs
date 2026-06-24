@@ -47,7 +47,7 @@ def _rank1_mpo_term(
 
     mpo = MPO()
     mpo.custom(tensors, transpose=False)
-    mpo.physical_dimension = phys_dims
+    mpo.physical_dimension = phys_dims  # ty: ignore[invalid-assignment]
     return mpo
 
 
@@ -159,10 +159,10 @@ def _reconstruct_upsilon(
         ValueError: If shapes are inconsistent or the self-check fails.
     """
     if len(basis_ops) != 16:
-        msg = "Need choi_basis of length 16 to reconstruct Υ."
+        msg = "Need choi_basis of length 16 to reconstruct Upsilon."
         raise ValueError(msg)
     if len(dual_ops) != 16:
-        msg = "Need choi_duals of length 16 to reconstruct Υ."
+        msg = "Need choi_duals of length 16 to reconstruct Upsilon."
         raise ValueError(msg)
     if out_vecs.shape[0] != 4:
         msg = f"Expected out_vecs[0] dim 4 (vec of 2x2 output), got {out_vecs.shape[0]}."
@@ -189,7 +189,7 @@ def _reconstruct_upsilon(
     if not check:
         return upsilon
 
-    U4 = upsilon.reshape(2, dim_past, 2, dim_past)
+    comb_4d = upsilon.reshape(2, dim_past, 2, dim_past)
     err_sum = 0.0
     n_used = 0
     max_checks = 64 if dim_past > 256 else 256
@@ -204,13 +204,13 @@ def _reconstruct_upsilon(
         for a in alpha[1:]:
             past = np.kron(past, basis_ops[a])
         ins = past.T.reshape(dim_past, dim_past)
-        rho_pred = np.einsum("s p q r, r p -> s q", U4, ins)
+        rho_pred = np.einsum("s p q r, r p -> s q", comb_4d, ins)
         err_sum += float(np.linalg.norm(rho_true - rho_pred))
         n_used += 1
 
     mean_err = err_sum / max(1, n_used)
     if mean_err > atol:
-        msg = f"Υ reconstruction self-check failed (mean_err={mean_err:.3e} > atol={atol})."
+        msg = f"Upsilon reconstruction self-check failed (mean_err={mean_err:.3e} > atol={atol})."
         raise ValueError(msg)
 
     return upsilon

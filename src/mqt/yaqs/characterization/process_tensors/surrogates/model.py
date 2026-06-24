@@ -1,5 +1,9 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
 # SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
 """Neural surrogate module: :class:`TransformerComb` only.
 
 Training data containers (:class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`,
@@ -9,12 +13,13 @@ Training data containers (:class:`~mqt.yaqs.characterization.process_tensors.sur
 Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.process_tensors.core.metrics`.
 
 **Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
-(in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.process_tensors.tomography.data`.
+(in the noise sense) is one MCWF/TJM stochastic realization; see
+:mod:`mqt.yaqs.characterization.process_tensors.tomography.data`.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
@@ -25,7 +30,7 @@ from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed
 from ..diagnostics.probe import ProbeSet, probe_process
 from .utils import _choi_features_from_parts
 
-# Computational-basis |0⟩⟨0| (same convention as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data` rollouts).
+# Computational-basis |0><0| (same convention as workflow rollouts).
 _RHO0_PROJECTOR = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
@@ -146,8 +151,16 @@ class TransformerComb(nn.Module):
 
     @property
     def d_e(self) -> int:
-        """Per-step intervention feature dimension (excluding the initial-state side channel)."""
-        return int(self.in_proj[0].in_features) - self._d_side
+        """Per-step intervention feature dimension (excluding the initial-state side channel).
+
+        Raises:
+            TypeError: If the input projection is not a linear layer.
+        """
+        in_proj = self.in_proj[0]
+        if not isinstance(in_proj, nn.Linear):
+            msg = "Expected a Linear input projection layer."
+            raise TypeError(msg)
+        return int(in_proj.in_features) - self._d_side
 
     def _default_rho0(self, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         r"""Packed rho8 for the physical |0⟩⟨0| reduced state (same path as training data).
@@ -157,6 +170,12 @@ class TransformerComb(nn.Module):
         :func:`~mqt.yaqs.characterization.process_tensors.core.encoding.normalize_rho_from_backend_output`,
         matching surrogate rollouts in
         :mod:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow`.
+
+        Returns:
+            Packed rho8 tensor on ``device`` with dtype ``dtype``.
+
+        Raises:
+            ValueError: If packed length does not match ``d_rho``.
         """
         packed = pack_rho8(normalize_rho_from_backend_output(_RHO0_PROJECTOR)).astype(np.float32)
         if packed.shape[0] != self.d_rho:
@@ -165,7 +184,14 @@ class TransformerComb(nn.Module):
         return torch.as_tensor(packed, device=device, dtype=dtype)
 
     def _rho_to_features(self, rho: torch.Tensor) -> torch.Tensor:
-        """Map predicted final density encodings to real feature vectors for the cut matrix."""
+        """Map predicted final density encodings to real feature vectors for the cut matrix.
+
+        Returns:
+            Real feature tensor with the same shape as ``rho``.
+
+        Raises:
+            ValueError: If the last dimension does not match ``d_rho``.
+        """
         if rho.shape[-1] != self.d_rho:
             msg = f"Expected last dim d_rho={self.d_rho}, got {rho.shape}."
             raise ValueError(msg)
@@ -174,7 +200,7 @@ class TransformerComb(nn.Module):
     def predict_final_state_batch(
         self,
         rho0: torch.Tensor,
-        E: torch.Tensor,
+        e_features: torch.Tensor,
         *,
         restore_training: bool = True,
     ) -> torch.Tensor:
@@ -182,8 +208,8 @@ class TransformerComb(nn.Module):
 
         Args:
             rho0: Initial encoding of shape ``(d_rho,)`` or ``(B, d_rho)``. A single row is broadcast to
-                the batch size of ``E``.
-            E: Per-step features of shape ``(B, T, d_e)``.
+                the batch size of ``e_features``.
+            e_features: Per-step features of shape ``(B, T, d_e)``.
             restore_training: If ``False``, do not restore ``.train()`` after inference (for callers that
                 run many batched predictions in a loop, e.g. :meth:`entropy`).
 
@@ -193,11 +219,11 @@ class TransformerComb(nn.Module):
         Raises:
             ValueError: If shapes are inconsistent.
         """
-        if E.dim() != 3:
-            msg = f"E must be (B, T, d_e), got {E.shape}."
+        if e_features.dim() != 3:
+            msg = f"e_features must be (B, T, d_e), got {e_features.shape}."
             raise ValueError(msg)
-        b = int(E.shape[0])
-        rho0_t = torch.as_tensor(rho0, dtype=E.dtype, device=E.device)
+        b = int(e_features.shape[0])
+        rho0_t = torch.as_tensor(rho0, dtype=e_features.dtype, device=e_features.device)
         if rho0_t.dim() == 1:
             if rho0_t.shape[0] != self.d_rho:
                 msg = f"rho0 (d_rho,) expected length {self.d_rho}, got {rho0_t.shape}."
@@ -209,7 +235,7 @@ class TransformerComb(nn.Module):
         was_training = self.training
         self.eval()
         with torch.no_grad():
-            out = self.forward(E, rho0_t)
+            out = self.forward(e_features, rho0_t)
         if restore_training and was_training:
             self.train()
         return out[:, -1, :]
@@ -260,7 +286,11 @@ class TransformerComb(nn.Module):
         return float(out["entropy"])
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe responses for :func:`probe_process`."""
+        """Evaluate split-cut probe responses for :func:`probe_process`.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 3)`` with Pauli expectations.
+        """
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1
@@ -301,11 +331,11 @@ class TransformerComb(nn.Module):
                 self.train()
         return v_rows
 
-    def forward(self, E: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
+    def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.
 
         Args:
-            E: Per-step features of shape ``(B, T, d_e)``.
+            e_features: Per-step features of shape ``(B, T, d_e)``.
             rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
 
         Returns:
@@ -314,12 +344,12 @@ class TransformerComb(nn.Module):
         Raises:
             ValueError: If input shapes are inconsistent.
         """
-        b, t, _de = E.shape
+        b, t, _de = e_features.shape
         if rho0.shape != (b, self.d_rho):
             msg = f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}."
             raise ValueError(msg)
         side = rho0[:, None, :].expand(b, t, self._d_side)
-        x = torch.cat([E, side], dim=-1)
+        x = torch.cat([e_features, side], dim=-1)
         pe = _sinusoidal_positional_encoding(t, self.d_model, device=x.device, dtype=x.dtype)
         h = self.in_ln(self.in_proj(x)) + pe
         mask = _causal_mask(t, h.device)
@@ -328,7 +358,7 @@ class TransformerComb(nn.Module):
 
     def predict(
         self,
-        E: torch.Tensor | np.ndarray,
+        e_features: torch.Tensor | np.ndarray,
         rho0: torch.Tensor | np.ndarray,
         *,
         device: torch.device | str | None = None,
@@ -337,7 +367,7 @@ class TransformerComb(nn.Module):
         """Run inference (eval mode, no gradients).
 
         Args:
-            E: Per-step features of shape ``(B, T, d_e)``.
+            e_features: Per-step features of shape ``(B, T, d_e)``.
             rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
             device: Device for inference. Defaults to the model's current device.
             return_numpy: If ``True``, return a NumPy array on CPU; otherwise return a tensor on ``device``.
@@ -351,10 +381,10 @@ class TransformerComb(nn.Module):
             dev = torch.device(device) if isinstance(device, str) else device
         was_training = self.training
         self.eval()
-        E_t = torch.as_tensor(E, dtype=torch.float32, device=dev)
+        e_features_t = torch.as_tensor(e_features, dtype=torch.float32, device=dev)
         r0_t = torch.as_tensor(rho0, dtype=torch.float32, device=dev)
         with torch.no_grad():
-            out = self.forward(E_t, r0_t)
+            out = self.forward(e_features_t, r0_t)
         if was_training:
             self.train()
         if return_numpy:
@@ -395,23 +425,23 @@ class TransformerComb(nn.Module):
             device = next(self.parameters()).device
         self.to(device)
 
-        E_train, rho0_train, target_train = train_dataset.tensors
-        E_train = E_train.to(device)
+        e_train, rho0_train, target_train = train_dataset.tensors
+        e_train = e_train.to(device)
         rho0_train = rho0_train.to(device)
         target_train = target_train.to(device)
         self.sequence_length = int(target_train.shape[1])
-        train_ds = TensorDataset(E_train, rho0_train, target_train)
+        train_ds = TensorDataset(e_train, rho0_train, target_train)
 
         has_val = val_dataset is not None
         if has_val:
-            E_val, rho0_val, target_val = val_dataset.tensors
-            E_val = cast("torch.Tensor", E_val).to(device)
-            rho0_val = cast("torch.Tensor", rho0_val).to(device)
-            target_val = cast("torch.Tensor", target_val).to(device)
+            e_val, rho0_val, target_val = val_dataset.tensors
+            e_val = e_val.to(device)
+            rho0_val = rho0_val.to(device)
+            target_val = target_val.to(device)
 
         opt = torch.optim.Adam(self.parameters(), lr=float(lr))
         loss_fn = nn.MSELoss()
-        bs = min(int(batch_size), max(1, int(E_train.shape[0])))
+        bs = min(int(batch_size), max(1, int(e_train.shape[0])))
         loader = DataLoader(train_ds, batch_size=bs, shuffle=True)
         k_max = int(target_train.shape[1])
         best = float("inf")
@@ -419,20 +449,20 @@ class TransformerComb(nn.Module):
 
         for _ep in range(int(epochs)):
             self.train()
-            for E_b, rho0_b, tgt_b in loader:
+            for e_batch, rho0_b, tgt_b in loader:
                 opt.zero_grad(set_to_none=True)
                 if prefix_loss == "full" or k_max <= 1:
-                    pred = self(E_b, rho0_b)
+                    pred = self(e_batch, rho0_b)
                     loss = loss_fn(pred, tgt_b)
                 elif prefix_loss == "random":
-                    Ls = int(torch.randint(low=1, high=k_max + 1, size=(1,), device=E_b.device).item())
-                    pred = self(E_b[:, :Ls, :], rho0_b)
-                    loss = loss_fn(pred, tgt_b[:, :Ls, :])
+                    prefix_len = int(torch.randint(low=1, high=k_max + 1, size=(1,), device=e_batch.device).item())
+                    pred = self(e_batch[:, :prefix_len, :], rho0_b)
+                    loss = loss_fn(pred, tgt_b[:, :prefix_len, :])
                 elif prefix_loss == "all":
                     losses = []
-                    for Ls in range(1, k_max + 1):
-                        pred_L = self(E_b[:, :Ls, :], rho0_b)
-                        losses.append(loss_fn(pred_L, tgt_b[:, :Ls, :]))
+                    for prefix_len in range(1, k_max + 1):
+                        pred_prefix = self(e_batch[:, :prefix_len, :], rho0_b)
+                        losses.append(loss_fn(pred_prefix, tgt_b[:, :prefix_len, :]))
                     loss = torch.stack(losses, dim=0).mean()
                 else:
                     msg = f"Unknown prefix_loss: {prefix_loss!r}"
@@ -446,8 +476,8 @@ class TransformerComb(nn.Module):
             if has_val:
                 self.eval()
                 with torch.no_grad():
-                    pred_va = self(cast("torch.Tensor", E_val), cast("torch.Tensor", rho0_val))
-                    val = float(loss_fn(pred_va, cast("torch.Tensor", target_val)).detach().cpu().item())
+                    pred_va = self(e_val, rho0_val)
+                    val = float(loss_fn(pred_va, target_val).detach().cpu().item())
                 if val < best:
                     best = val
                     best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}

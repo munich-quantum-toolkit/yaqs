@@ -21,7 +21,7 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 # ---------------------------------------------------------------------------
 # 2) THIRD PARTY
@@ -37,6 +37,9 @@ from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from torch.utils.data import TensorDataset
+
+    from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -45,6 +48,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
 from ..core.utils import (
+    StochasticSolver,
     _apply_backend_unitary_site_zero,
     _evolve_backend_state,
     _get_rho_site_zero,
@@ -56,6 +60,8 @@ from ..core.utils import (
 from .data import SequenceRolloutSample, stack_rollouts
 from .model import TransformerComb
 from .utils import _random_density_matrix, _sample_random_intervention_sequence, build_initial_psi
+
+_T = TypeVar("_T")
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +116,13 @@ def _validate_comb_sequence_inputs(
     timesteps: list[float],
     timesteps_rows: list[list[float]] | None,
     operators_list: list[list[MPO]] | None,
-    static_ctx_list: list[list[Any]] | None,
+    static_ctx_list: list[list[MCWFContext | None]] | None,
 ) -> None:
-    """Require compatible lengths for the process-tensor / comb convention."""
+    """Require compatible lengths for the process-tensor / comb convention.
+
+    Raises:
+        ValueError: If sequence lengths or optional per-sequence schedules are inconsistent.
+    """
     num_sequences = len(psi_pairs_list)
     if timesteps_rows is None:
         ks = [len(p) for p in psi_pairs_list]
@@ -165,15 +175,15 @@ def _comb_durations_ops_ctx(
     timesteps_rows: list[list[float]] | None,
     hamiltonian: MPO,
     operators_list: list[list[MPO]] | None,
-    mcwf_static_ctx: Any,
-    mcwf_static_ctx_list: list[list[Any]] | None,
-) -> tuple[list[float], list[MPO], list[Any]]:
+    mcwf_static_ctx: MCWFContext | None,
+    mcwf_static_ctx_list: list[list[MCWFContext | None]] | None,
+) -> tuple[list[float], list[MPO], list[MCWFContext | None]]:
     if timesteps_rows is not None:
         durs = [float(timesteps_rows[sequence_idx][i]) for i in range(k + 1)]
     else:
         durs = [float(timesteps[i]) for i in range(k + 1)]
     ops: list[MPO] = []
-    ctxs: list[Any] = []
+    ctxs: list[MCWFContext | None] = []
     for i in range(k + 1):
         op = hamiltonian if operators_list is None else operators_list[sequence_idx][i]
         ctx = mcwf_static_ctx if mcwf_static_ctx_list is None else mcwf_static_ctx_list[sequence_idx][i]
@@ -192,14 +202,22 @@ def _final_state_rollout_core(
     worker_ctx: dict[str, Any],
     collect_trace: bool,
 ) -> tuple[np.ndarray, float, dict[str, Any] | None]:
-    """Shared comb rollout: ``U_1`` then ``k`` times (reprepare → ``U``). Optionally return diagnostic trace."""
+    """Shared comb rollout: ``U_1`` then ``k`` times (reprepare -> ``U``). Optionally return diagnostic trace.
+
+    Returns:
+        Tuple ``(rho_final, cumulative_weight, trace)`` where ``trace`` is ``None`` when
+        ``collect_trace`` is ``False``.
+
+    Raises:
+        ValueError: If an intervention step has an unsupported type.
+    """
     psi_pairs = worker_ctx["psi_pairs"][sequence_idx]
     hamiltonian = worker_ctx["operator"]
     sim_params = worker_ctx["sim_params"]
     timesteps: list[float] = worker_ctx["timesteps"]
     timesteps_rows: list[list[float]] | None = worker_ctx.get("timesteps_rows")
     operators_list: list[list[MPO]] | None = worker_ctx.get("operators_list")
-    mcwf_ctx_list: list[list[Any]] | None = worker_ctx.get("mcwf_static_ctx_list")
+    mcwf_ctx_list: list[list[MCWFContext | None]] | None = worker_ctx.get("mcwf_static_ctx_list")
     noise_model = worker_ctx["noise_model"]
     initial_states: list[np.ndarray] = worker_ctx["initial_psi"]
 
@@ -350,7 +368,6 @@ def _surrogate_final_state_worker(
         worker_ctx=worker_ctx,
         collect_trace=False,
     )
-    rho_final = cast("np.ndarray", rho_final)
     return (sequence_idx, trajectory_idx, rho_final, float(cum_w))
 
 
@@ -358,7 +375,14 @@ def _surrogate_final_state_worker_diagnostics(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, float, dict[str, Any]]:
-    """Same as :func:`_surrogate_final_state_worker` but includes per-sequence rollout diagnostics."""
+    """Same as :func:`_surrogate_final_state_worker` but includes per-sequence rollout diagnostics.
+
+    Returns:
+        Tuple ``(sequence_index, trajectory_index, rho_final, cumulative_weight, trace)``.
+
+    Raises:
+        RuntimeError: If the diagnostics trace is missing.
+    """
     worker_ctx = job_payload if job_payload is not None else WORKER_CTX
     num_trajectories: int = int(worker_ctx["num_trajectories"])
     sequence_idx = int(job_idx // num_trajectories)
@@ -373,7 +397,6 @@ def _surrogate_final_state_worker_diagnostics(
     if trace is None:
         msg = "internal: diagnostics trace missing"
         raise RuntimeError(msg)
-    rho_final = cast("np.ndarray", rho_final)
     return (sequence_idx, trajectory_idx, rho_final, float(cum_w), trace)
 
 
@@ -395,6 +418,9 @@ def _surrogate_rollout_worker(
         ``choi_features_matrix`` is ``(num_steps, d_e)`` and ``rho_seq_packed`` is ``(num_steps, 8)``.
         Here ``rho0_packed`` is the reduced state on site 0 **after** the first free evolution ``U_1`` and
         **before** the first instrument (comb boundary), matching the process-tensor slicing convention.
+
+    Raises:
+        ValueError: If required feature rows are missing or shapes are inconsistent.
     """
     worker_ctx = job_payload if job_payload is not None else WORKER_CTX
     num_trajectories: int = int(worker_ctx["num_trajectories"])
@@ -533,7 +559,7 @@ def _surrogate_rollout_worker(
 # ---------------------------------------------------------------------------
 # 7) SERIAL BACKEND WRAPPER — same thread cap pattern as :func:`mqt.yaqs.simulator._call_backend`
 # ---------------------------------------------------------------------------
-def _call_worker_serial(worker_fn: Callable[..., Any], *args: Any) -> Any:
+def _call_worker_serial(worker_fn: Callable[..., _T], *args: object) -> _T:
     """Run one worker call under BLAS thread limits if available.
 
     Args:
@@ -543,13 +569,11 @@ def _call_worker_serial(worker_fn: Callable[..., Any], *args: Any) -> Any:
     Returns:
         The return value of ``worker_fn(*args)``.
     """
-    import contextlib  # noqa: PLC0415
-
     try:
         from threadpoolctl import threadpool_limits  # noqa: PLC0415
     except ImportError:
         return worker_fn(*args)
-    with contextlib.suppress(Exception), threadpool_limits(limits=1):
+    with threadpool_limits(limits=1):
         return worker_fn(*args)
 
 
@@ -563,16 +587,16 @@ def _simulate_sequences(
     timesteps: list[float],
     psi_pairs_list: list[list[Any]],
     initial_psis: list[np.ndarray],
-    static_ctx: Any,
+    static_ctx: MCWFContext | None,
     parallel: bool = True,
     show_progress: bool = True,
     record_step_states: bool = True,
     e_features_rows: list[np.ndarray] | None = None,
     timesteps_rows: list[list[float]] | None = None,
     operators_list: list[list[MPO]] | None = None,
-    static_ctx_list: list[list[Any]] | None = None,
+    static_ctx_list: list[list[MCWFContext | None]] | None = None,
     context_vec: np.ndarray | None = None,
-    solver: str | None = None,
+    solver: StochasticSolver | None = None,
 ) -> list[SequenceRolloutSample] | np.ndarray:
     """Simulate many intervention sequences.
 
@@ -592,9 +616,11 @@ def _simulate_sequences(
         operators_list: Optional per-sequence Hamiltonians, length ``k+1`` per sequence.
         static_ctx_list: Optional per-sequence MCWF contexts, length ``k+1`` per sequence.
         context_vec: Optional static context vector to attach to each sample.
+        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
-        If ``record_step_states=True``: list of :class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`.
+        If ``record_step_states=True``: list of
+        :class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`.
         Otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states.
 
     Raises:
@@ -726,20 +752,39 @@ def simulate_final_states_with_diagnostics(
     timesteps: list[float],
     psi_pairs_list: list[list[Any]],
     initial_psis: list[np.ndarray],
-    static_ctx: Any,
+    static_ctx: MCWFContext | None,
     parallel: bool = True,
     show_progress: bool = True,
     timesteps_rows: list[list[float]] | None = None,
     operators_list: list[list[MPO]] | None = None,
-    static_ctx_list: list[list[Any]] | None = None,
+    static_ctx_list: list[list[MCWFContext | None]] | None = None,
+    solver: StochasticSolver | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """Like final-state :func:`_simulate_sequences` (``record_step_states=False``) but returns per-sequence diagnostics.
 
     Does not change physics; only threads rollout metadata from :func:`_surrogate_final_state_worker_diagnostics`.
 
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Comb schedule evolution durations.
+        psi_pairs_list: Intervention steps per sequence.
+        initial_psis: Initial state vectors per sequence.
+        static_ctx: Optional static MCWF context.
+        parallel: Whether to parallelize over sequences.
+        show_progress: Whether to show a progress bar.
+        timesteps_rows: Optional per-sequence durations.
+        operators_list: Optional per-sequence Hamiltonians.
+        static_ctx_list: Optional per-sequence MCWF contexts.
+        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
+
     Returns:
         ``(final_packed, traces)`` where ``final_packed`` is ``(N, 8)`` float32 and ``traces[i]`` matches
         sequence ``i`` (same order as ``psi_pairs_list``).
+
+    Raises:
+        RuntimeError: If parallel execution returns incomplete results.
+        ValueError: If input lengths are inconsistent.
     """
     num_sequences = len(initial_psis)
     if len(psi_pairs_list) != num_sequences:
@@ -836,24 +881,24 @@ def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 def _rollout_arrays_to_tensor_dataset(
     rho0: np.ndarray,
-    E_features: np.ndarray,
+    e_features: np.ndarray,
     rho_seq: np.ndarray,
-):
+) -> TensorDataset:
     """Convert rollout arrays into a PyTorch TensorDataset.
 
     Args:
         rho0: Array of shape ``(N, 8)``.
-        E_features: Array of shape ``(N, K, d_e)``.
+        e_features: Array of shape ``(N, K, d_e)``.
         rho_seq: Array of shape ``(N, K, 8)``.
 
     Returns:
-        TensorDataset with tensors ``(E_features, rho0, rho_seq)`` in that order.
+        TensorDataset with tensors ``(e_features, rho0, rho_seq)`` in that order.
     """
     import torch  # noqa: PLC0415
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
     return TensorDataset(
-        torch.as_tensor(E_features, dtype=torch.float32),
+        torch.as_tensor(e_features, dtype=torch.float32),
         torch.as_tensor(rho0, dtype=torch.float32),
         torch.as_tensor(rho_seq, dtype=torch.float32),
     )
@@ -871,8 +916,8 @@ def generate_data(
     show_progress: bool = True,
     timesteps: list[float] | None = None,
     init_mode: str = "eigenstate",
-    solver: str | None = None,
-):
+    solver: StochasticSolver | None = None,
+) -> TensorDataset:
     """Generate surrogate training data by sampling interventions and simulating rollouts.
 
     Args:
@@ -886,6 +931,7 @@ def generate_data(
         show_progress: Whether to show progress bars.
         timesteps: Optional comb evolution durations (defaults to ``[sim_params.dt] * (k+1)``).
         init_mode: Initial-state sampling mode (see :func:`build_initial_psi`).
+        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
@@ -896,7 +942,7 @@ def generate_data(
     chain_length = int(operator.length)
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
 
-    static_ctx: Any | None = None
+    static_ctx: MCWFContext | None = None
     if stochastic_solver == "MCWF":
         static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
 
@@ -924,9 +970,14 @@ def generate_data(
             step_pairs.append((psi_meas, psi_prep))
         psi_pairs_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
-        initial_psis.append(build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode))
+        initial_psi = build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
+        if isinstance(initial_psi, tuple):
+            initial_psi = initial_psi[0]
+        initial_psis.append(initial_psi)
 
-    samples = _simulate_sequences(
+    samples = cast(
+        "list[SequenceRolloutSample]",
+        _simulate_sequences(
         operator=operator,
         sim_params=sim_params,
         timesteps=timesteps,
@@ -939,8 +990,8 @@ def generate_data(
         static_ctx=static_ctx,
         context_vec=None,
         solver=stochastic_solver,
+        ),
     )
-    assert isinstance(samples, list)
     rho0_batch, features_batch, rho_seq_batch, _ctx = stack_rollouts(samples)
     return _rollout_arrays_to_tensor_dataset(rho0_batch, features_batch, rho_seq_batch)
 

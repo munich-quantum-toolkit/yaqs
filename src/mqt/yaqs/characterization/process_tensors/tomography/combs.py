@@ -1,3 +1,11 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+
 """Dense and MPO comb (process-tensor) wrappers."""
 
 from __future__ import annotations
@@ -72,12 +80,12 @@ def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
         Von Neumann entropy in the given base.
     """
     log_base = np.log(base)
-    rH = 0.5 * (r + r.conj().T)
-    tr = np.trace(rH)
+    rho_herm = 0.5 * (r + r.conj().T)
+    tr = np.trace(rho_herm)
     if abs(tr) < 1e-15:
         return 0.0
-    rH /= tr
-    evals = np.linalg.eigvalsh(rH).real
+    rho_herm /= tr
+    evals = np.linalg.eigvalsh(rho_herm).real
     evals = np.clip(evals, 0.0, 1.0)
     nz = evals[evals > 1e-15]
     if nz.size == 0:
@@ -86,7 +94,7 @@ def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
 
 
 class DenseComb:
-    """Wrapper around a dense comb Choi operator Υ."""
+    """Wrapper around a dense comb Choi operator Upsilon."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
         """Create a dense comb wrapper.
@@ -125,7 +133,7 @@ class DenseComb:
         hermitize: bool = True,
         psd_project: bool = False,
         normalize_trace: bool = True,
-        psd_tol: float = 1e-12,
+        _psd_tol: float = 1e-12,
     ) -> DenseComb:
         """Return a canonicalized comb matrix.
 
@@ -133,23 +141,23 @@ class DenseComb:
             hermitize: If ``True``, symmetrize to enforce Hermiticity.
             psd_project: If ``True``, project eigenvalues onto the PSD cone.
             normalize_trace: If ``True``, normalize by the trace when nonzero.
-            psd_tol: PSD tolerance (currently unused; kept for compatibility).
+            _psd_tol: PSD tolerance (currently unused; kept for compatibility).
 
         Returns:
             New `DenseComb` with canonicalized matrix.
         """
-        U = self.upsilon.copy()
+        comb_mat = self.upsilon.copy()
         if hermitize:
-            U = 0.5 * (U + U.conj().T)
+            comb_mat = 0.5 * (comb_mat + comb_mat.conj().T)
         if psd_project:
-            w, V = np.linalg.eigh(U)
+            w, eig_vecs = np.linalg.eigh(comb_mat)
             w = np.clip(w, 0.0, None)
-            U = (V * w) @ V.conj().T
+            comb_mat = (eig_vecs * w) @ eig_vecs.conj().T
         if normalize_trace:
-            tr = np.trace(U)
+            tr = np.trace(comb_mat)
             if abs(tr) > 1e-15:
-                U /= tr
-        return DenseComb(U, self.timesteps)
+                comb_mat /= tr
+        return DenseComb(comb_mat, self.timesteps)
 
     def reduced(self, keep_last_m: int = 1) -> DenseComb:
         """Reduce the comb by tracing out early past legs.
@@ -173,12 +181,12 @@ class DenseComb:
         dim_m = 2 * (4**keep_last_m)
         dim_traced = 4 ** (k - keep_last_m)
         if dim_traced == 1:
-            U_red = self.upsilon.reshape(dim_m, dim_m)
+            comb_reduced = self.upsilon.reshape(dim_m, dim_m)
         else:
-            U6 = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
-            U_red = np.einsum("iabjac->ibjc", U6).reshape(dim_m, dim_m)
+            comb_6d = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
+            comb_reduced = np.einsum("iabjac->ibjc", comb_6d).reshape(dim_m, dim_m)
         t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
-        return DenseComb(U_red, t_red)
+        return DenseComb(comb_reduced, t_red)
 
     def _predict_raw(
         self,
@@ -198,9 +206,9 @@ class DenseComb:
         for p in past_list[1:]:
             past_total = np.kron(past_total, p)
         dim_p = 4**k_steps
-        U4 = self.upsilon.reshape(2, dim_p, 2, dim_p)
+        comb_4d = self.upsilon.reshape(2, dim_p, 2, dim_p)
         ins = past_total.T.reshape(dim_p, dim_p)
-        return np.einsum("s p q r, r p -> s q", U4, ins)
+        return np.einsum("s p q r, r p -> s q", comb_4d, ins)
 
     def predict(
         self,
@@ -225,9 +233,9 @@ class DenseComb:
             rho /= tr
 
         # PSD projection
-        w, V = np.linalg.eigh(rho)
+        w, eig_vecs = np.linalg.eigh(rho)
         w = np.clip(w, 0.0, None)
-        rho = (V * w) @ V.conj().T
+        rho = (eig_vecs * w) @ eig_vecs.conj().T
         tr2 = np.trace(rho)
         if abs(tr2) > 1e-15:
             rho /= tr2
@@ -237,6 +245,7 @@ class DenseComb:
         self,
         base: int = 2,
         past: str = "all",
+        *,
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
@@ -257,42 +266,43 @@ class DenseComb:
         if assume_canonical:
             rho = self.upsilon
         else:
-            U = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
             if check_psd:
-                lam_min = float(np.linalg.eigvalsh(U).min().real)
+                lam_min = float(np.linalg.eigvalsh(comb_mat).min().real)
                 if lam_min < -1e-9:
-                    msg = f"Υ not PSD (min eigenvalue {lam_min:.3e})."
+                    msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
                     raise ValueError(msg)
-            tr = np.trace(U)
-            rho = U / tr if abs(tr) > 1e-15 else U
+            tr = np.trace(comb_mat)
+            rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
 
         k_steps = self._k_steps()
         dims = [2] + [4] * k_steps
         if past == "all":
-            keep_P = list(range(1, k_steps + 1))
+            keep_past = list(range(1, k_steps + 1))
         elif past == "last":
-            keep_P = [k_steps]
+            keep_past = [k_steps]
         elif past == "first":
-            keep_P = [1]
+            keep_past = [1]
         else:
             msg = f"Unknown past='{past}'."
             raise ValueError(msg)
 
-        rho_F = _partial_trace_dense(rho, dims, keep=[0])
-        rho_P = _partial_trace_dense(rho, dims, keep=keep_P)
-        return _entropy_dense(rho_P, base) + _entropy_dense(rho_F, base) - _entropy_dense(rho, base)
+        rho_final_sub = _partial_trace_dense(rho, dims, keep=[0])
+        rho_past_sub = _partial_trace_dense(rho, dims, keep=keep_past)
+        return _entropy_dense(rho_past_sub, base) + _entropy_dense(rho_final_sub, base) - _entropy_dense(rho, base)
 
     def cmi(
         self,
         base: int = 2,
-        check_psd: bool = False,
+        *,
+        _check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
 
         Args:
             base: Log base for entropy.
-            check_psd: If ``True``, validate PSD before normalizing (currently ignored).
+            _check_psd: If ``True``, validate PSD before normalizing (currently ignored).
             assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
 
         Returns:
@@ -301,30 +311,30 @@ class DenseComb:
         if assume_canonical:
             rho = self.upsilon
         else:
-            U = 0.5 * (self.upsilon + self.upsilon.conj().T)
-            tr = np.trace(U)
-            rho = U / tr if abs(tr) > 1e-15 else U
+            comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            tr = np.trace(comb_mat)
+            rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
 
         k_steps = self._k_steps()
         if k_steps < 2:
             return 0.0
         dims = [2] + [4] * k_steps
-        rho_FPk = _partial_trace_dense(rho, dims, keep=[0, k_steps])
-        rho_P = _partial_trace_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
-        rho_Pk = _partial_trace_dense(rho, dims, keep=[k_steps])
+        rho_final_past_k = _partial_trace_dense(rho, dims, keep=[0, k_steps])
+        rho_past_sub = _partial_trace_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
+        rho_past_k = _partial_trace_dense(rho, dims, keep=[k_steps])
         return (
-            _entropy_dense(rho_FPk, base)
-            + _entropy_dense(rho_P, base)
-            - _entropy_dense(rho_Pk, base)
+            _entropy_dense(rho_final_past_k, base)
+            + _entropy_dense(rho_past_sub, base)
+            - _entropy_dense(rho_past_k, base)
             - _entropy_dense(rho, base)
         )
 
     def cmi_conditional(
         self,
         *,
-        A: str = "first",
-        B: str = "final",
-        C: str = "last",
+        a_label: str = "first",
+        b_label: str = "final",
+        c_label: str = "last",
         base: int = 2,
         normalize: bool = True,
         check_psd: bool = True,
@@ -332,9 +342,9 @@ class DenseComb:
         """Compute I(A:B|C) for selected subsystem labels.
 
         Args:
-            A: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
-            B: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
-            C: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
+            a_label: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
+            b_label: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
+            c_label: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
             base: Log base for entropy.
             normalize: Whether to normalize the comb matrix by trace.
             check_psd: Whether to project onto PSD before computing entropies.
@@ -345,18 +355,18 @@ class DenseComb:
         Raises:
             ValueError: If a subsystem label is invalid.
         """
-        U = 0.5 * (self.upsilon + self.upsilon.conj().T)
+        comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
         if check_psd:
-            w, V = np.linalg.eigh(U)
+            w, eig_vecs = np.linalg.eigh(comb_mat)
             w = np.clip(w, 0.0, None)
-            U = (V * w) @ V.conj().T
+            comb_mat = (eig_vecs * w) @ eig_vecs.conj().T
         if normalize:
-            tr = np.trace(U)
+            tr = np.trace(comb_mat)
             if abs(tr) < 1e-15:
                 return 0.0
-            rho = U / tr
+            rho = comb_mat / tr
         else:
-            rho = U
+            rho = comb_mat
 
         k_steps = self._k_steps()
         if k_steps < 2:
@@ -374,24 +384,24 @@ class DenseComb:
             msg = f"Unknown subsystem '{which}'."
             raise ValueError(msg)
 
-        iA, iB, iC = _idx(A), _idx(B), _idx(C)
-        if len({iA, iB, iC}) != 3:
+        idx_a, idx_b, idx_c = _idx(a_label), _idx(b_label), _idx(c_label)
+        if len({idx_a, idx_b, idx_c}) != 3:
             msg = "A, B, C must be three distinct subsystems."
             raise ValueError(msg)
 
-        rho_AC = _partial_trace_dense(rho, dims, keep=[iA, iC])
-        rho_BC = _partial_trace_dense(rho, dims, keep=[iB, iC])
-        rho_C = _partial_trace_dense(rho, dims, keep=[iC])
+        rho_ac = _partial_trace_dense(rho, dims, keep=[idx_a, idx_c])
+        rho_bc = _partial_trace_dense(rho, dims, keep=[idx_b, idx_c])
+        rho_c = _partial_trace_dense(rho, dims, keep=[idx_c])
         return (
-            _entropy_dense(rho_AC, base)
-            + _entropy_dense(rho_BC, base)
-            - _entropy_dense(rho_C, base)
+            _entropy_dense(rho_ac, base)
+            + _entropy_dense(rho_bc, base)
+            - _entropy_dense(rho_c, base)
             - _entropy_dense(rho, base)
         )
 
 
 class MPOComb(MPO):
-    """Wrapper around an MPO representation of a comb Choi operator Υ."""
+    """Wrapper around an MPO representation of a comb Choi operator Upsilon."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
         """Create an MPO comb wrapper.
@@ -472,9 +482,9 @@ class MPOComb(MPO):
         tr = np.trace(rho)
         if abs(tr) > 1e-12:
             rho /= tr
-        w, V = np.linalg.eigh(rho)
+        w, eig_vecs = np.linalg.eigh(rho)
         w = np.clip(w, 0.0, None)
-        rho = (V * w) @ V.conj().T
+        rho = (eig_vecs * w) @ eig_vecs.conj().T
         tr2 = np.trace(rho)
         if abs(tr2) > 1e-15:
             rho /= tr2
@@ -484,6 +494,7 @@ class MPOComb(MPO):
         self,
         base: int = 2,
         past: str = "all",
+        *,
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
@@ -508,6 +519,7 @@ class MPOComb(MPO):
     def cmi(
         self,
         base: int = 2,
+        *,
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
@@ -523,16 +535,16 @@ class MPOComb(MPO):
         """
         return self.to_dense().cmi(
             base=base,
-            check_psd=check_psd,
+            _check_psd=check_psd,
             assume_canonical=assume_canonical,
         )
 
     def cmi_conditional(
         self,
         *,
-        A: str = "first",
-        B: str = "final",
-        C: str = "last",
+        a_label: str = "first",
+        b_label: str = "final",
+        c_label: str = "last",
         base: int = 2,
         normalize: bool = True,
         check_psd: bool = True,
@@ -540,9 +552,9 @@ class MPOComb(MPO):
         """Compute I(A:B|C) for selected subsystem labels.
 
         Args:
-            A: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
-            B: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
-            C: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
+            a_label: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
+            b_label: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
+            c_label: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
             base: Log base for entropy.
             normalize: Passed through to the dense implementation.
             check_psd: Passed through to the dense implementation.
@@ -551,9 +563,9 @@ class MPOComb(MPO):
             Conditional mutual information.
         """
         return self.to_dense().cmi_conditional(
-            A=A,
-            B=B,
-            C=C,
+            a_label=a_label,
+            b_label=b_label,
+            c_label=c_label,
             base=base,
             normalize=normalize,
             check_psd=check_psd,

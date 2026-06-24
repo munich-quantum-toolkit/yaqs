@@ -14,8 +14,9 @@ of noise in quantum systems.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
+from . import _lazy_exports as _lazy_exports_module
 from . import characterizer, simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
@@ -36,11 +37,17 @@ from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
 from .simulator import Simulator
 
-_LAZY_EXPORTS = {
-    "TransformerComb": ("mqt.yaqs.characterizer", "TransformerComb"),
-    "create_surrogate": ("mqt.yaqs.characterizer", "create_surrogate"),
-    "generate_data": ("mqt.yaqs.characterizer", "generate_data"),
-}
+if TYPE_CHECKING:
+    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (
+        create_surrogate,
+        generate_data,
+    )
+
+
+def __getattr__(name: str) -> object:
+    return _lazy_exports_module.__getattr__(name)
+
 
 __all__ = [
     "MPO",
@@ -65,13 +72,3 @@ __all__ = [
     "simulator",
     "version_info",
 ]
-
-
-def __getattr__(name: str) -> Any:
-    if name in _LAZY_EXPORTS:
-        module_path, attr = _LAZY_EXPORTS[name]
-        import importlib
-
-        return getattr(importlib.import_module(module_path), attr)
-    msg = f"module {__name__!r} has no attribute {name!r}"
-    raise AttributeError(msg)

@@ -1,3 +1,10 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact process probing helpers built on the rollout backend."""
 
 from __future__ import annotations
@@ -27,6 +34,14 @@ class ExactProbeProcess:
         initial_psi: np.ndarray,
         parallel: bool = True,
     ) -> None:
+        """Initialize exact probe backend with reusable MCWF static context.
+
+        Args:
+            operator: Hamiltonian MPO.
+            sim_params: Analog simulation parameters.
+            initial_psi: Initial state vector for rollouts.
+            parallel: Whether to parallelize sequence simulation.
+        """
         self.operator = operator
         self.sim_params = sim_params
         self.initial_psi = np.asarray(initial_psi, dtype=np.complex128).copy()
@@ -37,8 +52,12 @@ class ExactProbeProcess:
         """Run exact backend for all (past, future) probe combinations.
 
         Returns:
-            Array of shape ``(n_pasts, n_futures, 3)`` — Pauli :math:`(x,y,z)` expectations
-            from the final single-qubit reduced state (see :mod:`~mqt.yaqs.characterization.process_tensors.core.encoding`).
+            Array of shape ``(n_pasts, n_futures, 3)`` with Pauli :math:`(x,y,z)` expectations
+            from the final single-qubit reduced state.
+
+        Raises:
+            RuntimeError: If the backend returns an unexpected result count.
+            TypeError: If the backend output is not an ndarray.
         """
         all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
         n_tot = n_p * n_f
@@ -56,11 +75,12 @@ class ExactProbeProcess:
         )
         if not isinstance(final_packed, np.ndarray):
             msg = "Expected ndarray output from exact simulation."
-            raise RuntimeError(msg)
+            raise TypeError(msg)
         if final_packed.shape[0] != n_tot:
             msg = f"Expected {n_tot} final states from exact simulation, got {final_packed.shape[0]}."
             raise RuntimeError(msg)
-        xyz = packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3)
+        packed_flat = np.asarray(final_packed, dtype=np.float32).reshape(n_p * n_f, 8)
+        xyz = packed_rho8_to_pauli_xyz_batch(packed_flat).reshape(n_p, n_f, 3)
         return xyz.astype(np.float32)
 
 
@@ -79,6 +99,9 @@ def evaluate_exact_probe_set_with_diagnostics(
         ``(n_pasts, n_futures, 3)`` (Pauli expectations :math:`x,y,z` from the final reduced state),
         ``weights_ij[i,j] = cumulative_weight_final``, and ``traces_flat[i * n_f + j]`` matches the
         sequence order of :func:`build_all_pairs_grid`.
+
+    Raises:
+        TypeError: If the backend output is not an ndarray.
     """
     all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
     n_tot = n_p * n_f
@@ -95,7 +118,7 @@ def evaluate_exact_probe_set_with_diagnostics(
     )
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
-        raise RuntimeError(msg)
+        raise TypeError(msg)
     pauli_xyz = (
         packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
     )

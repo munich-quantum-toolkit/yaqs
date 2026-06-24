@@ -1,11 +1,29 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: PLR6301 -- DummyProcess mimics a protocol-style backend object
+
+"""Tests for process-tensor probe evaluation APIs."""
+
 from __future__ import annotations
 
 import inspect
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+import mqt.yaqs.characterization.process_tensors.diagnostics.exact as exact_mod
 from mqt.yaqs.characterization.process_tensors.diagnostics.exact import ExactProbeProcess
 from mqt.yaqs.characterization.process_tensors.diagnostics.probe import ProbeSet, probe_process
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
@@ -23,6 +41,8 @@ def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int 
 
 
 def test_probe_process_uses_object_backend() -> None:
+    """probe_process delegates evaluation to a user-supplied process object."""
+
     class DummyProcess:
         def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
             n_p = len(probe_set.past_pairs)
@@ -35,21 +55,21 @@ def test_probe_process_uses_object_backend() -> None:
 
 
 def test_exact_probe_process_hides_static_ctx_parameter() -> None:
+    """ExactProbeProcess builds static context internally instead of exposing it."""
     sig = inspect.signature(ExactProbeProcess.__init__)
     assert "static_ctx" not in sig.parameters
     assert "initial_psi" in sig.parameters
 
 
-def test_exact_probe_process_builds_static_ctx_internally(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import mqt.yaqs.characterization.process_tensors.diagnostics.exact as exact_mod
+def test_exact_probe_process_builds_static_ctx_internally(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ExactProbeProcess wires make_mcwf_static_context and _simulate_sequences internally."""
+    calls: dict[str, Any] = {}
 
-    calls: dict[str, object] = {}
-
-    def _fake_make_ctx(operator, sim_params, noise_model=None) -> str:  # noqa: ANN001
+    def _fake_make_ctx(operator: object, sim_params: object, noise_model: object | None = None) -> str:
         calls["ctx_args"] = (operator, sim_params, noise_model)
         return "CTX"
 
-    def _fake_simulate_sequences(**kwargs):  # noqa: ANN003
+    def _fake_simulate_sequences(**kwargs) -> np.ndarray:  # noqa: ANN003
         calls["simulate_kwargs"] = kwargs
         n_tot = len(kwargs["psi_pairs_list"])
         return np.zeros((n_tot, 8), dtype=np.float32)
@@ -57,11 +77,8 @@ def test_exact_probe_process_builds_static_ctx_internally(monkeypatch) -> None: 
     monkeypatch.setattr(exact_mod, "make_mcwf_static_context", _fake_make_ctx)
     monkeypatch.setattr(exact_mod, "_simulate_sequences", _fake_simulate_sequences)
 
-    class DummySimParams:
-        dt = 0.1
-
-    op = object()
-    sim = DummySimParams()
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    sim = AnalogSimParams(dt=0.1)
     psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     process = ExactProbeProcess(operator=op, sim_params=sim, initial_psi=psi0, parallel=False)
     probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=3)

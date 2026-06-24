@@ -39,13 +39,13 @@ class SequenceRolloutSample:
 def stack_rollouts(
     samples: list[SequenceRolloutSample],
     *,
-    append_context_to_E: bool = False,
+    append_context_to_features: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
     """Stack rollout samples into dense batch arrays.
 
     Args:
         samples: List of rollout samples.
-        append_context_to_E: If ``True`` and context is present, append it to every step feature row
+        append_context_to_features: If ``True`` and context is present, append it to every step feature row
             in ``E_features`` and return ``context=None``.
 
     Returns:
@@ -62,14 +62,14 @@ def stack_rollouts(
         msg = "stack_rollouts requires at least one SequenceRolloutSample."
         raise ValueError(msg)
     rho_0 = np.stack([s.rho_0 for s in samples], axis=0).astype(np.float32)
-    E = np.stack([s.E_features for s in samples], axis=0).astype(np.float32)
+    e_features = np.stack([s.E_features for s in samples], axis=0).astype(np.float32)
     rho_seq = np.stack([s.rho_seq for s in samples], axis=0).astype(np.float32)
     ctx = None
     if samples[0].context is not None:
         ctx = np.stack([cast("np.ndarray", s.context) for s in samples], axis=0).astype(np.float32)
-    if append_context_to_E and ctx is not None:
-        k = E.shape[1]
-        ctx_b = np.broadcast_to(ctx[:, None, :], (E.shape[0], k, ctx.shape[1])).astype(np.float32)
-        E = np.concatenate([E, ctx_b], axis=-1)
+    if append_context_to_features and ctx is not None:
+        k = e_features.shape[1]
+        ctx_b = np.broadcast_to(ctx[:, None, :], (e_features.shape[0], k, ctx.shape[1])).astype(np.float32)
+        e_features = np.concatenate([e_features, ctx_b], axis=-1)
         ctx = None
-    return rho_0, E, rho_seq, ctx
+    return rho_0, e_features, rho_seq, ctx

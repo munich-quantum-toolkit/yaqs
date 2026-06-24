@@ -1,3 +1,12 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: SLF001 -- white-box tests exercise private comb prediction helpers
+
 """Tests for DenseComb and MPOComb wrappers."""
 
 from __future__ import annotations
@@ -52,6 +61,7 @@ def test_mpocomb_qmi_fallback_to_dense() -> None:
 
 
 def test_mpocomb_predict_smoke_identity_map() -> None:
+    """MPOComb.predict returns a physical density matrix for a trivial intervention."""
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
     data = SequenceData(
         sequences=[(0,)],
@@ -74,6 +84,7 @@ def test_mpocomb_predict_smoke_identity_map() -> None:
 
 
 def test_mpocomb_predict_raises_on_empty_interventions() -> None:
+    """Predict rejects an empty intervention list."""
     data = SequenceData(
         sequences=[(0,)],
         outputs=[np.eye(2, dtype=np.complex128)],
@@ -84,11 +95,12 @@ def test_mpocomb_predict_raises_on_empty_interventions() -> None:
         timesteps=[0.1],
     )
     comb = data.to_mpo_comb(compress_every=1)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="interventions list must be non-empty"):
         comb.predict([])
 
 
 def test_mpocomb_predict_raises_on_length_mismatch() -> None:
+    """Predict rejects intervention lists whose length mismatches the comb."""
     data = SequenceData(
         sequences=[(0,)],
         outputs=[np.eye(2, dtype=np.complex128)],
@@ -103,5 +115,5 @@ def test_mpocomb_predict_raises_on_length_mismatch() -> None:
     def id_map(x: np.ndarray) -> np.ndarray:
         return x
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="MPOComb length"):
         comb.predict([id_map, id_map])

@@ -1,3 +1,12 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tests for tomography SequenceData comb conversion."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -8,7 +17,7 @@ from mqt.yaqs.characterization.process_tensors.tomography.data import SequenceDa
 def test_to_dense_sequence_data_minimal() -> None:
     """Smoke test SequenceData.to_dense_comb on minimal data."""
     rho = np.eye(2, dtype=np.complex128)
-    seqs = [(0,)]
+    seqs: list[tuple[int, ...]] = [(0,)]
     outputs = [rho]
     weights = [1.0]
     choi_basis = [np.eye(4, dtype=np.complex128)] * 16
@@ -34,7 +43,7 @@ def test_to_dense_sequence_data_minimal() -> None:
 def test_to_mpo_sequence_data_minimal() -> None:
     """Smoke test SequenceData.to_mpo_comb on minimal data."""
     rho = np.eye(2, dtype=np.complex128)
-    seqs = [(0,)]
+    seqs: list[tuple[int, ...]] = [(0,)]
     outputs = [rho]
     weights = [1.0]
     choi_basis = [np.eye(4, dtype=np.complex128)] * 16

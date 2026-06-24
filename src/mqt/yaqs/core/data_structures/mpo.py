@@ -108,15 +108,28 @@ class MPO:
         *,
         left_action: bool = True,
     ) -> None:
-        """Apply a local operator to the physical legs of one MPO site in place."""
-        T = self.tensors[site]
-        d_out, d_in, Dl, Dr = T.shape
+        """Apply a local operator to the physical legs of one MPO site in place.
+
+        Args:
+            site: Site index.
+            op: Local operator as a ``(d, d)`` matrix or ``(d, d, d, d)`` tensor.
+            left_action: If True, apply ``op`` on the left (output) leg.
+
+        Raises:
+            ValueError: If ``op`` is incompatible with the site physical dimensions.
+        """
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
         d2 = d_out * d_in
 
         if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
-            T_view = T.reshape(d_out, d_in, Dl * Dr)
-            T_new = np.einsum("ac,cbk->abk", op, T_view) if left_action else np.einsum("abk,cb->ack", T_view, op)
-            self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            tensor_new = (
+                np.einsum("ac,cbk->abk", op, tensor_view)
+                if left_action
+                else np.einsum("abk,cb->ack", tensor_view, op)
+            )
+            self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
             return
 
         if op.ndim == 2:
@@ -133,29 +146,46 @@ class MPO:
             msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
             raise ValueError(msg)
 
-        T_phys = T.reshape(d2, Dl * Dr)
+        tensor_phys = tensor.reshape(d2, dim_left * dim_right)
         if left_action:
-            T_new = op_mat @ T_phys
+            tensor_new = op_mat @ tensor_phys
         else:
-            T_new = T_phys.T @ op_mat
-            T_new = T_new.T
-        self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+            tensor_new = tensor_phys.T @ op_mat
+            tensor_new = tensor_new.T
+        self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
 
     def partial_trace_site(self, site: int) -> None:
-        """Partial trace over the physical legs of a single MPO site in place."""
-        T = self.tensors[site]
-        d_out, d_in, Dl, Dr = T.shape
+        """Partial trace over the physical legs of a single MPO site in place.
+
+        Args:
+            site: Site index.
+
+        Raises:
+            ValueError: If the site physical dimensions are not square.
+        """
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
         if d_out != d_in:
             msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
             raise ValueError(msg)
 
-        traced = np.zeros((1, 1, Dl, Dr), dtype=T.dtype)
+        traced = np.zeros((1, 1, dim_left, dim_right), dtype=tensor.dtype)
         for s in range(d_out):
-            traced[0, 0] += T[s, s]
+            traced[0, 0] += tensor[s, s]
         self.tensors[site] = traced
 
     def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
-        """Return a new MPO with all sites not in ``keep_sites`` traced out."""
+        """Return a new MPO with all sites not in ``keep_sites`` traced out.
+
+        Args:
+            keep_sites: Site indices to retain.
+
+        Returns:
+            A new MPO with non-kept sites traced out.
+
+        Raises:
+            ValueError: If ``keep_sites`` is empty or contains out-of-range indices.
+        """
         if not keep_sites:
             msg = "keep_sites must be non-empty."
             raise ValueError(msg)
@@ -178,7 +208,17 @@ class MPO:
 
     @classmethod
     def from_local_ops(cls, local_ops: list[np.ndarray]) -> MPO:
-        """Build an MPO that is the tensor product of given local operators."""
+        """Build an MPO that is the tensor product of given local operators.
+
+        Args:
+            local_ops: Square local operator matrices, one per site.
+
+        Returns:
+            MPO representing the tensor product of ``local_ops``.
+
+        Raises:
+            ValueError: If ``local_ops`` is empty or contains incompatible shapes.
+        """
         if not local_ops:
             msg = "local_ops must contain at least one operator."
             raise ValueError(msg)
@@ -196,8 +236,8 @@ class MPO:
                 msg = f"Inconsistent local dimensions in local_ops: {d} vs {local_d}."
                 raise ValueError(msg)
 
-            T = op.reshape(local_d, local_d, 1, 1).astype(np.complex128)
-            tensors.append(T)
+            site_tensor = op.reshape(local_d, local_d, 1, 1).astype(np.complex128)
+            tensors.append(site_tensor)
 
         mpo = cls()
         mpo.tensors = tensors
@@ -1889,6 +1929,9 @@ class MPO:
 
         Returns:
             A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
+
+        Raises:
+            ValueError: If the MPO lengths do not match.
         """
         if self.length != other.length:
             msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
@@ -1930,6 +1973,9 @@ class MPO:
 
         Returns:
             A new MPO directly representing the sum.
+
+        Raises:
+            ValueError: If ``mpos`` is empty.
         """
         if not mpos:
             msg = "mpo_sum requires at least one MPO."

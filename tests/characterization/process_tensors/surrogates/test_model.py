@@ -1,3 +1,14 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: N806, PLC2701, SLF001 -- surrogate tests use E tensors and private helpers
+
+"""Tests for the TransformerComb surrogate model."""
+
 from __future__ import annotations
 
 import math
@@ -5,8 +16,15 @@ import math
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.process_tensors.surrogates.utils import (
+    _choi_features_from_parts,
+    _sample_random_intervention,
+    _sample_random_intervention_parts,
+)
+
 
 def test_transformercomb_forward_shape_cpu() -> None:
+    """Forward pass returns one rho8 vector per sequence step."""
     torch = pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -19,6 +37,7 @@ def test_transformercomb_forward_shape_cpu() -> None:
 
 
 def test_transformercomb_predict_numpy_roundtrip() -> None:
+    """Predict with return_numpy=True yields a float32 ndarray."""
     pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -32,6 +51,7 @@ def test_transformercomb_predict_numpy_roundtrip() -> None:
 
 
 def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
+    """Predict can return torch tensors and preserves train/eval mode."""
     torch = pytest.importorskip("torch")
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
@@ -65,6 +85,7 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
 
 
 def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
+    """Fit rejects unknown prefix_loss modes."""
     torch = pytest.importorskip("torch")
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
@@ -76,11 +97,12 @@ def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
     rho0_t = torch.zeros((2, 8), dtype=torch.float32)
     tgt_t = torch.zeros((2, 2, 8), dtype=torch.float32)
     ds = TensorDataset(E_t, rho0_t, tgt_t)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unknown prefix_loss"):
         model.fit(ds, epochs=1, prefix_loss="nope")  # type: ignore[arg-type]
 
 
 def test_transformercomb_predict_final_state_batch_matches_forward_last_step() -> None:
+    """predict_final_state_batch agrees with the last forward-pass output."""
     torch = pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -94,6 +116,7 @@ def test_transformercomb_predict_final_state_batch_matches_forward_last_step() -
 
 
 def test_transformercomb_entropy_shapes_and_batched_futures() -> None:
+    """Entropy returns a finite scalar for a configured sequence length."""
     pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -117,6 +140,7 @@ def test_transformercomb_entropy_shapes_and_batched_futures() -> None:
 
 
 def test_transformercomb_entropy_restores_training_mode() -> None:
+    """Entropy leaves the model in its prior train/eval mode."""
     pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -137,6 +161,7 @@ def test_transformercomb_entropy_restores_training_mode() -> None:
 
 
 def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
+    """Default initial state matches the normalized |0> density matrix."""
     torch = pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -156,24 +181,19 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
     """Measurement/preparation parts must reassemble into the standard fused Choi feature row."""
     rng = np.random.default_rng(0)
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.utils import (  # noqa: PLC0415
-        _choi_features_from_parts,
-        _sample_random_intervention,
-        _sample_random_intervention_parts,
-    )
-
-    _emap, rho_prep, effect, _J = _sample_random_intervention(rng)
-    feat_from_J = _choi_features_from_parts(rho_prep, effect)
+    _emap, rho_prep, effect, _ = _sample_random_intervention(rng)
+    feat_from_choi = _choi_features_from_parts(rho_prep, effect)
     # Also cover the direct parts sampler path.
     rho2, eff2, feat2 = _sample_random_intervention_parts(rng)
     feat_from_parts = _choi_features_from_parts(rho2, eff2)
 
-    assert feat_from_J.shape == (32,)
+    assert feat_from_choi.shape == (32,)
     assert feat_from_parts.shape == (32,)
     np.testing.assert_allclose(feat_from_parts, feat2, atol=0.0)
 
 
 def test_transformercomb_entropy_rejects_out_of_range_cut() -> None:
+    """Entropy validates the cut index against sequence_length."""
     pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -206,6 +226,7 @@ def test_transformercomb_entropy_rejects_out_of_range_cut() -> None:
 
 
 def test_transformercomb_entropy_requires_sequence_length() -> None:
+    """Entropy requires sequence_length to be configured on the model."""
     pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
@@ -216,6 +237,7 @@ def test_transformercomb_entropy_requires_sequence_length() -> None:
 
 
 def test_transformercomb_entropy_sets_sequence_length_from_fit() -> None:
+    """Fit infers sequence_length from training data for subsequent entropy calls."""
     torch = pytest.importorskip("torch")
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415

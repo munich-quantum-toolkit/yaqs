@@ -30,7 +30,7 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 # ---------------------------------------------------------------------------
 # 2) THIRD PARTY
@@ -44,6 +44,7 @@ from tqdm import tqdm
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
 from ..core.utils import (
+    StochasticSolver,
     _evolve_backend_state,
     _get_rho_site_zero,
     _initialize_backend_state,
@@ -70,10 +71,10 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-    from .basis import (
-        TomographyBasis,
-    )
+    from .basis import TomographyBasis
     from .combs import DenseComb, MPOComb
+
+_T = TypeVar("_T")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +157,7 @@ def _sequence_worker(
     return (s_idx, traj_idx, rho_final, float(weight))
 
 
-def _call_backend_serial(backend: Callable[..., Any], *args: Any) -> Any:
+def _call_backend_serial(backend: Callable[..., _T], *args: object) -> _T:
     """Call a backend under BLAS thread limits if available.
 
     Args:
@@ -166,13 +167,11 @@ def _call_backend_serial(backend: Callable[..., Any], *args: Any) -> Any:
     Returns:
         The return value of ``backend(*args)``.
     """
-    import contextlib  # noqa: PLC0415
-
     try:
         from threadpoolctl import threadpool_limits  # noqa: PLC0415
     except ImportError:
         return backend(*args)
-    with contextlib.suppress(Exception), threadpool_limits(limits=1):
+    with threadpool_limits(limits=1):
         return backend(*args)
 
 
@@ -191,18 +190,23 @@ def run_all_sequences(
     noise_model: NoiseModel | None = None,
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
-    solver: str | None = None,
+    solver: StochasticSolver | None = None,
     show_progress: bool = False,
 ) -> SequenceData:
     """Run the backend for every one of the ``16^k`` discrete Choi index sequences.
 
     Prefer :func:`construct_process_tensor` for the validated user entry; this routine assumes
-    ``timesteps`` and
-    solver compatibility are already correct.
+    ``timesteps`` and solver compatibility are already correct.
+
+    Returns:
+        Exhaustive :class:`~mqt.yaqs.characterization.process_tensors.tomography.data.SequenceData`.
+
+    Raises:
+        ValueError: If ``k=0`` or the solver is unsupported.
     """
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
-    stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)  # type: ignore[arg-type]
+    stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)
 
     basis_set = get_basis_states(basis=basis, seed=basis_seed)
     choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
@@ -306,7 +310,7 @@ def _construct_data(
     num_trajectories: int = 100,
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
-    solver: str | None = None,
+    solver: StochasticSolver | None = None,
     show_progress: bool = False,
 ) -> SequenceData:
     """Validate inputs and construct `SequenceData` via exhaustive simulation.
@@ -320,6 +324,8 @@ def _construct_data(
         num_trajectories: Number of MCWF trajectories per sequence (forced to 1 if noiseless).
         basis: Tomography basis name.
         basis_seed: Optional seed used when ``basis="random"``.
+        solver: Stochastic solver name (``"MCWF"`` or ``"TJM"``).
+        show_progress: Whether to show a progress bar during simulation.
 
     Returns:
         Exhaustive `SequenceData` containing all simulated sequences.
@@ -330,7 +336,7 @@ def _construct_data(
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
 
-    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)  # type: ignore[arg-type]
+    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
     valid_solvers = {"MCWF", "TJM"}
     if stochastic_solver not in valid_solvers:
         msg = f"Tomography requires solvers {valid_solvers}, got {stochastic_solver!r}."
@@ -376,6 +382,12 @@ def construct_process_tensor(
 
     - ``return_type="dense"``: reconstruct and return a :class:`DenseComb`.
     - ``return_type="mpo"``: build and return an :class:`MPOComb`.
+
+    Returns:
+        Dense or MPO comb wrapper depending on ``return_type``.
+
+    Raises:
+        ValueError: If ``return_type`` is not ``"dense"`` or ``"mpo"``.
     """
     data = _construct_data(
         operator,

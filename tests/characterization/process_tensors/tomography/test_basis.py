@@ -1,4 +1,17 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: PLC2701 -- white-box tests import private tomography basis helpers
+
+"""Tests for process-tensor tomography basis construction."""
+
 from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 
@@ -53,7 +66,11 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
         rho_p = basis[p][2]
         e_m = basis[m][2]
 
-        def a_alpha(rho, e_m_sub=e_m, rho_p_sub=rho_p):
+        def a_alpha(
+            rho: np.ndarray,
+            e_m_sub: np.ndarray = e_m,
+            rho_p_sub: np.ndarray = rho_p,
+        ) -> np.ndarray:
             return np.trace(e_m_sub @ rho) * rho_p_sub
 
         j_choi = np.zeros((4, 4), dtype=complex)
@@ -75,7 +92,7 @@ def test_finalize_sequence_averages_basic() -> None:
     rho = np.eye(2, dtype=np.complex128)
     weight_sum = 2.0
     count = 2
-    acc = {seq: [rho * weight_sum, weight_sum, count]}
+    acc: dict[tuple[int, ...], list[Any]] = {seq: [rho * weight_sum, weight_sum, count]}
     final_seqs, outputs, weights = _finalize_sequence_averages(acc, weight_scale=1.0)
     assert final_seqs == [seq]
     np.testing.assert_allclose(outputs[0], np.eye(2, dtype=np.complex128))
@@ -98,6 +115,7 @@ def test_basis_reproduction_h0_identity_map() -> None:
 
 
 def test_get_basis_states_random_is_normalized_and_seeded() -> None:
+    """Random basis generation is deterministic for a fixed seed."""
     a = get_basis_states(basis="random", seed=123)
     b = get_basis_states(basis="random", seed=123)
     assert len(a) == 4
@@ -108,6 +126,7 @@ def test_get_basis_states_random_is_normalized_and_seeded() -> None:
 
 
 def test_build_basis_for_fixed_alphabet_shapes() -> None:
+    """Fixed-alphabet basis builders return consistent state, Choi, and feature tables."""
     basis_set, choi_mats, choi_idx, feat = build_basis_for_fixed_alphabet(basis="standard")
     assert len(basis_set) == 4
     assert len(choi_mats) == 16

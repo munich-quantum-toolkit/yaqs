@@ -1,6 +1,17 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+
+"""Tests for surrogate rollout sample stacking."""
+
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.characterization.process_tensors.surrogates.data import (
     SequenceRolloutSample,
@@ -9,6 +20,7 @@ from mqt.yaqs.characterization.process_tensors.surrogates.data import (
 
 
 def test_stack_rollouts_shapes() -> None:
+    """stack_rollouts batches rho_0, features, and per-step states with correct ranks."""
     s1 = SequenceRolloutSample(
         rho_0=np.zeros(8, dtype=np.float32),
         E_features=np.zeros((2, 32), dtype=np.float32),
@@ -23,28 +35,21 @@ def test_stack_rollouts_shapes() -> None:
         context=None,
         weight=2.0,
     )
-    rho0, E, rho_seq, ctx = stack_rollouts([s1, s2])
+    rho0, e_features, rho_seq, ctx = stack_rollouts([s1, s2])
     assert rho0.shape == (2, 8)
-    assert E.shape == (2, 2, 32)
+    assert e_features.shape == (2, 2, 32)
     assert rho_seq.shape == (2, 2, 8)
     assert ctx is None
 
 
 def test_stack_rollouts_raises_on_empty() -> None:
-    import pytest
-
-    from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
-
-    with pytest.raises(ValueError):
+    """stack_rollouts rejects an empty sample list."""
+    with pytest.raises(ValueError, match="stack_rollouts requires at least one"):
         stack_rollouts([])
 
 
-def test_stack_rollouts_appends_context_to_E() -> None:
-    from mqt.yaqs.characterization.process_tensors.surrogates.data import (
-        SequenceRolloutSample,
-        stack_rollouts,
-    )
-
+def test_stack_rollouts_appends_context_to_features() -> None:
+    """append_context_to_features concatenates context vectors onto feature rows."""
     s = SequenceRolloutSample(
         rho_0=np.zeros(8, dtype=np.float32),
         E_features=np.zeros((2, 32), dtype=np.float32),
@@ -52,8 +57,8 @@ def test_stack_rollouts_appends_context_to_E() -> None:
         context=np.ones(5, dtype=np.float32),
         weight=1.0,
     )
-    rho0, E, rho_seq, ctx = stack_rollouts([s], append_context_to_E=True)
+    rho0, e_features, rho_seq, ctx = stack_rollouts([s], append_context_to_features=True)
     assert rho0.shape == (1, 8)
-    assert E.shape == (1, 2, 32 + 5)
+    assert e_features.shape == (1, 2, 32 + 5)
     assert rho_seq.shape == (1, 2, 8)
     assert ctx is None

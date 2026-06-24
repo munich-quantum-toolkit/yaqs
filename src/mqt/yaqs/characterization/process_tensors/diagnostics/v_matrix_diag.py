@@ -1,14 +1,26 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Diagnostic-only helpers for V-matrix variants, spectra, and weighted masks (not the main estimator)."""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
 
 
 def center_past_rows(v: np.ndarray) -> np.ndarray:
-    """Subtract the mean over past rows (axis 0), matching the current V-matrix centering."""
+    """Subtract the mean over past rows (axis 0), matching the current V-matrix centering.
+
+    Returns:
+        Past-row-centered matrix with the same shape as ``v``.
+    """
     vv = np.asarray(v, dtype=np.float64)
     return vv - vv.mean(axis=0, keepdims=True)
 
@@ -21,6 +33,9 @@ def prepare_branch_weights(
     """Validate physical branch weights; clamp negatives to 0; record NaN/inf as diagnostic failure.
 
     Does **not** renormalize weights across entries. Returns cleaned weights safe for ``w**beta``.
+
+    Returns:
+        Tuple ``(weights_clean, meta)`` with diagnostic metadata in ``meta``.
     """
     w = np.asarray(weights_ij, dtype=np.float64)
     meta: dict[str, Any] = {
@@ -37,8 +52,6 @@ def prepare_branch_weights(
     if meta["negative_count"]:
         meta["warnings"].append("Negative weights clamped to 0.")
         if log_warnings:
-            import warnings
-
             warnings.warn(
                 "prepare_branch_weights: clamped negative cumulative weights to 0.",
                 stacklevel=2,
@@ -58,6 +71,9 @@ def build_weighted_v_matrix(
 
     ``pauli_xyz_ij`` is ``(n_pasts, n_futures, 3)`` with :math:`f=(x,y,z)` Pauli expectations;
     ``weights_ij`` is ``(n_pasts, n_futures)``.
+
+    Returns:
+        Weighted V matrix of shape ``(n_pasts, n_futures * d_out)``.
     """
     n_p, n_f, d_out = pauli_xyz_ij.shape
     w = np.asarray(weights_ij, dtype=np.float64).reshape(n_p, n_f)
@@ -88,7 +104,11 @@ def build_weighted_v_candidate_triple(
 
 
 def build_v_variants(pauli_xyz_ij: np.ndarray) -> dict[str, np.ndarray]:
-    """Build raw and several centered variants of V from ``pauli_xyz_ij`` (n_p, n_f, 3)."""
+    """Build raw and several centered variants of V from ``pauli_xyz_ij`` (n_p, n_f, 3).
+
+    Returns:
+        Dictionary of named V-matrix variants.
+    """
     n_p, n_f, d_out = pauli_xyz_ij.shape
     v_raw = pauli_xyz_ij.reshape(n_p, n_f * d_out).astype(np.float64)
     col_mean = v_raw.mean(axis=0, keepdims=True)
@@ -118,11 +138,14 @@ def _svd_spectrum_entropy_rank(
     If ``discarded_weight_threshold`` is not ``None``, the returned singular spectrum is
     truncated by accumulating the squared singular values from smallest to largest and
     stopping before the cumulative discarded weight exceeds the threshold.
+
+    Returns:
+        Tuple ``(singular_values, entropy, rank, participation_ratio, discarded_weight)``.
     """
     s_full = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
     s = s_full
     discarded_weight = 0.0
-    if s.size:
+    if s.size and discarded_weight_threshold is not None:
         thr = max(float(discarded_weight_threshold), 0.0)
         keep = int(s.size)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
@@ -160,7 +183,11 @@ def matrix_diagnostic_metrics(
     discarded_weight_threshold: float | None = 1e-12,
     min_keep: int = 1,
 ) -> dict[str, Any]:
-    """Frobenius norms, SVD spectrum stats, row/column norm statistics."""
+    """Frobenius norms, SVD spectrum stats, row/column norm statistics.
+
+    Returns:
+        Dictionary of matrix diagnostic metrics.
+    """
     fro = float(np.linalg.norm(mat, ord="fro"))
     fro_sq = float(fro**2)
     discarded_weight_threshold = 1e-3
@@ -192,6 +219,11 @@ def matrix_diagnostic_metrics(
 
 
 def pairwise_row_distances(v: np.ndarray) -> np.ndarray:
+    """Compute pairwise Euclidean distances between rows.
+
+    Returns:
+        Symmetric distance matrix of shape ``(n_rows, n_rows)``.
+    """
     n = int(v.shape[0])
     d = np.zeros((n, n), dtype=np.float64)
     for i in range(n):
@@ -201,6 +233,11 @@ def pairwise_row_distances(v: np.ndarray) -> np.ndarray:
 
 
 def row_distance_summary(v: np.ndarray) -> dict[str, float]:
+    """Summarize upper-triangular pairwise row distances.
+
+    Returns:
+        Dictionary with max/mean/median row distances.
+    """
     dmat = pairwise_row_distances(v)
     tri = dmat[np.triu_indices(dmat.shape[0], k=1)]
     return {
@@ -216,7 +253,11 @@ def apply_weight_mask_and_scales(
     *,
     mask_threshold: float,
 ) -> dict[str, np.ndarray]:
-    """Diagnostic-only: masked and weighted variants of the same V layout (weights shape `(n_p, n_f)`)."""
+    """Diagnostic-only: masked and weighted variants of the same V layout (weights shape `(n_p, n_f)`).
+
+    Returns:
+        Dictionary of masked and weighted V variants.
+    """
     n_p, n_f = weights_ij.shape
     d = v_raw.shape[1] // n_f
     w_exp = np.repeat(np.asarray(weights_ij, dtype=np.float64), d, axis=1)
@@ -236,13 +277,22 @@ def apply_weight_mask_and_scales(
 
 
 def delta_norm_of_centered(v_raw: np.ndarray, v_c: np.ndarray) -> float:
+    """Ratio of squared Frobenius norms of centered to raw V.
+
+    Returns:
+        Scalar ``||v_c||_F^2 / ||v_raw||_F^2``.
+    """
     fro_v_sq = float(np.linalg.norm(v_raw, ord="fro") ** 2)
     fro_c_sq = float(np.linalg.norm(v_c, ord="fro") ** 2)
     return float(fro_c_sq / fro_v_sq) if fro_v_sq > 0.0 else 0.0
 
 
 def entry_centered_block_norms(v_centered_past: np.ndarray, n_f: int, d: int = 3) -> np.ndarray:
-    """Per-(i,j) Frobenius norm of the centered block (length d) for each future column."""
+    """Per-(i,j) Frobenius norm of the centered block (length d) for each future column.
+
+    Returns:
+        Array of shape ``(n_p, n_f)`` with block norms.
+    """
     n_p = v_centered_past.shape[0]
     out = np.zeros((n_p, n_f), dtype=np.float64)
     for i in range(n_p):
@@ -256,6 +306,11 @@ def correlation_weight_vs_entry_norm(
     weights: np.ndarray,
     entry_norms: np.ndarray,
 ) -> float:
+    """Pearson correlation between branch weights and entry norms.
+
+    Returns:
+        Correlation coefficient, or ``nan`` when undefined.
+    """
     w = weights.reshape(-1)
     e = entry_norms.reshape(-1)
     if w.size < 2 or np.std(w) < 1e-30 or np.std(e) < 1e-30:
@@ -267,6 +322,11 @@ def correlation_terminated_vs_entry_norm(
     terminated: np.ndarray,
     entry_norms: np.ndarray,
 ) -> float:
+    """Pearson correlation between early-termination flags and entry norms.
+
+    Returns:
+        Correlation coefficient, or ``nan`` when undefined.
+    """
     t = terminated.astype(np.float64).reshape(-1)
     e = entry_norms.reshape(-1)
     if t.size < 2 or np.std(t) < 1e-30 or np.std(e) < 1e-30:
@@ -280,7 +340,14 @@ def traces_flat_to_ij_arrays(
     n_p: int,
     n_f: int,
 ) -> dict[str, np.ndarray]:
-    """Map rollout traces (same order as :func:`build_all_pairs_grid`) to per-entry fields shaped ``(n_p, n_f)``."""
+    """Map rollout traces (same order as :func:`build_all_pairs_grid`) to per-entry fields shaped ``(n_p, n_f)``.
+
+    Returns:
+        Dictionary of per-entry diagnostic arrays.
+
+    Raises:
+        ValueError: If ``len(traces) != n_p * n_f``.
+    """
     n_tot = n_p * n_f
     if len(traces) != n_tot:
         msg = f"Expected {n_tot} traces, got {len(traces)}."
@@ -319,7 +386,11 @@ def traces_flat_to_ij_arrays(
 
 
 def weight_threshold_fractions(weights: np.ndarray, thresholds: list[float]) -> dict[str, float]:
-    """Fraction of entries with cumulative weight below each threshold."""
+    """Fraction of entries with cumulative weight below each threshold.
+
+    Returns:
+        Mapping from threshold key to fraction below threshold.
+    """
     w = np.asarray(weights, dtype=np.float64).reshape(-1)
     out: dict[str, float] = {}
     for thr in thresholds:
@@ -329,7 +400,11 @@ def weight_threshold_fractions(weights: np.ndarray, thresholds: list[float]) -> 
 
 
 def summarize_weight_by_index(weights: np.ndarray) -> dict[str, Any]:
-    """Mean weight along past rows and future columns."""
+    """Mean weight along past rows and future columns.
+
+    Returns:
+        Dictionary with mean weights by past row and future column.
+    """
     w = np.asarray(weights, dtype=np.float64)
     return {
         "mean_weight_by_past": [float(x) for x in np.mean(w, axis=1)],
@@ -343,7 +418,11 @@ def analyze_weight_scheme_pair(
     *,
     scheme_name: str,
 ) -> dict[str, Any]:
-    """Full metrics for one weighting scheme: raw + past-centered, row distances, ``delta_norm``."""
+    """Full metrics for one weighting scheme: raw + past-centered, row distances, ``delta_norm``.
+
+    Returns:
+        Dictionary of scheme metrics and singular-value spectra.
+    """
     mr = matrix_diagnostic_metrics(v_raw, f"{scheme_name}_raw")
     mc = matrix_diagnostic_metrics(v_centered, f"{scheme_name}_centered_past")
     dn = delta_norm_of_centered(v_raw, v_centered)

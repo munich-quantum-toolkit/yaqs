@@ -5,25 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Characterization entry point for YAQS."""
+"""Lazy attribute resolution for optional surrogate exports."""
 
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING
-
-from mqt.yaqs.characterization.process_tensors.tomography import DenseComb, MPOComb, construct_process_tensor
-
-if TYPE_CHECKING:
-    from typing import TypeAlias
-
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
-    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (
-        create_surrogate,
-        generate_data,
-    )
-
-    Comb: TypeAlias = DenseComb | MPOComb | TransformerComb
 
 _LAZY_EXPORTS = {
     "TransformerComb": ("mqt.yaqs.characterization.process_tensors.surrogates.model", "TransformerComb"),
@@ -38,11 +24,3 @@ def __getattr__(name: str) -> object:
         return getattr(importlib.import_module(module_path), attr)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
-
-
-__all__ = [
-    "TransformerComb",
-    "construct_process_tensor",
-    "create_surrogate",
-    "generate_data",
-]

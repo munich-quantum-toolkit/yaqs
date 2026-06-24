@@ -1,3 +1,14 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# ruff: noqa: PLC2701 -- white-box tests import private encoding helpers
+
+"""Tests for process-tensor Choi and density-matrix encoding helpers."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,6 +23,7 @@ from mqt.yaqs.characterization.process_tensors.core.encoding import (
 
 
 def test_flatten_choi4_to_real32_shape_and_dtype() -> None:
+    """Flattened Choi features are float32 vectors of length 32."""
     j = np.eye(4, dtype=np.complex128)
     y = _flatten_choi4_to_real32(j)
     assert y.shape == (32,)
@@ -19,6 +31,7 @@ def test_flatten_choi4_to_real32_shape_and_dtype() -> None:
 
 
 def test_build_choi_feature_table_shape() -> None:
+    """Feature table stacks one row per input Choi matrix."""
     mats = [np.eye(4, dtype=np.complex128) for _ in range(16)]
     table = build_choi_feature_table(mats)
     assert table.shape == (16, 32)
@@ -26,6 +39,7 @@ def test_build_choi_feature_table_shape() -> None:
 
 
 def test_pack_unpack_roundtrip_hermitianized() -> None:
+    """pack_rho8 and unpack_rho8 preserve a physical single-qubit state."""
     rng = np.random.default_rng(0)
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = a @ a.conj().T
@@ -38,6 +52,7 @@ def test_pack_unpack_roundtrip_hermitianized() -> None:
 
 
 def test_normalize_rho_from_backend_output_returns_physical_dm() -> None:
+    """Backend output normalization yields Hermitian, trace-one, PSD density matrix."""
     rho_raw = np.array([[2.0 + 0.0j, 1.0 + 2.0j], [0.0 + 0.0j, 0.1 + 0.0j]], dtype=np.complex128)
     rho = normalize_rho_from_backend_output(rho_raw)
     np.testing.assert_allclose(rho, rho.conj().T, atol=1e-12)
