@@ -66,9 +66,25 @@ class NoiseModel:
 
         Args:
             processes: A list of noise process dictionaries affecting the quantum
-                system. Default is ``None``.
+                system. Each dict must contain ``name``, ``sites``, and
+                ``strength``. Optional keys:
+
+                - ``matrix``: local jump operator L as a ``d x d`` array for
+                  1-site or adjacent 2-site processes. When provided, YAQS uses
+                  this matrix and does not look up ``name`` in
+                  {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
+                  When omitted, ``name`` must be a library entry (e.g.
+                  ``"lowering"``, ``"pauli_x"``, ``"crosstalk_xx"``).
+                - ``factors``: pair of 1-site matrices for non-adjacent 2-site
+                  processes (required unless ``name`` is a recognized long-range
+                  crosstalk label).
+
+                ``strength`` is the Lindblad rate ``gamma``; jump operators are
+                formed as ``sqrt(gamma) * L`` during simulation.
             scheduled_jumps: A list of scheduled jumps to apply at specific times.
-                Default is ``None``.
+                Each dict must contain ``time``, ``sites``, and ``name``. An
+                optional ``matrix`` overrides the library lookup for the jump
+                operator, same as for ``processes``.
 
         Note:
             Input validation is performed and assertion errors may be raised by

@@ -31,6 +31,8 @@ from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from numpy.typing import NDArray
+
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -874,7 +876,11 @@ def test_check_canonical_form_full() -> None:
     delta_mid = np.zeros((2, 2, 2), dtype=np.complex128)
     delta_mid[0, 0, 0] = np.array(1, dtype=np.complex128)
     delta_mid[1, 1, 1] = np.array(1, dtype=np.complex128)
-    tensors = [delta_left, delta_mid, delta_right]
+    tensors: list[NDArray[np.complex128]] = [
+        delta_left,
+        delta_mid,
+        delta_right,
+    ]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
     assert res == [0, 1, 2]

@@ -95,6 +95,9 @@ are not supported for unitary equivalence on either backend. See
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import EquivalenceChecker
 
 # Recommended: MPO for the circuits you care about
@@ -106,8 +109,6 @@ mpo_checker = EquivalenceChecker(
 
 # Auto: matrix if num_qubits <= 7, else MPO
 auto_checker = EquivalenceChecker(representation="auto")
-
-print("Auto matrix cutover: 7 qubits")
 ```
 
 ## Loading from OpenQASM
@@ -146,6 +147,9 @@ depth = num_qubits
 Create a TwoLocal circuit and decompose it.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from qiskit.circuit.library.n_local import TwoLocal
 
 import numpy as np
@@ -156,36 +160,40 @@ rng = np.random.default_rng()
 values = rng.uniform(-np.pi, np.pi, size=num_pars)
 circuit.assign_parameters(values, inplace=True)
 circuit.measure_all()
-circuit.draw(output="mpl")
 ```
 
 Transpile the circuit to a new basis.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from qiskit import transpile
 
 basis_gates = ["cz", "rz", "sx", "x", "id"]
 transpiled_circuit = transpile(circuit, basis_gates=basis_gates, optimization_level=1)
-transpiled_circuit.draw(output="mpl")
 ```
 
 Run equivalence checking with the MPO backend.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import EquivalenceChecker
 
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6, fidelity=1 - 1e-13)
 result = checker.check(circuit, transpiled_circuit)
-print(f"Equivalent: {result['equivalent']}")
-print(f"Backend: {result['representation']}, time: {result['elapsed_time']:.3f} s")
 ```
 
 The same pair with `representation="auto"` on this five-qubit example selects the matrix
 backend because $5 \leq 7$. For a consistent pipeline, keep `representation="mpo"` as above.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 auto_result = EquivalenceChecker(representation="auto").check(circuit, transpiled_circuit)
-print(f"Auto backend: {auto_result['representation']}")
 ```
 
 ## Matrix backend (small circuits)

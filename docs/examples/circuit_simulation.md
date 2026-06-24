@@ -22,7 +22,7 @@ mystnb:
 | **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `StrongSimParams(sample_layers=True)` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit                      |
 | **Shot-based readout**      | Hardware-like bitstring statistics                  | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` — see {doc}`weak_circuit_simulation`             |
 
-Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or OpenQASM strings). The initial state must use `representation="mps"` (the default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For accuracy presets, truncation knobs, and `random_seed`, see {doc}`simulation_parameters`. For bell-curve (Gaussian) noise strengths, see {doc}`realistic_noise_models`.
+Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or OpenQASM strings). The initial state must use `representation="mps"` (the default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For accuracy presets, truncation knobs, and `random_seed`, see {doc}`simulation_parameters`. For log-normal disorder on noise strengths, see {doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
 from mqt.yaqs import Simulator
@@ -32,18 +32,20 @@ sim = Simulator(show_progress=False)
 
 ## 1. Final observables and noise scaling
 
-We build an Ising-style circuit, prepare $\ket{0}^{\otimes n}$, and sweep a global relaxation rate $\gamma$. Expectation values $\langle Z_i \rangle$ at the **end** of the circuit are collected into a heatmap.
+We build an Ising-style circuit, prepare $\ket{0}^{\otimes n}$, and sweep a global relaxation rate $\gamma$. The plot below shows how each qubit's final $\langle Z_i \rangle$ moves toward $+1$ as relaxation dominates.
 
 ### 1.1 Circuit and initial state
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 num_qubits = 5
 circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
 circuit.measure_all()
-circuit.draw(output="mpl")
 
 state = State(num_qubits, initial="zeros")
 ```
@@ -61,7 +63,7 @@ sim_params = StrongSimParams(
 )
 ```
 
-### 1.3 Noise sweep and heatmap
+### 1.3 Noise sweep and plot
 
 ```{code-cell} ipython3
 ---
@@ -91,19 +93,16 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots(figsize=(6, 3.5))
-im = ax.imshow(heatmap, aspect="auto", vmin=0.5, vmax=1)
-ax.set_ylabel("Qubit")
+fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
+colors = plt.cm.viridis(np.linspace(0.15, 0.85, num_qubits))
+for i in range(num_qubits):
+    ax.semilogx(gammas, heatmap[i], "o-", color=colors[i], linewidth=1.8, markersize=5, label=rf"$q_{i}$")
 ax.set_xlabel(r"Relaxation rate $\gamma$")
-ax.set_yticks(range(num_qubits))
-ax.set_xticks(range(len(gammas)))
-ax.set_xticklabels([f"$10^{{{int(np.log10(g))}}}$" for g in gammas])
-
-fig.subplots_adjust(top=0.95, right=0.88)
-cbar_ax = fig.add_axes(rect=(0.9, 0.11, 0.025, 0.8))
-cbar = fig.colorbar(im, cax=cbar_ax)
-cbar.ax.set_title(r"$\langle Z \rangle$")
-plt.tight_layout()
+ax.set_ylabel(r"$\langle Z_i \rangle$")
+ax.set_ylim(-1.05, 1.05)
+ax.legend(ncol=num_qubits, fontsize=8, loc="lower left", frameon=False)
+ax.set_title("Final Z expectation vs amplitude-damping strength")
+ax.grid(alpha=0.3, which="both")
 plt.show()
 ```
 
@@ -112,31 +111,34 @@ plt.show()
 (mid-circuit-observables)=
 
 ```{note}
-This section uses `num_traj=1000` and may take one to two minutes during a documentation build. Reduce `num_traj` for faster local runs.
+This section uses `num_traj=64` during the documentation build. Increase `num_traj` locally for lower-variance layer curves.
 ```
 
 Set `sample_layers=True` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you want measurements. YAQS records observables at the circuit start, after each labelled barrier, and after the final gate layer.
+
+The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$ entanglers, and tracks how amplitude damping gradually drives each $\langle Z_i \rangle$ toward $+1$.
 
 Other barriers and `measure` operations are ignored for this sampling schedule.
 
 ### 2.1 Circuit with sampling barriers
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from qiskit.circuit import QuantumCircuit
 
-layer_qubits = 3
+layer_qubits = 5
 qc = QuantumCircuit(layer_qubits)
 
-for segment in range(5):
-    qc.rzz(0.5, 0, 1)
-    qc.rzz(0.5, 1, 2)
-    if segment < 4:
+for segment in range(6):
+    for i in range(layer_qubits - 1):
+        qc.rzz(0.7, i, i + 1)
+    if segment < 5:
         qc.barrier(label="SAMPLE_OBSERVABLES")
-
-qc.draw(output="mpl")
 ```
 
-Five entangler layers with four labelled barriers yield **six** sampling points: initial state, four mid-circuit checkpoints, and the final layer.
+Six entangler layers with five labelled barriers yield **seven** sampling points: initial state, five mid-circuit checkpoints, and the final layer.
 
 ### 2.2 Noise model and parameters
 
@@ -145,20 +147,19 @@ import numpy as np
 
 from mqt.yaqs import Observable, StrongSimParams
 
-noise_factor = 0.01
-layer_noise = NoiseModel(
-    [{"name": "pauli_x", "sites": [i], "strength": noise_factor} for i in range(layer_qubits)]
-    + [{"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_factor} for i in range(layer_qubits - 1)]
-)
+noise_factor = 0.1
+layer_noise = NoiseModel([
+    {"name": "lowering", "sites": [i], "strength": noise_factor} for i in range(layer_qubits)
+])
 
-layer_state = State(layer_qubits, initial="zeros", pad=2)
+layer_state = State(layer_qubits, initial="x+", pad=16)
 layer_observables = [Observable("z", i) for i in range(layer_qubits)]
-layer_params = StrongSimParams(layer_observables, num_traj=1000, sample_layers=True)
+layer_params = StrongSimParams(layer_observables, num_traj=64, sample_layers=True, max_bond_dim=12)
 ```
 
 Higher `num_traj` reduces Monte Carlo variance; `100` trajectories are often enough for prototyping.
 
-### 2.3 Run and validate
+### 2.3 Run and plot
 
 ```{code-cell} ipython3
 ---
@@ -166,16 +167,7 @@ tags: [remove-output]
 ---
 layer_result = sim.run(layer_state, qc, layer_params, layer_noise)
 
-# Reference expectations (rows: qubits; columns: initial + 4 barriers + final)
-reference = np.array([
-    [1.0, 0.9607894391523233, 0.9231163463866354, 0.8869204367171571, 0.8521437889662108, 0.8187307530779814],
-    [1.0, 0.9231163463866359, 0.8521437889662113, 0.7866278610665535, 0.726149037073691, 0.6703200460356394],
-    [1.0, 0.9607894391523233, 0.9231163463866354, 0.8869204367171571, 0.8521437889662108, 0.8187307530779814],
-])
-
 yaqs = np.vstack([np.real(v) for v in layer_result.expectation_values])
-max_diff = float(np.abs(yaqs - reference).max())
-print(f"max|YAQS − reference| = {max_diff:.4f}  (decreases with num_traj)")
 ```
 
 ```{code-cell} ipython3
@@ -187,20 +179,24 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-layers = range(yaqs.shape[1])
-labels = [f"q{i}" for i in range(layer_qubits)]
+depth = np.arange(yaqs.shape[1])
+qubit_labels = [rf"$q_{i}$" for i in range(layer_qubits)]
 
-fig, ax = plt.subplots(figsize=(7, 4))
-for q in range(layer_qubits):
-    ax.plot(layers, reference[q], "--", color=f"C{q}", alpha=0.6, label=f"reference {labels[q]}")
-    ax.plot(layers, yaqs[q], "o-", color=f"C{q}", label=f"YAQS {labels[q]}")
-
-ax.set_xlabel("Sampling point (initial → barriers → final)")
-ax.set_ylabel(r"$\langle Z \rangle$")
-ax.set_xticks(list(layers))
-ax.legend(ncols=2, fontsize=8)
-ax.grid(alpha=0.3)
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
+im = ax.imshow(
+    yaqs,
+    aspect="auto",
+    origin="lower",
+    vmin=-1,
+    vmax=1,
+    extent=(-0.5, yaqs.shape[1] - 0.5, -0.5, layer_qubits - 0.5),
+)
+ax.set_xlabel("Sampling index")
+ax.set_ylabel("Qubit")
+ax.set_xticks(depth)
+ax.set_yticks(range(layer_qubits), qubit_labels)
+ax.set_title(r"Mid-circuit $\langle Z \rangle$")
+fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 plt.show()
 ```
 
@@ -209,6 +205,9 @@ plt.show()
 Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import State, WeakSimParams
 
 qasm = """
@@ -230,7 +229,6 @@ qasm_result = sim.run(
     qasm,
     WeakSimParams(shots=128, max_bond_dim=4),
 )
-print(f"Top bitstrings: {list(qasm_result.counts.items())[:3]}")
 ```
 
 OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms; see {doc}`equivalence_checking`.
@@ -242,6 +240,9 @@ OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.Equivalence
 Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both modes:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from qiskit.circuit import QuantumCircuit
 
 lr_qc = QuantumCircuit(3)
@@ -249,6 +250,7 @@ lr_qc.h(0)
 lr_qc.cx(0, 2)
 
 lr_state = State(3, initial="zeros")
+z0_by_mode = {}
 for mode in ("mpo", "tdvp"):
     mode_params = StrongSimParams(
         observables=[Observable("z", 0)],
@@ -257,14 +259,13 @@ for mode in ("mpo", "tdvp"):
         max_bond_dim=8,
     )
     mode_result = sim.run(lr_state, lr_qc, mode_params)
-    z0 = float(mode_result.expectation_values[0][0])
-    print(f"gate_mode={mode!r}: ⟨Z₀⟩ = {z0:.6f}")
+    z0_by_mode[mode] = float(mode_result.expectation_values[0][0])
 ```
 
 ## 5. Related topics
 
 - {doc}`weak_circuit_simulation` — shot-based readout with {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`
-- {doc}`custom_gates` — Qiskit gate translation and custom unitaries
-- {doc}`realistic_noise_models` — Gaussian and other distributed noise strengths
+- {doc}`custom_gates` — custom unitaries and gate translation
+- {doc}`realistic_noise_models` — log-normal and other distributed noise strengths
 - {doc}`equivalence_checking` — verify that two circuits implement the same unitary
 - {doc}`quickstart` — minimal analog, digital, and equivalence-check workflows

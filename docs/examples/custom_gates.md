@@ -1,4 +1,4 @@
-# Custom and Qiskit Gates in YAQS
+# Custom Gates in YAQS
 
 ```{note}
 This is a **reference guide** with static code blocks; it is not executed during the documentation build. Runnable circuit examples are in {doc}`circuit_simulation` and {doc}`equivalence_checking`.
@@ -235,7 +235,6 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 gate = GateLibrary.cx()
 gate.set_sites(0, 1)
 # gate.generator is a list of two 2x2 arrays, set inside set_sites
-assert len(gate.generator) == 2
 ```
 
 Routing checks `getattr(gate, "generator", None) is not None` in

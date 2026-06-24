@@ -47,7 +47,9 @@ We define a scheduled jump using a list of dictionaries in the `NoiseModel`. Eac
 
 - `time`: The time at which to apply the jump.
 - `sites`: A list of site indices the jump acts on.
-- `name`: The name of the jump operator (e.g., "x", "y", "z", "crosstalk_xx").
+- `name`: The name of the jump operator (e.g., `"x"`, `"y"`, `"z"`, `"crosstalk_xx"`), **or** any label when you pass a custom `matrix` (see below).
+
+If `matrix` is omitted, `name` is resolved from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`. To apply a custom operator, add a `matrix` key with a local `d×d` NumPy array (`d=2` for qubits); `name` is then only an identifier. See {doc}`realistic_noise_models` § 6 for the full process-dict schema.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
@@ -58,6 +60,19 @@ jump_site = 5 # Apply jump to the middle site
 # Schedule a Pauli-X flip on site 5 at t=1.0
 scheduled_jumps = [{"time": jump_time, "sites": [jump_site], "name": "x"}]
 noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+```
+
+### Custom operator example
+
+A $\pi/2 rotation about $Y$ can be scheduled explicitly instead of using a library name:
+
+```{code-cell} ipython3
+import numpy as np
+
+ry_pi2 = np.array([[1, -1], [1, 1]], dtype=complex) / np.sqrt(2)
+
+custom_jump = [{"time": jump_time, "sites": [jump_site], "name": "ry_pi2", "matrix": ry_pi2}]
+custom_noise_model = NoiseModel(scheduled_jumps=custom_jump)
 ```
 
 ## 3. Simulation Parameters
@@ -134,5 +149,5 @@ plt.show()
 ## Related topics
 
 - {doc}`analog_simulation` — TJM workflow and noise models
-- {doc}`realistic_noise_models` — distributed noise strengths
+- {doc}`realistic_noise_models` — built-in and custom jump operators, distributed strengths
 - {doc}`simulation_parameters` — time grids and `dt` alignment

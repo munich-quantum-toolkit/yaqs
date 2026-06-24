@@ -38,5 +38,6 @@ A full list of references is given below.
 ````
 
 ```{bibliography}
+:sorted: false
 
 ```

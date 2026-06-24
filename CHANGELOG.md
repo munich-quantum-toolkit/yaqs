@@ -30,6 +30,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- added trapped-ion position-grid guide and `hamiltonians` factory section ([#476]) ([**@linusschulte**])
 - simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
