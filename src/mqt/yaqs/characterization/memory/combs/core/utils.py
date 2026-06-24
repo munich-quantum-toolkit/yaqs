@@ -8,7 +8,7 @@
 """MCWF/TJM state evolution helpers shared by process-tensor tomography and surrogate workflows.
 
 Distinct from :mod:`mqt.yaqs.simulator`. See
-:mod:`mqt.yaqs.characterization.process_tensors.tomography.data` for **sequence** vs **trajectory**
+:mod:`mqt.yaqs.characterization.memory.combs.tomography.data` for **sequence** vs **trajectory**
 terminology.
 """
 

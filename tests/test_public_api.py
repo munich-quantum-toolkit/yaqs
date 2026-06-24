@@ -14,8 +14,10 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
 EXPECTED_PUBLIC_API = frozenset({
+    "DenseComb",
     "MPO",
     "MPS",
+    "MPOComb",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
     "EquivalenceChecker",

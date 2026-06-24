@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..core.encoding import packed_rho8_to_pauli_xyz_batch
-from ..core.utils import make_mcwf_static_context
-from ..surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
-from .probe import ProbeSet, build_all_pairs_grid
+from ..combs.core.encoding import packed_rho8_to_pauli_xyz_batch
+from ..combs.core.utils import make_mcwf_static_context
+from ..combs.surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
+from ..probing.probe import ProbeSet, build_all_pairs_grid
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -97,8 +97,8 @@ def evaluate_exact_probe_set_with_diagnostics(
     Returns:
         ``(pauli_xyz_ij, weights_ij, traces_flat)`` where ``pauli_xyz_ij`` has shape
         ``(n_pasts, n_futures, 3)`` (Pauli expectations :math:`x,y,z` from the final reduced state),
-        ``weights_ij[i,j] = cumulative_weight_final``, and ``traces_flat[i * n_f + j]`` matches the
-        sequence order of :func:`build_all_pairs_grid`.
+        ``weights_ij`` uses causal cut weights ``prod(step_probs[:cut])``, and
+        ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`build_all_pairs_grid`.
 
     Raises:
         TypeError: If the backend output is not an ndarray.
@@ -123,8 +123,10 @@ def evaluate_exact_probe_set_with_diagnostics(
         packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
     )
     w = np.zeros((n_p, n_f), dtype=np.float64)
+    cut = int(probe_set.cut)
     for ii in range(n_p):
         for jj in range(n_f):
-            idx = ii * n_f + jj
-            w[ii, jj] = float(traces[idx]["cumulative_weight_final"])
+            probs = traces[ii * n_f + jj]["step_probs"]
+            n = min(cut, len(probs))
+            w[ii, jj] = float(np.prod(probs[:n])) if n else 1.0
     return pauli_xyz, w, traces

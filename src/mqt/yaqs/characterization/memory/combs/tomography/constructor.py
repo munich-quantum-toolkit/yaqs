@@ -3,25 +3,25 @@
 
 """Process-tensor tomography workflow: exhaustive discrete-basis simulation.
 
-**Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.process_tensors.tomography`):
+**Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.memory.combs.tomography`):
 :func:`construct_process_tensor` (this module,
-:mod:`mqt.yaqs.characterization.process_tensors.tomography.constructor`).
+:mod:`mqt.yaqs.characterization.memory.combs.tomography.constructor`).
 
 :func:`construct_process_tensor` is the high-level user entry point returning a comb directly
-(:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.DenseComb` or
-:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.MPOComb`).
+(:class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.DenseComb` or
+:class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.MPOComb`).
 The lower-level :func:`run_all_sequences` returns
-:class:`~mqt.yaqs.characterization.process_tensors.tomography.data.SequenceData` covering all ``16^k``
+:class:`~mqt.yaqs.characterization.memory.combs.tomography.data.SequenceData` covering all ``16^k``
 Choi index sequences for ``k`` steps.
 
 **Execution model** — Same pattern as :mod:`mqt.yaqs.simulator` and
-:mod:`mqt.yaqs.characterization.process_tensors.surrogates.workflow`: build a picklable payload, optionally
+:mod:`mqt.yaqs.characterization.memory.combs.surrogates.workflow`: build a picklable payload, optionally
 install it as :data:`~mqt.yaqs.simulator.WORKER_CTX`, then dispatch with
 :func:`~mqt.yaqs.simulator.run_backend_parallel` or run workers serially (optionally via
 ``threadpoolctl`` for BLAS restraint).
 
 **Internals** — :func:`run_all_sequences` performs payload construction, aggregation, and
-:func:`mqt.yaqs.characterization.process_tensors.tomography.basis._finalize_sequence_averages`.
+:func:`mqt.yaqs.characterization.memory.combs.tomography.basis._finalize_sequence_averages`.
 """
 
 from __future__ import annotations
@@ -199,7 +199,7 @@ def run_all_sequences(
     ``timesteps`` and solver compatibility are already correct.
 
     Returns:
-        Exhaustive :class:`~mqt.yaqs.characterization.process_tensors.tomography.data.SequenceData`.
+        Exhaustive :class:`~mqt.yaqs.characterization.memory.combs.tomography.data.SequenceData`.
 
     Raises:
         ValueError: If ``k=0`` or the solver is unsupported.

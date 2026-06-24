@@ -21,6 +21,7 @@ from . import characterizer, simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
 from .characterizer import construct_process_tensor
+from .characterization.memory.combs.tomography.combs import DenseComb, MPOComb
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mpo import MPO
 from .core.data_structures.mps import MPS
@@ -38,8 +39,8 @@ from .equivalence_checker import EquivalenceChecker
 from .simulator import Simulator
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
-    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
         create_surrogate,
         generate_data,
     )
@@ -68,7 +69,9 @@ __all__ = [
     "characterizer",
     "construct_process_tensor",
     "create_surrogate",
+    "DenseComb",
     "generate_data",
+    "MPOComb",
     "simulator",
     "version_info",
 ]

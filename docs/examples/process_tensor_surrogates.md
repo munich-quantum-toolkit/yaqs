@@ -45,7 +45,6 @@ hamiltonian = Hamiltonian.ising(length=2, J=1.0, g=1.0)
 operator = hamiltonian.mpo
 
 sim_params = AnalogSimParams(
-    solver="MCWF",  # also works with "TJM" (surrogate generation is noiseless)
     dt=0.1,
     order=1,
     max_bond_dim=16,
@@ -72,6 +71,7 @@ train_ds = generate_data(
     seed=0,
     parallel=True,
     show_progress=False,
+    solver="MCWF",  # also works with "TJM" (surrogate generation is noiseless)
 )
 
 E, rho0, tgt = train_ds.tensors
@@ -119,7 +119,23 @@ pred = model.predict(E[:5], rho0[:5], device=device, return_numpy=True)
 print(pred.shape)  # (5, k, 8)
 ```
 
-## 5. One-call helper: create_surrogate
+## 5. Operational memory diagnostics
+
+After training, ``TransformerComb`` exposes the same paper-weighted split-cut memory
+metrics as dense/MPO combs. For the full V-matrix pipeline, return dictionary, and sweeps,
+see {doc}`operational_memory`.
+
+```{code-cell} ipython3
+ent = model.entropy(cut=2, n_pasts=8, n_futures=8)
+sv = model.singular_values(cut=2, n_pasts=8, n_futures=8)
+print(f"S_V(2) = {ent:.4f} nats")
+print(f"singular spectrum length: {sv.size}")
+```
+
+The surrogate learns reduced-state rollouts; it does **not** reconstruct the full comb matrix :math:`\Upsilon`.
+Operational memory readouts are estimated from probe statistics, distinct from exact comb-state QMI/CMI on a tomographic comb.
+
+## 6. One-call helper: create_surrogate
 
 `create_surrogate` wraps `generate_data -> TransformerComb -> fit` for a quick end-to-end workflow.
 
@@ -138,4 +154,9 @@ quick_model = create_surrogate(
     train_kwargs={"epochs": 50, "lr": 2e-3, "batch_size": 64},
 )
 ```
+
+## Related topics
+
+- {doc}`operational_memory` — V-matrix diagnostics shared with dense/MPO combs
+- {doc}`process_tomography` — exact comb tomography for small `k`
 

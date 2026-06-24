@@ -3,13 +3,13 @@
 
 """Neural surrogates and sequence-rollout helpers.
 
-Public workflow API: :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`
+Public workflow API: :func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.generate_data`
 (returns :class:`~torch.utils.data.TensorDataset`) and
-:func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.create_surrogate`.
-:class:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb` holds the network and
-:meth:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb.fit` training loop.
-Rollout samples: :mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`.
+:func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.create_surrogate`.
+:class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb` holds the network and
+:meth:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb.fit` training loop.
+Rollout samples: :mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`.
 
-**Terminology** — See :mod:`mqt.yaqs.characterization.process_tensors.tomography.data` (**sequence** vs
+**Terminology** — See :mod:`mqt.yaqs.characterization.memory.combs.tomography.data` (**sequence** vs
 stochastic **trajectory** under a noise model).
 """

@@ -339,8 +339,15 @@ def traces_flat_to_ij_arrays(
     *,
     n_p: int,
     n_f: int,
+    cut: int | None = None,
 ) -> dict[str, np.ndarray]:
     """Map rollout traces (same order as :func:`build_all_pairs_grid`) to per-entry fields shaped ``(n_p, n_f)``.
+
+    Args:
+        traces: Flat list of rollout trace dicts.
+        n_p: Number of past probe rows.
+        n_f: Number of future probe columns.
+        cut: When set, also populate ``weight_through_cut`` via paper cut weight.
 
     Returns:
         Dictionary of per-entry diagnostic arrays.
@@ -355,6 +362,7 @@ def traces_flat_to_ij_arrays(
     term = np.zeros((n_p, n_f), dtype=bool)
     brk = np.full((n_p, n_f), np.nan, dtype=np.float64)
     wfin = np.zeros((n_p, n_f), dtype=np.float64)
+    wcut = np.zeros((n_p, n_f), dtype=np.float64) if cut is not None else None
     nsteps = np.zeros((n_p, n_f), dtype=np.int32)
     min_sp = np.zeros((n_p, n_f), dtype=np.float64)
     max_sp = np.zeros((n_p, n_f), dtype=np.float64)
@@ -368,12 +376,16 @@ def traces_flat_to_ij_arrays(
             bs = tr.get("break_step")
             brk[ii, jj] = float(bs) if bs is not None else np.nan
             wfin[ii, jj] = float(tr["cumulative_weight_final"])
+            if wcut is not None:
+                probs = tr["step_probs"]
+                n = min(int(cut), len(probs))
+                wcut[ii, jj] = float(np.prod(probs[:n])) if n else 1.0
             nsteps[ii, jj] = int(tr["num_steps_completed"])
             min_sp[ii, jj] = float(tr["min_step_prob"])
             max_sp[ii, jj] = float(tr["max_step_prob"])
             mean_sp[ii, jj] = float(tr["mean_step_prob"])
             any_skip[ii, jj] = bool(tr.get("any_prob_skipped_renormalize", False))
-    return {
+    out: dict[str, np.ndarray] = {
         "terminated_early": term,
         "break_step": brk,
         "cumulative_weight_final": wfin,
@@ -383,6 +395,9 @@ def traces_flat_to_ij_arrays(
         "mean_step_prob": mean_sp,
         "any_prob_skipped_renormalize": any_skip,
     }
+    if wcut is not None:
+        out["weight_through_cut"] = wcut
+    return out
 
 
 def weight_threshold_fractions(weights: np.ndarray, thresholds: list[float]) -> dict[str, float]:

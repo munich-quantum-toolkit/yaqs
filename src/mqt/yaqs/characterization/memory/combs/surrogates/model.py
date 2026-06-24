@@ -6,15 +6,15 @@
 # Licensed under the MIT License
 """Neural surrogate module: :class:`TransformerComb` only.
 
-Training data containers (:class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`,
-:func:`~mqt.yaqs.characterization.process_tensors.surrogates.data.stack_rollouts`) live in
-:mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`.
+Training data containers (:class:`~mqt.yaqs.characterization.memory.combs.surrogates.data.SequenceRolloutSample`,
+:func:`~mqt.yaqs.characterization.memory.combs.surrogates.data.stack_rollouts`) live in
+:mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`.
 
-Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.process_tensors.core.metrics`.
+Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.memory.combs.core.metrics`.
 
 **Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
 (in the noise sense) is one MCWF/TJM stochastic realization; see
-:mod:`mqt.yaqs.characterization.process_tensors.tomography.data`.
+:mod:`mqt.yaqs.characterization.memory.combs.tomography.data`.
 """
 
 from __future__ import annotations
@@ -26,8 +26,9 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from ...probing.operational_memory import OperationalMemoryMixin
+from ...probing.probe import ProbeSet
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
-from ..diagnostics.probe import ProbeSet, probe_process
 from .utils import _choi_features_from_parts
 
 # Computational-basis |0><0| (same convention as workflow rollouts).
@@ -91,7 +92,7 @@ def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     return m
 
 
-class TransformerComb(nn.Module):
+class TransformerComb(OperationalMemoryMixin, nn.Module):
     """Causal transformer over per-step features ``(E_t, rho_0)``."""
 
     def __init__(
@@ -165,11 +166,11 @@ class TransformerComb(nn.Module):
     def _default_rho0(self, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         r"""Packed rho8 for the physical |0⟩⟨0| reduced state (same path as training data).
 
-        Uses :func:`~mqt.yaqs.characterization.process_tensors.core.encoding.pack_rho8` on the
+        Uses :func:`~mqt.yaqs.characterization.memory.combs.core.encoding.pack_rho8` on the
         trace-1 density matrix for :math:`|0\\rangle\\langle 0|`, after
-        :func:`~mqt.yaqs.characterization.process_tensors.core.encoding.normalize_rho_from_backend_output`,
+        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding.normalize_rho_from_backend_output`,
         matching surrogate rollouts in
-        :mod:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow`.
+        :mod:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow`.
 
         Returns:
             Packed rho8 tensor on ``device`` with dtype ``dtype``.
@@ -240,50 +241,11 @@ class TransformerComb(nn.Module):
             self.train()
         return out[:, -1, :]
 
-    def entropy(self, cut: int) -> float:
-        r"""Cut-entropy diagnostic via split-cut process probing.
-
-        Analogous to the entropy of the normalized squared singular values of an MPS/MPO bond matrix
-        (spectrum of the reduced density operator across the cut): build a future-response matrix at
-        the cut, take its singular values, form weights ``s_i^2 / \\sum_j s_j^2``, and return the Shannon
-        entropy ``-\\sum_i w_i \\log w_i`` in **nats**.
-
-        Uses split-cut probes at slot ``cut`` (1-based, inclusive): the past side contributes
-        measurement at ``cut`` and the future side contributes preparation at ``cut``.
-
-        This mimics a temporal-MPO bond cut between the measurement and preparation legs of the
-        intervention at time ``t``. It is only valid because the current per-step encoding is the
-        flattened Choi matrix ``J_t = kron(rho_prep_t, effect_t.T)``.
-
-        For such ``t``, draws random probe sets using the same intervention distribution as
-        :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`.
-        Inference starts from the packed :math:`|0\\rangle\\langle 0|` state. The matrix is column-centered
-        before SVD.
-
-        Args:
-            cut: Split-cut slot index ``c`` with ``1 <= c <= k`` where ``k`` is :attr:`sequence_length`.
-
-        Returns:
-            Entropy as a Python ``float`` (CPU scalar).
-
-        Raises:
-            ValueError: If :attr:`sequence_length` is unset or ``cut`` is out of range.
-        """
+    def _k_for_probe(self) -> int:
         if self.sequence_length is None:
             msg = "sequence_length is unset: call fit() or pass sequence_length=... to __init__."
             raise ValueError(msg)
-        k_total = int(self.sequence_length)
-        c = int(cut)
-        if not (1 <= c <= k_total):
-            msg = f"cut must satisfy 1 <= cut <= sequence_length ({k_total}), got {c}."
-            raise ValueError(msg)
-
-        out = probe_process(
-            process=self,
-            cut=c,
-            k=k_total,
-        )
-        return float(out["entropy"])
+        return int(self.sequence_length)
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe responses for :func:`probe_process`.
@@ -484,4 +446,5 @@ class TransformerComb(nn.Module):
 
         if best_state is not None:
             self.load_state_dict(best_state)
+        self.clear_operational_memory_cache()
         return self

@@ -5,25 +5,14 @@
 #
 # Licensed under the MIT License
 
-"""Process-tensors characterization."""
+"""Non-Markovian memory characterization (process-tensor combs and split-cut probing)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from ._lazy_exports import __getattr__
-from .diagnostics.probe import probe_process
-from .tomography.constructor import construct_process_tensor
-
-if TYPE_CHECKING:
-    from .surrogates.model import TransformerComb
-    from .surrogates.workflow import create_surrogate, generate_data
+from .combs.tomography.constructor import construct_process_tensor
+from .probing.probe import probe_process
 
 __all__ = [
-    "TransformerComb",
-    "__getattr__",
     "construct_process_tensor",
-    "create_surrogate",
-    "generate_data",
     "probe_process",
 ]

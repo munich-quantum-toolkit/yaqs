@@ -266,7 +266,7 @@ def _sample_random_intervention_sequence(
     Returns:
         maps: length-k list of callables ``rho -> Tr(E_t rho) * rho_prep_t``
         choi_features: shape ``(k, 32)``, each row from
-        :func:`~mqt.yaqs.characterization.process_tensors.core.encoding._flatten_choi4_to_real32`
+        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding._flatten_choi4_to_real32`
     """
     maps: list[InterventionMap] = []
     rows: list[np.ndarray] = []

@@ -10,16 +10,84 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from ...probing.operational_memory import OperationalMemoryMixin
+from ...probing.probe import ProbeSet, probe_sequence
+from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
+from ..surrogates.utils import InterventionMap
 
+if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+_Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+
+
+def _probe_step_to_intervention(step: Any) -> InterventionMap | np.ndarray:
+    if isinstance(step, dict):
+        step_type = str(step.get("type", "")).lower()
+        if step_type == "unitary":
+            return np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+        if step_type == "measure_only":
+            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
+            psi_reset = np.asarray(step.get("psi_reset", _Z0), dtype=np.complex128).reshape(2)
+            return InterventionMap(
+                rho_prep=np.outer(psi_reset, psi_reset.conj()),
+                effect=np.outer(psi_meas, psi_meas.conj()),
+            )
+        if step_type == "prepare_only":
+            psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
+            return InterventionMap(rho_prep=np.outer(psi_prep, psi_prep.conj()), effect=_RHO0)
+        if step_type == "reset_only":
+            psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+            return InterventionMap(rho_prep=np.outer(psi_r, psi_r.conj()), effect=np.eye(2, dtype=np.complex128))
+        msg = f"Unsupported probe step type: {step_type!r}"
+        raise ValueError(msg)
+    psi_meas, psi_prep = step
+    psi_m = np.asarray(psi_meas, dtype=np.complex128).reshape(2)
+    psi_p = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
+    return InterventionMap(
+        rho_prep=np.outer(psi_p, psi_p.conj()),
+        effect=np.outer(psi_m, psi_m.conj()),
+    )
+
+
+def _probe_step_to_callable(
+    step: Any,
+) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
+    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`."""
+    inter = _probe_step_to_intervention(step)
+    if isinstance(inter, np.ndarray):
+        u = inter
+
+        def unitary_map(rho: NDArray[np.complex128], mat: NDArray[np.complex128] = u) -> NDArray[np.complex128]:
+            return mat @ rho @ mat.conj().T
+
+        return unitary_map
+    return inter
+
+
+def _pauli_xyz_from_rho(rho: NDArray[np.complex128]) -> NDArray[np.float32]:
+    packed = pack_rho8(normalize_rho_from_backend_output(rho)).astype(np.float32)
+    return packed_rho8_to_pauli_xyz_batch(packed.reshape(1, 8), normalize=True)[0].astype(np.float32)
+
+
+def _evaluate_dense_comb_probe_set(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
+    n_p = len(probe_set.past_pairs)
+    n_f = len(probe_set.future_pairs)
+    pauli = np.empty((n_p, n_f, 3), dtype=np.float32)
+    for i in range(n_p):
+        for j in range(n_f):
+            steps = probe_sequence(probe_set, i, j)
+            interventions = [_probe_step_to_callable(s) for s in steps]
+            pauli[i, j] = _pauli_xyz_from_rho(comb.predict(interventions))
+    return pauli
 
 
 def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
@@ -93,7 +161,7 @@ def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
-class DenseComb:
+class DenseComb(OperationalMemoryMixin):
     """Wrapper around a dense comb Choi operator Upsilon."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
@@ -240,6 +308,17 @@ class DenseComb:
         if abs(tr2) > 1e-15:
             rho /= tr2
         return rho
+
+    def _k_for_probe(self) -> int:
+        return self._k_steps()
+
+    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe Pauli responses.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 3)``.
+        """
+        return _evaluate_dense_comb_probe_set(self, probe_set)
 
     def qmi(
         self,
@@ -400,7 +479,7 @@ class DenseComb:
         )
 
 
-class MPOComb(MPO):
+class MPOComb(OperationalMemoryMixin, MPO):
     """Wrapper around an MPO representation of a comb Choi operator Upsilon."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
@@ -432,6 +511,13 @@ class MPOComb(MPO):
             Dense comb wrapper.
         """
         return DenseComb(self.to_matrix(), self.timesteps)
+
+    def _k_for_probe(self) -> int:
+        return int(self.length) - 1
+
+    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe Pauli responses."""
+        return self.to_dense().evaluate_probe_set(probe_set)
 
     def predict(
         self,

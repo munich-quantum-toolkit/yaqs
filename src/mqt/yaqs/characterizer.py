@@ -12,13 +12,13 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
-from mqt.yaqs.characterization.process_tensors.tomography import DenseComb, MPOComb, construct_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, construct_process_tensor
 
 if TYPE_CHECKING:
     from typing import TypeAlias
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
-    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
         create_surrogate,
         generate_data,
     )
@@ -26,9 +26,9 @@ if TYPE_CHECKING:
     Comb: TypeAlias = DenseComb | MPOComb | TransformerComb
 
 _LAZY_EXPORTS = {
-    "TransformerComb": ("mqt.yaqs.characterization.process_tensors.surrogates.model", "TransformerComb"),
-    "create_surrogate": ("mqt.yaqs.characterization.process_tensors.surrogates.workflow", "create_surrogate"),
-    "generate_data": ("mqt.yaqs.characterization.process_tensors.surrogates.workflow", "generate_data"),
+    "TransformerComb": ("mqt.yaqs.characterization.memory.combs.surrogates.model", "TransformerComb"),
+    "create_surrogate": ("mqt.yaqs.characterization.memory.combs.surrogates.workflow", "create_surrogate"),
+    "generate_data": ("mqt.yaqs.characterization.memory.combs.surrogates.workflow", "generate_data"),
 }
 
 
@@ -41,6 +41,8 @@ def __getattr__(name: str) -> object:
 
 
 __all__ = [
+    "DenseComb",
+    "MPOComb",
     "TransformerComb",
     "construct_process_tensor",
     "create_surrogate",

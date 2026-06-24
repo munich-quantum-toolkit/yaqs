@@ -6,13 +6,13 @@
 **Public** (see ``__all__``): :func:`generate_data`, :func:`create_surrogate`.
 
 :func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for
-:meth:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb.fit`.
+:meth:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb.fit`.
 
 **Internals** — Same execution pattern as :mod:`mqt.yaqs.simulator`: :func:`_simulate_sequences` builds a
 process-pool payload (or uses :data:`~mqt.yaqs.simulator.WORKER_CTX`), then dispatches to
 :func:`~mqt.yaqs.simulator.run_backend_parallel` or runs workers serially. Rollout types live in
-:mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`; the model is
-:class:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb`.
+:mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`; the model is
+:class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb`.
 """
 
 from __future__ import annotations
@@ -620,7 +620,7 @@ def _simulate_sequences(
 
     Returns:
         If ``record_step_states=True``: list of
-        :class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`.
+        :class:`~mqt.yaqs.characterization.memory.combs.surrogates.data.SequenceRolloutSample`.
         Otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states.
 
     Raises:

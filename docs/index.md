@@ -72,8 +72,15 @@ flowchart LR
 | Scheduled jumps at fixed times                                | {doc}`examples/scheduled_jumps`            |
 | Transmon–resonator SWAP (noiseless vs noisy)                  | {doc}`examples/transmon_emulation`         |
 | Trapped-ion position-grid dynamics                            | {doc}`examples/trapped_ion`                |
-| Process tensor tomography                                     | {doc}`examples/process_tomography`         |
 | Custom gate translation                                       | {doc}`examples/custom_gates`               |
+
+### Characterization
+
+| I want to…                                                    | Read                                       |
+| ------------------------------------------------------------- | ------------------------------------------ |
+| Reconstruct a process-tensor comb (dense / MPO)               | {doc}`examples/process_tomography`         |
+| Characterize operational memory (V-matrix, S_V, rank)         | {doc}`examples/operational_memory`         |
+| Train a surrogate comb for large `k`                          | {doc}`examples/process_tensor_surrogates` |
 
 ```{toctree}
 :caption: Getting started
@@ -102,7 +109,23 @@ examples/ensemble_evolution
 examples/representation_comparison
 examples/transmon_emulation
 examples/trapped_ion
+```
+
+## Characterization
+
+Characterize **non-Markovian memory** in open quantum processes: reconstruct multi-time
+process-tensor combs, estimate bond entropy :math:`S_V(c)` from split-cut probing, or train
+a surrogate comb when exhaustive tomography is too costly.
+
+```{toctree}
+:caption: Characterization
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
 examples/process_tomography
+examples/operational_memory
+examples/process_tensor_surrogates
 ```
 
 ```{toctree}

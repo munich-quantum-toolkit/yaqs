@@ -15,8 +15,9 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from ..core.encoding import _flatten_choi4_to_real32
-from ..surrogates.utils import _sample_random_intervention_parts
+from ..combs.core.encoding import _flatten_choi4_to_real32
+from ..combs.surrogates.utils import _sample_random_intervention_parts
+from .v_matrix import build_weighted_v_matrix, center_past_rows, prepare_branch_weights
 
 
 def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
@@ -670,6 +671,117 @@ def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int
     return all_pairs, n_p, n_f
 
 
+def probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
+    """Full intervention sequence for probe-grid entry ``(i, j)``."""
+    c = int(probe_set.cut)
+    kk = int(probe_set.k)
+    full: list[Any] = [probe_set.past_pairs[i][t] for t in range(c - 1)]
+    full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
+    full.extend(probe_set.future_pairs[j][t] for t in range(kk - c))
+    return full
+
+
+_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
+
+def _rank1_prob(rho: np.ndarray, psi: np.ndarray) -> float:
+    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    ket = np.asarray(psi, dtype=np.complex128).reshape(2)
+    return float(np.real(np.vdot(ket, r @ ket)))
+
+
+def _step_probability(rho: np.ndarray, step: Any) -> float:
+    if isinstance(step, dict):
+        step_type = str(step.get("type", "")).lower()
+        if step_type in {"unitary", "depolarizing_pauli", "prepare_only", "reset_only"}:
+            return 1.0
+        if step_type == "measure_only":
+            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
+            return _rank1_prob(rho, psi_meas)
+        msg = f"Unsupported probe step type: {step_type!r}"
+        raise ValueError(msg)
+    psi_meas, _ = step
+    return _rank1_prob(rho, psi_meas)
+
+
+def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
+    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    if isinstance(step, dict):
+        step_type = str(step.get("type", "")).lower()
+        if step_type == "unitary":
+            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+            out = u @ r @ u.conj().T
+        elif step_type == "depolarizing_pauli":
+            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+            out = u @ r @ u.conj().T
+        elif step_type == "measure_only":
+            z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
+            psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
+            prob = _rank1_prob(r, psi_meas)
+            ket = psi_reset / max(float(np.linalg.norm(psi_reset)), 1e-15)
+            out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
+        elif step_type == "prepare_only":
+            psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
+            ket = psi_prep / max(float(np.linalg.norm(psi_prep)), 1e-15)
+            out = np.outer(ket, ket.conj())
+        elif step_type == "reset_only":
+            psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+            ket = psi_r / max(float(np.linalg.norm(psi_r)), 1e-15)
+            out = np.outer(ket, ket.conj())
+        else:
+            msg = f"Unsupported probe step type: {step_type!r}"
+            raise ValueError(msg)
+    else:
+        psi_meas, psi_prep = step
+        prob = _rank1_prob(r, psi_meas)
+        ket = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
+        ket = ket / max(float(np.linalg.norm(ket)), 1e-15)
+        out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
+    tr = np.trace(out)
+    if abs(tr) > 1e-15:
+        out = out / tr
+    return out
+
+
+def rollout_branch_weight(steps: list[Any], *, cut: int) -> float:
+    """Product of step probabilities through ``cut`` (inclusive, paper semantics)."""
+    rho = _RHO0.copy()
+    weight = 1.0
+    for t in range(min(int(cut), len(steps))):
+        sp = _step_probability(rho, steps[t])
+        weight *= sp
+        if weight < 1e-15:
+            return float(weight)
+        rho = _apply_step(rho, steps[t])
+    return float(weight)
+
+
+def branch_weights_ij(probe_set: ProbeSet) -> np.ndarray:
+    """Causal cut weights ``w_ij = prod(step_probs[:cut])`` for each probe-grid row.
+
+    Under split-cut sampling the weight is constant across future columns for fixed past row ``i``.
+    """
+    n_p = len(probe_set.past_pairs)
+    n_f = len(probe_set.future_pairs)
+    c = int(probe_set.cut)
+    w = np.empty((n_p, n_f), dtype=np.float64)
+    for i in range(n_p):
+        w_i = rollout_branch_weight(probe_sequence(probe_set, i, 0), cut=c)
+        w[i, :] = w_i
+    return w
+
+
+def build_weighted_v_from_probe(
+    pauli_xyz_ij: np.ndarray,
+    weights_ij: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build paper-weighted V with past centering (Eq. 14, beta=1)."""
+    w_clean, _ = prepare_branch_weights(weights_ij)
+    v = build_weighted_v_matrix(pauli_xyz_ij, w_clean, beta=1.0)
+    return v, center_past_rows(v)
+
+
 def build_v_matrix(pauli_xyz_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Flatten Pauli features ``(n_p, n_f, 3)`` into rows of :math:`V` (order preserved).
 
@@ -790,6 +902,8 @@ def probe_process(
     rng: np.random.Generator | None = None,
     probe_set: ProbeSet | None = None,
     return_v: bool = False,
+    intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
 ) -> dict[str, Any]:
     """Probe a process via split-cut probes and return V-matrix diagnostics.
 
@@ -800,15 +914,33 @@ def probe_process(
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()
-        probe_set = sample_split_cut_probes(cut=cut, k=k, n_pasts=n_pasts, n_futures=n_futures, rng=rng)
-    pauli_xyz_ij = process.evaluate_probe_set(probe_set).astype(np.float32)
-    v, v_centered = build_v_matrix(pauli_xyz_ij)
+        probe_set = sample_split_cut_probes(
+            cut=cut,
+            k=k,
+            n_pasts=n_pasts,
+            n_futures=n_futures,
+            rng=rng,
+            intervention_mode=intervention_mode,
+            unitary_ensemble=unitary_ensemble,
+        )
+    weighted = getattr(process, "evaluate_probe_set_with_weights", None)
+    if callable(weighted):
+        pauli_xyz_ij, weights_ij = weighted(probe_set)
+        pauli_xyz_ij = np.asarray(pauli_xyz_ij, dtype=np.float32)
+        weights_ij = np.asarray(weights_ij, dtype=np.float64)
+        v, v_centered = build_weighted_v_from_probe(pauli_xyz_ij, weights_ij)
+    else:
+        pauli_xyz_ij = process.evaluate_probe_set(probe_set).astype(np.float32)
+        weights_ij = None
+        v, v_centered = build_v_matrix(pauli_xyz_ij)
     ana = analyze_v_matrix(v, v_centered)
     out: dict[str, Any] = {
         "pauli_xyz_ij": pauli_xyz_ij,
         **ana,
         "probe_set": probe_set,
     }
+    if weights_ij is not None:
+        out["weights_ij"] = weights_ij
     if return_v:
         out["V"] = v
         out["V_centered"] = v_centered

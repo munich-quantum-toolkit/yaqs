@@ -5,8 +5,8 @@
 
 This subpackage constructs a process tensor from exhaustive discrete intervention sequences (size
 ``16^k`` for ``k`` steps), optionally under MCWF/TJM noise, and returns a
-:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.DenseComb` or
-:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.MPOComb`.
+:class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.DenseComb` or
+:class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.MPOComb`.
 """
 
 from .basis import TomographyBasis as TomographyBasis
