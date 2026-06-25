@@ -140,7 +140,7 @@ class MemoryCharacterizer:
 
     **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_comb`
 
-    **Use:** :meth:`predict` (reduced-state dynamics), :meth:`characterize` (memory metrics)
+    **Use:** :meth:`predict` (surrogate or reference-comb dynamics), :meth:`characterize` (memory metrics)
 
     Attributes:
         parallel: Whether sequence simulations run in parallel via a process pool.
@@ -529,23 +529,6 @@ class MemoryCharacterizer:
             parts[int(resolved_cut)] = _result_from_probe_dict(out, cut=resolved_cut)
         return _merge_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
-    @overload
-    def predict(
-        self,
-        hamiltonian: Hamiltonian,
-        sim_params: AnalogSimParams,
-        rho0: np.ndarray,
-        sequence: InterventionSequence,
-        /,
-        *,
-        k: int,
-        return_sequence: bool = False,
-        rng: Generator | None = None,
-        timesteps: list[float] | None = None,
-        init_mode: str = "eigenstate",
-    ) -> np.ndarray: ...
-
-    @overload
     def predict(
         self,
         target: Any,
@@ -556,53 +539,15 @@ class MemoryCharacterizer:
         k: int | None = None,
         return_sequence: bool = False,
         rng: Generator | None = None,
-        timesteps: list[float] | None = None,
-        init_mode: str = "eigenstate",
-    ) -> np.ndarray: ...
-
-    def predict(
-        self,
-        target: Any,
-        arg2: Any,
-        arg3: Any,
-        arg4: InterventionSequence | None = None,
-        /,
-        *,
-        k: int | None = None,
-        return_sequence: bool = False,
-        rng: Generator | None = None,
-        timesteps: list[float] | None = None,
-        init_mode: str = "eigenstate",
     ) -> np.ndarray:
-        """Predict site-0 reduced-state dynamics under an intervention sequence."""
+        """Predict site-0 reduced-state dynamics under an intervention sequence.
+
+        Supports trained surrogates and reference combs. For combs, ``rho0`` is accepted
+        for API symmetry but not used (the comb contracts from the tomographic reference state).
+        """
         local_rng = rng if rng is not None else np.random.default_rng()
-
-        if _is_hamiltonian_target(target):
-            from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-
-            if not isinstance(arg2, AnalogSimParams):
-                msg = "predict(hamiltonian, sim_params, rho0, sequence, k=...) requires AnalogSimParams."
-                raise TypeError(msg)
-            if arg4 is None:
-                msg = "predict(hamiltonian, sim_params, rho0, sequence, ...) requires a sequence."
-                raise TypeError(msg)
-            if k is None:
-                msg = "predict(hamiltonian, ...) requires k=."
-                raise ValueError(msg)
-            return self._predict_hamiltonian(
-                target,
-                arg2,
-                _as_rho_matrix(arg3),
-                arg4,
-                k=int(k),
-                return_sequence=return_sequence,
-                rng=local_rng,
-                timesteps=timesteps,
-                init_mode=init_mode,
-            )
-
-        rho_mat = _as_rho_matrix(arg2)
-        seq = arg3
+        rho_mat = _as_rho_matrix(rho0)
+        seq = sequence
 
         if _is_comb_target(target):
             resolved_k = _resolve_k(target, k)
@@ -628,55 +573,6 @@ class MemoryCharacterizer:
         if return_sequence:
             return np.stack([unpack_rho8(row) for row in pred[0]], axis=0).astype(np.complex128)
         return unpack_rho8(pred[0, -1, :])
-
-    def _predict_hamiltonian(
-        self,
-        hamiltonian: Hamiltonian,
-        sim_params: AnalogSimParams,
-        rho0: np.ndarray,
-        sequence: InterventionSequence,
-        *,
-        k: int,
-        return_sequence: bool,
-        rng: Generator,
-        timesteps: list[float] | None,
-        init_mode: str,
-    ) -> np.ndarray:
-        from mqt.yaqs.characterization.memory.combs.core.utils import make_mcwf_static_context
-        from mqt.yaqs.characterization.memory.combs.surrogates.utils import build_initial_psi
-        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import _simulate_sequences
-
-        operator = _require_hamiltonian(hamiltonian)
-        solver = self._solver_for(hamiltonian)
-        if timesteps is None:
-            timesteps = [float(sim_params.dt)] * (int(k) + 1)
-        steps, e = encode_sequence(sequence, k=int(k), rng=rng)
-        initial_psi = build_initial_psi(rho0, length=int(operator.length), rng=rng, init_mode=init_mode)
-        if isinstance(initial_psi, tuple):
-            initial_psi = initial_psi[0]
-        static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None) if solver == "MCWF" else None
-        samples = _simulate_sequences(
-            operator=operator,
-            sim_params=sim_params,
-            timesteps=timesteps,
-            psi_pairs_list=[steps],
-            initial_psis=[np.asarray(initial_psi, dtype=np.complex128)],
-            static_ctx=static_ctx,
-            parallel=False,
-            show_progress=False,
-            record_step_states=True,
-            e_features_rows=[e],
-            solver=solver,
-            _execution=self._execution,
-        )
-        sample = samples[0]
-        if return_sequence:
-            from mqt.yaqs.characterization.memory.combs.core.encoding import unpack_rho8 as _unpack
-
-            return np.stack([_unpack(row) for row in sample.rho_seq], axis=0)
-        from mqt.yaqs.characterization.memory.combs.core.encoding import unpack_rho8 as _unpack
-
-        return _unpack(sample.rho_seq[-1])
 
 
 __all__ = ["MemoryCharacterizer"]

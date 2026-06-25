@@ -15,8 +15,8 @@ mystnb:
 # Operational Memory Diagnostics
 
 ```{note}
-For step-by-step workflows (predict, characterize, validation), start with {doc}`characterization`.
-This page focuses on V-matrix theory and cross-backend validation.
+This page is **not** the main on-ramp. For predict/characterize workflows start with {doc}`characterization`.
+Here we cover V-matrix theory, `probe_process`, and cross-backend validation.
 ```
 
 **Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.

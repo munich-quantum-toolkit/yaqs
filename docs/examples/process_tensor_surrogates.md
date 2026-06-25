@@ -15,7 +15,7 @@ mystnb:
 # Process Tensor Surrogates (TransformerComb)
 
 ```{note}
-Completed Path B in {doc}`characterization`? Continue here for advanced training knobs.
+Start with {doc}`characterization` for the main predict/characterize funnel. This page covers advanced training knobs and Transformer internals.
 ```
 
 This example shows how to train and use the **TransformerComb** surrogate model.
@@ -39,6 +39,19 @@ The surrogate is **not** a replacement for tomography:
 
 - it does **not** reconstruct the full comb matrix \( \Upsilon \),
 - it predicts only the reduced dynamics for the training data distribution (model/solver/timestep regime).
+
+## Transformer structure and sequence length
+
+`TransformerComb` is a **causal transformer** over per-step intervention features, conditioned on the initial packed `rho0`:
+
+- sinusoidal positional encoding and a causal attention mask ensure step `t` only sees steps `≤ t`,
+- each step emits a packed `rho8` reduced density matrix for site 0.
+
+Training via `mc.train(..., k=...)` fixes the rollout length and stores `sequence_length` on the model after `fit`.
+
+**Inference flexibility:** `mc.predict(model, rho0, seq, k=k_prime)` may use `k_prime` shorter or longer than the training `k` because the encoder is length-agnostic. Accuracy is best at or near the trained horizon and diminishes when extrapolating beyond it.
+
+For user-facing dynamics, prefer `MemoryCharacterizer.predict`; the low-level `model.predict(E, rho0)` API remains for batch training shapes.
 
 ## 1. Define the system
 
@@ -130,10 +143,11 @@ if torch is not None:
     print(pred.shape)  # (5, k, 8)
 ```
 
-## 5. Operational memory diagnostics
+For single-sequence user workflows, use `mc.predict(model, rho0, sequence, k=...)`.
 
-After training, use `MemoryCharacterizer.characterize(model, ...)` for split-cut memory metrics.
-For the full V-matrix pipeline and validation, see {doc}`operational_memory`.
+## 5. Operational memory via surrogate backend
+
+After training, `mc.characterize(model, ...)` quantifies operational memory at cut `c` using the surrogate as the process backend — the same `S_V` quantity as Hamiltonian characterize, not a training-quality score.
 
 ```{code-cell} ipython3
 if torch is not None:
@@ -143,7 +157,6 @@ if torch is not None:
 ```
 
 The surrogate learns reduced-state rollouts; it does **not** reconstruct the full comb matrix :math:`\Upsilon`.
-Operational memory readouts are estimated from probe statistics, distinct from exact comb-state QMI/CMI on a tomographic comb.
 
 ## 6. One-call training via `MemoryCharacterizer.train`
 
@@ -166,5 +179,6 @@ if torch is not None:
 
 ## Related topics
 
-- {doc}`operational_memory` — V-matrix diagnostics shared with dense/MPO combs
+- {doc}`characterization` — main predict/characterize funnel
 - {doc}`reference_exact_combs` — exact comb tomography for small `k`
+- {doc}`operational_memory` — V-matrix theory (advanced)

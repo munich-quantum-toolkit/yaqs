@@ -79,11 +79,10 @@ flowchart LR
 | I want to…                                   | Read                                      |
 | -------------------------------------------- | ----------------------------------------- |
 | Characterize operational memory (start here) | {doc}`examples/characterization`          |
-| Ground-truth S_V from simulator rollouts     | {doc}`examples/characterization`          |
-| Fast repeated memory metrics via surrogate   | {doc}`examples/characterization`          |
+| Predict dynamics with a trained surrogate    | {doc}`examples/characterization`          |
+| Gold dynamics at small `k` (reference comb)  | {doc}`examples/reference_exact_combs`     |
 | Tune surrogate training                      | {doc}`examples/process_tensor_surrogates` |
-| V-matrix theory and validation               | {doc}`examples/operational_memory`        |
-| Reference exact combs (small `k` only)       | {doc}`examples/reference_exact_combs`     |
+| V-matrix theory (advanced)                   | {doc}`examples/operational_memory`        |
 
 ```{toctree}
 :caption: Getting started
@@ -118,7 +117,8 @@ examples/trapped_ion
 
 Characterize **non-Markovian memory** in open quantum processes via split-cut V-matrix
 diagnostics (`S_V`, rank, spectrum). Start with {doc}`examples/characterization` for
-`MemoryCharacterizer` workflows (exact simulator and surrogate paths).
+`MemoryCharacterizer` workflows: predict with surrogates (or reference combs at small `k`),
+characterize with the Hamiltonian as the primary metric.
 
 ```{toctree}
 :caption: Characterization

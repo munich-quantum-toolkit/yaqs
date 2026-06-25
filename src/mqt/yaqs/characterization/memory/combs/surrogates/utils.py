@@ -107,9 +107,9 @@ def _initial_mcwf_state_from_rho0(
     for i in range(2):
         if w[i] < 1e-15:
             continue
-        anc = np.zeros(2, dtype=np.complex128)
-        anc[i] = 1.0
-        psi_2 += np.sqrt(w[i]) * np.kron(v[:, i].astype(np.complex128), anc)
+        aux_ket = np.zeros(2, dtype=np.complex128)
+        aux_ket[i] = 1.0
+        psi_2 += np.sqrt(w[i]) * np.kron(v[:, i].astype(np.complex128), aux_ket)
     nrm = float(np.linalg.norm(psi_2))
     if nrm < 1e-15:
         psi_2 = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)

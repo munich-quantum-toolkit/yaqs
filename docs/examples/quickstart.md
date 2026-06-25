@@ -102,7 +102,7 @@ For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence
 
 ## 4. Operational memory characterization
 
-Minimal ground-truth memory metric via :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`:
+Primary memory metric via Hamiltonian characterize:
 
 ```{code-cell} ipython3
 ---
@@ -118,7 +118,7 @@ result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
 print(result.summary())
 ```
 
-See {doc}`characterization` for all workflows (exact simulator, surrogate, validation).
+See {doc}`characterization` for the full funnel (surrogate predict, reference comb validation).
 
 ## 5. Where to go next
 

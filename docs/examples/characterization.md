@@ -17,39 +17,34 @@ mystnb:
 **Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.
 YAQS estimates bond entropy `S_V(c)`, operational rank, and the memory-matrix singular spectrum from **split-cut probes**.
 
-## Mental model
+## Typical workflow
 
-1. **Predict** reduced-state dynamics under intervention sequences — primary production workflow.
-2. **Characterize** V-matrix memory metrics when you need `S_V`, rank, or the memory matrix.
-3. **Build** artifacts when needed — `train()` (surrogate) or `build_comb()` (reference comb at small `k`).
+1. **Train** a surrogate for fast dynamics: `model = mc.train(ham, params, k=...)`.
+2. **Predict** site-0 reduced states with the surrogate (production) or a reference comb (small-`k` gold).
+3. **Characterize** operational memory with the Hamiltonian (primary metric) or the same quantity via surrogate/comb backends.
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 mc = MemoryCharacterizer(representation="auto", parallel=True)
 
-# Predict (surrogate — production)
-model = mc.train(ham, params, k=4, n=80, interventions="measure_prepare")
-rho = mc.predict(model, rho0, "measure_prepare", k=4)
+model = mc.train(ham, params, k=4, n=500)
+rho = mc.predict(model, rho0, sequence, k=4)
 
-# Characterize (memory metrics)
-memory = mc.characterize(model, cut=2, preset="balanced", interventions="haar")
+memory = mc.characterize(ham, params, k=4, cut=2)  # primary metric
+surrogate_memory = mc.characterize(model, cut=2, k=4)  # same quantity, surrogate backend
 
-# Hamiltonian black-box metric (research; not tomographic ground truth)
-metric = mc.characterize(ham, params, k=4, cut=2, interventions="haar")
-
-# Reference comb (validation only; scales as 16^k)
-comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense")
-ref = mc.characterize(comb, cut=1)
+comb = mc.build_comb(ham, params, timesteps=[0.1] * 4, return_type="dense")
+rho_ref = mc.predict(comb, rho0, sequence, k=4)  # gold dynamics (small k)
 ```
 
-## Three backends
+## Verb × backend
 
-| Backend            | Build          | Characterize                       | Typical use                                   |
-| ------------------ | -------------- | ---------------------------------- | --------------------------------------------- |
-| **Surrogate**      | `train()`      | `characterize(model)`              | Production predictions and fast metrics       |
-| **Hamiltonian**    | —              | `characterize(ham, params, k=...)` | Research V-matrix metric from full simulation |
-| **Reference comb** | `build_comb()` | `characterize(comb)`               | Tomographic gold standard at very small `k`   |
+|                    | **predict**                       | **characterize**                    |
+| ------------------ | --------------------------------- | ----------------------------------- |
+| **Surrogate**      | Primary production dynamics       | Same `S_V(c)` via surrogate process |
+| **Hamiltonian**    | —                                 | Primary memory metric               |
+| **Reference comb** | Primary gold dynamics (small `k`) | Optional gold metric                |
 
 ## Setup
 
@@ -91,25 +86,12 @@ else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
-Training defaults to `interventions="measure_prepare"`; characterization defaults to `interventions="haar"`.
+Training fixes the rollout horizon `k` on the model. At inference, `mc.predict(model, ..., k=k_prime)` may use a shorter or longer sequence; accuracy is best at the trained horizon and degrades when extrapolating beyond it. See {doc}`process_tensor_surrogates` for architecture details.
 
-## Characterize memory metrics
-
-```{code-cell} ipython3
----
-tags: [remove-output]
----
-exact = mc.characterize(ham, params, k=1, cut=1, n_pasts=6, n_futures=6)
-print(exact.summary())
-print(f"S_V = {exact.entropy(1):.4f} nats, rank = {exact.rank(1)}")
-```
-
-Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
-
-## Reference comb validation
+## Predict with a reference comb
 
 ```{warning}
-`build_comb` scales as `16^k`. Use only for validation at very small `k`.
+`build_comb` scales as `16^k`. Use only for gold dynamics at very small `k`.
 ```
 
 ```{code-cell} ipython3
@@ -117,6 +99,46 @@ Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid size
 tags: [remove-output]
 ---
 comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense", num_trajectories=20)
+rho_ref = mc.predict(comb, rho0, "measure_prepare", k=1)
+print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
+```
+
+`rho0` is accepted for API symmetry but **not used** — the comb contracts from the tomographic reference state.
+
+## Characterize with a Hamiltonian
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+memory = mc.characterize(ham, params, k=1, cut=1, n_pasts=6, n_futures=6)
+print(memory.summary())
+print(f"S_V = {memory.entropy(1):.4f} nats, rank = {memory.rank(1)}")
+```
+
+Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
+
+## Characterize with a surrogate
+
+`characterize(model, ...)` evaluates the **same** operational memory quantity at cut `c`, using the surrogate as the process backend. It is not a training-quality score.
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+if torch is not None:
+    surrogate_memory = mc.characterize(model, cut=1, k=1, n_pasts=4, n_futures=4)
+    print(surrogate_memory.summary())
+else:
+    print("torch not installed; skip surrogate characterize in doc build")
+```
+
+## Reference comb characterize (optional)
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 ref = mc.characterize(comb, cut=1, k=1, n_pasts=4, n_futures=4)
 print(ref.summary())
 ```
@@ -138,6 +160,6 @@ With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (
 
 ## Related topics
 
-- {doc}`process_tensor_surrogates` — advanced surrogate training
-- {doc}`operational_memory` — V-matrix theory
-- {doc}`reference_exact_combs` — reference comb details
+- {doc}`process_tensor_surrogates` — advanced surrogate training and Transformer structure
+- {doc}`reference_exact_combs` — reference comb predict and validation
+- {doc}`operational_memory` — V-matrix theory (advanced)
