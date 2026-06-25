@@ -44,7 +44,7 @@ def test_rollout_branch_weight_from_steps() -> None:
 
 
 def test_comb_probe_process_returns_cut_weights() -> None:
-    from mqt.yaqs import construct_process_tensor
+    from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
 
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)

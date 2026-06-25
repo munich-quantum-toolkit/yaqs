@@ -5,7 +5,6 @@
 #
 # Licensed under the MIT License
 
-
 """Tests for surrogate rollout sample stacking."""
 
 from __future__ import annotations

@@ -5,14 +5,14 @@
 #
 # Licensed under the MIT License
 
-"""Non-Markovian memory characterization (process-tensor combs and split-cut diagnostics)."""
+"""Non-Markovian memory characterization (split-cut diagnostics and reference combs)."""
 
 from __future__ import annotations
 
-from .combs.tomography.constructor import construct_process_tensor
 from .diagnostics.probe import probe_process
+from .diagnostics.results import ProbeResult
 
 __all__ = [
-    "construct_process_tensor",
+    "ProbeResult",
     "probe_process",
 ]

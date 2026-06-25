@@ -12,9 +12,10 @@ from __future__ import annotations
 import importlib
 
 _LAZY_EXPORTS = {
-    "TransformerComb": ("mqt.yaqs.characterizer", "TransformerComb"),
-    "create_surrogate": ("mqt.yaqs.characterizer", "create_surrogate"),
-    "generate_data": ("mqt.yaqs.characterizer", "generate_data"),
+    "TransformerComb": ("mqt.yaqs.characterization.memory.combs.surrogates.model", "TransformerComb"),
+    "train_surrogate": ("mqt.yaqs.memory_characterizer", "train_surrogate"),
+    "sample_rollouts": ("mqt.yaqs.memory_characterizer", "sample_rollouts"),
+    "characterize_memory": ("mqt.yaqs.memory_characterizer", "characterize_memory"),
 }
 
 

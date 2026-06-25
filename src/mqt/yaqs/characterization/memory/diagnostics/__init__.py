@@ -7,12 +7,15 @@
 
 """Split-cut process diagnostics (V-matrix construction and operational memory metrics)."""
 
-from .probe import ProbeSet, analyze_v_matrix, build_v_matrix, probe_process, sample_split_cut_probes
+from .probe import ProbeSet, analyze_v_matrix, build_v_matrix, build_weighted_v_from_probe, probe_process, sample_split_cut_probes
+from .results import ProbeResult
 
 __all__ = [
+    "ProbeResult",
     "ProbeSet",
     "analyze_v_matrix",
     "build_v_matrix",
+    "build_weighted_v_from_probe",
     "probe_process",
     "sample_split_cut_probes",
 ]

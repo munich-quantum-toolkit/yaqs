@@ -45,7 +45,6 @@ references it unchanged.
 
 from __future__ import annotations
 
-import contextlib
 import copy
 
 # ruff: noqa: E402
@@ -84,7 +83,7 @@ else:
     threadpool_info = _threadpool_info
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
 
     from numpy.typing import NDArray
 
@@ -96,6 +95,10 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
+from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.ensemble import ensemble_member_worker
+from .analog.lindblad import lindblad_evolve, preprocess_lindblad
+from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.result import (
     Result,
@@ -113,20 +116,14 @@ from .core.data_structures.simulation_parameters import (
 )
 from .core.data_structures.state import State
 from .core.parallel_utils import (
+    WORKER_CTX,
     ExecutionConfig,
     MPContext,
-    WORKER_CTX,
     available_cpus,
     call_serial_capped,
     get_parallel_context,
     run_backend_parallel,
-    worker_init,
 )
-
-from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
-from .analog.ensemble import ensemble_member_worker
-from .analog.lindblad import lindblad_evolve, preprocess_lindblad
-from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 

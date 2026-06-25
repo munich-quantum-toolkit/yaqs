@@ -11,7 +11,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
+- added [`MemoryCharacterizer`](src/mqt/yaqs/memory_characterizer.py) with `probe_exact`, `probe`, `probe_from_responses`, and `characterize`, all returning [`ProbeResult`](src/mqt/yaqs/characterization/memory/diagnostics/results.py) V-matrix diagnostics; `train` and `build_comb` remain separate artifact builders
+- added characterization guide at `docs/examples/characterization.md`
 - added orthogonality center tracking ([#477]) ([**@aaronleesander**])
 - extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
 - extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
@@ -30,6 +31,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- replaced top-level `Characterizer`, `construct_process_tensor`, `create_surrogate`, and `generate_data` with `MemoryCharacterizer`, `train_surrogate`, `sample_rollouts`, and `characterize_memory`
 - added trapped-ion position-grid guide and `hamiltonians` factory section ([#476]) ([**@linusschulte**])
 - simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])

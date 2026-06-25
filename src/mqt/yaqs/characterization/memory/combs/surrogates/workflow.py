@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 
 """Surrogate workflow: data generation and end-to-end training entry points.
@@ -37,6 +44,7 @@ if TYPE_CHECKING:
     from torch.utils.data import TensorDataset
 
     from mqt.yaqs.analog.mcwf import MCWFContext
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -55,7 +63,6 @@ from ..core.utils import (
     resolve_stochastic_solver,
 )
 from .data import SequenceRolloutSample, stack_rollouts
-from .model import TransformerComb
 from .utils import _random_density_matrix, _sample_random_intervention_sequence, build_initial_psi
 
 
@@ -964,6 +971,8 @@ def create_surrogate(
         Trained :class:`TransformerComb`.
     """
     import torch  # noqa: PLC0415
+
+    from .model import TransformerComb
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
     train_data = generate_data(

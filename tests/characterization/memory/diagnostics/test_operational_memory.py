@@ -14,7 +14,8 @@ import math
 import numpy as np
 import pytest
 
-from mqt.yaqs import construct_process_tensor
+from mqt.yaqs import Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.combs import DenseComb, MPOComb
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
     analyze_v_matrix,

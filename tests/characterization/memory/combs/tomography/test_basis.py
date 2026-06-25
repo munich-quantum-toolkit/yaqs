@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs import construct_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.basis import (
     _finalize_sequence_averages,
     build_basis_for_fixed_alphabet,

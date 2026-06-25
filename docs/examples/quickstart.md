@@ -100,10 +100,31 @@ equiv = checker.check(original, rewritten)
 
 For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence_checking`.
 
-## 4. Where to go next
+## 4. Operational memory characterization
+
+Minimal ground-truth memory metric via :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`:
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+
+ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
+params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+result = MemoryCharacterizer(parallel=False, show_progress=False).probe_exact(
+    ham, params, cut=1, k=1, n_pasts=4, n_futures=4,
+)
+print(result.summary())
+```
+
+See {doc}`characterization` for all workflows (exact simulator, surrogate, validation).
+
+## 5. Where to go next
 
 | Goal                                                | Start here                    |
 | --------------------------------------------------- | ----------------------------- |
+| Operational memory (S_V, V-matrix)                  | {doc}`characterization`       |
 | Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
 | Bell-curve (log-normal) noise strengths             | {doc}`realistic_noise_models` |
 | Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |

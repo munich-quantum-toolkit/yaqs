@@ -78,9 +78,12 @@ flowchart LR
 
 | I want to…                                                    | Read                                       |
 | ------------------------------------------------------------- | ------------------------------------------ |
-| Reconstruct a process-tensor comb (dense / MPO)               | {doc}`examples/process_tomography`         |
-| Characterize operational memory (V-matrix, S_V, rank)         | {doc}`examples/operational_memory`         |
-| Train a surrogate comb for large `k`                          | {doc}`examples/process_tensor_surrogates` |
+| Characterize operational memory (start here)                  | {doc}`examples/characterization`           |
+| Ground-truth S_V from simulator rollouts                      | {doc}`examples/characterization`           |
+| Fast repeated memory metrics via surrogate                    | {doc}`examples/characterization`           |
+| Tune surrogate training                                       | {doc}`examples/process_tensor_surrogates`  |
+| V-matrix theory and validation                                | {doc}`examples/operational_memory`         |
+| Reference exact combs (small `k` only)                        | {doc}`examples/reference_exact_combs`     |
 
 ```{toctree}
 :caption: Getting started
@@ -113,9 +116,9 @@ examples/trapped_ion
 
 ## Characterization
 
-Characterize **non-Markovian memory** in open quantum processes: reconstruct multi-time
-process-tensor combs, estimate bond entropy :math:`S_V(c)` from split-cut probing, or train
-a surrogate comb when exhaustive tomography is too costly.
+Characterize **non-Markovian memory** in open quantum processes via split-cut V-matrix
+diagnostics (`S_V`, rank, spectrum). Start with {doc}`examples/characterization` for
+`MemoryCharacterizer` workflows (exact simulator and surrogate paths).
 
 ```{toctree}
 :caption: Characterization
@@ -123,9 +126,10 @@ a surrogate comb when exhaustive tomography is too costly.
 :maxdepth: 1
 :titlesonly:
 
-examples/process_tomography
-examples/operational_memory
+examples/characterization
 examples/process_tensor_surrogates
+examples/operational_memory
+examples/reference_exact_combs
 ```
 
 ```{toctree}

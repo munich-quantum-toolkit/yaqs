@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
 """Neural surrogate module: :class:`TransformerComb` only.
 
 Training data containers (:class:`~mqt.yaqs.characterization.memory.combs.surrogates.data.SequenceRolloutSample`,
