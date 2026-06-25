@@ -27,8 +27,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...diagnostics.probe import ProbeSet, branch_weights_ij
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
+from ...diagnostics.probe import ProbeSet, _branch_weights_ij
+from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_batch
 from .utils import _choi_features_from_parts
 
 # Computational-basis |0><0| (same convention as workflow rollouts).
@@ -248,16 +248,16 @@ class TransformerComb(nn.Module):
         return int(self.sequence_length)
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe responses for :func:`probe_process`.
+        """Evaluate split-cut probe responses for :func:`_probe_process`.
 
         Returns:
-            Array of shape ``(n_pasts, n_futures, 3)`` with Pauli expectations.
+            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
         """
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1
         suffix_len = int(probe_set.k) - int(probe_set.cut)
-        v_rows = np.empty((n_p, n_f, 3), dtype=np.float32)
+        v_rows = np.empty((n_p, n_f, 4), dtype=np.float32)
         dev = next(self.parameters()).device
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
         was_training = self.training
@@ -287,7 +287,7 @@ class TransformerComb(nn.Module):
                 seq_t = torch.from_numpy(seq).to(device=dev, dtype=torch.float32)
                 rho_pred_batch = self.predict_final_state_batch(rho0, seq_t, restore_training=False)
                 packed_np = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
-                v_rows[i] = packed_rho8_to_pauli_xyz_batch(packed_np).astype(np.float32)
+                v_rows[i] = packed_rho8_to_pauli_batch(packed_np).astype(np.float32)
         finally:
             if was_training:
                 self.train()
@@ -296,7 +296,7 @@ class TransformerComb(nn.Module):
     def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Return Pauli responses and causal cut branch weights."""
         pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
-        return pauli, branch_weights_ij(probe_set)
+        return pauli, _branch_weights_ij(probe_set)
 
     def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.

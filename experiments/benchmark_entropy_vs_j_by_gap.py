@@ -45,8 +45,8 @@ from _benchmark_plotting import (
     plot_entropy_heatmap_tau_j_pair,
     plot_entropy_vs_ell,
 )
+from _benchmark_probes import sample_split_delayed_break_probes
 
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_delayed_break_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

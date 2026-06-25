@@ -29,10 +29,12 @@ from mqt.yaqs.characterization.memory.combs.core.utils import (
 )
 from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, construct_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.combs import _probe_step_to_callable
+from mqt.yaqs.characterization.memory.diagnostics.memory_matrix import (
+    _analyze_memory_matrix,
+    _build_weighted_memory_matrix_from_probe,
+)
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    analyze_v_matrix,
-    build_weighted_v_from_probe,
-    probe_process,
+    _probe_process,
     sample_split_cut_probes,
 )
 from mqt.yaqs.characterization.memory.diagnostics.results import (
@@ -460,7 +462,7 @@ class MemoryCharacterizer:
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
         resolved_cut = _default_cut(int(k), cut)
-        out = probe_process(
+        out = _probe_process(
             process=target,
             cut=resolved_cut,
             k=int(k),
@@ -468,7 +470,7 @@ class MemoryCharacterizer:
             n_futures=n_futures,
             rng=rng,
             probe_set=probe_set,
-            return_v=True,
+            return_raw=True,
             parallel=parallel if parallel is not None else self._execution.parallel,
             **probe_kw,
         )
@@ -523,9 +525,9 @@ class MemoryCharacterizer:
                 show_progress=self._execution.show_progress,
                 solver=self._solver_for(hamiltonian),
             )
-            v, v_centered = build_weighted_v_from_probe(pauli_xyz, weights_ij)
-            ana = analyze_v_matrix(v, v_centered)
-            out: dict[str, Any] = {**ana, "V_centered": v_centered}
+            _m_raw, memory_matrix = _build_weighted_memory_matrix_from_probe(pauli_xyz, weights_ij)
+            ana = _analyze_memory_matrix(memory_matrix)
+            out: dict[str, Any] = {**ana, "memory_matrix": memory_matrix}
             parts[int(resolved_cut)] = _result_from_probe_dict(out, cut=resolved_cut)
         return _merge_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
@@ -552,9 +554,9 @@ class MemoryCharacterizer:
         if _is_comb_target(target):
             resolved_k = _resolve_k(target, k)
             if isinstance(seq, str):
-                from mqt.yaqs.characterization.memory.interventions import expand_intervention_sequence
+                from mqt.yaqs.characterization.memory.interventions import _expand_intervention_sequence
 
-                slots = expand_intervention_sequence(seq, k=resolved_k, rng=local_rng)
+                slots = _expand_intervention_sequence(seq, k=resolved_k, rng=local_rng)
             else:
                 slots = list(seq)
             steps, _ = encode_sequence(slots, k=resolved_k, rng=local_rng)

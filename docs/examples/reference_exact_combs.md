@@ -109,4 +109,4 @@ rho_comb = mc.predict(comb_single, rho0, "measure_prepare", k=1)
 
 - {doc}`characterization` — primary memory characterization guide
 - {doc}`process_tensor_surrogates` — surrogate training
-- {doc}`operational_memory` — V-matrix theory (advanced)
+- {doc}`operational_memory` — memory matrix theory (advanced)

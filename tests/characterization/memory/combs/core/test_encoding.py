@@ -12,12 +12,16 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.characterization.memory.combs.core.encoding import (
     _flatten_choi4_to_real32,
     build_choi_feature_table,
     normalize_rho_from_backend_output,
     pack_rho8,
+    packed_rho8_to_pauli_batch,
+    pauli_expectations_to_rho,
+    rho_to_pauli_expectations,
     unpack_rho8,
 )
 
@@ -59,3 +63,42 @@ def test_normalize_rho_from_backend_output_returns_physical_dm() -> None:
     np.testing.assert_allclose(np.trace(rho).real, 1.0, atol=1e-12)
     evals = np.linalg.eigvalsh(rho).real
     assert float(evals.min()) >= -1e-12
+
+
+def test_pauli_tomography_roundtrip_and_identity_component() -> None:
+    """Four-component Pauli tomography reconstructs rho; I expectation is unity."""
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
+    rho = a @ a.conj().T
+    rho /= np.trace(rho)
+    pauli = rho_to_pauli_expectations(rho)
+    assert pauli[0] == pytest.approx(1.0)
+    recon = pauli_expectations_to_rho(pauli)
+    np.testing.assert_allclose(recon, rho, atol=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("psi", "expected_xyz"),
+    [
+        (np.array([1.0, 0.0], dtype=np.complex128), np.array([0.0, 0.0, 1.0])),
+        (np.array([0.0, 1.0], dtype=np.complex128), np.array([0.0, 0.0, -1.0])),
+        (np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2), np.array([1.0, 0.0, 0.0])),
+        (np.array([1.0, 1.0j], dtype=np.complex128) / np.sqrt(2), np.array([0.0, 1.0, 0.0])),
+    ],
+)
+def test_rho_to_pauli_xyz_standard_bloch_states(psi: np.ndarray, expected_xyz: np.ndarray) -> None:
+    """Standard single-qubit states map to the expected X,Y,Z Pauli expectations."""
+    rho = np.outer(psi, psi.conj())
+    tr = float(np.trace(rho).real)
+    if tr > 1e-15:
+        rho /= tr
+    xyz = rho_to_pauli_expectations(rho)[1:4]
+    np.testing.assert_allclose(xyz, expected_xyz, atol=1e-10, rtol=0.0)
+
+
+def test_packed_rho8_pauli_batch_shape_and_identity() -> None:
+    """rho8 batch maps to (I,X,Y,Z) with I≈1 for normalized states."""
+    packed = np.random.default_rng(1).standard_normal((3, 8)).astype(np.float32)
+    full = packed_rho8_to_pauli_batch(packed)
+    assert full.shape == (3, 4)
+    assert full[..., 0] == pytest.approx(1.0, abs=0.05)

@@ -15,8 +15,8 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from ...diagnostics.probe import ProbeSet, branch_weights_ij, probe_sequence
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
+from ...diagnostics.probe import ProbeSet, _branch_weights_ij, _probe_sequence
+from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_batch
 from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
@@ -72,20 +72,20 @@ def _probe_step_to_callable(
     return inter
 
 
-def _pauli_xyz_from_rho(rho: NDArray[np.complex128]) -> NDArray[np.float32]:
+def _pauli_from_rho(rho: NDArray[np.complex128]) -> NDArray[np.float32]:
     packed = pack_rho8(normalize_rho_from_backend_output(rho)).astype(np.float32)
-    return packed_rho8_to_pauli_xyz_batch(packed.reshape(1, 8), normalize=True)[0].astype(np.float32)
+    return packed_rho8_to_pauli_batch(packed.reshape(1, 8), normalize=True)[0].astype(np.float32)
 
 
 def _evaluate_dense_comb_probe_set(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
-    pauli = np.empty((n_p, n_f, 3), dtype=np.float32)
+    pauli = np.empty((n_p, n_f, 4), dtype=np.float32)
     for i in range(n_p):
         for j in range(n_f):
-            steps = probe_sequence(probe_set, i, j)
+            steps = _probe_sequence(probe_set, i, j)
             interventions = [_probe_step_to_callable(s) for s in steps]
-            pauli[i, j] = _pauli_xyz_from_rho(comb.predict(interventions))
+            pauli[i, j] = _pauli_from_rho(comb.predict(interventions))
     return pauli
 
 
@@ -315,14 +315,14 @@ class DenseComb:
         """Evaluate split-cut probe Pauli responses.
 
         Returns:
-            Array of shape ``(n_pasts, n_futures, 3)``.
+            Array of shape ``(n_pasts, n_futures, 4)``.
         """
         return _evaluate_dense_comb_probe_set(self, probe_set)
 
     def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Return Pauli responses and causal cut branch weights for paper-aligned V assembly."""
         pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
-        return pauli, branch_weights_ij(probe_set)
+        return pauli, _branch_weights_ij(probe_set)
 
     def qmi(
         self,

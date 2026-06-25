@@ -77,7 +77,7 @@ else:
 if torch is not None:
     memory = mc.characterize(model, cut=2, k=4, n_pasts=8, n_futures=8)
     print(f"S_V(2) = {memory.entropy(2):.4f}")
-    print(f"effective modes ≈ {memory.rank(2)}")
+    print(f"R(2) = {memory.rank(2):.3f}")
 ```
 
 ## Advanced: custom architecture and `sample`

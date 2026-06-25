@@ -879,8 +879,8 @@ def generate_data(
         ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
     from mqt.yaqs.characterization.memory.interventions import (
-        normalize_intervention_kind,
-        sample_training_sequence,
+        _normalize_intervention_kind,
+        _sample_training_sequence,
     )
 
     chain_length = int(operator.length)
@@ -904,9 +904,9 @@ def generate_data(
 
     for _ in range(int(n)):
         rho_in = _random_density_matrix(rng)
-        step_pairs, choi_rows = sample_training_sequence(
+        step_pairs, choi_rows = _sample_training_sequence(
             int(k),
-            normalize_intervention_kind(str(interventions)),
+            _normalize_intervention_kind(str(interventions)),
             rng,
         )
         psi_pairs_list.append(step_pairs)

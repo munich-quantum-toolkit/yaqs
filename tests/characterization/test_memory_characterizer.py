@@ -9,6 +9,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+import math
+
 import numpy as np
 import pytest
 
@@ -55,7 +58,7 @@ def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, Analog
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("torch") is None,
+    importlib.util.find_spec("torch") is None,
     reason="torch not installed",
 )
 def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -76,7 +79,7 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("torch") is None,
+    importlib.util.find_spec("torch") is None,
     reason="torch not installed",
 )
 def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -107,6 +110,69 @@ def test_build_comb_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogS
     assert out.entropy(1) >= 0.0
 
 
+def test_characterize_comb_default_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """characterize() uses interior default cut when cut is omitted."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    comb = mc.build_comb(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
+    rng = np.random.default_rng(0)
+    default_cut = (2 + 1) // 2
+    ent_default = mc.characterize(comb, k=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
+    ent_explicit = mc.characterize(
+        comb,
+        cut=default_cut,
+        k=2,
+        n_pasts=4,
+        n_futures=4,
+        rng=np.random.default_rng(0),
+    ).entropy(default_cut)
+    assert ent_default == pytest.approx(ent_explicit)
+    result = mc.characterize(
+        comb,
+        cut=2,
+        k=2,
+        n_pasts=4,
+        n_futures=4,
+        rng=np.random.default_rng(0),
+    )
+    sv = result.singular_values(2)
+    assert sv.ndim == 1
+    assert sv.size >= 1
+    assert math.isfinite(float(result.entropy(2)))
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None,
+    reason="torch not installed",
+)
+def test_transformercomb_characterize_singular_values_shape(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+) -> None:
+    """Characterize returns the full SVD spectrum for a surrogate."""
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
+
+    _ham, _params = ham_and_params
+    model = TransformerComb(
+        d_e=32,
+        d_rho=8,
+        d_model=32,
+        nhead=4,
+        num_layers=1,
+        dim_ff=64,
+        dropout=0.0,
+        sequence_length=3,
+    )
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    sv = mc.characterize(
+        model,
+        cut=2,
+        n_pasts=4,
+        n_futures=3,
+        rng=np.random.default_rng(0),
+    ).singular_values(2)
+    assert sv.shape == (min(4, 3 * 3),)
+
+
 def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """predict(comb, rho0, sequence, k=...) returns a valid density matrix."""
     ham, params = ham_and_params
@@ -128,7 +194,7 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("torch") is None,
+    importlib.util.find_spec("torch") is None,
     reason="torch not installed",
 )
 def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:

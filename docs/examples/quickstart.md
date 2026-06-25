@@ -124,7 +124,7 @@ See {doc}`characterization` for the full funnel (surrogate predict, reference co
 
 | Goal                                                | Start here                    |
 | --------------------------------------------------- | ----------------------------- |
-| Operational memory (S_V, V-matrix)                  | {doc}`characterization`       |
+| Operational memory (S_V, memory matrix)             | {doc}`characterization`       |
 | Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
 | Bell-curve (log-normal) noise strengths             | {doc}`realistic_noise_models` |
 | Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |

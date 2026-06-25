@@ -34,11 +34,11 @@ cut = 2  # causal break after step cut-1; future probes use steps cut+1 … k
 model = mc.train(ham, params, k=k, n=500)
 rho = mc.predict(model, rho0, sequence, k=k)
 
-memory = mc.characterize(ham, params, cut=cut, k=k)           # primary metric
-surrogate_memory = mc.characterize(model, cut=cut, k=k)         # same quantity, surrogate backend
+memory = mc.characterize(ham, params, cut=cut, k=k)  # primary metric
+surrogate_memory = mc.characterize(model, cut=cut, k=k)  # same quantity, surrogate backend
 
 comb = mc.build_comb(ham, params, timesteps=[0.1] * k, return_type="dense")
-rho_ref = mc.predict(comb, rho0, sequence, k=k)                # reference dynamics (small k)
+rho_ref = mc.predict(comb, rho0, sequence, k=k)  # reference dynamics (small k)
 ```
 
 ## Verb × backend
@@ -116,7 +116,7 @@ tags: [remove-output]
 ---
 memory = mc.characterize(ham, params, cut=1, k=1, n_pasts=6, n_futures=6)
 print(memory.summary())
-print(f"S_V = {memory.entropy(1):.4f}, rank = {memory.rank(1)}")
+print(f"S_V = {memory.entropy(1):.4f}, R = {memory.rank(1):.3f}")
 ```
 
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
@@ -148,13 +148,13 @@ print(ref.summary())
 
 ## Reading `CharacterizationResult`
 
-| Access                      | Meaning                                                       |
-| --------------------------- | ------------------------------------------------------------- |
+| Access                      | Meaning                                                         |
+| --------------------------- | --------------------------------------------------------------- |
 | `result.entropy(c)`         | Cross-cut memory entropy `S_V(c)` (natural log of mode weights) |
-| `result.rank(c)`            | Effective number of resolved memory modes at cut `c`          |
-| `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c` |
-| `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`              |
-| `result.summary()`          | Human-readable entropy/rank table                             |
+| `result.rank(c)`            | Effective mode number `R(c) = exp(S_V(c))`                      |
+| `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c`    |
+| `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`               |
+| `result.summary()`          | Human-readable entropy/rank table                               |
 
 ## Representation
 

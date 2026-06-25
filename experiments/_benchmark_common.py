@@ -14,21 +14,13 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from _benchmark_memory import linear_weighted_metrics as _linear_weighted_metrics
 
 from mqt.yaqs.characterization.memory.combs.surrogates.utils import _random_pure_state
-from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, analyze_v_matrix, sample_split_cut_probes
-from mqt.yaqs.characterization.memory.diagnostics.v_matrix import (
-    build_weighted_v_matrix,
-    center_past_rows,
-    prepare_branch_weights,
-)
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, sample_split_cut_probes
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from mqt.yaqs.core.data_structures.mpo import MPO
-    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 # Paper / legacy experiment defaults.
 L_DEFAULT = 2
@@ -87,8 +79,6 @@ def list_initial_states_sys_env0(*, length: int, n_seeds: int, rng: np.random.Ge
 
 
 def load_summary_csv(path: Path) -> list[dict[str, str]]:
-    import csv
-
     with path.open(newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
@@ -96,35 +86,20 @@ def load_summary_csv(path: Path) -> list[dict[str, str]]:
 def linear_weighted_metrics(
     *,
     probe_set: ProbeSet,
-    op: MPO,
-    sim_params: AnalogSimParams,
+    op: Any,
+    sim_params: Any,
     psi0: np.ndarray,
     parallel: bool,
 ) -> dict[str, float | int]:
-    """Past-centered S_V with V = w^β ρ (β=1) using mc-process cumulative branch weights."""
-    pauli_xyz_ij, _, traces = evaluate_exact_probe_set_with_diagnostics(
+    """Past-centered S_V with weighted memory matrix (beta=1) using mc-process branch weights."""
+    return _linear_weighted_metrics(
         probe_set=probe_set,
-        operator=op,
+        op=op,
         sim_params=sim_params,
-        initial_psi=psi0,
+        psi0=psi0,
         parallel=parallel,
+        branch_weight_beta=BRANCH_WEIGHT_BETA,
     )
-    n_p, n_f = pauli_xyz_ij.shape[:2]
-    weights_ij = np.zeros((n_p, n_f), dtype=np.float64)
-    for ii in range(n_p):
-        for jj in range(n_f):
-            weights_ij[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
-    w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
-    v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
-    v_c = center_past_rows(v_w)
-    ana = analyze_v_matrix(v_w, v_c)
-    return {
-        "entropy": float(ana["entropy"]),
-        "delta_norm": float(ana["delta_norm"]),
-        "rank": int(ana["rank"]),
-        "weight_min": float(np.min(weights_ij)),
-        "weight_max": float(np.max(weights_ij)),
-    }
 
 
 def write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -161,3 +136,29 @@ def sample_probe_set(
         unitary_ensemble=unitary_ensemble,
         intervention_mode=intervention_mode,
     )
+
+
+__all__ = [
+    "BRANCH_WEIGHT_BETA",
+    "DT_DEFAULT",
+    "ELL_MAX_ELL",
+    "ELL_MAX_GAP",
+    "FUTURE_LEN_FIXED",
+    "G_DEFAULT",
+    "J_SWEEP_PAPER",
+    "K_DEFAULT",
+    "K_PAPER",
+    "L_DEFAULT",
+    "L_PAPER",
+    "PANEL2_FIXED_TAUS",
+    "PAST_LEN_FIXED",
+    "SV_THRESHOLD_DEFAULT",
+    "linear_weighted_metrics",
+    "list_initial_states_sys_env0",
+    "load_summary_csv",
+    "parse_float_list",
+    "parse_int_list",
+    "sample_probe_set",
+    "write_summary_csv",
+    "write_summary_json",
+]

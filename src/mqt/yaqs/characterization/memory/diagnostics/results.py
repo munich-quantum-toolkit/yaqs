@@ -19,7 +19,7 @@ import numpy as np
 class _CutResult:
     cut: int
     entropy: float
-    rank: int
+    rank: float
     singular_values: np.ndarray
     memory_matrix: np.ndarray
 
@@ -37,9 +37,9 @@ class CharacterizationResult:
         """Cross-cut memory entropy :math:`S_V(c)` at ``cut`` (natural log of mode weights)."""
         return float(self.by_cut[int(cut)].entropy)
 
-    def rank(self, cut: int) -> int:
-        """Effective number of resolved memory modes at ``cut`` (paper :math:`R(c)=\\exp(S_V(c))` scale)."""
-        return int(self.by_cut[int(cut)].rank)
+    def rank(self, cut: int) -> float:
+        r"""Effective mode number :math:`R(c)=\exp(S_V(c))` at ``cut``."""
+        return float(self.by_cut[int(cut)].rank)
 
     def singular_values(self, cut: int) -> np.ndarray:
         """Singular spectrum of the memory matrix at ``cut``."""
@@ -54,25 +54,25 @@ class CharacterizationResult:
         if len(self.by_cut) == 1:
             c = next(iter(self.by_cut))
             d = self.by_cut[c]
-            return f"cut={c}: S_V={d.entropy:.4f}, modes≈{d.rank}"
-        lines = ["cut  S_V    modes"]
+            return f"cut={c}: S_V={d.entropy:.4f}, R={d.rank:.3f}"
+        lines = ["cut  S_V    R"]
         for c in sorted(self.by_cut):
             d = self.by_cut[c]
-            lines.append(f"{c:4d} {d.entropy:10.4f} {d.rank:5d}")
+            lines.append(f"{c:4d} {d.entropy:10.4f} {d.rank:8.3f}")
         return "\n".join(lines)
 
 
 def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
-    v_centered = out.get("V_centered")
-    if v_centered is None:
-        msg = "probe output missing V_centered required for memory_matrix."
+    memory_matrix = out.get("memory_matrix")
+    if memory_matrix is None:
+        msg = "probe output missing memory_matrix."
         raise ValueError(msg)
     return _CutResult(
         cut=int(cut),
         entropy=float(out["entropy"]),
-        rank=int(out["rank"]),
+        rank=float(out["rank"]),
         singular_values=np.asarray(out.get("singular_values_full", out["singular_values"])),
-        memory_matrix=np.asarray(v_centered),
+        memory_matrix=np.asarray(memory_matrix),
     )
 
 
@@ -89,6 +89,3 @@ def _merge_results(results: dict[int, CharacterizationResult]) -> Characterizati
             raise ValueError(msg)
         by_cut[int(cut_key)] = part.by_cut[int(cut_key)]
     return CharacterizationResult(by_cut=by_cut)
-
-
-__all__ = ["CharacterizationResult"]

@@ -25,16 +25,26 @@ Following the black-box construction in the cross-cut memory framework:
 
 1. Sample past interventions :math:`\alpha=(U_1,\ldots,U_{c-1})` and future interventions :math:`\beta=(V_{c+1},\ldots,V_k)`.
 2. Insert a **causal break** at step `c`: measure an effect :math:`E_m` on the past side and prepare :math:`\sigma_p` on the future side.
-3. For each conditioned past :math:`(\alpha,m)` and future setting :math:`(p,\beta)`, record the break weight :math:`w_{\alpha,m}` (the probability of that conditioned past at the cut) and the output response :math:`\mathbf{r}(\rho_{\mathrm{out}})` — here the Pauli expectation vector :math:`(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)`.
-4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights.
+3. For each conditioned past :math:`(\alpha,m)` and future setting :math:`(p,\beta)`, record the break weight :math:`w_{\alpha,m}` (the probability of that conditioned past at the cut) and the output response :math:`\mathbf{r}(\rho_{\mathrm{out}})` — Pauli tomography :math:`(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)` with :math:`\langle I\rangle=1` for physical states. The cross-cut matrix :math:`\widetilde{V}(c)` uses the :math:`X,Y,Z` components only (identical to the legacy three-component pipeline).
+4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights. Report :math:`R(c)=\exp(S_V(c))` via `result.rank(c)`.
 
 Use {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` for all memory metrics:
 
 ```python
 result = mc.characterize(target, cut=c, k=k, preset="balanced")
-result.entropy(c)          # S_V(c)
+result.entropy(c)  # S_V(c)
 result.singular_values(c)  # spectrum of Ṽ(c)
+result.rank(c)  # R(c) = exp(S_V(c))
 ```
+
+### Break weights :math:`w_{\alpha,m}`
+
+| Backend              | How `weights_ij` are obtained                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hamiltonian**      | Product of simulated intervention probabilities along each probe sequence through cut `c` (from full-state rollouts).                  |
+| **Comb / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (internal branch-weight rollout). |
+
+In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).
 
 ## 1. Setup
 
@@ -91,8 +101,8 @@ sv = result.singular_values(cut)
 rk = result.rank(cut)
 v_c = result.memory_matrix(cut)
 
-print(f"S_V({cut}) = {ent:.4f}")
-print(f"spectrum length = {sv.size}, effective modes ≈ {rk}")
+print(f"S_V({cut}) = {ent:.4f}, R({cut}) = {rk:.3f}")
+print(f"spectrum length = {sv.size}")
 print(f"centered response matrix shape {v_c.shape}")
 ```
 
@@ -164,8 +174,8 @@ axes[0].set_title("Memory entropy vs cut")
 
 axes[1].plot(list(cuts), ranks, "s-")
 axes[1].set_xlabel("cut c")
-axes[1].set_ylabel("effective modes")
-axes[1].set_title("Mode count vs cut")
+axes[1].set_ylabel("R(c)")
+axes[1].set_title("Effective modes vs cut")
 fig.tight_layout()
 ```
 

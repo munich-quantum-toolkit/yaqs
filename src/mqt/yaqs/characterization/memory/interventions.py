@@ -21,6 +21,7 @@ from mqt.yaqs.characterization.memory.combs.surrogates.utils import (
     _sample_random_intervention_sequence,
 )
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
+    _psi_from_rank1_projector,
     _sample_random_clifford_unitary,
     _sample_random_unitary,
     _unitary_to_choi_features,
@@ -31,7 +32,7 @@ InterventionSlot = str | dict[str, Any]
 InterventionSequence = Sequence[InterventionSlot] | InterventionKind
 
 
-def normalize_intervention_kind(kind: str) -> InterventionKind:
+def _normalize_intervention_kind(kind: str) -> InterventionKind:
     """Validate a user intervention kind string.
 
     Args:
@@ -52,21 +53,11 @@ def normalize_intervention_kind(kind: str) -> InterventionKind:
 
 def probe_kwargs_from_interventions(interventions: str) -> dict[str, str]:
     """Map user intervention names to internal split-cut probe keyword arguments."""
-    kind = normalize_intervention_kind(interventions)
+    kind = _normalize_intervention_kind(interventions)
     if kind == "measure_prepare":
         return {"intervention_mode": "measure_prepare", "unitary_ensemble": "haar"}
     ensemble = "clifford" if kind == "clifford" else "haar"
     return {"intervention_mode": "unitary_break_mp", "unitary_ensemble": ensemble}
-
-
-def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
-    eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
-    idx = int(np.argmax(eigvals.real))
-    psi = eigvecs[:, idx]
-    norm = float(np.linalg.norm(psi))
-    if norm < 1e-15:
-        return np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    return (psi / norm).astype(np.complex128)
 
 
 def _unitary_sampler(kind: InterventionKind, rng: np.random.Generator):
@@ -75,7 +66,7 @@ def _unitary_sampler(kind: InterventionKind, rng: np.random.Generator):
     return _sample_random_unitary
 
 
-def encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
+def _encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
     """Encode one intervention slot to a simulator step and Choi feature row.
 
     Returns:
@@ -87,7 +78,7 @@ def encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, 
             raise ValueError(msg)
         u = np.asarray(slot["unitary"], dtype=np.complex128).reshape(2, 2)
         return {"type": "unitary", "U": u}, _unitary_to_choi_features(u)
-    kind = normalize_intervention_kind(str(slot))
+    kind = _normalize_intervention_kind(str(slot))
     if kind == "measure_prepare":
         rho_prep, effect, feat = _sample_random_intervention_parts(rng)
         psi_meas = _psi_from_rank1_projector(effect)
@@ -97,7 +88,7 @@ def encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, 
     return {"type": "unitary", "U": u}, _unitary_to_choi_features(u)
 
 
-def expand_intervention_sequence(
+def _expand_intervention_sequence(
     spec: InterventionSequence,
     *,
     k: int,
@@ -106,7 +97,7 @@ def expand_intervention_sequence(
     """Expand a scalar spec or per-slot list to length ``k``."""
     kk = int(k)
     if isinstance(spec, str):
-        kind = normalize_intervention_kind(spec)
+        kind = _normalize_intervention_kind(spec)
         return [kind] * kk
     slots = list(spec)
     if len(slots) == 1 and kk > 1:
@@ -128,17 +119,17 @@ def encode_sequence(
     Returns:
         ``(psi_pairs, choi_features)`` with ``choi_features`` shaped ``(k, 32)``.
     """
-    slots = expand_intervention_sequence(spec, k=k, rng=rng)
+    slots = _expand_intervention_sequence(spec, k=k, rng=rng)
     steps: list[Any] = []
     rows: list[np.ndarray] = []
     for slot in slots:
-        step, feat = encode_slot(slot, rng)
+        step, feat = _encode_slot(slot, rng)
         steps.append(step)
         rows.append(feat)
     return steps, np.stack(rows, axis=0).astype(np.float32)
 
 
-def sample_training_sequence(
+def _sample_training_sequence(
     k: int,
     interventions: InterventionKind,
     rng: np.random.Generator,
@@ -153,16 +144,3 @@ def sample_training_sequence(
             steps.append((psi_meas, psi_prep))
         return steps, choi
     return encode_sequence(interventions, k=int(k), rng=rng)
-
-
-__all__ = [
-    "InterventionKind",
-    "InterventionSequence",
-    "InterventionSlot",
-    "encode_sequence",
-    "encode_slot",
-    "expand_intervention_sequence",
-    "normalize_intervention_kind",
-    "probe_kwargs_from_interventions",
-    "sample_training_sequence",
-]

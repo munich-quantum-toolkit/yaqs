@@ -15,10 +15,10 @@ import numpy as np
 
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
-from ..combs.core.encoding import packed_rho8_to_pauli_xyz_batch
+from ..combs.core.encoding import packed_rho8_to_pauli_batch
 from ..combs.core.utils import StochasticSolver, make_mcwf_static_context
 from ..combs.surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
-from ..diagnostics.probe import ProbeSet, build_all_pairs_grid
+from ..diagnostics.probe import ProbeSet, _build_all_pairs_grid
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -61,14 +61,14 @@ class ExactProbeProcess:
         """Run exact backend for all (past, future) probe combinations.
 
         Returns:
-            Array of shape ``(n_pasts, n_futures, 3)`` with Pauli :math:`(x,y,z)` expectations
+            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``
             from the final single-qubit reduced state.
 
         Raises:
             RuntimeError: If the backend returns an unexpected result count.
             TypeError: If the backend output is not an ndarray.
         """
-        all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
+        all_pairs, n_p, n_f = _build_all_pairs_grid(probe_set)
         n_tot = n_p * n_f
         initial_psis = [self.initial_psi.copy() for _ in range(n_tot)]
         final_packed = _simulate_sequences(
@@ -90,8 +90,7 @@ class ExactProbeProcess:
             msg = f"Expected {n_tot} final states from exact simulation, got {final_packed.shape[0]}."
             raise RuntimeError(msg)
         packed_flat = np.asarray(final_packed, dtype=np.float32).reshape(n_p * n_f, 8)
-        xyz = packed_rho8_to_pauli_xyz_batch(packed_flat).reshape(n_p, n_f, 3)
-        return xyz.astype(np.float32)
+        return packed_rho8_to_pauli_batch(packed_flat).reshape(n_p, n_f, 4).astype(np.float32)
 
 
 def evaluate_exact_probe_set_with_diagnostics(
@@ -104,18 +103,19 @@ def evaluate_exact_probe_set_with_diagnostics(
     show_progress: bool = False,
     solver: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
-    """Exact rollout with per-sequence diagnostics (branch weights, early termination).
+    r"""Exact rollout with per-sequence diagnostics (branch weights, early termination).
 
     Returns:
-        ``(pauli_xyz_ij, weights_ij, traces_flat)`` where ``pauli_xyz_ij`` has shape
-        ``(n_pasts, n_futures, 3)`` (Pauli expectations :math:`x,y,z` from the final reduced state),
-        ``weights_ij`` uses causal cut weights ``prod(step_probs[:cut])``, and
-        ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`build_all_pairs_grid`.
+        ``(pauli_ij, weights_ij, traces_flat)`` where ``pauli_ij`` has shape
+        ``(n_pasts, n_futures, 4)`` (Pauli tomography from the final reduced state),
+        ``weights_ij`` holds break weights :math:`w_{\alpha,m}` from simulated step
+        probabilities through cut ``c``, and
+        ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`_build_all_pairs_grid`.
 
     Raises:
         TypeError: If the backend output is not an ndarray.
     """
-    all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
+    all_pairs, n_p, n_f = _build_all_pairs_grid(probe_set)
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(None, parallel=parallel, show_progress=show_progress)
@@ -136,9 +136,7 @@ def evaluate_exact_probe_set_with_diagnostics(
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
-    pauli_xyz = (
-        packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
-    )
+    pauli_xyz = packed_rho8_to_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4).astype(np.float32)
     w = np.zeros((n_p, n_f), dtype=np.float64)
     cut = int(probe_set.cut)
     for ii in range(n_p):

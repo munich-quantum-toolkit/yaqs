@@ -22,10 +22,12 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
 
-# Pauli matrices for single-qubit Bloch expectations Tr(rho P).
+# Single-qubit Pauli basis for tomography: I, X, Y, Z with rho = (1/2) sum_mu Tr(P_mu rho) P_mu.
+PAULI_I = np.eye(2, dtype=np.complex128)
 PAULI_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
 PAULI_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
 PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+PAULI_BASIS = (PAULI_I, PAULI_X, PAULI_Y, PAULI_Z)
 
 
 def _flatten_choi4_to_real32(j: np.ndarray) -> np.ndarray:
@@ -125,69 +127,63 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
     return 0.5 * (rho + rho.conj().T)
 
 
-def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
-    r"""Pauli expectation values :math:`(x,y,z)` with :math:`x=\\mathrm{Tr}(\\rho X)` etc.
-
-    Uses the same :math:`X,Y,Z` as the split-cut probing pipeline (no identity component).
+def rho_to_pauli_expectations(rho: np.ndarray) -> np.ndarray:
+    r"""Pauli tomography coefficients :math:`(\mathrm{Tr}(I\rho), \mathrm{Tr}(X\rho), \ldots)`.
 
     Args:
         rho: Single-qubit density matrix.
 
     Returns:
-        Float64 vector ``(x, y, z)`` of Pauli expectations.
+        Float64 vector ``(i, x, y, z)`` with ``i=\mathrm{Tr}(\rho)=1`` for physical states.
     """
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     return np.array(
-        [
-            np.trace(r @ PAULI_X).real,
-            np.trace(r @ PAULI_Y).real,
-            np.trace(r @ PAULI_Z).real,
-        ],
+        [float(np.trace(r @ p).real) for p in PAULI_BASIS],
         dtype=np.float64,
     )
 
 
-def pauli_xyz_to_rho(xyz: np.ndarray) -> np.ndarray:
-    r"""Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates.
-
-    Uses :math:`\\rho=\\frac12(I+xX+yY+zZ)`.
+def pauli_expectations_to_rho(pauli: np.ndarray) -> np.ndarray:
+    r"""Reconstruct :math:`\rho=\frac12\sum_\mu c_\mu P_\mu` from ``(c_I, c_X, c_Y, c_Z)``.
 
     Args:
-        xyz: Bloch coordinates ``(x, y, z)``.
+        pauli: Coefficients ``(i, x, y, z)``.
 
     Returns:
         Complex :math:`2\\times 2` Hermitian matrix (not necessarily physical).
     """
-    t = np.asarray(xyz, dtype=np.float64).reshape(3)
-    x, y, z = float(t[0]), float(t[1]), float(t[2])
-    return 0.5 * (np.eye(2, dtype=np.complex128) + x * PAULI_X + y * PAULI_Y + z * PAULI_Z)
+    t = np.asarray(pauli, dtype=np.float64).reshape(4)
+    out = np.zeros((2, 2), dtype=np.complex128)
+    for coeff, basis in zip(t, PAULI_BASIS, strict=True):
+        out += float(coeff) * basis
+    return 0.5 * out
 
 
-def packed_rho8_to_pauli_xyz_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
-    """Map backend ``rho8`` rows ``(..., 8)`` to Pauli ``(..., 3)`` features for :math:`V`.
+def packed_rho8_to_pauli_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
+    """Map backend ``rho8`` rows ``(..., 8)`` to Pauli tomography ``(..., 4)``.
 
     Args:
         packed: Last dimension 8 (``pack_rho8`` layout).
         normalize: If ``True``, project each unpacked matrix to a physical density matrix
-            before taking expectations (same as rollout normalization path).
+            before taking expectations.
 
     Returns:
-        Float64 array with shape ``packed.shape[:-1] + (3,)``.
+        Float64 array with shape ``packed.shape[:-1] + (4,)``.
 
     Raises:
         ValueError: If the last dimension of ``packed`` is not 8.
     """
     p = np.asarray(packed, dtype=np.float32)
     if p.shape[-1] != 8:
-        msg = f"packed_rho8_to_pauli_xyz_batch: expected last dim 8, got shape {p.shape}."
+        msg = f"packed_rho8_to_pauli_batch: expected last dim 8, got shape {p.shape}."
         raise ValueError(msg)
     flat = p.reshape(-1, 8)
-    out = np.empty((flat.shape[0], 3), dtype=np.float64)
+    out = np.empty((flat.shape[0], 4), dtype=np.float64)
     for i in range(flat.shape[0]):
         rho_u = unpack_rho8(flat[i])
         rho = normalize_rho_from_backend_output(rho_u) if normalize else rho_u
-        out[i] = rho_to_xyz(rho)
-    return out.reshape(*p.shape[:-1], 3)
+        out[i] = rho_to_pauli_expectations(rho)
+    return out.reshape(*p.shape[:-1], 4)
 
 
 def normalize_rho_from_backend_output(rho_final: ArrayLike) -> np.ndarray:

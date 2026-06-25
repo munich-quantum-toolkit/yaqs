@@ -21,22 +21,16 @@ from pathlib import Path
 
 import numpy as np
 from _benchmark_common import (
-    BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
     G_DEFAULT,
     list_initial_states_sys_env0,
     parse_float_list,
     parse_int_list,
 )
+from _benchmark_memory import entropy_from_singular_values, weighted_centered_singular_values
 from _benchmark_plotting import plot_convergence_sv_vs_m, plot_spectrum_and_rank_vs_j
 
 from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-from mqt.yaqs.characterization.memory.diagnostics.v_matrix import (
-    build_weighted_v_matrix,
-    center_past_rows,
-    prepare_branch_weights,
-)
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -101,29 +95,6 @@ def _resolve_config(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def _weighted_centered_singular_values(*, probe_set, op, sim_params, psi0, parallel: bool) -> np.ndarray:
-    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
-        probe_set=probe_set,
-        operator=op,
-        sim_params=sim_params,
-        initial_psi=psi0,
-        parallel=parallel,
-    )
-    w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
-    v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
-    v_c = center_past_rows(v_w)
-    return np.linalg.svd(np.asarray(v_c, dtype=np.float64), compute_uv=False).astype(np.float64)
-
-
-def _entropy_from_singular_values(s: np.ndarray) -> float:
-    p = np.asarray(s, dtype=np.float64) ** 2
-    ps = float(np.sum(p))
-    if ps <= 0.0:
-        return 0.0
-    q = np.clip(p / ps, 1e-30, 1.0)
-    return float(-np.sum(q * np.log(q)))
-
-
 def _write_csv(path: Path, rows: list[dict[str, float | int]]) -> None:
     if not rows:
         return
@@ -165,8 +136,8 @@ def run_convergence(cfg: dict[str, object], args: argparse.Namespace) -> list[di
                     rng=np.random.default_rng(draw_seed),
                 )
                 draw_entropy = [
-                    _entropy_from_singular_values(
-                        _weighted_centered_singular_values(
+                    entropy_from_singular_values(
+                        weighted_centered_singular_values(
                             probe_set=probe_set,
                             op=op,
                             sim_params=sim_params,
@@ -234,7 +205,7 @@ def run_spectrum_rank(
             seed_vectors: list[np.ndarray] = []
             seed_ranks: list[float] = []
             for psi0 in initial_list:
-                s = _weighted_centered_singular_values(
+                s = weighted_centered_singular_values(
                     probe_set=probe_set,
                     op=op,
                     sim_params=sim_params,

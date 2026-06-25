@@ -71,7 +71,7 @@ def test_exact_probe_process_builds_static_ctx_internally(monkeypatch: pytest.Mo
     probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=3)
     out = process.evaluate_probe_set(probe_set)
 
-    assert out.shape == (2, 3, 3)
+    assert out.shape == (2, 3, 4)
     assert calls["ctx_args"] == (op, sim, None)
     assert calls["simulate_kwargs"]["static_ctx"] == "CTX"
 
@@ -119,4 +119,4 @@ def test_exact_probe_process_parallel_smoke() -> None:
     process = ExactProbeProcess(operator=op, sim_params=sim, initial_psi=psi0, parallel=True, show_progress=False)
     probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=2)
     out = process.evaluate_probe_set(probe_set)
-    assert out.shape == (2, 2, 3)
+    assert out.shape == (2, 2, 4)
