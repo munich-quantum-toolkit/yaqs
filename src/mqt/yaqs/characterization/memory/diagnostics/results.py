@@ -34,11 +34,11 @@ class CharacterizationResult:
     by_cut: dict[int, _CutResult]
 
     def entropy(self, cut: int) -> float:
-        """Bond entropy :math:`S_V(c)` in nats at ``cut``."""
+        """Cross-cut memory entropy :math:`S_V(c)` at ``cut`` (natural log of mode weights)."""
         return float(self.by_cut[int(cut)].entropy)
 
     def rank(self, cut: int) -> int:
-        """Operational rank at ``cut``."""
+        """Effective number of resolved memory modes at ``cut`` (paper :math:`R(c)=\\exp(S_V(c))` scale)."""
         return int(self.by_cut[int(cut)].rank)
 
     def singular_values(self, cut: int) -> np.ndarray:
@@ -54,8 +54,8 @@ class CharacterizationResult:
         if len(self.by_cut) == 1:
             c = next(iter(self.by_cut))
             d = self.by_cut[c]
-            return f"cut={c}: S_V={d.entropy:.4f} nats, rank={d.rank}"
-        lines = ["cut  S_V (nats)  rank"]
+            return f"cut={c}: S_V={d.entropy:.4f}, modes≈{d.rank}"
+        lines = ["cut  S_V    modes"]
         for c in sorted(self.by_cut):
             d = self.by_cut[c]
             lines.append(f"{c:4d} {d.entropy:10.4f} {d.rank:5d}")

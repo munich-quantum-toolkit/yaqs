@@ -15,7 +15,7 @@ mystnb:
 # Reference Exact Combs (small `k`)
 
 ```{warning}
-Exhaustive tomography scales as ``16^k``. For production dynamics use a trained surrogate; for small-``k`` gold dynamics and metrics, use the reference comb paths below.
+Exhaustive tomography scales as ``16^k``. For production dynamics use a trained surrogate; for small-``k`` reference dynamics and metrics, use the reference comb paths below.
 ```
 
 ```{note}
@@ -23,7 +23,7 @@ For the main characterization funnel, see {doc}`characterization`.
 ```
 
 Reference comb construction reconstructs the full multi-time comb matrix :math:`\Upsilon` by
-simulating every discrete intervention sequence. At very small `k`, use it for **gold dynamics**
+simulating every discrete intervention sequence. At very small `k`, use it for **reference dynamics**
 (`mc.predict(comb, ...)`) and optional memory-metric cross-checks (`mc.characterize(comb, ...)`).
 
 ## 1. Define the system

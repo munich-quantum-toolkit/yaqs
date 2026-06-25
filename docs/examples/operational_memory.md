@@ -16,24 +16,25 @@ mystnb:
 
 ```{note}
 This page is **not** the main on-ramp. For predict/characterize workflows start with {doc}`characterization`.
-Here we cover V-matrix theory, `probe_process`, and cross-backend validation.
+Here we spell out the response-matrix construction and show cut sweeps / backend comparisons.
 ```
 
-**Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.
-YAQS estimates it from **split-cut probes**: random interventions on the past and future sides of the cut, assembled into a weighted **V matrix** with causal branch weights :math:`w_{ij} = \prod_t p(\text{step}_t)` through cut `c` (starting from :math:`|0\rangle\langle 0|`).
-Past-row centering and the singular spectrum of the centered V yield bond entropy :math:`S_V(c)` and an **operational rank**.
+**Operational memory** quantifies how many independent ways the conditioned past remains visible in accessible future responses across a temporal cut `c`.
+
+Following the black-box construction in the cross-cut memory framework:
+
+1. Sample past interventions :math:`\alpha=(U_1,\ldots,U_{c-1})` and future interventions :math:`\beta=(V_{c+1},\ldots,V_k)`.
+2. Insert a **causal break** at step `c`: measure an effect :math:`E_m` on the past side and prepare :math:`\sigma_p` on the future side.
+3. For each conditioned past :math:`(\alpha,m)` and future setting :math:`(p,\beta)`, record the break weight :math:`w_{\alpha,m}` (the probability of that conditioned past at the cut) and the output response :math:`\mathbf{r}(\rho_{\mathrm{out}})` — here the Pauli expectation vector :math:`(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)`.
+4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights.
 
 Use {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` for all memory metrics:
 
 ```python
-result = mc.characterize(target, cut=c, preset="balanced")
-result.entropy(c)
-result.memory_matrix(c)
+result = mc.characterize(target, cut=c, k=k, preset="balanced")
+result.entropy(c)          # S_V(c)
+result.singular_values(c)  # spectrum of Ṽ(c)
 ```
-
-This page also covers the low-level `probe_process` return dictionary, plots, and validation against exact rollouts.
-
-For comb construction see {doc}`reference_exact_combs`; for surrogate training see {doc}`process_tensor_surrogates`.
 
 ## 1. Setup
 
@@ -81,80 +82,39 @@ print("MPO:", type(comb_mpo).__name__)
 ---
 tags: [remove-output]
 ---
-cut, n_p, n_f = 2, 8, 8
+cut, k = 2, 2
+n_p, n_f = 8, 8
 
-result = mc.characterize(comb_dense, cut=cut, k=2, n_pasts=n_p, n_futures=n_f, rng=rng)
+result = mc.characterize(comb_dense, cut=cut, k=k, n_pasts=n_p, n_futures=n_f, rng=rng)
 ent = result.entropy(cut)
 sv = result.singular_values(cut)
 rk = result.rank(cut)
 v_c = result.memory_matrix(cut)
 
-print(f"S_V({cut}) = {ent:.4f} nats")
-print(f"spectrum length = {sv.size}, operational rank = {rk}")
-print(f"memory matrix shape {v_c.shape}")
+print(f"S_V({cut}) = {ent:.4f}")
+print(f"spectrum length = {sv.size}, effective modes ≈ {rk}")
+print(f"centered response matrix shape {v_c.shape}")
 ```
 
 When `cut` is omitted on `characterize()`, the default interior cut `(k + 1) // 2` is used.
 
-## 4. Low-level API — `probe_process`
+## 4. Reproducible probes with `probe_set`
 
-Use {func}`~mqt.yaqs.characterization.memory.diagnostics.probe.probe_process` for full control and inspection of intermediate objects.
-
-```{code-cell} ipython3
----
-tags: [remove-output]
----
-from mqt.yaqs.characterization.memory.diagnostics.probe import probe_process
-
-out = probe_process(
-    process=comb_dense,
-    cut=2,
-    k=2,
-    n_pasts=8,
-    n_futures=8,
-    return_v=True,
-    rng=np.random.default_rng(0),
-)
-
-for key in sorted(out):
-    val = out[key]
-    if hasattr(val, "shape"):
-        print(f"{key:24s} array{val.shape}")
-    elif isinstance(val, float):
-        print(f"{key:24s} {val:.6f}")
-    else:
-        print(f"{key:24s} {type(val).__name__}")
-```
-
-Key quantities:
-
-| Key                    | Meaning                                                    |
-| ---------------------- | ---------------------------------------------------------- |
-| `pauli_xyz_ij`         | Probe responses `(n_pasts, n_futures, 3)`                  |
-| `weights_ij`           | Causal cut branch weights on comb backends                 |
-| `V`, `V_centered`      | Weighted V and past-row-centered V (`return_v=True`)       |
-| `entropy`              | Bond entropy :math:`S_V(c)` in nats                        |
-| `singular_values_full` | Full SVD spectrum of centered V                            |
-| `rank`                 | Operational rank from spectrum threshold                   |
-| `delta_norm`           | :math:`\|V_c\|_F^2 / \|V\|_F^2` — effect of past centering |
-| `probe_set`            | Frozen probe grid for reproducible re-runs                 |
-
-Manual V assembly (equivalent to characterize on weighted backends):
+Pass a frozen probe grid to `characterize(..., probe_set=...)` when you need identical past/future ensembles across backends or repeated runs.
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    analyze_v_matrix,
-    build_weighted_v_from_probe,
-)
+from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
 
-pauli = out["pauli_xyz_ij"]
-weights = out["weights_ij"]
-v, v_c = build_weighted_v_from_probe(pauli, weights)
-ana = analyze_v_matrix(v, v_c)
-print(f"manual S_V = {ana['entropy']:.4f}, comb S_V = {out['entropy']:.4f}")
+cut, k = 2, 2
+probe_set = sample_split_cut_probes(cut=cut, k=k, n_pasts=6, n_futures=5, rng=np.random.default_rng(3))
+
+ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, k=k, probe_set=probe_set)
+comb_result = mc.characterize(comb_dense, cut=cut, k=k, probe_set=probe_set)
+print(f"Hamiltonian S_V = {ham_result.entropy(cut):.4f}")
+print(f"Comb S_V       = {comb_result.entropy(cut):.4f}")
 ```
 
 ## 5. Singular spectrum and cut sweep
@@ -175,9 +135,9 @@ sv = mc.characterize(
 ).singular_values(2)
 fig, ax = plt.subplots(figsize=(5, 3))
 ax.semilogy(sv, "o-")
-ax.set_xlabel("index")
+ax.set_xlabel("mode index")
 ax.set_ylabel("singular value")
-ax.set_title("Centered V spectrum at cut c=2")
+ax.set_title("Spectrum of Ṽ(c) at cut c=2")
 fig.tight_layout()
 ```
 
@@ -199,50 +159,19 @@ ranks = [
 fig, axes = plt.subplots(1, 2, figsize=(8, 3))
 axes[0].plot(list(cuts), ents, "o-")
 axes[0].set_xlabel("cut c")
-axes[0].set_ylabel("S_V (nats)")
-axes[0].set_title("Bond entropy vs cut")
+axes[0].set_ylabel("S_V(c)")
+axes[0].set_title("Memory entropy vs cut")
 
 axes[1].plot(list(cuts), ranks, "s-")
 axes[1].set_xlabel("cut c")
-axes[1].set_ylabel("operational rank")
-axes[1].set_title("Rank vs cut")
+axes[1].set_ylabel("effective modes")
+axes[1].set_title("Mode count vs cut")
 fig.tight_layout()
 ```
 
-## 6. Comb vs simulator reference
+## 6. Coupling sweep (doc-sized)
 
-For validation, compare comb probing against full MCWF rollouts via {mod}`~mqt.yaqs.characterization.memory.reference.exact` (benchmark / test tooling).
-
-```{code-cell} ipython3
----
-tags: [remove-output]
----
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-from mqt.yaqs.characterization.memory.reference.exact import (
-    evaluate_exact_probe_set_with_diagnostics,
-)
-
-probe_set = sample_split_cut_probes(cut=2, k=2, n_pasts=6, n_futures=5, rng=np.random.default_rng(3))
-psi0 = np.zeros(4, dtype=np.complex128)
-psi0[0] = 1.0
-
-pauli_e, weights_e, _ = evaluate_exact_probe_set_with_diagnostics(
-    probe_set=probe_set,
-    operator=hamiltonian.mpo,
-    sim_params=sim_params,
-    initial_psi=psi0,
-    parallel=False,
-)
-v_e, v_c_e = build_weighted_v_from_probe(pauli_e, weights_e)
-out_exact = analyze_v_matrix(v_e, v_c_e)
-
-out_comb = probe_process(process=comb_dense, cut=2, k=2, probe_set=probe_set)
-print(f"exact S_V = {out_exact['entropy']:.4f}, comb S_V = {out_comb['entropy']:.4f}")
-```
-
-## 7. Open-system sweep (doc-sized)
-
-Lightweight :math:`S_V` vs coupling :math:`J` at fixed cuts (inspired by the experiment benchmarks).
+Lightweight :math:`S_V(c)` vs coupling :math:`J` at fixed cuts.
 
 ```{code-cell} ipython3
 ---
@@ -277,6 +206,6 @@ for row in rows:
 
 ## Related topics
 
+- {doc}`characterization` — main user funnel
 - {doc}`reference_exact_combs` — dense and MPO reference comb construction
-- {doc}`process_tensor_surrogates` — surrogate combs for larger `k`
-- {doc}`realistic_noise_models` — attaching open-system noise to tomography runs
+- {doc}`process_tensor_surrogates` — surrogate training

@@ -14,13 +14,13 @@ mystnb:
 
 # Operational Memory Characterization
 
-**Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.
-YAQS estimates bond entropy `S_V(c)`, operational rank, and the memory-matrix singular spectrum from **split-cut probes**.
+**Operational memory** quantifies how much history a black-box quantum process retains across a temporal cut `c`.
+YAQS estimates the cross-cut memory entropy `S_V(c)`, an effective mode number, and the singular spectrum of the centered response matrix from **split-cut probes**.
 
 ## Typical workflow
 
 1. **Train** a surrogate for fast dynamics: `model = mc.train(ham, params, k=...)`.
-2. **Predict** site-0 reduced states with the surrogate (production) or a reference comb (small-`k` gold).
+2. **Predict** site-0 reduced states with the surrogate (production) or a reference comb (small `k` validation).
 3. **Characterize** operational memory with the Hamiltonian (primary metric) or the same quantity via surrogate/comb backends.
 
 ```python
@@ -28,23 +28,26 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 mc = MemoryCharacterizer(representation="auto", parallel=True)
 
-model = mc.train(ham, params, k=4, n=500)
-rho = mc.predict(model, rho0, sequence, k=4)
+k = 4
+cut = 2  # causal break after step cut-1; future probes use steps cut+1 … k
 
-memory = mc.characterize(ham, params, k=4, cut=2)  # primary metric
-surrogate_memory = mc.characterize(model, cut=2, k=4)  # same quantity, surrogate backend
+model = mc.train(ham, params, k=k, n=500)
+rho = mc.predict(model, rho0, sequence, k=k)
 
-comb = mc.build_comb(ham, params, timesteps=[0.1] * 4, return_type="dense")
-rho_ref = mc.predict(comb, rho0, sequence, k=4)  # gold dynamics (small k)
+memory = mc.characterize(ham, params, cut=cut, k=k)           # primary metric
+surrogate_memory = mc.characterize(model, cut=cut, k=k)         # same quantity, surrogate backend
+
+comb = mc.build_comb(ham, params, timesteps=[0.1] * k, return_type="dense")
+rho_ref = mc.predict(comb, rho0, sequence, k=k)                # reference dynamics (small k)
 ```
 
 ## Verb × backend
 
-|                    | **predict**                       | **characterize**                    |
-| ------------------ | --------------------------------- | ----------------------------------- |
-| **Surrogate**      | Primary production dynamics       | Same `S_V(c)` via surrogate process |
-| **Hamiltonian**    | —                                 | Primary memory metric               |
-| **Reference comb** | Primary gold dynamics (small `k`) | Optional gold metric                |
+|                    | **predict**                            | **characterize**                    |
+| ------------------ | -------------------------------------- | ----------------------------------- |
+| **Surrogate**      | Primary production dynamics            | Same `S_V(c)` via surrogate process |
+| **Hamiltonian**    | —                                      | Primary memory metric               |
+| **Reference comb** | Primary reference dynamics (small `k`) | Optional reference metric           |
 
 ## Setup
 
@@ -86,12 +89,12 @@ else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
-Training fixes the rollout horizon `k` on the model. At inference, `mc.predict(model, ..., k=k_prime)` may use a shorter or longer sequence; accuracy is best at the trained horizon and degrades when extrapolating beyond it. See {doc}`process_tensor_surrogates` for architecture details.
+Training fixes the number of intervention steps `k` on the model. At inference, `mc.predict(model, rho0, sequence, k=k_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `k_prime` up to the trained `k`; accuracy generally decreases when `k_prime` exceeds the training horizon. See {doc}`process_tensor_surrogates` for architecture details.
 
 ## Predict with a reference comb
 
 ```{warning}
-`build_comb` scales as `16^k`. Use only for gold dynamics at very small `k`.
+`build_comb` scales as `16^k`. Use only for reference dynamics at very small `k`.
 ```
 
 ```{code-cell} ipython3
@@ -111,9 +114,9 @@ print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ---
 tags: [remove-output]
 ---
-memory = mc.characterize(ham, params, k=1, cut=1, n_pasts=6, n_futures=6)
+memory = mc.characterize(ham, params, cut=1, k=1, n_pasts=6, n_futures=6)
 print(memory.summary())
-print(f"S_V = {memory.entropy(1):.4f} nats, rank = {memory.rank(1)}")
+print(f"S_V = {memory.entropy(1):.4f}, rank = {memory.rank(1)}")
 ```
 
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
@@ -145,13 +148,13 @@ print(ref.summary())
 
 ## Reading `CharacterizationResult`
 
-| Access                      | Meaning                                  |
-| --------------------------- | ---------------------------------------- |
-| `result.entropy(c)`         | Bond entropy `S_V(c)` in nats            |
-| `result.rank(c)`            | Operational rank at cut `c`              |
-| `result.singular_values(c)` | Memory-matrix spectrum at cut `c`        |
-| `result.memory_matrix(c)`   | Past-row-centered weighted memory matrix |
-| `result.summary()`          | Human-readable entropy/rank table        |
+| Access                      | Meaning                                                       |
+| --------------------------- | ------------------------------------------------------------- |
+| `result.entropy(c)`         | Cross-cut memory entropy `S_V(c)` (natural log of mode weights) |
+| `result.rank(c)`            | Effective number of resolved memory modes at cut `c`          |
+| `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c` |
+| `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`              |
+| `result.summary()`          | Human-readable entropy/rank table                             |
 
 ## Representation
 
@@ -160,6 +163,6 @@ With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (
 
 ## Related topics
 
-- {doc}`process_tensor_surrogates` — advanced surrogate training and Transformer structure
+- {doc}`process_tensor_surrogates` — surrogate training and Transformer structure
 - {doc}`reference_exact_combs` — reference comb predict and validation
-- {doc}`operational_memory` — V-matrix theory (advanced)
+- {doc}`operational_memory` — construction details and theory (advanced)
