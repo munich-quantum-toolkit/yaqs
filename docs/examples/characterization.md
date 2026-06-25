@@ -154,6 +154,7 @@ print(ref.summary())
 | `result.rank(c)`            | Effective mode number `R(c) = exp(S_V(c))`                      |
 | `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c`    |
 | `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`               |
+| `result.probes(c)`          | Probe feature arrays used at cut `c` (for logging or inspection) |
 | `result.summary()`          | Human-readable entropy/rank table                               |
 
 ## Representation

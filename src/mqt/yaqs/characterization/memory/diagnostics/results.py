@@ -22,6 +22,7 @@ class _CutResult:
     rank: float
     singular_values: np.ndarray
     memory_matrix: np.ndarray
+    probe_set: Any | None = None
 
 
 @dataclass
@@ -49,6 +50,24 @@ class CharacterizationResult:
         """Past-row-centered weighted memory matrix at ``cut``."""
         return np.asarray(self.by_cut[int(cut)].memory_matrix)
 
+    def probes(self, cut: int) -> dict[str, Any]:
+        """Export probe arrays used at ``cut`` for logging or cross-backend reuse.
+
+        Returns:
+            Dict with keys ``cut``, ``k``, ``past_features``, and ``future_features``.
+        """
+        entry = self.by_cut[int(cut)]
+        if entry.probe_set is None:
+            msg = f"No probe data recorded for cut={cut}."
+            raise ValueError(msg)
+        ps = entry.probe_set
+        return {
+            "cut": int(ps.cut),
+            "k": int(ps.k),
+            "past_features": np.asarray(ps.past_features),
+            "future_features": np.asarray(ps.future_features),
+        }
+
     def summary(self) -> str:
         """Human-readable summary of entropy and rank per cut."""
         if len(self.by_cut) == 1:
@@ -73,6 +92,7 @@ def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
         rank=float(out["rank"]),
         singular_values=np.asarray(out.get("singular_values_full", out["singular_values"])),
         memory_matrix=np.asarray(memory_matrix),
+        probe_set=out.get("probe_set"),
     )
 
 

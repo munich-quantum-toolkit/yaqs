@@ -108,23 +108,21 @@ print(f"centered response matrix shape {v_c.shape}")
 
 When `cut` is omitted on `characterize()`, the default interior cut `(k + 1) // 2` is used.
 
-## 4. Reproducible probes with `probe_set`
+## 4. Reproducible probes across backends
 
-Pass a frozen probe grid to `characterize(..., probe_set=...)` when you need identical past/future ensembles across backends or repeated runs.
+Run one backend first, then pass that result to ``characterize(..., probe_set=...)`` so both use the same past/future ensemble. Inspect the sampled arrays with ``result.probes(cut)``.
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-
 cut, k = 2, 2
-probe_set = sample_split_cut_probes(cut=cut, k=k, n_pasts=6, n_futures=5, rng=np.random.default_rng(3))
 
-ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, k=k, probe_set=probe_set)
-comb_result = mc.characterize(comb_dense, cut=cut, k=k, probe_set=probe_set)
+ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, k=k, n_pasts=6, n_futures=5, rng=rng)
+comb_result = mc.characterize(comb_dense, cut=cut, k=k, probe_set=ham_result)
 print(f"Hamiltonian S_V = {ham_result.entropy(cut):.4f}")
 print(f"Comb S_V       = {comb_result.entropy(cut):.4f}")
+print("past feature shape:", ham_result.probes(cut)["past_features"].shape)
 ```
 
 ## 5. Singular spectrum and cut sweep

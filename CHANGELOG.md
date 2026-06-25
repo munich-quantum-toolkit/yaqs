@@ -34,6 +34,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- `characterize()` now stores probes on its return value; use `result.probes(cut)` to inspect arrays and `probe_set=prior_result` to reuse probes across backends without importing diagnostics internals
 - refactored memory characterization around `MemoryCharacterizer.predict()` and `MemoryCharacterizer.characterize()`; removed top-level `train_surrogate`, `sample_rollouts`, `characterize_memory`, and `TransformerComb` exports
 - replaced `probe_exact`, `probe`, and `probe_from_responses` with unified `characterize()` dispatch; `ProbeResult` renamed to `CharacterizationResult`
 - removed `OperationalMemoryMixin` and per-object `.entropy()` / `.rank()` on combs and surrogates; use `MemoryCharacterizer.characterize()` instead

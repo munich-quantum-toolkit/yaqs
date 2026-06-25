@@ -16,8 +16,6 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-from mqt.yaqs.characterization.memory.diagnostics.results import CharacterizationResult
 
 
 @pytest.fixture
@@ -28,7 +26,7 @@ def ham_and_params() -> tuple[Hamiltonian, AnalogSimParams]:
 
 
 def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """``characterize(ham, params, ...)`` returns CharacterizationResult with memory metrics."""
+    """``characterize(ham, params, ...)`` returns diagnostics with memory metrics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     out = mc.characterize(
@@ -40,19 +38,25 @@ def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, Analo
         n_futures=3,
         rng=np.random.default_rng(0),
     )
-    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
     assert out.rank(1) >= 1
     assert out.memory_matrix(1).ndim == 2
 
 
 def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Passing the same probe_set yields reproducible characterization."""
+    """Passing a prior characterize() result reuses the same probes."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    probe_set = sample_split_cut_probes(cut=1, k=1, n_pasts=3, n_futures=3, rng=np.random.default_rng(0))
-    first = mc.characterize(ham, params, k=1, cut=1, probe_set=probe_set)
-    second = mc.characterize(ham, params, k=1, cut=1, probe_set=probe_set)
+    first = mc.characterize(
+        ham,
+        params,
+        k=1,
+        cut=1,
+        n_pasts=3,
+        n_futures=3,
+        rng=np.random.default_rng(0),
+    )
+    second = mc.characterize(ham, params, k=1, cut=1, probe_set=first)
     assert second.entropy(1) == pytest.approx(first.entropy(1))
     assert second.rank(1) == first.rank(1)
 
@@ -74,7 +78,6 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
     out = mc.characterize(model, cut=1, k=1, n_pasts=4, n_futures=4)
-    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
 
 
@@ -106,7 +109,6 @@ def test_build_comb_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogS
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(comb, cut=1, k=1, n_pasts=3, n_futures=3)
-    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
 
 

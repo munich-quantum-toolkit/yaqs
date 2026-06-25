@@ -85,6 +85,22 @@ def _resolve_probe_grid(
     )
 
 
+def _resolve_probe_set_arg(probe_set: Any) -> ProbeSet | None:
+    """Accept a prior :class:`CharacterizationResult` or internal probe bundle."""
+    if probe_set is None:
+        return None
+    if isinstance(probe_set, CharacterizationResult):
+        if len(probe_set.by_cut) != 1:
+            msg = "probe_set from a prior characterize() result requires exactly one cut."
+            raise ValueError(msg)
+        entry = next(iter(probe_set.by_cut.values()))
+        if entry.probe_set is None:
+            msg = "Prior characterize() result has no stored probes to reuse."
+            raise ValueError(msg)
+        return entry.probe_set
+    return probe_set
+
+
 def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
     if not isinstance(hamiltonian, Hamiltonian):
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
@@ -338,7 +354,7 @@ class MemoryCharacterizer:
         n_futures: int | None = None,
         interventions: str = "haar",
         rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
+        probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
         **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
@@ -357,7 +373,7 @@ class MemoryCharacterizer:
         n_futures: int | None = None,
         interventions: str = "haar",
         rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
+        probe_set: Any | None = None,
         parallel: bool | None = None,
         **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
@@ -376,7 +392,7 @@ class MemoryCharacterizer:
         n_futures: int | None = None,
         interventions: str = "haar",
         rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
+        probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
         parallel: bool | None = None,
         **probe_kwargs: Any,
@@ -384,6 +400,7 @@ class MemoryCharacterizer:
         """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb."""
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**probe_kwargs_from_interventions(interventions), **probe_kwargs}
+        resolved_probe_set = _resolve_probe_set_arg(probe_set)
 
         if _is_hamiltonian_target(target):
             if sim_params is None:
@@ -401,7 +418,7 @@ class MemoryCharacterizer:
                 n_pasts=n_p,
                 n_futures=n_f,
                 rng=rng,
-                probe_set=probe_set,
+                probe_set=resolved_probe_set,
                 initial_psi=initial_psi,
                 probe_kw=probe_kw,
             )
@@ -416,7 +433,7 @@ class MemoryCharacterizer:
                 n_pasts=n_p,
                 n_futures=n_f,
                 rng=rng,
-                probe_set=probe_set,
+                probe_set=resolved_probe_set,
                 parallel=parallel,
                 probe_kw=probe_kw,
             )
@@ -527,7 +544,7 @@ class MemoryCharacterizer:
             )
             _m_raw, memory_matrix = _build_weighted_memory_matrix_from_probe(pauli_xyz, weights_ij)
             ana = _analyze_memory_matrix(memory_matrix)
-            out: dict[str, Any] = {**ana, "memory_matrix": memory_matrix}
+            out: dict[str, Any] = {**ana, "memory_matrix": memory_matrix, "probe_set": local_probe_set}
             parts[int(resolved_cut)] = _result_from_probe_dict(out, cut=resolved_cut)
         return _merge_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 

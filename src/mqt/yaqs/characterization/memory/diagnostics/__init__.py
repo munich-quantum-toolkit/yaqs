@@ -5,8 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Split-cut process diagnostics (probes, memory matrix, and results)."""
-
-from .results import CharacterizationResult
-
-__all__ = ["CharacterizationResult"]
+"""Internal split-cut diagnostics (use :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`)."""
