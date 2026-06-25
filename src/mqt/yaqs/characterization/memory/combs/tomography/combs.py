@@ -5,7 +5,6 @@
 #
 # Licensed under the MIT License
 
-
 """Dense and MPO comb (process-tensor) wrappers."""
 
 from __future__ import annotations

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: middle-cut entropy heatmap S_V(L, k) at fixed J=1.
 
 Paper-style output: three-panel ``fig_entropy_heatmap_middlecut_vs_L_k``.

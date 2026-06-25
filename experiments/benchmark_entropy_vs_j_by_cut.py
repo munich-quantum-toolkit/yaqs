@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: bond entropy S_V vs coupling J for multiple causal cuts.
 
 Paper-style outputs:

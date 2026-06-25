@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Run all operational-memory paper figure benchmarks in quick mode.
 
 Recreates a small version of each published plot:

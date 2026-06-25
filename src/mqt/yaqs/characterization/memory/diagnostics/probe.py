@@ -835,7 +835,7 @@ def analyze_v_matrix(
 
     discarded_weight_threshold = 1e-12
     if s.size and discarded_weight_threshold is not None and total_weight > 0.0:
-        thr = max(float(discarded_weight_threshold), 0.0)
+        the = max(float(discarded_weight_threshold), 0.0)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
 
         tail_cumsum = np.cumsum(s_full[::-1] ** 2)
@@ -844,7 +844,7 @@ def analyze_v_matrix(
         for idx, tail_weight in enumerate(tail_cumsum, start=1):
             tail_fraction = float(tail_weight / total_weight)
             candidate_keep = s_full.size - idx
-            if tail_fraction > thr:
+            if tail_fraction > the:
                 keep = max(candidate_keep + 1, min_keep_eff)
                 break
         else:

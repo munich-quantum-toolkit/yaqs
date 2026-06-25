@@ -146,13 +146,13 @@ def _svd_spectrum_entropy_rank(
     s = s_full
     discarded_weight = 0.0
     if s.size and discarded_weight_threshold is not None:
-        thr = max(float(discarded_weight_threshold), 0.0)
+        the = max(float(discarded_weight_threshold), 0.0)
         keep = int(s.size)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
         discard = 0.0
         for idx, sval in enumerate(reversed(s)):
             next_discard = discard + float(sval * sval)
-            if next_discard > thr:
+            if next_discard > the:
                 keep = max(int(s.size) - idx, min_keep_eff)
                 break
             discard = next_discard
@@ -408,9 +408,9 @@ def weight_threshold_fractions(weights: np.ndarray, thresholds: list[float]) -> 
     """
     w = np.asarray(weights, dtype=np.float64).reshape(-1)
     out: dict[str, float] = {}
-    for thr in thresholds:
-        key = f"fraction_weight_lt_{thr:g}"
-        out[key] = float(np.mean(w < thr)) if w.size else 0.0
+    for the in thresholds:
+        key = f"fraction_weight_lt_{the:g}"
+        out[key] = float(np.mean(w < the)) if w.size else 0.0
     return out
 
 

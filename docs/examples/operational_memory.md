@@ -15,7 +15,8 @@ mystnb:
 # Operational Memory Diagnostics
 
 ```{note}
-This page runs tomography and probing steps and may take one to two minutes during a documentation build.
+For step-by-step workflows (exact simulator, surrogate, validation), start with {doc}`characterization`.
+This page focuses on V-matrix theory and cross-backend validation.
 ```
 
 **Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.
@@ -29,18 +30,18 @@ This page covers:
 3. the low-level `probe_process` return dictionary,
 4. plots and lightweight parameter sweeps.
 
-For comb construction details see {doc}`process_tomography`; for surrogate training see {doc}`process_tensor_surrogates`.
+For comb construction details see {doc}`reference_exact_combs`; for surrogate training see {doc}`process_tensor_surrogates`.
 
 ## 1. Setup
 
 ```{code-cell} ipython3
 import numpy as np
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, construct_process_tensor
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 hamiltonian = Hamiltonian.ising(length=2, J=1.0, g=0.5)
-operator = hamiltonian.mpo
 sim_params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+mc = MemoryCharacterizer(parallel=False, show_progress=False)
 rng = np.random.default_rng(0)
 ```
 
@@ -53,22 +54,20 @@ All backends below expose the same operational memory methods via {class}`~mqt.y
 tags: [remove-output]
 ---
 # Dense — exact comb matrix, best for small k
-comb_dense = construct_process_tensor(
-    operator,
+comb_dense = mc.build_comb(
+    hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
     num_trajectories=60,
-    parallel=False,
     return_type="dense",
 )
 
 # MPO — compressed bond representation
-comb_mpo = construct_process_tensor(
-    operator,
+comb_mpo = mc.build_comb(
+    hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
     num_trajectories=60,
-    parallel=False,
     return_type="mpo",
     compress_every=1,
 )
@@ -222,7 +221,7 @@ psi0[0] = 1.0
 
 pauli_e, weights_e, _ = evaluate_exact_probe_set_with_diagnostics(
     probe_set=probe_set,
-    operator=operator,
+    operator=hamiltonian.mpo,
     sim_params=sim_params,
     initial_psi=psi0,
     parallel=False,
@@ -242,19 +241,16 @@ Lightweight :math:`S_V` vs coupling :math:`J` at fixed cuts (inspired by the exp
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import MPO
-
 js = [0.0, 1.0, 2.0]
 cuts = [1, 2]
 rows = []
 for jv in js:
-    op_j = MPO.ising(length=1, J=jv, g=0.0)
-    comb_j = construct_process_tensor(
-        op_j,
+    ham_j = Hamiltonian.ising(length=1, J=jv, g=0.0)
+    comb_j = mc.build_comb(
+        ham_j,
         AnalogSimParams(dt=0.1, max_bond_dim=8, order=1),
         timesteps=[0.1, 0.1],
         num_trajectories=40,
-        parallel=False,
         return_type="dense",
     )
     for cut in cuts:
@@ -267,6 +263,6 @@ for row in rows:
 
 ## Related topics
 
-- {doc}`process_tomography` — dense and MPO comb construction
+- {doc}`reference_exact_combs` — dense and MPO reference comb construction
 - {doc}`process_tensor_surrogates` — surrogate combs for larger `k`
 - {doc}`realistic_noise_models` — attaching open-system noise to tomography runs

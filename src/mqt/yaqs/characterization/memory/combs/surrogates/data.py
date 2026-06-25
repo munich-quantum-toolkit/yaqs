@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 
 """Surrogate training data: one sequence rollout and batch stacking.
@@ -25,7 +32,7 @@ class SequenceRolloutSample:
     ``E_features`` rows have length ``d_e`` (32 for the default single-qubit Choi flattening). This is
     not the same as a single stochastic
     **trajectory** when ``num_trajectories > 1`` under a noise model (see
-    :func:`~mqt.yaqs.characterizer.construct_process_tensor`), returning
+    :meth:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_comb`), returning
     :class:`~mqt.yaqs.characterization.memory.combs.tomography.data.SequenceData`.
     """
 

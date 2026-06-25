@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Figure-2 style benchmarks: probe convergence and singular-value spectrum / rank.
 
 Outputs:

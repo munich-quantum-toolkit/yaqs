@@ -14,7 +14,11 @@ mystnb:
 
 # Process Tensor Surrogates (TransformerComb)
 
-This example shows how to train and use the **TransformerComb** surrogate model for process-tensor workflows.
+```{note}
+Completed Path B in {doc}`characterization`? Continue here for advanced training knobs.
+```
+
+This example shows how to train and use the **TransformerComb** surrogate model.
 
 ## What the surrogate is intended to do
 
@@ -39,21 +43,21 @@ The surrogate is **not** a replacement for tomography:
 ## 1. Define the system
 
 ```{code-cell} ipython3
-from mqt.yaqs import AnalogSimParams, Hamiltonian
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 hamiltonian = Hamiltonian.ising(length=2, J=1.0, g=1.0)
-operator = hamiltonian.mpo
 
 sim_params = AnalogSimParams(
     dt=0.1,
     order=1,
     max_bond_dim=16,
 )
+mc = MemoryCharacterizer(parallel=False, show_progress=False)
 ```
 
 ## 2. Generate training data
 
-`generate_data` samples random interventions and simulates rollouts. It returns a PyTorch `TensorDataset`
+`sample` samples random interventions and simulates rollouts. It returns a PyTorch `TensorDataset`
 with tensors `(E_features, rho0, rho_seq)`:
 
 - `E_features`: `(n, k, d_e)`
@@ -61,21 +65,29 @@ with tensors `(E_features, rho0, rho_seq)`:
 - `rho_seq`: `(n, k, 8)` (packed `rho8` per step)
 
 ```{code-cell} ipython3
-from mqt.yaqs import generate_data
+try:
+    import torch
+except ImportError:
+    torch = None
 
-train_ds = generate_data(
-    operator,
-    sim_params,
-    k=4,          # number of intervention steps
-    n=80,         # number of sampled sequences
-    seed=0,
-    parallel=True,
-    show_progress=False,
-    solver="MCWF",  # also works with "TJM" (surrogate generation is noiseless)
-)
+if torch is not None:
+    from mqt.yaqs import sample_rollouts
 
-E, rho0, tgt = train_ds.tensors
-print(E.shape, rho0.shape, tgt.shape)
+    train_ds = sample_rollouts(
+        hamiltonian,
+        sim_params,
+        k=4,          # number of intervention steps
+        n=80,         # number of sampled sequences
+        seed=0,
+        parallel=True,
+        show_progress=False,
+        solver="MCWF",  # also works with "TJM" (surrogate generation is noiseless)
+    )
+
+    E, rho0, tgt = train_ds.tensors
+    print(E.shape, rho0.shape, tgt.shape)
+else:
+    print("torch not installed; skip surrogate data generation in doc build")
 ```
 
 ## 3. Train a TransformerComb explicitly
@@ -83,28 +95,28 @@ print(E.shape, rho0.shape, tgt.shape)
 If you want full control of architecture and training arguments, instantiate `TransformerComb` directly and call `fit`.
 
 ```{code-cell} ipython3
-import torch
-from mqt.yaqs import TransformerComb
+if torch is not None:
+    from mqt.yaqs import TransformerComb
 
-d_e = int(E.shape[-1])
-model = TransformerComb(
-    d_e=d_e,
-    d_rho=8,
-    d_model=128,
-    nhead=4,
-    num_layers=3,
-    dim_ff=256,
-    dropout=0.0,
-)
+    d_e = int(E.shape[-1])
+    model = TransformerComb(
+        d_e=d_e,
+        d_rho=8,
+        d_model=128,
+        nhead=4,
+        num_layers=3,
+        dim_ff=256,
+        dropout=0.0,
+    )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.fit(
-    train_ds,
-    epochs=50,
-    lr=2e-3,
-    batch_size=64,
-    device=device,
-)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.fit(
+        train_ds,
+        epochs=50,
+        lr=2e-3,
+        batch_size=64,
+        device=device,
+    )
 ```
 
 ## 4. Predict rollouts
@@ -115,8 +127,9 @@ model.fit(
 - `rho0`: `(B, 8)`
 
 ```{code-cell} ipython3
-pred = model.predict(E[:5], rho0[:5], device=device, return_numpy=True)
-print(pred.shape)  # (5, k, 8)
+if torch is not None:
+    pred = model.predict(E[:5], rho0[:5], device=device, return_numpy=True)
+    print(pred.shape)  # (5, k, 8)
 ```
 
 ## 5. Operational memory diagnostics
@@ -126,37 +139,38 @@ metrics as dense/MPO combs. For the full V-matrix pipeline, return dictionary, a
 see {doc}`operational_memory`.
 
 ```{code-cell} ipython3
-ent = model.entropy(cut=2, n_pasts=8, n_futures=8)
-sv = model.singular_values(cut=2, n_pasts=8, n_futures=8)
-print(f"S_V(2) = {ent:.4f} nats")
-print(f"singular spectrum length: {sv.size}")
+if torch is not None:
+    ent = model.entropy(cut=2, n_pasts=8, n_futures=8)
+    sv = model.singular_values(cut=2, n_pasts=8, n_futures=8)
+    print(f"S_V(2) = {ent:.4f} nats")
+    print(f"singular spectrum length: {sv.size}")
 ```
 
 The surrogate learns reduced-state rollouts; it does **not** reconstruct the full comb matrix :math:`\Upsilon`.
 Operational memory readouts are estimated from probe statistics, distinct from exact comb-state QMI/CMI on a tomographic comb.
 
-## 6. One-call helper: create_surrogate
+## 6. One-call helper: `train_surrogate`
 
-`create_surrogate` wraps `generate_data -> TransformerComb -> fit` for a quick end-to-end workflow.
+`train_surrogate` wraps `sample` → `TransformerComb` → `fit` for a quick end-to-end workflow.
 
 ```{code-cell} ipython3
-from mqt.yaqs import create_surrogate
+if torch is not None:
+    from mqt.yaqs import train_surrogate
 
-quick_model = create_surrogate(
-    operator,
-    sim_params,
-    k=4,
-    n=80,
-    seed=0,
-    parallel=True,
-    show_progress=False,
-    model_kwargs={"d_model": 128, "nhead": 4, "num_layers": 3},
-    train_kwargs={"epochs": 50, "lr": 2e-3, "batch_size": 64},
-)
+    quick_model = train_surrogate(
+        hamiltonian,
+        sim_params,
+        k=4,
+        n=80,
+        seed=0,
+        parallel=True,
+        show_progress=False,
+        model_kwargs={"d_model": 128, "nhead": 4, "num_layers": 3},
+        train_kwargs={"epochs": 50, "lr": 2e-3, "batch_size": 64},
+    )
 ```
 
 ## Related topics
 
 - {doc}`operational_memory` — V-matrix diagnostics shared with dense/MPO combs
-- {doc}`process_tomography` — exact comb tomography for small `k`
-
+- {doc}`reference_exact_combs` — exact comb tomography for small `k`

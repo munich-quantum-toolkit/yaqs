@@ -161,7 +161,7 @@ def safe_set_numba_threads(n_threads: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Process-pool orchestration (used by Simulator, Characterizer, and internals)
+# Process-pool orchestration (used by Simulator, MemoryCharacterizer, and internals)
 # ---------------------------------------------------------------------------
 
 # Global worker state (initialized once per worker process).

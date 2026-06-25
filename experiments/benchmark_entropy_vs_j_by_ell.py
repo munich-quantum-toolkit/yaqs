@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: operational memory vs delay length ell at fixed couplings J.
 
 Uses :func:`sample_split_delayed_break_probes` — past + left break + ell identity

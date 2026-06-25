@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Basic entropy-vs-J-by-cut benchmark (β=1, unitary_break_mp, causal cut weights)."""
 
 from __future__ import annotations

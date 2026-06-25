@@ -17,11 +17,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import _lazy_exports as _lazy_exports_module
-from . import characterizer, simulator
+from . import memory_characterizer, simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
-from .characterizer import Characterizer, construct_process_tensor
-from .characterization.memory.combs.tomography.combs import DenseComb, MPOComb
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mpo import MPO
 from .core.data_structures.mps import MPS
@@ -36,14 +34,11 @@ from .core.data_structures.simulation_parameters import (
 )
 from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
+from .memory_characterizer import MemoryCharacterizer, characterize_memory, sample_rollouts, train_surrogate
 from .simulator import Simulator
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
-    from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
-        create_surrogate,
-        generate_data,
-    )
 
 
 def __getattr__(name: str) -> object:
@@ -55,9 +50,9 @@ __all__ = [
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
-    "Characterizer",
     "EquivalenceChecker",
     "Hamiltonian",
+    "MemoryCharacterizer",
     "NoiseModel",
     "Observable",
     "Result",
@@ -67,12 +62,10 @@ __all__ = [
     "TransformerComb",
     "WeakSimParams",
     "__version__",
-    "characterizer",
-    "construct_process_tensor",
-    "create_surrogate",
-    "DenseComb",
-    "generate_data",
-    "MPOComb",
+    "characterize_memory",
+    "memory_characterizer",
+    "sample_rollouts",
     "simulator",
+    "train_surrogate",
     "version_info",
 ]
