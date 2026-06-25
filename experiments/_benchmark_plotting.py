@@ -21,6 +21,7 @@ HEATMAP_COLOR_VMAX = 3.0
 # Representative cuts / couplings for multi-panel figures.
 PANEL2_FIXED_CUTS: tuple[int, ...] = (10, 15, 19)
 PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 2.0)
+PANEL2_FIXED_TAUS: tuple[int, ...] = (0, 1, 2, 4, 8)
 PANEL_TARGET_JS_ELL: tuple[float, ...] = (0.5, 1.0, 1.5, 2.0)
 
 
@@ -428,6 +429,255 @@ def plot_spectrum_and_rank_vs_j(
     plt.close(fig)
 
 
+def save_figure_prl(fig: object, out_stem: Path) -> None:
+    """Save PDF/PNG plus ``_prl`` variants (mc-process figure naming)."""
+    import matplotlib.pyplot as plt
+
+    fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    prl_stem = out_stem.with_name(f"{out_stem.name}_prl")
+    fig.savefig(prl_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    fig.savefig(prl_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    plt.close(fig)
+
+
+def last_tau_above_for_panel_b(
+    z: np.ndarray, taus: list[int], ji: int, *, threshold: float
+) -> tuple[float, str]:
+    """Last τ (in increasing order) with S_V ≥ threshold for panel (c) of the gap figure."""
+    if not taus:
+        return float("nan"), "nodata"
+    thr = float(threshold)
+    has_any = False
+    last_above: float | None = None
+    for gi, t in enumerate(taus):
+        v = z[gi, ji]
+        if not np.isfinite(v):
+            continue
+        has_any = True
+        if float(v) >= thr:
+            last_above = float(t)
+    if not has_any:
+        return float("nan"), "nodata"
+    if last_above is not None:
+        return last_above, "hit"
+    return 0.0, "censored"
+
+
+def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm, Normalize
+    from matplotlib.ticker import LogFormatterMathtext, LogLocator, NullLocator
+
+    if not rows:
+        return
+    configure_matplotlib_prl()
+    taus = sorted({int(float(r["tau"])) for r in rows})
+    j_vals = sorted({float(r["J"]) for r in rows})
+    z = np.full((len(taus), len(j_vals)), np.nan, dtype=np.float64)
+    for r in rows:
+        gi = taus.index(int(float(r["tau"])))
+        ji = j_vals.index(float(r["J"]))
+        z[gi, ji] = float(r["entropy"])
+
+    g_arr = np.asarray(taus, dtype=np.float64)
+    j_arr = np.asarray(j_vals, dtype=np.float64)
+    g_edges = (
+        np.concatenate([[g_arr[0] - 0.5], 0.5 * (g_arr[:-1] + g_arr[1:]), [g_arr[-1] + 0.5]])
+        if len(g_arr) > 1
+        else np.array([-0.5, 0.5])
+    )
+    if len(j_arr) > 1:
+        dj = float(np.median(np.diff(j_arr)))
+        j_edges = np.concatenate([[j_arr[0] - dj / 2], 0.5 * (j_arr[:-1] + j_arr[1:]), [j_arr[-1] + dj / 2]])
+    else:
+        j_edges = np.array([j_arr[0] - 0.05, j_arr[0] + 0.05])
+
+    fig = plt.figure(figsize=(8.2, 4.3), constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, width_ratios=[2.0, 1.0], height_ratios=[1.0, 1.0], wspace=0.06, hspace=0.10)
+    ax0 = fig.add_subplot(gs[:, 0])
+    ax1 = fig.add_subplot(gs[0, 1])
+    ax2 = fig.add_subplot(gs[1, 1])
+
+    z_plot = np.where(np.isfinite(z), np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)), np.nan)
+    z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
+    cmap = plt.get_cmap("magma").copy()
+    cmap.set_under(color="black")
+    cmap.set_bad(color=(1.0, 1.0, 1.0, 0.0))
+    im = ax0.pcolormesh(
+        g_edges,
+        j_edges,
+        z_mesh,
+        cmap=cmap,
+        norm=LogNorm(vmin=HEATMAP_COLOR_VMIN, vmax=HEATMAP_COLOR_VMAX),
+        shading="auto",
+        linewidth=0,
+        rasterized=True,
+    )
+    ax0.set_xlabel(r"Delay $\tau$")
+    ax0.set_ylabel(r"Coupling $J$")
+    cbar = fig.colorbar(im, ax=ax0, shrink=0.92, pad=0.012, aspect=18)
+    cbar.ax.set_title(r"$S_V$", fontsize=16, pad=3)
+    cbar.ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
+
+    panel2_gaps = [g for g in PANEL2_FIXED_TAUS if g in taus]
+    panel2_cmap = plt.get_cmap("Blues")
+    panel2_norm = Normalize(vmin=0.0, vmax=float(max(taus) if taus else 1))
+    for g in panel2_gaps:
+        sub = sorted((r for r in rows if int(float(r["tau"])) == int(g)), key=lambda r: float(r["J"]))
+        ax1.semilogy(
+            [float(r["J"]) for r in sub],
+            [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in sub],
+            color=panel2_cmap(panel2_norm(float(g))),
+            lw=1.7,
+            marker="o",
+            ms=3.8,
+            label=rf"$\tau={g}$",
+        )
+    ax1.set_xlabel(r"Coupling $J$")
+    ax1.set_ylabel(r"$S_V$")
+    ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+    ax1.yaxis.set_minor_locator(NullLocator())
+    ax1.legend(frameon=False, fontsize=7.0, loc="upper right")
+
+    panel3_js = [float(j_arr[int(np.argmin(np.abs(j_arr - t)))]) for t in PANEL3_TARGET_JS]
+    panel3_cmap = plt.get_cmap("Reds")
+    panel3_norm = Normalize(vmin=0.0, vmax=2.0)
+    for jv in panel3_js:
+        ji = j_vals.index(jv)
+        ys = np.asarray([max(float(z[gi, ji]), HEATMAP_COLOR_VMIN) for gi in range(len(taus))], dtype=np.float64)
+        ax2.semilogy(taus, ys, lw=1.8, marker="o", ms=4.6, color=panel3_cmap(panel3_norm(jv)), label=rf"$J={jv:g}$")
+    ax2.set_xlabel(r"Delay $\tau$")
+    ax2.set_ylabel(r"$S_V$")
+    ax2.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+    ax2.legend(frameon=False, fontsize=7.0, loc="upper right")
+
+    y_side = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in rows if int(float(r["tau"])) in panel2_gaps]
+    y_hi = min(1.0, max(HEATMAP_COLOR_VMIN * 1.2, (float(np.nanmax(y_side)) * 1.25 if y_side else 1.0)))
+    ax1.set_ylim(HEATMAP_COLOR_VMIN, y_hi)
+    ax2.set_ylim(HEATMAP_COLOR_VMIN, y_hi)
+
+    for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
+        ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=13, fontweight="bold")
+
+    save_figure_prl(fig, out_stem)
+
+
+def plot_entropy_heatmap_tau_j_pair(
+    rows: list[dict[str, str | float | int]],
+    out_stem: Path,
+    *,
+    sv_threshold: float = 1e-2,
+) -> None:
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm, Normalize
+    from matplotlib.ticker import LogFormatterMathtext, LogLocator, NullLocator
+
+    from _benchmark_common import SV_THRESHOLD_DEFAULT
+
+    if not rows:
+        return
+    configure_matplotlib_prl()
+    thr = float(sv_threshold if sv_threshold is not None else SV_THRESHOLD_DEFAULT)
+    taus = sorted({int(float(r["tau"])) for r in rows})
+    j_vals = sorted({float(r["J"]) for r in rows})
+    j_arr = np.asarray(j_vals, dtype=np.float64)
+    g_arr = np.asarray(taus, dtype=np.float64)
+    z = np.full((len(taus), len(j_vals)), np.nan, dtype=np.float64)
+    for r in rows:
+        gi = taus.index(int(float(r["tau"])))
+        ji = j_vals.index(float(r["J"]))
+        z[gi, ji] = float(r["entropy"])
+
+    g_edges = (
+        np.concatenate([[g_arr[0] - 0.5], 0.5 * (g_arr[:-1] + g_arr[1:]), [g_arr[-1] + 0.5]])
+        if len(g_arr) > 1
+        else np.array([-0.5, 0.5])
+    )
+    if len(j_arr) > 1:
+        dj = float(np.median(np.diff(j_arr)))
+        j_edges = np.concatenate([[j_arr[0] - dj / 2], 0.5 * (j_arr[:-1] + j_arr[1:]), [j_arr[-1] + dj / 2]])
+    else:
+        j_edges = np.array([j_arr[0] - 0.05, j_arr[0] + 0.05])
+
+    fig = plt.figure(figsize=(8.3, 4.3), constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, width_ratios=[2.0, 1.0], height_ratios=[1.0, 1.0], wspace=0.06, hspace=0.10)
+    ax0 = fig.add_subplot(gs[:, 0])
+    ax1 = fig.add_subplot(gs[0, 1])
+    ax2 = fig.add_subplot(gs[1, 1])
+
+    cmap = plt.get_cmap("magma").copy()
+    cmap.set_under(color="black")
+    cmap.set_bad(color=(1.0, 1.0, 1.0, 0.0))
+    z_plot = np.where(
+        np.isfinite(z),
+        np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)),
+        np.nan,
+    )
+    z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
+    im = ax0.pcolormesh(
+        g_edges,
+        j_edges,
+        z_mesh,
+        cmap=cmap,
+        norm=LogNorm(vmin=HEATMAP_COLOR_VMIN, vmax=HEATMAP_COLOR_VMAX),
+        shading="auto",
+        linewidth=0,
+        rasterized=True,
+    )
+    ax0.set_xlabel(r"Delay $\tau$")
+    ax0.set_ylabel(r"Coupling $J$")
+    cbar = fig.colorbar(im, ax=ax0, shrink=0.90, pad=0.015, aspect=20)
+    cbar.ax.set_title(r"$S_V$", fontsize=14, pad=2)
+    cbar.ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
+
+    panel3_js = [float(j_arr[int(np.argmin(np.abs(j_arr - t)))]) for t in PANEL3_TARGET_JS]
+    panel3_cmap = plt.get_cmap("Reds")
+    panel3_norm = Normalize(vmin=0.0, vmax=2.0)
+    for jv in panel3_js:
+        ji = j_vals.index(jv)
+        ys = np.asarray([max(float(z[gi, ji]), HEATMAP_COLOR_VMIN) for gi in range(len(taus))], dtype=np.float64)
+        ax1.semilogy(taus, ys, lw=1.8, marker="o", ms=4.2, color=panel3_cmap(panel3_norm(jv)), label=rf"$J={jv:g}$")
+    ax1.set_xlabel(r"Delay $\tau$")
+    ax1.set_ylabel(r"$S_V$")
+    ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+    ref_thr = max(thr, 1e-30)
+    ax1.axhline(ref_thr, color="0.35", ls="--", lw=0.9, label=rf"$S_{{\rm thr}}={ref_thr:.0e}$")
+    ax1.legend(frameon=False, fontsize=6.8, loc="upper right")
+
+    thr_main = max(thr, 1e-30)
+    thr_lo, thr_hi = 0.5 * thr_main, 2.0 * thr_main
+
+    def _tau_curve(threshold: float) -> np.ndarray:
+        return np.asarray(
+            [last_tau_above_for_panel_b(z, taus, ji, threshold=threshold)[0] for ji in range(len(j_vals))],
+            dtype=np.float64,
+        )
+
+    y_lo, y_main, y_hi = _tau_curve(thr_lo), _tau_curve(thr_main), _tau_curve(thr_hi)
+    mb = np.isfinite(y_lo) & np.isfinite(y_hi)
+    mm = np.isfinite(y_main)
+    if np.any(mb):
+        ax2.fill_between(j_arr[mb], y_lo[mb], y_hi[mb], color="0.70", alpha=0.30, linewidth=0.0)
+    if np.any(mm):
+        ax2.plot(j_arr[mm], y_main[mm], color="0.15", lw=1.8, marker="o", ms=3.6, label=rf"main: $S_{{\rm thr}}={thr_main:.0e}$")
+    ax2.set_xlabel(r"Coupling $J$")
+    ax2.set_ylabel(r"Operational memory horizon $\tau_{\rm mem}$")
+    tau_max = float(max(taus) if taus else 0.0)
+    ax2.set_ylim(-0.5, max(1.0, tau_max + 0.5))
+    ax2.axhline(tau_max, color="0.45", ls="--", lw=0.8)
+    ax2.legend(frameon=False, fontsize=6.3, loc="upper left")
+
+    y_side = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in rows]
+    y_hi_plot = min(1.0, max(HEATMAP_COLOR_VMIN * 1.2, (float(np.nanmax(y_side)) * 1.25 if y_side else 1.0)))
+    ax1.set_ylim(HEATMAP_COLOR_VMIN, y_hi_plot)
+
+    for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
+        ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=12, fontweight="bold")
+
+    save_figure_prl(fig, out_stem)
+
+
 def plot_entropy_vs_ell(rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
@@ -439,6 +689,7 @@ def plot_entropy_vs_ell(rows: list[dict[str, str | float | int]], out_stem: Path
     ell_key = "ell" if "ell" in rows[0] else "tau"
     ells = sorted({int(float(r[ell_key])) for r in rows})
     j_arr = np.asarray(sorted({float(r["J"]) for r in rows}), dtype=np.float64)
+    ell_arr = np.asarray(ells, dtype=np.float64)
 
     fig, ax = plt.subplots(1, 1, figsize=(5.0, 3.2), constrained_layout=True)
     target_js = [float(j_arr[int(np.argmin(np.abs(j_arr - t)))]) for t in PANEL_TARGET_JS_ELL]
@@ -460,16 +711,17 @@ def plot_entropy_vs_ell(rows: list[dict[str, str | float | int]], out_stem: Path
             label=rf"$J={jv:g}$",
         )
 
-    ax.set_xlabel(r"Delay $\ell$")
+    ax.set_xlabel(r"Zero resets $\ell$")
     ax.set_ylabel(r"$S_V$")
     ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax.yaxis.set_minor_locator(NullLocator())
     ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
     ax.grid(True, which="major", axis="y", alpha=0.10, linewidth=0.35)
+    if len(ell_arr) > 1:
+        ax.set_xlim(ell_arr[0] - 0.4, ell_arr[-1] + 0.4)
     y_all = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in rows]
     ax.set_ylim(HEATMAP_COLOR_VMIN, min(1.0, max(HEATMAP_COLOR_VMIN * 1.2, float(np.nanmax(y_all)) * 1.25)))
     ax.legend(frameon=False, fontsize=7.0, loc="upper right")
+    ax.text(0.04, 0.955, "(a)", transform=ax.transAxes, va="top", ha="left", fontsize=12, fontweight="bold")
 
-    fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
-    fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
-    plt.close(fig)
+    save_figure_prl(fig, out_stem)

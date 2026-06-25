@@ -5,7 +5,8 @@ Recreates a small version of each published plot:
 1. S_V heatmap vs cut and J
 2. Middle-cut S_V(L, k) heatmap
 3. Probe convergence S_V(m) and spectrum / rank vs J
-4. S_V vs memory delay ell
+5. S_V vs memory delay ell (shared past/future pools)
+6. Gap / operational-memory horizon heatmap (τ vs J)
 
 Figures are written under ``experiments/*_quick_results/``.
 """
@@ -21,7 +22,8 @@ SCRIPTS = (
     ("cut × J heatmap", "benchmark_entropy_vs_j_by_cut.py"),
     ("middle-cut L × k", "benchmark_entropy_middlecut_vs_L_k.py"),
     ("convergence + spectrum", "benchmark_entropy_convergence_and_spectrum.py"),
-    ("delay ℓ curves", "benchmark_entropy_vs_j_by_ell.py"),
+    ("delay ℓ curves (shared pools)", "benchmark_entropy_vs_j_by_ell.py"),
+    ("gap / τ heatmap (paper)", "benchmark_entropy_vs_j_by_gap.py"),
 )
 
 

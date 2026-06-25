@@ -27,12 +27,23 @@ from mqt.yaqs.characterization.memory.combs.surrogates.utils import _random_pure
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-# Paper / legacy experiment defaults (reduced k for basic runs).
+# Paper / legacy experiment defaults.
 L_DEFAULT = 2
+L_PAPER = 6
 K_DEFAULT = 10
+K_PAPER = 20
 DT_DEFAULT = 0.1
 G_DEFAULT = 1.0
 BRANCH_WEIGHT_BETA = 1.0
+J_SWEEP_PAPER = [0.05 * i for i in range(41)]  # 0.0 ... 2.0
+
+# Fixed-window delayed-break geometry (gap / ell benchmarks).
+PAST_LEN_FIXED = 15
+FUTURE_LEN_FIXED = 5
+ELL_MAX_GAP = 24
+ELL_MAX_ELL = 15
+SV_THRESHOLD_DEFAULT = 1e-2
+PANEL2_FIXED_TAUS: tuple[int, ...] = (0, 1, 2, 4, 8)
 
 
 def parse_int_list(spec: str) -> list[int]:
@@ -72,6 +83,13 @@ def list_initial_states_sys_env0(*, length: int, n_seeds: int, rng: np.random.Ge
     return out
 
 
+def load_summary_csv(path: Path) -> list[dict[str, str]]:
+    import csv
+
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
 def linear_weighted_metrics(
     *,
     probe_set: ProbeSet,
@@ -80,14 +98,19 @@ def linear_weighted_metrics(
     psi0: np.ndarray,
     parallel: bool,
 ) -> dict[str, float | int]:
-    """Past-centered S_V with V = w^β ρ (β=1) using causal cut branch weights."""
-    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
+    """Past-centered S_V with V = w^β ρ (β=1) using mc-process cumulative branch weights."""
+    pauli_xyz_ij, _, traces = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
         initial_psi=psi0,
         parallel=parallel,
     )
+    n_p, n_f = pauli_xyz_ij.shape[:2]
+    weights_ij = np.zeros((n_p, n_f), dtype=np.float64)
+    for ii in range(n_p):
+        for jj in range(n_f):
+            weights_ij[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
     w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
     v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
     v_c = center_past_rows(v_w)
