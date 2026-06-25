@@ -14,13 +14,11 @@ import pytest
 
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
     branch_weights_ij,
-    rollout_branch_weight,
-)
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
-from mqt.yaqs.characterization.memory.diagnostics.probe import (
     probe_process,
+    rollout_branch_weight,
     sample_split_cut_probes,
 )
+from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

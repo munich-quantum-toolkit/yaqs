@@ -63,7 +63,7 @@ from ..core.utils import (
     resolve_stochastic_solver,
 )
 from .data import SequenceRolloutSample, stack_rollouts
-from .utils import _random_density_matrix, _sample_random_intervention_sequence, build_initial_psi
+from .utils import _random_density_matrix, build_initial_psi
 
 
 # ---------------------------------------------------------------------------
@@ -662,7 +662,7 @@ def _simulate_sequences(
             desc="Simulating sequences (final states)",
         )
         final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
-        for seq_idx, worker_out in job_results.items():
+        for worker_out in job_results.values():
             sequence_idx, _traj_idx, rho_final, _weight = worker_out
             rho_norm = normalize_rho_from_backend_output(rho_final)
             final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
@@ -682,7 +682,7 @@ def _simulate_sequences(
         desc="Simulating sequences (rollouts)",
     )
     samples_by_index: list[SequenceRolloutSample | None] = [None] * num_sequences
-    for seq_idx, worker_out in job_results.items():
+    for worker_out in job_results.values():
         sequence_idx, _t, rho0, choi_mat, rho_seq, weight = worker_out
         samples_by_index[sequence_idx] = SequenceRolloutSample(
             rho_0=rho0,
@@ -779,7 +779,7 @@ def simulate_final_states_with_diagnostics(
         desc="Simulating sequences (final states + diagnostics)",
     )
     final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
-    for seq_idx, worker_out in job_results.items():
+    for worker_out in job_results.values():
         sequence_idx, _traj_idx, rho_final, _weight, trace = worker_out
         rho_norm = normalize_rho_from_backend_output(rho_final)
         final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
@@ -853,6 +853,7 @@ def generate_data(
     timesteps: list[float] | None = None,
     init_mode: str = "eigenstate",
     solver: StochasticSolver | None = None,
+    interventions: str = "measure_prepare",
     _execution: ExecutionConfig | None = None,
 ) -> TensorDataset:
     """Generate surrogate training data by sampling interventions and simulating rollouts.
@@ -869,6 +870,7 @@ def generate_data(
         timesteps: Optional comb evolution durations (defaults to ``[sim_params.dt] * (k+1)``).
         init_mode: Initial-state sampling mode (see :func:`build_initial_psi`).
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
+        interventions: Training intervention kind (``"haar"``, ``"clifford"``, or ``"measure_prepare"``).
 
     Returns:
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
@@ -876,6 +878,11 @@ def generate_data(
     Raises:
         ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
+    from mqt.yaqs.characterization.memory.interventions import (
+        normalize_intervention_kind,
+        sample_training_sequence,
+    )
+
     chain_length = int(operator.length)
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
 
@@ -891,20 +898,17 @@ def generate_data(
         msg = f"Comb schedule: timesteps length must be k+1={int(k) + 1}, got {len(timesteps)}."
         raise ValueError(msg)
 
-    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]] = []
+    psi_pairs_list: list[list[Any]] = []
     initial_psis: list[np.ndarray] = []
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
     for _ in range(int(n)):
         rho_in = _random_density_matrix(rng)
-        intervention_maps, choi_rows = _sample_random_intervention_sequence(int(k), rng)
-        step_pairs: list[tuple[np.ndarray, np.ndarray]] = []
-        for emap in intervention_maps:
-            rho_prep = np.asarray(emap.rho_prep, dtype=np.complex128)
-            effect_dm = np.asarray(emap.effect, dtype=np.complex128)
-            psi_meas = _psi_from_rank1_projector(effect_dm)
-            psi_prep = _psi_from_rank1_projector(rho_prep)
-            step_pairs.append((psi_meas, psi_prep))
+        step_pairs, choi_rows = sample_training_sequence(
+            int(k),
+            normalize_intervention_kind(str(interventions)),
+            rng,
+        )
         psi_pairs_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
         initial_psi = build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
@@ -915,19 +919,19 @@ def generate_data(
     samples = cast(
         "list[SequenceRolloutSample]",
         _simulate_sequences(
-        operator=operator,
-        sim_params=sim_params,
-        timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
-        initial_psis=initial_psis,
-        e_features_rows=choi_feature_rows_per_sequence,
-        parallel=bool(parallel),
-        show_progress=bool(show_progress),
-        record_step_states=True,
-        static_ctx=static_ctx,
-        context_vec=None,
-        solver=stochastic_solver,
-        _execution=_execution,
+            operator=operator,
+            sim_params=sim_params,
+            timesteps=timesteps,
+            psi_pairs_list=psi_pairs_list,
+            initial_psis=initial_psis,
+            e_features_rows=choi_feature_rows_per_sequence,
+            parallel=bool(parallel),
+            show_progress=bool(show_progress),
+            record_step_states=True,
+            static_ctx=static_ctx,
+            context_vec=None,
+            solver=stochastic_solver,
+            _execution=_execution,
         ),
     )
     rho0_batch, features_batch, rho_seq_batch, _ctx = stack_rollouts(samples)
@@ -950,6 +954,8 @@ def create_surrogate(
     init_mode: str = "eigenstate",
     model_kwargs: dict[str, Any] | None = None,
     train_kwargs: dict[str, Any] | None = None,
+    solver: StochasticSolver | None = None,
+    interventions: str = "measure_prepare",
     _execution: ExecutionConfig | None = None,
 ) -> TransformerComb:
     """Train a surrogate model end-to-end on sampled rollout data.
@@ -964,6 +970,8 @@ def create_surrogate(
         show_progress: Whether to show progress bars.
         timesteps: Optional per-step durations passed to :func:`generate_data`.
         init_mode: Initial-state sampling mode passed to :func:`generate_data`.
+        solver: Optional stochastic solver override passed to :func:`generate_data`.
+        interventions: Training intervention kind passed to :func:`generate_data`.
         model_kwargs: Optional keyword arguments forwarded to :class:`TransformerComb`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`TransformerComb.fit`.
 
@@ -985,6 +993,8 @@ def create_surrogate(
         show_progress=bool(show_progress),
         timesteps=timesteps,
         init_mode=init_mode,
+        solver=solver,
+        interventions=interventions,
         _execution=_execution,
     )
 

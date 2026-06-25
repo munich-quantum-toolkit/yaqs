@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: S_V vs number of zero-reset slots ell.
 
 Fixed geometry (shared past/future probe pools):
@@ -17,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -33,6 +39,7 @@ from _benchmark_common import (
     write_summary_csv,
 )
 from _benchmark_plotting import plot_entropy_vs_ell
+
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
     ProbeSet,
     _sample_cut_measurement_only,
@@ -117,8 +124,7 @@ def _probe_set_for_ell(
             full.extend(copy.deepcopy(past_pairs[i]))
             psi_m = np.asarray(past_cut_meas[i], dtype=np.complex128)
             full.append((psi_m, z0))
-            for _ in range(ell_i):
-                full.append((z0, z0))
+            full.extend((z0, z0) for _ in range(ell_i))
             full.append({"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)})
             full.extend(copy.deepcopy(future_pairs[j]))
             if len(full) != k_this:
@@ -191,7 +197,6 @@ def main() -> None:
     if bool(args.plot_only):
         csv_path = Path(args.summary_csv) if args.summary_csv is not None else out_dir / "summary.csv"
         plot_entropy_vs_ell(load_summary_csv(csv_path), out_dir / "fig_entropy_vs_ell")
-        print(f"Wrote figure: {out_dir / 'fig_entropy_vs_ell.png'}", flush=True)
         return
 
     ells = cfg["ells"]
@@ -208,11 +213,6 @@ def main() -> None:
         unitary_ensemble=str(args.unitary_ensemble),
     )
 
-    print(
-        f"=== S_V vs zero-reset count ell (L={L_PAPER}, past={PAST_LEN_FIXED}, "
-        f"future={FUTURE_LEN_FIXED}, shared pools) ===",
-        flush=True,
-    )
     rows: list[dict[str, float | int]] = []
     sim_params = AnalogSimParams(dt=DT_DEFAULT)
 
@@ -245,35 +245,31 @@ def main() -> None:
                 entropies.append(float(m["entropy"]))
                 delta_norms.append(float(m["delta_norm"]))
                 ranks.append(int(m["rank"]))
-            rows.append(
-                {
-                    "L": L_PAPER,
-                    "k": k_this,
-                    "dt": DT_DEFAULT,
-                    "g": G_DEFAULT,
-                    "left_cut": left_cut,
-                    "tau": int(ell),
-                    "ell": int(ell),
-                    "right_cut": int(left_cut + ell + 1),
-                    "past_len_fixed": PAST_LEN_FIXED,
-                    "future_len_fixed": FUTURE_LEN_FIXED,
-                    "J": float(jv),
-                    "n_pasts": int(cfg["n_pasts"]),
-                    "n_futures": int(cfg["n_futures"]),
-                    "n_seeds": n_seeds,
-                    "branch_weight_beta": BRANCH_WEIGHT_BETA,
-                    "entropy": float(np.mean(entropies)),
-                    "entropy_std": float(np.std(entropies, ddof=1)) if len(entropies) > 1 else 0.0,
-                    "delta_norm": float(np.mean(delta_norms)),
-                    "rank": int(round(float(np.mean(ranks)))),
-                }
-            )
-            print(f"ell={ell:2d}, J={jv:>4.2f}, S_mean={rows[-1]['entropy']:.6e}", flush=True)
+            rows.append({
+                "L": L_PAPER,
+                "k": k_this,
+                "dt": DT_DEFAULT,
+                "g": G_DEFAULT,
+                "left_cut": left_cut,
+                "tau": int(ell),
+                "ell": int(ell),
+                "right_cut": int(left_cut + ell + 1),
+                "past_len_fixed": PAST_LEN_FIXED,
+                "future_len_fixed": FUTURE_LEN_FIXED,
+                "J": float(jv),
+                "n_pasts": int(cfg["n_pasts"]),
+                "n_futures": int(cfg["n_futures"]),
+                "n_seeds": n_seeds,
+                "branch_weight_beta": BRANCH_WEIGHT_BETA,
+                "entropy": float(np.mean(entropies)),
+                "entropy_std": float(np.std(entropies, ddof=1)) if len(entropies) > 1 else 0.0,
+                "delta_norm": float(np.mean(delta_norms)),
+                "rank": round(float(np.mean(ranks))),
+            })
 
     write_summary_csv(out_dir / "summary.csv", rows)
     (out_dir / "summary.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     plot_entropy_vs_ell(rows, out_dir / "fig_entropy_vs_ell")
-    print(f"Wrote results to: {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

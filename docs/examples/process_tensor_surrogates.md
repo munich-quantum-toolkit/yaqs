@@ -71,9 +71,7 @@ except ImportError:
     torch = None
 
 if torch is not None:
-    from mqt.yaqs import sample_rollouts
-
-    train_ds = sample_rollouts(
+    train_ds = mc.sample(
         hamiltonian,
         sim_params,
         k=4,          # number of intervention steps
@@ -81,7 +79,7 @@ if torch is not None:
         seed=0,
         parallel=True,
         show_progress=False,
-        solver="MCWF",  # also works with "TJM" (surrogate generation is noiseless)
+        interventions="measure_prepare",
     )
 
     E, rho0, tgt = train_ds.tensors
@@ -134,30 +132,26 @@ if torch is not None:
 
 ## 5. Operational memory diagnostics
 
-After training, ``TransformerComb`` exposes the same paper-weighted split-cut memory
-metrics as dense/MPO combs. For the full V-matrix pipeline, return dictionary, and sweeps,
-see {doc}`operational_memory`.
+After training, use `MemoryCharacterizer.characterize(model, ...)` for split-cut memory metrics.
+For the full V-matrix pipeline and validation, see {doc}`operational_memory`.
 
 ```{code-cell} ipython3
 if torch is not None:
-    ent = model.entropy(cut=2, n_pasts=8, n_futures=8)
-    sv = model.singular_values(cut=2, n_pasts=8, n_futures=8)
-    print(f"S_V(2) = {ent:.4f} nats")
-    print(f"singular spectrum length: {sv.size}")
+    memory = mc.characterize(model, cut=2, k=4, n_pasts=8, n_futures=8)
+    print(f"S_V(2) = {memory.entropy(2):.4f} nats")
+    print(f"singular spectrum length: {memory.singular_values(2).size}")
 ```
 
 The surrogate learns reduced-state rollouts; it does **not** reconstruct the full comb matrix :math:`\Upsilon`.
 Operational memory readouts are estimated from probe statistics, distinct from exact comb-state QMI/CMI on a tomographic comb.
 
-## 6. One-call helper: `train_surrogate`
+## 6. One-call training via `MemoryCharacterizer.train`
 
-`train_surrogate` wraps `sample` → `TransformerComb` → `fit` for a quick end-to-end workflow.
+`MemoryCharacterizer.train` wraps `sample` → `TransformerComb` → `fit` for a quick end-to-end workflow.
 
 ```{code-cell} ipython3
 if torch is not None:
-    from mqt.yaqs import train_surrogate
-
-    quick_model = train_surrogate(
+    quick_model = mc.train(
         hamiltonian,
         sim_params,
         k=4,

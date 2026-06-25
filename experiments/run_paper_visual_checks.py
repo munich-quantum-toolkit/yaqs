@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Run all operational-memory paper figure benchmarks in quick mode.
 
 Recreates a small version of each published plot:
@@ -30,7 +37,9 @@ SCRIPTS = (
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--parallel", action="store_true", default=False, help="Enable MCWF rollout parallelism.")
-    p.add_argument("--only", type=str, default="", help="Comma-separated script stems to run (e.g. benchmark_entropy_vs_j_by_cut).")
+    p.add_argument(
+        "--only", type=str, default="", help="Comma-separated script stems to run (e.g. benchmark_entropy_vs_j_by_cut)."
+    )
     return p.parse_args()
 
 
@@ -40,23 +49,20 @@ def main() -> None:
     only = {s.strip() for s in str(args.only).split(",") if s.strip()}
     parallel_flag = ["--parallel"] if args.parallel else ["--no-parallel"]
 
-    for label, script in SCRIPTS:
+    for _label, script in SCRIPTS:
         stem = script.removesuffix(".py")
         if only and stem not in only:
             continue
         cmd = [sys.executable, str(here / script), "--quick", *parallel_flag]
-        print(f"\n>>> {label}: {' '.join(cmd)}", flush=True)
         subprocess.run(cmd, cwd=here, check=True)
 
-    print("\n=== All quick benchmarks finished ===", flush=True)
     for _, script in SCRIPTS:
         stem = script.removesuffix(".py")
         out = here / f"{stem}_quick_results"
         pngs = sorted(out.glob("fig*.png")) if out.is_dir() else []
         if pngs:
-            print(f"  {stem}: {out}/")
-            for p in pngs:
-                print(f"    - {p.name}")
+            for _p in pngs:
+                pass
 
 
 if __name__ == "__main__":

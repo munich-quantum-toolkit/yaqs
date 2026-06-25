@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: middle-cut entropy heatmap S_V(L, k) at fixed J=1.
 
 Paper-style output: three-panel ``fig_entropy_heatmap_middlecut_vs_L_k``.
@@ -8,11 +15,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 from pathlib import Path
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -25,6 +30,7 @@ from _benchmark_common import (
     write_summary_json,
 )
 from _benchmark_plotting import plot_entropy_heatmap_middlecut_vs_l_k
+
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -84,8 +90,9 @@ def main() -> None:
 
     if bool(args.plot_only):
         csv_path = Path(args.summary_csv) if args.summary_csv is not None else out_dir / "summary.csv"
-        plot_entropy_heatmap_middlecut_vs_l_k(_load_summary_csv(csv_path), out_dir / "fig_entropy_heatmap_middlecut_vs_L_k")
-        print(f"Wrote figure: {out_dir / 'fig_entropy_heatmap_middlecut_vs_L_k.png'}", flush=True)
+        plot_entropy_heatmap_middlecut_vs_l_k(
+            _load_summary_csv(csv_path), out_dir / "fig_entropy_heatmap_middlecut_vs_L_k"
+        )
         return
 
     l_values = cfg["l_values"]
@@ -112,7 +119,6 @@ def main() -> None:
             rng=init_rng,
         )
 
-    print(f"=== Middle-cut S_V(L, k) at J={J_FIXED} ===", flush=True)
     rows: list[dict[str, float | int]] = []
 
     for length in l_values:
@@ -141,12 +147,10 @@ def main() -> None:
                 "branch_weight_beta": BRANCH_WEIGHT_BETA,
             }
             rows.append(row)
-            print(f"L={length:2d}, k={k:3d}, cut={cut:2d}, S_V={row['entropy']:.6e}", flush=True)
 
     write_summary_csv(out_dir / "summary.csv", rows)
     write_summary_json(out_dir / "summary.json", rows)
     plot_entropy_heatmap_middlecut_vs_l_k(rows, out_dir / "fig_entropy_heatmap_middlecut_vs_L_k")
-    print(f"Wrote results to: {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

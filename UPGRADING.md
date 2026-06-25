@@ -65,19 +65,19 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 
 ### Breaking changes at a glance
 
-| Area                     | Before                                                            | After                                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Entry point**          | `mqt.yaqs.simulator.run(...)`                                     | `Simulator(...).run(...)` → returns `Result`                                                                           |
-| **Imports**              | `mqt.yaqs.core.data_structures.*`, `gate_library` for observables | `from mqt.yaqs import State, Hamiltonian, Observable, ...`                                                             |
-| **State / Hamiltonian**  | Raw `MPS` / `MPO` passed to `run`                                 | `State` and `Hamiltonian` (set `representation` on `State`)                                                            |
-| **Observables**          | `Observable(Z(), sites=0)` via `gate_library`                     | `Observable("z", sites=0)` — also `"entropy"`, `"schmidt_spectrum"`, etc.                                              |
-| **Outputs**              | Written onto `*SimParams` / `Observable.results`                  | Read from `Result` (`expectation_values`, `counts`, `output_state`, …)                                                 |
-| **SVD truncation**       | `threshold` on `*SimParams`                                       | `svd_threshold` (presets use the same key in `SIMULATION_PRESETS`)                                                     |
-| **Execution UI**         | `show_progress` on `*SimParams`                                   | `show_progress` on `Simulator`; `num_threads` removed (unused)                                                         |
-| **Equivalence checking** | `digital.equivalence_checker.run(...)`                            | `EquivalenceChecker(...).check(...)`                                                                                   |
-| **Matrix auto cutover**  | `from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS`                  | Default is **7** on `EquivalenceChecker(matrix_max_qubits=...)`; constant lives in `mqt.yaqs.equivalence_checker` only |
-| **Bond diagnostics**     | `Observable("max_bond")` etc. in `observables`                    | `result.max_bond`, `result.total_bond`, `result.runtime_cost`                                                          |
-| **Memory characterization** | `construct_process_tensor(MPO, ...)`, `create_surrogate`         | `MemoryCharacterizer().probe_exact(...)`, `train`/`build_comb` + `probe`, `characterize` |
+| Area                        | Before                                                            | After                                                                                                                  |
+| --------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Entry point**             | `mqt.yaqs.simulator.run(...)`                                     | `Simulator(...).run(...)` → returns `Result`                                                                           |
+| **Imports**                 | `mqt.yaqs.core.data_structures.*`, `gate_library` for observables | `from mqt.yaqs import State, Hamiltonian, Observable, ...`                                                             |
+| **State / Hamiltonian**     | Raw `MPS` / `MPO` passed to `run`                                 | `State` and `Hamiltonian` (set `representation` on `State`)                                                            |
+| **Observables**             | `Observable(Z(), sites=0)` via `gate_library`                     | `Observable("z", sites=0)` — also `"entropy"`, `"schmidt_spectrum"`, etc.                                              |
+| **Outputs**                 | Written onto `*SimParams` / `Observable.results`                  | Read from `Result` (`expectation_values`, `counts`, `output_state`, …)                                                 |
+| **SVD truncation**          | `threshold` on `*SimParams`                                       | `svd_threshold` (presets use the same key in `SIMULATION_PRESETS`)                                                     |
+| **Execution UI**            | `show_progress` on `*SimParams`                                   | `show_progress` on `Simulator`; `num_threads` removed (unused)                                                         |
+| **Equivalence checking**    | `digital.equivalence_checker.run(...)`                            | `EquivalenceChecker(...).check(...)`                                                                                   |
+| **Matrix auto cutover**     | `from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS`                  | Default is **7** on `EquivalenceChecker(matrix_max_qubits=...)`; constant lives in `mqt.yaqs.equivalence_checker` only |
+| **Bond diagnostics**        | `Observable("max_bond")` etc. in `observables`                    | `result.max_bond`, `result.total_bond`, `result.runtime_cost`                                                          |
+| **Memory characterization** | `construct_process_tensor(MPO, ...)`, `create_surrogate`          | `MemoryCharacterizer().probe_exact(...)`, `train`/`build_comb` + `probe`, `characterize`                               |
 
 ### Memory characterization migration
 

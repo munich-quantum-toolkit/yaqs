@@ -27,14 +27,9 @@ EXPECTED_PUBLIC_API = frozenset({
     "Simulator",
     "State",
     "StrongSimParams",
-    "TransformerComb",
     "WeakSimParams",
     "__version__",
-    "characterize_memory",
-    "memory_characterizer",
-    "sample_rollouts",
     "simulator",
-    "train_surrogate",
     "version_info",
 })
 
@@ -44,10 +39,11 @@ def test_public_api_all_matches_documented_surface() -> None:
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
 
 
-def test_probe_result_not_top_level() -> None:
-    """ProbeResult is returned by MemoryCharacterizer, not a top-level import."""
+def test_characterization_result_not_top_level() -> None:
+    """CharacterizationResult is returned by MemoryCharacterizer, not a top-level import."""
     import mqt.yaqs as yaqs_module
 
+    assert "CharacterizationResult" not in yaqs_module.__all__
     assert "ProbeResult" not in yaqs_module.__all__
 
 

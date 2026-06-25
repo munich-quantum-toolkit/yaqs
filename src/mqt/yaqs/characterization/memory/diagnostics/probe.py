@@ -314,9 +314,7 @@ def sample_split_gap_probes(
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
-        raise ValueError(
-            msg
-        )
+        raise ValueError(msg)
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
         msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
@@ -440,9 +438,7 @@ def sample_split_symmetric_gap_probes(
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
-        raise ValueError(
-            msg
-        )
+        raise ValueError(msg)
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
         msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
@@ -565,9 +561,7 @@ def sample_split_delayed_break_probes(
     mode = str(intervention_mode).strip().lower()
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
-        raise ValueError(
-            msg
-        )
+        raise ValueError(msg)
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
         msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
@@ -710,10 +704,7 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
-        if step_type == "unitary":
-            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-            out = u @ r @ u.conj().T
-        elif step_type == "depolarizing_pauli":
+        if step_type in {"unitary", "depolarizing_pauli"}:
             u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
             out = u @ r @ u.conj().T
         elif step_type == "measure_only":
@@ -738,11 +729,11 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
         psi_meas, psi_prep = step
         prob = _rank1_prob(r, psi_meas)
         ket = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
-        ket = ket / max(float(np.linalg.norm(ket)), 1e-15)
+        ket /= max(float(np.linalg.norm(ket)), 1e-15)
         out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
     tr = np.trace(out)
     if abs(tr) > 1e-15:
-        out = out / tr
+        out /= tr
     return out
 
 

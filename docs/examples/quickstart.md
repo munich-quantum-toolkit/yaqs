@@ -112,8 +112,8 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
 params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
-result = MemoryCharacterizer(parallel=False, show_progress=False).probe_exact(
-    ham, params, cut=1, k=1, n_pasts=4, n_futures=4,
+result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
+    ham, params, k=1, cut=1, n_pasts=4, n_futures=4,
 )
 print(result.summary())
 ```

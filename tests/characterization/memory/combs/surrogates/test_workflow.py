@@ -28,9 +28,9 @@ from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
     create_surrogate,
     generate_data,
 )
-from mqt.yaqs.core.parallel_utils import ExecutionConfig
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def test_psi_from_rank1_projector_fallback_for_zero_projector() -> None:

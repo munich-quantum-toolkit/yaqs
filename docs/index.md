@@ -76,14 +76,14 @@ flowchart LR
 
 ### Characterization
 
-| I want to…                                                    | Read                                       |
-| ------------------------------------------------------------- | ------------------------------------------ |
-| Characterize operational memory (start here)                  | {doc}`examples/characterization`           |
-| Ground-truth S_V from simulator rollouts                      | {doc}`examples/characterization`           |
-| Fast repeated memory metrics via surrogate                    | {doc}`examples/characterization`           |
-| Tune surrogate training                                       | {doc}`examples/process_tensor_surrogates`  |
-| V-matrix theory and validation                                | {doc}`examples/operational_memory`         |
-| Reference exact combs (small `k` only)                        | {doc}`examples/reference_exact_combs`     |
+| I want to…                                   | Read                                      |
+| -------------------------------------------- | ----------------------------------------- |
+| Characterize operational memory (start here) | {doc}`examples/characterization`          |
+| Ground-truth S_V from simulator rollouts     | {doc}`examples/characterization`          |
+| Fast repeated memory metrics via surrogate   | {doc}`examples/characterization`          |
+| Tune surrogate training                      | {doc}`examples/process_tensor_surrogates` |
+| V-matrix theory and validation               | {doc}`examples/operational_memory`        |
+| Reference exact combs (small `k` only)       | {doc}`examples/reference_exact_combs`     |
 
 ```{toctree}
 :caption: Getting started

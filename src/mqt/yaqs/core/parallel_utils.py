@@ -24,7 +24,6 @@ from mqt.yaqs.core.linalg._threading import threadpool_limits_one
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-
     from concurrent.futures import Future
 
 TRes = TypeVar("TRes")
@@ -295,18 +294,21 @@ def run_indexed_jobs(
     """Run indexed jobs in parallel or serially, returning results keyed by job index."""
     results: dict[int, TRes] = {}
     if config.parallel and n_jobs > 1:
-        for job_idx, result in run_backend_parallel(
-            worker_fn=worker_fn,
-            payload=payload,
-            n_jobs=n_jobs,
-            max_workers=config.resolved_max_workers(),
-            show_progress=config.show_progress,
-            desc=desc,
-            max_retries=config.max_retries,
-            retry_exceptions=config.retry_exceptions,
-            mp_context=config.mp_context,
-        ):
-            results[job_idx] = result
+        results.update(
+            dict(
+                run_backend_parallel(
+                    worker_fn=worker_fn,
+                    payload=payload,
+                    n_jobs=n_jobs,
+                    max_workers=config.resolved_max_workers(),
+                    show_progress=config.show_progress,
+                    desc=desc,
+                    max_retries=config.max_retries,
+                    retry_exceptions=config.retry_exceptions,
+                    mp_context=config.mp_context,
+                )
+            )
+        )
         return results
 
     for job_idx in tqdm(

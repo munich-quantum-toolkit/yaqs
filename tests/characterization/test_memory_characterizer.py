@@ -14,7 +14,7 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-from mqt.yaqs.characterization.memory.diagnostics.results import ProbeResult
+from mqt.yaqs.characterization.memory.diagnostics.results import CharacterizationResult
 
 
 @pytest.fixture
@@ -24,39 +24,42 @@ def ham_and_params() -> tuple[Hamiltonian, AnalogSimParams]:
     return ham, params
 
 
-def test_probe_exact_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """probe_exact returns a ProbeResult with V-matrix diagnostics."""
+def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """``characterize(ham, params, ...)`` returns CharacterizationResult with memory metrics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    out = mc.probe_exact(ham, params, cut=1, k=1, n_pasts=3, n_futures=3, rng=np.random.default_rng(0))
-    assert isinstance(out, ProbeResult)
-    assert out.cut == 1
+    out = mc.characterize(
+        ham,
+        params,
+        k=1,
+        cut=1,
+        n_pasts=3,
+        n_futures=3,
+        rng=np.random.default_rng(0),
+    )
+    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
     assert out.rank(1) >= 1
+    assert out.memory_matrix(1).ndim == 2
 
 
-def test_probe_from_responses_matches_probe_exact(
-    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
-) -> None:
-    """probe_from_responses reproduces probe_exact on the same sampled grid."""
+def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Passing the same probe_set yields reproducible characterization."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    rng = np.random.default_rng(0)
-    probe_set = sample_split_cut_probes(cut=1, k=1, n_pasts=3, n_futures=3, rng=rng)
-    exact = mc.probe_exact(ham, params, cut=1, k=1, probe_set=probe_set)
-    cut = exact.by_cut[1]
-    assert cut.weights is not None
-    rebuilt = mc.probe_from_responses(cut.pauli_xyz_ij, cut.weights, probe_set, cut=1)
-    assert rebuilt.entropy(1) == pytest.approx(exact.entropy(1))
-    assert rebuilt.rank(1) == exact.rank(1)
+    probe_set = sample_split_cut_probes(cut=1, k=1, n_pasts=3, n_futures=3, rng=np.random.default_rng(0))
+    first = mc.characterize(ham, params, k=1, cut=1, probe_set=probe_set)
+    second = mc.characterize(ham, params, k=1, cut=1, probe_set=probe_set)
+    assert second.entropy(1) == pytest.approx(first.entropy(1))
+    assert second.rank(1) == first.rank(1)
 
 
 @pytest.mark.skipif(
     __import__("importlib").util.find_spec("torch") is None,
     reason="torch not installed",
 )
-def test_train_then_probe(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """train returns a model; probe returns ProbeResult diagnostics."""
+def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Train returns a model; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     model = mc.train(
@@ -67,8 +70,8 @@ def test_train_then_probe(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    out = mc.probe(model, cut=1, k=1, n_pasts=4, n_futures=4)
-    assert isinstance(out, ProbeResult)
+    out = mc.characterize(model, cut=1, k=1, n_pasts=4, n_futures=4)
+    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
 
 
@@ -76,30 +79,29 @@ def test_train_then_probe(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -
     __import__("importlib").util.find_spec("torch") is None,
     reason="torch not installed",
 )
-def test_characterize_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Characterize trains and returns multi-cut ProbeResult with model attached."""
+def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """predict(model, rho0, sequence) returns a valid density matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    out = mc.characterize(
+    model = mc.train(
         ham,
         params,
         k=1,
         n=8,
-        n_pasts=4,
-        n_futures=4,
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    assert isinstance(out, ProbeResult)
-    assert out.model is not None
-    assert 1 in out.by_cut
+    rho0 = np.eye(2, dtype=np.complex128) / 2.0
+    rho_out = mc.predict(model, rho0, "measure_prepare", k=1)
+    assert rho_out.shape == (2, 2)
+    assert np.all(np.isfinite(rho_out))
 
 
-def test_build_comb_then_probe(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """build_comb returns a comb; probe returns ProbeResult diagnostics."""
+def test_build_comb_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """build_comb returns a comb; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
-    out = mc.probe(comb, cut=1, k=1, n_pasts=3, n_futures=3)
-    assert isinstance(out, ProbeResult)
+    out = mc.characterize(comb, cut=1, k=1, n_pasts=3, n_futures=3)
+    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0

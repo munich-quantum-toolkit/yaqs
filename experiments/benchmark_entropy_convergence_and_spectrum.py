@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Figure-2 style benchmarks: probe convergence and singular-value spectrum / rank.
 
 Outputs:
@@ -10,11 +17,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 from pathlib import Path
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -24,13 +29,14 @@ from _benchmark_common import (
     parse_int_list,
 )
 from _benchmark_plotting import plot_convergence_sv_vs_m, plot_spectrum_and_rank_vs_j
+
 from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
 from mqt.yaqs.characterization.memory.diagnostics.v_matrix import (
     build_weighted_v_matrix,
     center_past_rows,
     prepare_branch_weights,
 )
+from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -85,9 +91,9 @@ def _resolve_config(args: argparse.Namespace) -> dict[str, object]:
         "length": args.length if args.length is not None else length,
         "k": args.k if args.k is not None else k,
         "cut": args.cut if args.cut is not None else cut,
-        "m_values": parse_int_list(args.m_values if args.m_values else m_values),
-        "conv_js": parse_float_list(args.convergence_js if args.convergence_js else conv_js),
-        "spec_js": parse_float_list(args.spectrum_js if args.spectrum_js else spec_js),
+        "m_values": parse_int_list(args.m_values or m_values),
+        "conv_js": parse_float_list(args.convergence_js or conv_js),
+        "spec_js": parse_float_list(args.spectrum_js or spec_js),
         "probe_draws": args.probe_draws if args.probe_draws is not None else probe_draws,
         "m_spectrum": args.m_spectrum if args.m_spectrum is not None else m_spectrum,
         "spectrum_draws": args.spectrum_draws if args.spectrum_draws is not None else spectrum_draws,
@@ -139,7 +145,7 @@ def run_convergence(cfg: dict[str, object], args: argparse.Namespace) -> list[di
     cut = int(cfg["cut"])
     m_values = cfg["m_values"]
     conv_js = cfg["conv_js"]
-    m_max = int(max(m_values))
+    int(max(m_values))
 
     init_rng = np.random.default_rng(int(args.seed) + 77_777)
     initial_list = list_initial_states_sys_env0(length=length, n_seeds=int(args.n_seeds), rng=init_rng)
@@ -149,7 +155,7 @@ def run_convergence(cfg: dict[str, object], args: argparse.Namespace) -> list[di
     for jv in conv_js:
         op = MPO.ising(length=length, J=float(jv), g=G_DEFAULT)
         for draw in range(int(cfg["probe_draws"])):
-            draw_seed = int(args.seed) + 100_000 * cut + 10 * int(round(100 * jv)) + draw
+            draw_seed = int(args.seed) + 100_000 * cut + 10 * round(100 * jv) + draw
             for m in m_values:
                 probe_set = sample_split_cut_probes(
                     cut=cut,
@@ -170,22 +176,35 @@ def run_convergence(cfg: dict[str, object], args: argparse.Namespace) -> list[di
                     )
                     for psi0 in initial_list
                 ]
-                detail_rows.append({"cut": cut, "J": float(jv), "m": int(m), "probe_draw": draw, "entropy": float(np.mean(draw_entropy))})
-                print(f"conv: J={jv:.1f}, m={m}, S_V={detail_rows[-1]['entropy']:.6e}", flush=True)
+                detail_rows.append({
+                    "cut": cut,
+                    "J": float(jv),
+                    "m": int(m),
+                    "probe_draw": draw,
+                    "entropy": float(np.mean(draw_entropy)),
+                })
 
     summary: list[dict[str, float | int]] = []
     grouped: dict[tuple[int, float], list[float]] = {}
     for row in detail_rows:
         grouped.setdefault((int(row["m"]), float(row["J"])), []).append(float(row["entropy"]))
     for (m, jv), vals in sorted(grouped.items()):
-        summary.append({"cut": cut, "J": jv, "m": m, "entropy_mean": float(np.mean(vals)), "entropy_std": float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0})
+        summary.append({
+            "cut": cut,
+            "J": jv,
+            "m": m,
+            "entropy_mean": float(np.mean(vals)),
+            "entropy_std": float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0,
+        })
 
     _write_csv(out_dir / "convergence_detail.csv", detail_rows)
     _write_csv(out_dir / "convergence_summary.csv", summary)
     return summary
 
 
-def run_spectrum_rank(cfg: dict[str, object], args: argparse.Namespace) -> tuple[list[dict[str, float | int]], dict[str, dict[str, np.ndarray]]]:
+def run_spectrum_rank(
+    cfg: dict[str, object], args: argparse.Namespace
+) -> tuple[list[dict[str, float | int]], dict[str, dict[str, np.ndarray]]]:
     out_dir = cfg["out_dir"].resolve()
     length = int(cfg["length"])
     k = int(cfg["k"])
@@ -204,7 +223,7 @@ def run_spectrum_rank(cfg: dict[str, object], args: argparse.Namespace) -> tuple
         per_draw_vectors: list[np.ndarray] = []
         per_draw_rank: list[float] = []
         for draw in range(int(cfg["spectrum_draws"])):
-            probe_seed = int(args.seed) + 900_000 + 100_000 * cut + 100 * int(round(100 * jv)) + draw
+            probe_seed = int(args.seed) + 900_000 + 100_000 * cut + 100 * round(100 * jv) + draw
             probe_set = sample_split_cut_probes(
                 cut=cut,
                 k=k,
@@ -238,9 +257,17 @@ def run_spectrum_rank(cfg: dict[str, object], args: argparse.Namespace) -> tuple
         for i, v in enumerate(per_draw_vectors):
             arr[i, : v.size] = v
         p_mean = np.nanmean(arr, axis=0)
-        spectrum_probs[f"{jv:g}"] = {"p_mean": p_mean, "p_std": np.nanstd(arr, axis=0, ddof=1) if len(per_draw_vectors) > 1 else np.zeros_like(p_mean)}
-        rank_rows.append({"J": float(jv), "R_mean": float(np.mean(per_draw_rank)), "R_std": float(np.std(per_draw_rank, ddof=1)) if len(per_draw_rank) > 1 else 0.0, "cut": cut, "m_spectrum": m_spec})
-        print(f"spectrum: J={jv:.1f}, R={rank_rows[-1]['R_mean']:.2f}", flush=True)
+        spectrum_probs[f"{jv:g}"] = {
+            "p_mean": p_mean,
+            "p_std": np.nanstd(arr, axis=0, ddof=1) if len(per_draw_vectors) > 1 else np.zeros_like(p_mean),
+        }
+        rank_rows.append({
+            "J": float(jv),
+            "R_mean": float(np.mean(per_draw_rank)),
+            "R_std": float(np.std(per_draw_rank, ddof=1)) if len(per_draw_rank) > 1 else 0.0,
+            "cut": cut,
+            "m_spectrum": m_spec,
+        })
 
     _write_csv(out_dir / "spectrum_rank_summary.csv", rank_rows)
     np.savez_compressed(
@@ -259,7 +286,9 @@ def main() -> None:
 
     if bool(args.plot_only):
         if bool(args.run_convergence):
-            plot_convergence_sv_vs_m(_load_csv(out_dir / "convergence_summary.csv"), out_dir / "fig_convergence_sv_vs_m_prl")
+            plot_convergence_sv_vs_m(
+                _load_csv(out_dir / "convergence_summary.csv"), out_dir / "fig_convergence_sv_vs_m_prl"
+            )
         if bool(args.run_spectrum_rank):
             loaded = np.load(out_dir / "spectrum_probs.npz")
             probs: dict[str, dict[str, np.ndarray]] = {}
@@ -267,8 +296,11 @@ def main() -> None:
                 if key.endswith("_mean"):
                     jlabel = key[1:-5]
                     probs[jlabel] = {"p_mean": np.asarray(loaded[key]), "p_std": np.asarray(loaded[f"J{jlabel}_std"])}
-            plot_spectrum_and_rank_vs_j(rank_rows=_load_csv(out_dir / "spectrum_rank_summary.csv"), spectrum_probs=probs, out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl")
-        print(f"Wrote figures under: {out_dir}", flush=True)
+            plot_spectrum_and_rank_vs_j(
+                rank_rows=_load_csv(out_dir / "spectrum_rank_summary.csv"),
+                spectrum_probs=probs,
+                out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl",
+            )
         return
 
     if bool(args.run_convergence):
@@ -276,8 +308,9 @@ def main() -> None:
         plot_convergence_sv_vs_m(summary, out_dir / "fig_convergence_sv_vs_m_prl")
     if bool(args.run_spectrum_rank):
         rank_rows, spectrum_probs = run_spectrum_rank(cfg, args)
-        plot_spectrum_and_rank_vs_j(rank_rows=rank_rows, spectrum_probs=spectrum_probs, out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl")
-    print(f"Wrote results to: {out_dir}", flush=True)
+        plot_spectrum_and_rank_vs_j(
+            rank_rows=rank_rows, spectrum_probs=spectrum_probs, out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl"
+        )
 
 
 if __name__ == "__main__":

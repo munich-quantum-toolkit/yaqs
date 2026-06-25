@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: fixed-window delayed break sweep S_V(ell, J) — paper gap figure.
 
 Construction per sequence:
@@ -17,7 +24,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -39,6 +45,7 @@ from _benchmark_plotting import (
     plot_entropy_heatmap_tau_j_pair,
     plot_entropy_vs_ell,
 )
+
 from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_delayed_break_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -77,7 +84,9 @@ def _resolve_config(args: argparse.Namespace) -> dict[str, object]:
         j_list = [float(x.strip()) for x in js.split(",") if x.strip()]
     else:
         ells = ",".join(str(i) for i in range(ELL_MAX_GAP + 1)) if args.ells is None else str(args.ells)
-        j_list = list(J_SWEEP_PAPER) if args.js is None else [float(x.strip()) for x in str(args.js).split(",") if x.strip()]
+        j_list = (
+            list(J_SWEEP_PAPER) if args.js is None else [float(x.strip()) for x in str(args.js).split(",") if x.strip()]
+        )
         n_pasts = 32 if args.n_pasts is None else int(args.n_pasts)
         n_futures = 32 if args.n_futures is None else int(args.n_futures)
         out_dir = Path("benchmark_entropy_vs_j_by_gap_results") if args.out_dir is None else args.out_dir
@@ -109,14 +118,12 @@ def main() -> None:
             raise FileNotFoundError(msg)
         rows_raw = load_summary_csv(csv_path)
         _plot_all(rows_raw, out_dir, sv_threshold=float(args.sv_threshold))
-        print(f"Wrote figures under: {out_dir}", flush=True)
         return
 
     ell_spec = str(args.ells).strip() if args.ells is not None else ""
     if not ell_spec:
         ell_spec = str(args.taus).strip() or str(args.gaps).strip()
-    if (str(args.taus).strip() or str(args.gaps).strip()) and args.ells is None:
-        print("Using deprecated --taus/--gaps alias; please use --ells.", flush=True)
+    (str(args.taus).strip() or str(args.gaps).strip()) and args.ells is None
 
     ells = cfg["ells"]
     js = cfg["js"]
@@ -126,11 +133,6 @@ def main() -> None:
     initial_list = list_initial_states_sys_env0(length=L_PAPER, n_seeds=n_seeds, rng=init_rng)
     np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
 
-    print(
-        f"=== S_V vs gap ell (L={L_PAPER}, past={PAST_LEN_FIXED}, future={FUTURE_LEN_FIXED}, "
-        f"beta={BRANCH_WEIGHT_BETA}) ===",
-        flush=True,
-    )
     rows: list[dict[str, float | int]] = []
 
     for ell in ells:
@@ -140,10 +142,6 @@ def main() -> None:
         left_cut = int(PAST_LEN_FIXED + 1)
         right_cut = int(left_cut + ell + 1)
         k_this = int(PAST_LEN_FIXED + 1 + ell + 1 + FUTURE_LEN_FIXED)
-        print(
-            f"ell={ell:2d}, left_cut={left_cut:2d}, right_cut={right_cut:2d}, k={k_this:2d}",
-            flush=True,
-        )
         probe_rng = np.random.default_rng(int(args.seed) + 10_000 * int(ell))
         probe_set = sample_split_delayed_break_probes(
             left_cut=left_cut,
@@ -172,35 +170,31 @@ def main() -> None:
                 entropies.append(float(m["entropy"]))
                 delta_norms.append(float(m["delta_norm"]))
                 ranks.append(int(m["rank"]))
-            rows.append(
-                {
-                    "L": L_PAPER,
-                    "k": k_this,
-                    "dt": DT_DEFAULT,
-                    "g": G_DEFAULT,
-                    "left_cut": left_cut,
-                    "tau": int(ell),
-                    "ell": int(ell),
-                    "right_cut": right_cut,
-                    "past_len_fixed": PAST_LEN_FIXED,
-                    "future_len_fixed": FUTURE_LEN_FIXED,
-                    "J": float(jv),
-                    "n_pasts": int(cfg["n_pasts"]),
-                    "n_futures": int(cfg["n_futures"]),
-                    "n_seeds": n_seeds,
-                    "branch_weight_beta": BRANCH_WEIGHT_BETA,
-                    "entropy": float(np.mean(entropies)),
-                    "entropy_std": float(np.std(entropies, ddof=1)) if len(entropies) > 1 else 0.0,
-                    "delta_norm": float(np.mean(delta_norms)),
-                    "rank": int(round(float(np.mean(ranks)))),
-                }
-            )
-            print(f"ell={ell:2d}, J={jv:>4.2f}, S_mean={rows[-1]['entropy']:.6e}", flush=True)
+            rows.append({
+                "L": L_PAPER,
+                "k": k_this,
+                "dt": DT_DEFAULT,
+                "g": G_DEFAULT,
+                "left_cut": left_cut,
+                "tau": int(ell),
+                "ell": int(ell),
+                "right_cut": right_cut,
+                "past_len_fixed": PAST_LEN_FIXED,
+                "future_len_fixed": FUTURE_LEN_FIXED,
+                "J": float(jv),
+                "n_pasts": int(cfg["n_pasts"]),
+                "n_futures": int(cfg["n_futures"]),
+                "n_seeds": n_seeds,
+                "branch_weight_beta": BRANCH_WEIGHT_BETA,
+                "entropy": float(np.mean(entropies)),
+                "entropy_std": float(np.std(entropies, ddof=1)) if len(entropies) > 1 else 0.0,
+                "delta_norm": float(np.mean(delta_norms)),
+                "rank": round(float(np.mean(ranks))),
+            })
 
     write_summary_csv(out_dir / "summary.csv", rows)
     (out_dir / "summary.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _plot_all([{**r} for r in rows], out_dir, sv_threshold=float(args.sv_threshold))
-    print(f"Wrote results to: {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

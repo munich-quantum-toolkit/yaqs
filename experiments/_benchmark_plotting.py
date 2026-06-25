@@ -10,9 +10,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Fixed log color limits for heatmaps (values clip to ends of the scale).
 HEATMAP_COLOR_VMIN = 1e-3
@@ -30,56 +33,52 @@ def configure_matplotlib_prl() -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     import matplotlib as mpl
 
-    mpl.rcParams.update(
-        {
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "savefig.facecolor": "white",
-            "savefig.bbox": "tight",
-            "savefig.pad_inches": 0.02,
-            "font.family": "serif",
-            "font.serif": ["DejaVu Serif", "Times New Roman", "Times", "STIXGeneral"],
-            "mathtext.fontset": "stix",
-            "font.size": 10,
-            "axes.labelsize": 12,
-            "axes.titlesize": 11,
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "legend.fontsize": 9,
-            "axes.linewidth": 0.8,
-            "xtick.major.width": 0.7,
-            "ytick.major.width": 0.7,
-            "xtick.direction": "in",
-            "ytick.direction": "in",
-            "xtick.top": True,
-            "ytick.right": True,
-            "grid.alpha": 0.0,
-            "lines.linewidth": 1.5,
-            "lines.markersize": 3.5,
-        }
-    )
+    mpl.rcParams.update({
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "savefig.facecolor": "white",
+        "savefig.bbox": "tight",
+        "savefig.pad_inches": 0.02,
+        "font.family": "serif",
+        "font.serif": ["DejaVu Serif", "Times New Roman", "Times", "STIXGeneral"],
+        "mathtext.fontset": "stix",
+        "font.size": 10,
+        "axes.labelsize": 12,
+        "axes.titlesize": 11,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 9,
+        "axes.linewidth": 0.8,
+        "xtick.major.width": 0.7,
+        "ytick.major.width": 0.7,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "grid.alpha": 0.0,
+        "lines.linewidth": 1.5,
+        "lines.markersize": 3.5,
+    })
 
 
 def configure_matplotlib_simple() -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     import matplotlib as mpl
 
-    mpl.rcParams.update(
-        {
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "savefig.facecolor": "white",
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "legend.fontsize": 8,
-            "lines.linewidth": 1.6,
-            "axes.linewidth": 0.8,
-            "grid.alpha": 0.25,
-            "font.family": "sans-serif",
-            "mathtext.default": "it",
-        }
-    )
+    mpl.rcParams.update({
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "savefig.facecolor": "white",
+        "axes.labelsize": 9,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
+        "lines.linewidth": 1.6,
+        "axes.linewidth": 0.8,
+        "grid.alpha": 0.25,
+        "font.family": "sans-serif",
+        "mathtext.default": "it",
+    })
 
 
 def savefig_base(fig: object, path_stem: Path, *, dpi: int = 300) -> None:
@@ -239,7 +238,9 @@ def plot_entropy_heatmap_cut_vs_j(rows: list[dict[str, str | float | int]], out_
     for j_use in sorted(panel3_js):
         ji = j_vals.index(j_use)
         ys = [max(float(z[ci, ji]), HEATMAP_COLOR_VMIN) for ci in range(len(cuts))]
-        ax2.semilogy(cuts, ys, lw=1.9, marker="o", ms=5.0, color=panel3_cmap(panel3_norm(j_use)), label=rf"$J={j_use:g}$")
+        ax2.semilogy(
+            cuts, ys, lw=1.9, marker="o", ms=5.0, color=panel3_cmap(panel3_norm(j_use)), label=rf"$J={j_use:g}$"
+        )
     ax2.set_xlabel(r"Causal cut $c$")
     ax2.set_ylabel(r"$S_V$")
     ax2.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
@@ -266,7 +267,7 @@ def plot_entropy_heatmap_cut_vs_j(rows: list[dict[str, str | float | int]], out_
 def plot_entropy_heatmap_middlecut_vs_l_k(rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import LogNorm, Normalize
-    from matplotlib.ticker import LogFormatterMathtext, LogLocator, NullLocator
+    from matplotlib.ticker import LogFormatterMathtext, LogLocator
 
     if not rows:
         return
@@ -286,7 +287,9 @@ def plot_entropy_heatmap_middlecut_vs_l_k(rows: list[dict[str, str | float | int
     gs = fig.add_gridspec(2, 2, width_ratios=[2.0, 1.0], height_ratios=[1.0, 1.0], wspace=0.06, hspace=0.10)
     ax0, ax1, ax2 = fig.add_subplot(gs[:, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, 1])
 
-    z_plot = np.where(np.isfinite(z), np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)), np.nan)
+    z_plot = np.where(
+        np.isfinite(z), np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)), np.nan
+    )
     z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
     cmap = plt.get_cmap("magma").copy()
     cmap.set_under(color="black")
@@ -392,7 +395,9 @@ def plot_spectrum_and_rank_vs_j(
     from matplotlib.colors import LogNorm
 
     configure_matplotlib_prl()
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(6.2, 2.45), constrained_layout=True, gridspec_kw={"width_ratios": [1.15, 1.0]})
+    fig, (ax0, ax1) = plt.subplots(
+        1, 2, figsize=(6.2, 2.45), constrained_layout=True, gridspec_kw={"width_ratios": [1.15, 1.0]}
+    )
 
     js = sorted(float(k) for k in spectrum_probs)
     max_len = max((int(np.asarray(spectrum_probs[f"{j:g}"]["p_mean"]).size) for j in js), default=1)
@@ -406,7 +411,9 @@ def plot_spectrum_and_rank_vs_j(
     x_edges = np.concatenate(([0.5], 0.5 * (x[:-1] + x[1:]), [x[-1] + 0.5])) if x.size > 1 else np.array([0.5, 1.5])
     y_edges = _mesh_edges(y) if y.size else np.array([-0.05, 0.05])
 
-    im = ax0.pcolormesh(x_edges, y_edges, z, cmap="cividis", norm=LogNorm(vmin=1e-16, vmax=1.0), shading="auto", rasterized=True)
+    im = ax0.pcolormesh(
+        x_edges, y_edges, z, cmap="cividis", norm=LogNorm(vmin=1e-16, vmax=1.0), shading="auto", rasterized=True
+    )
     ax0.set_xlabel(r"Mode index $n$")
     ax0.set_ylabel(r"$J$")
     fig.colorbar(im, ax=ax0, pad=0.02, shrink=0.9).ax.set_title(r"$p_n$", pad=2)
@@ -441,13 +448,11 @@ def save_figure_prl(fig: object, out_stem: Path) -> None:
     plt.close(fig)
 
 
-def last_tau_above_for_panel_b(
-    z: np.ndarray, taus: list[int], ji: int, *, threshold: float
-) -> tuple[float, str]:
+def last_tau_above_for_panel_b(z: np.ndarray, taus: list[int], ji: int, *, threshold: float) -> tuple[float, str]:
     """Last τ (in increasing order) with S_V ≥ threshold for panel (c) of the gap figure."""
     if not taus:
         return float("nan"), "nodata"
-    thr = float(threshold)
+    the = float(threshold)
     has_any = False
     last_above: float | None = None
     for gi, t in enumerate(taus):
@@ -455,7 +460,7 @@ def last_tau_above_for_panel_b(
         if not np.isfinite(v):
             continue
         has_any = True
-        if float(v) >= thr:
+        if float(v) >= the:
             last_above = float(t)
     if not has_any:
         return float("nan"), "nodata"
@@ -499,7 +504,9 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     ax1 = fig.add_subplot(gs[0, 1])
     ax2 = fig.add_subplot(gs[1, 1])
 
-    z_plot = np.where(np.isfinite(z), np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)), np.nan)
+    z_plot = np.where(
+        np.isfinite(z), np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)), np.nan
+    )
     z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
     cmap = plt.get_cmap("magma").copy()
     cmap.set_under(color="black")
@@ -570,15 +577,14 @@ def plot_entropy_heatmap_tau_j_pair(
     sv_threshold: float = 1e-2,
 ) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib.colors import LogNorm, Normalize
-    from matplotlib.ticker import LogFormatterMathtext, LogLocator, NullLocator
-
     from _benchmark_common import SV_THRESHOLD_DEFAULT
+    from matplotlib.colors import LogNorm, Normalize
+    from matplotlib.ticker import LogFormatterMathtext, LogLocator
 
     if not rows:
         return
     configure_matplotlib_prl()
-    thr = float(sv_threshold if sv_threshold is not None else SV_THRESHOLD_DEFAULT)
+    the = float(sv_threshold if sv_threshold is not None else SV_THRESHOLD_DEFAULT)
     taus = sorted({int(float(r["tau"])) for r in rows})
     j_vals = sorted({float(r["J"]) for r in rows})
     j_arr = np.asarray(j_vals, dtype=np.float64)
@@ -641,12 +647,12 @@ def plot_entropy_heatmap_tau_j_pair(
     ax1.set_xlabel(r"Delay $\tau$")
     ax1.set_ylabel(r"$S_V$")
     ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
-    ref_thr = max(thr, 1e-30)
-    ax1.axhline(ref_thr, color="0.35", ls="--", lw=0.9, label=rf"$S_{{\rm thr}}={ref_thr:.0e}$")
+    ref_the = max(the, 1e-30)
+    ax1.axhline(ref_the, color="0.35", ls="--", lw=0.9, label=rf"$S_{{\rm the}}={ref_the:.0e}$")
     ax1.legend(frameon=False, fontsize=6.8, loc="upper right")
 
-    thr_main = max(thr, 1e-30)
-    thr_lo, thr_hi = 0.5 * thr_main, 2.0 * thr_main
+    the_main = max(the, 1e-30)
+    the_lo, the_hi = 0.5 * the_main, 2.0 * the_main
 
     def _tau_curve(threshold: float) -> np.ndarray:
         return np.asarray(
@@ -654,13 +660,21 @@ def plot_entropy_heatmap_tau_j_pair(
             dtype=np.float64,
         )
 
-    y_lo, y_main, y_hi = _tau_curve(thr_lo), _tau_curve(thr_main), _tau_curve(thr_hi)
+    y_lo, y_main, y_hi = _tau_curve(the_lo), _tau_curve(the_main), _tau_curve(the_hi)
     mb = np.isfinite(y_lo) & np.isfinite(y_hi)
     mm = np.isfinite(y_main)
     if np.any(mb):
         ax2.fill_between(j_arr[mb], y_lo[mb], y_hi[mb], color="0.70", alpha=0.30, linewidth=0.0)
     if np.any(mm):
-        ax2.plot(j_arr[mm], y_main[mm], color="0.15", lw=1.8, marker="o", ms=3.6, label=rf"main: $S_{{\rm thr}}={thr_main:.0e}$")
+        ax2.plot(
+            j_arr[mm],
+            y_main[mm],
+            color="0.15",
+            lw=1.8,
+            marker="o",
+            ms=3.6,
+            label=rf"main: $S_{{\rm the}}={the_main:.0e}$",
+        )
     ax2.set_xlabel(r"Coupling $J$")
     ax2.set_ylabel(r"Operational memory horizon $\tau_{\rm mem}$")
     tau_max = float(max(taus) if taus else 0.0)

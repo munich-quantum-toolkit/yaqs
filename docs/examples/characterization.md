@@ -15,46 +15,41 @@ mystnb:
 # Operational Memory Characterization
 
 **Operational memory** quantifies how much history an open quantum process retains at a temporal cut `c`.
-YAQS estimates bond entropy `S_V(c)`, operational rank, and the V-matrix singular spectrum from **split-cut probes**.
+YAQS estimates bond entropy `S_V(c)`, operational rank, and the memory-matrix singular spectrum from **split-cut probes**.
 
 ## Mental model
 
-1. **Build** artifacts when needed — `train()` (surrogate), `build_comb()` (reference comb).
-2. **Probe** to get V-matrix diagnostics — every `probe*` method returns the same
-   `ProbeResult` with `.entropy(c)`, `.rank(c)`, `.singular_values(c)`.
+1. **Predict** reduced-state dynamics under intervention sequences — primary production workflow.
+2. **Characterize** V-matrix memory metrics when you need `S_V`, rank, or the memory matrix.
+3. **Build** artifacts when needed — `train()` (surrogate) or `build_comb()` (reference comb at small `k`).
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
-mc = MemoryCharacterizer(parallel=True)
+mc = MemoryCharacterizer(representation="auto", parallel=True)
 
-# Path A — exact simulator (no torch)
-exact = mc.probe_exact(ham, params, cut=2, k=2, n_pasts=16, n_futures=16)
+# Predict (surrogate — production)
+model = mc.train(ham, params, k=4, n=80, interventions="measure_prepare")
+rho = mc.predict(model, rho0, "measure_prepare", k=4)
 
-# Path B — train separately, then probe; or use characterize() shortcut
-model = mc.train(ham, params, k=4, n=80)
-result = mc.probe(model, cut=2, k=4, n_pasts=16, n_futures=16)
-# result = mc.characterize(ham, params, k=4, n=80)  # train + probe in one call
+# Characterize (memory metrics)
+memory = mc.characterize(model, cut=2, preset="balanced", interventions="haar")
 
-# Path C — from pre-computed responses
-rebuilt = MemoryCharacterizer.probe_from_responses(pauli_xyz, weights, probe_set, cut=1)
+# Hamiltonian black-box metric (research; not tomographic ground truth)
+metric = mc.characterize(ham, params, k=4, cut=2, interventions="haar")
 
-# Path D — build comb separately, then probe
+# Reference comb (validation only; scales as 16^k)
 comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense")
-ref = mc.probe(comb, cut=1, k=1, n_pasts=16, n_futures=16)
+ref = mc.characterize(comb, cut=1)
 ```
 
-## The three `probe*` methods
+## Three backends
 
-All three assemble the **same weighted V matrix** and return a **`ProbeResult`**. They differ only in **where probe responses come from**:
-
-| Method | Responses from | Typical use |
-|--------|------------------|-------------|
-| `probe_exact(ham, params, …)` | Full **simulator** rollouts | Ground-truth `S_V`; validate surrogates |
-| `probe(target, …)` | A **model you built** (`train` / `build_comb`) | Surrogate or reference comb probing |
-| `probe_from_responses(…)` | **Arrays you already have** | External data or re-analysis |
-
-`train`, `sample`, and `build_comb` return models or combs — **not** diagnostics. Always finish with a `probe*` call (or use `characterize` / `characterize_comb` shortcuts).
+| Backend            | Build          | Characterize                       | Typical use                                   |
+| ------------------ | -------------- | ---------------------------------- | --------------------------------------------- |
+| **Surrogate**      | `train()`      | `characterize(model)`              | Production predictions and fast metrics       |
+| **Hamiltonian**    | —              | `characterize(ham, params, k=...)` | Research V-matrix metric from full simulation |
+| **Reference comb** | `build_comb()` | `characterize(comb)`               | Tomographic gold standard at very small `k`   |
 
 ## Setup
 
@@ -66,23 +61,14 @@ params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
 mc = MemoryCharacterizer(parallel=False, show_progress=False)
 ```
 
-## Path A — `probe_exact()`
+## Predict with a trained surrogate
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-exact = mc.probe_exact(ham, params, cut=1, k=1, n_pasts=6, n_futures=6)
-print(exact.summary())
-print(f"S_V = {exact.entropy(1):.4f} nats, rank = {exact.rank(1)}")
-```
+import numpy as np
 
-## Path B — `train()` then `probe()`
-
-```{code-cell} ipython3
----
-tags: [remove-output]
----
 try:
     import torch
 except ImportError:
@@ -94,36 +80,33 @@ if torch is not None:
         params,
         k=1,
         n=12,
+        interventions="measure_prepare",
         train_kwargs={"epochs": 2, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    result = mc.probe(model, cut=1, k=1, n_pasts=6, n_futures=6)
-    print(result.summary())
+    rho0 = np.eye(2, dtype=np.complex128) / 2.0
+    rho_out = mc.predict(model, rho0, "measure_prepare", k=1)
+    print(f"trace(rho) = {np.trace(rho_out).real:.4f}")
 else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
-One-call shortcut: `mc.characterize(ham, params, k=1, n=12, …)` trains and probes in one step.
+Training defaults to `interventions="measure_prepare"`; characterization defaults to `interventions="haar"`.
 
-## Path C — `probe_from_responses()`
+## Characterize memory metrics
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
-import numpy as np
-
-rng = np.random.default_rng(0)
-probe_set = sample_split_cut_probes(cut=1, k=1, n_pasts=4, n_futures=4, rng=rng)
-exact = mc.probe_exact(ham, params, cut=1, k=1, probe_set=probe_set)
-cut = exact.by_cut[1]
-assert cut.weights is not None
-rebuilt = MemoryCharacterizer.probe_from_responses(cut.pauli_xyz_ij, cut.weights, probe_set, cut=1)
-print(f"exact S_V={exact.entropy(1):.4f}, rebuilt S_V={rebuilt.entropy(1):.4f}")
+exact = mc.characterize(ham, params, k=1, cut=1, n_pasts=6, n_futures=6)
+print(exact.summary())
+print(f"S_V = {exact.entropy(1):.4f} nats, rank = {exact.rank(1)}")
 ```
 
-## Path D — `build_comb()` then `probe()`
+Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
+
+## Reference comb validation
 
 ```{warning}
 `build_comb` scales as `16^k`. Use only for validation at very small `k`.
@@ -134,19 +117,24 @@ print(f"exact S_V={exact.entropy(1):.4f}, rebuilt S_V={rebuilt.entropy(1):.4f}")
 tags: [remove-output]
 ---
 comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense", num_trajectories=20)
-ref = mc.probe(comb, cut=1, k=1, n_pasts=4, n_futures=4)
+ref = mc.characterize(comb, cut=1, k=1, n_pasts=4, n_futures=4)
 print(ref.summary())
 ```
 
-## Reading `ProbeResult`
+## Reading `CharacterizationResult`
 
-| Access | Meaning |
-|--------|---------|
-| `result.entropy(c)` | Bond entropy `S_V(c)` in nats |
-| `result.rank(c)` | Operational rank at cut `c` |
-| `result.singular_values(c)` | Centered V spectrum at cut `c` |
-| `result.by_cut[c]` | Per-cut detail (raw `V`, weights, probe grid, …) |
-| `result.model` | Trained surrogate when using `characterize()` |
+| Access                      | Meaning                                  |
+| --------------------------- | ---------------------------------------- |
+| `result.entropy(c)`         | Bond entropy `S_V(c)` in nats            |
+| `result.rank(c)`            | Operational rank at cut `c`              |
+| `result.singular_values(c)` | Memory-matrix spectrum at cut `c`        |
+| `result.memory_matrix(c)`   | Past-row-centered weighted memory matrix |
+| `result.summary()`          | Human-readable entropy/rank table        |
+
+## Representation
+
+`MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` uses MCWF, `"mps"` uses TJM.
+With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (default 10).
 
 ## Related topics
 

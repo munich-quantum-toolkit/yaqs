@@ -33,16 +33,66 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 StochasticSolver = Literal["MCWF", "TJM"]
+CharacterizerRepresentation = Literal["vector", "mps", "auto"]
+DEFAULT_VECTOR_MAX_QUBITS = 10
+
+
+def resolve_characterizer_representation(
+    chain_length: int,
+    representation: CharacterizerRepresentation,
+    *,
+    vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
+) -> Literal["vector", "mps"]:
+    """Resolve ``auto`` to ``vector`` (MCWF) or ``mps`` (TJM) by chain length.
+
+    Args:
+        chain_length: Number of qubits in the Hamiltonian chain.
+        representation: User representation selection.
+        vector_max_qubits: Inclusive upper qubit count for ``auto`` → ``vector``.
+
+    Returns:
+        Resolved ``"vector"`` or ``"mps"``.
+
+    Raises:
+        ValueError: If ``representation`` is invalid.
+    """
+    rep = str(representation).strip().lower()
+    if rep == "vector":
+        return "vector"
+    if rep == "mps":
+        return "mps"
+    if rep == "auto":
+        return "vector" if int(chain_length) <= int(vector_max_qubits) else "mps"
+    msg = f"representation must be 'vector', 'mps', or 'auto', got {representation!r}."
+    raise ValueError(msg)
+
+
+def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
+    """Map characterizer representation to the internal stochastic solver name."""
+    return "MCWF" if rep == "vector" else "TJM"
 
 
 def resolve_stochastic_solver(
     sim_params: AnalogSimParams,
     *,
     solver: StochasticSolver | None = None,
+    representation: CharacterizerRepresentation | None = None,
+    chain_length: int | None = None,
+    vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
 ) -> StochasticSolver:
     """Return the stochastic unraveling backend for process-tensor rollouts."""
     if solver is not None:
         return solver
+    if representation is not None:
+        if chain_length is None:
+            msg = "chain_length is required when representation= is passed."
+            raise ValueError(msg)
+        rep = resolve_characterizer_representation(
+            int(chain_length),
+            representation,
+            vector_max_qubits=vector_max_qubits,
+        )
+        return representation_to_solver(rep)
     legacy = getattr(sim_params, "solver", None)
     if legacy in {"MCWF", "TJM"}:
         return legacy

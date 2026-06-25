@@ -27,8 +27,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...diagnostics.operational_memory import OperationalMemoryMixin
-from ...diagnostics.probe import ProbeSet
+from ...diagnostics.probe import ProbeSet, branch_weights_ij
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
 from .utils import _choi_features_from_parts
 
@@ -93,7 +92,7 @@ def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     return m
 
 
-class TransformerComb(OperationalMemoryMixin, nn.Module):
+class TransformerComb(nn.Module):
     """Causal transformer over per-step features ``(E_t, rho_0)``."""
 
     def __init__(
@@ -294,6 +293,11 @@ class TransformerComb(OperationalMemoryMixin, nn.Module):
                 self.train()
         return v_rows
 
+    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Return Pauli responses and causal cut branch weights."""
+        pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
+        return pauli, branch_weights_ij(probe_set)
+
     def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.
 
@@ -447,5 +451,4 @@ class TransformerComb(OperationalMemoryMixin, nn.Module):
 
         if best_state is not None:
             self.load_state_dict(best_state)
-        self.clear_operational_memory_cache()
         return self

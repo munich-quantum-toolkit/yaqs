@@ -22,7 +22,7 @@
     "n_pasts": 12,
     "n_futures": 12,
     "branch_weight_beta": 1.0,
-    "entropy": 5.08000985822189e-07,
+    "entropy": 5.08000985822189e-7,
     "rank": 3
   },
   {
@@ -35,7 +35,7 @@
     "n_pasts": 12,
     "n_futures": 12,
     "branch_weight_beta": 1.0,
-    "entropy": 6.847456850215616e-06,
+    "entropy": 6.847456850215616e-6,
     "rank": 3
   },
   {
@@ -48,7 +48,7 @@
     "n_pasts": 12,
     "n_futures": 12,
     "branch_weight_beta": 1.0,
-    "entropy": 3.104468339848825e-05,
+    "entropy": 3.104468339848825e-5,
     "rank": 3
   },
   {
@@ -61,7 +61,7 @@
     "n_pasts": 12,
     "n_futures": 12,
     "branch_weight_beta": 1.0,
-    "entropy": 8.912311294249725e-05,
+    "entropy": 8.912311294249725e-5,
     "rank": 3
   },
   {
@@ -100,7 +100,7 @@
     "n_pasts": 12,
     "n_futures": 12,
     "branch_weight_beta": 1.0,
-    "entropy": 8.589141603808489e-05,
+    "entropy": 8.589141603808489e-5,
     "rank": 4
   },
   {

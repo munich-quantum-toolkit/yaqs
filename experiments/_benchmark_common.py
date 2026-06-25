@@ -11,21 +11,24 @@ from __future__ import annotations
 
 import csv
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
+from mqt.yaqs.characterization.memory.combs.surrogates.utils import _random_pure_state
 from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, analyze_v_matrix, sample_split_cut_probes
 from mqt.yaqs.characterization.memory.diagnostics.v_matrix import (
     build_weighted_v_matrix,
     center_past_rows,
     prepare_branch_weights,
 )
-from mqt.yaqs.characterization.memory.combs.surrogates.utils import _random_pure_state
-from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 # Paper / legacy experiment defaults.
 L_DEFAULT = 2

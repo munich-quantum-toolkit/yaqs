@@ -15,7 +15,7 @@ mystnb:
 # Operational Memory Diagnostics
 
 ```{note}
-For step-by-step workflows (exact simulator, surrogate, validation), start with {doc}`characterization`.
+For step-by-step workflows (predict, characterize, validation), start with {doc}`characterization`.
 This page focuses on V-matrix theory and cross-backend validation.
 ```
 
@@ -23,14 +23,17 @@ This page focuses on V-matrix theory and cross-backend validation.
 YAQS estimates it from **split-cut probes**: random interventions on the past and future sides of the cut, assembled into a weighted **V matrix** with causal branch weights :math:`w_{ij} = \prod_t p(\text{step}_t)` through cut `c` (starting from :math:`|0\rangle\langle 0|`).
 Past-row centering and the singular spectrum of the centered V yield bond entropy :math:`S_V(c)` and an **operational rank**.
 
-This page covers:
+Use {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` for all memory metrics:
 
-1. constructing **dense**, **MPO**, and **surrogate** combs,
-2. the high-level `.entropy()` / `.singular_values()` / `.rank()` API,
-3. the low-level `probe_process` return dictionary,
-4. plots and lightweight parameter sweeps.
+```python
+result = mc.characterize(target, cut=c, preset="balanced")
+result.entropy(c)
+result.memory_matrix(c)
+```
 
-For comb construction details see {doc}`reference_exact_combs`; for surrogate training see {doc}`process_tensor_surrogates`.
+This page also covers the low-level `probe_process` return dictionary, plots, and validation against exact rollouts.
+
+For comb construction see {doc}`reference_exact_combs`; for surrogate training see {doc}`process_tensor_surrogates`.
 
 ## 1. Setup
 
@@ -45,15 +48,12 @@ mc = MemoryCharacterizer(parallel=False, show_progress=False)
 rng = np.random.default_rng(0)
 ```
 
-## 2. Three comb backends
-
-All backends below expose the same operational memory methods via {class}`~mqt.yaqs.characterization.memory.diagnostics.operational_memory.OperationalMemoryMixin`.
+## 2. Reference combs
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-# Dense — exact comb matrix, best for small k
 comb_dense = mc.build_comb(
     hamiltonian,
     sim_params,
@@ -62,7 +62,6 @@ comb_dense = mc.build_comb(
     return_type="dense",
 )
 
-# MPO — compressed bond representation
 comb_mpo = mc.build_comb(
     hamiltonian,
     sim_params,
@@ -76,10 +75,7 @@ print("Dense:", type(comb_dense).__name__)
 print("MPO:", type(comb_mpo).__name__)
 ```
 
-Surrogate combs ({class}`~mqt.yaqs.TransformerComb`) are trained separately; see {doc}`process_tensor_surrogates`.
-After training, they support the same `.entropy(cut=...)` API.
-
-## 3. High-level API on combs
+## 3. Characterize memory metrics
 
 ```{code-cell} ipython3
 ---
@@ -87,20 +83,18 @@ tags: [remove-output]
 ---
 cut, n_p, n_f = 2, 8, 8
 
-ent = comb_dense.entropy(cut=cut, n_pasts=n_p, n_futures=n_f, rng=rng)
-sv = comb_dense.singular_values(cut=cut, n_pasts=n_p, n_futures=n_f, rng=rng)
-rk = comb_dense.rank(cut=cut, n_pasts=n_p, n_futures=n_f, rng=rng)
+result = mc.characterize(comb_dense, cut=cut, k=2, n_pasts=n_p, n_futures=n_f, rng=rng)
+ent = result.entropy(cut)
+sv = result.singular_values(cut)
+rk = result.rank(cut)
+v_c = result.memory_matrix(cut)
 
 print(f"S_V({cut}) = {ent:.4f} nats")
 print(f"spectrum length = {sv.size}, operational rank = {rk}")
-
-mats = comb_dense.operational_v_matrices
-if mats is not None:
-    v, v_c = mats
-    print(f"V shape {v.shape}, centered V shape {v_c.shape}")
+print(f"memory matrix shape {v_c.shape}")
 ```
 
-When `cut` is omitted, the default interior cut `(k + 1) // 2` is used.
+When `cut` is omitted on `characterize()`, the default interior cut `(k + 1) // 2` is used.
 
 ## 4. Low-level API — `probe_process`
 
@@ -134,18 +128,18 @@ for key in sorted(out):
 
 Key quantities:
 
-| Key | Meaning |
-|-----|---------|
-| `pauli_xyz_ij` | Probe responses `(n_pasts, n_futures, 3)` |
-| `weights_ij` | Causal cut branch weights on comb backends |
-| `V`, `V_centered` | Weighted V and past-row-centered V (`return_v=True`) |
-| `entropy` | Bond entropy :math:`S_V(c)` in nats |
-| `singular_values_full` | Full SVD spectrum of centered V |
-| `rank` | Operational rank from spectrum threshold |
-| `delta_norm` | :math:`\|V_c\|_F^2 / \|V\|_F^2` — effect of past centering |
-| `probe_set` | Frozen probe grid for reproducible re-runs |
+| Key                    | Meaning                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| `pauli_xyz_ij`         | Probe responses `(n_pasts, n_futures, 3)`                  |
+| `weights_ij`           | Causal cut branch weights on comb backends                 |
+| `V`, `V_centered`      | Weighted V and past-row-centered V (`return_v=True`)       |
+| `entropy`              | Bond entropy :math:`S_V(c)` in nats                        |
+| `singular_values_full` | Full SVD spectrum of centered V                            |
+| `rank`                 | Operational rank from spectrum threshold                   |
+| `delta_norm`           | :math:`\|V_c\|_F^2 / \|V\|_F^2` — effect of past centering |
+| `probe_set`            | Frozen probe grid for reproducible re-runs                 |
 
-Manual V assembly (equivalent to the comb shortcut on weighted backends):
+Manual V assembly (equivalent to characterize on weighted backends):
 
 ```{code-cell} ipython3
 ---
@@ -171,7 +165,14 @@ tags: [remove-output]
 ---
 import matplotlib.pyplot as plt
 
-sv = comb_dense.singular_values(cut=2, n_pasts=8, n_futures=8, rng=np.random.default_rng(1))
+sv = mc.characterize(
+    comb_dense,
+    cut=2,
+    k=2,
+    n_pasts=8,
+    n_futures=8,
+    rng=np.random.default_rng(1),
+).singular_values(2)
 fig, ax = plt.subplots(figsize=(5, 3))
 ax.semilogy(sv, "o-")
 ax.set_xlabel("index")
@@ -186,8 +187,14 @@ tags: [remove-output]
 ---
 k = 2
 cuts = range(1, k + 1)
-ents = [comb_dense.entropy(cut=c, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)) for c in cuts]
-ranks = [comb_dense.rank(cut=c, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)) for c in cuts]
+ents = [
+    mc.characterize(comb_dense, cut=c, k=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).entropy(c)
+    for c in cuts
+]
+ranks = [
+    mc.characterize(comb_dense, cut=c, k=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).rank(c)
+    for c in cuts
+]
 
 fig, axes = plt.subplots(1, 2, figsize=(8, 3))
 axes[0].plot(list(cuts), ents, "o-")
@@ -204,7 +211,7 @@ fig.tight_layout()
 
 ## 6. Comb vs simulator reference
 
-For validation, compare comb probing against full MCWF rollouts via {mod}`~mqt.yaqs.characterization.memory.reference.exact` (benchmark / test tooling, not the production `.entropy()` path).
+For validation, compare comb probing against full MCWF rollouts via {mod}`~mqt.yaqs.characterization.memory.reference.exact` (benchmark / test tooling).
 
 ```{code-cell} ipython3
 ---
@@ -254,7 +261,14 @@ for jv in js:
         return_type="dense",
     )
     for cut in cuts:
-        ent_j = comb_j.entropy(cut=cut, n_pasts=8, n_futures=8, rng=np.random.default_rng(int(jv * 10 + cut)))
+        ent_j = mc.characterize(
+            comb_j,
+            cut=cut,
+            k=2,
+            n_pasts=8,
+            n_futures=8,
+            rng=np.random.default_rng(int(jv * 10 + cut)),
+        ).entropy(cut)
         rows.append({"J": jv, "cut": cut, "S_V": ent_j})
 
 for row in rows:

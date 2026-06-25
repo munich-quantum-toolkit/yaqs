@@ -70,8 +70,6 @@ from .basis import (
 from .data import SequenceData
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -354,6 +352,7 @@ def construct_process_tensor(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
+    solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
 ) -> DenseComb | MPOComb:
     """Construct a process tensor via exhaustive discrete-basis tomography.
@@ -378,6 +377,7 @@ def construct_process_tensor(
         num_trajectories=num_trajectories,
         basis=basis,
         basis_seed=basis_seed,
+        solver=solver,
         _execution=_execution,
     )
 

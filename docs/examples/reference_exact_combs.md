@@ -16,7 +16,7 @@ mystnb:
 
 ```{warning}
 This page is for **reference validation only**. Exhaustive tomography scales as ``16^k``.
-For production memory metrics, start with {doc}`characterization` (`probe_exact` or surrogate paths).
+For production memory metrics, start with {doc}`characterization` (surrogate or Hamiltonian characterize paths).
 ```
 
 ```{note}
@@ -76,7 +76,7 @@ print(type(comb_mpo).__name__, comb_mpo.to_dense().to_matrix().shape)
 ---
 tags: [remove-output]
 ---
-result = mc.probe(comb_single, cut=1, k=1, n_pasts=6, n_futures=6)
+result = mc.characterize(comb_single, cut=1, k=1, n_pasts=6, n_futures=6)
 print(result.summary())
 ```
 

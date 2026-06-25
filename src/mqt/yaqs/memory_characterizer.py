@@ -7,25 +7,44 @@
 
 """Operational memory characterization entry point for YAQS."""
 
-# ruff: noqa: ANN401, D102, PLC0415 -- module-level shortcuts, Attributes in class docstring, lazy torch imports
+# ruff: noqa: ANN401, D102, PLC0415 -- lazy torch imports, unified dispatch targets
 
 from __future__ import annotations
 
-import importlib
 from concurrent.futures import CancelledError
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 
+from mqt.yaqs.characterization.memory.combs.core.encoding import (
+    normalize_rho_from_backend_output,
+    pack_rho8,
+    unpack_rho8,
+)
+from mqt.yaqs.characterization.memory.combs.core.utils import (
+    DEFAULT_VECTOR_MAX_QUBITS,
+    CharacterizerRepresentation,
+    representation_to_solver,
+    resolve_characterizer_representation,
+)
 from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, construct_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography.combs import _probe_step_to_callable
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    ProbeSet,
     analyze_v_matrix,
     build_weighted_v_from_probe,
     probe_process,
     sample_split_cut_probes,
 )
-from mqt.yaqs.characterization.memory.diagnostics.results import CutDiagnostics, ProbeResult
+from mqt.yaqs.characterization.memory.diagnostics.results import (
+    CharacterizationResult,
+    _merge_results,
+    _result_from_probe_dict,
+)
+from mqt.yaqs.characterization.memory.interventions import (
+    InterventionSequence,
+    encode_sequence,
+    probe_kwargs_from_interventions,
+)
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
 
@@ -35,32 +54,36 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
     from mqt.yaqs.characterization.memory.combs.tomography.basis import TomographyBasis
+    from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-_LAZY_EXPORTS = {
-    "TransformerComb": ("mqt.yaqs.characterization.memory.combs.surrogates.model", "TransformerComb"),
+
+_DEFAULT_CHARACTERIZATION_PRESET = "balanced"
+_CHARACTERIZATION_PRESETS: dict[str, tuple[int, int]] = {
+    "quick": (8, 8),
+    "balanced": (32, 32),
+    "accurate": (128, 128),
 }
 
 
-def __getattr__(name: str) -> object:
-    if name in _LAZY_EXPORTS:
-        module_path, attr = _LAZY_EXPORTS[name]
-        return getattr(importlib.import_module(module_path), attr)
-    msg = f"module {__name__!r} has no attribute {name!r}"
-    raise AttributeError(msg)
+def _resolve_probe_grid(
+    preset: str,
+    n_pasts: int | None,
+    n_futures: int | None,
+) -> tuple[int, int]:
+    if preset not in _CHARACTERIZATION_PRESETS:
+        msg = f"preset must be one of {sorted(_CHARACTERIZATION_PRESETS)!r}, got {preset!r}."
+        raise ValueError(msg)
+    defaults = _CHARACTERIZATION_PRESETS[preset]
+    return (
+        int(defaults[0] if n_pasts is None else n_pasts),
+        int(defaults[1] if n_futures is None else n_futures),
+    )
 
 
 def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
-    """Resolve a user :class:`Hamiltonian` to its MPO backend representation.
-
-    Returns:
-        MPO operator backing ``hamiltonian``.
-
-    Raises:
-        TypeError: If ``hamiltonian`` is not a :class:`Hamiltonian`.
-    """
     if not isinstance(hamiltonian, Hamiltonian):
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
         raise TypeError(msg)
@@ -69,7 +92,6 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
 
 
 def _default_product_zero_psi(length: int) -> np.ndarray:
-    """Return |0...0> on ``length`` qubits as a state vector."""
     dim = 2 ** int(length)
     psi = np.zeros(dim, dtype=np.complex128)
     psi[0] = 1.0
@@ -82,7 +104,7 @@ def _resolve_k(target: Any, k: int | None) -> int:
     k_attr = getattr(target, "_k_for_probe", None)
     if callable(k_attr):
         return int(k_attr())
-    msg = "k must be provided when the probe target does not define _k_for_probe()."
+    msg = "k must be provided when the target does not define _k_for_probe()."
     raise ValueError(msg)
 
 
@@ -95,50 +117,38 @@ def _default_cut(k: int, cut: int | None) -> int:
     return c
 
 
-def _surrogate_model_if_any(target: Any) -> Any:
-    """Return ``target`` when it is a trained surrogate without importing torch."""
-    target_type = type(target)
-    if target_type.__name__ == "TransformerComb" and target_type.__module__.endswith(".surrogates.model"):
-        return target
-    return None
+def _as_rho_matrix(rho0: np.ndarray) -> np.ndarray:
+    arr = np.asarray(rho0, dtype=np.complex128)
+    if arr.shape == (8,):
+        return unpack_rho8(arr.astype(np.float64))
+    if arr.shape == (2, 2):
+        return arr
+    msg = f"rho0 must be shape (2, 2) or packed length-8, got {arr.shape}."
+    raise ValueError(msg)
+
+
+def _is_hamiltonian_target(target: Any) -> bool:
+    return isinstance(target, Hamiltonian)
+
+
+def _is_comb_target(target: Any) -> bool:
+    return isinstance(target, (DenseComb, MPOComb))
 
 
 class MemoryCharacterizer:
-    """Entry point for operational memory characterization workflows.
+    """Entry point for operational memory workflows.
 
-  **Build artifacts** (optional intermediate steps — not diagnostics themselves):
+    **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_comb`
 
-    - :meth:`train` / :meth:`sample` — surrogate model and training data
-    - :meth:`build_comb` — small-``k`` reference comb for validation
-
-  **V-matrix diagnostics** (entropy, rank, singular spectrum) — always via ``probe*``:
-
-    +-----------------------------+------------------------------------------+
-    | Method                      | Where probe responses come from          |
-    +=============================+==========================================+
-    | :meth:`probe_exact`         | Full :class:`~mqt.yaqs.Simulator`       |
-    |                             | rollouts (ground truth)                  |
-    +-----------------------------+------------------------------------------+
-    | :meth:`probe`               | A trained surrogate or reference comb    |
-    |                             | you built with :meth:`train` or          |
-    |                             | :meth:`build_comb`                       |
-    +-----------------------------+------------------------------------------+
-    | :meth:`probe_from_responses`| Pre-computed response grids              |
-    +-----------------------------+------------------------------------------+
-
-    Each ``probe*`` method returns a :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`
-    with :meth:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult.entropy`,
-    :meth:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult.rank`, and
-    :meth:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult.singular_values`.
-
-    :meth:`characterize` is a shortcut that calls :meth:`train` then :meth:`probe` at
-    multiple cuts.
+    **Use:** :meth:`predict` (reduced-state dynamics), :meth:`characterize` (memory metrics)
 
     Attributes:
-        parallel: Whether probe rollouts run in parallel via a process pool.
+        parallel: Whether sequence simulations run in parallel via a process pool.
         max_workers: Maximum worker processes when ``parallel=True``.
         show_progress: Whether to display a tqdm progress bar.
-        mp_context: Multiprocessing context (``"auto"``, ``"fork"``, or ``"spawn"``).
+        representation: ``"vector"`` (MCWF), ``"mps"`` (TJM), or ``"auto"``.
+        vector_max_qubits: Auto cutover: vector up to this many qubits, then mps.
+        mp_context: Multiprocessing context.
         max_retries: Maximum retry attempts for transient worker errors.
         retry_exceptions: Exception types that trigger a retry.
     """
@@ -149,20 +159,12 @@ class MemoryCharacterizer:
         parallel: bool = True,
         max_workers: int | None = None,
         show_progress: bool = True,
+        representation: CharacterizerRepresentation = "auto",
+        vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
         mp_context: MPContext = "auto",
         max_retries: int = 10,
         retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
     ) -> None:
-        """Initialize with execution-side configuration.
-
-        Args:
-            parallel: If ``True`` (default), use a process pool for rollout-heavy paths.
-            max_workers: Maximum worker processes when running in parallel.
-            show_progress: Show a tqdm progress bar during rollouts.
-            mp_context: Multiprocessing start method.
-            max_retries: Maximum retries for transient worker errors.
-            retry_exceptions: Exception types that trigger a retry.
-        """
         self._execution = ExecutionConfig(
             parallel=parallel,
             max_workers=max_workers,
@@ -171,6 +173,8 @@ class MemoryCharacterizer:
             max_retries=max_retries,
             retry_exceptions=retry_exceptions,
         )
+        self.representation = representation
+        self.vector_max_qubits = int(vector_max_qubits)
 
     @property
     def parallel(self) -> bool:
@@ -196,6 +200,14 @@ class MemoryCharacterizer:
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
         return self._execution.retry_exceptions
 
+    def _solver_for(self, hamiltonian: Hamiltonian) -> Literal["MCWF", "TJM"]:
+        rep = resolve_characterizer_representation(
+            hamiltonian.length,
+            self.representation,
+            vector_max_qubits=self.vector_max_qubits,
+        )
+        return representation_to_solver(rep)
+
     def build_comb(
         self,
         hamiltonian: Hamiltonian,
@@ -215,11 +227,7 @@ class MemoryCharacterizer:
         n_sweeps: int = 2,
         parallel: bool | None = None,
     ) -> DenseComb | MPOComb:
-        """Build an exhaustive reference comb (validation only; scales as ``16^k``).
-
-        Returns:
-            Dense or MPO process tensor comb.
-        """
+        """Build an exhaustive reference comb (validation only; scales as ``16^k``)."""
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
         return construct_process_tensor(
@@ -237,6 +245,7 @@ class MemoryCharacterizer:
             tol=tol,
             max_bond_dim=max_bond_dim,
             n_sweeps=n_sweeps,
+            solver=self._solver_for(hamiltonian),
             _execution=execution,
         )
 
@@ -251,15 +260,11 @@ class MemoryCharacterizer:
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        solver: str | None = None,
+        interventions: str = "measure_prepare",
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TensorDataset:
-        """Sample intervention rollouts for surrogate training.
-
-        Returns:
-            PyTorch dataset of past/future intervention rollouts.
-        """
+        """Sample intervention sequences for surrogate training (advanced)."""
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.combs.surrogates.workflow import generate_data as _generate_data
 
@@ -272,7 +277,8 @@ class MemoryCharacterizer:
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
-            solver=solver,
+            solver=self._solver_for(hamiltonian),
+            interventions=interventions,
             parallel=self._execution.parallel if parallel is None else parallel,
             show_progress=self._execution.show_progress if show_progress is None else show_progress,
             _execution=self._execution,
@@ -288,16 +294,13 @@ class MemoryCharacterizer:
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
+        interventions: str = "measure_prepare",
         model_kwargs: dict | None = None,
         train_kwargs: dict | None = None,
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TransformerComb:
-        """Train a :class:`TransformerComb` surrogate on sampled rollouts.
-
-        Returns:
-            Trained surrogate comb model.
-        """
+        """Train a surrogate on simulated intervention sequences."""
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.combs.surrogates.workflow import create_surrogate as _create_surrogate
 
@@ -309,6 +312,8 @@ class MemoryCharacterizer:
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
+            interventions=interventions,
+            solver=self._solver_for(hamiltonian),
             model_kwargs=model_kwargs,
             train_kwargs=train_kwargs,
             parallel=self._execution.parallel if parallel is None else parallel,
@@ -316,285 +321,362 @@ class MemoryCharacterizer:
             _execution=self._execution,
         )
 
-    def probe(
+    @overload
+    def characterize(
+        self,
+        hamiltonian: Hamiltonian,
+        sim_params: AnalogSimParams,
+        /,
+        *,
+        k: int,
+        cut: int | None = None,
+        cuts: Literal["all"] | list[int] | None = None,
+        preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
+        n_pasts: int | None = None,
+        n_futures: int | None = None,
+        interventions: str = "haar",
+        rng: Generator | None = None,
+        probe_set: ProbeSet | None = None,
+        initial_psi: np.ndarray | None = None,
+        **probe_kwargs: Any,
+    ) -> CharacterizationResult: ...
+
+    @overload
+    def characterize(
+        self,
+        target: Any,
+        /,
+        *,
+        cut: int | None = None,
+        cuts: Literal["all"] | list[int] | None = None,
+        k: int | None = None,
+        preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
+        n_pasts: int | None = None,
+        n_futures: int | None = None,
+        interventions: str = "haar",
+        rng: Generator | None = None,
+        probe_set: ProbeSet | None = None,
+        parallel: bool | None = None,
+        **probe_kwargs: Any,
+    ) -> CharacterizationResult: ...
+
+    def characterize(
+        self,
+        target: Any,
+        sim_params: AnalogSimParams | None = None,
+        /,
+        *,
+        k: int | None = None,
+        cut: int | None = None,
+        cuts: Literal["all"] | list[int] | None = None,
+        preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
+        n_pasts: int | None = None,
+        n_futures: int | None = None,
+        interventions: str = "haar",
+        rng: Generator | None = None,
+        probe_set: ProbeSet | None = None,
+        initial_psi: np.ndarray | None = None,
+        parallel: bool | None = None,
+        **probe_kwargs: Any,
+    ) -> CharacterizationResult:
+        """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb."""
+        n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
+        probe_kw = {**probe_kwargs_from_interventions(interventions), **probe_kwargs}
+
+        if _is_hamiltonian_target(target):
+            if sim_params is None:
+                msg = "characterize(hamiltonian, sim_params, k=...) requires AnalogSimParams."
+                raise TypeError(msg)
+            if k is None:
+                msg = "characterize(hamiltonian, sim_params, ...) requires k=."
+                raise ValueError(msg)
+            return self._characterize_hamiltonian(
+                target,
+                sim_params,
+                k=int(k),
+                cut=cut,
+                cuts=cuts,
+                n_pasts=n_p,
+                n_futures=n_f,
+                rng=rng,
+                probe_set=probe_set,
+                initial_psi=initial_psi,
+                probe_kw=probe_kw,
+            )
+
+        resolved_k = _resolve_k(target, k)
+        cut_list = self._resolve_cut_list(resolved_k, cut=cut, cuts=cuts)
+        if len(cut_list) == 1:
+            return self._characterize_target(
+                target,
+                cut=cut_list[0],
+                k=resolved_k,
+                n_pasts=n_p,
+                n_futures=n_f,
+                rng=rng,
+                probe_set=probe_set,
+                parallel=parallel,
+                probe_kw=probe_kw,
+            )
+        parts: dict[int, CharacterizationResult] = {}
+        for c in cut_list:
+            parts[int(c)] = self._characterize_target(
+                target,
+                cut=int(c),
+                k=resolved_k,
+                n_pasts=n_p,
+                n_futures=n_f,
+                rng=rng,
+                probe_set=None,
+                parallel=parallel,
+                probe_kw=probe_kw,
+            )
+        return _merge_results(parts)
+
+    def _resolve_cut_list(
+        self,
+        k: int,
+        *,
+        cut: int | None,
+        cuts: Literal["all"] | list[int] | None,
+    ) -> list[int]:
+        if cuts is not None:
+            return list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
+        if cut is not None:
+            return [int(cut)]
+        return [_default_cut(int(k), None)]
+
+    def _characterize_target(
         self,
         target: Any,
         *,
-        cut: int | None = None,
-        k: int | None = None,
-        n_pasts: int = 32,
-        n_futures: int = 32,
-        rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
-        return_v: bool = True,
-        parallel: bool | None = None,
-        **probe_kwargs: Any,
-    ) -> ProbeResult:
-        """Probe a process model and return V-matrix diagnostics.
-
-        Call after :meth:`train` or :meth:`build_comb` with the returned surrogate or
-        comb. Samples split-cut interventions, queries ``target`` for each response
-        pair, builds the weighted V matrix, and returns entropy, rank, and singular
-        values in a :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`.
-
-        Args:
-            target: ``TransformerComb``, ``DenseComb``, or ``MPOComb``.
-
-        Returns:
-            :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`
-            at the resolved cut.
-        """
-        resolved_k = _resolve_k(target, k)
-        resolved_cut = _default_cut(resolved_k, cut)
+        cut: int,
+        k: int,
+        n_pasts: int,
+        n_futures: int,
+        rng: Generator | None,
+        probe_set: ProbeSet | None,
+        parallel: bool | None,
+        probe_kw: dict[str, Any],
+    ) -> CharacterizationResult:
+        resolved_cut = _default_cut(int(k), cut)
         out = probe_process(
             process=target,
             cut=resolved_cut,
-            k=resolved_k,
+            k=int(k),
             n_pasts=n_pasts,
             n_futures=n_futures,
             rng=rng,
             probe_set=probe_set,
-            return_v=return_v,
+            return_v=True,
             parallel=parallel if parallel is not None else self._execution.parallel,
-            **probe_kwargs,
+            **probe_kw,
         )
-        model = _surrogate_model_if_any(target)
-        return ProbeResult.from_probe_process_dict(out, cut=resolved_cut, model=model)
+        return _result_from_probe_dict(out, cut=resolved_cut)
 
-    def probe_exact(
+    def _characterize_hamiltonian(
         self,
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
         *,
-        cut: int | None = None,
         k: int,
-        n_pasts: int = 32,
-        n_futures: int = 32,
-        rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
-        initial_psi: np.ndarray | None = None,
-        return_v: bool = True,
-        **probe_kwargs: Any,
-    ) -> ProbeResult:
-        """Probe via exact simulator rollouts and return V-matrix diagnostics.
-
-        Ground-truth path: runs the full analog simulator for each split-cut
-        intervention, assembles the weighted V matrix, and returns a
-        :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`.
-
-        Returns:
-            :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`
-            at the resolved cut.
-        """
+        cut: int | None,
+        cuts: Literal["all"] | list[int] | None,
+        n_pasts: int,
+        n_futures: int,
+        rng: Generator | None,
+        probe_set: ProbeSet | None,
+        initial_psi: np.ndarray | None,
+        probe_kw: dict[str, Any],
+    ) -> CharacterizationResult:
         from mqt.yaqs.characterization.memory.reference.exact import (
             evaluate_exact_probe_set_with_diagnostics,
         )
 
         operator = _require_hamiltonian(hamiltonian)
-        resolved_cut = _default_cut(int(k), cut)
-        if probe_set is None:
-            if rng is None:
-                rng = np.random.default_rng()
-            sample_kw = {
-                key: probe_kwargs[key] for key in ("intervention_mode", "unitary_ensemble") if key in probe_kwargs
-            }
-            probe_set = sample_split_cut_probes(
-                cut=resolved_cut,
-                k=int(k),
-                n_pasts=n_pasts,
-                n_futures=n_futures,
-                rng=rng,
-                **sample_kw,
+        cut_list = self._resolve_cut_list(int(k), cut=cut, cuts=cuts)
+        parts: dict[int, CharacterizationResult] = {}
+        for c in cut_list:
+            resolved_cut = _default_cut(int(k), int(c))
+            local_probe_set = probe_set
+            if local_probe_set is None:
+                local_rng = rng if rng is not None else np.random.default_rng()
+                local_probe_set = sample_split_cut_probes(
+                    cut=resolved_cut,
+                    k=int(k),
+                    n_pasts=n_pasts,
+                    n_futures=n_futures,
+                    rng=local_rng,
+                    **probe_kw,
+                )
+            psi0 = (
+                np.asarray(initial_psi, dtype=np.complex128)
+                if initial_psi is not None
+                else _default_product_zero_psi(hamiltonian.length)
             )
-        psi0 = (
-            np.asarray(initial_psi, dtype=np.complex128)
-            if initial_psi is not None
-            else _default_product_zero_psi(hamiltonian.length)
-        )
-        pauli_xyz, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
-            probe_set=probe_set,
-            operator=operator,
-            sim_params=sim_params,
-            initial_psi=psi0,
-            parallel=self._execution.parallel,
-            show_progress=self._execution.show_progress,
-        )
-        v, v_centered = build_weighted_v_from_probe(pauli_xyz, weights_ij)
-        ana = analyze_v_matrix(v, v_centered)
-        out: dict[str, Any] = {
-            "pauli_xyz_ij": pauli_xyz,
-            "weights_ij": weights_ij,
-            "probe_set": probe_set,
-            **ana,
-        }
-        if return_v:
-            out["V"] = v
-            out["V_centered"] = v_centered
-        return ProbeResult.from_probe_process_dict(out, cut=resolved_cut)
+            pauli_xyz, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
+                probe_set=local_probe_set,
+                operator=operator,
+                sim_params=sim_params,
+                initial_psi=psi0,
+                parallel=self._execution.parallel,
+                show_progress=self._execution.show_progress,
+                solver=self._solver_for(hamiltonian),
+            )
+            v, v_centered = build_weighted_v_from_probe(pauli_xyz, weights_ij)
+            ana = analyze_v_matrix(v, v_centered)
+            out: dict[str, Any] = {**ana, "V_centered": v_centered}
+            parts[int(resolved_cut)] = _result_from_probe_dict(out, cut=resolved_cut)
+        return _merge_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
-    @staticmethod
-    def probe_from_responses(
-        pauli_xyz_ij: np.ndarray,
-        weights_ij: np.ndarray,
-        probe_set: ProbeSet,
-        *,
-        cut: int | None = None,
-        return_v: bool = True,
-    ) -> ProbeResult:
-        """Assemble V-matrix diagnostics from pre-computed probe response grids.
-
-        No simulation is run. Use when responses were produced elsewhere or saved from
-        a prior :meth:`probe_exact` call.
-
-        Returns:
-            :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`
-            at the resolved cut.
-        """
-        resolved_cut = _default_cut(int(probe_set.k), cut if cut is not None else int(probe_set.cut))
-        v, v_centered = build_weighted_v_from_probe(
-            np.asarray(pauli_xyz_ij, dtype=np.float32),
-            np.asarray(weights_ij, dtype=np.float64),
-        )
-        ana = analyze_v_matrix(v, v_centered)
-        out: dict[str, Any] = {
-            "pauli_xyz_ij": np.asarray(pauli_xyz_ij, dtype=np.float32),
-            "weights_ij": np.asarray(weights_ij, dtype=np.float64),
-            "probe_set": probe_set,
-            **ana,
-        }
-        if return_v:
-            out["V"] = v
-            out["V_centered"] = v_centered
-        return ProbeResult.from_probe_process_dict(out, cut=resolved_cut)
-
-    def characterize(
+    @overload
+    def predict(
         self,
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
+        rho0: np.ndarray,
+        sequence: InterventionSequence,
+        /,
         *,
         k: int,
-        n: int,
-        cuts: Literal["all"] | list[int] = "all",
-        n_pasts: int = 32,
-        n_futures: int = 32,
-        seed: int | None = None,
+        return_sequence: bool = False,
+        rng: Generator | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        model_kwargs: dict | None = None,
-        train_kwargs: dict | None = None,
+    ) -> np.ndarray: ...
+
+    @overload
+    def predict(
+        self,
+        target: Any,
+        rho0: np.ndarray,
+        sequence: InterventionSequence,
+        /,
+        *,
+        k: int | None = None,
+        return_sequence: bool = False,
         rng: Generator | None = None,
-        **probe_kwargs: Any,
-    ) -> ProbeResult:
-        """Train a surrogate and return V-matrix diagnostics at one or more cuts.
+        timesteps: list[float] | None = None,
+        init_mode: str = "eigenstate",
+    ) -> np.ndarray: ...
 
-        Shortcut for :meth:`train` followed by :meth:`probe`. To train once and probe
-        many times, call those methods separately.
+    def predict(
+        self,
+        target: Any,
+        arg2: Any,
+        arg3: Any,
+        arg4: InterventionSequence | None = None,
+        /,
+        *,
+        k: int | None = None,
+        return_sequence: bool = False,
+        rng: Generator | None = None,
+        timesteps: list[float] | None = None,
+        init_mode: str = "eigenstate",
+    ) -> np.ndarray:
+        """Predict site-0 reduced-state dynamics under an intervention sequence."""
+        local_rng = rng if rng is not None else np.random.default_rng()
 
-        Returns:
-            Multi-cut :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`;
-            :attr:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult.model`
-            holds the trained surrogate.
-        """
-        model = self.train(
-            hamiltonian,
-            sim_params,
-            k=k,
-            n=n,
-            seed=seed,
-            timesteps=timesteps,
-            init_mode=init_mode,
-            model_kwargs=model_kwargs,
-            train_kwargs=train_kwargs,
-        )
-        cut_list = list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
-        by_cut: dict[int, CutDiagnostics] = {}
-        for c in cut_list:
-            part = self.probe(
-                model,
-                cut=c,
-                k=k,
-                n_pasts=n_pasts,
-                n_futures=n_futures,
-                rng=rng,
-                **probe_kwargs,
+        if _is_hamiltonian_target(target):
+            from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+            if not isinstance(arg2, AnalogSimParams):
+                msg = "predict(hamiltonian, sim_params, rho0, sequence, k=...) requires AnalogSimParams."
+                raise TypeError(msg)
+            if arg4 is None:
+                msg = "predict(hamiltonian, sim_params, rho0, sequence, ...) requires a sequence."
+                raise TypeError(msg)
+            if k is None:
+                msg = "predict(hamiltonian, ...) requires k=."
+                raise ValueError(msg)
+            return self._predict_hamiltonian(
+                target,
+                arg2,
+                _as_rho_matrix(arg3),
+                arg4,
+                k=int(k),
+                return_sequence=return_sequence,
+                rng=local_rng,
+                timesteps=timesteps,
+                init_mode=init_mode,
             )
-            by_cut[int(c)] = part.by_cut[int(c)]
-        return ProbeResult(by_cut=by_cut, model=model)
 
-    def characterize_comb(
+        rho_mat = _as_rho_matrix(arg2)
+        seq = arg3
+
+        if _is_comb_target(target):
+            resolved_k = _resolve_k(target, k)
+            if isinstance(seq, str):
+                from mqt.yaqs.characterization.memory.interventions import expand_intervention_sequence
+
+                slots = expand_intervention_sequence(seq, k=resolved_k, rng=local_rng)
+            else:
+                slots = list(seq)
+            steps, _ = encode_sequence(slots, k=resolved_k, rng=local_rng)
+            callables = [_probe_step_to_callable(s) for s in steps]
+            rho_out = target.predict(callables)
+            return np.asarray(rho_out, dtype=np.complex128)
+
+        resolved_k = _resolve_k(target, k)
+        _steps, e_features = encode_sequence(seq, k=resolved_k, rng=local_rng)
+        packed0 = pack_rho8(normalize_rho_from_backend_output(rho_mat)).astype(np.float32)
+        pred = target.predict(
+            e_features[np.newaxis, ...],
+            packed0[np.newaxis, ...],
+            return_numpy=True,
+        )
+        if return_sequence:
+            return np.stack([unpack_rho8(row) for row in pred[0]], axis=0).astype(np.complex128)
+        return unpack_rho8(pred[0, -1, :])
+
+    def _predict_hamiltonian(
         self,
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
+        rho0: np.ndarray,
+        sequence: InterventionSequence,
         *,
-        cut: int | None = None,
         k: int,
-        timesteps: list[float] | None = None,
-        n_pasts: int = 32,
-        n_futures: int = 32,
-        rng: Generator | None = None,
-        probe_set: ProbeSet | None = None,
-        return_v: bool = True,
-        parallel: bool | None = None,
-        **comb_kwargs: Any,
-    ) -> ProbeResult:
-        """Build a reference comb and return V-matrix diagnostics (small ``k`` only).
+        return_sequence: bool,
+        rng: Generator,
+        timesteps: list[float] | None,
+        init_mode: str,
+    ) -> np.ndarray:
+        from mqt.yaqs.characterization.memory.combs.core.utils import make_mcwf_static_context
+        from mqt.yaqs.characterization.memory.combs.surrogates.utils import build_initial_psi
+        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import _simulate_sequences
 
-        Shortcut for :meth:`build_comb` followed by :meth:`probe`. Prefer calling
-        those methods separately when reusing the comb at multiple cuts.
-
-        Returns:
-            :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`
-            at the resolved cut.
-        """
-        comb = self.build_comb(
-            hamiltonian,
-            sim_params,
-            timesteps,
-            parallel=parallel,
-            **comb_kwargs,
+        operator = _require_hamiltonian(hamiltonian)
+        solver = self._solver_for(hamiltonian)
+        if timesteps is None:
+            timesteps = [float(sim_params.dt)] * (int(k) + 1)
+        steps, e = encode_sequence(sequence, k=int(k), rng=rng)
+        initial_psi = build_initial_psi(rho0, length=int(operator.length), rng=rng, init_mode=init_mode)
+        if isinstance(initial_psi, tuple):
+            initial_psi = initial_psi[0]
+        static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None) if solver == "MCWF" else None
+        samples = _simulate_sequences(
+            operator=operator,
+            sim_params=sim_params,
+            timesteps=timesteps,
+            psi_pairs_list=[steps],
+            initial_psis=[np.asarray(initial_psi, dtype=np.complex128)],
+            static_ctx=static_ctx,
+            parallel=False,
+            show_progress=False,
+            record_step_states=True,
+            e_features_rows=[e],
+            solver=solver,
+            _execution=self._execution,
         )
-        return self.probe(
-            comb,
-            cut=cut,
-            k=k,
-            n_pasts=n_pasts,
-            n_futures=n_futures,
-            rng=rng,
-            probe_set=probe_set,
-            return_v=return_v,
-        )
+        sample = samples[0]
+        if return_sequence:
+            from mqt.yaqs.characterization.memory.combs.core.encoding import unpack_rho8 as _unpack
+
+            return np.stack([_unpack(row) for row in sample.rho_seq], axis=0)
+        from mqt.yaqs.characterization.memory.combs.core.encoding import unpack_rho8 as _unpack
+
+        return _unpack(sample.rho_seq[-1])
 
 
-def train_surrogate(hamiltonian: Hamiltonian, sim_params: AnalogSimParams, /, **kwargs: Any) -> TransformerComb:
-    """Train a surrogate via a default :class:`MemoryCharacterizer`.
-
-    Returns:
-        Trained :class:`TransformerComb`.
-    """
-    return MemoryCharacterizer().train(hamiltonian, sim_params, **kwargs)
-
-
-def sample_rollouts(hamiltonian: Hamiltonian, sim_params: AnalogSimParams, /, **kwargs: Any) -> TensorDataset:
-    """Sample training rollouts via a default :class:`MemoryCharacterizer`.
-
-    Returns:
-        PyTorch rollout dataset.
-    """
-    return MemoryCharacterizer().sample(hamiltonian, sim_params, **kwargs)
-
-
-def characterize_memory(hamiltonian: Hamiltonian, sim_params: AnalogSimParams, /, **kwargs: Any) -> ProbeResult:
-    """Train and probe memory via a default :class:`MemoryCharacterizer`.
-
-    Returns:
-        Multi-cut :class:`~mqt.yaqs.characterization.memory.diagnostics.results.ProbeResult`.
-    """
-    return MemoryCharacterizer().characterize(hamiltonian, sim_params, **kwargs)
-
-
-__all__ = [
-    "MemoryCharacterizer",
-    "characterize_memory",
-    "sample_rollouts",
-    "train_surrogate",
-]
+__all__ = ["MemoryCharacterizer"]

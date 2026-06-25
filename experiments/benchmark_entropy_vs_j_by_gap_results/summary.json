@@ -36,7 +36,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.699548923738331e-06,
+    "entropy": 1.699548923738331e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.2437101973464077,
     "rank": 4
@@ -57,7 +57,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.126420658064657e-05,
+    "entropy": 2.126420658064657e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.24465097285250004,
     "rank": 4
@@ -78,7 +78,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 9.283858324046182e-05,
+    "entropy": 9.283858324046182e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.245399037785878,
     "rank": 5
@@ -897,7 +897,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.262850331674901e-06,
+    "entropy": 4.262850331674901e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.20501346350585317,
     "rank": 4
@@ -918,7 +918,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 5.721410883861912e-05,
+    "entropy": 5.721410883861912e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.20548503235686807,
     "rank": 4
@@ -1758,7 +1758,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.634763826423246e-06,
+    "entropy": 2.634763826423246e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.2925961785928337,
     "rank": 4
@@ -1779,7 +1779,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.5455403820814724e-05,
+    "entropy": 3.5455403820814724e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.29369441551807646,
     "rank": 4
@@ -2619,7 +2619,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.5114340783927526e-06,
+    "entropy": 2.5114340783927526e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.14841837650446799,
     "rank": 4
@@ -2640,7 +2640,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.265181833114797e-05,
+    "entropy": 3.265181833114797e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.147366539614067,
     "rank": 4
@@ -3480,7 +3480,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.0096291194170064e-06,
+    "entropy": 3.0096291194170064e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.2529380263381496,
     "rank": 4
@@ -3501,7 +3501,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.315302400277129e-05,
+    "entropy": 4.315302400277129e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.2534220663674005,
     "rank": 4
@@ -4341,7 +4341,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.7656626431503759e-06,
+    "entropy": 1.7656626431503759e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.3202964563534514,
     "rank": 4
@@ -4362,7 +4362,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.3480148063646463e-05,
+    "entropy": 2.3480148063646463e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.31901936767961675,
     "rank": 4
@@ -5202,7 +5202,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.492467236399123e-06,
+    "entropy": 1.492467236399123e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.31341500950102397,
     "rank": 4
@@ -5223,7 +5223,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.0427833933144192e-05,
+    "entropy": 2.0427833933144192e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.3147178967581287,
     "rank": 4
@@ -5244,7 +5244,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 9.425962855341424e-05,
+    "entropy": 9.425962855341424e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.31560346394058314,
     "rank": 5
@@ -6063,7 +6063,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.8407025782579883e-06,
+    "entropy": 1.8407025782579883e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.23032559326417673,
     "rank": 4
@@ -6084,7 +6084,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.5703213988043906e-05,
+    "entropy": 2.5703213988043906e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.22904355645829763,
     "rank": 4
@@ -6924,7 +6924,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.068950854081277e-06,
+    "entropy": 2.068950854081277e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.191574291973872,
     "rank": 3
@@ -6945,7 +6945,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.9285358435968482e-05,
+    "entropy": 2.9285358435968482e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.19213460918120812,
     "rank": 4
@@ -7785,7 +7785,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 9.57699697767618e-07,
+    "entropy": 9.57699697767618e-7,
     "entropy_std": 0.0,
     "delta_norm": 0.24830937784593285,
     "rank": 3
@@ -7806,7 +7806,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.6065898569603598e-05,
+    "entropy": 1.6065898569603598e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.24617041343408996,
     "rank": 4
@@ -7827,7 +7827,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 8.877375114434246e-05,
+    "entropy": 8.877375114434246e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.24394139348019872,
     "rank": 5
@@ -8646,7 +8646,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 7.060911158593183e-07,
+    "entropy": 7.060911158593183e-7,
     "entropy_std": 0.0,
     "delta_norm": 0.21958419884961014,
     "rank": 3
@@ -8667,7 +8667,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.565595619539261e-05,
+    "entropy": 1.565595619539261e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.2187814365665272,
     "rank": 4
@@ -9507,7 +9507,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 9.052387001747842e-07,
+    "entropy": 9.052387001747842e-7,
     "entropy_std": 0.0,
     "delta_norm": 0.22458551216750192,
     "rank": 3
@@ -9528,7 +9528,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.894791532683541e-05,
+    "entropy": 2.894791532683541e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.2254251895463017,
     "rank": 4
@@ -10368,7 +10368,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.2520248179726674e-06,
+    "entropy": 1.2520248179726674e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.22456182515761847,
     "rank": 3
@@ -10389,7 +10389,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.8011501811288336e-05,
+    "entropy": 3.8011501811288336e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.22562601505207175,
     "rank": 4
@@ -11229,7 +11229,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.8243036939053353e-06,
+    "entropy": 1.8243036939053353e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.297863734437525,
     "rank": 3
@@ -11250,7 +11250,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.818770779238761e-05,
+    "entropy": 4.818770779238761e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.29888694890285267,
     "rank": 4
@@ -12090,7 +12090,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 7.272986786811112e-06,
+    "entropy": 7.272986786811112e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.2100849729129495,
     "rank": 3
@@ -12951,7 +12951,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 5.504930361258455e-06,
+    "entropy": 5.504930361258455e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.25486315861764086,
     "rank": 3
@@ -12972,7 +12972,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.7671362402998945e-05,
+    "entropy": 4.7671362402998945e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.2565059729687802,
     "rank": 4
@@ -13812,7 +13812,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.49597061999255e-06,
+    "entropy": 3.49597061999255e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.21393778343154607,
     "rank": 3
@@ -13833,7 +13833,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 8.03757893668063e-05,
+    "entropy": 8.03757893668063e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.2157448895835858,
     "rank": 4
@@ -14673,7 +14673,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.6858166049289265e-06,
+    "entropy": 2.6858166049289265e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.21004209958902803,
     "rank": 3
@@ -14694,7 +14694,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.103866396693124e-05,
+    "entropy": 4.103866396693124e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.20909658542038848,
     "rank": 4
@@ -15534,7 +15534,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.3382362880517774e-06,
+    "entropy": 3.3382362880517774e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.20556212220906142,
     "rank": 3
@@ -15555,7 +15555,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.481878940498706e-05,
+    "entropy": 4.481878940498706e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.20443977379940131,
     "rank": 4
@@ -16395,7 +16395,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.314017930827217e-06,
+    "entropy": 2.314017930827217e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.1955211896458331,
     "rank": 3
@@ -16416,7 +16416,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.2254040987212254e-05,
+    "entropy": 3.2254040987212254e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.1954286283440935,
     "rank": 4
@@ -17256,7 +17256,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.361170103543086e-06,
+    "entropy": 2.361170103543086e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.20071904402412755,
     "rank": 3
@@ -17277,7 +17277,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.256630454583235e-05,
+    "entropy": 3.256630454583235e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.20101723784043324,
     "rank": 4
@@ -18117,7 +18117,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.295451307456123e-06,
+    "entropy": 3.295451307456123e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.22286331142442695,
     "rank": 3
@@ -18138,7 +18138,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 4.834980524155495e-05,
+    "entropy": 4.834980524155495e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.22240262155675078,
     "rank": 4
@@ -18978,7 +18978,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.42818656427919e-06,
+    "entropy": 2.42818656427919e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.2009464459060908,
     "rank": 3
@@ -18999,7 +18999,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.634376554203255e-05,
+    "entropy": 3.634376554203255e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.19988558372118123,
     "rank": 4
@@ -19839,7 +19839,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.0885163581250816e-06,
+    "entropy": 2.0885163581250816e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.30453196995135484,
     "rank": 4
@@ -19860,7 +19860,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 3.382613688871434e-05,
+    "entropy": 3.382613688871434e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.3026501467819151,
     "rank": 4
@@ -20700,7 +20700,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 1.8586482187013988e-06,
+    "entropy": 1.8586482187013988e-6,
     "entropy_std": 0.0,
     "delta_norm": 0.20148669318316395,
     "rank": 4
@@ -20721,7 +20721,7 @@
     "n_futures": 32,
     "n_seeds": 1,
     "branch_weight_beta": 1.0,
-    "entropy": 2.7669840054313694e-05,
+    "entropy": 2.7669840054313694e-5,
     "entropy_std": 0.0,
     "delta_norm": 0.203149813485739,
     "rank": 4

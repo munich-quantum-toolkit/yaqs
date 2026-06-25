@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Exact benchmark: bond entropy S_V vs coupling J for multiple causal cuts.
 
 Paper-style outputs:
@@ -13,11 +20,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 from pathlib import Path
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -30,6 +35,7 @@ from _benchmark_common import (
     write_summary_json,
 )
 from _benchmark_plotting import plot_entropy_heatmap_cut_vs_j, plot_entropy_vs_j
+
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -62,7 +68,7 @@ def _resolve_config(args: argparse.Namespace) -> dict[str, object]:
     if args.quick:
         length = 2 if args.length is None else int(args.length)
         k = 8 if args.k is None else int(args.k)
-        cuts = f"1,2,3,4,5,6,7,8" if args.cuts is None else str(args.cuts)
+        cuts = "1,2,3,4,5,6,7,8" if args.cuts is None else str(args.cuts)
         js = "0.0,0.4,0.8,1.2,1.6,2.0" if args.js is None else str(args.js)
         n_pasts = 12 if args.n_pasts is None else int(args.n_pasts)
         n_futures = 12 if args.n_futures is None else int(args.n_futures)
@@ -102,9 +108,12 @@ def main() -> None:
         csv_path = Path(args.summary_csv) if args.summary_csv is not None else out_dir / "summary.csv"
         rows_raw = _load_summary_csv(csv_path)
         k = int(cfg["k"])
-        plot_entropy_vs_j([{**r, "entropy": float(r["entropy"]), "cut": int(float(r["cut"])), "J": float(r["J"])} for r in rows_raw], out_dir / "fig_entropy_vs_j_by_cut", k=k)
+        plot_entropy_vs_j(
+            [{**r, "entropy": float(r["entropy"]), "cut": int(float(r["cut"])), "J": float(r["J"])} for r in rows_raw],
+            out_dir / "fig_entropy_vs_j_by_cut",
+            k=k,
+        )
         plot_entropy_heatmap_cut_vs_j(rows_raw, out_dir / "fig_entropy_heatmap_cut_vs_J")
-        print(f"Wrote figures under: {out_dir}", flush=True)
         return
 
     length = int(cfg["length"])
@@ -116,7 +125,6 @@ def main() -> None:
     initial_list = list_initial_states_sys_env0(length=length, n_seeds=int(args.n_seeds), rng=init_rng)
     np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
 
-    print(f"=== S_V vs J by cut (L={length}, k={k}, beta={BRANCH_WEIGHT_BETA}) ===", flush=True)
     rows: list[dict[str, float | int]] = []
 
     for cut in cuts:
@@ -154,16 +162,14 @@ def main() -> None:
                 "n_futures": int(cfg["n_futures"]),
                 "branch_weight_beta": BRANCH_WEIGHT_BETA,
                 "entropy": float(np.mean(entropies)),
-                "rank": int(round(float(np.mean(ranks)))),
+                "rank": round(float(np.mean(ranks))),
             }
             rows.append(row)
-            print(f"cut={cut:2d}, J={jv:4.1f}, S_V={row['entropy']:.6e}", flush=True)
 
     write_summary_csv(out_dir / "summary.csv", rows)
     write_summary_json(out_dir / "summary.json", rows)
     plot_entropy_vs_j(rows, out_dir / "fig_entropy_vs_j_by_cut", k=k)
     plot_entropy_heatmap_cut_vs_j(rows, out_dir / "fig_entropy_heatmap_cut_vs_J")
-    print(f"Wrote results to: {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

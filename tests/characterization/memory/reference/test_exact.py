@@ -13,7 +13,6 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pytest
 
 import mqt.yaqs.characterization.memory.reference.exact as exact_mod
 from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
@@ -25,7 +24,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 if TYPE_CHECKING:
-    pass
+    import pytest
 
 
 def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:

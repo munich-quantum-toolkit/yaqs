@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Basic entropy-vs-J-by-cut benchmark (β=1, unitary_break_mp, causal cut weights)."""
 
 from __future__ import annotations
@@ -7,7 +14,6 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-
 from _benchmark_common import (
     BRANCH_WEIGHT_BETA,
     DT_DEFAULT,
@@ -22,6 +28,7 @@ from _benchmark_common import (
     write_summary_csv,
     write_summary_json,
 )
+
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -58,7 +65,6 @@ def main() -> None:
     init_rng = np.random.default_rng(int(args.seed) + 77_777)
     initial_list = list_initial_states_sys_env0(length=length, n_seeds=int(args.n_seeds), rng=init_rng)
 
-    print("=== Basic S_V vs J by cut (β=1, causal cut weights) ===", flush=True)
     rows: list[dict[str, float | int]] = []
 
     for cut in cuts:
@@ -97,14 +103,9 @@ def main() -> None:
                 "rank": float(np.mean(rank_list)),
             }
             rows.append(row)
-            print(
-                f"cut={cut:2d}, J={jv:4.1f}, S_V={row['entropy']:.6e}, rank={row['rank']:.1f}",
-                flush=True,
-            )
 
     write_summary_csv(out_dir / "summary.csv", rows)
     write_summary_json(out_dir / "summary.json", rows)
-    print(f"\nWrote results to: {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

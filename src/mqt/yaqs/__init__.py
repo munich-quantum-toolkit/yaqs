@@ -14,10 +14,7 @@ of noise in quantum systems.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from . import _lazy_exports as _lazy_exports_module
-from . import memory_characterizer, simulator
+from . import simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
 from .core.data_structures.hamiltonian import Hamiltonian
@@ -34,16 +31,8 @@ from .core.data_structures.simulation_parameters import (
 )
 from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
-from .memory_characterizer import MemoryCharacterizer, characterize_memory, sample_rollouts, train_surrogate
+from .memory_characterizer import MemoryCharacterizer
 from .simulator import Simulator
-
-if TYPE_CHECKING:
-    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
-
-
-def __getattr__(name: str) -> object:
-    return _lazy_exports_module.__getattr__(name)
-
 
 __all__ = [
     "MPO",
@@ -59,13 +48,8 @@ __all__ = [
     "Simulator",
     "State",
     "StrongSimParams",
-    "TransformerComb",
     "WeakSimParams",
     "__version__",
-    "characterize_memory",
-    "memory_characterizer",
-    "sample_rollouts",
     "simulator",
-    "train_surrogate",
     "version_info",
 ]

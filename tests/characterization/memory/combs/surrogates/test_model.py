@@ -11,8 +11,6 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
@@ -27,7 +25,7 @@ def test_transformercomb_forward_shape_cpu() -> None:
     """Forward pass returns one rho8 vector per sequence step."""
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = torch.zeros((2, 3, 32), dtype=torch.float32)
@@ -40,7 +38,7 @@ def test_transformercomb_predict_numpy_roundtrip() -> None:
     """Predict with return_numpy=True yields a float32 ndarray."""
     pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = np.zeros((1, 2, 32), dtype=np.float32)
@@ -56,7 +54,7 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     model.train()
@@ -90,7 +88,7 @@ def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E_t = torch.zeros((2, 2, 32), dtype=torch.float32)
@@ -105,7 +103,7 @@ def test_transformercomb_predict_final_state_batch_matches_forward_last_step() -
     """predict_final_state_batch agrees with the last forward-pass output."""
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = torch.randn((5, 4, 32), dtype=torch.float32)
@@ -115,60 +113,32 @@ def test_transformercomb_predict_final_state_batch_matches_forward_last_step() -
     assert torch.allclose(batched, last, atol=1e-6, rtol=1e-6)
 
 
-def test_transformercomb_entropy_shapes_and_batched_futures() -> None:
-    """Entropy returns a finite scalar for a configured sequence length."""
-    pytest.importorskip("torch")
+def test_transformercomb_fit_sets_sequence_length() -> None:
+    """Fit infers sequence_length from training data."""
+    torch = pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    d_e = 32
-    cut = 2
-    k_total = 5
-    model = TransformerComb(
-        d_e=d_e,
-        d_rho=8,
-        d_model=32,
-        nhead=4,
-        num_layers=1,
-        dim_ff=64,
-        dropout=0.0,
-        sequence_length=k_total,
-    )
-    ent = model.entropy(cut)
-    assert isinstance(ent, float)
-    assert math.isfinite(ent)
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
-
-def test_transformercomb_entropy_restores_training_mode() -> None:
-    """Entropy leaves the model in its prior train/eval mode."""
-    pytest.importorskip("torch")
-
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
-
-    model = TransformerComb(
-        d_e=32,
-        d_rho=8,
-        d_model=32,
-        nhead=4,
-        num_layers=1,
-        dim_ff=64,
-        dropout=0.0,
-        sequence_length=3,
-    )
-    model.train()
-    model.entropy(1)
-    assert model.training is True
+    k = 4
+    model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
+    E_t = torch.zeros((2, k, 32), dtype=torch.float32)
+    rho0_t = torch.zeros((2, 8), dtype=torch.float32)
+    tgt_t = torch.zeros((2, k, 8), dtype=torch.float32)
+    model.fit(TensorDataset(E_t, rho0_t, tgt_t), epochs=1, batch_size=2, device=torch.device("cpu"))
+    assert model.sequence_length == k
 
 
 def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     """Default initial state matches the normalized |0> density matrix."""
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
     from mqt.yaqs.characterization.memory.combs.core.encoding import (  # noqa: PLC0415
         normalize_rho_from_backend_output,
         pack_rho8,
     )
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     rho0 = model._default_rho0(device=torch.device("cpu"), dtype=torch.float32)
@@ -183,74 +153,9 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
 
     _emap, rho_prep, effect, _ = _sample_random_intervention(rng)
     feat_from_choi = _choi_features_from_parts(rho_prep, effect)
-    # Also cover the direct parts sampler path.
     rho2, eff2, feat2 = _sample_random_intervention_parts(rng)
     feat_from_parts = _choi_features_from_parts(rho2, eff2)
 
     assert feat_from_choi.shape == (32,)
     assert feat_from_parts.shape == (32,)
     np.testing.assert_allclose(feat_from_parts, feat2, atol=0.0)
-
-
-def test_transformercomb_entropy_rejects_out_of_range_cut() -> None:
-    """Entropy validates the cut index against sequence_length."""
-    pytest.importorskip("torch")
-
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
-
-    model = TransformerComb(
-        d_e=32,
-        d_rho=8,
-        d_model=32,
-        nhead=4,
-        num_layers=1,
-        dim_ff=64,
-        dropout=0.0,
-        sequence_length=4,
-    )
-    with pytest.raises(ValueError, match="cut must satisfy"):
-        model.entropy(0)
-    with pytest.raises(ValueError, match="cut must satisfy"):
-        model.entropy(5)
-    with pytest.raises(ValueError, match="cut must satisfy"):
-        TransformerComb(
-            d_e=32,
-            d_rho=8,
-            d_model=32,
-            nhead=4,
-            num_layers=1,
-            dim_ff=64,
-            dropout=0.0,
-            sequence_length=1,
-        ).entropy(2)
-
-
-def test_transformercomb_entropy_requires_sequence_length() -> None:
-    """Entropy requires sequence_length to be configured on the model."""
-    pytest.importorskip("torch")
-
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
-
-    model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
-    with pytest.raises(ValueError, match="sequence_length"):
-        model.entropy(1)
-
-
-def test_transformercomb_entropy_sets_sequence_length_from_fit() -> None:
-    """Fit infers sequence_length from training data for subsequent entropy calls."""
-    torch = pytest.importorskip("torch")
-
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
-
-    from mqt.yaqs import TransformerComb  # noqa: PLC0415
-
-    k = 4
-    model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
-    E_t = torch.zeros((2, k, 32), dtype=torch.float32)
-    rho0_t = torch.zeros((2, 8), dtype=torch.float32)
-    tgt_t = torch.zeros((2, k, 8), dtype=torch.float32)
-    model.fit(TensorDataset(E_t, rho0_t, tgt_t), epochs=1, batch_size=2, device=torch.device("cpu"))
-    assert model.sequence_length == k
-    ent = model.entropy(2)
-    assert isinstance(ent, float)
-    assert math.isfinite(ent)

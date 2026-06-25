@@ -9,19 +9,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from ...diagnostics.operational_memory import OperationalMemoryMixin
-from ...diagnostics.probe import ProbeSet, probe_sequence
+from ...diagnostics.probe import ProbeSet, branch_weights_ij, probe_sequence
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
 from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -160,7 +160,7 @@ def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
-class DenseComb(OperationalMemoryMixin):
+class DenseComb:
     """Wrapper around a dense comb Choi operator Upsilon."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
@@ -318,6 +318,11 @@ class DenseComb(OperationalMemoryMixin):
             Array of shape ``(n_pasts, n_futures, 3)``.
         """
         return _evaluate_dense_comb_probe_set(self, probe_set)
+
+    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Return Pauli responses and causal cut branch weights for paper-aligned V assembly."""
+        pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
+        return pauli, branch_weights_ij(probe_set)
 
     def qmi(
         self,
@@ -478,7 +483,7 @@ class DenseComb(OperationalMemoryMixin):
         )
 
 
-class MPOComb(OperationalMemoryMixin, MPO):
+class MPOComb(MPO):
     """Wrapper around an MPO representation of a comb Choi operator Upsilon."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
@@ -517,6 +522,10 @@ class MPOComb(OperationalMemoryMixin, MPO):
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses."""
         return self.to_dense().evaluate_probe_set(probe_set)
+
+    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Return Pauli responses and causal cut branch weights."""
+        return self.to_dense().evaluate_probe_set_with_weights(probe_set)
 
     def predict(
         self,

@@ -14,7 +14,7 @@ import math
 import numpy as np
 import pytest
 
-from mqt.yaqs import Hamiltonian, MemoryCharacterizer
+from mqt.yaqs import MemoryCharacterizer
 from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.combs import DenseComb, MPOComb
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
@@ -103,8 +103,8 @@ def test_mpo_comb_entropy_matches_dense() -> None:
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
 
-def test_dense_comb_entropy_default_cut() -> None:
-    """entropy() uses interior default cut when cut is omitted."""
+def test_characterize_comb_default_cut() -> None:
+    """characterize() uses interior default cut when cut is omitted."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
     comb = construct_process_tensor(
@@ -116,64 +116,38 @@ def test_dense_comb_entropy_default_cut() -> None:
         return_type="dense",
     )
     assert isinstance(comb, DenseComb)
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
     rng = np.random.default_rng(0)
-    ent_default = comb.entropy(n_pasts=4, n_futures=4, rng=rng)
-    ent_explicit = comb.entropy(2, n_pasts=4, n_futures=4, rng=np.random.default_rng(0))
+    default_cut = (2 + 1) // 2
+    ent_default = mc.characterize(comb, k=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
+    ent_explicit = mc.characterize(
+        comb,
+        cut=default_cut,
+        k=2,
+        n_pasts=4,
+        n_futures=4,
+        rng=np.random.default_rng(0),
+    ).entropy(default_cut)
     assert ent_default == pytest.approx(ent_explicit)
-    sv = comb.singular_values(2, n_pasts=4, n_futures=4, rng=np.random.default_rng(0))
+    result = mc.characterize(
+        comb,
+        cut=2,
+        k=2,
+        n_pasts=4,
+        n_futures=4,
+        rng=np.random.default_rng(0),
+    )
+    sv = result.singular_values(2)
     assert sv.ndim == 1
     assert sv.size >= 1
-    assert math.isfinite(float(comb.entropy(2, n_pasts=4, n_futures=4, rng=np.random.default_rng(0))))
+    assert math.isfinite(float(result.entropy(2)))
 
 
-def test_memory_metrics_reuse_cached_v(monkeypatch: pytest.MonkeyPatch) -> None:
-    """entropy, singular_values, and rank share one probe_process call per cache key."""
-    import mqt.yaqs.characterization.memory.diagnostics.operational_memory as operational_memory_mod
-
-    n_calls = {"n": 0}
-    real_probe_process = operational_memory_mod.probe_process
-
-    def counting_probe_process(*args, **kwargs):  # noqa: ANN002, ANN003
-        n_calls["n"] += 1
-        return real_probe_process(*args, **kwargs)
-
-    monkeypatch.setattr(operational_memory_mod, "probe_process", counting_probe_process)
-
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    params = _params()
-    comb = construct_process_tensor(
-        op,
-        params,
-        timesteps=[0.05],
-        num_trajectories=20,
-        parallel=False,
-        return_type="dense",
-    )
-    assert isinstance(comb, DenseComb)
-    rng = np.random.default_rng(7)
-    kw = {"n_pasts": 4, "n_futures": 3, "rng": rng}
-    ent = comb.entropy(1, **kw)
-    sv = comb.singular_values(1, **kw)
-    rk = comb.rank(1, **kw)
-    assert n_calls["n"] == 1
-    assert math.isfinite(ent)
-    assert sv.size >= 1
-    assert rk >= 1
-    mats = comb.operational_v_matrices
-    assert mats is not None
-    v, v_c = mats
-    assert v.shape == v_c.shape
-    comb.clear_operational_memory_cache()
-    assert comb.operational_v_matrices is None
-    _ = comb.entropy(1, **kw)
-    assert n_calls["n"] == 2
-
-
-def test_transformercomb_singular_values_shape() -> None:
-    """TransformerComb.singular_values returns the full SVD spectrum."""
+def test_transformercomb_characterize_singular_values_shape() -> None:
+    """MemoryCharacterizer.characterize returns the full SVD spectrum for a surrogate."""
     pytest.importorskip("torch")
 
-    from mqt.yaqs import TransformerComb
+    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
 
     model = TransformerComb(
         d_e=32,
@@ -185,10 +159,12 @@ def test_transformercomb_singular_values_shape() -> None:
         dropout=0.0,
         sequence_length=3,
     )
-    sv = model.singular_values(
-        2,
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    sv = mc.characterize(
+        model,
+        cut=2,
         n_pasts=4,
         n_futures=3,
         rng=np.random.default_rng(0),
-    )
+    ).singular_values(2)
     assert sv.shape == (min(4, 3 * 3),)
