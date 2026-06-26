@@ -135,10 +135,7 @@ def run_operational_memory(
         if isinstance(process, ExactBackend):
             execution_override = process.execution_config(parallel=parallel)
     if probe_set is not None and (int(probe_set.cut) != int(cut) or int(probe_set.k) != int(k)):
-        msg = (
-            f"probe_set was built for cut={probe_set.cut}, k={probe_set.k}, "
-            f"but cut={cut}, k={k} were requested."
-        )
+        msg = f"probe_set was built for cut={probe_set.cut}, k={probe_set.k}, but cut={cut}, k={k} were requested."
         raise ValueError(msg)
     if probe_set is None:
         if rng is None:
