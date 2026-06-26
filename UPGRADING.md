@@ -144,7 +144,7 @@ mc = MemoryCharacterizer()
 ham = Hamiltonian.ising(length=2, J=1.0, g=0.5)
 params = AnalogSimParams(dt=0.1)
 
-model = mc.train(ham, params, k=4)          # surrogate training
+model = mc.train(ham, params, k=4)  # surrogate training
 rho = mc.predict(model, rho0, sequence, k=4)  # fast dynamics
 comb = mc.build_comb(ham, params, timesteps=[0.1])  # small-k reference
 result = mc.characterize(ham, params, cut=2, k=4)  # operational memory S_V(c)

@@ -120,8 +120,14 @@ def sample_train_dataset(
     Raises:
         ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
-    _require_torch()
     chain_length = int(operator.length)
+    if timesteps is None:
+        timesteps = [float(sim_params.dt)] * (int(k) + 1)
+    if len(timesteps) != int(k) + 1:
+        msg = f"Comb schedule: timesteps length must be k+1={int(k) + 1}, got {len(timesteps)}."
+        raise ValueError(msg)
+
+    _require_torch()
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
 
     static_ctx: MCWFContext | None = None
@@ -130,11 +136,6 @@ def sample_train_dataset(
 
     if rng is None:
         rng = np.random.default_rng(0 if seed is None else int(seed))
-    if timesteps is None:
-        timesteps = [float(sim_params.dt)] * (int(k) + 1)
-    if len(timesteps) != int(k) + 1:
-        msg = f"Comb schedule: timesteps length must be k+1={int(k) + 1}, got {len(timesteps)}."
-        raise ValueError(msg)
 
     psi_pairs_list: list[list[Any]] = []
     initial_psis: list[np.ndarray] = []
