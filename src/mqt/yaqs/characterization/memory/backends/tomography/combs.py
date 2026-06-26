@@ -316,9 +316,7 @@ class DenseComb:
         """
         k_steps = self._k_steps()
         if len(interventions) != k_steps:
-            msg = (
-                f"DenseComb expects {k_steps} interventions for k={k_steps}, got {len(interventions)}."
-            )
+            msg = f"DenseComb expects {k_steps} interventions for k={k_steps}, got {len(interventions)}."
             raise ValueError(msg)
         rho = self._predict_raw(interventions)
 

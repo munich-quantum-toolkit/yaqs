@@ -112,7 +112,7 @@ class ExactBackend:
         psi_pairs_list: Optional pre-built sequence grid.
         static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
-    Returns:
+        Returns:
             Tuple ``(pauli_xyz_ij, weights_ij)``.
         """
         pauli_xyz, weights_ij, _traces = simulate_exact(

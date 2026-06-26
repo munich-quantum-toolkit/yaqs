@@ -18,7 +18,7 @@ from mqt.yaqs.characterization.memory.backends.surrogates.utils import (
     sample_intervention_parts,
     sample_intervention_sequence,
 )
-from mqt.yaqs.characterization.memory.operational_memory.samples import (  # noqa: PLC2701
+from mqt.yaqs.characterization.memory.operational_memory.samples import (
     _sample_random_clifford_unitary,
     _sample_random_unitary,
     encode_unitary_choi,
