@@ -51,14 +51,14 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
     """
     dt_f = float(dt)
     dur_f = float(duration)
-    if dur_f == 0.0:
+    if abs(dur_f) < 1e-15:
         key = (dt_f, 0.0)
         out = times_cache.get(key)
         if out is None:
             out = np.array([0.0], dtype=np.float64)
             times_cache[key] = out
         return out
-    n_steps = int(round(dur_f / dt_f))
+    n_steps = round(dur_f / dt_f)
     if n_steps < 1 or abs(n_steps * dt_f - dur_f) > 1e-9 * max(1.0, dur_f):
         msg = f"duration={dur_f} must be a positive integer multiple of dt={dt_f}."
         raise ValueError(msg)

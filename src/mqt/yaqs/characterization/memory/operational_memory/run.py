@@ -9,15 +9,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
-
-from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
 from .branch_weights import compute_analytic_weights
 from .memory_matrix import assemble_memory_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
+
+if TYPE_CHECKING:
+    from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 class OperationalMemoryBackend(Protocol):
@@ -129,7 +130,7 @@ def run_operational_memory(
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if isinstance(process, ExactBackend):
-            execution_override = merge_execution_config(process._execution, parallel=parallel)
+            execution_override = process.execution_config(parallel=parallel)
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()

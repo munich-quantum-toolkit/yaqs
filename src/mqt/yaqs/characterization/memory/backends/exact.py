@@ -98,6 +98,19 @@ class ExactBackend:
         """Whether parallel sequence execution is enabled."""
         return self._execution.parallel
 
+    def execution_config(self, *, parallel: bool | None = None) -> ExecutionConfig:
+        """Return execution settings, optionally overriding parallelism for one call.
+
+        Args:
+            parallel: When set, merge a one-shot ``parallel`` override into the backend config.
+
+        Returns:
+            Effective :class:`~mqt.yaqs.core.parallel_utils.ExecutionConfig`.
+        """
+        if parallel is None:
+            return self._execution
+        return merge_execution_config(self._execution, parallel=parallel)
+
     def evaluate_probes_weighted(
         self,
         probe_set: ProbeSet,
@@ -109,10 +122,10 @@ class ExactBackend:
 
         Args:
             probe_set: Sampled split-cut probes.
-        psi_pairs_list: Optional pre-built sequence grid.
-        static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
+            psi_pairs_list: Optional pre-built sequence grid (experiment geometries).
+            _execution: Optional one-shot execution override for this evaluation.
 
-    Returns:
+        Returns:
             Tuple ``(pauli_xyz_ij, weights_ij)``.
         """
         pauli_xyz, weights_ij, _traces = simulate_exact(

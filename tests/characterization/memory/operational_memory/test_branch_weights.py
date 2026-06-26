@@ -34,6 +34,9 @@ def _trace_final_weight(trace: dict[str, object]) -> float:
 
     Returns:
         Final cumulative branch weight as a float.
+
+    Raises:
+        TypeError: If ``cumulative_weight_final`` is not numeric.
     """
     val = trace["cumulative_weight_final"]
     if not isinstance(val, (int, float)):

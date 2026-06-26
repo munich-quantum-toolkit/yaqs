@@ -180,8 +180,6 @@ def run_all_sequences(
     local_params.get_state = True
     stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)
 
-    from .basis import assemble_fixed_basis
-
     basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
 

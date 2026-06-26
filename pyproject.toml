@@ -115,9 +115,14 @@ run.disable_warnings = [
 # Error if ty emits any warning-level diagnostics.
 error-on-warning = true
 
+[tool.ty.analysis]
+# torch is an optional extra; ty runs with --isolated in pre-commit.
+allowed-unresolved-imports = ["torch.**"]
+
 [tool.ty.src]
 exclude = [
     "docs/**",
+    "experiments/**",
 ]
 
 
@@ -150,6 +155,7 @@ preview = true
 fix = true
 unsafe-fixes = true
 show-fixes = true
+extend-exclude = ["experiments"]
 
 [tool.ruff.format]
 preview = true

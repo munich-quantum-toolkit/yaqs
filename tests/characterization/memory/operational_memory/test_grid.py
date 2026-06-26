@@ -16,7 +16,7 @@ from mqt.yaqs.characterization.memory.operational_memory.grid import (
     assemble_probe_grid,
     assemble_probe_sequence,
 )
-from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 
 
 def test_assemble_probe_sequence_length_and_cut_step() -> None:
@@ -44,8 +44,6 @@ def test_assemble_probe_grid_size() -> None:
 def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
     """Direct callers get a length-k invariant check."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
-
     probe_set = ProbeSet(
         cut=1,
         k=3,

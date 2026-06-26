@@ -59,6 +59,9 @@ def mean_trace_distance_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> flo
 
     Returns:
         Mean trace distance over the batch.
+
+    Raises:
+        ValueError: If ``pred_rho8`` and ``tgt_rho8`` do not share the same shape.
     """
     if pred_rho8.shape != tgt_rho8.shape:
         msg = f"pred_rho8 and tgt_rho8 must share shape, got {pred_rho8.shape} vs {tgt_rho8.shape}."
@@ -80,6 +83,9 @@ def mean_frobenius_mse_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> floa
 
     Returns:
         Mean squared Frobenius error (Hilbert-Schmidt squared norm) over the batch.
+
+    Raises:
+        ValueError: If ``pred_rho8`` and ``tgt_rho8`` do not share the same shape.
     """
     if pred_rho8.shape != tgt_rho8.shape:
         msg = f"pred_rho8 and tgt_rho8 must share shape, got {pred_rho8.shape} vs {tgt_rho8.shape}."

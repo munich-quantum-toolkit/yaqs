@@ -25,6 +25,9 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
 
     Returns:
         Intervention sequence of length ``probe_set.k``.
+
+    Raises:
+        ValueError: If the assembled sequence length does not equal ``probe_set.k``.
     """
     c = int(probe_set.cut)
     kk = int(probe_set.k)

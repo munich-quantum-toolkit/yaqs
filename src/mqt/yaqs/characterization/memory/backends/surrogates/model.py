@@ -415,10 +415,10 @@ class TransformerComb(nn.Module):
 
         for _ep in range(int(epochs)):
             self.train()
-            for e_batch, rho0_b, tgt_b in loader:
-                e_batch = e_batch.to(device)
-                rho0_b = rho0_b.to(device)
-                tgt_b = tgt_b.to(device)
+            for e_cpu, rho0_cpu, tgt_cpu in loader:
+                e_batch = e_cpu.to(device)
+                rho0_b = rho0_cpu.to(device)
+                tgt_b = tgt_cpu.to(device)
                 opt.zero_grad(set_to_none=True)
                 if prefix_loss == "full" or k_max <= 1:
                     pred = self(e_batch, rho0_b)
