@@ -14,9 +14,9 @@
   </a>
 </p>
 
-# MQT YAQS — Scalable simulation for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
 
-MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS uses state-of-the-art techniques in these areas such as parallelized trajectories, tensor network compression, and problem-size-appropriate backends wherever possible (see [Cite This](#cite-this)).
+MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation and characterization of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS uses state-of-the-art techniques in these areas such as parallelized trajectories, tensor network compression, and problem-size-appropriate backends wherever possible (see [Cite This](#cite-this)).
 It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 <p align="center">
@@ -30,6 +30,8 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 - **Analog simulation**: Large-scale open-system and unitary time evolution using parallelized quantum trajectories when a noise model is attached [1] (trajectory guidance [4]).
 - **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit observables, shot-based readout, and OpenQASM 2 inputs [3] (`pip install mqt-yaqs[qasm3]` for OpenQASM 3).
 - **Equivalence checking**: Scalable comparison of quantum circuits [2].
+- **Process characterization**: Quantify non-Markovian memory in multi-time quantum processes, how much temporal history a process retains, with exact reference checks where needed ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
+- **Process tensor surrogates**: Train a causal Transformer surrogate for fast prediction of non-Markovian response to local control and measurement over time ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/process_tensor_surrogates.html)).
 - **Hardware-oriented modeling**: Realistic noise models including Gaussian and other strength distributions, plus hardware dynamics such as transmon–resonator systems, and heterogeneous site dimensions ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
 - **Multiple backends**: Monte Carlo wavefunction and master equation evolution are available for analog simulation on smaller systems, alongside the scalable MPS trajectory path.
 
@@ -91,7 +93,20 @@ params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.
 print(sim.run(state, H, params).expectation_values[0])
 ```
 
-**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
+Operational memory characterization:
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+
+ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
+params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
+    ham, params, k=1, cut=1, n_pasts=4, n_futures=4,
+)
+print(result.summary())
+```
+
+**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [Characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
 
 ## System Requirements
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mqt-yaqs"
-description = "Scalable simulation for open systems, noisy circuits, and realistic hardware"
+description = "Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
