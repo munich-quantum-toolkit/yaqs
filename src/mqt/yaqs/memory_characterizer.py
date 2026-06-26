@@ -47,7 +47,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execu
 
 if TYPE_CHECKING:
     from numpy.random import Generator
-    from torch.utils.data import TensorDataset  # ty: ignore[unresolved-import]
+    from torch.utils.data import TensorDataset
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
     from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis

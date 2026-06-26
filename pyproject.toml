@@ -195,6 +195,7 @@ test = [
     "pytest-sugar>=1.1.1",
     "pytest-xdist>=3.8.0",
     "qiskit-qasm3-import>=0.4.1",
+    "torch>=2.0",
 ]
 docs = [
     "furo>=2025.09.25",

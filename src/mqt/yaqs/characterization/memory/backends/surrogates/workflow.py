@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 if TYPE_CHECKING:
-    from torch.utils.data import TensorDataset  # ty: ignore[unresolved-import]
+    from torch.utils.data import TensorDataset
 
     from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
@@ -53,8 +53,8 @@ def pack_dataset(
     Returns:
         TensorDataset with tensors ``(e_features, rho0, rho_seq)`` in that order.
     """
-    import torch  # noqa: PLC0415  # ty: ignore[unresolved-import]
-    from torch.utils.data import TensorDataset  # noqa: PLC0415  # ty: ignore[unresolved-import]
+    import torch  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415
 
     return TensorDataset(
         torch.as_tensor(e_features, dtype=torch.float32),
@@ -193,7 +193,7 @@ def train_surrogate_model(
     Returns:
         Trained :class:`TransformerComb`.
     """
-    import torch  # noqa: PLC0415  # ty: ignore[unresolved-import]
+    import torch  # noqa: PLC0415
 
     from .model import TransformerComb  # noqa: PLC0415
 

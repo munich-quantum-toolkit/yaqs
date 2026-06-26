@@ -1783,6 +1783,7 @@ dev = [
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "qiskit-qasm3-import" },
+    { name = "torch" },
 ]
 docs = [
     { name = "furo" },
@@ -1807,6 +1808,7 @@ test = [
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "qiskit-qasm3-import" },
+    { name = "torch" },
 ]
 
 [package.metadata]
@@ -1838,6 +1840,7 @@ dev = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "qiskit-qasm3-import", specifier = ">=0.4.1" },
+    { name = "torch", specifier = ">=2.0" },
 ]
 docs = [
     { name = "furo", specifier = ">=2025.9.25" },
@@ -1859,6 +1862,7 @@ test = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "qiskit-qasm3-import", specifier = ">=0.4.1" },
+    { name = "torch", specifier = ">=2.0" },
 ]
 
 [[package]]
