@@ -107,3 +107,26 @@ def test_sample_train_sequence_measure_prepare() -> None:
     for step in steps:
         assert isinstance(step, tuple)
         assert len(step) == 2
+
+
+def test_encode_slot_rejects_dict_without_unitary_key() -> None:
+    """Dict slots must include a unitary matrix."""
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match="unitary"):
+        encode_slot({"gate": "x"}, rng)
+
+
+def test_encode_sequence_clifford_produces_unitary_dicts() -> None:
+    """Clifford style encodes random single-qubit Clifford gates."""
+    rng = np.random.default_rng(4)
+    steps, choi = encode_sequence("clifford", k=2, rng=rng)
+    assert choi.shape == (2, 32)
+    assert all(s.get("type") == "unitary" for s in steps)
+
+
+def test_sample_train_sequence_clifford() -> None:
+    """Training sampler supports clifford style."""
+    rng = np.random.default_rng(5)
+    steps, choi = sample_train_sequence(3, "clifford", rng)
+    assert len(steps) == 3
+    assert choi.shape == (3, 32)

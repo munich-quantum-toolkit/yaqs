@@ -107,6 +107,47 @@ def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
     assert s0.rho_seq.shape == (1, 8)
 
 
+def test_simulate_sequences_traced_incompatible_with_record_step_states() -> None:
+    """Traced mode cannot be combined with per-step trace recording."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+    with pytest.raises(ValueError, match="incompatible"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.0, 0.0],
+            psi_pairs_list=[[(psi0, psi0)]],
+            initial_psis=[psi0.copy()],
+            static_ctx=static_ctx,
+            parallel=False,
+            traced=True,
+            record_step_states=True,
+            e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
+        )
+
+
+def test_simulate_sequences_e_features_rows_length_mismatch() -> None:
+    """Per-sequence Choi rows must align with the number of sequences."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+    with pytest.raises(ValueError, match="e_features_rows length"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.0, 0.0],
+            psi_pairs_list=[[(psi0, psi0)], [(psi0, psi0)]],
+            initial_psis=[psi0.copy(), psi0.copy()],
+            static_ctx=static_ctx,
+            parallel=False,
+            record_step_states=True,
+            e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
+        )
+
+
 def test_simulate_sequences_parallel_smoke() -> None:
     """Parallel MCWF sequence simulation completes for a tiny batch."""
     op = MPO.ising(length=1, J=0.0, g=0.0)

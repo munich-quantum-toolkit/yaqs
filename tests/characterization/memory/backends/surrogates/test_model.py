@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -120,14 +121,17 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
     tgt_t = torch.zeros((4, 2, 8), dtype=torch.float32)
     train_ds = TensorDataset(E_t, rho0_t, tgt_t)
     val_ds = TensorDataset(E_t[:2], rho0_t[:2], tgt_t[:2])
-    model.fit(
-        train_ds,
-        val_dataset=val_ds,
-        epochs=1,
-        batch_size=2,
-        prefix_loss="random",
-        device=torch.device("cpu"),
-    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="CUDA initialization", category=UserWarning)
+        model.fit(
+            train_ds,
+            val_dataset=val_ds,
+            epochs=1,
+            batch_size=2,
+            prefix_loss="random",
+            device=torch.device("cpu"),
+        )
 
 
 def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:

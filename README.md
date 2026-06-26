@@ -88,7 +88,7 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 sim = Simulator()
 state = State(3, initial="zeros")
-H = Hamiltonian.ising(3, J=1.0, g=0.5)
+H = Hamiltonian.ising(L=3, J=1.0, g=0.5)
 params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
 print(sim.run(state, H, params).expectation_values[0])
 ```
@@ -98,10 +98,15 @@ Operational memory characterization:
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
-ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
-params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
-result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
-    ham, params, k=1, cut=1, n_pasts=4, n_futures=4,
+ham = Hamiltonian.ising(length=3, J=1.0, g=0.5)
+params = AnalogSimParams(dt=0.1)
+result = MemoryCharacterizer().characterize(
+    ham,
+    params,
+    k=4,
+    cut=2,
+    n_pasts=4,
+    n_futures=4,
 )
 print(result.summary())
 ```

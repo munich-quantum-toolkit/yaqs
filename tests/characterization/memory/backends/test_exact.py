@@ -28,6 +28,7 @@ from mqt.yaqs.characterization.memory.operational_memory.samples import (
     _sample_cut_preparation_only,
     _sample_probe_step,
     resolve_unitary_sampler,
+    sample_probes,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -278,3 +279,34 @@ def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:
     assert weights.shape == (3, 2)
     assert len(traces) == 6
     assert all("cumulative_weight_final" in t for t in traces)
+
+
+def test_exact_backend_execution_config_override() -> None:
+    """execution_config merges one-shot parallel overrides."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    backend = ExactBackend(
+        operator=op,
+        sim_params=params,
+        initial_psi=np.array([1.0, 0.0], dtype=np.complex128),
+        parallel=True,
+    )
+    assert backend.execution_config().parallel is True
+    assert backend.execution_config(parallel=False).parallel is False
+
+
+def test_simulate_exact_rejects_mismatched_psi_pairs_list() -> None:
+    """Custom psi_pairs_list length must match the probe grid."""
+    rng = np.random.default_rng(0)
+    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=rng)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    with pytest.raises(ValueError, match="psi_pairs_list length"):
+        simulate_exact(
+            probe_set=probe_set,
+            operator=op,
+            sim_params=params,
+            initial_psi=np.array([1.0, 0.0], dtype=np.complex128),
+            parallel=False,
+            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+        )

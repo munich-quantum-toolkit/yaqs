@@ -137,3 +137,38 @@ def test_characterize_multiple_cuts_smoke() -> None:
     for cut in (1, 2, 3):
         assert result.entropy(cut) >= 0.0
         assert result.rank(cut) >= 1.0
+
+
+def test_probes_raises_when_not_recorded() -> None:
+    """probes() requires probe_set data on the stored cut."""
+    packed = pack_result(
+        {"entropy": 0.0, "rank": 1.0, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+        cut=1,
+    )
+    with pytest.raises(ValueError, match="No probe data"):
+        packed.probes()
+
+
+def test_summary_single_cut_format() -> None:
+    """Single-cut results use the compact one-line summary."""
+    packed = pack_result(
+        {"entropy": 0.5, "rank": 1.6, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+        cut=2,
+    )
+    assert packed.summary() == "cut=2: S_V=0.5000, R=1.600"
+
+
+def test_merge_cut_results_rejects_multi_cut_parts() -> None:
+    """merge_cut_results expects each partial result to hold one cut."""
+    multi = merge_cut_results({
+        1: pack_result(
+            {"entropy": 0.1, "rank": 1.1, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+            cut=1,
+        ),
+        2: pack_result(
+            {"entropy": 0.2, "rank": 1.2, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+            cut=2,
+        ),
+    })
+    with pytest.raises(ValueError, match="exactly one cut"):
+        merge_cut_results({1: multi})
