@@ -95,6 +95,15 @@ def test_compute_spectrum_tail_truncation_keeps_threshold_mode() -> None:
     np.testing.assert_allclose(out["singular_values"], np.array([10.0, 5.0]))
 
 
+def test_compute_spectrum_tail_truncation_keeps_significant_mode_near_threshold() -> None:
+    """Do not drop a significant SV when only the full cumulative tail exceeds the budget."""
+    m = np.diag(np.array([10.0, 5.0, 1e-6, 1e-8], dtype=np.float64))
+    out = compute_spectrum(m, discarded_weight_threshold=0.21)
+    np.testing.assert_allclose(out["singular_values"], np.array([10.0, 5.0]))
+    full = compute_spectrum(m, discarded_weight_threshold=None)
+    assert out["entropy"] == pytest.approx(full["entropy"], rel=1e-12, abs=1e-12)
+
+
 def test_compute_spectrum_rank_equals_exp_entropy() -> None:
     """analyze_memory_matrix reports R(c)=exp(S_V(c))."""
     m = np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]], dtype=np.float64)

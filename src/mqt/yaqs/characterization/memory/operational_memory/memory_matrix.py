@@ -157,10 +157,17 @@ def compute_spectrum(
         keep = s_full.size
         for idx, tail_weight in enumerate(tail_cumsum):
             if float(tail_weight / total_weight) > the:
-                keep = max(s_full.size - idx, min_keep_eff)
+                # ``tail_cumsum[idx]`` sums the ``idx + 1`` smallest modes. When
+                # ``idx == n - 1`` the largest mode is included, so ``keep = n - idx``
+                # would discard a significant mode even though the actual discarded
+                # tail (``n - idx`` smallest only) is below the budget.
+                if idx == s_full.size - 1:
+                    keep = max(s_full.size - idx + 1, min_keep_eff)
+                else:
+                    keep = max(s_full.size - idx, min_keep_eff)
                 break
         else:
-            keep = min_keep_eff
+            keep = s_full.size
         s = s_full[:keep]
 
     kept_weight = float(np.sum(s**2))
