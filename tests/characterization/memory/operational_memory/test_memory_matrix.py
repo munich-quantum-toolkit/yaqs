@@ -69,7 +69,7 @@ def test_center_rows_removes_past_mean() -> None:
 
 
 def test_assemble_memory_matrix_beta_scales_rows() -> None:
-    """beta exponent scales branch weights before centering."""
+    """Beta exponent scales branch weights before centering."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
     pauli[..., 0] = 1.0
     weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)

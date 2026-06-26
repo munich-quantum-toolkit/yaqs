@@ -68,31 +68,34 @@ def test_parse_cut_result_requires_memory_matrix() -> None:
 def test_merge_cut_results_multi_cut_summary() -> None:
     """merge_cut_results builds a multi-cut CharacterizationResult."""
     parts = {
-        1: pack_result({"entropy": 0.5, "rank": 1.6, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)}, cut=1),
-        2: pack_result({"entropy": 0.8, "rank": 2.2, "singular_values": np.array([1.0, 0.5]), "memory_matrix": np.eye(2)}, cut=2),
+        1: pack_result(
+            {"entropy": 0.5, "rank": 1.6, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)}, cut=1
+        ),
+        2: pack_result(
+            {"entropy": 0.8, "rank": 2.2, "singular_values": np.array([1.0, 0.5]), "memory_matrix": np.eye(2)}, cut=2
+        ),
     }
     merged = merge_cut_results(parts)
     assert merged.entropy(1) == pytest.approx(0.5)
     assert merged.entropy(2) == pytest.approx(0.8)
     summary = merged.summary()
     assert "cut  S_V" in summary
-    assert "1" in summary and "2" in summary
+    assert "1" in summary
+    assert "2" in summary
 
 
 def test_entropy_requires_cut_when_multiple_stored() -> None:
     """Accessors require an explicit cut for multi-cut results."""
-    merged = merge_cut_results(
-        {
-            1: pack_result(
-                {"entropy": 0.1, "rank": 1.1, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
-                cut=1,
-            ),
-            2: pack_result(
-                {"entropy": 0.2, "rank": 1.2, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
-                cut=2,
-            ),
-        }
-    )
+    merged = merge_cut_results({
+        1: pack_result(
+            {"entropy": 0.1, "rank": 1.1, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+            cut=1,
+        ),
+        2: pack_result(
+            {"entropy": 0.2, "rank": 1.2, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+            cut=2,
+        ),
+    })
     with pytest.raises(ValueError, match="cut is required"):
         merged.entropy()
 
@@ -113,4 +116,3 @@ def test_characterize_multiple_cuts_smoke() -> None:
     for cut in (1, 2, 3):
         assert result.entropy(cut) >= 0.0
         assert result.rank(cut) >= 1.0
-
