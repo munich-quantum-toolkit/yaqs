@@ -55,7 +55,12 @@ dependencies = [
 
 [project.optional-dependencies]
 qasm3 = ["qiskit-qasm3-import>=0.4.1"]
-torch = ["torch>=2.0"]
+torch = [
+    "torch>=2.0; python_version < '3.12'",
+    "torch>=2.2; python_version == '3.12'",
+    "torch>=2.4; python_version == '3.13'",
+    "torch>=2.9; python_version >= '3.14'",
+]
 
 [project.urls]
 Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
@@ -195,7 +200,6 @@ test = [
     "pytest-sugar>=1.1.1",
     "pytest-xdist>=3.8.0",
     "qiskit-qasm3-import>=0.4.1",
-    "torch>=2.0",
 ]
 docs = [
     "furo>=2025.09.25",

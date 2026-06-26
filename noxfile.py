@@ -61,6 +61,7 @@ def _run_tests(
     *,
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
+    extra_torch: bool = False,
 ) -> None:
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
@@ -70,13 +71,19 @@ def _run_tests(
         # disable Numba JIT coverage
         env["NUMBA_DISABLE_JIT"] = "1"
 
-    session.run(
+    uv_args = [
         "uv",
         "run",
         "--no-dev",  # do not auto-install dev dependencies
         "--group",
         "test",
         *install_args,
+    ]
+    if extra_torch:
+        uv_args.extend(["--extra", "torch"])
+
+    session.run(
+        *uv_args,
         "pytest",
         *run_args,
         *session.posargs,
@@ -88,7 +95,7 @@ def _run_tests(
 @nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, default=True)
 def tests(session: nox.Session) -> None:
     """Run the test suite."""
-    _run_tests(session)
+    _run_tests(session, extra_torch=True)
 
 
 @nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, venv_backend="uv")
