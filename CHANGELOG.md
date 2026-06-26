@@ -11,11 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added [`MemoryCharacterizer`](src/mqt/yaqs/memory_characterizer.py) as the sole public memory-characterization entry point with unified `predict()` and `characterize()` over surrogate, Hamiltonian, and reference-comb backends; `train`, `sample`, and `build_comb` build artifacts separately
-- added [`CharacterizationResult`](src/mqt/yaqs/characterization/memory/diagnostics/results.py) with per-cut `entropy`, `rank`, `singular_values`, and `memory_matrix` accessors
-- added `representation` (`"vector"` / `"mps"` / `"auto"`) on `MemoryCharacterizer`, mirroring `Simulator`
-- added user-facing `interventions` presets (`"haar"`, `"clifford"`, `"measure_prepare"`) for characterize and predict workflows
-- added characterization guide at `docs/examples/characterization.md`
+- added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
 - added orthogonality center tracking ([#477]) ([**@aaronleesander**])
 - extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
 - extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
@@ -34,11 +30,6 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
-- `characterize()` now stores probes on its return value; use `result.probes(cut)` to inspect arrays and `probe_set=prior_result` to reuse probes across backends without importing diagnostics internals
-- refactored memory characterization around `MemoryCharacterizer.predict()` and `MemoryCharacterizer.characterize()`; removed top-level `train_surrogate`, `sample_rollouts`, `characterize_memory`, and `TransformerComb` exports
-- replaced `probe_exact`, `probe`, and `probe_from_responses` with unified `characterize()` dispatch; `ProbeResult` renamed to `CharacterizationResult`
-- removed `OperationalMemoryMixin` and per-object `.entropy()` / `.rank()` on combs and surrogates; use `MemoryCharacterizer.characterize()` instead
-- deleted dead `_lazy_exports.py` and inlined characterization preset tables into `MemoryCharacterizer`
 - added trapped-ion position-grid guide and `hamiltonians` factory section ([#476]) ([**@linusschulte**])
 - simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])
