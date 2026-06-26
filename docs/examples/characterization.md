@@ -52,11 +52,14 @@ rho_ref = mc.predict(comb, rho0, sequence, k=k)  # reference dynamics (small k)
 ## Setup
 
 ```{code-cell} ipython3
+import numpy as np
+
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
 params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
 mc = MemoryCharacterizer(parallel=False, show_progress=False)
+rho0 = np.eye(2, dtype=np.complex128) / 2.0
 ```
 
 ## Predict with a trained surrogate
@@ -65,8 +68,6 @@ mc = MemoryCharacterizer(parallel=False, show_progress=False)
 ---
 tags: [remove-output]
 ---
-import numpy as np
-
 try:
     import torch
 except ImportError:
@@ -81,7 +82,6 @@ if torch is not None:
         train_kwargs={"epochs": 2, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    rho0 = np.eye(2, dtype=np.complex128) / 2.0
     rho_out = mc.predict(model, rho0, "haar", k=1)
     print(f"trace(rho) = {np.trace(rho_out).real:.4f}")
 else:

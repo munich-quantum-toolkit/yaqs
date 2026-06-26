@@ -4,3 +4,5 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
+"""Tests for characterization memory backends."""
