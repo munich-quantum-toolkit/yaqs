@@ -1,4 +1,4 @@
-# MQT YAQS — Scalable simulation for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
 
 ```{only} html
 [![PyPI](https://img.shields.io/pypi/v/mqt.yaqs?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
@@ -11,7 +11,7 @@
 \begin{abstract}
 ```
 
-YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS applies state-of-the-art techniques in these areas—parallelized trajectories, tensor-network compression, and backends matched to problem size—wherever possible (see {doc}`references`).
+YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation and characterization of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS applies state-of-the-art techniques in these areas—parallelized trajectories, tensor-network compression, and backends matched to problem size—wherever possible (see {doc}`references`).
 It is developed as part of the [Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io) by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de).
 
 This documentation provides a comprehensive guide to the MQT YAQS library, including {doc}`installation instructions <installation>`, notebook-like examples, and detailed {doc}`API documentation <api/mqt/yaqs/index>`.
