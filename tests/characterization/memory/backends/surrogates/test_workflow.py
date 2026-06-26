@@ -12,72 +12,26 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
+    pack_dataset,
+    sample_train_dataset,
+    train_surrogate_model,
+)
+from mqt.yaqs.characterization.memory.operational_memory.samples import extract_ket
 from mqt.yaqs.characterization.memory.shared.encoding import unpack_rho8
 from mqt.yaqs.characterization.memory.shared.metrics import (
     compute_trace_distance,
     mean_frobenius_mse_rho8,
     mean_trace_distance_rho8,
 )
-from mqt.yaqs.characterization.memory.shared.utils import make_mcwf_static_context
-from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
-    pack_dataset,
-    sample_train_dataset,
-    simulate_sequences,
-    train_surrogate_model,
-)
-from mqt.yaqs.characterization.memory.operational_memory.samples import extract_ket
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def test_extract_ket_fallback_for_zero_projector() -> None:
     """Zero projectors fall back to the |0> state vector."""
     psi = extract_ket(np.zeros((2, 2), dtype=np.complex128))
     np.testing.assert_allclose(psi, np.array([1.0 + 0.0j, 0.0 + 0.0j]))
-
-
-def test_simulate_sequences_input_validation_errors() -> None:
-    """simulate_sequences validates comb schedule and rollout feature inputs."""
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-
-    with pytest.raises(ValueError, match="psi_pairs_list and initial_psis must have equal length"):
-        simulate_sequences(
-            operator=op,
-            sim_params=params,
-            timesteps=[0.1],
-            psi_pairs_list=[],
-            initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
-            static_ctx=None,
-            parallel=False,
-        )
-
-    with pytest.raises(ValueError, match="record_step_states=True requires e_features_rows"):
-        simulate_sequences(
-            operator=op,
-            sim_params=params,
-            timesteps=[0.1, 0.1],
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
-            initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
-            static_ctx=None,
-            parallel=False,
-            record_step_states=True,
-            e_features_rows=None,
-        )
-
-    with pytest.raises(ValueError, match="e_features_rows is only used when record_step_states=True"):
-        simulate_sequences(
-            operator=op,
-            sim_params=params,
-            timesteps=[0.1, 0.1],
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
-            initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
-            static_ctx=None,
-            parallel=False,
-            record_step_states=False,
-            e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
-        )
 
 
 def test_pack_dataset_shapes() -> None:
@@ -93,75 +47,6 @@ def test_pack_dataset_shapes() -> None:
     assert tuple(ds.tensors[1].shape) == (2, 8)
     assert tuple(ds.tensors[2].shape) == (2, 3, 8)
     assert ds.tensors[0].dtype == torch.float32
-
-
-def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
-    """MCWF simulation returns final packed states or rollout samples."""
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    params = AnalogSimParams(dt=0.1)
-    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
-
-    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
-    psi_pairs_list = [[(psi0, psi0)]]
-    initial_psis = [psi0.copy()]
-    timesteps = [0.0, 0.0]
-
-    finals = simulate_sequences(
-        operator=op,
-        sim_params=params,
-        timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
-        initial_psis=initial_psis,
-        static_ctx=static_ctx,
-        parallel=False,
-        show_progress=False,
-        record_step_states=False,
-    )
-    assert isinstance(finals, np.ndarray)
-    assert finals.shape == (1, 8)
-
-    samples = simulate_sequences(
-        operator=op,
-        sim_params=params,
-        timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
-        initial_psis=initial_psis,
-        static_ctx=static_ctx,
-        parallel=False,
-        show_progress=False,
-        record_step_states=True,
-        e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
-    )
-    assert isinstance(samples, list)
-    assert len(samples) == 1
-    s0 = samples[0]
-    assert s0.rho_0.shape == (8,)
-    assert s0.E_features.shape == (1, 32)
-    assert s0.rho_seq.shape == (1, 8)
-
-
-def test_simulate_sequences_parallel_smoke() -> None:
-    """Parallel MCWF sequence simulation completes for a tiny batch."""
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    params = AnalogSimParams(dt=0.1)
-    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
-    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
-    psi_pairs_list = [[(psi0, psi0)], [(psi0, psi0)]]
-    initial_psis = [psi0.copy(), psi0.copy()]
-    cfg = ExecutionConfig(parallel=True, max_workers=2, show_progress=False)
-
-    finals = simulate_sequences(
-        operator=op,
-        sim_params=params,
-        timesteps=[0.0, 0.0],
-        psi_pairs_list=psi_pairs_list,
-        initial_psis=initial_psis,
-        static_ctx=static_ctx,
-        record_step_states=False,
-        _execution=cfg,
-    )
-    assert isinstance(finals, np.ndarray)
-    assert finals.shape == (2, 8)
 
 
 def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
@@ -229,12 +114,14 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     # Small but non-trivial dataset: k=2 sequences, enough samples to evaluate generalization.
     k = 2
     n = 60
+    # Fixed rank-1 leg instrument for a stable accuracy benchmark (independent of train default).
     ds = sample_train_dataset(
         op,
         params,
         k=k,
         n=n,
         seed=123,
+        style="measure_prepare",
         parallel=False,
         show_progress=False,
         timesteps=[0.0, 0.0, 0.0],

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Neural surrogates and comb-sequence simulation helpers.
+"""Neural surrogates for operational-memory dynamics.
 
 Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.sample_train_dataset`
 (returns :class:`~torch.utils.data.TensorDataset`) and
@@ -13,6 +13,7 @@ Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogate
 :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb` holds the network and
 :meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb.fit` training loop.
 Sequence traces: :mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
+Comb-schedule simulation: :mod:`mqt.yaqs.characterization.memory.backends.sequences`.
 
 **Terminology** — See :mod:`mqt.yaqs.characterization.memory.backends.tomography.data` (**sequence** vs
 stochastic **trajectory** under a noise model).

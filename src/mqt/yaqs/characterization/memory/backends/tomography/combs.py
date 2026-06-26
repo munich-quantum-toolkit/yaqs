@@ -16,14 +16,15 @@ import numpy as np
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 from ...operational_memory.grid import assemble_probe_sequence
-from ...operational_memory.samples import ProbeSet
-from ...shared.encoding import decode_packed_pauli_batch, encode_rho_pauli, normalize_backend_rho, pack_rho8
+from ...shared.encoding import encode_rho_pauli
 from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
+    from ...operational_memory.samples import ProbeSet
 
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)

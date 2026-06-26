@@ -19,7 +19,7 @@ from ..operational_memory.branch_weights import compute_trace_weights
 from ..operational_memory.grid import assemble_probe_grid
 from ..shared.encoding import decode_packed_pauli_batch
 from ..shared.utils import StochasticSolver, make_mcwf_static_context
-from .surrogates.workflow import simulate_sequences
+from .sequences.workflow import simulate_sequences
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -58,7 +58,7 @@ class ExactBackend:
     """Exact MCWF/TJM backend for weighted split-cut probe evaluation.
 
     Builds a reusable static MCWF context internally and dispatches sequence
-    simulation via :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.simulate_sequences`
+    simulation via :func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
     with ``traced=True``.
     """
 

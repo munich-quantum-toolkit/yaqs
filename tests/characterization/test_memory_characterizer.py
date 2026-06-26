@@ -65,6 +65,32 @@ def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, Analog
     importlib.util.find_spec("torch") is None,
     reason="torch not installed",
 )
+def test_train_default_style_is_haar(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """train() defaults to style='haar' when style is omitted."""
+    ham, params = ham_and_params
+    captured: dict[str, str] = {}
+
+    def _fake_train(*_args: object, **kwargs: object) -> object:
+        captured["style"] = str(kwargs["style"])
+        from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
+
+        return TransformerComb(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
+
+    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
+
+    monkeypatch.setattr(wf, "train_surrogate_model", _fake_train)
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    mc.train(ham, params, k=1, n=4, train_kwargs={"epochs": 0})
+    assert captured["style"] == "haar"
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None,
+    reason="torch not installed",
+)
 def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Train returns a model; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
@@ -98,7 +124,7 @@ def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimPar
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(model, rho0, "measure_prepare", k=1)
+    rho_out = mc.predict(model, rho0, "haar", k=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -181,7 +207,7 @@ def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams])
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(comb, rho0, "measure_prepare", k=1)
+    rho_out = mc.predict(comb, rho0, "haar", k=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -192,7 +218,7 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(TypeError):
-        mc.predict(ham, params, rho0, "measure_prepare", k=1)  # type: ignore[call-overload]
+        mc.predict(ham, params, rho0, "haar", k=1)  # type: ignore[call-overload]
 
 
 @pytest.mark.skipif(
@@ -213,6 +239,6 @@ def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, Analog
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     for k_prime in (1, 3):
-        rho_out = mc.predict(model, rho0, "measure_prepare", k=k_prime)
+        rho_out = mc.predict(model, rho0, "haar", k=k_prime)
         assert rho_out.shape == (2, 2)
         assert np.all(np.isfinite(rho_out))

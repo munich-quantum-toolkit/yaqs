@@ -58,12 +58,11 @@ if torch is not None:
         k=4,
         n=80,
         seed=0,
-        interventions="measure_prepare",
         model_kwargs={"d_model": 128, "nhead": 4, "num_layers": 3},
         train_kwargs={"epochs": 50, "lr": 2e-3, "batch_size": 64},
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(model, rho0, "measure_prepare", k=4)
+    rho_out = mc.predict(model, rho0, "haar", k=4)
     print(f"trace(rho) = {np.trace(rho_out).real:.4f}")
 else:
     print("torch not installed; skip surrogate path in doc build")

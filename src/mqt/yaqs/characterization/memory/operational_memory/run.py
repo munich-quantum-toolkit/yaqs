@@ -26,9 +26,7 @@ class OperationalMemoryBackend(Protocol):
     Implement :meth:`evaluate_probes_weighted` (for example :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`).
     """
 
-    def evaluate_probes_weighted(
-        self, probe_set: ProbeSet
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate weighted probe responses.
 
         Args:
@@ -157,50 +155,3 @@ def run_operational_memory(
     if return_raw:
         out["memory_matrix_raw"] = m_raw
     return out
-
-
-def run_probe_diagnostics(
-    *,
-    process: MemoryProcessBackend,
-    cut: int,
-    k: int,
-    n_pasts: int = 32,
-    n_futures: int = 32,
-    rng: np.random.Generator | None = None,
-    probe_set: ProbeSet | None = None,
-    return_raw: bool = False,
-    intervention_mode: str = "unitary_break_mp",
-    unitary_ensemble: str = "haar",
-    parallel: bool | None = None,
-) -> dict[str, Any]:
-    """Deprecated alias for :func:`run_operational_memory`.
-
-    Args:
-        process: Operational-memory backend.
-        cut: Causal cut index.
-        k: Total sequence length.
-        n_pasts: Past probe count when sampling internally.
-        n_futures: Future probe count when sampling internally.
-        rng: RNG for internal probe sampling.
-        probe_set: Pre-sampled probes (optional).
-        return_raw: If True, include uncentered ``memory_matrix_raw``.
-        intervention_mode: Passed to internal sampling.
-        unitary_ensemble: Passed to internal sampling.
-        parallel: Override parallelism for exact backends.
-
-    Returns:
-        Same dict as :func:`run_operational_memory`.
-    """
-    return run_operational_memory(
-        process=process,
-        cut=cut,
-        k=k,
-        n_pasts=n_pasts,
-        n_futures=n_futures,
-        rng=rng,
-        probe_set=probe_set,
-        return_raw=return_raw,
-        intervention_mode=intervention_mode,
-        unitary_ensemble=unitary_ensemble,
-        parallel=parallel,
-    )

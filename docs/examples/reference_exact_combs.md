@@ -80,7 +80,7 @@ print(type(comb_mpo).__name__, comb_mpo.to_dense().to_matrix().shape)
 ---
 tags: [remove-output]
 ---
-rho_ref = mc.predict(comb_single, rho0, "measure_prepare", k=1)
+rho_ref = mc.predict(comb_single, rho0, "haar", k=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
@@ -100,8 +100,8 @@ At small `k`, compare surrogate predictions against the reference comb:
 
 ```python
 model = mc.train(hamiltonian, sim_params, k=1, n=40)
-rho_sure = mc.predict(model, rho0, "measure_prepare", k=1)
-rho_comb = mc.predict(comb_single, rho0, "measure_prepare", k=1)
+rho_sure = mc.predict(model, rho0, "haar", k=1)
+rho_comb = mc.predict(comb_single, rho0, "haar", k=1)
 # Compare rho_sure vs rho_comb (e.g. trace distance or fidelity)
 ```
 

@@ -15,8 +15,8 @@ from typing import Any
 
 import numpy as np
 
-from ..shared.encoding import _flatten_choi4
 from ..backends.surrogates.utils import sample_intervention_parts
+from ..shared.encoding import _flatten_choi4
 
 
 @dataclass(slots=True)

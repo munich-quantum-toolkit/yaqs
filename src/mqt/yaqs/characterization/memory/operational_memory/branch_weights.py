@@ -9,12 +9,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from .grid import assemble_probe_sequence
-from .samples import ProbeSet
+
+if TYPE_CHECKING:
+    from .samples import ProbeSet
 
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 

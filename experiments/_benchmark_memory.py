@@ -99,7 +99,7 @@ def weighted_centered_singular_values(
         initial_psi=psi0,
         parallel=parallel,
     )
-    m_raw, memory_matrix = assemble_memory_matrix(
+    _m_raw, memory_matrix = assemble_memory_matrix(
         pauli_xyz_ij,
         weights_ij,
         beta=branch_weight_beta,

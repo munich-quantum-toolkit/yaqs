@@ -19,6 +19,7 @@ import numpy as np
 from mqt.yaqs.characterization.memory.backends.tomography import DenseComb, MPOComb, build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.combs import convert_probe_callable
 from mqt.yaqs.characterization.memory.operational_memory.interventions import (
+    DEFAULT_INTERVENTION_STYLE,
     InterventionSequence,
     encode_sequence,
     map_probe_kwargs,
@@ -391,7 +392,7 @@ class MemoryCharacterizer:
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        interventions: str = "measure_prepare",
+        style: str = DEFAULT_INTERVENTION_STYLE,
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TensorDataset:
@@ -406,7 +407,7 @@ class MemoryCharacterizer:
             seed: Optional seed when ``rng`` is omitted.
             timesteps: Optional comb schedule of length ``k + 1``.
             init_mode: Initial-state sampling mode for training sequences.
-            interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             parallel: Override instance parallel setting.
             show_progress: Override instance progress-bar setting.
 
@@ -428,7 +429,7 @@ class MemoryCharacterizer:
             timesteps=timesteps,
             init_mode=init_mode,
             solver=self._solver_for(hamiltonian),
-            interventions=interventions,
+            style=style,
             parallel=self._execution.parallel if parallel is None else parallel,
             show_progress=self._execution.show_progress if show_progress is None else show_progress,
             _execution=self._execution,
@@ -444,7 +445,7 @@ class MemoryCharacterizer:
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        interventions: str = "measure_prepare",
+        style: str = DEFAULT_INTERVENTION_STYLE,
         model_kwargs: dict | None = None,
         train_kwargs: dict | None = None,
         parallel: bool | None = None,
@@ -460,7 +461,7 @@ class MemoryCharacterizer:
             seed: Optional RNG seed for data sampling and weight init.
             timesteps: Optional comb schedule of length ``k + 1``.
             init_mode: Initial-state sampling mode for training sequences.
-            interventions: Training intervention kind.
+            style: Training intervention style.
             model_kwargs: Optional overrides for :class:`TransformerComb` construction.
             train_kwargs: Optional overrides for the training loop.
             parallel: Override instance parallel setting.
@@ -482,7 +483,7 @@ class MemoryCharacterizer:
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
-            interventions=interventions,
+            style=style,
             solver=self._solver_for(hamiltonian),
             model_kwargs=model_kwargs,
             train_kwargs=train_kwargs,
@@ -504,7 +505,7 @@ class MemoryCharacterizer:
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        interventions: str = "haar",
+        style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
@@ -523,7 +524,7 @@ class MemoryCharacterizer:
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        interventions: str = "haar",
+        style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         parallel: bool | None = None,
@@ -542,7 +543,7 @@ class MemoryCharacterizer:
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        interventions: str = "haar",
+        style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
@@ -563,7 +564,7 @@ class MemoryCharacterizer:
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
             n_pasts: Override number of past probes.
             n_futures: Override number of future probes.
-            interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
@@ -578,7 +579,7 @@ class MemoryCharacterizer:
             ValueError: If ``k`` is missing for a Hamiltonian target.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
-        probe_kw = {**map_probe_kwargs(interventions), **probe_kwargs}
+        probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
         resolved_probe_set = resolve_probe_bundle(probe_set)
 
         if matches_hamiltonian(target):
@@ -778,7 +779,7 @@ class MemoryCharacterizer:
             if isinstance(seq, str):
                 from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_sequence
 
-                slots = expand_sequence(seq, k=resolved_k, rng=local_rng)
+                slots = expand_sequence(seq, k=resolved_k, _rng=local_rng)
             else:
                 slots = list(seq)
             steps, _ = encode_sequence(slots, k=resolved_k, rng=local_rng)

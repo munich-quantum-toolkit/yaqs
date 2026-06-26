@@ -58,7 +58,7 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 # ---------------------------------------------------------------------------
 # Parallel job payload (pickle-stable keys for WORKER_CTX)
 # ---------------------------------------------------------------------------
-# ``simulate_sequences`` in :mod:`.workflow` passes this dict to
+# ``simulate_sequences`` in :mod:`mqt.yaqs.characterization.memory.backends.sequences.workflow` passes this dict to
 # :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs` (initializer →
 # :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`) or directly to workers on the
 # serial path. Workers use :func:`~mqt.yaqs.core.parallel_utils.resolve_worker_ctx`

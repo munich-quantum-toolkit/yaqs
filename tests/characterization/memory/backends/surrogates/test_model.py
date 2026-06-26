@@ -134,11 +134,11 @@ def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     """Default initial state matches the normalized |0> density matrix."""
     torch = pytest.importorskip("torch")
 
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
     from mqt.yaqs.characterization.memory.shared.encoding import (  # noqa: PLC0415
         normalize_backend_rho,
         pack_rho8,
     )
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     rho0 = model._default_rho0(device=torch.device("cpu"), dtype=torch.float32)

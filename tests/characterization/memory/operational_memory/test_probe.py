@@ -14,22 +14,22 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
-from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb
-from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
-    assemble_memory_matrix,
-    compute_spectrum,
-)
-from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    compute_branch_weight,
-    compute_branch_weights,
-)
-from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
-from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.backends.exact import (
     ExactBackend,
     simulate_exact,
 )
+from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb
+from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
+    compute_branch_weight,
+    compute_branch_weights,
+)
+from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
+    assemble_memory_matrix,
+    compute_spectrum,
+)
+from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

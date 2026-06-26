@@ -11,8 +11,8 @@ Package layout (internal; user entry point is :class:`~mqt.yaqs.memory_character
 
 - :mod:`.operational_memory` — split-cut probes, branch weights, memory matrix, orchestration
 - :mod:`.shared` — encoding, metrics, and MCWF/TJM site-0 helpers shared by backends
-- :mod:`.backends` — exact Hamiltonian simulation, process-tensor tomography, neural surrogates
+- :mod:`.backends` — exact Hamiltonian simulation, comb-schedule sequences, tomography, neural surrogates
 
 Public helpers use compact verb-first names (``sample_probes``, ``assemble_probe_grid``,
-``compute_trace_weights``, ``simulate_sequences``, ``encode_rho_pauli``, …).
+``compute_trace_weights``, ``simulate_sequences`` in :mod:`.backends.sequences`, …).
 """

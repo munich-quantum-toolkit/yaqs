@@ -78,18 +78,27 @@ if torch is not None:
         params,
         k=1,
         n=12,
-        interventions="measure_prepare",
         train_kwargs={"epochs": 2, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(model, rho0, "measure_prepare", k=1)
+    rho_out = mc.predict(model, rho0, "haar", k=1)
     print(f"trace(rho) = {np.trace(rho_out).real:.4f}")
 else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
 Training fixes the number of intervention steps `k` on the model. At inference, `mc.predict(model, rho0, sequence, k=k_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `k_prime` up to the trained `k`; accuracy generally decreases when `k_prime` exceeds the training horizon. See {doc}`process_tensor_surrogates` for architecture details.
+
+### Intervention styles
+
+`train`, `sample`, and `characterize` accept `style=` (default `"haar"`):
+
+- **`"haar"`** (default): Haar-random unitaries on sequence legs; measure/prepare at the causal cut only (paper V-matrix / `experiments/` standard).
+- **`"measure_prepare"`**: rank-1 measure–prepare CP maps on every leg — opt-in for tomography/comb-aligned studies.
+- **`"clifford"`**: uniformly random single-qubit Clifford gates on legs.
+
+For `predict`, pass the same style string as the third argument, or an explicit per-step slot list.
 
 ## Predict with a reference comb
 
@@ -102,7 +111,7 @@ Training fixes the number of intervention steps `k` on the model. At inference, 
 tags: [remove-output]
 ---
 comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense", num_trajectories=20)
-rho_ref = mc.predict(comb, rho0, "measure_prepare", k=1)
+rho_ref = mc.predict(comb, rho0, "haar", k=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
@@ -164,8 +173,8 @@ With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (
 
 ## Developer modules
 
-Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (``operational_memory``,
-``shared``, ``backends``). See {doc}`operational_memory` for the internal layout and verb-first API names.
+Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (`operational_memory`,
+`shared`, `backends`). See {doc}`operational_memory` for the internal layout and verb-first API names.
 
 ## Related topics
 

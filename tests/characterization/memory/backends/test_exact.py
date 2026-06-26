@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 import mqt.yaqs.characterization.memory.backends.exact as exact_mod
-from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.characterization.memory.backends.exact import (
     ExactBackend,
     simulate_exact,
 )
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

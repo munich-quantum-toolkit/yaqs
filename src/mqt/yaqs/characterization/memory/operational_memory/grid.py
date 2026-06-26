@@ -9,9 +9,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .samples import ProbeSet
+if TYPE_CHECKING:
+    from .samples import ProbeSet
 
 
 def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:

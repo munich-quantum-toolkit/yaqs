@@ -33,12 +33,13 @@ from .run import (
     OperationalMemoryBackend,
     evaluate_probes_weighted_for,
     run_operational_memory,
-    run_probe_diagnostics,
 )
 from .samples import ProbeSet, extract_ket, resolve_unitary_sampler, sample_probes
 
 __all__ = [
     "CharacterizationResult",
+    "CombProbeBackend",
+    "MemoryProcessBackend",
     "OperationalMemoryBackend",
     "ProbeSet",
     "assemble_probe_grid",
@@ -54,6 +55,5 @@ __all__ = [
     "pack_result",
     "resolve_unitary_sampler",
     "run_operational_memory",
-    "run_probe_diagnostics",
     "sample_probes",
 ]
