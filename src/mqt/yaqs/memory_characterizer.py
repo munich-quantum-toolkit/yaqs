@@ -16,36 +16,30 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.combs.core.encoding import (
-    normalize_backend_rho,
-    pack_rho8,
-    unpack_rho8,
+from mqt.yaqs.characterization.memory.backends.tomography import DenseComb, MPOComb, build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.combs import convert_probe_callable
+from mqt.yaqs.characterization.memory.operational_memory.interventions import (
+    InterventionSequence,
+    encode_sequence,
+    map_probe_kwargs,
 )
-from mqt.yaqs.characterization.memory.combs.core.utils import (
-    DEFAULT_VECTOR_MAX_QUBITS,
-    CharacterizerRepresentation,
-    representation_to_solver,
-    resolve_characterizer_representation,
-)
-from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, build_process_tensor
-from mqt.yaqs.characterization.memory.combs.tomography.combs import convert_probe_callable
-from mqt.yaqs.characterization.memory.diagnostics.memory_matrix import (
-    assemble_weighted_matrix_from_probe,
-    compute_spectrum,
-)
-from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    run_probe_diagnostics,
-    sample_probes,
-)
-from mqt.yaqs.characterization.memory.diagnostics.results import (
+from mqt.yaqs.characterization.memory.operational_memory.results import (
     CharacterizationResult,
     merge_cut_results,
     pack_result,
 )
-from mqt.yaqs.characterization.memory.interventions import (
-    InterventionSequence,
-    encode_sequence,
-    map_probe_kwargs,
+from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
+from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.shared.encoding import (
+    normalize_backend_rho,
+    pack_rho8,
+    unpack_rho8,
+)
+from mqt.yaqs.characterization.memory.shared.utils import (
+    DEFAULT_VECTOR_MAX_QUBITS,
+    CharacterizerRepresentation,
+    representation_to_solver,
+    resolve_characterizer_representation,
 )
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
@@ -54,9 +48,9 @@ if TYPE_CHECKING:
     from numpy.random import Generator
     from torch.utils.data import TensorDataset
 
-    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
-    from mqt.yaqs.characterization.memory.combs.tomography.basis import TomographyBasis
-    from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis
+    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -265,7 +259,7 @@ class MemoryCharacterizer:
         """Configure execution and representation defaults for characterization workflows.
 
         Args:
-            parallel: Whether to parallelize sequence rollouts.
+            parallel: Whether to parallelize sequence simulation.
             max_workers: Cap on worker processes when ``parallel=True``.
             show_progress: Whether to show tqdm progress bars.
             representation: ``"vector"``, ``"mps"``, or ``"auto"`` stochastic solver choice.
@@ -287,17 +281,17 @@ class MemoryCharacterizer:
 
     @property
     def parallel(self) -> bool:
-        """Whether parallel rollout execution is enabled."""
+        """Whether parallel sequence simulation is enabled."""
         return self._execution.parallel
 
     @property
     def max_workers(self) -> int:
-        """Resolved worker-process cap for parallel rollouts."""
+        """Resolved worker-process cap for parallel sequence jobs."""
         return self._execution.resolved_max_workers()
 
     @property
     def show_progress(self) -> bool:
-        """Whether progress bars are shown during rollouts."""
+        """Whether progress bars are shown during sequence simulation."""
         return self._execution.show_progress
 
     @property
@@ -349,7 +343,7 @@ class MemoryCharacterizer:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
             timesteps: Optional per-step durations; defaults from ``sim_params.dt``.
-            noise_model: Optional noise model during tomography rollouts.
+            noise_model: Optional noise model during tomography sequences.
             num_trajectories: Monte Carlo trajectories per tomography sample.
             basis: Intervention basis for process-tensor tomography.
             basis_seed: Optional RNG seed for basis construction.
@@ -411,7 +405,7 @@ class MemoryCharacterizer:
             rng: Optional RNG (overrides ``seed``).
             seed: Optional seed when ``rng`` is omitted.
             timesteps: Optional comb schedule of length ``k + 1``.
-            init_mode: Initial-state sampling mode for rollouts.
+            init_mode: Initial-state sampling mode for training sequences.
             interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             parallel: Override instance parallel setting.
             show_progress: Override instance progress-bar setting.
@@ -420,7 +414,7 @@ class MemoryCharacterizer:
             PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
         """
         operator = _require_hamiltonian(hamiltonian)
-        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
+        from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
             sample_train_dataset as _sample_train_dataset,
         )
 
@@ -465,7 +459,7 @@ class MemoryCharacterizer:
             n: Number of training sequences.
             seed: Optional RNG seed for data sampling and weight init.
             timesteps: Optional comb schedule of length ``k + 1``.
-            init_mode: Initial-state sampling mode for rollouts.
+            init_mode: Initial-state sampling mode for training sequences.
             interventions: Training intervention kind.
             model_kwargs: Optional overrides for :class:`TransformerComb` construction.
             train_kwargs: Optional overrides for the training loop.
@@ -473,10 +467,10 @@ class MemoryCharacterizer:
             show_progress: Override instance progress-bar setting.
 
         Returns:
-            Trained :class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb`.
+            Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb`.
         """
         operator = _require_hamiltonian(hamiltonian)
-        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
+        from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
             train_surrogate_model as _train_surrogate_model,
         )
 
@@ -572,7 +566,7 @@ class MemoryCharacterizer:
             interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
-            initial_psi: Optional initial state for Hamiltonian exact rollouts.
+            initial_psi: Optional initial state for Hamiltonian exact simulation.
             parallel: Override parallelism for comb/surrogate probing.
             **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
 
@@ -675,7 +669,7 @@ class MemoryCharacterizer:
     ) -> CharacterizationResult:
         """Characterize a comb or surrogate via internal split-cut probing."""
         resolved_cut = _default_cut(int(k), cut)
-        out = run_probe_diagnostics(
+        out = run_operational_memory(
             process=target,
             cut=resolved_cut,
             k=int(k),
@@ -704,13 +698,25 @@ class MemoryCharacterizer:
         initial_psi: np.ndarray | None,
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
-        """Characterize a Hamiltonian via exact stochastic rollouts and branch weights."""
-        from mqt.yaqs.characterization.memory.reference.exact import (
-            simulate_probes_exact,
-        )
+        """Characterize a Hamiltonian via exact stochastic sequences and branch weights."""
+        from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
 
         operator = _require_hamiltonian(hamiltonian)
         cut_list = self._resolve_cut_list(int(k), cut=cut, cuts=cuts)
+        psi0 = (
+            np.asarray(initial_psi, dtype=np.complex128)
+            if initial_psi is not None
+            else make_zero_psi(hamiltonian.length)
+        )
+        backend = ExactBackend(
+            operator=operator,
+            sim_params=sim_params,
+            initial_psi=psi0,
+            parallel=self._execution.parallel,
+            show_progress=self._execution.show_progress,
+            solver=self._solver_for(hamiltonian),
+            _execution=self._execution,
+        )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
             resolved_cut = _default_cut(int(k), int(c))
@@ -725,23 +731,13 @@ class MemoryCharacterizer:
                     rng=local_rng,
                     **probe_kw,
                 )
-            psi0 = (
-                np.asarray(initial_psi, dtype=np.complex128)
-                if initial_psi is not None
-                else make_zero_psi(hamiltonian.length)
-            )
-            pauli_xyz, weights_ij, _traces = simulate_probes_exact(
+            out = run_operational_memory(
+                process=backend,
+                cut=resolved_cut,
+                k=int(k),
                 probe_set=local_probe_set,
-                operator=operator,
-                sim_params=sim_params,
-                initial_psi=psi0,
-                parallel=self._execution.parallel,
-                show_progress=self._execution.show_progress,
-                solver=self._solver_for(hamiltonian),
+                return_raw=True,
             )
-            _m_raw, memory_matrix = assemble_weighted_matrix_from_probe(pauli_xyz, weights_ij)
-            ana = compute_spectrum(memory_matrix)
-            out: dict[str, Any] = {**ana, "memory_matrix": memory_matrix, "probe_set": local_probe_set}
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
@@ -780,7 +776,7 @@ class MemoryCharacterizer:
         if matches_comb(target):
             resolved_k = _resolve_k(target, k)
             if isinstance(seq, str):
-                from mqt.yaqs.characterization.memory.interventions import expand_sequence
+                from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_sequence
 
                 slots = expand_sequence(seq, k=resolved_k, rng=local_rng)
             else:

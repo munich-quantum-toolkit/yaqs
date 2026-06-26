@@ -162,6 +162,11 @@ print(ref.summary())
 `MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` uses MCWF, `"mps"` uses TJM.
 With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (default 10).
 
+## Developer modules
+
+Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (``operational_memory``,
+``shared``, ``backends``). See {doc}`operational_memory` for the internal layout and verb-first API names.
+
 ## Related topics
 
 - {doc}`process_tensor_surrogates` — surrogate training and Transformer structure

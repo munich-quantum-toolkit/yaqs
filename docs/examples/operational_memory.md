@@ -41,8 +41,8 @@ result.rank(c)  # R(c) = exp(S_V(c))
 
 | Backend              | How `weights_ij` are obtained                                                                                                          |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **Hamiltonian**      | Product of simulated intervention probabilities along each probe sequence through cut `c` (from full-state rollouts).                  |
-| **Comb / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (internal branch-weight rollout). |
+| **Hamiltonian**      | Product of simulated intervention probabilities along each probe sequence through cut `c` (from traced full-state simulation).       |
+| **Comb / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (internal branch-weight path). |
 
 In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).
 
@@ -211,6 +211,20 @@ for jv in js:
 for row in rows:
     print(f"J={row['J']:.1f}, cut={row['cut']}, S_V={row['S_V']:.4f}")
 ```
+
+## Internal package layout (developers)
+
+User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` only. Lower-level modules live under ``mqt.yaqs.characterization.memory``:
+
+| Path | Role |
+| ---- | ---- |
+| ``operational_memory/`` | Split-cut protocol: ``sample_probes``, ``assemble_probe_grid``, ``run_operational_memory`` |
+| ``shared/`` | Choi/rho encoding and site-0 MCWF/TJM helpers (not ``mqt.yaqs.core``) |
+| ``backends/exact.py`` | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
+| ``backends/tomography/`` | Reference dense/MPO combs |
+| ``backends/surrogates/`` | ``TransformerComb``, ``simulate_sequences``, ``SeqTrace`` training traces |
+
+Verb-first naming is used throughout (``compute_*``, ``assemble_*``, ``simulate_*``, ``encode_*``).
 
 ## Related topics
 

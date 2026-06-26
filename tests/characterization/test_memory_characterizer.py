@@ -151,7 +151,7 @@ def test_transformercomb_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
-    from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
 
     _ham, _params = ham_and_params
     model = TransformerComb(

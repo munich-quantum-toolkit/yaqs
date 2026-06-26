@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from _benchmark_memory import linear_weighted_metrics as _linear_weighted_metrics
 
-from mqt.yaqs.characterization.memory.combs.surrogates.utils import sample_pure_state
-from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, sample_probes
+from mqt.yaqs.characterization.memory.backends.surrogates.utils import sample_pure_state
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -90,6 +90,7 @@ def linear_weighted_metrics(
     sim_params: Any,
     psi0: np.ndarray,
     parallel: bool,
+    psi_pairs_list: list[Any] | None = None,
 ) -> dict[str, float | int]:
     """Past-centered S_V with weighted memory matrix (beta=1) using mc-process branch weights."""
     return _linear_weighted_metrics(
@@ -99,6 +100,7 @@ def linear_weighted_metrics(
         psi0=psi0,
         parallel=parallel,
         branch_weight_beta=BRANCH_WEIGHT_BETA,
+        psi_pairs_list=psi_pairs_list,
     )
 
 

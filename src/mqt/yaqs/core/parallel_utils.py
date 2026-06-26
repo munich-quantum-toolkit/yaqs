@@ -52,7 +52,10 @@ __all__ = [
     "available_cpus",
     "get_parallel_context",
     "limit_worker_threads",
+    "reassemble_indexed",
+    "resolve_worker_ctx",
     "safe_set_numba_threads",
+    "unpack_flat_job",
 ]
 
 
@@ -210,6 +213,40 @@ def merge_execution_config(
     return replace(base, **updates) if updates else base
 
 
+# ---------------------------------------------------------------------------
+# Worker helpers — shared by characterization pool workers
+# ---------------------------------------------------------------------------
+# Pool workers take ``(job_idx, payload=None)``. When ``payload`` is omitted they
+# read :data:`WORKER_CTX`, installed once per process by :func:`worker_init`.
+# Flat job indices encode ``sequence_index * num_trajectories + trajectory_index``;
+# use :func:`unpack_flat_job` and :func:`reassemble_indexed` to map results back.
+def resolve_worker_ctx(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Return ``payload`` when set, otherwise the process-pool :data:`WORKER_CTX`."""
+    return WORKER_CTX if payload is None else payload
+
+
+def unpack_flat_job(job_idx: int, num_trajectories: int) -> tuple[int, int]:
+    """Unpack a flat job index into ``(sequence_index, trajectory_index)``."""
+    n_traj = int(num_trajectories)
+    idx = int(job_idx)
+    return idx // n_traj, idx % n_traj
+
+
+def reassemble_indexed(
+    results: dict[int, TRes],
+    n_jobs: int,
+    *,
+    label: str,
+) -> list[TRes]:
+    """Build an ordered result list from a job-index map; raise if any slot is missing."""
+    n = int(n_jobs)
+    missing = [i for i in range(n) if i not in results]
+    if missing:
+        msg = f"{label}: parallel execution incomplete (missing indices: {missing[:8]})."
+        raise RuntimeError(msg)
+    return [results[i] for i in range(n)]
+
+
 def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     """Initialize worker process thread caps and shared payload context."""
     limit_worker_threads(n_threads)
@@ -283,6 +320,9 @@ def run_backend_parallel(
                     next_job_idx += 1
 
 
+# ---------------------------------------------------------------------------
+# Indexed job dispatch — parallel or serial (characterization entry point)
+# ---------------------------------------------------------------------------
 def run_indexed_jobs(
     worker_fn: Callable[..., TRes],
     *,

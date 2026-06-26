@@ -82,7 +82,7 @@ if torch is not None:
 
 ## Advanced: custom architecture and `sample`
 
-For full control over architecture, training loops, or batched tensor shapes, use `mc.sample(...)` to generate a PyTorch dataset and instantiate {class}`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb` directly. User-facing dynamics should still go through `mc.predict`.
+For full control over architecture, training loops, or batched tensor shapes, use `mc.sample(...)` to generate a PyTorch dataset and instantiate {class}`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb` directly. Training data are built from simulated :class:`~mqt.yaqs.characterization.memory.backends.surrogates.data.SeqTrace` records via :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.sample_train_dataset`. User-facing dynamics should still go through `mc.predict`.
 
 ## Related topics
 

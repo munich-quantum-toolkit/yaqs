@@ -143,7 +143,7 @@ def main() -> None:
         right_cut = int(left_cut + ell + 1)
         k_this = int(PAST_LEN_FIXED + 1 + ell + 1 + FUTURE_LEN_FIXED)
         probe_rng = np.random.default_rng(int(args.seed) + 10_000 * int(ell))
-        probe_set = sample_split_delayed_break_probes(
+        probe_set, psi_pairs_list = sample_split_delayed_break_probes(
             left_cut=left_cut,
             tau=int(ell),
             k=k_this,
@@ -166,6 +166,7 @@ def main() -> None:
                     sim_params=sim_params,
                     psi0=psi0,
                     parallel=bool(args.parallel),
+                    psi_pairs_list=psi_pairs_list,
                 )
                 entropies.append(float(m["entropy"]))
                 delta_norms.append(float(m["delta_norm"]))

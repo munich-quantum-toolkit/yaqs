@@ -30,7 +30,7 @@ from _benchmark_common import (
 from _benchmark_memory import entropy_from_singular_values, weighted_centered_singular_values
 from _benchmark_plotting import plot_convergence_sv_vs_m, plot_spectrum_and_rank_vs_j
 
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_probes
+from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

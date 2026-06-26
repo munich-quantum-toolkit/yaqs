@@ -116,7 +116,7 @@ def main() -> None:
             raise ValueError(msg)
         left_cut = int(PAST_LEN_FIXED + 1)
         k_this = int(PAST_LEN_FIXED + 1 + ell + 1 + FUTURE_LEN_FIXED)
-        probe_set = probe_set_for_ell(
+        probe_set, psi_pairs_list = probe_set_for_ell(
             past_pairs=past_pairs,
             past_cut_meas=past_cut_meas,
             future_prep_cut=future_prep_cut,
@@ -135,6 +135,7 @@ def main() -> None:
                     sim_params=sim_params,
                     psi0=psi0,
                     parallel=bool(args.parallel),
+                    psi_pairs_list=psi_pairs_list,
                 )
                 entropies.append(float(m["entropy"]))
                 delta_norms.append(float(m["delta_norm"]))

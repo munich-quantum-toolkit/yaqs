@@ -115,8 +115,8 @@ examples/trapped_ion
 
 ## Characterization
 
-Characterize **non-Markovian memory** in open quantum processes via split-cut memory matrices
-diagnostics (`S_V`, rank, spectrum). Start with {doc}`examples/characterization` for
+Characterize **non-Markovian memory** in open quantum processes via split-cut operational memory
+(`S_V`, rank, spectrum). Start with {doc}`examples/characterization` for
 `MemoryCharacterizer` workflows: predict with surrogates (or reference combs at small `k`),
 characterize with the Hamiltonian as the primary metric.
 

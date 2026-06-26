@@ -18,7 +18,12 @@ import numba
 import pytest
 
 from mqt.yaqs.core import parallel_utils
-from mqt.yaqs.core.parallel_utils import get_parallel_context, worker_init
+from mqt.yaqs.core.parallel_utils import (
+    get_parallel_context,
+    resolve_worker_ctx,
+    unpack_flat_job,
+    worker_init,
+)
 from mqt.yaqs.simulator import available_cpus as simulator_available_cpus
 
 
@@ -101,6 +106,21 @@ def test_threading_config() -> None:
 
         with contextlib.suppress(Exception):
             numba.set_num_threads(original_numba_threads)
+
+
+def test_resolve_worker_ctx_and_unpack_flat_job() -> None:
+    """Worker helpers resolve pool context and flat job indices."""
+    payload = {"num_trajectories": 2, "x": 1}
+    worker_init(payload)
+    assert resolve_worker_ctx(None)["x"] == 1
+    assert resolve_worker_ctx({"y": 2})["y"] == 2
+    assert unpack_flat_job(3, 2) == (1, 1)
+
+
+def test_reassemble_indexed_raises_on_missing() -> None:
+    """Incomplete parallel maps raise with a descriptive label."""
+    with pytest.raises(RuntimeError, match="incomplete"):
+        parallel_utils.reassemble_indexed({0: 1}, 2, label="test_job")
 
 
 def test_get_parallel_context_explicit_fork_and_spawn() -> None:

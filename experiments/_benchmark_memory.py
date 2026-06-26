@@ -9,20 +9,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.diagnostics.memory_matrix import (
-    assemble_weighted_matrix,
-    center_rows,
+from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
+from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
+    assemble_memory_matrix,
     compute_spectrum,
-    sanitize_branch_weights,
 )
-from mqt.yaqs.characterization.memory.reference.exact import simulate_probes_exact
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
+    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -52,23 +50,28 @@ def linear_weighted_metrics(
     psi0: np.ndarray,
     parallel: bool,
     branch_weight_beta: float = 1.0,
+    psi_pairs_list: list[list[Any]] | None = None,
 ) -> dict[str, float | int]:
     """Past-centered S_V with weighted memory matrix using mc-process branch weights."""
-    pauli_xyz_ij, _, traces = simulate_probes_exact(
+    pauli_xyz_ij, _, traces = simulate_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
         initial_psi=psi0,
         parallel=parallel,
+        psi_pairs_list=psi_pairs_list,
     )
     n_p, n_f = pauli_xyz_ij.shape[:2]
     weights_ij = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
             weights_ij[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
-    w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=False)
-    m_raw = assemble_weighted_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
-    memory_matrix = center_rows(m_raw)
+    m_raw, memory_matrix = assemble_memory_matrix(
+        pauli_xyz_ij,
+        weights_ij,
+        beta=branch_weight_beta,
+        log_weight_warnings=False,
+    )
     ana = compute_spectrum(memory_matrix)
     return {
         "entropy": float(ana["entropy"]),
@@ -89,14 +92,17 @@ def weighted_centered_singular_values(
     branch_weight_beta: float = 1.0,
 ) -> np.ndarray:
     """Singular values of the past-centered weighted memory matrix from exact rollouts."""
-    pauli_xyz_ij, weights_ij, _ = simulate_probes_exact(
+    pauli_xyz_ij, weights_ij, _ = simulate_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
         initial_psi=psi0,
         parallel=parallel,
     )
-    w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=False)
-    m_raw = assemble_weighted_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
-    memory_matrix = center_rows(m_raw)
+    m_raw, memory_matrix = assemble_memory_matrix(
+        pauli_xyz_ij,
+        weights_ij,
+        beta=branch_weight_beta,
+        log_weight_warnings=False,
+    )
     return np.linalg.svd(np.asarray(memory_matrix, dtype=np.float64), compute_uv=False).astype(np.float64)

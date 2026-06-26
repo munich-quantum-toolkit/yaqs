@@ -13,15 +13,15 @@ import copy
 from typing import Any
 
 import numpy as np
-from _benchmark_sampling import (
-    resolve_unitary_sampler,
-    sample_cut_measurement_only,
-    sample_cut_preparation_only,
-    sample_probe_step,
-    sample_step,
-)
 
-from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
+from mqt.yaqs.characterization.memory.operational_memory.samples import (
+    ProbeSet,
+    _sample_cut_measurement_only,
+    _sample_cut_preparation_only,
+    _sample_probe_step,
+    _sample_step,
+    resolve_unitary_sampler,
+)
 
 PAST_LEN_FIXED = 15
 FUTURE_LEN_FIXED = 5
@@ -38,7 +38,7 @@ def sample_split_delayed_break_probes(
     sigma_ref: np.ndarray | None = None,
     intervention_mode: str = "unitary_break_mp",
     unitary_ensemble: str = "haar",
-) -> ProbeSet:
+) -> tuple[ProbeSet, list[list[Any]]]:
     """Delayed causal-break probes: past + break + identity bridge + future."""
     c_left = int(left_cut)
     tt = int(tau)
@@ -68,20 +68,20 @@ def sample_split_delayed_break_probes(
     for _ in range(n_pasts):
         pairs_i: list[Any] = []
         for _ in range(past_full):
-            _feat, step = sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            _feat, step = _sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
             pairs_i.append(step)
-        _feat_m, psi_m = sample_cut_measurement_only(rng)
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
 
     future_prep_cut: list[np.ndarray] = []
     future_pairs: list[list[Any]] = []
     for _ in range(n_futures):
-        _feat_p, psi_p = sample_cut_preparation_only(rng)
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
         future_prep_cut.append(psi_p)
         pairs_j: list[Any] = []
         for _ in range(future_tail):
-            _feat, step = sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            _feat, step = _sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
             pairs_j.append(step)
         future_pairs.append(pairs_j)
 
@@ -118,10 +118,7 @@ def sample_split_delayed_break_probes(
         past_cut_meas=past_cut_meas,
         future_prep_cut=future_prep_cut,
         future_pairs=future_pairs,
-        all_pairs_grid=all_pairs,
-        n_pasts_grid=int(n_pasts),
-        n_futures_grid=int(n_futures),
-    )
+    ), all_pairs
 
 
 def sample_base_past_future_ensemble(
@@ -147,23 +144,23 @@ def sample_base_past_future_ensemble(
         pairs_i: list[Any] = []
         for _ in range(past_len):
             if mode == "measure_prepare":
-                _feat, pair = sample_step(rng)
+                _feat, pair = _sample_step(rng)
                 pairs_i.append(pair)
             else:
                 pairs_i.append({"type": "unitary", "U": unitary_sampler(rng)})
-        _feat_m, psi_m = sample_cut_measurement_only(rng)
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
 
     future_prep_cut: list[np.ndarray] = []
     future_pairs: list[list[Any]] = []
     for _ in range(n_futures):
-        _feat_p, psi_p = sample_cut_preparation_only(rng)
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
         future_prep_cut.append(psi_p)
         pairs_j: list[Any] = []
         for _ in range(future_len):
             if mode == "measure_prepare":
-                _feat, pair = sample_step(rng)
+                _feat, pair = _sample_step(rng)
                 pairs_j.append(pair)
             else:
                 pairs_j.append({"type": "unitary", "U": unitary_sampler(rng)})
@@ -181,7 +178,7 @@ def probe_set_for_ell(
     ell: int,
     past_len: int = PAST_LEN_FIXED,
     future_len: int = FUTURE_LEN_FIXED,
-) -> ProbeSet:
+) -> tuple[ProbeSet, list[list[Any]]]:
     """Build a probe set with ``ell`` zero-reset slots after the left break."""
     left_cut = int(past_len + 1)
     ell_i = int(ell)
@@ -215,7 +212,4 @@ def probe_set_for_ell(
         past_cut_meas=[np.asarray(x, dtype=np.complex128) for x in past_cut_meas],
         future_prep_cut=[np.asarray(x, dtype=np.complex128) for x in future_prep_cut],
         future_pairs=copy.deepcopy(future_pairs),
-        all_pairs_grid=all_pairs,
-        n_pasts_grid=n_p,
-        n_futures_grid=n_f,
-    )
+    ), all_pairs
