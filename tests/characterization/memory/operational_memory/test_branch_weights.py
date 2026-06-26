@@ -16,7 +16,6 @@ from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
     compute_born_prob,
     compute_branch_weight,
-    compute_branch_weights,
     compute_trace_weights,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
@@ -27,18 +26,30 @@ _PSI0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 _Z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
+def _trace_final_weight(trace: dict[str, object]) -> float:
+    val = trace["cumulative_weight_final"]
+    if not isinstance(val, (int, float)):
+        msg = "cumulative_weight_final must be numeric"
+        raise TypeError(msg)
+    return float(val)
+
+
 def _cumulative_weights_from_traces(
     traces: list[dict[str, object]],
     *,
     n_pasts: int,
     n_futures: int,
 ) -> np.ndarray:
-    """Mirror experiments/_benchmark_memory.py cumulative_weight_final weighting."""
+    """Mirror experiments/_benchmark_memory.py cumulative_weight_final weighting.
+
+    Returns:
+        Branch-weight matrix of shape ``(n_pasts, n_futures)``.
+    """
     n_p, n_f = n_pasts, n_futures
     weights = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
-            weights[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
+            weights[ii, jj] = _trace_final_weight(traces[ii * n_f + jj])
     return weights
 
 

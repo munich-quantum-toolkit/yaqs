@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -29,8 +29,21 @@ if TYPE_CHECKING:
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
+ProbeStepInput = dict[str, Any] | tuple[Any, Any]
 
-def convert_probe_step(step: Any) -> InterventionMap | np.ndarray:
+
+def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
+    """Normalize a probe-grid step to an intervention map or unitary matrix.
+
+    Args:
+        step: Structured dict step or measure/prepare ket pair.
+
+    Returns:
+        :class:`InterventionMap` or ``2 x 2`` unitary array.
+
+    Raises:
+        ValueError: If the step type is unsupported.
+    """
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
         if step_type == "unitary":
@@ -60,21 +73,30 @@ def convert_probe_step(step: Any) -> InterventionMap | np.ndarray:
 
 
 def convert_probe_callable(
-    step: Any,
+    step: ProbeStepInput,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
-    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`."""
+    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`.
+
+    Returns:
+        Callable implementing the single-qubit map for ``step``.
+    """
     inter = convert_probe_step(step)
     if isinstance(inter, np.ndarray):
-        u = inter
+        u_mat = cast("NDArray[np.complex128]", np.asarray(inter, dtype=np.complex128).reshape(2, 2))
 
-        def unitary_map(rho: NDArray[np.complex128], mat: NDArray[np.complex128] = u) -> NDArray[np.complex128]:
-            return mat @ rho @ mat.conj().T
+        def unitary_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            return u_mat @ rho @ u_mat.conj().T
 
         return unitary_map
     return inter
 
 
 def evaluate_dense_probes(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
+    """Evaluate split-cut probe Pauli responses on a dense comb.
+
+    Returns:
+        Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
+    """
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
     pauli = np.empty((n_p, n_f, 4), dtype=np.float32)
@@ -516,7 +538,11 @@ class MPOComb(MPO):
         return int(self.length) - 1
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe Pauli responses."""
+        """Evaluate split-cut probe Pauli responses.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
+        """
         return self.to_dense().evaluate_probes(probe_set)
 
     def predict(

@@ -20,6 +20,11 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 @pytest.fixture
 def ham_and_params() -> tuple[Hamiltonian, AnalogSimParams]:
+    """Single-qubit Ising Hamiltonian and analog simulation parameters.
+
+    Returns:
+        Hamiltonian and :class:`~mqt.yaqs.AnalogSimParams` pair.
+    """
     ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
     return ham, params
@@ -177,7 +182,7 @@ def test_transformercomb_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 
     _ham, _params = ham_and_params
     model = TransformerComb(
@@ -218,7 +223,7 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(TypeError):
-        mc.predict(ham, params, rho0, "haar", k=1)  # type: ignore[call-overload]
+        mc.predict(ham, params, rho0, "haar", k=1)  # ty: ignore[invalid-argument-type, too-many-positional-arguments]
 
 
 @pytest.mark.skipif(
@@ -246,7 +251,11 @@ def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, Analog
 
 @pytest.fixture
 def paper_params() -> AnalogSimParams:
-    """Analog parameters for L=2 paper-style benchmark geometry."""
+    """Analog parameters for L=2 paper-style benchmark geometry.
+
+    Returns:
+        Shared :class:`~mqt.yaqs.AnalogSimParams` for paper regression tests.
+    """
     return AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
 
 

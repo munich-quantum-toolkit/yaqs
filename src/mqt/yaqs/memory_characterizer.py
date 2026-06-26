@@ -47,7 +47,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execu
 
 if TYPE_CHECKING:
     from numpy.random import Generator
-    from torch.utils.data import TensorDataset
+    from torch.utils.data import TensorDataset  # ty: ignore[unresolved-import]
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
     from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis
@@ -311,7 +311,11 @@ class MemoryCharacterizer:
         return self._execution.retry_exceptions
 
     def _solver_for(self, hamiltonian: Hamiltonian) -> Literal["MCWF", "TJM"]:
-        """Resolve stochastic solver for a Hamiltonian under this characterizer's representation."""
+        """Resolve stochastic solver for a Hamiltonian under this characterizer's representation.
+
+        Returns:
+            ``"MCWF"`` or ``"TJM"`` from the resolved characterizer representation.
+        """
         rep = resolve_characterizer_representation(
             hamiltonian.length,
             self.representation,
@@ -632,8 +636,8 @@ class MemoryCharacterizer:
             )
         return merge_cut_results(parts)
 
+    @staticmethod
     def _resolve_cut_list(
-        self,
         k: int,
         *,
         cut: int | None,
@@ -668,7 +672,11 @@ class MemoryCharacterizer:
         parallel: bool | None,
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
-        """Characterize a comb or surrogate via internal split-cut probing."""
+        """Characterize a comb or surrogate via internal split-cut probing.
+
+        Returns:
+            Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
+        """
         resolved_cut = _default_cut(int(k), cut)
         out = run_operational_memory(
             process=target,
@@ -699,11 +707,16 @@ class MemoryCharacterizer:
         initial_psi: np.ndarray | None,
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
-        """Characterize a Hamiltonian via exact stochastic sequences and branch weights."""
+        """Characterize a Hamiltonian via exact stochastic sequences and branch weights.
+
+        Returns:
+            Single- or multi-cut
+            :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
+        """
         from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
 
         operator = _require_hamiltonian(hamiltonian)
-        cut_list = self._resolve_cut_list(int(k), cut=cut, cuts=cuts)
+        cut_list = MemoryCharacterizer._resolve_cut_list(int(k), cut=cut, cuts=cuts)
         psi0 = (
             np.asarray(initial_psi, dtype=np.complex128)
             if initial_psi is not None
@@ -742,7 +755,7 @@ class MemoryCharacterizer:
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
-    def predict(
+    def predict(  # noqa: PLR6301 -- public instance API
         self,
         target: Any,
         rho0: np.ndarray,

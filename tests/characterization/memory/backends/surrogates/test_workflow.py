@@ -101,7 +101,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     """Trained surrogate achieves modest error on held-out rollout samples."""
     torch = pytest.importorskip("torch")
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415  # ty: ignore[unresolved-import]
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 

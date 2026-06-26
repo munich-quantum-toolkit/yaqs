@@ -11,12 +11,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from ..backends.surrogates.utils import sample_intervention_parts
 from ..shared.encoding import _flatten_choi4
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+ProbeStep = dict[str, Any] | tuple[np.ndarray, np.ndarray]
 
 
 @dataclass(slots=True)
@@ -187,8 +192,8 @@ def _sample_probe_step(
     rng: np.random.Generator,
     *,
     intervention_mode: str,
-    unitary_sampler: Any,
-) -> tuple[np.ndarray, Any]:
+    unitary_sampler: Callable[[np.random.Generator], np.ndarray],
+) -> tuple[np.ndarray, ProbeStep]:
     """Sample one within-sequence intervention step.
 
     Args:
@@ -206,7 +211,7 @@ def _sample_probe_step(
     return encode_unitary_choi(u), {"type": "unitary", "U": u}
 
 
-def resolve_unitary_sampler(unitary_ensemble: str):
+def resolve_unitary_sampler(unitary_ensemble: str) -> Callable[[np.random.Generator], np.ndarray]:
     """Map ensemble name to a unitary sampling callable.
 
     Args:

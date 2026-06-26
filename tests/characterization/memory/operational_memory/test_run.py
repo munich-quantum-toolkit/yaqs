@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -26,6 +28,7 @@ from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
     compute_spectrum,
 )
 from mqt.yaqs.characterization.memory.operational_memory.run import (
+    MemoryProcessBackend,
     evaluate_probes_weighted_for,
     run_operational_memory,
 )
@@ -38,6 +41,14 @@ _PSI0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 def _params() -> AnalogSimParams:
     return AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
+
+
+def _trace_final_weight(trace: dict[str, object]) -> float:
+    val = trace["cumulative_weight_final"]
+    if not isinstance(val, (int, float)):
+        msg = "cumulative_weight_final must be numeric"
+        raise TypeError(msg)
+    return float(val)
 
 
 def test_run_operational_memory_uses_object_backend() -> None:
@@ -57,6 +68,7 @@ def test_run_operational_memory_uses_object_backend() -> None:
 
 
 def test_branch_weights_constant_across_future_columns() -> None:
+    """Branch weights are constant across future columns for a fixed past."""
     rng = np.random.default_rng(3)
     probe_set = sample_probes(cut=2, k=3, n_pasts=5, n_futures=4, rng=rng)
     w = compute_branch_weights(probe_set)
@@ -64,6 +76,7 @@ def test_branch_weights_constant_across_future_columns() -> None:
 
 
 def test_compute_branch_weight_from_steps() -> None:
+    """Structured unitary steps yield unit branch weight."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     steps = [
         {"type": "unitary", "U": np.eye(2, dtype=np.complex128)},
@@ -73,6 +86,7 @@ def test_compute_branch_weight_from_steps() -> None:
 
 
 def test_comb_run_operational_memory_returns_cut_weights() -> None:
+    """Dense comb orchestration returns positive cut weights."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     comb = build_process_tensor(
@@ -90,6 +104,7 @@ def test_comb_run_operational_memory_returns_cut_weights() -> None:
 
 
 def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
+    """Analytic branch weights match exact rollout at J=0."""
     rng = np.random.default_rng(11)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     probe_set = sample_probes(
@@ -153,6 +168,7 @@ def test_dense_comb_vs_exact_probe_entropy() -> None:
 
 
 def test_mpo_comb_entropy_matches_dense() -> None:
+    """MPO and dense comb backends yield the same entropy."""
     rng = np.random.default_rng(1)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
@@ -200,7 +216,7 @@ def test_evaluate_probes_weighted_for_missing_method_raises() -> None:
 
     probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
     with pytest.raises(TypeError, match="evaluate_probes"):
-        evaluate_probes_weighted_for(NoProbes(), probe_set)
+        evaluate_probes_weighted_for(cast("MemoryProcessBackend", NoProbes()), probe_set)
 
 
 def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
@@ -234,7 +250,11 @@ def _entropy_from_cumulative_weights(
     params: AnalogSimParams,
     psi0: np.ndarray,
 ) -> float:
-    """Entropy using cumulative_weight_final from traced exact rollouts."""
+    """Entropy using cumulative_weight_final from traced exact rollouts.
+
+    Returns:
+        Von Neumann entropy of the assembled memory matrix.
+    """
     pauli, _, traces = simulate_exact(
         probe_set=probe_set,
         operator=op,
@@ -246,7 +266,7 @@ def _entropy_from_cumulative_weights(
     weights = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
-            weights[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
+            weights[ii, jj] = _trace_final_weight(traces[ii * n_f + jj])
     _raw, memory_matrix = assemble_memory_matrix(pauli, weights, log_weight_warnings=False)
     return float(compute_spectrum(memory_matrix)["entropy"])
 
@@ -263,4 +283,3 @@ def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:
     out = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
     exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
     assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
-

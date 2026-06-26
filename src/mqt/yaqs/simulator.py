@@ -500,26 +500,32 @@ class Simulator:
 
     @property
     def parallel(self) -> bool:
+        """Whether parallel execution is enabled."""
         return self._execution.parallel
 
     @property
     def max_workers(self) -> int:
+        """Effective worker count for parallel execution."""
         return self._execution.resolved_max_workers()
 
     @property
     def show_progress(self) -> bool:
+        """Whether progress bars are shown during execution."""
         return self._execution.show_progress
 
     @property
     def mp_context(self) -> MPContext:
+        """Multiprocessing start-method context for worker processes."""
         return self._execution.mp_context
 
     @property
     def max_retries(self) -> int:
+        """Maximum retries per job in parallel execution."""
         return self._execution.max_retries
 
     @property
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
+        """Exception types that trigger a parallel job retry."""
         return self._execution.retry_exceptions
 
     # -----------------------------------------------------------------------

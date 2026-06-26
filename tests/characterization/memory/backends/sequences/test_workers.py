@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box validation of comb-schedule worker internals
+
 """Tests for comb-schedule worker validation and traced simulation."""
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.sequences.workers import (  # noqa: PLC2701
+from mqt.yaqs.characterization.memory.backends.sequences.workers import (
     _validate_comb_sequence_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
@@ -24,7 +26,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 def test_validate_comb_sequence_inputs_timesteps_length() -> None:
     """Comb schedule requires timesteps of length k+1."""
     psi_pairs = [[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))] * 2]
-    with pytest.raises(ValueError, match="timesteps.*k\\+1"):
+    with pytest.raises(ValueError, match=r"timesteps.*k\+1"):
         _validate_comb_sequence_inputs(
             psi_pairs_list=psi_pairs,
             timesteps=[0.1],
@@ -65,7 +67,7 @@ def test_simulate_sequences_traced_returns_diagnostics() -> None:
     psi_pairs_list = [[(psi0, psi0)], [(psi0, psi0)]]
     initial_psis = [psi0.copy(), psi0.copy()]
 
-    finals, traces = simulate_sequences(
+    result = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
@@ -77,10 +79,14 @@ def test_simulate_sequences_traced_returns_diagnostics() -> None:
         record_step_states=False,
         traced=True,
     )
+    assert isinstance(result, tuple)
+    finals, traces = result
     assert isinstance(finals, np.ndarray)
+    assert isinstance(traces, list)
     assert finals.shape == (2, 8)
     assert len(traces) == 2
     for trace in traces:
+        assert isinstance(trace, dict)
         assert "step_probs" in trace
         assert "cumulative_weight_final" in trace
         assert "terminated_early" in trace

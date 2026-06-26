@@ -52,7 +52,7 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
     """Predict can return torch tensors and preserves train/eval mode."""
     torch = pytest.importorskip("torch")
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415  # ty: ignore[unresolved-import]
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 
@@ -86,7 +86,7 @@ def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
     """Fit rejects unknown prefix_loss modes."""
     torch = pytest.importorskip("torch")
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415  # ty: ignore[unresolved-import]
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 
@@ -117,7 +117,7 @@ def test_transformercomb_fit_sets_sequence_length() -> None:
     """Fit infers sequence_length from training data."""
     torch = pytest.importorskip("torch")
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # noqa: PLC0415  # ty: ignore[unresolved-import]
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
 

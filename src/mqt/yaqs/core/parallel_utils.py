@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from tqdm import tqdm
 
-from mqt.yaqs.core.linalg._threading import threadpool_limits_one
+from mqt.yaqs.core.linalg._threading import threadpool_limits_one  # noqa: PLC2701
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -197,7 +197,11 @@ def merge_execution_config(
     mp_context: MPContext | None = None,
     max_retries: int | None = None,
 ) -> ExecutionConfig:
-    """Merge optional overrides into an :class:`ExecutionConfig`."""
+    """Merge optional overrides into an :class:`ExecutionConfig`.
+
+    Returns:
+        Updated execution configuration.
+    """
     base = execution or ExecutionConfig()
     updates: dict[str, Any] = {}
     if parallel is not None:
@@ -226,7 +230,11 @@ def resolve_worker_ctx(payload: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def unpack_flat_job(job_idx: int, num_trajectories: int) -> tuple[int, int]:
-    """Unpack a flat job index into ``(sequence_index, trajectory_index)``."""
+    """Unpack a flat job index into ``(sequence_index, trajectory_index)``.
+
+    Returns:
+        Tuple ``(sequence_index, trajectory_index)``.
+    """
     n_traj = int(num_trajectories)
     idx = int(job_idx)
     return idx // n_traj, idx % n_traj
@@ -238,7 +246,14 @@ def reassemble_indexed(
     *,
     label: str,
 ) -> list[TRes]:
-    """Build an ordered result list from a job-index map; raise if any slot is missing."""
+    """Build an ordered result list from a job-index map; raise if any slot is missing.
+
+    Returns:
+        Results ordered by job index ``0 .. n_jobs-1``.
+
+    Raises:
+        RuntimeError: If any job index is missing from ``results``.
+    """
     n = int(n_jobs)
     missing = [i for i in range(n) if i not in results]
     if missing:
@@ -256,7 +271,11 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
 
 
 def call_serial_capped(fn: Callable[..., TRes], /, *args: object, n_threads: int = 1) -> TRes:
-    """Invoke ``fn(*args)`` under Numba/BLAS thread caps."""
+    """Invoke ``fn(*args)`` under Numba/BLAS thread caps.
+
+    Returns:
+        Value returned by ``fn``.
+    """
     safe_set_numba_threads(n_threads)
     with threadpool_limits_one():
         return fn(*args)
@@ -274,7 +293,11 @@ def run_backend_parallel(
     retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
     mp_context: MPContext = "auto",
 ) -> Iterator[tuple[int, TRes]]:
-    """Execute indexed jobs in parallel with bounded submission and retry logic."""
+    """Execute indexed jobs in parallel with bounded submission and retry logic.
+
+    Yields:
+        Pairs ``(job_index, result)`` as jobs complete.
+    """
     ctx = get_parallel_context(mp_context)
     inflight_factor = 2
     max_inflight = max_workers * inflight_factor
@@ -331,7 +354,11 @@ def run_indexed_jobs(
     config: ExecutionConfig,
     desc: str,
 ) -> dict[int, TRes]:
-    """Run indexed jobs in parallel or serially, returning results keyed by job index."""
+    """Run indexed jobs in parallel or serially, returning results keyed by job index.
+
+    Returns:
+        Mapping from job index to worker result.
+    """
     results: dict[int, TRes] = {}
     if config.parallel and n_jobs > 1:
         results.update(

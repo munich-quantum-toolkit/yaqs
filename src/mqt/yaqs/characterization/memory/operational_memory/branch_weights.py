@@ -18,6 +18,8 @@ from .grid import assemble_probe_sequence
 if TYPE_CHECKING:
     from .samples import ProbeSet
 
+ProbeStep = dict[str, Any] | tuple[np.ndarray, np.ndarray]
+
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
@@ -36,7 +38,7 @@ def compute_born_prob(rho: np.ndarray, psi: np.ndarray) -> float:
     return float(np.real(np.vdot(ket, r @ ket)))
 
 
-def _step_probability(rho: np.ndarray, step: Any) -> float:
+def _step_probability(rho: np.ndarray, step: ProbeStep) -> float:
     """Compute the measurement probability for one intervention step.
 
     Args:
@@ -62,7 +64,7 @@ def _step_probability(rho: np.ndarray, step: Any) -> float:
     return compute_born_prob(rho, psi_meas)
 
 
-def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
+def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
     """Apply one intervention step to a single-qubit state.
 
     Args:

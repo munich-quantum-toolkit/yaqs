@@ -68,7 +68,11 @@ def resolve_characterizer_representation(
 
 
 def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
-    """Map characterizer representation to the internal stochastic solver name."""
+    """Map characterizer representation to the internal stochastic solver name.
+
+    Returns:
+        ``"MCWF"`` for ``vector`` and ``"TJM"`` for ``mps``.
+    """
     return "MCWF" if rep == "vector" else "TJM"
 
 
@@ -80,7 +84,14 @@ def resolve_stochastic_solver(
     chain_length: int | None = None,
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
 ) -> StochasticSolver:
-    """Return the stochastic unraveling backend for comb-sequence simulation."""
+    """Return the stochastic unraveling backend for comb-sequence simulation.
+
+    Returns:
+        Resolved solver name ``"MCWF"`` or ``"TJM"``.
+
+    Raises:
+        ValueError: If ``representation`` is set without ``chain_length``.
+    """
     if solver is not None:
         return solver
     if representation is not None:

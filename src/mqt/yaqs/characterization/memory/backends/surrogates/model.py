@@ -23,9 +23,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
-from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+import torch  # ty: ignore[unresolved-import]
+from torch import nn  # ty: ignore[unresolved-import]
+from torch.utils.data import DataLoader, TensorDataset  # ty: ignore[unresolved-import]
 
 from ...shared.encoding import decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
 from .utils import encode_choi_features

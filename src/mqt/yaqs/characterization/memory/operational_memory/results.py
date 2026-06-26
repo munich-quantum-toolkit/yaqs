@@ -120,6 +120,9 @@ class CharacterizationResult:
 
         Returns:
             Dict with keys ``cut``, ``k``, ``past_features``, and ``future_features``.
+
+        Raises:
+            ValueError: If no probe data was recorded for the resolved cut.
         """
         c = self._resolve_cut(cut)
         entry = self.by_cut[c]

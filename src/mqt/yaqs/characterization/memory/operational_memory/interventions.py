@@ -73,7 +73,7 @@ def _unitary_sampler(style: InterventionStyle, _rng: np.random.Generator):
 
     Args:
         style: ``"haar"`` or ``"clifford"``.
-        rng: Unused; present for call-site symmetry.
+        _rng: Unused; present for call-site symmetry.
 
     Returns:
         Callable ``rng -> U``.

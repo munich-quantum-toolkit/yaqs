@@ -23,7 +23,8 @@ from .samples import ProbeSet, sample_probes
 class OperationalMemoryBackend(Protocol):
     """Protocol for backends that evaluate weighted split-cut probes.
 
-    Implement :meth:`evaluate_probes_weighted` (for example :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`).
+    Implement :meth:`evaluate_probes_weighted` (for example
+    :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`).
     """
 
     def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
@@ -114,7 +115,8 @@ def run_operational_memory(
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
         return_raw: If True, include uncentered ``memory_matrix_raw``.
-        intervention_mode: Passed to internal :func:`~mqt.yaqs.characterization.memory.operational_memory.samples.sample_probes`.
+        intervention_mode: Passed to internal
+            :func:`~mqt.yaqs.characterization.memory.operational_memory.samples.sample_probes`.
         unitary_ensemble: Passed to internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
 

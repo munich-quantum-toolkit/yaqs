@@ -86,7 +86,7 @@ class ExactBackend:
         self.operator = operator
         self.sim_params = sim_params
         self.initial_psi = np.asarray(initial_psi, dtype=np.complex128).copy()
-        self._solver: StochasticSolver = "MCWF" if solver is None else solver  # type: ignore[assignment]
+        self._solver: StochasticSolver = "MCWF" if solver is None else solver  # ty: ignore[invalid-assignment]
         self._execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
         self._static_ctx = (
             make_mcwf_static_context(operator, sim_params, noise_model=None) if self._solver == "MCWF" else None
@@ -174,7 +174,7 @@ def simulate_exact(
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
-    resolved_solver: StochasticSolver = "MCWF" if solver is None else solver  # type: ignore[assignment]
+    resolved_solver: StochasticSolver = "MCWF" if solver is None else solver  # ty: ignore[invalid-assignment]
     static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None) if resolved_solver == "MCWF" else None
     result = simulate_sequences(
         operator=operator,

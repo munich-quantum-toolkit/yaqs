@@ -41,10 +41,8 @@ def test_public_api_all_matches_documented_surface() -> None:
 
 def test_characterization_result_not_top_level() -> None:
     """CharacterizationResult is returned by MemoryCharacterizer, not a top-level import."""
-    import mqt.yaqs as yaqs_module
-
-    assert "CharacterizationResult" not in yaqs_module.__all__
-    assert "ProbeResult" not in yaqs_module.__all__
+    assert "CharacterizationResult" not in yaqs.__all__
+    assert "ProbeResult" not in yaqs.__all__
 
 
 def test_top_level_import_smoke() -> None:

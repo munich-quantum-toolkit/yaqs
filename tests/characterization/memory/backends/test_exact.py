@@ -5,12 +5,14 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box probe construction for delayed-break geometry
+
 """Tests for simulator reference probe backends."""
 
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -30,9 +32,6 @@ from mqt.yaqs.characterization.memory.operational_memory.samples import (
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-if TYPE_CHECKING:
-    pass
-
 
 def _product_initial_state(length: int) -> np.ndarray:
     psi = np.zeros(2**length, dtype=np.complex128)
@@ -49,7 +48,11 @@ def _sample_split_delayed_break_probes(
     n_futures: int,
     rng: np.random.Generator,
 ) -> tuple[ProbeSet, list[list[Any]]]:
-    """Delayed causal-break probes: past + break + identity bridge + future."""
+    """Delayed causal-break probes: past + break + identity bridge + future.
+
+    Returns:
+        Tuple of probe set metadata and flat sequence grid for ``simulate_exact``.
+    """
     c_left = int(left_cut)
     tt = int(tau)
     kk = int(k)
@@ -73,12 +76,10 @@ def _sample_split_delayed_break_probes(
     for _ in range(n_futures):
         _feat_p, psi_p = _sample_cut_preparation_only(rng)
         future_prep_cut.append(psi_p)
-        future_pairs.append(
-            [
-                _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
-                for _ in range(future_tail)
-            ]
-        )
+        future_pairs.append([
+            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
+            for _ in range(future_tail)
+        ])
 
     z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     u_id = np.eye(2, dtype=np.complex128)
@@ -140,7 +141,10 @@ def test_exact_run_operational_memory_builds_static_ctx_internally(monkeypatch: 
         n_tot = len(kwargs["psi_pairs_list"])
         packed = np.zeros((n_tot, 8), dtype=np.float32)
         if kwargs.get("traced"):
-            traces = [{"step_probs": [1.0], "cumulative_weight_final": 1.0} for _ in range(n_tot)]
+            traces = cast(
+                "list[dict[str, object]]",
+                [{"step_probs": [1.0], "cumulative_weight_final": 1.0} for _ in range(n_tot)],
+            )
             return packed, traces
         return packed
 
@@ -164,7 +168,10 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
 
     def _fake_simulate(**kwargs) -> tuple[np.ndarray, list[dict[str, object]]]:  # noqa: ANN003
         n_tot = len(kwargs["psi_pairs_list"])
-        traces = [{"step_probs": [0.5, 0.8, 1.0], "cumulative_weight_final": 0.4} for _ in range(n_tot)]
+        traces = cast(
+            "list[dict[str, object]]",
+            [{"step_probs": [0.5, 0.8, 1.0], "cumulative_weight_final": 0.4} for _ in range(n_tot)],
+        )
         return np.zeros((n_tot, 8), dtype=np.float32), traces
 
     monkeypatch.setattr(exact_mod, "simulate_sequences", _fake_simulate)
@@ -191,7 +198,7 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
         parallel=False,
     )
     assert weights.shape == (1, 1)
-    assert float(weights[0, 0]) == 0.4
+    assert float(weights[0, 0]) == pytest.approx(0.4)
 
 
 def test_exact_run_operational_memory_parallel_smoke() -> None:
@@ -224,9 +231,7 @@ def test_delayed_break_custom_psi_pairs_list_geometry() -> None:
     for seq in psi_pairs_list:
         assert len(seq) == k
         bridge = seq[left_cut : left_cut + tau]
-        assert all(
-            step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in bridge
-        )
+        assert all(step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in bridge)
 
 
 def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:
