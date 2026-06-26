@@ -57,7 +57,10 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
             )
         if step_type == "prepare_only":
             psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-            return InterventionMap(rho_prep=np.outer(psi_prep, psi_prep.conj()), effect=_RHO0)
+            return InterventionMap(
+                rho_prep=np.outer(psi_prep, psi_prep.conj()),
+                effect=np.eye(2, dtype=np.complex128),
+            )
         if step_type == "reset_only":
             psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
             return InterventionMap(rho_prep=np.outer(psi_r, psi_r.conj()), effect=np.eye(2, dtype=np.complex128))
@@ -293,6 +296,8 @@ class DenseComb:
             Raw 2x2 complex matrix from the comb contraction (not guaranteed physical).
         """
         k_steps = len(interventions)
+        if k_steps == 0:
+            return np.asarray(self.upsilon, dtype=np.complex128).reshape(2, 2).copy()
         past_list = [encode_cptp_choi(emap) for emap in interventions]
         past_total = past_list[0]
         for p in past_list[1:]:

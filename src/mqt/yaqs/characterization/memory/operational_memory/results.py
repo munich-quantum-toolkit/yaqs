@@ -58,7 +58,11 @@ class CharacterizationResult:
             ValueError: If ``cut`` is omitted and multiple cuts are stored.
         """
         if cut is not None:
-            return int(cut)
+            c = int(cut)
+            if c not in self.by_cut:
+                msg = f"cut {c} is not stored in this result (available: {sorted(self.by_cut)})."
+                raise ValueError(msg)
+            return c
         if len(self.by_cut) != 1:
             msg = "cut is required when the result holds multiple cuts."
             raise ValueError(msg)

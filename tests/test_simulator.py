@@ -68,9 +68,18 @@ def test_simulator_defaults() -> None:
 
 
 def test_simulator_max_workers_resolution() -> None:
-    """An explicit ``max_workers`` is preserved as-is."""
+    """An explicit ``max_workers`` is preserved as-is and can be cleared."""
     sim = Simulator(max_workers=3)
     assert sim.max_workers == 3
+    sim.max_workers = None
+    assert sim.max_workers == Simulator().max_workers
+
+
+def test_simulator_retry_exceptions_setter() -> None:
+    """retry_exceptions can be reconfigured after construction."""
+    sim = Simulator()
+    sim.retry_exceptions = (ValueError,)
+    assert sim.retry_exceptions == (ValueError,)
 
 
 def test_simulator_parallel_serial_equivalence() -> None:

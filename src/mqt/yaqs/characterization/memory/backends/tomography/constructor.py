@@ -132,7 +132,7 @@ def _sequence_worker(
         step_params.num_traj = 1
         step_params.get_state = True
         n_steps = max(1, int(np.round(duration / step_params.dt)))
-        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
+        step_params.times = np.linspace(0, duration, n_steps + 1)
 
         current_state = _evolve_backend_state(
             current_state,

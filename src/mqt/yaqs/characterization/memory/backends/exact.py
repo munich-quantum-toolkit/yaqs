@@ -18,7 +18,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 from ..operational_memory.branch_weights import compute_trace_weights
 from ..operational_memory.grid import assemble_probe_grid
 from ..shared.encoding import decode_packed_pauli_batch
-from ..shared.utils import StochasticSolver, make_mcwf_static_context
+from ..shared.utils import StochasticSolver, make_mcwf_static_context, validate_stochastic_solver
 from .sequences.workflow import simulate_sequences
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ class ExactBackend:
         initial_psi: np.ndarray,
         parallel: bool = True,
         show_progress: bool = False,
-        solver: str | None = None,
+        solver: StochasticSolver | None = None,
         _execution: ExecutionConfig | None = None,
     ) -> None:
         """Initialize the exact probe backend.
@@ -87,7 +87,7 @@ class ExactBackend:
         self.operator = operator
         self.sim_params = sim_params
         self.initial_psi = np.asarray(initial_psi, dtype=np.complex128).copy()
-        self._solver: StochasticSolver = "MCWF" if solver is None else solver  # ty: ignore[invalid-assignment]
+        self._solver = validate_stochastic_solver(solver)
         self._execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
         self._static_ctx = (
             make_mcwf_static_context(operator, sim_params, noise_model=None) if self._solver == "MCWF" else None
@@ -163,7 +163,7 @@ def simulate_exact(
     initial_psi: np.ndarray,
     parallel: bool = True,
     show_progress: bool = False,
-    solver: str | None = None,
+    solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
     psi_pairs_list: list[list[Any]] | None = None,
     static_ctx: MCWFContext | None = None,
@@ -193,7 +193,7 @@ def simulate_exact(
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
-    resolved_solver: StochasticSolver = "MCWF" if solver is None else solver  # ty: ignore[invalid-assignment]
+    resolved_solver = validate_stochastic_solver(solver)
     if static_ctx is None and resolved_solver == "MCWF":
         static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
     result = simulate_sequences(

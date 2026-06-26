@@ -88,7 +88,7 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 sim = Simulator()
 state = State(3, initial="zeros")
-H = Hamiltonian.ising(L=3, J=1.0, g=0.5)
+H = Hamiltonian.ising(length=3, J=1.0, g=0.5)
 params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
 print(sim.run(state, H, params).expectation_values[0])
 ```

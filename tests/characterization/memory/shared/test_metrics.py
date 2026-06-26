@@ -68,3 +68,12 @@ def test_rho8_metrics_shape_mismatch_raises() -> None:
         mean_trace_distance_rho8(y, y[:0])
     with pytest.raises(ValueError, match="must share shape"):
         mean_frobenius_mse_rho8(y, np.zeros((2, 8), dtype=np.float32))
+
+
+def test_rho8_metrics_reject_empty_batch() -> None:
+    """Packed-state metrics reject zero-length batches."""
+    empty = np.zeros((0, 8), dtype=np.float64)
+    with pytest.raises(ValueError, match="non-zero batch"):
+        mean_trace_distance_rho8(empty, empty)
+    with pytest.raises(ValueError, match="non-zero batch"):
+        mean_frobenius_mse_rho8(empty, empty)

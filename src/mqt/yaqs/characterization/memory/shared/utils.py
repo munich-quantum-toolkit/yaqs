@@ -76,6 +76,26 @@ def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
     return "MCWF" if rep == "vector" else "TJM"
 
 
+def validate_stochastic_solver(solver: StochasticSolver | str | None) -> StochasticSolver:
+    """Validate and normalize a stochastic solver name.
+
+    Args:
+        solver: Solver override, or ``None`` for the MCWF default.
+
+    Returns:
+        ``"MCWF"`` or ``"TJM"``.
+
+    Raises:
+        ValueError: If ``solver`` is not ``"MCWF"`` or ``"TJM"``.
+    """
+    if solver is None:
+        return "MCWF"
+    if solver not in {"MCWF", "TJM"}:
+        msg = f"solver must be 'MCWF' or 'TJM', got {solver!r}."
+        raise ValueError(msg)
+    return cast("StochasticSolver", solver)
+
+
 def resolve_stochastic_solver(
     sim_params: AnalogSimParams,
     *,
@@ -93,7 +113,7 @@ def resolve_stochastic_solver(
         ValueError: If ``representation`` is set without ``chain_length``.
     """
     if solver is not None:
-        return solver
+        return validate_stochastic_solver(solver)
     if representation is not None:
         if chain_length is None:
             msg = "chain_length is required when representation= is passed."

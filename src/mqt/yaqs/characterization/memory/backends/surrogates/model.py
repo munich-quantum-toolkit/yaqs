@@ -128,6 +128,9 @@ class TransformerComb(nn.Module):
             ValueError: If ``d_model`` is not divisible by ``nhead``.
         """
         super().__init__()
+        if nhead <= 0:
+            msg = f"nhead must be positive, got {nhead}."
+            raise ValueError(msg)
         if d_model % nhead != 0:
             msg = f"d_model={d_model} must be divisible by nhead={nhead}."
             raise ValueError(msg)

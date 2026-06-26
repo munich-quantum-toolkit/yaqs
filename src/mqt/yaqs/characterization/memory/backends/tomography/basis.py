@@ -118,7 +118,7 @@ def get_basis_states(
 
 def get_choi_basis(
     *,
-    basis: TomographyBasis = "standard",
+    basis: TomographyBasis = "tetrahedral",
     seed: int | None = None,
 ) -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
     """Generate the 16 CP-map Choi basis matrices.

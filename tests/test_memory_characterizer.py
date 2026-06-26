@@ -227,6 +227,39 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
         mc.predict(ham, rho0, "haar", k=1)
 
 
+def test_predict_comb_rejects_return_sequence(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """predict(comb, ..., return_sequence=True) is not supported."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    rho0 = np.eye(2, dtype=np.complex128) / 2.0
+    with pytest.raises(ValueError, match="return_sequence=True"):
+        mc.predict(comb, rho0, "haar", k=1, return_sequence=True)
+
+
+def test_build_comb_forwards_parallel_override(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """build_comb passes the resolved parallel flag into build_process_tensor."""
+    ham, params = ham_and_params
+    seen: list[bool] = []
+
+    def _capture(*_args: object, **kwargs: object) -> None:
+        seen.append(bool(kwargs["parallel"]))
+        msg = "stop"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(
+        "mqt.yaqs.memory_characterizer.build_process_tensor",
+        _capture,
+    )
+    mc = MemoryCharacterizer(parallel=True, show_progress=False)
+    with pytest.raises(RuntimeError, match="stop"):
+        mc.build_comb(ham, params, timesteps=[0.1], parallel=False)
+    assert seen == [False]
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("torch") is None,
     reason="torch not installed",

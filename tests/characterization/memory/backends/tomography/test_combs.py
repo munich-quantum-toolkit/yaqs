@@ -188,6 +188,7 @@ def test_convert_probe_step_dict_variants() -> None:
     po = convert_probe_step({"type": "prepare_only", "psi_prep": x})
     assert isinstance(po, InterventionMap)
     assert po.rho_prep.shape == (2, 2)
+    np.testing.assert_allclose(po.effect, np.eye(2), atol=1e-12)
 
     ro = convert_probe_step({"type": "reset_only", "psi_reset": z})
     assert isinstance(ro, InterventionMap)
@@ -199,6 +200,27 @@ def test_convert_probe_step_dict_variants() -> None:
 
     with pytest.raises(ValueError, match="Unsupported probe step"):
         convert_probe_step({"type": "nope"})
+
+
+def test_prepare_only_map_independent_of_input_state() -> None:
+    """prepare_only applies unconditional preparation, not a |0>-conditioned effect."""
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
+    step_map = convert_probe_callable({"type": "prepare_only", "psi_prep": plus})
+    rho0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    rho1 = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=np.complex128)
+    out0 = step_map(rho0)
+    out1 = step_map(rho1)
+    target = np.outer(plus, plus.conj())
+    np.testing.assert_allclose(out0, target, atol=1e-12)
+    np.testing.assert_allclose(out1, target, atol=1e-12)
+
+
+def test_dense_comb_predict_zero_steps() -> None:
+    """DenseComb.predict([]) returns the stored output state when k=0."""
+    rho = np.array([[0.2, 0.1 + 0.1j], [0.1 - 0.1j, 0.8]], dtype=np.complex128)
+    comb = DenseComb(rho.reshape(2, 2), timesteps=[])
+    rho_out = comb.predict([])
+    np.testing.assert_allclose(rho_out, rho, atol=1e-12)
 
 
 def test_convert_probe_callable_unitary_and_map() -> None:

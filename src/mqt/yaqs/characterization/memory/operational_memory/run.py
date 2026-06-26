@@ -82,10 +82,10 @@ def evaluate_probes_weighted_for(
     weighted_fn = getattr(process, "evaluate_probes_weighted", None)
     if callable(weighted_fn):
         pauli_xyz_ij, weights_ij = weighted_fn(probe_set)
-        return np.asarray(pauli_xyz_ij, dtype=np.float32), np.asarray(weights_ij, dtype=np.float64)
+        return np.asarray(pauli_xyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
     evaluate_fn = getattr(process, "evaluate_probes", None)
     if callable(evaluate_fn):
-        pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float32)
+        pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
         return pauli_xyz_ij, compute_analytic_weights(probe_set)
     msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
     raise TypeError(msg)
@@ -124,6 +124,9 @@ def run_operational_memory(
     Returns:
         Dict with ``entropy``, ``rank``, ``singular_values``, ``memory_matrix``,
         ``probe_set``, and optional ``weights_ij``.
+
+    Raises:
+        ValueError: If a supplied ``probe_set`` was built for a different ``cut`` or ``k``.
     """
     execution_override: ExecutionConfig | None = None
     if parallel is not None:
@@ -131,6 +134,12 @@ def run_operational_memory(
 
         if isinstance(process, ExactBackend):
             execution_override = process.execution_config(parallel=parallel)
+    if probe_set is not None and (int(probe_set.cut) != int(cut) or int(probe_set.k) != int(k)):
+        msg = (
+            f"probe_set was built for cut={probe_set.cut}, k={probe_set.k}, "
+            f"but cut={cut}, k={k} were requested."
+        )
+        raise ValueError(msg)
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()

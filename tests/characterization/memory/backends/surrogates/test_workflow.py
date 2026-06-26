@@ -158,3 +158,20 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     rho_pred = unpack_rho8(pred[0, -1, :])
     rho_true = unpack_rho8(tgt_test.numpy()[0, -1, :])
     assert compute_trace_distance(rho_pred, rho_true) < 0.5
+
+
+def test_sample_train_dataset_requires_torch_before_simulation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """sample_train_dataset fails fast when torch is unavailable."""
+    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
+
+    def _raise_import() -> None:
+        msg = "no torch"
+        raise ImportError(msg)
+
+    monkeypatch.setattr(wf, "_require_torch", _raise_import)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    with pytest.raises(ImportError):
+        sample_train_dataset(op, params, k=1, n=1, parallel=False, show_progress=False)

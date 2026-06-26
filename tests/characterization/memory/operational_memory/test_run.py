@@ -310,3 +310,35 @@ def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:
     out = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
     exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
     assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
+
+
+def test_run_operational_memory_rejects_mismatched_probe_set() -> None:
+    """Supplied probe_set must match the requested cut and k."""
+    rng = np.random.default_rng(0)
+    probe_set = sample_probes(cut=1, k=2, n_pasts=2, n_futures=2, rng=rng)
+
+    class DummyProcess:
+        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+            n_p = len(probe_set.past_pairs)
+            n_f = len(probe_set.future_pairs)
+            return np.zeros((n_p, n_f, 4), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="probe_set was built for"):
+        run_operational_memory(process=DummyProcess(), cut=2, k=2, probe_set=probe_set)
+
+
+def test_evaluate_probes_weighted_for_preserves_float64() -> None:
+    """Probe responses are not downcast to float32 before memory assembly."""
+
+    class HighPrecisionBackend:
+        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+            n_p = len(probe_set.past_pairs)
+            n_f = len(probe_set.future_pairs)
+            out = np.zeros((n_p, n_f, 4), dtype=np.float64)
+            out[..., 1] = 1e-7
+            return out
+
+    probe_set = sample_probes(cut=1, k=1, n_pasts=1, n_futures=1, rng=np.random.default_rng(0))
+    pauli, _weights = evaluate_probes_weighted_for(HighPrecisionBackend(), probe_set)
+    assert pauli.dtype == np.float64
+    assert pauli[0, 0, 1] == pytest.approx(1e-7)

@@ -21,6 +21,7 @@ from mqt.yaqs.characterization.memory.backends.sequences.workers import (
     _validate_comb_sequence_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
+from mqt.yaqs.characterization.memory.shared.encoding import unpack_rho8
 from mqt.yaqs.characterization.memory.shared.utils import make_mcwf_static_context
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -219,6 +220,31 @@ def test_simulate_sequences_dict_step_types() -> None:
     )
     assert isinstance(finals, np.ndarray)
     assert finals.shape == (1, 8)
+
+
+def test_prepare_only_unconditional_from_non_zero_state() -> None:
+    """prepare_only resets site 0 without conditioning on |0>."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
+    initial = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
+    steps = [{"type": "prepare_only", "psi_prep": plus}]
+    finals = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.0, 0.0],
+        psi_pairs_list=[steps],
+        initial_psis=[initial],
+        static_ctx=static_ctx,
+        parallel=False,
+        show_progress=False,
+        record_step_states=False,
+    )
+    assert isinstance(finals, np.ndarray)
+    rho2 = unpack_rho8(np.asarray(finals[0], dtype=np.float64))
+    target = np.outer(plus, plus.conj())
+    np.testing.assert_allclose(rho2, target, atol=1e-10)
 
 
 def test_simulate_sequences_trace_worker_early_termination_fill() -> None:

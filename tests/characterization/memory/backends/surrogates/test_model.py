@@ -223,6 +223,15 @@ def test_transformercomb_init_rejects_incompatible_head_width() -> None:
         TransformerComb(d_e=32, d_rho=8, d_model=33, nhead=4)
 
 
+def test_transformercomb_rejects_non_positive_nhead() -> None:
+    """nhead=0 raises ValueError instead of ZeroDivisionError."""
+    pytest.importorskip("torch")
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
+
+    with pytest.raises(ValueError, match="nhead must be positive"):
+        TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=0)
+
+
 def test_transformercomb_d_e_property_matches_input_projection() -> None:
     """d_e reports the intervention feature width excluding the rho side channel."""
     model = _tiny_model()

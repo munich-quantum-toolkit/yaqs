@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 if TYPE_CHECKING:
+    import types
+
     from torch.utils.data import TensorDataset
 
     from mqt.yaqs.analog.mcwf import MCWFContext
@@ -36,6 +38,23 @@ from ...shared.utils import StochasticSolver, make_mcwf_static_context, resolve_
 from ..sequences.workflow import simulate_sequences
 from .data import SeqTrace, stack_traces
 from .utils import sample_density_matrix, sample_initial_psi
+
+
+def _require_torch() -> types.ModuleType:
+    """Import PyTorch or raise with an installation hint.
+
+    Returns:
+        The ``torch`` module.
+
+    Raises:
+        ImportError: If PyTorch is not installed.
+    """
+    try:
+        import torch  # noqa: PLC0415
+    except ImportError as exc:
+        msg = "PyTorch is required for surrogate training; install with `uv sync --extra torch`."
+        raise ImportError(msg) from exc
+    return torch
 
 
 def pack_dataset(
@@ -101,6 +120,7 @@ def sample_train_dataset(
     Raises:
         ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
+    _require_torch()
     chain_length = int(operator.length)
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
 

@@ -56,6 +56,7 @@ import copy
 # and in backend calls via call_serial_capped() with threadpoolctl.
 # ---------------------------------------------------------------------------
 from concurrent.futures import CancelledError
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -551,6 +552,10 @@ class Simulator:
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
         """Exception types that trigger a parallel job retry."""
         return self._execution.retry_exceptions
+
+    @retry_exceptions.setter
+    def retry_exceptions(self, value: tuple[type[BaseException], ...]) -> None:
+        self._execution = replace(self._execution, retry_exceptions=value)
 
     # -----------------------------------------------------------------------
     # Public API

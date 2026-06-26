@@ -188,12 +188,19 @@ class ExecutionConfig:
         return max(1, available_cpus() - 1)
 
 
+class _UnsetType:
+    """Sentinel for optional merge fields that distinguish unset from explicit ``None``."""
+
+
+_UNSET = _UnsetType()
+
+
 def merge_execution_config(
     execution: ExecutionConfig | None,
     *,
     parallel: bool | None = None,
     show_progress: bool | None = None,
-    max_workers: int | None = None,
+    max_workers: int | _UnsetType | None = _UNSET,
     mp_context: MPContext | None = None,
     max_retries: int | None = None,
 ) -> ExecutionConfig:
@@ -208,8 +215,11 @@ def merge_execution_config(
         updates["parallel"] = bool(parallel)
     if show_progress is not None:
         updates["show_progress"] = bool(show_progress)
-    if max_workers is not None:
-        updates["max_workers"] = int(max_workers)
+    if max_workers is not _UNSET:
+        if isinstance(max_workers, int):
+            updates["max_workers"] = max_workers
+        else:
+            updates["max_workers"] = None
     if mp_context is not None:
         updates["mp_context"] = mp_context
     if max_retries is not None:

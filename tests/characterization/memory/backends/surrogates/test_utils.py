@@ -99,3 +99,7 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
     psi_pur = psi_pur_out
     assert psi_pur.shape == (2**3,)
     np.testing.assert_allclose(np.linalg.norm(psi_pur), 1.0, atol=1e-12)
+
+    psi_tensor = np.reshape(psi_pur, (2, 2, 2))
+    rho_reduced = np.einsum("abc,dbc->ad", psi_tensor, psi_tensor.conj())
+    np.testing.assert_allclose(rho_reduced, rho, atol=1e-10)

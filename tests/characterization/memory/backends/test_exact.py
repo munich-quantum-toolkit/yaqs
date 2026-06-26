@@ -30,6 +30,7 @@ from mqt.yaqs.characterization.memory.operational_memory.samples import (
     resolve_unitary_sampler,
     sample_probes,
 )
+from mqt.yaqs.characterization.memory.shared.utils import validate_stochastic_solver
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -190,7 +191,7 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
         n_tot = len(kwargs["psi_pairs_list"])
         traces = cast(
             "list[dict[str, object]]",
-            [{"step_probs": [0.5, 0.8, 1.0], "cumulative_weight_final": 0.4} for _ in range(n_tot)],
+            [{"step_probs": [0.5, 0.8, 1.0], "cumulative_weight_final": 0.99} for _ in range(n_tot)],
         )
         return np.zeros((n_tot, 8), dtype=np.float32), traces
 
@@ -219,6 +220,12 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
     )
     assert weights.shape == (1, 1)
     assert float(weights[0, 0]) == pytest.approx(0.4)
+
+
+def test_exact_backend_rejects_invalid_solver() -> None:
+    """Invalid solver strings fail at backend construction."""
+    with pytest.raises(ValueError, match="solver must be"):
+        validate_stochastic_solver("typo")
 
 
 def test_exact_run_operational_memory_parallel_smoke() -> None:

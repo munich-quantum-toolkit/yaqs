@@ -20,6 +20,7 @@ import pytest
 from mqt.yaqs.core import parallel_utils
 from mqt.yaqs.core.parallel_utils import (
     ExecutionConfig,
+    available_cpus,
     call_serial_capped,
     get_parallel_context,
     merge_execution_config,
@@ -153,6 +154,14 @@ def test_merge_execution_config_applies_overrides() -> None:
     assert merged.parallel is False
     assert merged.max_workers == 2
     assert merged.show_progress is False
+
+
+def test_merge_execution_config_clears_max_workers() -> None:
+    """Explicit max_workers=None restores the default worker policy."""
+    base = ExecutionConfig(parallel=True, max_workers=2, show_progress=True)
+    merged = merge_execution_config(base, max_workers=None)
+    assert merged.max_workers is None
+    assert merged.resolved_max_workers() == max(1, available_cpus() - 1)
 
 
 def test_call_serial_capped_preserves_order() -> None:

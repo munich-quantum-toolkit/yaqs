@@ -101,6 +101,18 @@ def test_entropy_requires_cut_when_multiple_stored() -> None:
         merged.entropy()
 
 
+def test_resolve_cut_missing_raises() -> None:
+    """Explicit cut values missing from by_cut raise ValueError."""
+    merged = merge_cut_results({
+        1: pack_result(
+            {"entropy": 0.1, "rank": 1.1, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+            cut=1,
+        ),
+    })
+    with pytest.raises(ValueError, match="cut 2 is not stored"):
+        merged.entropy(2)
+
+
 def test_parse_cut_result_stores_truncated_singular_values() -> None:
     """parse_cut_result exposes the truncated spectrum used for entropy/rank."""
     full = np.array([10.0, 5.0, 1e-6, 1e-8], dtype=np.float64)

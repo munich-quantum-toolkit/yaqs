@@ -1277,6 +1277,23 @@ def test_apply_local_operator_hilbert_vs_vectorized() -> None:
     np.testing.assert_allclose(mpo_h.tensors[0], mpo_v.tensors[0], atol=1e-12)
 
 
+def test_apply_local_operator_right_action_matches_dense() -> None:
+    """left_action=False applies the operator on the input leg without transposing."""
+    T = _crandn((2, 2, 1, 1))
+
+    mpo = MPO()
+    mpo.tensors = [T.copy()]
+    mpo.length = 1
+    mpo.physical_dimension = 2
+
+    op2 = np.array([[0.7, 0.3 + 0.2j], [0.1, -0.4]], dtype=np.complex128)
+    mpo.apply_local_operator(site=0, op=op2, left_action=False)
+
+    dense_before = T.reshape(2, 2, 1, 1)
+    ref = np.einsum("abk,bc->ack", dense_before.reshape(2, 2, 1), op2).reshape(2, 2, 1, 1)
+    np.testing.assert_allclose(mpo.tensors[0], ref, atol=1e-12)
+
+
 def test_partial_trace_site_matches_dense_trace() -> None:
     """partial_trace_site produces the operator trace on a 1-site MPO."""
     A = _crandn((2, 2))

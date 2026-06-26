@@ -104,7 +104,12 @@ def _initial_mcwf_state_from_rho0(
                 psi += np.sqrt(w[i]) * v[:, i].astype(np.complex128)
         nrm = float(np.linalg.norm(psi))
         psi /= max(nrm, 1e-15)
-        return (psi, 0, float(w[0])) if return_eig_sample else psi
+        if return_eig_sample:
+            if rng is None:
+                rng = np.random.default_rng()
+            idx = int(rng.choice(2, p=w))
+            return psi, idx, float(w[idx])
+        return psi
 
     psi_2 = np.zeros(4, dtype=np.complex128)
     for i in range(2):
@@ -121,7 +126,12 @@ def _initial_mcwf_state_from_rho0(
     psi = psi_2
     for _ in range(length - 2):
         psi = np.kron(psi, np.array([1.0, 0.0], dtype=np.complex128))
-    return (psi, 0, float(w[0])) if return_eig_sample else psi
+    if return_eig_sample:
+        if rng is None:
+            rng = np.random.default_rng()
+        idx = int(rng.choice(2, p=w))
+        return psi, idx, float(w[idx])
+    return psi
 
 
 def sample_initial_psi(

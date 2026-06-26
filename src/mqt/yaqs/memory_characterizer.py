@@ -382,6 +382,7 @@ class MemoryCharacterizer:
             max_bond_dim=max_bond_dim,
             n_sweeps=n_sweeps,
             solver=self._solver_for(hamiltonian),
+            parallel=execution.parallel,
             _execution=execution,
         )
 

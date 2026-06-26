@@ -125,7 +125,7 @@ class MPO:
         if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
             tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
             tensor_new = (
-                np.einsum("ac,cbk->abk", op, tensor_view) if left_action else np.einsum("abk,cb->ack", tensor_view, op)
+                np.einsum("ac,cbk->abk", op, tensor_view) if left_action else np.einsum("abk,bc->ack", tensor_view, op)
             )
             self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
             return

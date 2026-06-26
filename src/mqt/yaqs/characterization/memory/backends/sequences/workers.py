@@ -309,7 +309,9 @@ def _simulate_seq_core(
                 sp = float(step_prob)
             elif step_type == "prepare_only":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, _step_prob = _reprepare_backend_state_forced(state, z0, psi_prep, solver)
+                state = _reset_backend_site_zero_to_product_ket(
+                    state, psi_prep, solver, chain_length=int(hamiltonian.length)
+                )
                 sp = 1.0
             elif step_type == "reset_only":
                 psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
@@ -532,7 +534,9 @@ def _seq_trace_worker(
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
             elif step_type == "prepare_only":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, _tmp_prob = _reprepare_backend_state_forced(state, z0, psi_prep, solver)
+                state = _reset_backend_site_zero_to_product_ket(
+                    state, psi_prep, solver, chain_length=int(hamiltonian.length)
+                )
                 step_prob = 1.0
             elif step_type == "reset_only":
                 psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
