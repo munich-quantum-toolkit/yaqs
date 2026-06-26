@@ -135,7 +135,7 @@ norm loss to MCWF jump probabilities under lowering noise.
 
 ### Characterization API
 
-The legacy ``Characterizer`` workflow is replaced by :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`:
+The legacy `Characterizer` workflow is replaced by :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`:
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
@@ -150,12 +150,12 @@ comb = mc.build_comb(ham, params, timesteps=[0.1])  # small-k reference
 result = mc.characterize(ham, params, cut=2, k=4)  # operational memory S_V(c)
 ```
 
-| Legacy intent | Replacement |
-| ------------- | ----------- |
-| Train surrogate | ``mc.train(...)`` |
-| Predict dynamics | ``mc.predict(model, ...)`` or ``mc.predict(comb, ...)`` |
-| Build reference comb | ``mc.build_comb(...)`` |
-| Memory metrics | ``mc.characterize(target, cut=..., k=...)`` |
+| Legacy intent        | Replacement                                         |
+| -------------------- | --------------------------------------------------- |
+| Train surrogate      | `mc.train(...)`                                     |
+| Predict dynamics     | `mc.predict(model, ...)` or `mc.predict(comb, ...)` |
+| Build reference comb | `mc.build_comb(...)`                                |
+| Memory metrics       | `mc.characterize(target, cut=..., k=...)`           |
 
 ### Top-level public API
 
