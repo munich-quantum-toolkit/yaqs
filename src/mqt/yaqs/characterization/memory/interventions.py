@@ -7,7 +7,7 @@
 
 """User-facing intervention specifications for memory characterization."""
 
-# ruff: noqa: PLC2701, DOC201, ANN202 -- bridges internal probe/surrogate helpers
+# ruff: noqa: PLC2701, ANN202 -- bridges internal probe/surrogate helpers
 
 from __future__ import annotations
 
@@ -52,7 +52,14 @@ def _normalize_intervention_kind(kind: str) -> InterventionKind:
 
 
 def probe_kwargs_from_interventions(interventions: str) -> dict[str, str]:
-    """Map user intervention names to internal split-cut probe keyword arguments."""
+    """Map user intervention names to internal split-cut probe keyword arguments.
+
+    Args:
+        interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+
+    Returns:
+        Dict with ``intervention_mode`` and ``unitary_ensemble`` keys for probing.
+    """
     kind = _normalize_intervention_kind(interventions)
     if kind == "measure_prepare":
         return {"intervention_mode": "measure_prepare", "unitary_ensemble": "haar"}
@@ -61,6 +68,15 @@ def probe_kwargs_from_interventions(interventions: str) -> dict[str, str]:
 
 
 def _unitary_sampler(kind: InterventionKind, rng: np.random.Generator):
+    """Return the unitary sampler callable for an intervention kind.
+
+    Args:
+        kind: ``"haar"`` or ``"clifford"``.
+        rng: Unused; present for call-site symmetry.
+
+    Returns:
+        Callable ``rng -> U``.
+    """
     if kind == "clifford":
         return _sample_random_clifford_unitary
     return _sample_random_unitary
@@ -69,8 +85,15 @@ def _unitary_sampler(kind: InterventionKind, rng: np.random.Generator):
 def _encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
     """Encode one intervention slot to a simulator step and Choi feature row.
 
+    Args:
+        slot: Intervention kind string, ``{"unitary": U}`` dict, or expanded slot.
+        rng: NumPy random generator for stochastic slots.
+
     Returns:
         Tuple ``(step, choi_features)`` where ``step`` is an MP pair or unitary dict.
+
+    Raises:
+        ValueError: If a dict slot lacks ``unitary`` or the kind is unsupported.
     """
     if isinstance(slot, dict):
         if "unitary" not in slot:
@@ -94,7 +117,19 @@ def _expand_intervention_sequence(
     k: int,
     rng: np.random.Generator,
 ) -> list[InterventionSlot]:
-    """Expand a scalar spec or per-slot list to length ``k``."""
+    """Expand a scalar spec or per-slot list to length ``k``.
+
+    Args:
+        spec: Per-slot list or scalar intervention kind.
+        k: Required sequence length.
+        rng: Unused for string specs; reserved for future stochastic expansion.
+
+    Returns:
+        List of ``k`` intervention slots.
+
+    Raises:
+        ValueError: If an explicit list length does not match ``k``.
+    """
     kk = int(k)
     if isinstance(spec, str):
         kind = _normalize_intervention_kind(spec)
@@ -116,8 +151,13 @@ def encode_sequence(
 ) -> tuple[list[Any], np.ndarray]:
     """Encode a user intervention sequence for simulation or surrogate inference.
 
+    Args:
+        spec: Intervention sequence or scalar kind.
+        k: Sequence length.
+        rng: NumPy random generator.
+
     Returns:
-        ``(psi_pairs, choi_features)`` with ``choi_features`` shaped ``(k, 32)``.
+        Tuple ``(steps, choi_features)`` with ``choi_features`` shaped ``(k, 32)``.
     """
     slots = _expand_intervention_sequence(spec, k=k, rng=rng)
     steps: list[Any] = []
@@ -134,7 +174,16 @@ def _sample_training_sequence(
     interventions: InterventionKind,
     rng: np.random.Generator,
 ) -> tuple[list[Any], np.ndarray]:
-    """Sample one training intervention sequence of length ``k``."""
+    """Sample one training intervention sequence of length ``k``.
+
+    Args:
+        k: Sequence length.
+        interventions: Intervention kind for all slots.
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(steps, choi_features)`` suitable for surrogate training rollouts.
+    """
     if interventions == "measure_prepare":
         maps, choi = _sample_random_intervention_sequence(int(k), rng)
         steps: list[Any] = []

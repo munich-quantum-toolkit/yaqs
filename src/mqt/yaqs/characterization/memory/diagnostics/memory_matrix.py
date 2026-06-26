@@ -135,6 +135,9 @@ def _analyze_memory_matrix(
 
     Args:
         memory_matrix: Past-row-centered memory matrix.
+        discarded_weight_threshold: Relative tail weight above which singular values are
+            discarded when computing entropy. ``None`` keeps the full spectrum.
+        min_keep: Minimum number of singular values to retain after tail truncation.
 
     Returns:
         Dictionary with ``entropy``, ``rank`` (:math:`R(c)`), ``singular_values``, and

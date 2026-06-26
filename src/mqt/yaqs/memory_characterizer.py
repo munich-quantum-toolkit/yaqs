@@ -75,6 +75,19 @@ def _resolve_probe_grid(
     n_pasts: int | None,
     n_futures: int | None,
 ) -> tuple[int, int]:
+    """Resolve past/future probe grid sizes from preset or overrides.
+
+    Args:
+        preset: ``"quick"``, ``"balanced"``, or ``"accurate"``.
+        n_pasts: Optional override for the number of past probes.
+        n_futures: Optional override for the number of future probes.
+
+    Returns:
+        Tuple ``(n_pasts, n_futures)``.
+
+    Raises:
+        ValueError: If ``preset`` is unknown.
+    """
     if preset not in _CHARACTERIZATION_PRESETS:
         msg = f"preset must be one of {sorted(_CHARACTERIZATION_PRESETS)!r}, got {preset!r}."
         raise ValueError(msg)
@@ -86,7 +99,17 @@ def _resolve_probe_grid(
 
 
 def _resolve_probe_set_arg(probe_set: Any) -> ProbeSet | None:
-    """Accept a prior :class:`CharacterizationResult` or internal probe bundle."""
+    """Accept a prior :class:`CharacterizationResult` or internal probe bundle.
+
+    Args:
+        probe_set: ``None``, a :class:`CharacterizationResult`, or an internal probe set.
+
+    Returns:
+        Internal probe bundle, or ``None``.
+
+    Raises:
+        ValueError: If a prior result has no reusable probes or multiple cuts.
+    """
     if probe_set is None:
         return None
     if isinstance(probe_set, CharacterizationResult):
@@ -102,6 +125,17 @@ def _resolve_probe_set_arg(probe_set: Any) -> ProbeSet | None:
 
 
 def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
+    """Encode a :class:`Hamiltonian` as MPO or raise.
+
+    Args:
+        hamiltonian: User-facing Hamiltonian object.
+
+    Returns:
+        Encoded MPO operator.
+
+    Raises:
+        TypeError: If ``hamiltonian`` is not a :class:`Hamiltonian`.
+    """
     if not isinstance(hamiltonian, Hamiltonian):
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
         raise TypeError(msg)
@@ -110,6 +144,14 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
 
 
 def _default_product_zero_psi(length: int) -> np.ndarray:
+    """Return ``|0...0>`` on ``length`` qubits as a state vector.
+
+    Args:
+        length: Chain length.
+
+    Returns:
+        Product computational-zero state vector.
+    """
     dim = 2 ** int(length)
     psi = np.zeros(dim, dtype=np.complex128)
     psi[0] = 1.0
@@ -117,6 +159,18 @@ def _default_product_zero_psi(length: int) -> np.ndarray:
 
 
 def _resolve_k(target: Any, k: int | None) -> int:
+    """Infer sequence length ``k`` from an explicit value or comb/surrogate target.
+
+    Args:
+        target: Comb, surrogate, or other characterized object.
+        k: Optional explicit sequence length.
+
+    Returns:
+        Resolved ``k``.
+
+    Raises:
+        ValueError: If ``k`` cannot be inferred from ``target``.
+    """
     if k is not None:
         return int(k)
     k_attr = getattr(target, "_k_for_probe", None)
@@ -127,6 +181,18 @@ def _resolve_k(target: Any, k: int | None) -> int:
 
 
 def _default_cut(k: int, cut: int | None) -> int:
+    """Resolve causal cut, defaulting to the interior cut ``(k + 1) // 2``.
+
+    Args:
+        k: Sequence length.
+        cut: Optional explicit cut.
+
+    Returns:
+        Valid cut in ``[1, k]``.
+
+    Raises:
+        ValueError: If the resolved cut is out of range.
+    """
     resolved_k = int(k)
     c = (resolved_k + 1) // 2 if cut is None else int(cut)
     if not (1 <= c <= resolved_k):
@@ -136,6 +202,17 @@ def _default_cut(k: int, cut: int | None) -> int:
 
 
 def _as_rho_matrix(rho0: np.ndarray) -> np.ndarray:
+    """Normalize an initial state to a ``2 x 2`` density matrix.
+
+    Args:
+        rho0: Packed length-8 vector or ``2 x 2`` matrix.
+
+    Returns:
+        Complex density matrix.
+
+    Raises:
+        ValueError: If ``rho0`` has an unsupported shape.
+    """
     arr = np.asarray(rho0, dtype=np.complex128)
     if arr.shape == (8,):
         return unpack_rho8(arr.astype(np.float64))
@@ -146,10 +223,12 @@ def _as_rho_matrix(rho0: np.ndarray) -> np.ndarray:
 
 
 def _is_hamiltonian_target(target: Any) -> bool:
+    """Return whether ``target`` is a Hamiltonian characterize/predict target."""
     return isinstance(target, Hamiltonian)
 
 
 def _is_comb_target(target: Any) -> bool:
+    """Return whether ``target`` is a reference comb predict target."""
     return isinstance(target, (DenseComb, MPOComb))
 
 
@@ -183,6 +262,18 @@ class MemoryCharacterizer:
         max_retries: int = 10,
         retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
     ) -> None:
+        """Configure execution and representation defaults for characterization workflows.
+
+        Args:
+            parallel: Whether to parallelize sequence rollouts.
+            max_workers: Cap on worker processes when ``parallel=True``.
+            show_progress: Whether to show tqdm progress bars.
+            representation: ``"vector"``, ``"mps"``, or ``"auto"`` stochastic solver choice.
+            vector_max_qubits: Auto cutover threshold from vector to MPS simulation.
+            mp_context: Multiprocessing start method.
+            max_retries: Retries for transient worker failures.
+            retry_exceptions: Exception types that trigger a worker retry.
+        """
         self._execution = ExecutionConfig(
             parallel=parallel,
             max_workers=max_workers,
@@ -196,29 +287,36 @@ class MemoryCharacterizer:
 
     @property
     def parallel(self) -> bool:
+        """Whether parallel rollout execution is enabled."""
         return self._execution.parallel
 
     @property
     def max_workers(self) -> int:
+        """Resolved worker-process cap for parallel rollouts."""
         return self._execution.resolved_max_workers()
 
     @property
     def show_progress(self) -> bool:
+        """Whether progress bars are shown during rollouts."""
         return self._execution.show_progress
 
     @property
     def mp_context(self) -> MPContext:
+        """Multiprocessing context used for worker pools."""
         return self._execution.mp_context
 
     @property
     def max_retries(self) -> int:
+        """Maximum retry attempts for transient worker failures."""
         return self._execution.max_retries
 
     @property
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
+        """Exception types that trigger a worker retry."""
         return self._execution.retry_exceptions
 
     def _solver_for(self, hamiltonian: Hamiltonian) -> Literal["MCWF", "TJM"]:
+        """Resolve stochastic solver for a Hamiltonian under this characterizer's representation."""
         rep = resolve_characterizer_representation(
             hamiltonian.length,
             self.representation,
@@ -245,7 +343,28 @@ class MemoryCharacterizer:
         n_sweeps: int = 2,
         parallel: bool | None = None,
     ) -> DenseComb | MPOComb:
-        """Build an exhaustive reference comb (validation only; scales as ``16^k``)."""
+        """Build an exhaustive reference comb (validation only; scales as ``16^k``).
+
+        Args:
+            hamiltonian: System Hamiltonian.
+            sim_params: Analog simulation parameters.
+            timesteps: Optional per-step durations; defaults from ``sim_params.dt``.
+            noise_model: Optional noise model during tomography rollouts.
+            num_trajectories: Monte Carlo trajectories per tomography sample.
+            basis: Intervention basis for process-tensor tomography.
+            basis_seed: Optional RNG seed for basis construction.
+            return_type: ``"dense"`` or ``"mpo"`` comb storage.
+            check: Whether to validate CPTP properties during construction.
+            atol: CPTP check tolerance.
+            compress_every: MPO compression cadence during construction.
+            tol: MPO compression tolerance.
+            max_bond_dim: Optional MPO bond-dimension cap.
+            n_sweeps: MPO variational refinement sweeps.
+            parallel: Override instance parallel setting.
+
+        Returns:
+            Dense or MPO reference comb for small ``k`` validation.
+        """
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
         return construct_process_tensor(
@@ -282,7 +401,24 @@ class MemoryCharacterizer:
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TensorDataset:
-        """Sample intervention sequences for surrogate training (advanced)."""
+        """Sample intervention sequences for surrogate training (advanced).
+
+        Args:
+            hamiltonian: System Hamiltonian.
+            sim_params: Analog simulation parameters.
+            k: Number of intervention steps per sequence.
+            n: Number of training sequences.
+            rng: Optional RNG (overrides ``seed``).
+            seed: Optional seed when ``rng`` is omitted.
+            timesteps: Optional comb schedule of length ``k + 1``.
+            init_mode: Initial-state sampling mode for rollouts.
+            interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            parallel: Override instance parallel setting.
+            show_progress: Override instance progress-bar setting.
+
+        Returns:
+            PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
+        """
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.combs.surrogates.workflow import generate_data as _generate_data
 
@@ -318,7 +454,25 @@ class MemoryCharacterizer:
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TransformerComb:
-        """Train a surrogate on simulated intervention sequences."""
+        """Train a Transformer surrogate on simulated intervention sequences.
+
+        Args:
+            hamiltonian: System Hamiltonian.
+            sim_params: Analog simulation parameters.
+            k: Training sequence length (stored on the model).
+            n: Number of training sequences.
+            seed: Optional RNG seed for data sampling and weight init.
+            timesteps: Optional comb schedule of length ``k + 1``.
+            init_mode: Initial-state sampling mode for rollouts.
+            interventions: Training intervention kind.
+            model_kwargs: Optional overrides for :class:`TransformerComb` construction.
+            train_kwargs: Optional overrides for the training loop.
+            parallel: Override instance parallel setting.
+            show_progress: Override instance progress-bar setting.
+
+        Returns:
+            Trained :class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb`.
+        """
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.combs.surrogates.workflow import create_surrogate as _create_surrogate
 
@@ -397,7 +551,34 @@ class MemoryCharacterizer:
         parallel: bool | None = None,
         **probe_kwargs: Any,
     ) -> CharacterizationResult:
-        """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb."""
+        """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb.
+
+        For a Hamiltonian, pass ``sim_params`` and ``k``. For combs/surrogates, ``k`` is
+        inferred from the target when omitted. Default interior cut is ``(k + 1) // 2``.
+
+        Args:
+            target: Hamiltonian, trained surrogate, or reference comb.
+            sim_params: Required for Hamiltonian targets only.
+            k: Intervention sequence length (required for Hamiltonian targets).
+            cut: Single causal cut; mutually exclusive with ``cuts``.
+            cuts: ``"all"`` or explicit list for multi-cut Hamiltonian sweeps.
+            preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
+            n_pasts: Override number of past probes.
+            n_futures: Override number of future probes.
+            interventions: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            rng: RNG for probe sampling.
+            probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
+            initial_psi: Optional initial state for Hamiltonian exact rollouts.
+            parallel: Override parallelism for comb/surrogate probing.
+            **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
+
+        Returns:
+            Diagnostics with per-cut entropy, rank, spectrum, and stored probes.
+
+        Raises:
+            TypeError: If a Hamiltonian is given without ``sim_params``.
+            ValueError: If ``k`` is missing for a Hamiltonian target.
+        """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**probe_kwargs_from_interventions(interventions), **probe_kwargs}
         resolved_probe_set = _resolve_probe_set_arg(probe_set)
@@ -459,6 +640,16 @@ class MemoryCharacterizer:
         cut: int | None,
         cuts: Literal["all"] | list[int] | None,
     ) -> list[int]:
+        """Resolve the list of cuts to characterize.
+
+        Args:
+            k: Sequence length.
+            cut: Optional single cut.
+            cuts: ``"all"`` or explicit cut list.
+
+        Returns:
+            Sorted list of cut indices to evaluate.
+        """
         if cuts is not None:
             return list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
         if cut is not None:
@@ -478,6 +669,7 @@ class MemoryCharacterizer:
         parallel: bool | None,
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
+        """Characterize a comb or surrogate via internal split-cut probing."""
         resolved_cut = _default_cut(int(k), cut)
         out = _probe_process(
             process=target,
@@ -508,6 +700,7 @@ class MemoryCharacterizer:
         initial_psi: np.ndarray | None,
         probe_kw: dict[str, Any],
     ) -> CharacterizationResult:
+        """Characterize a Hamiltonian via exact stochastic rollouts and branch weights."""
         from mqt.yaqs.characterization.memory.reference.exact import (
             evaluate_exact_probe_set_with_diagnostics,
         )
@@ -563,6 +756,18 @@ class MemoryCharacterizer:
 
         Supports trained surrogates and reference combs. For combs, ``rho0`` is accepted
         for API symmetry but not used (the comb contracts from the tomographic reference state).
+
+        Args:
+            target: Trained surrogate or reference comb.
+            rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
+            sequence: Intervention kind string, per-slot list, or expanded sequence.
+            k: Sequence length; inferred from ``target`` when omitted.
+            return_sequence: If True, return the full ``k``-step trajectory instead of the
+                final state only.
+            rng: RNG for stochastic intervention sampling.
+
+        Returns:
+            Final (or full) site-0 reduced density matrix.
         """
         local_rng = rng if rng is not None else np.random.default_rng()
         rho_mat = _as_rho_matrix(rho0)

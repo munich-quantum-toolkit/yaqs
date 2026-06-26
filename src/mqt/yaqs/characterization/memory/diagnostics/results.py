@@ -34,29 +34,74 @@ class CharacterizationResult:
 
     by_cut: dict[int, _CutResult]
 
-    def entropy(self, cut: int) -> float:
-        """Cross-cut memory entropy :math:`S_V(c)` at ``cut`` (natural log of mode weights)."""
-        return float(self.by_cut[int(cut)].entropy)
+    def _resolve_cut(self, cut: int | None) -> int:
+        """Return ``cut`` or the sole key in ``by_cut``."""
+        if cut is not None:
+            return int(cut)
+        if len(self.by_cut) != 1:
+            msg = "cut is required when the result holds multiple cuts."
+            raise ValueError(msg)
+        return int(next(iter(self.by_cut)))
 
-    def rank(self, cut: int) -> float:
-        r"""Effective mode number :math:`R(c)=\exp(S_V(c))` at ``cut``."""
-        return float(self.by_cut[int(cut)].rank)
+    def entropy(self, cut: int | None = None) -> float:
+        """Cross-cut memory entropy :math:`S_V(c)` (natural log of mode weights).
 
-    def singular_values(self, cut: int) -> np.ndarray:
-        """Singular spectrum of the memory matrix at ``cut``."""
-        return np.asarray(self.by_cut[int(cut)].singular_values)
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
 
-    def memory_matrix(self, cut: int) -> np.ndarray:
-        """Past-row-centered weighted memory matrix at ``cut``."""
-        return np.asarray(self.by_cut[int(cut)].memory_matrix)
+        Returns:
+            Entropy :math:`S_V(c)`.
+        """
+        c = self._resolve_cut(cut)
+        return float(self.by_cut[c].entropy)
 
-    def probes(self, cut: int) -> dict[str, Any]:
+    def rank(self, cut: int | None = None) -> float:
+        r"""Effective mode number :math:`R(c)=\exp(S_V(c))`.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            Effective rank :math:`R(c)`.
+        """
+        c = self._resolve_cut(cut)
+        return float(self.by_cut[c].rank)
+
+    def singular_values(self, cut: int | None = None) -> np.ndarray:
+        """Singular spectrum of the memory matrix at ``cut``.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            Singular values (possibly tail-truncated for entropy).
+        """
+        c = self._resolve_cut(cut)
+        return np.asarray(self.by_cut[c].singular_values)
+
+    def memory_matrix(self, cut: int | None = None) -> np.ndarray:
+        """Past-row-centered weighted memory matrix at ``cut``.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            Centered response matrix :math:`\\widetilde{V}(c)`.
+        """
+        c = self._resolve_cut(cut)
+        return np.asarray(self.by_cut[c].memory_matrix)
+
+    def probes(self, cut: int | None = None) -> dict[str, Any]:
         """Export probe arrays used at ``cut`` for logging or cross-backend reuse.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
 
         Returns:
             Dict with keys ``cut``, ``k``, ``past_features``, and ``future_features``.
         """
-        entry = self.by_cut[int(cut)]
+        c = self._resolve_cut(cut)
+        entry = self.by_cut[c]
         if entry.probe_set is None:
             msg = f"No probe data recorded for cut={cut}."
             raise ValueError(msg)
@@ -69,7 +114,11 @@ class CharacterizationResult:
         }
 
     def summary(self) -> str:
-        """Human-readable summary of entropy and rank per cut."""
+        """Human-readable summary of entropy and rank per cut.
+
+        Returns:
+            One-line summary for a single cut, or a fixed-width table for several cuts.
+        """
         if len(self.by_cut) == 1:
             c = next(iter(self.by_cut))
             d = self.by_cut[c]
@@ -82,6 +131,18 @@ class CharacterizationResult:
 
 
 def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
+    """Build one per-cut result entry from a probe-process output dict.
+
+    Args:
+        out: Output of :func:`~mqt.yaqs.characterization.memory.diagnostics.probe._probe_process`.
+        cut: Causal cut index.
+
+    Returns:
+        Internal per-cut storage object.
+
+    Raises:
+        ValueError: If ``memory_matrix`` is missing from ``out``.
+    """
     memory_matrix = out.get("memory_matrix")
     if memory_matrix is None:
         msg = "probe output missing memory_matrix."
@@ -97,10 +158,30 @@ def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
 
 
 def _result_from_probe_dict(out: dict[str, Any], *, cut: int) -> CharacterizationResult:
+    """Wrap a single-cut probe dict as :class:`CharacterizationResult`.
+
+    Args:
+        out: Probe-process output dict.
+        cut: Causal cut index.
+
+    Returns:
+        Result holding exactly one cut.
+    """
     return CharacterizationResult(by_cut={int(cut): _cut_from_probe_dict(out, cut=cut)})
 
 
 def _merge_results(results: dict[int, CharacterizationResult]) -> CharacterizationResult:
+    """Merge single-cut characterization results into one multi-cut object.
+
+    Args:
+        results: Mapping ``cut -> CharacterizationResult`` with one cut each.
+
+    Returns:
+        Combined result.
+
+    Raises:
+        ValueError: If any partial result holds more than one cut.
+    """
     by_cut: dict[int, _CutResult] = {}
     for cut_key in sorted(results):
         part = results[cut_key]

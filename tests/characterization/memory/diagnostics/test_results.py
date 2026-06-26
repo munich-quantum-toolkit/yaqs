@@ -18,7 +18,7 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 
 def test_rank_equals_exp_entropy() -> None:
-    """CharacterizationResult.rank is R(c)=exp(S_V(c))."""
+    """``rank()`` equals ``exp(entropy())`` for a single-cut result."""
     ham = Hamiltonian.ising(length=1, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
     result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
@@ -29,8 +29,8 @@ def test_rank_equals_exp_entropy() -> None:
         n_pasts=6,
         n_futures=6,
     )
-    sv = result.entropy(1)
-    r = result.rank(1)
+    sv = result.entropy()
+    r = result.rank()
     assert r == pytest.approx(math.exp(sv), rel=1e-9, abs=1e-9)
 
 
@@ -47,7 +47,7 @@ def test_probes_export_arrays() -> None:
         n_futures=3,
         rng=np.random.default_rng(0),
     )
-    probes = result.probes(1)
+    probes = result.probes()
     assert probes["cut"] == 1
     assert probes["k"] == 1
     assert probes["past_features"].shape[0] == 4

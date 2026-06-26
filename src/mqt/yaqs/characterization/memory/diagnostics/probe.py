@@ -30,7 +30,21 @@ _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 @dataclass(slots=True)
 class ProbeSet:
-    """Sampled split-cut probes for a fixed cut/sequence length."""
+    """Sampled split-cut probes for a fixed cut and sequence length.
+
+    Attributes:
+        cut: Causal cut index ``c`` (1-based).
+        k: Total intervention steps per probe sequence.
+        past_features: Choi features for past branches, shape ``(n_pasts, c, 32)``.
+        future_features: Choi features for future branches, shape ``(n_futures, k - c + 1, 32)``.
+        past_pairs: Intervention steps before the cut (per past index).
+        past_cut_meas: Measurement kets at the cut (per past index).
+        future_prep_cut: Preparation kets at the cut (per future index).
+        future_pairs: Intervention steps after the cut (per future index).
+        all_pairs_grid: Optional pre-built full grid (experiments only).
+        n_pasts_grid: Grid past count when ``all_pairs_grid`` is set.
+        n_futures_grid: Grid future count when ``all_pairs_grid`` is set.
+    """
 
     cut: int
     k: int
@@ -53,7 +67,14 @@ class _ProbeProcess(Protocol):
 
 
 def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
-    """Extract a normalized ket from a rank-one projector."""
+    """Extract a normalized ket from a rank-one projector.
+
+    Args:
+        projector: ``2 x 2`` Hermitian rank-one projector or density matrix.
+
+    Returns:
+        Normalized state vector of length 2; falls back to ``|0>`` if degenerate.
+    """
     eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
     idx = int(np.argmax(eigvals.real))
     psi = eigvecs[:, idx]
@@ -64,6 +85,14 @@ def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
 
 
 def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+    """Sample one measure-prepare intervention and its Choi features.
+
+    Args:
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(choi_features, (psi_meas, psi_prep))``.
+    """
     rho_prep, effect, feat = _sample_random_intervention_parts(rng)
     psi_meas = _psi_from_rank1_projector(effect)
     psi_prep = _psi_from_rank1_projector(rho_prep)
@@ -71,6 +100,14 @@ def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray
 
 
 def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
+    """Sample a Haar-random ``2 x 2`` unitary.
+
+    Args:
+        rng: NumPy random generator.
+
+    Returns:
+        Complex unitary matrix.
+    """
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     q, r = np.linalg.qr(a)
     d = np.diag(r)
@@ -83,6 +120,11 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
 
 @lru_cache(maxsize=1)
 def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
+    """Return the 24 single-qubit Clifford unitaries (cached).
+
+    Returns:
+        Tuple of ``2 x 2`` unitary matrices.
+    """
     h = (1.0 / np.sqrt(2.0)) * np.asarray([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128)
     s = np.asarray([[1.0, 0.0], [0.0, 1.0j]], dtype=np.complex128)
     gens = (h, s)
@@ -107,12 +149,28 @@ def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
 
 
 def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
+    """Sample a uniformly random single-qubit Clifford gate.
+
+    Args:
+        rng: NumPy random generator.
+
+    Returns:
+        Complex unitary matrix.
+    """
     cliffords = _single_qubit_clifford_group()
     idx = int(rng.integers(0, len(cliffords)))
     return np.asarray(cliffords[idx], dtype=np.complex128)
 
 
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
+    """Encode a unitary as a 32-dimensional Choi feature row.
+
+    Args:
+        u: ``2 x 2`` unitary matrix.
+
+    Returns:
+        Float32 feature vector of shape ``(32,)``.
+    """
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
     vec_u = uu.reshape(4, order="F")
     choi = np.outer(vec_u, vec_u.conj()).astype(np.complex128)
@@ -120,12 +178,28 @@ def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
 
 
 def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Sample the cut measurement branch (effect only).
+
+    Args:
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(choi_features, psi_meas)``.
+    """
     _rho_prep, effect, feat = _sample_random_intervention_parts(rng)
     psi_meas = _psi_from_rank1_projector(effect)
     return feat.astype(np.float32), psi_meas
 
 
 def _sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Sample the cut preparation branch (state only).
+
+    Args:
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(choi_features, psi_prep)``.
+    """
     rho_prep, _effect, feat = _sample_random_intervention_parts(rng)
     psi_prep = _psi_from_rank1_projector(rho_prep)
     return feat.astype(np.float32), psi_prep
@@ -137,6 +211,16 @@ def _sample_probe_step(
     intervention_mode: str,
     unitary_sampler: Any,
 ) -> tuple[np.ndarray, Any]:
+    """Sample one within-sequence intervention step.
+
+    Args:
+        rng: NumPy random generator.
+        intervention_mode: ``"measure_prepare"`` or unitary-break mode.
+        unitary_sampler: Callable ``rng -> U`` for unitary-break modes.
+
+    Returns:
+        Tuple ``(choi_features, step)`` where ``step`` is an MP pair or unitary dict.
+    """
     if intervention_mode == "measure_prepare":
         feat, pair = _sample_step(rng)
         return feat, pair
@@ -145,6 +229,17 @@ def _sample_probe_step(
 
 
 def _resolve_unitary_sampler(unitary_ensemble: str):
+    """Map ensemble name to a unitary sampling callable.
+
+    Args:
+        unitary_ensemble: ``"haar"`` or ``"clifford"``.
+
+    Returns:
+        Callable ``rng -> U``.
+
+    Raises:
+        ValueError: If ``unitary_ensemble`` is unsupported.
+    """
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
         msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
@@ -153,7 +248,16 @@ def _resolve_unitary_sampler(unitary_ensemble: str):
 
 
 def _probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
-    """Full intervention sequence for probe-grid entry ``(i, j)``."""
+    """Build the full intervention sequence for probe-grid entry ``(i, j)``.
+
+    Args:
+        probe_set: Sampled split-cut probes.
+        i: Past index.
+        j: Future index.
+
+    Returns:
+        Intervention sequence of length ``probe_set.k``.
+    """
     c = int(probe_set.cut)
     kk = int(probe_set.k)
     full: list[Any] = [probe_set.past_pairs[i][t] for t in range(c - 1)]
@@ -163,7 +267,17 @@ def _probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
 
 
 def _build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
-    """Construct the full sequence pair grid from split-cut probes."""
+    """Construct the full ``(past, future)`` sequence pair grid.
+
+    Args:
+        probe_set: Sampled split-cut probes.
+
+    Returns:
+        Tuple ``(all_pairs, n_pasts, n_futures)``.
+
+    Raises:
+        RuntimeError: If an assembled sequence length does not match ``k``.
+    """
     if probe_set.all_pairs_grid is not None:
         npg = int(probe_set.n_pasts_grid) if probe_set.n_pasts_grid is not None else len(probe_set.past_pairs)
         nfg = int(probe_set.n_futures_grid) if probe_set.n_futures_grid is not None else len(probe_set.future_pairs)
@@ -183,12 +297,33 @@ def _build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, in
 
 
 def _rank1_prob(rho: np.ndarray, psi: np.ndarray) -> float:
+    """Return Born probability ``<psi|rho|psi>`` for a rank-one effect.
+
+    Args:
+        rho: ``2 x 2`` density matrix.
+        psi: Length-2 ket.
+
+    Returns:
+        Real probability in ``[0, 1]``.
+    """
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     ket = np.asarray(psi, dtype=np.complex128).reshape(2)
     return float(np.real(np.vdot(ket, r @ ket)))
 
 
 def _step_probability(rho: np.ndarray, step: Any) -> float:
+    """Measurement probability for one intervention step.
+
+    Args:
+        rho: ``2 x 2`` state before the step.
+        step: MP pair, unitary dict, or structured probe step.
+
+    Returns:
+        Step probability used in branch-weight rollout.
+
+    Raises:
+        ValueError: If the step type is unsupported.
+    """
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
         if step_type in {"unitary", "depolarizing_pauli", "prepare_only", "reset_only"}:
@@ -203,6 +338,18 @@ def _step_probability(rho: np.ndarray, step: Any) -> float:
 
 
 def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
+    """Apply one intervention step to a single-qubit state.
+
+    Args:
+        rho: ``2 x 2`` density matrix before the step.
+        step: MP pair, unitary dict, or structured probe step.
+
+    Returns:
+        Normalized ``2 x 2`` state after the step.
+
+    Raises:
+        ValueError: If the step type is unsupported.
+    """
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
@@ -240,6 +387,15 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
 
 
 def _rollout_branch_weight(steps: list[Any], *, cut: int) -> float:
+    """Analytic branch weight from product of step probabilities up to ``cut``.
+
+    Args:
+        steps: Full intervention sequence.
+        cut: Causal cut index.
+
+    Returns:
+        Cumulative branch weight ``prod_t p_t`` for ``t < cut``.
+    """
     rho = _RHO0.copy()
     weight = 1.0
     for t in range(min(int(cut), len(steps))):
@@ -252,7 +408,14 @@ def _rollout_branch_weight(steps: list[Any], *, cut: int) -> float:
 
 
 def _branch_weights_ij(probe_set: ProbeSet) -> np.ndarray:
-    r"""Analytic branch weights :math:`w_{\alpha,m}` at the causal cut for comb/surrogate backends."""
+    r"""Analytic branch weights :math:`w_{\alpha,m}` at the causal cut.
+
+    Args:
+        probe_set: Sampled split-cut probes.
+
+    Returns:
+        Array of shape ``(n_pasts, n_futures)`` constant across future columns per past.
+    """
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
     c = int(probe_set.cut)
@@ -273,7 +436,23 @@ def sample_split_cut_probes(
     intervention_mode: str = "unitary_break_mp",
     unitary_ensemble: str = "haar",
 ) -> ProbeSet:
-    """Sample split-cut probes (unitary_break_mp or measure_prepare)."""
+    """Sample random split-cut past/future probe ensembles.
+
+    Args:
+        cut: Causal cut index ``c``.
+        k: Total sequence length.
+        n_pasts: Number of past probe branches.
+        n_futures: Number of future probe branches.
+        rng: NumPy random generator.
+        intervention_mode: ``"unitary_break_mp"`` or ``"measure_prepare"``.
+        unitary_ensemble: ``"haar"`` or ``"clifford"`` (unitary-break modes only).
+
+    Returns:
+        Populated :class:`ProbeSet`.
+
+    Raises:
+        ValueError: If ``cut`` or ``intervention_mode`` is invalid.
+    """
     c = int(cut)
     kk = int(k)
     if not (1 <= c <= kk):
@@ -341,7 +520,25 @@ def _probe_process(
     unitary_ensemble: str = "haar",
     parallel: bool | None = None,
 ) -> dict[str, Any]:
-    """Probe a process via split-cut probes and return memory-matrix diagnostics."""
+    """Run split-cut probing and assemble memory-matrix diagnostics.
+
+    Args:
+        process: Backend implementing :meth:`evaluate_probe_set`.
+        cut: Causal cut index.
+        k: Total sequence length.
+        n_pasts: Past probe count when sampling internally.
+        n_futures: Future probe count when sampling internally.
+        rng: RNG for internal probe sampling.
+        probe_set: Pre-sampled probes (optional).
+        return_raw: If True, include uncentered ``memory_matrix_raw``.
+        intervention_mode: Passed to internal sampling.
+        unitary_ensemble: Passed to internal sampling.
+        parallel: Override parallelism for exact backends.
+
+    Returns:
+        Dict with ``entropy``, ``rank``, ``singular_values``, ``memory_matrix``,
+        ``probe_set``, and optional ``weights_ij``.
+    """
     if parallel is not None:
         from ..reference.exact import ExactProbeProcess
 

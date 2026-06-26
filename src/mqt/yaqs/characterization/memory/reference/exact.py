@@ -55,10 +55,14 @@ class ExactProbeProcess:
 
     @property
     def parallel(self) -> bool:
+        """Whether parallel rollout execution is enabled."""
         return self._execution.parallel
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
         """Run exact backend for all (past, future) probe combinations.
+
+        Args:
+            probe_set: Sampled split-cut probes.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``
@@ -104,6 +108,15 @@ def evaluate_exact_probe_set_with_diagnostics(
     solver: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
     r"""Exact rollout with per-sequence diagnostics (branch weights, early termination).
+
+    Args:
+        probe_set: Sampled split-cut probes.
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        initial_psi: Initial state vector for rollouts.
+        parallel: Whether to parallelize sequence simulation.
+        show_progress: Whether to show a progress bar.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
 
     Returns:
         ``(pauli_ij, weights_ij, traces_flat)`` where ``pauli_ij`` has shape
