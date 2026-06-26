@@ -7,17 +7,14 @@
 
 # ruff: noqa: PLR6301 -- protocol-style dummy backend; white-box rollout test
 
-"""Tests for split-cut probes and run_operational_memory."""
+"""Tests for operational-memory orchestration (:mod:`run`)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.exact import (
-    ExactBackend,
-    simulate_exact,
-)
+from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
@@ -28,7 +25,10 @@ from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
     assemble_memory_matrix,
     compute_spectrum,
 )
-from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
+from mqt.yaqs.characterization.memory.operational_memory.run import (
+    evaluate_probes_weighted_for,
+    run_operational_memory,
+)
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -171,3 +171,96 @@ def test_mpo_comb_entropy_matches_dense() -> None:
     out_mpo = run_operational_memory(process=mpo_comb, cut=1, k=1, probe_set=probe_set)
     out_dense = run_operational_memory(process=dense, cut=1, k=1, probe_set=probe_set)
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
+
+
+def test_evaluate_probes_weighted_for_comb_uses_analytic_weights() -> None:
+    """Comb backends without weighted evaluate use analytic branch weights."""
+    rng = np.random.default_rng(2)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    comb = build_process_tensor(
+        op,
+        _params(),
+        timesteps=[0.05],
+        num_trajectories=20,
+        parallel=False,
+        return_type="dense",
+    )
+    probe_set = sample_probes(cut=1, k=1, n_pasts=3, n_futures=2, rng=rng)
+    pauli, weights = evaluate_probes_weighted_for(comb, probe_set)
+    assert pauli.shape == (3, 2, 4)
+    assert weights.shape == (3, 2)
+    assert np.allclose(weights.std(axis=1), 0.0)
+
+
+def test_evaluate_probes_weighted_for_missing_method_raises() -> None:
+    """Objects without probe methods raise TypeError."""
+
+    class NoProbes:
+        pass
+
+    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    with pytest.raises(TypeError, match="evaluate_probes"):
+        evaluate_probes_weighted_for(NoProbes(), probe_set)
+
+
+def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
+    """return_raw=True exposes the uncentered memory matrix."""
+    rng = np.random.default_rng(9)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    comb = build_process_tensor(
+        op,
+        _params(),
+        timesteps=[0.05],
+        num_trajectories=20,
+        parallel=False,
+        return_type="dense",
+    )
+    out = run_operational_memory(
+        process=comb,
+        cut=1,
+        k=1,
+        n_pasts=3,
+        n_futures=2,
+        rng=rng,
+        return_raw=True,
+    )
+    assert "memory_matrix_raw" in out
+    assert out["memory_matrix_raw"].shape == out["memory_matrix"].shape
+
+
+def _entropy_from_cumulative_weights(
+    probe_set: ProbeSet,
+    op: MPO,
+    params: AnalogSimParams,
+    psi0: np.ndarray,
+) -> float:
+    """Entropy using cumulative_weight_final from traced exact rollouts."""
+    pauli, _, traces = simulate_exact(
+        probe_set=probe_set,
+        operator=op,
+        sim_params=params,
+        initial_psi=psi0,
+        parallel=False,
+    )
+    n_p, n_f = pauli.shape[:2]
+    weights = np.zeros((n_p, n_f), dtype=np.float64)
+    for ii in range(n_p):
+        for jj in range(n_f):
+            weights[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
+    _raw, memory_matrix = assemble_memory_matrix(pauli, weights, log_weight_warnings=False)
+    return float(compute_spectrum(memory_matrix)["entropy"])
+
+
+def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:
+    """Exact-backend orchestration agrees with cumulative-weight entropy at J=0."""
+    rng = np.random.default_rng(4)
+    op = MPO.ising(length=2, J=0.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    probe_set = sample_probes(cut=2, k=4, n_pasts=4, n_futures=3, rng=rng)
+    psi0 = np.zeros(4, dtype=np.complex128)
+    psi0[0] = 1.0 + 0.0j
+    backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
+    out = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
+    exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
+    assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
+

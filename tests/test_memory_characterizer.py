@@ -242,3 +242,71 @@ def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, Analog
         rho_out = mc.predict(model, rho0, "haar", k=k_prime)
         assert rho_out.shape == (2, 2)
         assert np.all(np.isfinite(rho_out))
+
+
+@pytest.fixture
+def paper_params() -> AnalogSimParams:
+    """Analog parameters for L=2 paper-style benchmark geometry."""
+    return AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+
+
+def test_characterize_paper_geometry_finite_entropy(paper_params: AnalogSimParams) -> None:
+    """L=2, k=8 characterize path yields finite S_V and R (quick benchmark geometry)."""
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+    result = mc.characterize(
+        ham,
+        paper_params,
+        k=8,
+        cut=4,
+        n_pasts=8,
+        n_futures=8,
+        rng=np.random.default_rng(0),
+    )
+    assert result.entropy(4) >= 0.0
+    assert result.rank(4) >= 1.0
+
+
+def test_characterize_markovian_at_zero_coupling(paper_params: AnalogSimParams) -> None:
+    """With J=0 the process is Markovian: cross-cut memory entropy S_V is near zero."""
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    ham = Hamiltonian.ising(length=2, J=0.0, g=1.0)
+    result = mc.characterize(
+        ham,
+        paper_params,
+        k=8,
+        cut=4,
+        n_pasts=12,
+        n_futures=12,
+        rng=np.random.default_rng(11),
+    )
+    assert result.entropy(4) < 0.05
+    assert result.rank(4) == pytest.approx(1.0, abs=0.05)
+
+
+def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams) -> None:
+    """S_V at fixed cut increases monotonically with Ising coupling J."""
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    j_values = [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]
+    anchor = mc.characterize(
+        Hamiltonian.ising(length=2, J=0.0, g=1.0),
+        paper_params,
+        k=8,
+        cut=4,
+        n_pasts=12,
+        n_futures=12,
+        rng=np.random.default_rng(42),
+    )
+    entropies = [anchor.entropy(4)]
+    for jv in j_values[1:]:
+        result = mc.characterize(
+            Hamiltonian.ising(length=2, J=jv, g=1.0),
+            paper_params,
+            k=8,
+            cut=4,
+            probe_set=anchor,
+        )
+        entropies.append(result.entropy(4))
+    assert entropies[0] < 0.05
+    assert entropies[-1] > entropies[0] + 0.1
+    assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))

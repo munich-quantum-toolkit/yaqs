@@ -13,18 +13,97 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pytest
 
 import mqt.yaqs.characterization.memory.backends.exact as exact_mod
 from mqt.yaqs.characterization.memory.backends.exact import (
     ExactBackend,
     simulate_exact,
 )
-from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
+from mqt.yaqs.characterization.memory.operational_memory.samples import (
+    ProbeSet,
+    _sample_cut_measurement_only,
+    _sample_cut_preparation_only,
+    _sample_probe_step,
+    resolve_unitary_sampler,
+)
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 if TYPE_CHECKING:
-    import pytest
+    pass
+
+
+def _product_initial_state(length: int) -> np.ndarray:
+    psi = np.zeros(2**length, dtype=np.complex128)
+    psi[0] = 1.0 + 0.0j
+    return psi
+
+
+def _sample_split_delayed_break_probes(
+    *,
+    left_cut: int,
+    tau: int,
+    k: int,
+    n_pasts: int,
+    n_futures: int,
+    rng: np.random.Generator,
+) -> tuple[ProbeSet, list[list[Any]]]:
+    """Delayed causal-break probes: past + break + identity bridge + future."""
+    c_left = int(left_cut)
+    tt = int(tau)
+    kk = int(k)
+    past_full = c_left - 1
+    future_tail = kk - (c_left + tt + 1)
+    unitary_sampler = resolve_unitary_sampler("haar")
+
+    past_pairs: list[list[Any]] = []
+    past_cut_meas: list[np.ndarray] = []
+    for _ in range(n_pasts):
+        pairs_i = [
+            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
+            for _ in range(past_full)
+        ]
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
+        past_cut_meas.append(psi_m)
+        past_pairs.append(pairs_i)
+
+    future_prep_cut: list[np.ndarray] = []
+    future_pairs: list[list[Any]] = []
+    for _ in range(n_futures):
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
+        future_prep_cut.append(psi_p)
+        future_pairs.append(
+            [
+                _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
+                for _ in range(future_tail)
+            ]
+        )
+
+    z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    u_id = np.eye(2, dtype=np.complex128)
+    bridge = [{"type": "unitary", "U": u_id} for _ in range(tt)]
+    all_pairs: list[list[Any]] = []
+    for i in range(n_pasts):
+        for j in range(n_futures):
+            full = list(past_pairs[i])
+            full.append((past_cut_meas[i], z0))
+            full.extend(bridge)
+            full.append({"type": "prepare_only", "psi_prep": future_prep_cut[j]})
+            full.extend(future_pairs[j])
+            all_pairs.append(full)
+
+    probe_set = ProbeSet(
+        cut=c_left,
+        k=kk,
+        past_features=np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32),
+        future_features=np.zeros((n_futures, max(1, 1 + tt + future_tail), 32), dtype=np.float32),
+        past_pairs=past_pairs,
+        past_cut_meas=past_cut_meas,
+        future_prep_cut=future_prep_cut,
+        future_pairs=future_pairs,
+    )
+    return probe_set, all_pairs
 
 
 def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
@@ -124,3 +203,54 @@ def test_exact_run_operational_memory_parallel_smoke() -> None:
     probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=2)
     out = process.evaluate_probes(probe_set)
     assert out.shape == (2, 2, 4)
+
+
+def test_delayed_break_custom_psi_pairs_list_geometry() -> None:
+    """Gap geometry builds k-length sequences with an identity bridge of length tau."""
+    rng = np.random.default_rng(1)
+    left_cut, tau, k = 4, 2, 10
+    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+        left_cut=left_cut,
+        tau=tau,
+        k=k,
+        n_pasts=3,
+        n_futures=2,
+        rng=rng,
+    )
+    assert probe_set.cut == left_cut
+    assert probe_set.k == k
+    assert len(psi_pairs_list) == 6
+    u_id = np.eye(2, dtype=np.complex128)
+    for seq in psi_pairs_list:
+        assert len(seq) == k
+        bridge = seq[left_cut : left_cut + tau]
+        assert all(
+            step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in bridge
+        )
+
+
+def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:
+    """simulate_exact rolls out delayed-break probe grids when psi_pairs_list is supplied."""
+    rng = np.random.default_rng(2)
+    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+        left_cut=3,
+        tau=1,
+        k=8,
+        n_pasts=3,
+        n_futures=2,
+        rng=rng,
+    )
+    op = MPO.ising(length=2, J=0.5, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+    pauli, weights, traces = simulate_exact(
+        probe_set=probe_set,
+        operator=op,
+        sim_params=params,
+        initial_psi=_product_initial_state(2),
+        parallel=False,
+        psi_pairs_list=psi_pairs_list,
+    )
+    assert pauli.shape[:2] == (3, 2)
+    assert weights.shape == (3, 2)
+    assert len(traces) == 6
+    assert all("cumulative_weight_final" in t for t in traces)
