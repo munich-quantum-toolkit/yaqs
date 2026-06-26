@@ -10,12 +10,12 @@
 
 """Surrogate workflow: data generation and end-to-end training entry points.
 
-**Public** (see ``__all__``): :func:`generate_data`, :func:`create_surrogate`.
+**Public** (see ``__all__``): :func:`sample_train_dataset`, :func:`train_surrogate_model`.
 
-:func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for
+:func:`sample_train_dataset` returns a :class:`~torch.utils.data.TensorDataset` for
 :meth:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb.fit`.
 
-**Internals** — Same execution pattern as :mod:`mqt.yaqs.core.parallel_utils`: :func:`_simulate_sequences` builds a
+**Internals** — Same execution pattern as :mod:`mqt.yaqs.core.parallel_utils`: :func:`simulate_sequences` builds a
 process-pool payload (or uses :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`), then dispatches via
 :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`. Rollout types live in
 :mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`; the model is
@@ -51,19 +51,19 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # 4) LOCAL — tomography surrogate stack
 # ---------------------------------------------------------------------------
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
+from ..core.encoding import normalize_backend_rho, pack_rho8
 from ..core.utils import (
     StochasticSolver,
     _apply_backend_unitary_site_zero,
     _evolve_backend_state,
-    _get_rho_site_zero,
     _reprepare_backend_state_forced,
     _reset_backend_site_zero_to_product_ket,
+    extract_site0_rho,
     make_mcwf_static_context,
     resolve_stochastic_solver,
 )
 from .data import SequenceRolloutSample, stack_rollouts
-from .utils import _random_density_matrix, build_initial_psi
+from .utils import sample_density_matrix, sample_initial_psi
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 # ---------------------------------------------------------------------------
 # 5) PARALLEL JOB PAYLOAD
 # ---------------------------------------------------------------------------
-# ``_simulate_sequences`` passes the following dict to ``run_indexed_jobs`` (initializer →
+# ``simulate_sequences`` passes the following dict to ``run_indexed_jobs`` (initializer →
 # ``WORKER_CTX``) or directly to workers in the serial path. Keys must stay stable for pickling.
 #
 #   psi_pairs               list[list[step]] per sequence where step is either
@@ -316,7 +316,7 @@ def _final_state_rollout_core(
         )
         num_evolutions_in_loop += 1
 
-    rho_final = _get_rho_site_zero(state)
+    rho_final = extract_site0_rho(state)
     wfin = float(cumulative_weight)
 
     trace: dict[str, Any] | None = None
@@ -481,8 +481,8 @@ def _surrogate_rollout_worker(
         static_ctx=mcwf_ctxs[0],
     )
 
-    rho0_raw = _get_rho_site_zero(state)
-    rho0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
+    rho0_raw = extract_site0_rho(state)
+    rho0_packed = pack_rho8(normalize_backend_rho(rho0_raw)).astype(np.float32)
 
     cumulative_weight = 1.0
     last_rho_packed = rho0_packed.copy()
@@ -537,8 +537,8 @@ def _surrogate_rollout_worker(
             static_ctx=mcwf_ctxs[step_idx + 1],
         )
 
-        rho_step = _get_rho_site_zero(state)
-        rho_normalized = normalize_rho_from_backend_output(rho_step)
+        rho_step = extract_site0_rho(state)
+        rho_normalized = normalize_backend_rho(rho_step)
         last_rho_packed = pack_rho8(rho_normalized).astype(np.float32)
         rho_sequence_packed[out_i, :] = last_rho_packed
         out_i += 1
@@ -559,9 +559,9 @@ def _surrogate_rollout_worker(
 
 
 # ---------------------------------------------------------------------------
-# 8) _simulate_sequences — internal primitive (feeds :func:`generate_data`)
+# 8) simulate_sequences — internal primitive (feeds :func:`sample_train_dataset`)
 # ---------------------------------------------------------------------------
-def _simulate_sequences(
+def simulate_sequences(
     *,
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -664,7 +664,7 @@ def _simulate_sequences(
         final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
         for worker_out in job_results.values():
             sequence_idx, _traj_idx, rho_final, _weight = worker_out
-            rho_norm = normalize_rho_from_backend_output(rho_final)
+            rho_norm = normalize_backend_rho(rho_final)
             final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
         if any(x is None for x in final_packed_by_index):
             msg = "Parallel sequence simulation incomplete."
@@ -697,7 +697,7 @@ def _simulate_sequences(
     return [cast("SequenceRolloutSample", s) for s in samples_by_index]
 
 
-def simulate_final_states_with_diagnostics(
+def simulate_rollouts_traced(
     *,
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -713,7 +713,7 @@ def simulate_final_states_with_diagnostics(
     solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
-    """Like final-state :func:`_simulate_sequences` (``record_step_states=False``) but returns per-sequence diagnostics.
+    """Like final-state :func:`simulate_sequences` (``record_step_states=False``) but returns per-sequence diagnostics.
 
     Does not change physics; only threads rollout metadata from :func:`_surrogate_final_state_worker_diagnostics`.
 
@@ -781,7 +781,7 @@ def simulate_final_states_with_diagnostics(
     final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
     for worker_out in job_results.values():
         sequence_idx, _traj_idx, rho_final, _weight, trace = worker_out
-        rho_norm = normalize_rho_from_backend_output(rho_final)
+        rho_norm = normalize_backend_rho(rho_final)
         final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
         traces_ordered[sequence_idx] = trace
     if any(x is None for x in final_packed_by_index) or any(t is None for t in traces_ordered):
@@ -792,30 +792,9 @@ def simulate_final_states_with_diagnostics(
 
 
 # ---------------------------------------------------------------------------
-# 9) Helpers — used only by :func:`generate_data`
+# 10) Public — :func:`sample_train_dataset`
 # ---------------------------------------------------------------------------
-def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
-    """Extract a unit ket from a 2x2 rank-1 projector.
-
-    Args:
-        projector: 2x2 Hermitian projector/density matrix.
-
-    Returns:
-        Normalized eigenvector corresponding to the largest eigenvalue.
-    """
-    eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
-    idx = int(np.argmax(eigvals.real))
-    psi = eigvecs[:, idx]
-    norm = float(np.linalg.norm(psi))
-    if norm < 1e-15:
-        return np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    return (psi / norm).astype(np.complex128)
-
-
-# ---------------------------------------------------------------------------
-# 10) Public — :func:`generate_data`
-# ---------------------------------------------------------------------------
-def _rollout_arrays_to_tensor_dataset(
+def pack_rollout_dataset(
     rho0: np.ndarray,
     e_features: np.ndarray,
     rho_seq: np.ndarray,
@@ -840,7 +819,7 @@ def _rollout_arrays_to_tensor_dataset(
     )
 
 
-def generate_data(
+def sample_train_dataset(
     operator: MPO,
     sim_params: AnalogSimParams,
     *,
@@ -868,7 +847,7 @@ def generate_data(
         parallel: Whether to parallelize over sequences.
         show_progress: Whether to show progress bars.
         timesteps: Optional comb evolution durations (defaults to ``[sim_params.dt] * (k+1)``).
-        init_mode: Initial-state sampling mode (see :func:`build_initial_psi`).
+        init_mode: Initial-state sampling mode (see :func:`sample_initial_psi`).
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
         interventions: Training intervention kind (``"haar"``, ``"clifford"``, or ``"measure_prepare"``).
 
@@ -879,8 +858,8 @@ def generate_data(
         ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
     from mqt.yaqs.characterization.memory.interventions import (
-        _normalize_intervention_kind,
-        _sample_training_sequence,
+        normalize_kind,
+        sample_train_sequence,
     )
 
     chain_length = int(operator.length)
@@ -903,22 +882,22 @@ def generate_data(
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
     for _ in range(int(n)):
-        rho_in = _random_density_matrix(rng)
-        step_pairs, choi_rows = _sample_training_sequence(
+        rho_in = sample_density_matrix(rng)
+        step_pairs, choi_rows = sample_train_sequence(
             int(k),
-            _normalize_intervention_kind(str(interventions)),
+            normalize_kind(str(interventions)),
             rng,
         )
         psi_pairs_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
-        initial_psi = build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
+        initial_psi = sample_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
         if isinstance(initial_psi, tuple):
             initial_psi = initial_psi[0]
         initial_psis.append(initial_psi)
 
     samples = cast(
         "list[SequenceRolloutSample]",
-        _simulate_sequences(
+        simulate_sequences(
             operator=operator,
             sim_params=sim_params,
             timesteps=timesteps,
@@ -935,13 +914,13 @@ def generate_data(
         ),
     )
     rho0_batch, features_batch, rho_seq_batch, _ctx = stack_rollouts(samples)
-    return _rollout_arrays_to_tensor_dataset(rho0_batch, features_batch, rho_seq_batch)
+    return pack_rollout_dataset(rho0_batch, features_batch, rho_seq_batch)
 
 
 # ---------------------------------------------------------------------------
-# 11) Public — :func:`create_surrogate`
+# 11) Public — :func:`train_surrogate_model`
 # ---------------------------------------------------------------------------
-def create_surrogate(
+def train_surrogate_model(
     operator: MPO,
     sim_params: AnalogSimParams,
     *,
@@ -968,10 +947,10 @@ def create_surrogate(
         seed: Seed used for data generation RNG.
         parallel: Whether to parallelize data generation.
         show_progress: Whether to show progress bars.
-        timesteps: Optional per-step durations passed to :func:`generate_data`.
-        init_mode: Initial-state sampling mode passed to :func:`generate_data`.
-        solver: Optional stochastic solver override passed to :func:`generate_data`.
-        interventions: Training intervention kind passed to :func:`generate_data`.
+        timesteps: Optional per-step durations passed to :func:`sample_train_dataset`.
+        init_mode: Initial-state sampling mode passed to :func:`sample_train_dataset`.
+        solver: Optional stochastic solver override passed to :func:`sample_train_dataset`.
+        interventions: Training intervention kind passed to :func:`sample_train_dataset`.
         model_kwargs: Optional keyword arguments forwarded to :class:`TransformerComb`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`TransformerComb.fit`.
 
@@ -983,7 +962,7 @@ def create_surrogate(
     from .model import TransformerComb
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
-    train_data = generate_data(
+    train_data = sample_train_dataset(
         operator,
         sim_params,
         k=int(k),
@@ -1012,4 +991,4 @@ def create_surrogate(
     return model
 
 
-__all__ = ["create_surrogate", "generate_data"]
+__all__ = ["sample_train_dataset", "train_surrogate_model"]

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for construct_process_tensor entry point."""
+"""Tests for build_process_tensor entry point."""
 
 from __future__ import annotations
 
@@ -13,16 +13,16 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography import build_process_tensor
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 
-def test_construct_process_tensor_invalid_return_type_raises() -> None:
+def test_build_process_tensor_invalid_return_type_raises() -> None:
     """Unknown return_type values are rejected."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     with pytest.raises(ValueError, match="Unknown return_type"):
-        construct_process_tensor(op, params, timesteps=[0.0], return_type="nope")  # ty: ignore[invalid-argument-type]
+        build_process_tensor(op, params, timesteps=[0.0], return_type="nope")  # ty: ignore[invalid-argument-type]
 
 
 def test_build_comb_returns_dense_and_mpo_smoke() -> None:

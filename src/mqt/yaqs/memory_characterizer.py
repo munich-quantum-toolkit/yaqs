@@ -7,7 +7,7 @@
 
 """Operational memory characterization entry point for YAQS."""
 
-# ruff: noqa: ANN401, D102, PLC0415 -- lazy torch imports, unified dispatch targets
+# ruff: noqa: ANN401, PLC0415 -- lazy torch imports, unified dispatch targets
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 import numpy as np
 
 from mqt.yaqs.characterization.memory.combs.core.encoding import (
-    normalize_rho_from_backend_output,
+    normalize_backend_rho,
     pack_rho8,
     unpack_rho8,
 )
@@ -27,25 +27,25 @@ from mqt.yaqs.characterization.memory.combs.core.utils import (
     representation_to_solver,
     resolve_characterizer_representation,
 )
-from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, construct_process_tensor
-from mqt.yaqs.characterization.memory.combs.tomography.combs import _probe_step_to_callable
+from mqt.yaqs.characterization.memory.combs.tomography import DenseComb, MPOComb, build_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography.combs import convert_probe_callable
 from mqt.yaqs.characterization.memory.diagnostics.memory_matrix import (
-    _analyze_memory_matrix,
-    _build_weighted_memory_matrix_from_probe,
+    assemble_weighted_matrix_from_probe,
+    compute_spectrum,
 )
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    _probe_process,
-    sample_split_cut_probes,
+    run_probe_diagnostics,
+    sample_probes,
 )
 from mqt.yaqs.characterization.memory.diagnostics.results import (
     CharacterizationResult,
-    _merge_results,
-    _result_from_probe_dict,
+    merge_cut_results,
+    pack_result,
 )
 from mqt.yaqs.characterization.memory.interventions import (
     InterventionSequence,
     encode_sequence,
-    probe_kwargs_from_interventions,
+    map_probe_kwargs,
 )
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
@@ -98,7 +98,7 @@ def _resolve_probe_grid(
     )
 
 
-def _resolve_probe_set_arg(probe_set: Any) -> ProbeSet | None:
+def resolve_probe_bundle(probe_set: Any) -> ProbeSet | None:
     """Accept a prior :class:`CharacterizationResult` or internal probe bundle.
 
     Args:
@@ -143,7 +143,7 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
     return hamiltonian.mpo
 
 
-def _default_product_zero_psi(length: int) -> np.ndarray:
+def make_zero_psi(length: int) -> np.ndarray:
     """Return ``|0...0>`` on ``length`` qubits as a state vector.
 
     Args:
@@ -201,7 +201,7 @@ def _default_cut(k: int, cut: int | None) -> int:
     return c
 
 
-def _as_rho_matrix(rho0: np.ndarray) -> np.ndarray:
+def coerce_rho_matrix(rho0: np.ndarray) -> np.ndarray:
     """Normalize an initial state to a ``2 x 2`` density matrix.
 
     Args:
@@ -222,12 +222,12 @@ def _as_rho_matrix(rho0: np.ndarray) -> np.ndarray:
     raise ValueError(msg)
 
 
-def _is_hamiltonian_target(target: Any) -> bool:
+def matches_hamiltonian(target: Any) -> bool:
     """Return whether ``target`` is a Hamiltonian characterize/predict target."""
     return isinstance(target, Hamiltonian)
 
 
-def _is_comb_target(target: Any) -> bool:
+def matches_comb(target: Any) -> bool:
     """Return whether ``target`` is a reference comb predict target."""
     return isinstance(target, (DenseComb, MPOComb))
 
@@ -367,7 +367,7 @@ class MemoryCharacterizer:
         """
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
-        return construct_process_tensor(
+        return build_process_tensor(
             operator,
             sim_params,
             timesteps,
@@ -420,9 +420,11 @@ class MemoryCharacterizer:
             PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
         """
         operator = _require_hamiltonian(hamiltonian)
-        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import generate_data as _generate_data
+        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
+            sample_train_dataset as _sample_train_dataset,
+        )
 
-        return _generate_data(
+        return _sample_train_dataset(
             operator,
             sim_params,
             k=k,
@@ -474,9 +476,11 @@ class MemoryCharacterizer:
             Trained :class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb`.
         """
         operator = _require_hamiltonian(hamiltonian)
-        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import create_surrogate as _create_surrogate
+        from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
+            train_surrogate_model as _train_surrogate_model,
+        )
 
-        return _create_surrogate(
+        return _train_surrogate_model(
             operator,
             sim_params,
             k=k,
@@ -580,10 +584,10 @@ class MemoryCharacterizer:
             ValueError: If ``k`` is missing for a Hamiltonian target.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
-        probe_kw = {**probe_kwargs_from_interventions(interventions), **probe_kwargs}
-        resolved_probe_set = _resolve_probe_set_arg(probe_set)
+        probe_kw = {**map_probe_kwargs(interventions), **probe_kwargs}
+        resolved_probe_set = resolve_probe_bundle(probe_set)
 
-        if _is_hamiltonian_target(target):
+        if matches_hamiltonian(target):
             if sim_params is None:
                 msg = "characterize(hamiltonian, sim_params, k=...) requires AnalogSimParams."
                 raise TypeError(msg)
@@ -631,7 +635,7 @@ class MemoryCharacterizer:
                 parallel=parallel,
                 probe_kw=probe_kw,
             )
-        return _merge_results(parts)
+        return merge_cut_results(parts)
 
     def _resolve_cut_list(
         self,
@@ -671,7 +675,7 @@ class MemoryCharacterizer:
     ) -> CharacterizationResult:
         """Characterize a comb or surrogate via internal split-cut probing."""
         resolved_cut = _default_cut(int(k), cut)
-        out = _probe_process(
+        out = run_probe_diagnostics(
             process=target,
             cut=resolved_cut,
             k=int(k),
@@ -683,7 +687,7 @@ class MemoryCharacterizer:
             parallel=parallel if parallel is not None else self._execution.parallel,
             **probe_kw,
         )
-        return _result_from_probe_dict(out, cut=resolved_cut)
+        return pack_result(out, cut=resolved_cut)
 
     def _characterize_hamiltonian(
         self,
@@ -702,7 +706,7 @@ class MemoryCharacterizer:
     ) -> CharacterizationResult:
         """Characterize a Hamiltonian via exact stochastic rollouts and branch weights."""
         from mqt.yaqs.characterization.memory.reference.exact import (
-            evaluate_exact_probe_set_with_diagnostics,
+            simulate_probes_exact,
         )
 
         operator = _require_hamiltonian(hamiltonian)
@@ -713,7 +717,7 @@ class MemoryCharacterizer:
             local_probe_set = probe_set
             if local_probe_set is None:
                 local_rng = rng if rng is not None else np.random.default_rng()
-                local_probe_set = sample_split_cut_probes(
+                local_probe_set = sample_probes(
                     cut=resolved_cut,
                     k=int(k),
                     n_pasts=n_pasts,
@@ -724,9 +728,9 @@ class MemoryCharacterizer:
             psi0 = (
                 np.asarray(initial_psi, dtype=np.complex128)
                 if initial_psi is not None
-                else _default_product_zero_psi(hamiltonian.length)
+                else make_zero_psi(hamiltonian.length)
             )
-            pauli_xyz, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
+            pauli_xyz, weights_ij, _traces = simulate_probes_exact(
                 probe_set=local_probe_set,
                 operator=operator,
                 sim_params=sim_params,
@@ -735,11 +739,11 @@ class MemoryCharacterizer:
                 show_progress=self._execution.show_progress,
                 solver=self._solver_for(hamiltonian),
             )
-            _m_raw, memory_matrix = _build_weighted_memory_matrix_from_probe(pauli_xyz, weights_ij)
-            ana = _analyze_memory_matrix(memory_matrix)
+            _m_raw, memory_matrix = assemble_weighted_matrix_from_probe(pauli_xyz, weights_ij)
+            ana = compute_spectrum(memory_matrix)
             out: dict[str, Any] = {**ana, "memory_matrix": memory_matrix, "probe_set": local_probe_set}
-            parts[int(resolved_cut)] = _result_from_probe_dict(out, cut=resolved_cut)
-        return _merge_results(parts) if len(parts) > 1 else parts[cut_list[0]]
+            parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
+        return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
     def predict(
         self,
@@ -770,25 +774,25 @@ class MemoryCharacterizer:
             Final (or full) site-0 reduced density matrix.
         """
         local_rng = rng if rng is not None else np.random.default_rng()
-        rho_mat = _as_rho_matrix(rho0)
+        rho_mat = coerce_rho_matrix(rho0)
         seq = sequence
 
-        if _is_comb_target(target):
+        if matches_comb(target):
             resolved_k = _resolve_k(target, k)
             if isinstance(seq, str):
-                from mqt.yaqs.characterization.memory.interventions import _expand_intervention_sequence
+                from mqt.yaqs.characterization.memory.interventions import expand_sequence
 
-                slots = _expand_intervention_sequence(seq, k=resolved_k, rng=local_rng)
+                slots = expand_sequence(seq, k=resolved_k, rng=local_rng)
             else:
                 slots = list(seq)
             steps, _ = encode_sequence(slots, k=resolved_k, rng=local_rng)
-            callables = [_probe_step_to_callable(s) for s in steps]
+            callables = [convert_probe_callable(s) for s in steps]
             rho_out = target.predict(callables)
             return np.asarray(rho_out, dtype=np.complex128)
 
         resolved_k = _resolve_k(target, k)
         _steps, e_features = encode_sequence(seq, k=resolved_k, rng=local_rng)
-        packed0 = pack_rho8(normalize_rho_from_backend_output(rho_mat)).astype(np.float32)
+        packed0 = pack_rho8(normalize_backend_rho(rho_mat)).astype(np.float32)
         pred = target.predict(
             e_features[np.newaxis, ...],
             packed0[np.newaxis, ...],

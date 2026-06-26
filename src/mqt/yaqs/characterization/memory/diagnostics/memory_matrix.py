@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 
 
-def _center_past_rows(memory_matrix: np.ndarray) -> np.ndarray:
+def center_rows(memory_matrix: np.ndarray) -> np.ndarray:
     """Subtract the mean over past rows (axis 0).
 
     Returns:
@@ -25,7 +25,7 @@ def _center_past_rows(memory_matrix: np.ndarray) -> np.ndarray:
     return m - m.mean(axis=0, keepdims=True)
 
 
-def _prepare_branch_weights(
+def sanitize_branch_weights(
     weights_ij: np.ndarray,
     *,
     log_warnings: bool = True,
@@ -53,7 +53,7 @@ def _prepare_branch_weights(
         meta["warnings"].append("Negative weights clamped to 0.")
         if log_warnings:
             warnings.warn(
-                "_prepare_branch_weights: clamped negative cumulative weights to 0.",
+                "sanitize_branch_weights: clamped negative cumulative weights to 0.",
                 stacklevel=2,
             )
     w_clean = w.copy()
@@ -62,7 +62,7 @@ def _prepare_branch_weights(
     return w_clean, meta
 
 
-def _pauli_xyz_channels(pauli_ij: np.ndarray) -> np.ndarray:
+def extract_xyz_channels(pauli_ij: np.ndarray) -> np.ndarray:
     """Use :math:`X,Y,Z` response channels; identity is stored but fixed for physical states.
 
     Returns:
@@ -78,7 +78,7 @@ def _pauli_xyz_channels(pauli_ij: np.ndarray) -> np.ndarray:
     return p[..., 1:4]
 
 
-def _build_weighted_memory_matrix(
+def assemble_weighted_matrix(
     pauli_ij: np.ndarray,
     weights_ij: np.ndarray,
     beta: float,
@@ -90,7 +90,7 @@ def _build_weighted_memory_matrix(
     Returns:
         Matrix of shape ``(n_pasts, n_futures * d_out)`` with ``d_out=3``.
     """
-    xyz = _pauli_xyz_channels(pauli_ij) if np.asarray(pauli_ij).shape[-1] == 4 else pauli_ij
+    xyz = extract_xyz_channels(pauli_ij) if np.asarray(pauli_ij).shape[-1] == 4 else pauli_ij
     n_p, n_f, d_out = xyz.shape
     w = np.asarray(weights_ij, dtype=np.float64).reshape(n_p, n_f)
     features = np.asarray(xyz, dtype=np.float64).reshape(n_p, n_f, d_out)
@@ -99,7 +99,7 @@ def _build_weighted_memory_matrix(
     return (features * scale_exp).reshape(n_p, n_f * d_out)
 
 
-def _build_weighted_memory_matrix_from_probe(
+def assemble_weighted_matrix_from_probe(
     pauli_ij: np.ndarray,
     weights_ij: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -108,24 +108,24 @@ def _build_weighted_memory_matrix_from_probe(
     Returns:
         Tuple ``(memory_matrix_raw, memory_matrix)`` where the second entry is past-centered.
     """
-    w_clean, _ = _prepare_branch_weights(weights_ij)
-    m_raw = _build_weighted_memory_matrix(_pauli_xyz_channels(pauli_ij), w_clean, beta=1.0)
-    return m_raw, _center_past_rows(m_raw)
+    w_clean, _ = sanitize_branch_weights(weights_ij)
+    m_raw = assemble_weighted_matrix(extract_xyz_channels(pauli_ij), w_clean, beta=1.0)
+    return m_raw, center_rows(m_raw)
 
 
-def _build_memory_matrix(pauli_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def assemble_memory_matrix(pauli_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Flatten Pauli features ``(n_p, n_f, 4)`` into a memory matrix (order preserved).
 
     Returns:
         Tuple ``(memory_matrix_raw, memory_matrix)`` where the second entry is past-centered.
     """
-    xyz = _pauli_xyz_channels(pauli_ij)
+    xyz = extract_xyz_channels(pauli_ij)
     n_p, n_f, d_out = xyz.shape
     m_raw = xyz.reshape(n_p, n_f * d_out).astype(np.float64)
-    return m_raw, _center_past_rows(m_raw)
+    return m_raw, center_rows(m_raw)
 
 
-def _analyze_memory_matrix(
+def compute_spectrum(
     memory_matrix: np.ndarray,
     *,
     discarded_weight_threshold: float | None = 1e-12,

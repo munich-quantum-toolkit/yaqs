@@ -15,9 +15,9 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.combs.surrogates.utils import (
-    _choi_features_from_parts,
     _sample_random_intervention,
-    _sample_random_intervention_parts,
+    encode_choi_features,
+    sample_intervention_parts,
 )
 
 
@@ -135,7 +135,7 @@ def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     torch = pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.memory.combs.core.encoding import (  # noqa: PLC0415
-        normalize_rho_from_backend_output,
+        normalize_backend_rho,
         pack_rho8,
     )
     from mqt.yaqs.characterization.memory.combs.surrogates.model import TransformerComb  # noqa: PLC0415
@@ -143,7 +143,7 @@ def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     rho0 = model._default_rho0(device=torch.device("cpu"), dtype=torch.float32)
     rho_ground = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-    expected = pack_rho8(normalize_rho_from_backend_output(rho_ground)).astype(np.float32)
+    expected = pack_rho8(normalize_backend_rho(rho_ground)).astype(np.float32)
     np.testing.assert_array_almost_equal(rho0.cpu().numpy(), expected)
 
 
@@ -152,9 +152,9 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
     rng = np.random.default_rng(0)
 
     _emap, rho_prep, effect, _ = _sample_random_intervention(rng)
-    feat_from_choi = _choi_features_from_parts(rho_prep, effect)
-    rho2, eff2, feat2 = _sample_random_intervention_parts(rng)
-    feat_from_parts = _choi_features_from_parts(rho2, eff2)
+    feat_from_choi = encode_choi_features(rho_prep, effect)
+    rho2, eff2, feat2 = sample_intervention_parts(rng)
+    feat_from_parts = encode_choi_features(rho2, eff2)
 
     assert feat_from_choi.shape == (32,)
     assert feat_from_parts.shape == (32,)

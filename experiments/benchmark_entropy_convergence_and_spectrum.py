@@ -30,7 +30,7 @@ from _benchmark_common import (
 from _benchmark_memory import entropy_from_singular_values, weighted_centered_singular_values
 from _benchmark_plotting import plot_convergence_sv_vs_m, plot_spectrum_and_rank_vs_j
 
-from mqt.yaqs.characterization.memory.diagnostics.probe import sample_split_cut_probes
+from mqt.yaqs.characterization.memory.diagnostics.probe import sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -128,7 +128,7 @@ def run_convergence(cfg: dict[str, object], args: argparse.Namespace) -> list[di
         for draw in range(int(cfg["probe_draws"])):
             draw_seed = int(args.seed) + 100_000 * cut + 10 * round(100 * jv) + draw
             for m in m_values:
-                probe_set = sample_split_cut_probes(
+                probe_set = sample_probes(
                     cut=cut,
                     k=k,
                     n_pasts=int(m),
@@ -195,7 +195,7 @@ def run_spectrum_rank(
         per_draw_rank: list[float] = []
         for draw in range(int(cfg["spectrum_draws"])):
             probe_seed = int(args.seed) + 900_000 + 100_000 * cut + 100 * round(100 * jv) + draw
-            probe_set = sample_split_cut_probes(
+            probe_set = sample_probes(
                 cut=cut,
                 k=k,
                 n_pasts=m_spec,

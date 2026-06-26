@@ -10,7 +10,7 @@
 
 """Exhaustive discrete-basis process-tensor data + reconstruction helpers.
 
-The main product of :func:`~mqt.yaqs.characterization.memory.combs.tomography.constructor.construct_process_tensor`
+The main product of :func:`~mqt.yaqs.characterization.memory.combs.tomography.constructor.build_process_tensor`
 is :class:`SequenceData`. It can be converted to dense or MPO comb representations via
 :meth:`SequenceData.to_dense_comb` and :meth:`SequenceData.to_mpo_comb`.
 """
@@ -58,7 +58,7 @@ def _rank1_mpo_term(
     return mpo
 
 
-def _accumulate_rank1(
+def accumulate_rank1_terms(
     terms: Iterable[MPO],
     num_steps: int,
     dims: tuple[int, int] = (2, 2),
@@ -105,7 +105,7 @@ def _accumulate_rank1(
     return running
 
 
-def _pack_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], NDArray[np.float64]]:
+def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], NDArray[np.float64]]:
     """Pack per-sequence outputs/weights into dense tensors.
 
     Args:
@@ -140,7 +140,7 @@ def _iter_rank1_terms(data: SequenceData) -> Iterable[MPO]:
         yield _rank1_mpo_term(rho_out, dual_ops, weight=w)
 
 
-def _reconstruct_upsilon(
+def assemble_upsilon(
     *,
     out_vecs: NDArray[np.complex128],
     seq_weights: NDArray[np.float64],
@@ -245,8 +245,8 @@ class SequenceData:
         Returns:
             Dense comb representation.
         """
-        out_vecs, seq_weights = _pack_outputs(self)
-        upsilon = _reconstruct_upsilon(
+        out_vecs, seq_weights = pack_sequence_outputs(self)
+        upsilon = assemble_upsilon(
             out_vecs=out_vecs,
             seq_weights=seq_weights,
             dual_ops=self.choi_duals,
@@ -276,7 +276,7 @@ class SequenceData:
             MPO comb representation.
         """
         num_steps = len(self.timesteps)
-        mpo = _accumulate_rank1(
+        mpo = accumulate_rank1_terms(
             _iter_rank1_terms(self),
             num_steps=num_steps,
             dims=(2, 2),

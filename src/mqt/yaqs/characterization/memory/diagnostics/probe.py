@@ -17,12 +17,12 @@ import numpy as np
 
 from mqt.yaqs.core.parallel_utils import merge_execution_config
 
-from ..combs.core.encoding import _flatten_choi4_to_real32
-from ..combs.surrogates.utils import _sample_random_intervention_parts
+from ..combs.core.encoding import _flatten_choi4
+from ..combs.surrogates.utils import sample_intervention_parts
 from .memory_matrix import (
-    _analyze_memory_matrix,
-    _build_memory_matrix,
-    _build_weighted_memory_matrix_from_probe,
+    assemble_memory_matrix,
+    assemble_weighted_matrix_from_probe,
+    compute_spectrum,
 )
 
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -62,11 +62,11 @@ class ProbeSet:
 class _ProbeProcess(Protocol):
     """Minimal backend contract for object-first process probing."""
 
-    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Return probe responses shaped ``(n_pasts, n_futures, 4)`` (Pauli tomography)."""
 
 
-def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
+def extract_ket(projector: np.ndarray) -> np.ndarray:
     """Extract a normalized ket from a rank-one projector.
 
     Args:
@@ -93,9 +93,9 @@ def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray
     Returns:
         Tuple ``(choi_features, (psi_meas, psi_prep))``.
     """
-    rho_prep, effect, feat = _sample_random_intervention_parts(rng)
-    psi_meas = _psi_from_rank1_projector(effect)
-    psi_prep = _psi_from_rank1_projector(rho_prep)
+    rho_prep, effect, feat = sample_intervention_parts(rng)
+    psi_meas = extract_ket(effect)
+    psi_prep = extract_ket(rho_prep)
     return feat.astype(np.float32), (psi_meas, psi_prep)
 
 
@@ -119,7 +119,7 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
 
 
 @lru_cache(maxsize=1)
-def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
+def enumerate_clifford_unitaries() -> tuple[np.ndarray, ...]:
     """Return the 24 single-qubit Clifford unitaries (cached).
 
     Returns:
@@ -157,12 +157,12 @@ def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
     Returns:
         Complex unitary matrix.
     """
-    cliffords = _single_qubit_clifford_group()
+    cliffords = enumerate_clifford_unitaries()
     idx = int(rng.integers(0, len(cliffords)))
     return np.asarray(cliffords[idx], dtype=np.complex128)
 
 
-def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
+def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
     """Encode a unitary as a 32-dimensional Choi feature row.
 
     Args:
@@ -174,7 +174,7 @@ def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
     vec_u = uu.reshape(4, order="F")
     choi = np.outer(vec_u, vec_u.conj()).astype(np.complex128)
-    return _flatten_choi4_to_real32(choi).astype(np.float32)
+    return _flatten_choi4(choi).astype(np.float32)
 
 
 def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
@@ -186,8 +186,8 @@ def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     Returns:
         Tuple ``(choi_features, psi_meas)``.
     """
-    _rho_prep, effect, feat = _sample_random_intervention_parts(rng)
-    psi_meas = _psi_from_rank1_projector(effect)
+    _rho_prep, effect, feat = sample_intervention_parts(rng)
+    psi_meas = extract_ket(effect)
     return feat.astype(np.float32), psi_meas
 
 
@@ -200,8 +200,8 @@ def _sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     Returns:
         Tuple ``(choi_features, psi_prep)``.
     """
-    rho_prep, _effect, feat = _sample_random_intervention_parts(rng)
-    psi_prep = _psi_from_rank1_projector(rho_prep)
+    rho_prep, _effect, feat = sample_intervention_parts(rng)
+    psi_prep = extract_ket(rho_prep)
     return feat.astype(np.float32), psi_prep
 
 
@@ -225,10 +225,10 @@ def _sample_probe_step(
         feat, pair = _sample_step(rng)
         return feat, pair
     u = unitary_sampler(rng)
-    return _unitary_to_choi_features(u), {"type": "unitary", "U": u}
+    return encode_unitary_choi(u), {"type": "unitary", "U": u}
 
 
-def _resolve_unitary_sampler(unitary_ensemble: str):
+def resolve_unitary_sampler(unitary_ensemble: str):
     """Map ensemble name to a unitary sampling callable.
 
     Args:
@@ -247,7 +247,7 @@ def _resolve_unitary_sampler(unitary_ensemble: str):
     return _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
 
 
-def _probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
+def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     """Build the full intervention sequence for probe-grid entry ``(i, j)``.
 
     Args:
@@ -266,7 +266,7 @@ def _probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     return full
 
 
-def _build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
+def assemble_probe_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
     """Construct the full ``(past, future)`` sequence pair grid.
 
     Args:
@@ -288,7 +288,7 @@ def _build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, in
     all_pairs: list[list[Any]] = []
     for i in range(n_p):
         for j in range(n_f):
-            full = _probe_sequence(probe_set, i, j)
+            full = assemble_probe_sequence(probe_set, i, j)
             if len(full) != kk:
                 msg = "internal: full sequence length mismatch"
                 raise RuntimeError(msg)
@@ -296,7 +296,7 @@ def _build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, in
     return all_pairs, n_p, n_f
 
 
-def _rank1_prob(rho: np.ndarray, psi: np.ndarray) -> float:
+def compute_born_prob(rho: np.ndarray, psi: np.ndarray) -> float:
     """Return Born probability ``<psi|rho|psi>`` for a rank-one effect.
 
     Args:
@@ -330,11 +330,11 @@ def _step_probability(rho: np.ndarray, step: Any) -> float:
             return 1.0
         if step_type == "measure_only":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            return _rank1_prob(rho, psi_meas)
+            return compute_born_prob(rho, psi_meas)
         msg = f"Unsupported probe step type: {step_type!r}"
         raise ValueError(msg)
     psi_meas, _ = step
-    return _rank1_prob(rho, psi_meas)
+    return compute_born_prob(rho, psi_meas)
 
 
 def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
@@ -360,7 +360,7 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
             z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
             psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
-            prob = _rank1_prob(r, psi_meas)
+            prob = compute_born_prob(r, psi_meas)
             ket = psi_reset / max(float(np.linalg.norm(psi_reset)), 1e-15)
             out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
         elif step_type == "prepare_only":
@@ -376,7 +376,7 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
             raise ValueError(msg)
     else:
         psi_meas, psi_prep = step
-        prob = _rank1_prob(r, psi_meas)
+        prob = compute_born_prob(r, psi_meas)
         ket = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
         ket /= max(float(np.linalg.norm(ket)), 1e-15)
         out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
@@ -386,7 +386,7 @@ def _apply_step(rho: np.ndarray, step: Any) -> np.ndarray:
     return out
 
 
-def _rollout_branch_weight(steps: list[Any], *, cut: int) -> float:
+def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
     """Analytic branch weight from product of step probabilities up to ``cut``.
 
     Args:
@@ -407,7 +407,7 @@ def _rollout_branch_weight(steps: list[Any], *, cut: int) -> float:
     return float(weight)
 
 
-def _branch_weights_ij(probe_set: ProbeSet) -> np.ndarray:
+def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
     r"""Analytic branch weights :math:`w_{\alpha,m}` at the causal cut.
 
     Args:
@@ -421,12 +421,12 @@ def _branch_weights_ij(probe_set: ProbeSet) -> np.ndarray:
     c = int(probe_set.cut)
     w = np.empty((n_p, n_f), dtype=np.float64)
     for i in range(n_p):
-        w_i = _rollout_branch_weight(_probe_sequence(probe_set, i, 0), cut=c)
+        w_i = compute_branch_weight(assemble_probe_sequence(probe_set, i, 0), cut=c)
         w[i, :] = w_i
     return w
 
 
-def sample_split_cut_probes(
+def sample_probes(
     *,
     cut: int,
     k: int,
@@ -462,7 +462,7 @@ def sample_split_cut_probes(
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
         raise ValueError(msg)
-    unitary_sampler = _resolve_unitary_sampler(unitary_ensemble)
+    unitary_sampler = resolve_unitary_sampler(unitary_ensemble)
     past_full = c - 1
     future_full = kk - c
 
@@ -506,7 +506,7 @@ def sample_split_cut_probes(
     )
 
 
-def _probe_process(
+def run_probe_diagnostics(
     *,
     process: _ProbeProcess,
     cut: int,
@@ -523,7 +523,7 @@ def _probe_process(
     """Run split-cut probing and assemble memory-matrix diagnostics.
 
     Args:
-        process: Backend implementing :meth:`evaluate_probe_set`.
+        process: Backend implementing :meth:`evaluate_probes`.
         cut: Causal cut index.
         k: Total sequence length.
         n_pasts: Past probe count when sampling internally.
@@ -550,7 +550,7 @@ def _probe_process(
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()
-        probe_set = sample_split_cut_probes(
+        probe_set = sample_probes(
             cut=cut,
             k=k,
             n_pasts=n_pasts,
@@ -559,17 +559,17 @@ def _probe_process(
             intervention_mode=intervention_mode,
             unitary_ensemble=unitary_ensemble,
         )
-    weighted = getattr(process, "evaluate_probe_set_with_weights", None)
+    weighted = getattr(process, "evaluate_probes_weighted", None)
     if callable(weighted):
         pauli_xyz_ij, weights_ij = weighted(probe_set)
         pauli_xyz_ij = np.asarray(pauli_xyz_ij, dtype=np.float32)
         weights_ij = np.asarray(weights_ij, dtype=np.float64)
-        m_raw, memory_matrix = _build_weighted_memory_matrix_from_probe(pauli_xyz_ij, weights_ij)
+        m_raw, memory_matrix = assemble_weighted_matrix_from_probe(pauli_xyz_ij, weights_ij)
     else:
-        pauli_xyz_ij = process.evaluate_probe_set(probe_set).astype(np.float32)
+        pauli_xyz_ij = process.evaluate_probes(probe_set).astype(np.float32)
         weights_ij = None
-        m_raw, memory_matrix = _build_memory_matrix(pauli_xyz_ij)
-    ana = _analyze_memory_matrix(memory_matrix)
+        m_raw, memory_matrix = assemble_memory_matrix(pauli_xyz_ij)
+    ana = compute_spectrum(memory_matrix)
     out: dict[str, Any] = {
         "pauli_xyz_ij": pauli_xyz_ij,
         **ana,

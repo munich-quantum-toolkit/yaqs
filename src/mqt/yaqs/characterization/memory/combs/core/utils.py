@@ -155,7 +155,7 @@ def _reprepare_site_zero_vector_forced(
     return np.outer(new_state, env_vec).flatten(), prob
 
 
-def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
+def assemble_state_from_expectations(expectations: dict[str, float]) -> NDArray[np.complex128]:
     """Reconstruct a single-qubit density matrix from Pauli expectations.
 
     Args:
@@ -170,7 +170,7 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
     )
 
 
-def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
+def extract_site0_rho(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Extract the site-0 reduced density matrix.
 
     Args:
@@ -189,7 +189,7 @@ def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.comple
     rx = state.expect(Observable(X(), sites=[0]))
     ry = state.expect(Observable(Y(), sites=[0]))
     rz = state.expect(Observable(Z(), sites=[0]))
-    return trace * _reconstruct_state({"x": rx / trace, "y": ry / trace, "z": rz / trace})
+    return trace * assemble_state_from_expectations({"x": rx / trace, "y": ry / trace, "z": rz / trace})
 
 
 def _initialize_backend_state(operator: MPO, solver: str) -> MPS | NDArray[np.complex128]:

@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from mqt.yaqs.characterization.memory.diagnostics.memory_matrix import (
-    _analyze_memory_matrix,
-    _build_weighted_memory_matrix,
-    _center_past_rows,
-    _prepare_branch_weights,
+    assemble_weighted_matrix,
+    center_rows,
+    compute_spectrum,
+    sanitize_branch_weights,
 )
-from mqt.yaqs.characterization.memory.reference.exact import evaluate_exact_probe_set_with_diagnostics
+from mqt.yaqs.characterization.memory.reference.exact import simulate_probes_exact
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
@@ -54,7 +54,7 @@ def linear_weighted_metrics(
     branch_weight_beta: float = 1.0,
 ) -> dict[str, float | int]:
     """Past-centered S_V with weighted memory matrix using mc-process branch weights."""
-    pauli_xyz_ij, _, traces = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz_ij, _, traces = simulate_probes_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -66,10 +66,10 @@ def linear_weighted_metrics(
     for ii in range(n_p):
         for jj in range(n_f):
             weights_ij[ii, jj] = float(traces[ii * n_f + jj]["cumulative_weight_final"])
-    w_clean, _ = _prepare_branch_weights(weights_ij, log_warnings=False)
-    m_raw = _build_weighted_memory_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
-    memory_matrix = _center_past_rows(m_raw)
-    ana = _analyze_memory_matrix(memory_matrix)
+    w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=False)
+    m_raw = assemble_weighted_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
+    memory_matrix = center_rows(m_raw)
+    ana = compute_spectrum(memory_matrix)
     return {
         "entropy": float(ana["entropy"]),
         "delta_norm": float(delta_norm_of_centered(m_raw, memory_matrix)),
@@ -89,14 +89,14 @@ def weighted_centered_singular_values(
     branch_weight_beta: float = 1.0,
 ) -> np.ndarray:
     """Singular values of the past-centered weighted memory matrix from exact rollouts."""
-    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz_ij, weights_ij, _ = simulate_probes_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
         initial_psi=psi0,
         parallel=parallel,
     )
-    w_clean, _ = _prepare_branch_weights(weights_ij, log_warnings=False)
-    m_raw = _build_weighted_memory_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
-    memory_matrix = _center_past_rows(m_raw)
+    w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=False)
+    m_raw = assemble_weighted_matrix(pauli_xyz_ij, w_clean, branch_weight_beta)
+    memory_matrix = center_rows(m_raw)
     return np.linalg.svd(np.asarray(memory_matrix, dtype=np.float64), compute_uv=False).astype(np.float64)

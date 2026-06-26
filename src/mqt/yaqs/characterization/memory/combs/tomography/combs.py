@@ -15,8 +15,8 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from ...diagnostics.probe import ProbeSet, _branch_weights_ij, _probe_sequence
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_batch
+from ...diagnostics.probe import ProbeSet, assemble_probe_sequence, compute_branch_weights
+from ..core.encoding import decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
 from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
-def _probe_step_to_intervention(step: Any) -> InterventionMap | np.ndarray:
+def convert_probe_step(step: Any) -> InterventionMap | np.ndarray:
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
         if step_type == "unitary":
@@ -57,11 +57,11 @@ def _probe_step_to_intervention(step: Any) -> InterventionMap | np.ndarray:
     )
 
 
-def _probe_step_to_callable(
+def convert_probe_callable(
     step: Any,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
     """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`."""
-    inter = _probe_step_to_intervention(step)
+    inter = convert_probe_step(step)
     if isinstance(inter, np.ndarray):
         u = inter
 
@@ -72,24 +72,24 @@ def _probe_step_to_callable(
     return inter
 
 
-def _pauli_from_rho(rho: NDArray[np.complex128]) -> NDArray[np.float32]:
-    packed = pack_rho8(normalize_rho_from_backend_output(rho)).astype(np.float32)
-    return packed_rho8_to_pauli_batch(packed.reshape(1, 8), normalize=True)[0].astype(np.float32)
+def encode_rho_pauli(rho: NDArray[np.complex128]) -> NDArray[np.float32]:
+    packed = pack_rho8(normalize_backend_rho(rho)).astype(np.float32)
+    return decode_packed_pauli_batch(packed.reshape(1, 8), normalize=True)[0].astype(np.float32)
 
 
-def _evaluate_dense_comb_probe_set(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
+def evaluate_dense_probes(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
     pauli = np.empty((n_p, n_f, 4), dtype=np.float32)
     for i in range(n_p):
         for j in range(n_f):
-            steps = _probe_sequence(probe_set, i, j)
-            interventions = [_probe_step_to_callable(s) for s in steps]
-            pauli[i, j] = _pauli_from_rho(comb.predict(interventions))
+            steps = assemble_probe_sequence(probe_set, i, j)
+            interventions = [convert_probe_callable(s) for s in steps]
+            pauli[i, j] = encode_rho_pauli(comb.predict(interventions))
     return pauli
 
 
-def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+def encode_cptp_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
     """Convert a CPTP map callable into its Choi matrix.
 
     Args:
@@ -107,7 +107,7 @@ def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128
     return j_choi
 
 
-def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
+def trace_partial_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
     """Compute a partial trace of a dense operator.
 
     Args:
@@ -136,7 +136,7 @@ def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[
     return np.einsum("a b c b -> a c", reshaped)
 
 
-def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
+def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     """Compute von Neumann entropy of a (possibly unnormalized) density matrix.
 
     Args:
@@ -183,7 +183,7 @@ class DenseComb:
 
     # NOTE: previously there was a `DenseComb.fit(...)` entry point here.
     # The library now exposes only the exhaustive
-    # `construct_process_tensor(...) -> SequenceData -> to_*_comb()` path.
+    # `build_process_tensor(...) -> SequenceData -> to_*_comb()` path.
 
     def _k_steps(self) -> int:
         """Infer number of intervention steps from the comb matrix shape.
@@ -268,7 +268,7 @@ class DenseComb:
             Raw 2x2 complex matrix from the comb contraction (not guaranteed physical).
         """
         k_steps = len(interventions)
-        past_list = [_cptp_to_choi(emap) for emap in interventions]
+        past_list = [encode_cptp_choi(emap) for emap in interventions]
         past_total = past_list[0]
         for p in past_list[1:]:
             past_total = np.kron(past_total, p)
@@ -311,18 +311,18 @@ class DenseComb:
     def _k_for_probe(self) -> int:
         return self._k_steps()
 
-    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
-        return _evaluate_dense_comb_probe_set(self, probe_set)
+        return evaluate_dense_probes(self, probe_set)
 
-    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Return Pauli responses and causal cut branch weights for paper-aligned V assembly."""
-        pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
-        return pauli, _branch_weights_ij(probe_set)
+        pauli = np.asarray(self.evaluate_probes(probe_set), dtype=np.float32)
+        return pauli, compute_branch_weights(probe_set)
 
     def qmi(
         self,
@@ -370,9 +370,13 @@ class DenseComb:
             msg = f"Unknown past='{past}'."
             raise ValueError(msg)
 
-        rho_final_sub = _partial_trace_dense(rho, dims, keep=[0])
-        rho_past_sub = _partial_trace_dense(rho, dims, keep=keep_past)
-        return _entropy_dense(rho_past_sub, base) + _entropy_dense(rho_final_sub, base) - _entropy_dense(rho, base)
+        rho_final_sub = trace_partial_dense(rho, dims, keep=[0])
+        rho_past_sub = trace_partial_dense(rho, dims, keep=keep_past)
+        return (
+            compute_entropy_dense(rho_past_sub, base)
+            + compute_entropy_dense(rho_final_sub, base)
+            - compute_entropy_dense(rho, base)
+        )
 
     def cmi(
         self,
@@ -402,14 +406,14 @@ class DenseComb:
         if k_steps < 2:
             return 0.0
         dims = [2] + [4] * k_steps
-        rho_final_past_k = _partial_trace_dense(rho, dims, keep=[0, k_steps])
-        rho_past_sub = _partial_trace_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
-        rho_past_k = _partial_trace_dense(rho, dims, keep=[k_steps])
+        rho_final_past_k = trace_partial_dense(rho, dims, keep=[0, k_steps])
+        rho_past_sub = trace_partial_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
+        rho_past_k = trace_partial_dense(rho, dims, keep=[k_steps])
         return (
-            _entropy_dense(rho_final_past_k, base)
-            + _entropy_dense(rho_past_sub, base)
-            - _entropy_dense(rho_past_k, base)
-            - _entropy_dense(rho, base)
+            compute_entropy_dense(rho_final_past_k, base)
+            + compute_entropy_dense(rho_past_sub, base)
+            - compute_entropy_dense(rho_past_k, base)
+            - compute_entropy_dense(rho, base)
         )
 
     def cmi_conditional(
@@ -472,14 +476,14 @@ class DenseComb:
             msg = "A, B, C must be three distinct subsystems."
             raise ValueError(msg)
 
-        rho_ac = _partial_trace_dense(rho, dims, keep=[idx_a, idx_c])
-        rho_bc = _partial_trace_dense(rho, dims, keep=[idx_b, idx_c])
-        rho_c = _partial_trace_dense(rho, dims, keep=[idx_c])
+        rho_ac = trace_partial_dense(rho, dims, keep=[idx_a, idx_c])
+        rho_bc = trace_partial_dense(rho, dims, keep=[idx_b, idx_c])
+        rho_c = trace_partial_dense(rho, dims, keep=[idx_c])
         return (
-            _entropy_dense(rho_ac, base)
-            + _entropy_dense(rho_bc, base)
-            - _entropy_dense(rho_c, base)
-            - _entropy_dense(rho, base)
+            compute_entropy_dense(rho_ac, base)
+            + compute_entropy_dense(rho_bc, base)
+            - compute_entropy_dense(rho_c, base)
+            - compute_entropy_dense(rho, base)
         )
 
 
@@ -519,13 +523,13 @@ class MPOComb(MPO):
     def _k_for_probe(self) -> int:
         return int(self.length) - 1
 
-    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses."""
-        return self.to_dense().evaluate_probe_set(probe_set)
+        return self.to_dense().evaluate_probes(probe_set)
 
-    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Return Pauli responses and causal cut branch weights."""
-        return self.to_dense().evaluate_probe_set_with_weights(probe_set)
+        return self.to_dense().evaluate_probes_weighted(probe_set)
 
     def predict(
         self,
@@ -562,7 +566,7 @@ class MPOComb(MPO):
 
         # Apply local Choi operators (with transpose as in DenseComb.predict) on past sites.
         for t, emap in enumerate(interventions):
-            j_choi = _cptp_to_choi(emap)  # 4x4
+            j_choi = encode_cptp_choi(emap)  # 4x4
             work.apply_local_operator(site=t + 1, op=j_choi.T, left_action=True)
 
         # Trace out all past sites, keep only the final site (index 0).

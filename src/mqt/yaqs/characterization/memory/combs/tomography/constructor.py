@@ -11,10 +11,10 @@
 """Process-tensor tomography workflow: exhaustive discrete-basis simulation.
 
 **Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.memory.combs.tomography`):
-:func:`construct_process_tensor` (this module,
+:func:`build_process_tensor` (this module,
 :mod:`mqt.yaqs.characterization.memory.combs.tomography.constructor`).
 
-:func:`construct_process_tensor` is the high-level user entry point returning a comb directly
+:func:`build_process_tensor` is the high-level user entry point returning a comb directly
 (:class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.DenseComb` or
 :class:`~mqt.yaqs.characterization.memory.combs.tomography.combs.MPOComb`).
 The lower-level :func:`run_all_sequences` returns
@@ -51,9 +51,9 @@ from mqt.yaqs.core.parallel_utils import WORKER_CTX, ExecutionConfig, merge_exec
 from ..core.utils import (
     StochasticSolver,
     _evolve_backend_state,
-    _get_rho_site_zero,
     _initialize_backend_state,
     _reprepare_backend_state_forced,
+    extract_site0_rho,
     make_mcwf_static_context,
     resolve_stochastic_solver,
 )
@@ -63,7 +63,7 @@ from ..core.utils import (
 # ---------------------------------------------------------------------------
 from .basis import (
     _finalize_sequence_averages,
-    calculate_dual_choi_basis,
+    compute_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
 )
@@ -156,7 +156,7 @@ def _sequence_worker(
             static_ctx=ctx.get("mcwf_static_ctx"),
         )
 
-    rho_final = _get_rho_site_zero(current_state)
+    rho_final = extract_site0_rho(current_state)
     return (s_idx, traj_idx, rho_final, float(weight))
 
 
@@ -181,7 +181,7 @@ def run_all_sequences(
 ) -> SequenceData:
     """Run the backend for every one of the ``16^k`` discrete Choi index sequences.
 
-    Prefer :func:`construct_process_tensor` for the validated user entry; this routine assumes
+    Prefer :func:`build_process_tensor` for the validated user entry; this routine assumes
     ``timesteps`` and solver compatibility are already correct.
 
     Returns:
@@ -196,7 +196,7 @@ def run_all_sequences(
 
     basis_set = get_basis_states(basis=basis, seed=basis_seed)
     choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
-    choi_duals = calculate_dual_choi_basis(choi_basis)
+    choi_duals = compute_dual_choi_basis(choi_basis)
 
     k = len(timesteps)
 
@@ -333,7 +333,7 @@ def _construct_data(
     )
 
 
-def construct_process_tensor(
+def build_process_tensor(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,

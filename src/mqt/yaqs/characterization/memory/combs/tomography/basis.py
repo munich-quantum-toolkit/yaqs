@@ -19,7 +19,7 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-from ..core.encoding import build_choi_feature_table
+from ..core.encoding import stack_choi_features
 
 TomographyBasis = Literal["standard", "tetrahedral", "random"]
 
@@ -141,7 +141,7 @@ def get_choi_basis(
     return choi_matrices, indices
 
 
-def build_basis_for_fixed_alphabet(
+def assemble_fixed_basis(
     *,
     basis: TomographyBasis | str,
     basis_seed: int | None = None,
@@ -165,11 +165,11 @@ def build_basis_for_fixed_alphabet(
     seed_for_basis = int(basis_seed) if basis_seed is not None else None
     basis_set = get_basis_states(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
     choi_matrices, choi_pm_pairs = get_choi_basis(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
-    choi_feat_table = build_choi_feature_table(choi_matrices)
+    choi_feat_table = stack_choi_features(choi_matrices)
     return basis_set, choi_matrices, choi_pm_pairs, choi_feat_table
 
 
-def calculate_dual_choi_basis(
+def compute_dual_choi_basis(
     basis_matrices: list[NDArray[np.complex128]],
 ) -> list[NDArray[np.complex128]]:
     """Compute the dual frame for a Choi basis.

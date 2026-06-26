@@ -14,10 +14,10 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.combs.surrogates.utils import _sample_random_intervention_parts
+from mqt.yaqs.characterization.memory.combs.surrogates.utils import sample_intervention_parts
 
 
-def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
+def extract_ket(projector: np.ndarray) -> np.ndarray:
     eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
     idx = int(np.argmax(eigvals.real))
     psi = eigvecs[:, idx]
@@ -28,9 +28,9 @@ def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
 
 
 def sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
-    rho_prep, effect, feat = _sample_random_intervention_parts(rng)
-    psi_meas = _psi_from_rank1_projector(effect)
-    psi_prep = _psi_from_rank1_projector(rho_prep)
+    rho_prep, effect, feat = sample_intervention_parts(rng)
+    psi_meas = extract_ket(effect)
+    psi_prep = extract_ket(rho_prep)
     return feat.astype(np.float32), (psi_meas, psi_prep)
 
 
@@ -46,7 +46,7 @@ def sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
 
 
 @lru_cache(maxsize=1)
-def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
+def enumerate_clifford_unitaries() -> tuple[np.ndarray, ...]:
     h = (1.0 / np.sqrt(2.0)) * np.asarray([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128)
     s = np.asarray([[1.0, 0.0], [0.0, 1.0j]], dtype=np.complex128)
     gens = (h, s)
@@ -71,20 +71,20 @@ def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
 
 
 def sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
-    cliffords = _single_qubit_clifford_group()
+    cliffords = enumerate_clifford_unitaries()
     idx = int(rng.integers(0, len(cliffords)))
     return np.asarray(cliffords[idx], dtype=np.complex128)
 
 
 def sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    _rho_prep, effect, feat = _sample_random_intervention_parts(rng)
-    psi_meas = _psi_from_rank1_projector(effect)
+    _rho_prep, effect, feat = sample_intervention_parts(rng)
+    psi_meas = extract_ket(effect)
     return feat.astype(np.float32), psi_meas
 
 
 def sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    rho_prep, _effect, feat = _sample_random_intervention_parts(rng)
-    psi_prep = _psi_from_rank1_projector(rho_prep)
+    rho_prep, _effect, feat = sample_intervention_parts(rng)
+    psi_prep = extract_ket(rho_prep)
     return feat.astype(np.float32), psi_prep
 
 

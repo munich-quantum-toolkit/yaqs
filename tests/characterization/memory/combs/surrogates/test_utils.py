@@ -16,25 +16,25 @@ import pytest
 
 from mqt.yaqs.characterization.memory.combs.surrogates.utils import (
     _initial_mcwf_state_from_rho0,
-    _random_density_matrix,
-    _sample_random_intervention_sequence,
+    sample_density_matrix,
+    sample_intervention_sequence,
 )
 
 
-def test_random_density_matrix_is_physical() -> None:
+def test_sample_density_matrix_is_physical() -> None:
     """Random density matrices are Hermitian, trace-one, and PSD."""
     rng = np.random.default_rng(0)
-    rho = _random_density_matrix(rng)
+    rho = sample_density_matrix(rng)
     np.testing.assert_allclose(rho, rho.conj().T, atol=1e-12)
     np.testing.assert_allclose(np.trace(rho).real, 1.0, atol=1e-12)
     evals = np.linalg.eigvalsh(rho).real
     assert float(evals.min()) >= -1e-12
 
 
-def test_sample_random_intervention_sequence_shapes() -> None:
+def test_sample_intervention_sequence_shapes() -> None:
     """Intervention sequences return k maps and k float32 feature rows."""
     rng = np.random.default_rng(1)
-    maps, rows = _sample_random_intervention_sequence(3, rng)
+    maps, rows = sample_intervention_sequence(3, rng)
     assert len(maps) == 3
     assert rows.shape == (3, 32)
     assert rows.dtype == np.float32

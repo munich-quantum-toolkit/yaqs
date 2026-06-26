@@ -30,7 +30,7 @@ PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
 PAULI_BASIS = (PAULI_I, PAULI_X, PAULI_Y, PAULI_Z)
 
 
-def _flatten_choi4_to_real32(j: np.ndarray) -> np.ndarray:
+def _flatten_choi4(j: np.ndarray) -> np.ndarray:
     """Flatten a 4x4 Choi matrix into 32 real features.
 
     Args:
@@ -45,7 +45,7 @@ def _flatten_choi4_to_real32(j: np.ndarray) -> np.ndarray:
     return interleaved.reshape(-1)
 
 
-def build_choi_feature_table(choi_matrices: list[np.ndarray]) -> np.ndarray:
+def stack_choi_features(choi_matrices: list[np.ndarray]) -> np.ndarray:
     """Build a feature table for a fixed 16-letter Choi basis.
 
     Args:
@@ -54,7 +54,7 @@ def build_choi_feature_table(choi_matrices: list[np.ndarray]) -> np.ndarray:
     Returns:
         Float32 array of shape ``(16, 32)`` with one feature row per basis index.
     """
-    rows = [_flatten_choi4_to_real32(c) for c in choi_matrices]
+    rows = [_flatten_choi4(c) for c in choi_matrices]
     return np.stack(rows, axis=0)
 
 
@@ -127,7 +127,7 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
     return 0.5 * (rho + rho.conj().T)
 
 
-def rho_to_pauli_expectations(rho: np.ndarray) -> np.ndarray:
+def encode_rho_pauli(rho: np.ndarray) -> np.ndarray:
     r"""Pauli tomography coefficients :math:`(\mathrm{Tr}(I\rho), \mathrm{Tr}(X\rho), \ldots)`.
 
     Args:
@@ -143,7 +143,7 @@ def rho_to_pauli_expectations(rho: np.ndarray) -> np.ndarray:
     )
 
 
-def pauli_expectations_to_rho(pauli: np.ndarray) -> np.ndarray:
+def decode_pauli_rho(pauli: np.ndarray) -> np.ndarray:
     r"""Reconstruct :math:`\rho=\frac12\sum_\mu c_\mu P_\mu` from ``(c_I, c_X, c_Y, c_Z)``.
 
     Args:
@@ -159,7 +159,7 @@ def pauli_expectations_to_rho(pauli: np.ndarray) -> np.ndarray:
     return 0.5 * out
 
 
-def packed_rho8_to_pauli_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
+def decode_packed_pauli_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
     """Map backend ``rho8`` rows ``(..., 8)`` to Pauli tomography ``(..., 4)``.
 
     Args:
@@ -175,18 +175,18 @@ def packed_rho8_to_pauli_batch(packed: np.ndarray, *, normalize: bool = True) ->
     """
     p = np.asarray(packed, dtype=np.float32)
     if p.shape[-1] != 8:
-        msg = f"packed_rho8_to_pauli_batch: expected last dim 8, got shape {p.shape}."
+        msg = f"decode_packed_pauli_batch: expected last dim 8, got shape {p.shape}."
         raise ValueError(msg)
     flat = p.reshape(-1, 8)
     out = np.empty((flat.shape[0], 4), dtype=np.float64)
     for i in range(flat.shape[0]):
         rho_u = unpack_rho8(flat[i])
-        rho = normalize_rho_from_backend_output(rho_u) if normalize else rho_u
-        out[i] = rho_to_pauli_expectations(rho)
+        rho = normalize_backend_rho(rho_u) if normalize else rho_u
+        out[i] = encode_rho_pauli(rho)
     return out.reshape(*p.shape[:-1], 4)
 
 
-def normalize_rho_from_backend_output(rho_final: ArrayLike) -> np.ndarray:
+def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
     """Normalize a backend 2x2 output into a physical density matrix.
 
     This applies hermitization and trace normalization, then uses a conservative fast-path check

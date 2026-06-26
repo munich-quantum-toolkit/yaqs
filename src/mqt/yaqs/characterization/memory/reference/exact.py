@@ -15,10 +15,10 @@ import numpy as np
 
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
-from ..combs.core.encoding import packed_rho8_to_pauli_batch
+from ..combs.core.encoding import decode_packed_pauli_batch
 from ..combs.core.utils import StochasticSolver, make_mcwf_static_context
-from ..combs.surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
-from ..diagnostics.probe import ProbeSet, _build_all_pairs_grid
+from ..combs.surrogates.workflow import simulate_rollouts_traced, simulate_sequences
+from ..diagnostics.probe import ProbeSet, assemble_probe_grid
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -58,7 +58,7 @@ class ExactProbeProcess:
         """Whether parallel rollout execution is enabled."""
         return self._execution.parallel
 
-    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Run exact backend for all (past, future) probe combinations.
 
         Args:
@@ -72,10 +72,10 @@ class ExactProbeProcess:
             RuntimeError: If the backend returns an unexpected result count.
             TypeError: If the backend output is not an ndarray.
         """
-        all_pairs, n_p, n_f = _build_all_pairs_grid(probe_set)
+        all_pairs, n_p, n_f = assemble_probe_grid(probe_set)
         n_tot = n_p * n_f
         initial_psis = [self.initial_psi.copy() for _ in range(n_tot)]
-        final_packed = _simulate_sequences(
+        final_packed = simulate_sequences(
             operator=self.operator,
             sim_params=self.sim_params,
             timesteps=[float(self.sim_params.dt)] * (int(probe_set.k) + 1),
@@ -94,10 +94,10 @@ class ExactProbeProcess:
             msg = f"Expected {n_tot} final states from exact simulation, got {final_packed.shape[0]}."
             raise RuntimeError(msg)
         packed_flat = np.asarray(final_packed, dtype=np.float32).reshape(n_p * n_f, 8)
-        return packed_rho8_to_pauli_batch(packed_flat).reshape(n_p, n_f, 4).astype(np.float32)
+        return decode_packed_pauli_batch(packed_flat).reshape(n_p, n_f, 4).astype(np.float32)
 
 
-def evaluate_exact_probe_set_with_diagnostics(
+def simulate_probes_exact(
     *,
     probe_set: ProbeSet,
     operator: MPO,
@@ -123,18 +123,18 @@ def evaluate_exact_probe_set_with_diagnostics(
         ``(n_pasts, n_futures, 4)`` (Pauli tomography from the final reduced state),
         ``weights_ij`` holds break weights :math:`w_{\alpha,m}` from simulated step
         probabilities through cut ``c``, and
-        ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`_build_all_pairs_grid`.
+        ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`assemble_probe_grid`.
 
     Raises:
         TypeError: If the backend output is not an ndarray.
     """
-    all_pairs, n_p, n_f = _build_all_pairs_grid(probe_set)
+    all_pairs, n_p, n_f = assemble_probe_grid(probe_set)
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(None, parallel=parallel, show_progress=show_progress)
     resolved_solver: StochasticSolver = "MCWF" if solver is None else solver  # type: ignore[assignment]
     static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None) if resolved_solver == "MCWF" else None
-    final_packed, traces = simulate_final_states_with_diagnostics(
+    final_packed, traces = simulate_rollouts_traced(
         operator=operator,
         sim_params=sim_params,
         timesteps=[float(sim_params.dt)] * (int(probe_set.k) + 1),
@@ -149,7 +149,7 @@ def evaluate_exact_probe_set_with_diagnostics(
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
-    pauli_xyz = packed_rho8_to_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4).astype(np.float32)
+    pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4).astype(np.float32)
     w = np.zeros((n_p, n_f), dtype=np.float64)
     cut = int(probe_set.cut)
     for ii in range(n_p):

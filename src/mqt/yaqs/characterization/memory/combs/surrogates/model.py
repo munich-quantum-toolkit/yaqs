@@ -27,9 +27,9 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...diagnostics.probe import ProbeSet, _branch_weights_ij
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_batch
-from .utils import _choi_features_from_parts
+from ...diagnostics.probe import ProbeSet, compute_branch_weights
+from ..core.encoding import decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
+from .utils import encode_choi_features
 
 # Computational-basis |0><0| (same convention as workflow rollouts).
 _RHO0_PROJECTOR = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -168,7 +168,7 @@ class TransformerComb(nn.Module):
 
         Uses :func:`~mqt.yaqs.characterization.memory.combs.core.encoding.pack_rho8` on the
         trace-1 density matrix for :math:`|0\\rangle\\langle 0|`, after
-        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding.normalize_rho_from_backend_output`,
+        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding.normalize_backend_rho`,
         matching surrogate rollouts in
         :mod:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow`.
 
@@ -178,7 +178,7 @@ class TransformerComb(nn.Module):
         Raises:
             ValueError: If packed length does not match ``d_rho``.
         """
-        packed = pack_rho8(normalize_rho_from_backend_output(_RHO0_PROJECTOR)).astype(np.float32)
+        packed = pack_rho8(normalize_backend_rho(_RHO0_PROJECTOR)).astype(np.float32)
         if packed.shape[0] != self.d_rho:
             msg = f"rho8 packing length {packed.shape[0]} does not match d_rho={self.d_rho}."
             raise ValueError(msg)
@@ -247,8 +247,8 @@ class TransformerComb(nn.Module):
             raise ValueError(msg)
         return int(self.sequence_length)
 
-    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe responses for :func:`_probe_process`.
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe responses for :func:`run_probe_diagnostics`.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
@@ -276,7 +276,7 @@ class TransformerComb(nn.Module):
                 for j in range(n_f):
                     prep_ket = np.asarray(probe_set.future_prep_cut[j], dtype=np.complex128)
                     prep_dm = np.outer(prep_ket, prep_ket.conj())
-                    cut_rows.append(_choi_features_from_parts(prep_dm, eff_dm))
+                    cut_rows.append(encode_choi_features(prep_dm, eff_dm))
                 cut_step = np.asarray(cut_rows, dtype=np.float32).reshape(n_f, 1, self.d_e)
                 future_suffix = (
                     probe_set.future_features[:, 1:, :]
@@ -287,16 +287,16 @@ class TransformerComb(nn.Module):
                 seq_t = torch.from_numpy(seq).to(device=dev, dtype=torch.float32)
                 rho_pred_batch = self.predict_final_state_batch(rho0, seq_t, restore_training=False)
                 packed_np = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
-                v_rows[i] = packed_rho8_to_pauli_batch(packed_np).astype(np.float32)
+                v_rows[i] = decode_packed_pauli_batch(packed_np).astype(np.float32)
         finally:
             if was_training:
                 self.train()
         return v_rows
 
-    def evaluate_probe_set_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Return Pauli responses and causal cut branch weights."""
-        pauli = np.asarray(self.evaluate_probe_set(probe_set), dtype=np.float32)
-        return pauli, _branch_weights_ij(probe_set)
+        pauli = np.asarray(self.evaluate_probes(probe_set), dtype=np.float32)
+        return pauli, compute_branch_weights(probe_set)
 
     def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.

@@ -15,11 +15,11 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.combs.tomography import construct_process_tensor
+from mqt.yaqs.characterization.memory.combs.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.combs.tomography.basis import (
     _finalize_sequence_averages,
-    build_basis_for_fixed_alphabet,
-    calculate_dual_choi_basis,
+    assemble_fixed_basis,
+    compute_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
 )
@@ -30,7 +30,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 def test_choi_duality_biorthogonality() -> None:
     """Verify dual frame biorthogonality: Tr(D_i^† B_j) = δ_ij."""
     choi_basis, _ = get_choi_basis()
-    duals = calculate_dual_choi_basis(choi_basis)
+    duals = compute_dual_choi_basis(choi_basis)
 
     for i, d_i in enumerate(duals):
         for j, b_j in enumerate(choi_basis):
@@ -43,7 +43,7 @@ def test_reconstruction_identity_random_choi() -> None:
     """Verify Choi matrix reconstruction: J = Σ_k Tr(D_k^† J) B_k."""
     rng = np.random.default_rng(42)
     choi_basis, _ = get_choi_basis()
-    duals = calculate_dual_choi_basis(choi_basis)
+    duals = compute_dual_choi_basis(choi_basis)
 
     j_rand = rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))
     coeffs = np.array([np.trace(d.conj().T @ j_rand) for d in duals])
@@ -59,7 +59,7 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
     # Use the same basis label for states and Choi matrices (defaults differ per helper).
     basis = get_basis_states(basis="standard")
     choi_basis, choi_indices = get_choi_basis(basis="standard")
-    duals = calculate_dual_choi_basis(choi_basis)
+    duals = compute_dual_choi_basis(choi_basis)
 
     for alpha in range(16):
         p, m = choi_indices[alpha]
@@ -103,7 +103,7 @@ def test_basis_reproduction_h0_identity_map() -> None:
     """End-to-end sanity: identity map yields correct prediction for H=0."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    comb = construct_process_tensor(op, params, timesteps=[0.1], parallel=False, return_type="dense")
+    comb = build_process_tensor(op, params, timesteps=[0.1], parallel=False, return_type="dense")
 
     def identity_map(rho: np.ndarray) -> np.ndarray:
         return rho
@@ -125,9 +125,9 @@ def test_get_basis_states_random_is_normalized_and_seeded() -> None:
         np.testing.assert_allclose(rhoa, rhob, atol=1e-12)
 
 
-def test_build_basis_for_fixed_alphabet_shapes() -> None:
+def test_assemble_fixed_basis_shapes() -> None:
     """Fixed-alphabet basis builders return consistent state, Choi, and feature tables."""
-    basis_set, choi_mats, choi_idx, feat = build_basis_for_fixed_alphabet(basis="standard")
+    basis_set, choi_mats, choi_idx, feat = assemble_fixed_basis(basis="standard")
     assert len(basis_set) == 4
     assert len(choi_mats) == 16
     assert len(choi_idx) == 16

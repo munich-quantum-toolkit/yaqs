@@ -17,14 +17,14 @@ from typing import Any, Literal, cast
 import numpy as np
 
 from mqt.yaqs.characterization.memory.combs.surrogates.utils import (
-    _sample_random_intervention_parts,
-    _sample_random_intervention_sequence,
+    sample_intervention_parts,
+    sample_intervention_sequence,
 )
 from mqt.yaqs.characterization.memory.diagnostics.probe import (
-    _psi_from_rank1_projector,
     _sample_random_clifford_unitary,
     _sample_random_unitary,
-    _unitary_to_choi_features,
+    encode_unitary_choi,
+    extract_ket,
 )
 
 InterventionKind = Literal["haar", "clifford", "measure_prepare"]
@@ -32,7 +32,7 @@ InterventionSlot = str | dict[str, Any]
 InterventionSequence = Sequence[InterventionSlot] | InterventionKind
 
 
-def _normalize_intervention_kind(kind: str) -> InterventionKind:
+def normalize_kind(kind: str) -> InterventionKind:
     """Validate a user intervention kind string.
 
     Args:
@@ -51,7 +51,7 @@ def _normalize_intervention_kind(kind: str) -> InterventionKind:
     raise ValueError(msg)
 
 
-def probe_kwargs_from_interventions(interventions: str) -> dict[str, str]:
+def map_probe_kwargs(interventions: str) -> dict[str, str]:
     """Map user intervention names to internal split-cut probe keyword arguments.
 
     Args:
@@ -60,7 +60,7 @@ def probe_kwargs_from_interventions(interventions: str) -> dict[str, str]:
     Returns:
         Dict with ``intervention_mode`` and ``unitary_ensemble`` keys for probing.
     """
-    kind = _normalize_intervention_kind(interventions)
+    kind = normalize_kind(interventions)
     if kind == "measure_prepare":
         return {"intervention_mode": "measure_prepare", "unitary_ensemble": "haar"}
     ensemble = "clifford" if kind == "clifford" else "haar"
@@ -82,7 +82,7 @@ def _unitary_sampler(kind: InterventionKind, rng: np.random.Generator):
     return _sample_random_unitary
 
 
-def _encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
+def encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
     """Encode one intervention slot to a simulator step and Choi feature row.
 
     Args:
@@ -100,18 +100,18 @@ def _encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any,
             msg = "dict intervention slots must contain key 'unitary'."
             raise ValueError(msg)
         u = np.asarray(slot["unitary"], dtype=np.complex128).reshape(2, 2)
-        return {"type": "unitary", "U": u}, _unitary_to_choi_features(u)
-    kind = _normalize_intervention_kind(str(slot))
+        return {"type": "unitary", "U": u}, encode_unitary_choi(u)
+    kind = normalize_kind(str(slot))
     if kind == "measure_prepare":
-        rho_prep, effect, feat = _sample_random_intervention_parts(rng)
-        psi_meas = _psi_from_rank1_projector(effect)
-        psi_prep = _psi_from_rank1_projector(rho_prep)
+        rho_prep, effect, feat = sample_intervention_parts(rng)
+        psi_meas = extract_ket(effect)
+        psi_prep = extract_ket(rho_prep)
         return (psi_meas, psi_prep), feat
     u = _unitary_sampler(kind, rng)(rng)
-    return {"type": "unitary", "U": u}, _unitary_to_choi_features(u)
+    return {"type": "unitary", "U": u}, encode_unitary_choi(u)
 
 
-def _expand_intervention_sequence(
+def expand_sequence(
     spec: InterventionSequence,
     *,
     k: int,
@@ -132,7 +132,7 @@ def _expand_intervention_sequence(
     """
     kk = int(k)
     if isinstance(spec, str):
-        kind = _normalize_intervention_kind(spec)
+        kind = normalize_kind(spec)
         return [kind] * kk
     slots = list(spec)
     if len(slots) == 1 and kk > 1:
@@ -159,17 +159,17 @@ def encode_sequence(
     Returns:
         Tuple ``(steps, choi_features)`` with ``choi_features`` shaped ``(k, 32)``.
     """
-    slots = _expand_intervention_sequence(spec, k=k, rng=rng)
+    slots = expand_sequence(spec, k=k, rng=rng)
     steps: list[Any] = []
     rows: list[np.ndarray] = []
     for slot in slots:
-        step, feat = _encode_slot(slot, rng)
+        step, feat = encode_slot(slot, rng)
         steps.append(step)
         rows.append(feat)
     return steps, np.stack(rows, axis=0).astype(np.float32)
 
 
-def _sample_training_sequence(
+def sample_train_sequence(
     k: int,
     interventions: InterventionKind,
     rng: np.random.Generator,
@@ -185,11 +185,11 @@ def _sample_training_sequence(
         Tuple ``(steps, choi_features)`` suitable for surrogate training rollouts.
     """
     if interventions == "measure_prepare":
-        maps, choi = _sample_random_intervention_sequence(int(k), rng)
+        maps, choi = sample_intervention_sequence(int(k), rng)
         steps: list[Any] = []
         for emap in maps:
-            psi_meas = _psi_from_rank1_projector(emap.effect)
-            psi_prep = _psi_from_rank1_projector(emap.rho_prep)
+            psi_meas = extract_ket(emap.effect)
+            psi_prep = extract_ket(emap.rho_prep)
             steps.append((psi_meas, psi_prep))
         return steps, choi
     return encode_sequence(interventions, k=int(k), rng=rng)

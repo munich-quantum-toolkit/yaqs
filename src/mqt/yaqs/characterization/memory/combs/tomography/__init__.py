@@ -17,11 +17,11 @@ This subpackage constructs a process tensor from exhaustive discrete interventio
 """
 
 from .basis import TomographyBasis as TomographyBasis
-from .basis import build_basis_for_fixed_alphabet as build_basis_for_fixed_alphabet
+from .basis import assemble_fixed_basis as assemble_fixed_basis
 from .basis import get_basis_states as get_basis_states
 from .basis import get_choi_basis as get_choi_basis
 from .combs import DenseComb as DenseComb
 from .combs import MPOComb as MPOComb
-from .constructor import construct_process_tensor as construct_process_tensor
+from .constructor import build_process_tensor as build_process_tensor
 from .constructor import run_all_sequences as run_all_sequences
 from .data import SequenceData as SequenceData

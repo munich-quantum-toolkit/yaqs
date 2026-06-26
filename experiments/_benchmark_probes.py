@@ -13,9 +13,6 @@ import copy
 from typing import Any
 
 import numpy as np
-
-from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
-
 from _benchmark_sampling import (
     resolve_unitary_sampler,
     sample_cut_measurement_only,
@@ -23,6 +20,8 @@ from _benchmark_sampling import (
     sample_probe_step,
     sample_step,
 )
+
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet
 
 PAST_LEN_FIXED = 15
 FUTURE_LEN_FIXED = 5

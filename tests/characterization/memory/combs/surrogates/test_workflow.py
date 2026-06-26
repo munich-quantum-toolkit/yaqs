@@ -5,8 +5,6 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- surrogate workflow tests use E tensors and private helpers
-
 """Tests for surrogate data generation and training workflows."""
 
 from __future__ import annotations
@@ -16,36 +14,36 @@ import pytest
 
 from mqt.yaqs.characterization.memory.combs.core.encoding import unpack_rho8
 from mqt.yaqs.characterization.memory.combs.core.metrics import (
-    _mean_frobenius_mse_rho8,
-    _mean_trace_distance_rho8,
-    _trace_distance,
+    compute_trace_distance,
+    mean_frobenius_mse_rho8,
+    mean_trace_distance_rho8,
 )
 from mqt.yaqs.characterization.memory.combs.core.utils import make_mcwf_static_context
 from mqt.yaqs.characterization.memory.combs.surrogates.workflow import (
-    _psi_from_rank1_projector,
-    _rollout_arrays_to_tensor_dataset,
-    _simulate_sequences,
-    create_surrogate,
-    generate_data,
+    pack_rollout_dataset,
+    sample_train_dataset,
+    simulate_sequences,
+    train_surrogate_model,
 )
+from mqt.yaqs.characterization.memory.diagnostics.probe import extract_ket
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
-def test_psi_from_rank1_projector_fallback_for_zero_projector() -> None:
+def test_extract_ket_fallback_for_zero_projector() -> None:
     """Zero projectors fall back to the |0> state vector."""
-    psi = _psi_from_rank1_projector(np.zeros((2, 2), dtype=np.complex128))
+    psi = extract_ket(np.zeros((2, 2), dtype=np.complex128))
     np.testing.assert_allclose(psi, np.array([1.0 + 0.0j, 0.0 + 0.0j]))
 
 
 def test_simulate_sequences_input_validation_errors() -> None:
-    """_simulate_sequences validates comb schedule and rollout feature inputs."""
+    """simulate_sequences validates comb schedule and rollout feature inputs."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
 
     with pytest.raises(ValueError, match="psi_pairs_list and initial_psis must have equal length"):
-        _simulate_sequences(
+        simulate_sequences(
             operator=op,
             sim_params=params,
             timesteps=[0.1],
@@ -56,7 +54,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="record_step_states=True requires e_features_rows"):
-        _simulate_sequences(
+        simulate_sequences(
             operator=op,
             sim_params=params,
             timesteps=[0.1, 0.1],
@@ -69,7 +67,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="e_features_rows is only used when record_step_states=True"):
-        _simulate_sequences(
+        simulate_sequences(
             operator=op,
             sim_params=params,
             timesteps=[0.1, 0.1],
@@ -82,14 +80,14 @@ def test_simulate_sequences_input_validation_errors() -> None:
         )
 
 
-def test_rollout_arrays_to_tensor_dataset_shapes() -> None:
+def test_pack_rollout_dataset_shapes() -> None:
     """Rollout arrays convert to a three-tensor TensorDataset."""
     torch = pytest.importorskip("torch")
 
     rho0 = np.zeros((2, 8), dtype=np.float32)
     e_features = np.zeros((2, 3, 32), dtype=np.float32)
     rho_seq = np.zeros((2, 3, 8), dtype=np.float32)
-    ds = _rollout_arrays_to_tensor_dataset(rho0, e_features, rho_seq)
+    ds = pack_rollout_dataset(rho0, e_features, rho_seq)
     assert len(ds.tensors) == 3
     assert tuple(ds.tensors[0].shape) == (2, 3, 32)
     assert tuple(ds.tensors[1].shape) == (2, 8)
@@ -108,7 +106,7 @@ def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
     initial_psis = [psi0.copy()]
     timesteps = [0.0, 0.0]
 
-    finals = _simulate_sequences(
+    finals = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=timesteps,
@@ -122,7 +120,7 @@ def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
     assert isinstance(finals, np.ndarray)
     assert finals.shape == (1, 8)
 
-    samples = _simulate_sequences(
+    samples = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=timesteps,
@@ -152,7 +150,7 @@ def test_simulate_sequences_parallel_smoke() -> None:
     initial_psis = [psi0.copy(), psi0.copy()]
     cfg = ExecutionConfig(parallel=True, max_workers=2, show_progress=False)
 
-    finals = _simulate_sequences(
+    finals = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
@@ -166,14 +164,14 @@ def test_simulate_sequences_parallel_smoke() -> None:
     assert finals.shape == (2, 8)
 
 
-def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
-    """End-to-end generate_data and create_surrogate run on a tiny Ising chain."""
+def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
+    """End-to-end sample_train_dataset and train_surrogate_model run on a tiny Ising chain."""
     torch = pytest.importorskip("torch")
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
-    ds = generate_data(
+    ds = sample_train_dataset(
         op,
         params,
         k=1,
@@ -185,7 +183,7 @@ def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
     )
     assert len(ds.tensors) == 3
 
-    model = create_surrogate(
+    model = train_surrogate_model(
         op,
         params,
         k=1,
@@ -203,15 +201,15 @@ def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
     assert tuple(out.shape) == tuple(tgt.shape)
 
 
-def test_generate_data_timesteps_length_mismatch_raises() -> None:
-    """generate_data enforces comb schedule length k+1."""
+def test_sample_train_dataset_timesteps_length_mismatch_raises() -> None:
+    """sample_train_dataset enforces comb schedule length k+1."""
     pytest.importorskip("torch")
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
     with pytest.raises(ValueError, match="Comb schedule: timesteps length must be k\\+1"):
-        generate_data(op, params, k=2, n=1, timesteps=[0.1])
+        sample_train_dataset(op, params, k=2, n=1, timesteps=[0.1])
 
 
 def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
@@ -231,7 +229,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     # Small but non-trivial dataset: k=2 sequences, enough samples to evaluate generalization.
     k = 2
     n = 60
-    ds = generate_data(
+    ds = sample_train_dataset(
         op,
         params,
         k=k,
@@ -264,8 +262,8 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     # Accuracy on many samples and both time steps (flatten across steps).
     pred_flat = pred.reshape(-1, 8)
     tgt_flat = tgt_test.numpy().reshape(-1, 8)
-    mse = _mean_frobenius_mse_rho8(pred_flat, tgt_flat)
-    td = _mean_trace_distance_rho8(pred_flat, tgt_flat)
+    mse = mean_frobenius_mse_rho8(pred_flat, tgt_flat)
+    td = mean_trace_distance_rho8(pred_flat, tgt_flat)
 
     # Stricter absolute thresholds: ensure the surrogate is actually predictive on held-out data.
     assert mse < 0.05
@@ -274,4 +272,4 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     # Also sanity check at matrix level for the first test sample.
     rho_pred = unpack_rho8(pred[0, -1, :])
     rho_true = unpack_rho8(tgt_test.numpy()[0, -1, :])
-    assert _trace_distance(rho_pred, rho_true) < 0.5
+    assert compute_trace_distance(rho_pred, rho_true) < 0.5

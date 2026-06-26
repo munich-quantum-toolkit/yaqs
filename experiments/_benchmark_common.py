@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from _benchmark_memory import linear_weighted_metrics as _linear_weighted_metrics
 
-from mqt.yaqs.characterization.memory.combs.surrogates.utils import _random_pure_state
-from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, sample_split_cut_probes
+from mqt.yaqs.characterization.memory.combs.surrogates.utils import sample_pure_state
+from mqt.yaqs.characterization.memory.diagnostics.probe import ProbeSet, sample_probes
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,7 +69,7 @@ def list_initial_states_sys_env0(*, length: int, n_seeds: int, rng: np.random.Ge
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     out: list[np.ndarray] = []
     for _ in range(n_seeds):
-        psi_sys = _random_pure_state(rng).astype(np.complex128)
+        psi_sys = sample_pure_state(rng).astype(np.complex128)
         psi = psi_sys
         for _ in range(length - 1):
             psi = np.kron(psi, z)
@@ -127,7 +127,7 @@ def sample_probe_set(
     intervention_mode: str = "unitary_break_mp",
 ) -> ProbeSet:
     rng = np.random.default_rng(int(seed) + 10_000 * int(cut))
-    return sample_split_cut_probes(
+    return sample_probes(
         cut=int(cut),
         k=int(k),
         n_pasts=int(n_pasts),

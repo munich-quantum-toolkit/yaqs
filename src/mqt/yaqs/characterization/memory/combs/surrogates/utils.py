@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..core.encoding import _flatten_choi4_to_real32
+from ..core.encoding import _flatten_choi4
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +121,7 @@ def _initial_mcwf_state_from_rho0(
     return (psi, 0, float(w[0])) if return_eig_sample else psi
 
 
-def build_initial_psi(
+def sample_initial_psi(
     rho_in: np.ndarray,
     *,
     length: int,
@@ -150,7 +150,7 @@ def build_initial_psi(
     )
 
 
-def _random_density_matrix(rng: np.random.Generator) -> np.ndarray:
+def sample_density_matrix(rng: np.random.Generator) -> np.ndarray:
     """Sample a random physical 2x2 density matrix.
 
     Args:
@@ -166,7 +166,7 @@ def _random_density_matrix(rng: np.random.Generator) -> np.ndarray:
     return 0.5 * (rho + rho.conj().T)
 
 
-def _random_pure_state(rng: np.random.Generator) -> np.ndarray:
+def sample_pure_state(rng: np.random.Generator) -> np.ndarray:
     """Sample a random single-qubit pure state.
 
     Args:
@@ -182,7 +182,7 @@ def _random_pure_state(rng: np.random.Generator) -> np.ndarray:
     return (v / n).astype(np.complex128)
 
 
-def _random_rank1_projector(rng: np.random.Generator) -> np.ndarray:
+def sample_rank1_projector(rng: np.random.Generator) -> np.ndarray:
     """Sample a random rank-1 projector (pure-state density matrix).
 
     Args:
@@ -191,7 +191,7 @@ def _random_rank1_projector(rng: np.random.Generator) -> np.ndarray:
     Returns:
         A 2x2 rank-1 density matrix for a random pure state.
     """
-    psi = _random_pure_state(rng)
+    psi = sample_pure_state(rng)
     return np.outer(psi, psi.conj()).astype(np.complex128)
 
 
@@ -209,14 +209,14 @@ def _sample_random_intervention(
         E: 2x2 rank-1 measurement effect
         J: 4x4 Choi matrix ``kron(rho_prep, E.T)``
     """
-    rho_prep, effect_mat, _feat = _sample_random_intervention_parts(rng)
+    rho_prep, effect_mat, _feat = sample_intervention_parts(rng)
     emap = InterventionMap(rho_prep=rho_prep, effect=effect_mat)
 
-    choi_mat = _choi_from_parts(rho_prep, effect_mat)
+    choi_mat = assemble_choi(rho_prep, effect_mat)
     return emap, rho_prep, effect_mat, choi_mat
 
 
-def _choi_from_parts(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
+def assemble_choi(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
     r"""Build the 4x4 Choi matrix for one rank-1 intervention.
 
     For the continuous surrogate encoding, one timestep intervention is represented by the Choi matrix
@@ -230,16 +230,16 @@ def _choi_from_parts(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
     return np.kron(rp, ef.T).astype(np.complex128)
 
 
-def _choi_features_from_parts(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
+def encode_choi_features(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
     """Encode an intervention's Choi matrix into the standard 32-float feature row.
 
     Returns:
         Float32 feature vector of shape ``(32,)``.
     """
-    return _flatten_choi4_to_real32(_choi_from_parts(rho_prep, effect)).astype(np.float32)
+    return _flatten_choi4(assemble_choi(rho_prep, effect)).astype(np.float32)
 
 
-def _sample_random_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def sample_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Sample one continuous intervention as (prep, effect) plus its fused Choi features.
 
     Returns:
@@ -247,13 +247,13 @@ def _sample_random_intervention_parts(rng: np.random.Generator) -> tuple[np.ndar
         effect: 2x2 rank-1 measurement effect (projector).
         choi_features: float32 feature row of shape (32,) for ``kron(rho_prep, effect.T)``.
     """
-    rho_prep = _random_rank1_projector(rng)
-    effect = _random_rank1_projector(rng)
-    feat = _choi_features_from_parts(rho_prep, effect)
+    rho_prep = sample_rank1_projector(rng)
+    effect = sample_rank1_projector(rng)
+    feat = encode_choi_features(rho_prep, effect)
     return rho_prep, effect, feat
 
 
-def _sample_random_intervention_sequence(
+def sample_intervention_sequence(
     k: int,
     rng: np.random.Generator,
 ) -> tuple[list[InterventionMap], np.ndarray]:
@@ -266,12 +266,12 @@ def _sample_random_intervention_sequence(
     Returns:
         maps: length-k list of callables ``rho -> Tr(E_t rho) * rho_prep_t``
         choi_features: shape ``(k, 32)``, each row from
-        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding._flatten_choi4_to_real32`
+        :func:`~mqt.yaqs.characterization.memory.combs.core.encoding._flatten_choi4`
     """
     maps: list[InterventionMap] = []
     rows: list[np.ndarray] = []
     for _ in range(int(k)):
         emap, _rho_prep, _effect, choi_mat = _sample_random_intervention(rng)
         maps.append(emap)
-        rows.append(_flatten_choi4_to_real32(choi_mat))
+        rows.append(_flatten_choi4(choi_mat))
     return maps, np.stack(rows, axis=0).astype(np.float32)

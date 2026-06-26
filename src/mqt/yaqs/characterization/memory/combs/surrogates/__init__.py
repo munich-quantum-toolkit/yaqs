@@ -10,9 +10,9 @@
 
 """Neural surrogates and sequence-rollout helpers.
 
-Public workflow API: :func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.generate_data`
+Public workflow API: :func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.sample_train_dataset`
 (returns :class:`~torch.utils.data.TensorDataset`) and
-:func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.create_surrogate`.
+:func:`~mqt.yaqs.characterization.memory.combs.surrogates.workflow.train_surrogate_model`.
 :class:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb` holds the network and
 :meth:`~mqt.yaqs.characterization.memory.combs.surrogates.model.TransformerComb.fit` training loop.
 Rollout samples: :mod:`mqt.yaqs.characterization.memory.combs.surrogates.data`.

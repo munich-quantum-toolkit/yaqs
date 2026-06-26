@@ -80,7 +80,7 @@ class CharacterizationResult:
         return np.asarray(self.by_cut[c].singular_values)
 
     def memory_matrix(self, cut: int | None = None) -> np.ndarray:
-        """Past-row-centered weighted memory matrix at ``cut``.
+        r"""Past-row-centered weighted memory matrix at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
@@ -130,11 +130,11 @@ class CharacterizationResult:
         return "\n".join(lines)
 
 
-def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
+def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
     """Build one per-cut result entry from a probe-process output dict.
 
     Args:
-        out: Output of :func:`~mqt.yaqs.characterization.memory.diagnostics.probe._probe_process`.
+        out: Output of :func:`~mqt.yaqs.characterization.memory.diagnostics.probe.run_probe_diagnostics`.
         cut: Causal cut index.
 
     Returns:
@@ -157,7 +157,7 @@ def _cut_from_probe_dict(out: dict[str, Any], *, cut: int) -> _CutResult:
     )
 
 
-def _result_from_probe_dict(out: dict[str, Any], *, cut: int) -> CharacterizationResult:
+def pack_result(out: dict[str, Any], *, cut: int) -> CharacterizationResult:
     """Wrap a single-cut probe dict as :class:`CharacterizationResult`.
 
     Args:
@@ -167,10 +167,10 @@ def _result_from_probe_dict(out: dict[str, Any], *, cut: int) -> Characterizatio
     Returns:
         Result holding exactly one cut.
     """
-    return CharacterizationResult(by_cut={int(cut): _cut_from_probe_dict(out, cut=cut)})
+    return CharacterizationResult(by_cut={int(cut): parse_cut_result(out, cut=cut)})
 
 
-def _merge_results(results: dict[int, CharacterizationResult]) -> CharacterizationResult:
+def merge_cut_results(results: dict[int, CharacterizationResult]) -> CharacterizationResult:
     """Merge single-cut characterization results into one multi-cut object.
 
     Args:

@@ -110,7 +110,7 @@ When `cut` is omitted on `characterize()`, the default interior cut `(k + 1) // 
 
 ## 4. Reproducible probes across backends
 
-Run one backend first, then pass that result to ``characterize(..., probe_set=...)`` so both use the same past/future ensemble. Inspect the sampled arrays with ``result.probes(cut)``.
+Run one backend first, then pass that result to `characterize(..., probe_set=...)` so both use the same past/future ensemble. Inspect the sampled arrays with `result.probes(cut)`.
 
 ```{code-cell} ipython3
 ---
