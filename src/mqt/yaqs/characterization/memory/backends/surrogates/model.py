@@ -244,6 +244,14 @@ class TransformerComb(nn.Module):
         return out[:, -1, :]
 
     def _k_for_probe(self) -> int:
+        """Return the trained sequence length ``k`` used for probe evaluation.
+
+        Returns:
+            Total intervention steps ``k`` inferred from training data or ``__init__``.
+
+        Raises:
+            ValueError: If ``sequence_length`` was never set.
+        """
         if self.sequence_length is None:
             msg = "sequence_length is unset: call fit() or pass sequence_length=... to __init__."
             raise ValueError(msg)
@@ -390,18 +398,12 @@ class TransformerComb(nn.Module):
         self.to(device)
 
         e_train, rho0_train, target_train = train_dataset.tensors
-        e_train = e_train.to(device)
-        rho0_train = rho0_train.to(device)
-        target_train = target_train.to(device)
         self.sequence_length = int(target_train.shape[1])
         train_ds = TensorDataset(e_train, rho0_train, target_train)
 
         has_val = val_dataset is not None
         if has_val:
             e_val, rho0_val, target_val = val_dataset.tensors
-            e_val = e_val.to(device)
-            rho0_val = rho0_val.to(device)
-            target_val = target_val.to(device)
 
         opt = torch.optim.Adam(self.parameters(), lr=float(lr))
         loss_fn = nn.MSELoss()
@@ -414,6 +416,9 @@ class TransformerComb(nn.Module):
         for _ep in range(int(epochs)):
             self.train()
             for e_batch, rho0_b, tgt_b in loader:
+                e_batch = e_batch.to(device)
+                rho0_b = rho0_b.to(device)
+                tgt_b = tgt_b.to(device)
                 opt.zero_grad(set_to_none=True)
                 if prefix_loss == "full" or k_max <= 1:
                     pred = self(e_batch, rho0_b)
@@ -440,8 +445,8 @@ class TransformerComb(nn.Module):
             if has_val:
                 self.eval()
                 with torch.no_grad():
-                    pred_va = self(e_val, rho0_val)
-                    val = float(loss_fn(pred_va, target_val).detach().cpu().item())
+                    pred_va = self(e_val.to(device), rho0_val.to(device))
+                    val = float(loss_fn(pred_va, target_val.to(device)).detach().cpu().item())
                 if val < best:
                     best = val
                     best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}

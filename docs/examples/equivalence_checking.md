@@ -90,8 +90,10 @@ are not supported for unitary equivalence on either backend. See
   `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
   **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
-- **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
-  the machine CPU count via {func}`~mqt.yaqs.core.parallel_utils.available_cpus`).
+- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`. When unset, the pool size is
+  `min(available_cpus(), number_of_work_items)`, where {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
+  `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU limits when set, and falls back to CPU
+  affinity or `os.cpu_count()` on the host.
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3

@@ -372,9 +372,10 @@ def _evolve_backend_state(
     if not isinstance(state, MPS):
         msg = f"TJM solver requires MPS state, got {type(state)}."
         raise TypeError(msg)
-    step_params.get_state = True
-    backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
-    _, _, out = backend((traj_idx, state, noise_model, step_params, operator))
+    step_params_tjm = copy.copy(step_params)
+    step_params_tjm.get_state = True
+    backend = analog_tjm_1 if step_params_tjm.order == 1 else analog_tjm_2
+    _, _, out = backend((traj_idx, state, noise_model, step_params_tjm, operator))
     if out is None:
         msg = "TJM backend returned None state."
         raise RuntimeError(msg)

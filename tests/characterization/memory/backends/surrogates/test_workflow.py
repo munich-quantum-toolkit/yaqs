@@ -88,8 +88,6 @@ def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
 
 def test_sample_train_dataset_timesteps_length_mismatch_raises() -> None:
     """sample_train_dataset enforces comb schedule length k+1."""
-    pytest.importorskip("torch")
-
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 

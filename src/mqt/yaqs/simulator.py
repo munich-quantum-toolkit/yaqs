@@ -122,6 +122,7 @@ from .core.parallel_utils import (
     available_cpus,
     call_serial_capped,
     get_parallel_context,
+    merge_execution_config,
     run_backend_parallel,
 )
 from .digital.digital_tjm import digital_tjm
@@ -503,25 +504,48 @@ class Simulator:
         """Whether parallel execution is enabled."""
         return self._execution.parallel
 
+    @parallel.setter
+    def parallel(self, value: bool) -> None:
+        self._execution = merge_execution_config(self._execution, parallel=bool(value))
+
     @property
     def max_workers(self) -> int:
         """Effective worker count for parallel execution."""
         return self._execution.resolved_max_workers()
+
+    @max_workers.setter
+    def max_workers(self, value: int | None) -> None:
+        self._execution = merge_execution_config(
+            self._execution,
+            max_workers=None if value is None else int(value),
+        )
 
     @property
     def show_progress(self) -> bool:
         """Whether progress bars are shown during execution."""
         return self._execution.show_progress
 
+    @show_progress.setter
+    def show_progress(self, value: bool) -> None:
+        self._execution = merge_execution_config(self._execution, show_progress=bool(value))
+
     @property
     def mp_context(self) -> MPContext:
         """Multiprocessing start-method context for worker processes."""
         return self._execution.mp_context
 
+    @mp_context.setter
+    def mp_context(self, value: MPContext) -> None:
+        self._execution = merge_execution_config(self._execution, mp_context=value)
+
     @property
     def max_retries(self) -> int:
         """Maximum retries per job in parallel execution."""
         return self._execution.max_retries
+
+    @max_retries.setter
+    def max_retries(self, value: int) -> None:
+        self._execution = merge_execution_config(self._execution, max_retries=int(value))
 
     @property
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:

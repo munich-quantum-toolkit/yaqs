@@ -14,11 +14,13 @@ from __future__ import annotations
 import numpy as np
 
 from mqt.yaqs.characterization.memory.shared.utils import (
+    _evolve_backend_state,
     _initialize_backend_state,
     assemble_state_from_expectations,
     extract_site0_rho,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO, MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 
@@ -59,3 +61,13 @@ def test_assemble_state_from_expectations() -> None:
 
     rho_rec = assemble_state_from_expectations({"x": ex, "y": ey, "z": ez})
     np.testing.assert_allclose(rho_rec, rho0, atol=1e-12)
+
+
+def test_evolve_backend_state_tjm_does_not_mutate_caller_params() -> None:
+    """TJM evolution copies AnalogSimParams before toggling get_state."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
+    state = _initialize_backend_state(op, solver="TJM")
+    assert isinstance(state, MPS)
+    _evolve_backend_state(state, op, None, params, solver="TJM")
+    assert getattr(params, "get_state", False) is False

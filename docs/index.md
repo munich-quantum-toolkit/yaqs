@@ -76,13 +76,13 @@ flowchart LR
 
 ### Characterization
 
-| I want to…                                   | Read                                      |
-| -------------------------------------------- | ----------------------------------------- |
-| Characterize operational memory (start here) | {doc}`examples/characterization`          |
-| Predict dynamics with a trained surrogate    | {doc}`examples/characterization`          |
-| Gold dynamics at small `k` (reference comb)  | {doc}`examples/reference_exact_combs`     |
-| Tune surrogate training                      | {doc}`examples/process_tensor_surrogates` |
-| Memory matrix theory (advanced)              | {doc}`examples/operational_memory`        |
+| I want to…                                       | Read                                      |
+| ------------------------------------------------ | ----------------------------------------- |
+| Characterize operational memory (start here)     | {doc}`examples/characterization`          |
+| Predict dynamics with a trained surrogate        | {doc}`examples/characterization`          |
+| Reference dynamics at small `k` (reference comb) | {doc}`examples/reference_exact_combs`     |
+| Tune surrogate training                          | {doc}`examples/process_tensor_surrogates` |
+| Memory matrix theory (advanced)                  | {doc}`examples/operational_memory`        |
 
 ```{toctree}
 :caption: Getting started

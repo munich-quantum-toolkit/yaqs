@@ -219,6 +219,33 @@ def test_evaluate_probes_weighted_for_missing_method_raises() -> None:
         evaluate_probes_weighted_for(cast("MemoryProcessBackend", NoProbes()), probe_set)
 
 
+def test_evaluate_probes_weighted_for_inherited_method() -> None:
+    """Subclasses that inherit probe methods dispatch without TypeError."""
+
+    class BaseBackend:
+        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+            n_p = len(probe_set.past_pairs)
+            n_f = len(probe_set.future_pairs)
+            return np.zeros((n_p, n_f, 4), dtype=np.float32)
+
+    class ChildBackend(BaseBackend):
+        pass
+
+    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    pauli, weights = evaluate_probes_weighted_for(cast("MemoryProcessBackend", ChildBackend()), probe_set)
+    assert pauli.shape == (2, 2, 4)
+    assert weights.shape == (2, 2)
+
+
+def test_run_operational_memory_parallel_override_does_not_mutate_backend() -> None:
+    """A one-shot parallel=False override must not change ExactBackend defaults."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    backend = ExactBackend(operator=op, sim_params=_params(), initial_psi=_PSI0, parallel=True)
+    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    run_operational_memory(process=backend, cut=1, k=1, probe_set=probe_set, parallel=False)
+    assert backend.parallel is True
+
+
 def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
     """return_raw=True exposes the uncentered memory matrix."""
     rng = np.random.default_rng(9)

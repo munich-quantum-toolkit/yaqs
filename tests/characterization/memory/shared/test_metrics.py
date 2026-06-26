@@ -31,7 +31,7 @@ def test_rel_fro_error_scaling() -> None:
     """Relative Frobenius error scales predictably under scalar multiplication."""
     mat = np.eye(2, dtype=np.complex128)
     scaled = 2.0 * mat
-    # ||A - 2A||_F = ||A||_F, so relative error = 1
+    # ||A - 2A||_F / ||2A||_F = ||A||_F / (2||A||_F) = 0.5
     assert np.isclose(compute_rel_fro_error(mat, scaled), 0.5)
 
 
@@ -59,3 +59,12 @@ def test_rho8_metrics_positive_for_different_states() -> None:
     y1 = pack_rho8(rho1)[None, :]
     assert mean_trace_distance_rho8(y0, y1) > 0.9
     assert mean_frobenius_mse_rho8(y0, y1) > 0.0
+
+
+def test_rho8_metrics_shape_mismatch_raises() -> None:
+    """Packed-state metrics reject mismatched batch shapes."""
+    y = pack_rho8(np.eye(2, dtype=np.complex128))[None, :]
+    with pytest.raises(ValueError, match="must share shape"):
+        mean_trace_distance_rho8(y, y[:0])
+    with pytest.raises(ValueError, match="must share shape"):
+        mean_frobenius_mse_rho8(y, np.zeros((2, 8), dtype=np.float32))

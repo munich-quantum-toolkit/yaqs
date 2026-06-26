@@ -95,6 +95,9 @@ def _initial_mcwf_state_from_rho0(
         return psi
 
     if length <= 1:
+        if int(np.sum(w > 1e-12)) > 1:
+            msg = "purified init_mode requires a pure single-qubit state when length <= 1."
+            raise ValueError(msg)
         psi = np.zeros(2, dtype=np.complex128)
         for i in range(2):
             if w[i] > 1e-15:

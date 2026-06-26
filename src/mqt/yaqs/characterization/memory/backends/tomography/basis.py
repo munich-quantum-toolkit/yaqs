@@ -164,7 +164,11 @@ def assemble_fixed_basis(
     basis_t = cast("TomographyBasis", basis)
     seed_for_basis = int(basis_seed) if basis_seed is not None else None
     basis_set = get_basis_states(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
-    choi_matrices, choi_pm_pairs = get_choi_basis(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
+    choi_matrices, choi_pm_pairs = [], []
+    for p, (_, _, rho_p) in enumerate(basis_set):
+        for m, (_, _, e_m) in enumerate(basis_set):
+            choi_matrices.append(np.kron(rho_p, e_m.T))
+            choi_pm_pairs.append((p, m))
     choi_feat_table = stack_choi_features(choi_matrices)
     return basis_set, choi_matrices, choi_pm_pairs, choi_feat_table
 

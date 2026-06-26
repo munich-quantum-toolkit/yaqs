@@ -203,7 +203,8 @@ def test_transformercomb_characterize_singular_values_shape(
         n_futures=3,
         rng=np.random.default_rng(0),
     ).singular_values(2)
-    assert sv.shape == (min(4, 3 * 3),)
+    assert sv.ndim == 1
+    assert 1 <= sv.size <= min(4, 3 * 3)
 
 
 def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -219,11 +220,11 @@ def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams])
 
 def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """predict(ham, ...) is no longer supported."""
-    ham, params = ham_and_params
+    ham, _params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    with pytest.raises(TypeError):
-        mc.predict(ham, params, rho0, "haar", k=1)  # ty: ignore[invalid-argument-type, too-many-positional-arguments]
+    with pytest.raises(TypeError, match="Unsupported predict target"):
+        mc.predict(ham, rho0, "haar", k=1)
 
 
 @pytest.mark.skipif(

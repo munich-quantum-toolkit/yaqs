@@ -81,6 +81,14 @@ def test_encode_slot_unitary_dict() -> None:
     assert feat.shape == (32,)
 
 
+def test_encode_slot_rejects_non_unitary_dict() -> None:
+    """Non-unitary 2x2 matrices in dict slots raise ValueError."""
+    rng = np.random.default_rng(0)
+    bad = np.array([[1.0, 0.0], [0.0, 0.5]], dtype=np.complex128)
+    with pytest.raises(ValueError, match="unitary"):
+        encode_slot({"unitary": bad}, rng)
+
+
 def test_encode_sequence_haar_shape() -> None:
     """Haar-encoded sequences return k Choi rows."""
     rng = np.random.default_rng(2)

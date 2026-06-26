@@ -7,11 +7,9 @@
 
 """User-facing intervention specifications for memory characterization."""
 
-# ruff: noqa: PLC2701, ANN202 -- bridges internal probe/surrogate helpers
-
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -20,7 +18,7 @@ from mqt.yaqs.characterization.memory.backends.surrogates.utils import (
     sample_intervention_parts,
     sample_intervention_sequence,
 )
-from mqt.yaqs.characterization.memory.operational_memory.samples import (
+from mqt.yaqs.characterization.memory.operational_memory.samples import (  # noqa: PLC2701
     _sample_random_clifford_unitary,
     _sample_random_unitary,
     encode_unitary_choi,
@@ -68,7 +66,9 @@ def map_probe_kwargs(style: str) -> dict[str, str]:
     return {"intervention_mode": "unitary_break_mp", "unitary_ensemble": ensemble}
 
 
-def _unitary_sampler(style: InterventionStyle, _rng: np.random.Generator):
+def _unitary_sampler(
+    style: InterventionStyle, _rng: np.random.Generator
+) -> Callable[[np.random.Generator], np.ndarray]:
     """Return the unitary sampler callable for an intervention style.
 
     Args:
@@ -101,6 +101,9 @@ def encode_slot(slot: InterventionSlot, rng: np.random.Generator) -> tuple[Any, 
             msg = "dict intervention slots must contain key 'unitary'."
             raise ValueError(msg)
         u = np.asarray(slot["unitary"], dtype=np.complex128).reshape(2, 2)
+        if not np.allclose(u.conj().T @ u, np.eye(2, dtype=np.complex128), atol=1e-8):
+            msg = "dict intervention 'unitary' must be a 2x2 unitary matrix."
+            raise ValueError(msg)
         return {"type": "unitary", "U": u}, encode_unitary_choi(u)
     resolved = normalize_style(str(slot))
     if resolved == "measure_prepare":

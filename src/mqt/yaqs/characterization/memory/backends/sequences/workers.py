@@ -35,22 +35,37 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
 
 
-def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: float, duration: float) -> np.ndarray:
+def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt: float, duration: float) -> np.ndarray:
     """Return a cached time grid for a step.
 
     Args:
-        times_cache: Cache mapping ``(dt, n_steps)`` to time grids.
+        times_cache: Cache mapping ``(dt, duration)`` to time grids.
         dt: Integration step size.
         duration: Desired evolution duration.
 
     Returns:
         A 1D float array suitable for ``AnalogSimParams.times``.
+
+    Raises:
+        ValueError: If ``duration`` is not a positive integer multiple of ``dt``.
     """
-    n_steps = max(1, int(np.round(float(duration) / float(dt))))
-    key = (float(dt), int(n_steps))
+    dt_f = float(dt)
+    dur_f = float(duration)
+    if dur_f == 0.0:
+        key = (dt_f, 0.0)
+        out = times_cache.get(key)
+        if out is None:
+            out = np.array([0.0], dtype=np.float64)
+            times_cache[key] = out
+        return out
+    n_steps = int(round(dur_f / dt_f))
+    if n_steps < 1 or abs(n_steps * dt_f - dur_f) > 1e-9 * max(1.0, dur_f):
+        msg = f"duration={dur_f} must be a positive integer multiple of dt={dt_f}."
+        raise ValueError(msg)
+    key = (dt_f, dur_f)
     out = times_cache.get(key)
     if out is None:
-        out = np.linspace(0.0, float(n_steps) * float(dt), int(n_steps) + 1)
+        out = np.linspace(0.0, dur_f, n_steps + 1)
         times_cache[key] = out
     return out
 
@@ -148,6 +163,21 @@ def _comb_durations_ops_ctx(
     mcwf_static_ctx: MCWFContext | None,
     mcwf_static_ctx_list: list[list[MCWFContext | None]] | None,
 ) -> tuple[list[float], list[MPO], list[MCWFContext | None]]:
+    """Resolve per-sequence comb durations, Hamiltonians, and MCWF contexts.
+
+    Args:
+        sequence_idx: Index of the sequence being simulated.
+        k: Number of intervention steps.
+        timesteps: Default comb schedule of length ``k+1``.
+        timesteps_rows: Optional per-sequence durations, each length ``k+1``.
+        hamiltonian: Default Hamiltonian MPO for every evolution slot.
+        operators_list: Optional per-sequence MPO list of length ``k+1``.
+        mcwf_static_ctx: Shared static MCWF context when no per-slot list is given.
+        mcwf_static_ctx_list: Optional per-sequence MCWF contexts, each length ``k+1``.
+
+    Returns:
+        Tuple ``(durations, operators, mcwf_contexts)`` with one entry per comb slot.
+    """
     if timesteps_rows is not None:
         durs = [float(timesteps_rows[sequence_idx][i]) for i in range(k + 1)]
     else:
@@ -160,6 +190,35 @@ def _comb_durations_ops_ctx(
         ops.append(op)
         ctxs.append(ctx)
     return durs, ops, ctxs
+
+
+def _reshape_choi_feature_rows(raw_rows: np.ndarray, *, num_steps: int) -> np.ndarray:
+    """Validate and reshape per-sequence Choi feature rows.
+
+    Args:
+        raw_rows: Flat or matrix Choi feature storage for one sequence.
+        num_steps: Expected number of intervention steps.
+
+    Returns:
+        Float32 array of shape ``(num_steps, d_e)``.
+
+    Raises:
+        ValueError: If the row count does not match ``num_steps``.
+    """
+    rows = np.asarray(raw_rows, dtype=np.float32)
+    if rows.ndim == 1:
+        if rows.size % num_steps != 0:
+            msg = f"Choi feature rows length {rows.size} is not divisible by num_steps={num_steps}."
+            raise ValueError(msg)
+        rows = rows.reshape(num_steps, -1)
+    elif rows.ndim == 2:
+        if rows.shape[0] != num_steps:
+            msg = f"Choi feature rows must have length num_steps={num_steps}, got {rows.shape[0]}."
+            raise ValueError(msg)
+    else:
+        msg = f"Choi feature rows must be 1D or 2D, got ndim={rows.ndim}."
+        raise ValueError(msg)
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +257,7 @@ def _simulate_seq_core(
 
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
-    times_cache: dict[tuple[float, int], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
+    times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
     step_params.get_state = True
@@ -413,7 +472,7 @@ def _seq_trace_worker(
     num_steps = len(psi_pairs)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
-    times_cache: dict[tuple[float, int], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
+    times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
     step_params.get_state = True
@@ -421,7 +480,10 @@ def _seq_trace_worker(
     if per_sequence_choi_rows is None:
         msg = "Trace worker requires `e_features_rows`: per-sequence Choi feature rows."
         raise ValueError(msg)
-    choi_features_matrix = np.asarray(per_sequence_choi_rows[sequence_idx], dtype=np.float32).reshape(num_steps, -1)
+    choi_features_matrix = _reshape_choi_feature_rows(
+        per_sequence_choi_rows[sequence_idx],
+        num_steps=num_steps,
+    )
 
     durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
         sequence_idx=sequence_idx,
@@ -512,9 +574,6 @@ def _seq_trace_worker(
 
     if out_i < num_steps:
         rho_sequence_packed[out_i:, :] = last_rho_packed[None, :]
-    if choi_features_matrix.shape[0] != num_steps:
-        msg = "Choi feature rows must have length num_steps matching intervention steps."
-        raise ValueError(msg)
     return (
         sequence_idx,
         trajectory_idx,

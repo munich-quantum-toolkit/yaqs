@@ -1236,10 +1236,20 @@ def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
         mpo.from_pauli_sum(terms=[(1.0, "X0 Y2 garbage")], length=4, n_sweeps=0)
 
 
+_CRANDN_RNG = np.random.default_rng(0)
+
+
 def _crandn(shape: tuple[int, ...]) -> NDArray[np.complex128]:
-    rng = np.random.default_rng(0)
+    """Sample a complex Gaussian array with deterministic but distinct draws.
+
+    Args:
+        shape: Output array shape.
+
+    Returns:
+        Complex Gaussian samples with unit variance scaling.
+    """
     return np.asarray(
-        (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)) / np.sqrt(2),
+        (_CRANDN_RNG.standard_normal(shape) + 1j * _CRANDN_RNG.standard_normal(shape)) / np.sqrt(2),
         dtype=np.complex128,
     )
 

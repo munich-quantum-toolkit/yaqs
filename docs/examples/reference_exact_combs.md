@@ -48,7 +48,6 @@ comb_single = mc.build_comb(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
-    num_trajectories=60,
     return_type="dense",
 )
 print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
@@ -64,7 +63,6 @@ comb_mpo = mc.build_comb(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
-    num_trajectories=60,
     return_type="mpo",
     compress_every=1,
 )

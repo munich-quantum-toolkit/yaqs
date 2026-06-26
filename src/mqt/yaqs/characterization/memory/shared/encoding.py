@@ -204,7 +204,7 @@ def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
     if abs(tr) > 1e-12:
         rho_h /= tr
     else:
-        return np.zeros((2, 2), dtype=np.complex128)
+        return np.eye(2, dtype=np.complex128) * 0.5
 
     # Fast path: for near-physical outputs, avoid full PSD projection (eigh) and only do a cheap check.
     # This is conservative: any small negativity falls back to the projection path.

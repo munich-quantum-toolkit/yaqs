@@ -9,11 +9,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import numpy as np
 
-from mqt.yaqs.core.parallel_utils import merge_execution_config
+from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
 from .branch_weights import compute_analytic_weights
 from .memory_matrix import assemble_memory_matrix, compute_spectrum
@@ -78,13 +78,13 @@ def evaluate_probes_weighted_for(
     Raises:
         TypeError: If ``process`` implements neither weighted nor unweighted probing.
     """
-    if "evaluate_probes_weighted" in process.__class__.__dict__:
-        weighted = cast("OperationalMemoryBackend", process)
-        pauli_xyz_ij, weights_ij = weighted.evaluate_probes_weighted(probe_set)
+    weighted_fn = getattr(process, "evaluate_probes_weighted", None)
+    if callable(weighted_fn):
+        pauli_xyz_ij, weights_ij = weighted_fn(probe_set)
         return np.asarray(pauli_xyz_ij, dtype=np.float32), np.asarray(weights_ij, dtype=np.float64)
-    if "evaluate_probes" in process.__class__.__dict__:
-        comb = cast("CombProbeBackend", process)
-        pauli_xyz_ij = np.asarray(comb.evaluate_probes(probe_set), dtype=np.float32)
+    evaluate_fn = getattr(process, "evaluate_probes", None)
+    if callable(evaluate_fn):
+        pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float32)
         return pauli_xyz_ij, compute_analytic_weights(probe_set)
     msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
     raise TypeError(msg)
@@ -124,14 +124,12 @@ def run_operational_memory(
         Dict with ``entropy``, ``rank``, ``singular_values``, ``memory_matrix``,
         ``probe_set``, and optional ``weights_ij``.
     """
+    execution_override: ExecutionConfig | None = None
     if parallel is not None:
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if isinstance(process, ExactBackend):
-            process._execution = merge_execution_config(  # noqa: SLF001
-                process._execution,  # noqa: SLF001
-                parallel=parallel,
-            )
+            execution_override = merge_execution_config(process._execution, parallel=parallel)
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()
@@ -144,7 +142,18 @@ def run_operational_memory(
             intervention_mode=intervention_mode,
             unitary_ensemble=unitary_ensemble,
         )
-    pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, probe_set)
+    if execution_override is not None:
+        from ..backends.exact import ExactBackend  # noqa: PLC0415
+
+        if isinstance(process, ExactBackend):
+            pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(
+                probe_set,
+                _execution=execution_override,
+            )
+        else:
+            pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, probe_set)
+    else:
+        pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, probe_set)
     m_raw, memory_matrix = assemble_memory_matrix(pauli_xyz_ij, weights_ij)
     ana = compute_spectrum(memory_matrix)
     out: dict[str, Any] = {

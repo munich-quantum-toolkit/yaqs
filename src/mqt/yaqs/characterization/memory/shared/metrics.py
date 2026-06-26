@@ -60,7 +60,9 @@ def mean_trace_distance_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> flo
     Returns:
         Mean trace distance over the batch.
     """
-    assert pred_rho8.shape == tgt_rho8.shape
+    if pred_rho8.shape != tgt_rho8.shape:
+        msg = f"pred_rho8 and tgt_rho8 must share shape, got {pred_rho8.shape} vs {tgt_rho8.shape}."
+        raise ValueError(msg)
     tds: list[float] = []
     for i in range(pred_rho8.shape[0]):
         rp = unpack_rho8(pred_rho8[i])
@@ -79,7 +81,9 @@ def mean_frobenius_mse_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> floa
     Returns:
         Mean squared Frobenius error (Hilbert-Schmidt squared norm) over the batch.
     """
-    assert pred_rho8.shape == tgt_rho8.shape
+    if pred_rho8.shape != tgt_rho8.shape:
+        msg = f"pred_rho8 and tgt_rho8 must share shape, got {pred_rho8.shape} vs {tgt_rho8.shape}."
+        raise ValueError(msg)
     diffs: list[float] = []
     for i in range(pred_rho8.shape[0]):
         rp = unpack_rho8(pred_rho8[i])

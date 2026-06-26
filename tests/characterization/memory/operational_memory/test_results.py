@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import compute_spectrum
 from mqt.yaqs.characterization.memory.operational_memory.results import (
     merge_cut_results,
     pack_result,
@@ -98,6 +99,26 @@ def test_entropy_requires_cut_when_multiple_stored() -> None:
     })
     with pytest.raises(ValueError, match="cut is required"):
         merged.entropy()
+
+
+def test_parse_cut_result_stores_truncated_singular_values() -> None:
+    """parse_cut_result exposes the truncated spectrum used for entropy/rank."""
+    full = np.array([10.0, 5.0, 1e-6, 1e-8], dtype=np.float64)
+    m = np.diag(full)
+    out = compute_spectrum(m, discarded_weight_threshold=1e-4)
+    packed = parse_cut_result(
+        {
+            "entropy": out["entropy"],
+            "rank": out["rank"],
+            "singular_values": out["singular_values"],
+            "singular_values_full": out["singular_values_full"],
+            "memory_matrix": m,
+        },
+        cut=1,
+    )
+    assert packed.singular_values.size == out["singular_values"].size
+    assert packed.singular_values.size < full.size
+    np.testing.assert_allclose(packed.singular_values, out["singular_values"])
 
 
 def test_characterize_multiple_cuts_smoke() -> None:

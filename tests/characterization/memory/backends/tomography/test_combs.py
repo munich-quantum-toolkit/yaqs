@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb
+from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb, compute_entropy_dense
 from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData
 from mqt.yaqs.core.data_structures.mpo import MPO
 
@@ -34,6 +34,27 @@ def test_densecomb_predict_matches_helper() -> None:
     rho = comb.predict([id_map])
     np.testing.assert_allclose(np.trace(rho), 1.0, atol=1e-12)
     np.testing.assert_allclose(rho, rho_raw / np.trace(rho_raw), atol=1e-12)
+
+
+def test_densecomb_predict_raises_on_length_mismatch() -> None:
+    """DenseComb.predict rejects intervention lists whose length mismatches k."""
+    ups = np.eye(2 * 4, dtype=np.complex128)
+    comb = DenseComb(ups, [0.1])
+
+    def id_map(rho: np.ndarray) -> np.ndarray:
+        return rho
+
+    with pytest.raises(ValueError, match="DenseComb expects"):
+        comb.predict([id_map, id_map])
+
+
+def test_compute_entropy_dense_rejects_invalid_base() -> None:
+    """Entropy helpers reject non-positive bases and base equal to 1."""
+    rho = np.eye(2, dtype=np.complex128) * 0.5
+    with pytest.raises(ValueError, match="entropy base"):
+        compute_entropy_dense(rho, base=1)
+    with pytest.raises(ValueError, match="entropy base"):
+        compute_entropy_dense(rho, base=0)
 
 
 def test_mpocomb_matrix_matches_dense() -> None:

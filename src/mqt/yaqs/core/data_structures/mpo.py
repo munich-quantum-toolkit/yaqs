@@ -145,11 +145,7 @@ class MPO:
             raise ValueError(msg)
 
         tensor_phys = tensor.reshape(d2, dim_left * dim_right)
-        if left_action:
-            tensor_new = op_mat @ tensor_phys
-        else:
-            tensor_new = tensor_phys.T @ op_mat
-            tensor_new = tensor_new.T
+        tensor_new = op_mat @ tensor_phys if left_action else tensor_phys @ op_mat
         self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
 
     def partial_trace_site(self, site: int) -> None:
@@ -1941,23 +1937,33 @@ class MPO:
         new_tensors: list[np.ndarray] = []
 
         length = self.length
-        for i in range(length):
-            a = self.tensors[i]
-            b = other.tensors[i]
-
+        if length == 1:
+            a = self.tensors[0]
+            b = other.tensors[0]
             p_out, p_in, la, ra = a.shape
             _, _, lb, rb = b.shape
-
-            if i == 0:
-                new_t = np.concatenate([a, b], axis=3)
-            elif i == length - 1:
-                new_t = np.concatenate([a, b], axis=2)
-            else:
-                new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
-                new_t[:, :, :la, :ra] = a
-                new_t[:, :, la:, ra:] = b
-
+            new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+            new_t[:, :, :la, :ra] = a
+            new_t[:, :, la:, ra:] = b
             new_tensors.append(new_t)
+        else:
+            for i in range(length):
+                a = self.tensors[i]
+                b = other.tensors[i]
+
+                p_out, p_in, la, ra = a.shape
+                _, _, lb, rb = b.shape
+
+                if i == 0:
+                    new_t = np.concatenate([a, b], axis=3)
+                elif i == length - 1:
+                    new_t = np.concatenate([a, b], axis=2)
+                else:
+                    new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+                    new_t[:, :, :la, :ra] = a
+                    new_t[:, :, la:, ra:] = b
+
+                new_tensors.append(new_t)
 
         new_mpo.tensors = new_tensors
         return new_mpo

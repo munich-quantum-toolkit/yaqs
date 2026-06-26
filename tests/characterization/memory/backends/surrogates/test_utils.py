@@ -70,10 +70,13 @@ def test_initial_mcwf_state_from_rho0_eigenstate_return_eig_sample() -> None:
     np.testing.assert_allclose(np.linalg.norm(psi), 1.0, atol=1e-12)
 
 
-def test_initial_mcwf_state_from_rho0_purified_length1_returns_state() -> None:
-    """Purified mode returns a normalized state vector on a single site."""
+def test_initial_mcwf_state_from_rho0_purified_length1_requires_pure_state() -> None:
+    """Purified mode rejects mixed single-qubit inputs."""
     rho = np.array([[0.5, 0.0], [0.0, 0.5]], dtype=np.complex128)
-    psi_out = _initial_mcwf_state_from_rho0(rho, length=1, init_mode="purified")
+    with pytest.raises(ValueError, match="purified init_mode requires a pure"):
+        _initial_mcwf_state_from_rho0(rho, length=1, init_mode="purified")
+    rho_pure = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    psi_out = _initial_mcwf_state_from_rho0(rho_pure, length=1, init_mode="purified")
     assert isinstance(psi_out, np.ndarray)
     psi = psi_out
     assert psi.shape == (2,)

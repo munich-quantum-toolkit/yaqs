@@ -165,6 +165,9 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     Returns:
         Von Neumann entropy in the given base.
     """
+    if base <= 1:
+        msg = f"entropy base must be > 1, got {base!r}."
+        raise ValueError(msg)
     log_base = np.log(base)
     rho_herm = 0.5 * (r + r.conj().T)
     tr = np.trace(rho_herm)
@@ -307,7 +310,16 @@ class DenseComb:
 
         Returns:
             Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+
+        Raises:
+            ValueError: If the number of interventions does not match the comb length.
         """
+        k_steps = self._k_steps()
+        if len(interventions) != k_steps:
+            msg = (
+                f"DenseComb expects {k_steps} interventions for k={k_steps}, got {len(interventions)}."
+            )
+            raise ValueError(msg)
         rho = self._predict_raw(interventions)
 
         # Hermitize

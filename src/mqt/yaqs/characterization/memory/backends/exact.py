@@ -22,6 +22,7 @@ from ..shared.utils import StochasticSolver, make_mcwf_static_context
 from .sequences.workflow import simulate_sequences
 
 if TYPE_CHECKING:
+    from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -102,14 +103,16 @@ class ExactBackend:
         probe_set: ProbeSet,
         *,
         psi_pairs_list: list[list[Any]] | None = None,
+        _execution: ExecutionConfig | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate weighted probe responses via traced simulation.
 
         Args:
             probe_set: Sampled split-cut probes.
-            psi_pairs_list: Optional pre-built sequence grid.
+        psi_pairs_list: Optional pre-built sequence grid.
+        static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
-        Returns:
+    Returns:
             Tuple ``(pauli_xyz_ij, weights_ij)``.
         """
         pauli_xyz, weights_ij, _traces = simulate_exact(
@@ -117,11 +120,12 @@ class ExactBackend:
             operator=self.operator,
             sim_params=self.sim_params,
             initial_psi=self.initial_psi,
-            parallel=self._execution.parallel,
-            show_progress=self._execution.show_progress,
+            parallel=(exec_cfg := _execution or self._execution).parallel,
+            show_progress=exec_cfg.show_progress,
             solver=self._solver,
-            _execution=self._execution,
+            _execution=exec_cfg,
             psi_pairs_list=psi_pairs_list,
+            static_ctx=self._static_ctx,
         )
         return pauli_xyz, weights_ij
 
@@ -149,6 +153,7 @@ def simulate_exact(
     solver: str | None = None,
     _execution: ExecutionConfig | None = None,
     psi_pairs_list: list[list[Any]] | None = None,
+    static_ctx: MCWFContext | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
     r"""Exact simulation with per-sequence diagnostics (branch weights, early termination).
 
@@ -161,6 +166,7 @@ def simulate_exact(
         show_progress: Whether to show a progress bar.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         psi_pairs_list: Optional pre-built sequence grid (experiment geometries).
+        static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
     Returns:
         ``(pauli_ij, weights_ij, traces_flat)`` where ``pauli_ij`` has shape
@@ -175,7 +181,8 @@ def simulate_exact(
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
     resolved_solver: StochasticSolver = "MCWF" if solver is None else solver  # ty: ignore[invalid-assignment]
-    static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None) if resolved_solver == "MCWF" else None
+    if static_ctx is None and resolved_solver == "MCWF":
+        static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
     result = simulate_sequences(
         operator=operator,
         sim_params=sim_params,

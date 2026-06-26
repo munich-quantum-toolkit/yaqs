@@ -177,7 +177,8 @@ def assemble_upsilon(
 
     num_steps = out_vecs.ndim - 1
     if num_steps == 0:
-        return out_vecs.reshape(2, 2)
+        w = float(np.asarray(seq_weights).reshape(-1)[0])
+        return w * out_vecs.reshape(2, 2)
 
     dim_past = 4**num_steps
     dim_total = 2 * dim_past

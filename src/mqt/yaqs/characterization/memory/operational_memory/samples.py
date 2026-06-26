@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..backends.surrogates.utils import sample_intervention_parts
+from ..backends.surrogates.utils import encode_choi_features, sample_intervention_parts
 from ..shared.encoding import _flatten_choi4
 
 if TYPE_CHECKING:
@@ -169,8 +169,9 @@ def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     Returns:
         Tuple ``(choi_features, psi_meas)``.
     """
-    _rho_prep, effect, feat = sample_intervention_parts(rng)
+    _rho_prep, effect, _feat = sample_intervention_parts(rng)
     psi_meas = extract_ket(effect)
+    feat = encode_choi_features(np.eye(2, dtype=np.complex128) * 0.5, effect)
     return feat.astype(np.float32), psi_meas
 
 
@@ -183,8 +184,9 @@ def _sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     Returns:
         Tuple ``(choi_features, psi_prep)``.
     """
-    rho_prep, _effect, feat = sample_intervention_parts(rng)
+    rho_prep, _effect, _feat = sample_intervention_parts(rng)
     psi_prep = extract_ket(rho_prep)
+    feat = encode_choi_features(rho_prep, np.eye(2, dtype=np.complex128))
     return feat.astype(np.float32), psi_prep
 
 

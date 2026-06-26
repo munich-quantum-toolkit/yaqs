@@ -87,6 +87,14 @@ def test_compute_spectrum_tail_truncation_reduces_entropy() -> None:
     assert truncated["entropy"] <= full["entropy"]
 
 
+def test_compute_spectrum_tail_truncation_keeps_threshold_mode() -> None:
+    """Tail truncation retains modes up to the last one exceeding the weight threshold."""
+    m = np.diag(np.array([10.0, 5.0, 1e-6, 1e-8], dtype=np.float64))
+    out = compute_spectrum(m, discarded_weight_threshold=1e-4)
+    assert out["singular_values"].size == 2
+    np.testing.assert_allclose(out["singular_values"], np.array([10.0, 5.0]))
+
+
 def test_compute_spectrum_rank_equals_exp_entropy() -> None:
     """analyze_memory_matrix reports R(c)=exp(S_V(c))."""
     m = np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]], dtype=np.float64)

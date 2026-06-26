@@ -19,8 +19,12 @@ import pytest
 
 from mqt.yaqs.core import parallel_utils
 from mqt.yaqs.core.parallel_utils import (
+    ExecutionConfig,
+    call_serial_capped,
     get_parallel_context,
+    merge_execution_config,
     resolve_worker_ctx,
+    run_indexed_jobs,
     unpack_flat_job,
     worker_init,
 )
@@ -28,18 +32,22 @@ from mqt.yaqs.simulator import available_cpus as simulator_available_cpus
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without SLURM env vars, ``available_cpus`` falls back to ``cpu_count``."""
-    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    """Without overrides, ``available_cpus`` falls back to affinity or ``cpu_count``."""
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: set(range(4)), raising=False)
 
-    assert parallel_utils.available_cpus() == multiprocessing.cpu_count()
+    assert parallel_utils.available_cpus() == 4
 
 
 def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``SLURM_CPUS_ON_NODE`` is honoured when set."""
-    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    """``SLURM_CPUS_ON_NODE`` is honoured when higher-priority overrides are absent."""
     monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
 
     assert parallel_utils.available_cpus() == 8
 
@@ -136,3 +144,44 @@ def test_get_parallel_context_explicit_fork_and_spawn() -> None:
     else:
         fork_ctx = get_parallel_context("fork")
         assert fork_ctx.get_start_method() == "fork"
+
+
+def test_merge_execution_config_applies_overrides() -> None:
+    """merge_execution_config overlays parallel and worker settings."""
+    base = ExecutionConfig(parallel=True, max_workers=3, show_progress=True)
+    merged = merge_execution_config(base, parallel=False, max_workers=2, show_progress=False)
+    assert merged.parallel is False
+    assert merged.max_workers == 2
+    assert merged.show_progress is False
+
+
+def test_call_serial_capped_preserves_order() -> None:
+    """Serial capped execution returns the worker result in-process."""
+    seen: list[int] = []
+
+    def worker(x: int) -> int:
+        seen.append(x)
+        return x * 2
+
+    assert call_serial_capped(worker, 3) == 6
+    assert seen == [3]
+
+
+def test_run_indexed_jobs_serial_ordering() -> None:
+    """Serial run_indexed_jobs executes every index and preserves results."""
+    calls: list[int] = []
+
+    def worker(job_idx: int, payload: dict[str, int]) -> int:
+        calls.append(job_idx)
+        return job_idx + payload["offset"]
+
+    config = ExecutionConfig(parallel=False, show_progress=False)
+    results = run_indexed_jobs(
+        worker,
+        payload={"offset": 10},
+        n_jobs=4,
+        config=config,
+        desc="test",
+    )
+    assert calls == [0, 1, 2, 3]
+    assert results == {i: i + 10 for i in range(4)}

@@ -37,7 +37,7 @@ result.singular_values(c)  # spectrum of Ṽ(c)
 result.rank(c)  # R(c) = exp(S_V(c))
 ```
 
-### Break weights :math:`w_{\alpha,m}`
+## Break weights :math:`w_{\alpha,m}`
 
 | Backend              | How `weights_ij` are obtained                                                                                                       |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,7 +69,6 @@ comb_dense = mc.build_comb(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
-    num_trajectories=60,
     return_type="dense",
 )
 
@@ -77,7 +76,6 @@ comb_mpo = mc.build_comb(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
-    num_trajectories=60,
     return_type="mpo",
     compress_every=1,
 )
@@ -194,7 +192,6 @@ for jv in js:
         ham_j,
         AnalogSimParams(dt=0.1, max_bond_dim=8, order=1),
         timesteps=[0.1, 0.1],
-        num_trajectories=40,
         return_type="dense",
     )
     for cut in cuts:

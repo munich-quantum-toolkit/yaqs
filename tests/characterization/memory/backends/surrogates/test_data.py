@@ -61,3 +61,23 @@ def test_stack_traces_appends_context_to_features() -> None:
     assert e_features.shape == (1, 2, 32 + 5)
     assert rho_seq.shape == (1, 2, 8)
     assert ctx is None
+
+
+def test_stack_traces_rejects_mixed_context_samples() -> None:
+    """Context must be present for all samples or for none."""
+    base = SeqTrace(
+        rho_0=np.zeros(8, dtype=np.float32),
+        E_features=np.zeros((2, 32), dtype=np.float32),
+        rho_seq=np.zeros((2, 8), dtype=np.float32),
+        context=None,
+        weight=1.0,
+    )
+    with_ctx = SeqTrace(
+        rho_0=np.zeros(8, dtype=np.float32),
+        E_features=np.zeros((2, 32), dtype=np.float32),
+        rho_seq=np.zeros((2, 8), dtype=np.float32),
+        context=np.ones(3, dtype=np.float32),
+        weight=1.0,
+    )
+    with pytest.raises(ValueError, match="context must be present for all samples"):
+        stack_traces([base, with_ctx])

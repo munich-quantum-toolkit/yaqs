@@ -15,12 +15,36 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
+    _get_times_cached,
+    _reshape_choi_feature_rows,
     _validate_comb_sequence_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
 from mqt.yaqs.characterization.memory.shared.utils import make_mcwf_static_context
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+
+def test_get_times_cached_zero_and_distinct_durations() -> None:
+    """Duration-based cache keys distinguish zero-length and non-aligned segments."""
+    cache: dict[tuple[float, float], np.ndarray] = {}
+    zero = _get_times_cached(cache, dt=0.1, duration=0.0)
+    np.testing.assert_allclose(zero, np.array([0.0]))
+    short = _get_times_cached(cache, dt=0.1, duration=0.1)
+    long = _get_times_cached(cache, dt=0.1, duration=0.2)
+    assert short[-1] == pytest.approx(0.1)
+    assert long[-1] == pytest.approx(0.2)
+    assert len(cache) == 3
+    with pytest.raises(ValueError, match="integer multiple"):
+        _get_times_cached(cache, dt=0.1, duration=0.15)
+
+
+def test_reshape_choi_feature_rows_rejects_malformed_inputs() -> None:
+    """Malformed Choi feature storage raises before silent reshaping."""
+    with pytest.raises(ValueError, match="divisible"):
+        _reshape_choi_feature_rows(np.arange(5, dtype=np.float32), num_steps=2)
+    with pytest.raises(ValueError, match="num_steps"):
+        _reshape_choi_feature_rows(np.ones((3, 4), dtype=np.float32), num_steps=2)
 
 
 def test_validate_comb_sequence_inputs_timesteps_length() -> None:

@@ -34,6 +34,14 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
 def _product_initial_state(length: int) -> np.ndarray:
+    """Build |0...0> as a length-``2**length`` state vector.
+
+    Args:
+        length: Number of qubits in the product state.
+
+    Returns:
+        Normalized computational-basis state vector.
+    """
     psi = np.zeros(2**length, dtype=np.complex128)
     psi[0] = 1.0 + 0.0j
     return psi
@@ -108,6 +116,17 @@ def _sample_split_delayed_break_probes(
 
 
 def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
+    """Build a tiny ProbeSet with empty unitary legs and |0> cut kets.
+
+    Args:
+        cut: Causal cut index.
+        k: Intervention sequence length.
+        n_p: Number of past probe rows.
+        n_f: Number of future probe rows.
+
+    Returns:
+        Probe set suitable for ExactBackend smoke tests.
+    """
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     return ProbeSet(
         cut=cut,

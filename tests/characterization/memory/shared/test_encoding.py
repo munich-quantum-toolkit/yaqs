@@ -96,6 +96,13 @@ def test_rho_to_pauli_xyz_standard_bloch_states(psi: np.ndarray, expected_xyz: n
     np.testing.assert_allclose(xyz, expected_xyz, atol=1e-10, rtol=0.0)
 
 
+def test_normalize_backend_rho_zero_trace_returns_maximally_mixed() -> None:
+    """Near-zero trace inputs fall back to a valid I/2 density matrix."""
+    rho = normalize_backend_rho(np.zeros((2, 2), dtype=np.complex128))
+    np.testing.assert_allclose(rho, 0.5 * np.eye(2, dtype=np.complex128), atol=1e-12)
+    np.testing.assert_allclose(np.trace(rho).real, 1.0, atol=1e-12)
+
+
 def test_packed_rho8_pauli_batch_shape_and_identity() -> None:
     """rho8 batch maps to (I,X,Y,Z) with I≈1 for normalized states."""
     packed = np.random.default_rng(1).standard_normal((3, 8)).astype(np.float32)

@@ -110,12 +110,12 @@ For `predict`, pass the same style string as the third argument, or an explicit 
 ---
 tags: [remove-output]
 ---
-comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense", num_trajectories=20)
+comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense")
 rho_ref = mc.predict(comb, rho0, "haar", k=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
-`rho0` is accepted for API symmetry but **not used** — the comb contracts from the tomographic reference state.
+`rho0` is accepted for API symmetry but **not used** — the comb contracts from the tomographic reference state. In the noiseless path, `num_trajectories` is ignored (set `noise_model` to enable stochastic trajectories).
 
 ## Characterize with a Hamiltonian
 

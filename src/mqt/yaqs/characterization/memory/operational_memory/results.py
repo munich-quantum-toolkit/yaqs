@@ -175,7 +175,7 @@ def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
         cut=int(cut),
         entropy=float(out["entropy"]),
         rank=float(out["rank"]),
-        singular_values=np.asarray(out.get("singular_values_full", out["singular_values"])),
+        singular_values=np.asarray(out["singular_values"]),
         memory_matrix=np.asarray(memory_matrix),
         probe_set=out.get("probe_set"),
     )

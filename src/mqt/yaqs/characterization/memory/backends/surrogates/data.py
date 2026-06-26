@@ -67,7 +67,7 @@ def stack_traces(
         - ``context`` has shape ``(N, d_ctx)`` or ``None``
 
     Raises:
-        ValueError: If ``samples`` is empty.
+        ValueError: If ``samples`` is empty or context fields are mixed.
     """
     if not samples:
         msg = "stack_traces requires at least one SeqTrace."
@@ -76,7 +76,11 @@ def stack_traces(
     e_features = np.stack([s.E_features for s in samples], axis=0).astype(np.float32)
     rho_seq = np.stack([s.rho_seq for s in samples], axis=0).astype(np.float32)
     ctx = None
-    if samples[0].context is not None:
+    has_context = [s.context is not None for s in samples]
+    if any(has_context) and not all(has_context):
+        msg = "SeqTrace.context must be present for all samples or for none."
+        raise ValueError(msg)
+    if all(has_context):
         ctx = np.stack([cast("np.ndarray", s.context) for s in samples], axis=0).astype(np.float32)
     if append_context_to_features and ctx is not None:
         k = e_features.shape[1]

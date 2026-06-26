@@ -27,6 +27,14 @@ _Z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
 def _trace_final_weight(trace: dict[str, object]) -> float:
+    """Read ``cumulative_weight_final`` from a traced rollout dict.
+
+    Args:
+        trace: Per-sequence trace payload from :func:`simulate_exact`.
+
+    Returns:
+        Final cumulative branch weight as a float.
+    """
     val = trace["cumulative_weight_final"]
     if not isinstance(val, (int, float)):
         msg = "cumulative_weight_final must be numeric"
@@ -41,6 +49,11 @@ def _cumulative_weights_from_traces(
     n_futures: int,
 ) -> np.ndarray:
     """Mirror experiments/_benchmark_memory.py cumulative_weight_final weighting.
+
+    Args:
+        traces: Flat list of per-(past, future) trace dicts from :func:`simulate_exact`.
+        n_pasts: Number of past probe rows.
+        n_futures: Number of future probe columns.
 
     Returns:
         Branch-weight matrix of shape ``(n_pasts, n_futures)``.

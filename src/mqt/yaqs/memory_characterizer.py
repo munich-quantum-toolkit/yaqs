@@ -580,7 +580,8 @@ class MemoryCharacterizer:
 
         Raises:
             TypeError: If a Hamiltonian is given without ``sim_params``.
-            ValueError: If ``k`` is missing for a Hamiltonian target.
+            ValueError: If ``k`` is missing for a Hamiltonian target, both ``cut`` and
+                ``cuts`` are given, or ``probe_set`` is reused across multiple cuts.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
@@ -609,6 +610,9 @@ class MemoryCharacterizer:
 
         resolved_k = _resolve_k(target, k)
         cut_list = self._resolve_cut_list(resolved_k, cut=cut, cuts=cuts)
+        if resolved_probe_set is not None and len(cut_list) > 1:
+            msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
+            raise ValueError(msg)
         if len(cut_list) == 1:
             return self._characterize_target(
                 target,
@@ -652,7 +656,13 @@ class MemoryCharacterizer:
 
         Returns:
             Sorted list of cut indices to evaluate.
+
+        Raises:
+            ValueError: If both ``cut`` and ``cuts`` are provided.
         """
+        if cuts is not None and cut is not None:
+            msg = "Specify only one of cut=... or cuts=..., not both."
+            raise ValueError(msg)
         if cuts is not None:
             return list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
         if cut is not None:
@@ -712,11 +722,17 @@ class MemoryCharacterizer:
         Returns:
             Single- or multi-cut
             :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
+
+        Raises:
+            ValueError: If ``probe_set`` is given for a multi-cut request.
         """
         from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
 
         operator = _require_hamiltonian(hamiltonian)
         cut_list = MemoryCharacterizer._resolve_cut_list(int(k), cut=cut, cuts=cuts)
+        if probe_set is not None and len(cut_list) > 1:
+            msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
+            raise ValueError(msg)
         psi0 = (
             np.asarray(initial_psi, dtype=np.complex128)
             if initial_psi is not None
@@ -782,12 +798,19 @@ class MemoryCharacterizer:
 
         Returns:
             Final (or full) site-0 reduced density matrix.
+
+        Raises:
+            ValueError: If ``return_sequence=True`` for a comb target.
+            TypeError: If ``target`` does not support surrogate-style prediction.
         """
         local_rng = rng if rng is not None else np.random.default_rng()
         rho_mat = coerce_rho_matrix(rho0)
         seq = sequence
 
         if matches_comb(target):
+            if return_sequence:
+                msg = "return_sequence=True is not supported for comb targets."
+                raise ValueError(msg)
             resolved_k = _resolve_k(target, k)
             if isinstance(seq, str):
                 from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_sequence
@@ -801,9 +824,13 @@ class MemoryCharacterizer:
             return np.asarray(rho_out, dtype=np.complex128)
 
         resolved_k = _resolve_k(target, k)
+        predict_fn = getattr(target, "predict", None)
+        if not callable(predict_fn):
+            msg = f"Unsupported predict target type: {type(target).__name__}"
+            raise TypeError(msg)
         _steps, e_features = encode_sequence(seq, k=resolved_k, rng=local_rng)
         packed0 = pack_rho8(normalize_backend_rho(rho_mat)).astype(np.float32)
-        pred = target.predict(
+        pred = predict_fn(
             e_features[np.newaxis, ...],
             packed0[np.newaxis, ...],
             return_numpy=True,

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.grid import (
     assemble_probe_grid,
@@ -38,3 +39,22 @@ def test_assemble_probe_grid_size() -> None:
     assert n_f == n_futures
     assert len(all_pairs) == n_pasts * n_futures
     assert all(len(seq) == k for seq in all_pairs)
+
+
+def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
+    """Direct callers get a length-k invariant check."""
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
+
+    probe_set = ProbeSet(
+        cut=1,
+        k=3,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=np.zeros((1, 3, 32), dtype=np.float32),
+        past_pairs=[[]],
+        past_cut_meas=[z],
+        future_prep_cut=[z],
+        future_pairs=[[{"type": "unitary", "U": np.eye(2, dtype=np.complex128)}]],
+    )
+    with pytest.raises((ValueError, IndexError)):
+        assemble_probe_sequence(probe_set, i=0, j=0)

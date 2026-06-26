@@ -53,9 +53,8 @@ from ...shared.utils import (
 )
 from .basis import (
     _finalize_sequence_averages,
+    assemble_fixed_basis,
     compute_dual_choi_basis,
-    get_basis_states,
-    get_choi_basis,
 )
 from .data import SequenceData
 
@@ -181,8 +180,9 @@ def run_all_sequences(
     local_params.get_state = True
     stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)
 
-    basis_set = get_basis_states(basis=basis, seed=basis_seed)
-    choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
+    from .basis import assemble_fixed_basis
+
+    basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
 
     k = len(timesteps)

@@ -155,7 +155,7 @@ def compute_spectrum(
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
         tail_cumsum = np.cumsum(s_full[::-1] ** 2)
         keep = s_full.size
-        for idx, tail_weight in enumerate(tail_cumsum, start=1):
+        for idx, tail_weight in enumerate(tail_cumsum):
             if float(tail_weight / total_weight) > the:
                 keep = max(s_full.size - idx, min_keep_eff)
                 break

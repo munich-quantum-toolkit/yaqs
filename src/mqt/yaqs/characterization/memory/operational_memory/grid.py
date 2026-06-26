@@ -31,6 +31,9 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     full: list[Any] = [probe_set.past_pairs[i][t] for t in range(c - 1)]
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
     full.extend(probe_set.future_pairs[j][t] for t in range(kk - c))
+    if len(full) != kk:
+        msg = f"assembled probe sequence length {len(full)} != k={kk}"
+        raise ValueError(msg)
     return full
 
 

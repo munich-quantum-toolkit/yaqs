@@ -84,8 +84,9 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 **Before:**
 
 ```python
-from mqt.yaqs import construct_process_tensor, create_surrogate
+from mqt.yaqs import AnalogSimParams, Hamiltonian, construct_process_tensor, create_surrogate
 
+params = AnalogSimParams(dt=0.1)
 op = Hamiltonian.ising(2, J=1.0, g=0.5).mpo
 comb = construct_process_tensor(op, params, timesteps=[0.1, 0.1], return_type="dense")
 model = create_surrogate(op, params, k=4, n=80)
@@ -94,8 +95,9 @@ model = create_surrogate(op, params, k=4, n=80)
 **After:**
 
 ```python
-from mqt.yaqs import MemoryCharacterizer, characterize_memory
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
+params = AnalogSimParams(dt=0.1)
 ham = Hamiltonian.ising(2, J=1.0, g=0.5)
 mc = MemoryCharacterizer(parallel=True)
 

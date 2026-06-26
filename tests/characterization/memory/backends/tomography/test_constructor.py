@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
@@ -22,7 +24,7 @@ def test_build_process_tensor_invalid_return_type_raises() -> None:
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     with pytest.raises(ValueError, match="Unknown return_type"):
-        build_process_tensor(op, params, timesteps=[0.0], return_type="nope")  # ty: ignore[invalid-argument-type]
+        build_process_tensor(op, params, timesteps=[0.0], return_type=cast(Any, "nope"))
 
 
 def test_build_comb_returns_dense_and_mpo_smoke() -> None:
