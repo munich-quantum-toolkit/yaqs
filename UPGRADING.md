@@ -54,7 +54,7 @@ params = AnalogSimParams(
     svd_threshold=1e-8,
 )
 
-sim = Simulator(show_progress=False)
+sim = Simulator()
 result = sim.run(psi, H, params, noise_model)
 print(result.expectation_values[0])
 print(result.max_bond)  # bond diagnostics; no longer an Observable
