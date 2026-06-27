@@ -42,6 +42,14 @@ def test_build_comb_returns_dense_and_mpo_smoke() -> None:
     np.testing.assert_allclose(mat, dense.to_matrix(), atol=1e-8)
 
 
+def test_build_process_tensor_rejects_k_zero() -> None:
+    """Zero-step tomography is rejected before sequence enumeration."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    with pytest.raises(ValueError, match="No sequences for k=0"):
+        build_process_tensor(op, params, timesteps=[])
+
+
 def test_build_comb_parallel_smoke() -> None:
     """build_comb runs with parallel execution enabled."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)

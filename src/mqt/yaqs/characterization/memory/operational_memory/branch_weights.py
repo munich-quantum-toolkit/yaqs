@@ -84,12 +84,17 @@ def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
             u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
             out = u @ r @ u.conj().T
         elif step_type == "measure_only":
-            z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
             prob = compute_born_prob(r, psi_meas)
-            ket = psi_reset / max(float(np.linalg.norm(psi_reset)), 1e-15)
-            out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
+            if prob > 1e-15:
+                if "psi_reset" in step:
+                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+                    ket = psi_reset / max(float(np.linalg.norm(psi_reset)), 1e-15)
+                else:
+                    ket = psi_meas / max(float(np.linalg.norm(psi_meas)), 1e-15)
+                out = np.outer(ket, ket.conj())
+            else:
+                out = np.zeros((2, 2), dtype=np.complex128)
         elif step_type == "prepare_only":
             psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
             ket = psi_prep / max(float(np.linalg.norm(psi_prep)), 1e-15)

@@ -27,13 +27,15 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         Intervention sequence of length ``probe_set.k``.
 
     Raises:
-        ValueError: If past/future branch lengths are inconsistent or the assembled
-            sequence length does not equal ``probe_set.k``.
+        ValueError: If past/future branch lengths, cut-branch array sizes, or the assembled
+            sequence length do not match ``probe_set`` metadata.
     """
     c = int(probe_set.cut)
     kk = int(probe_set.k)
     past_len = c - 1
     future_len = kk - c
+    n_p = len(probe_set.past_pairs)
+    n_f = len(probe_set.future_pairs)
     past_pairs = probe_set.past_pairs[i]
     future_pairs = probe_set.future_pairs[j]
     if len(past_pairs) != past_len:
@@ -41,6 +43,12 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         raise ValueError(msg)
     if len(future_pairs) != future_len:
         msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
+        raise ValueError(msg)
+    if len(probe_set.past_cut_meas) != n_p:
+        msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_p}"
+        raise ValueError(msg)
+    if len(probe_set.future_prep_cut) != n_f:
+        msg = f"future_prep_cut length {len(probe_set.future_prep_cut)} != n_futures={n_f}"
         raise ValueError(msg)
     full: list[Any] = list(past_pairs)
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))

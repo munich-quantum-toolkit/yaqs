@@ -73,3 +73,21 @@ def test_assemble_probe_sequence_rejects_short_past_branch() -> None:
     )
     with pytest.raises(ValueError, match="past_pairs\\[0\\] length 1 != cut-1=2"):
         assemble_probe_sequence(probe_set, i=0, j=0)
+
+
+def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
+    """Malformed cut-branch arrays raise ValueError instead of IndexError."""
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    u = np.eye(2, dtype=np.complex128)
+    probe_set = ProbeSet(
+        cut=2,
+        k=2,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=np.zeros((1, 1, 32), dtype=np.float32),
+        past_pairs=[[{"type": "unitary", "U": u}]],
+        past_cut_meas=[z],
+        future_prep_cut=[z, z],
+        future_pairs=[[]],
+    )
+    with pytest.raises(ValueError, match="future_prep_cut length 2 != n_futures=1"):
+        assemble_probe_sequence(probe_set, i=0, j=0)

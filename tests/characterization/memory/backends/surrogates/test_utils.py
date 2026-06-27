@@ -114,6 +114,9 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
     assert isinstance(psi_pur_sample_out, tuple)
     psi_pur_sample, idx_p, p_p = psi_pur_sample_out
     assert psi_pur_sample.shape == (2**3,)
-    assert 0 <= idx_p < 2**3
-    assert 0.0 <= p_p <= 1.0
+    w, _v = np.linalg.eigh(0.5 * (rho + rho.conj().T))
+    w = np.maximum(w.real, 0.0)
+    w /= float(w.sum())
+    assert idx_p in {0, 1}
+    assert p_p == pytest.approx(float(w[idx_p]))
     np.testing.assert_allclose(np.linalg.norm(psi_pur_sample), 1.0, atol=1e-12)

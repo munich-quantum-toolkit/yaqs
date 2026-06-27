@@ -78,7 +78,8 @@ def simulate_sequences(
         operators_list: Optional per-sequence Hamiltonians, length ``k+1`` per sequence.
         static_ctx_list: Optional per-sequence MCWF contexts, length ``k+1`` per sequence.
         context_vec: Optional static context vector attached to each trace when
-            ``record_step_states=True`` (ignored otherwise).
+            ``record_step_states=True``. Raises :class:`ValueError` when set while
+            ``record_step_states=False``.
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
@@ -98,6 +99,13 @@ def simulate_sequences(
     if len(psi_pairs_list) != num_sequences:
         msg = "psi_pairs_list and initial_psis must have equal length."
         raise ValueError(msg)
+
+    if num_sequences == 0:
+        if traced:
+            return np.zeros((0, 8), dtype=np.float32), []
+        if record_step_states:
+            return []
+        return np.zeros((0, 8), dtype=np.float32)
 
     if record_step_states:
         if e_features_rows is None:

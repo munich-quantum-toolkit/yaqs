@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
+import mqt.yaqs.characterization.memory.backends.sequences as sequences_pkg
 from mqt.yaqs.characterization.memory.backends.sequences import simulate_sequences
 
 
 def test_sequences_package_reexports_simulate_sequences() -> None:
     """The public sequences package exposes simulate_sequences."""
+    assert "simulate_sequences" in sequences_pkg.__all__
     assert callable(simulate_sequences)

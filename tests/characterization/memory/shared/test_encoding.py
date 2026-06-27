@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
@@ -109,3 +111,9 @@ def test_packed_rho8_pauli_batch_shape_and_identity() -> None:
     full = decode_packed_pauli_batch(packed)
     assert full.shape == (3, 4)
     assert full[..., 0] == pytest.approx(1.0, abs=0.05)
+
+
+def test_decode_packed_pauli_batch_rejects_scalar_input() -> None:
+    """Scalar packed inputs raise ValueError with a clear shape message."""
+    with pytest.raises(ValueError, match="expected last dim 8"):
+        decode_packed_pauli_batch(cast("Any", np.float32(1.0)))

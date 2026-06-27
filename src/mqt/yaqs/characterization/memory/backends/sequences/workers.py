@@ -294,7 +294,6 @@ def _simulate_seq_core(
     break_step: int | None = None
     num_evolutions_in_loop = 0
 
-    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for step_idx, step in enumerate(psi_pairs):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
@@ -304,7 +303,10 @@ def _simulate_seq_core(
                 sp = 1.0
             elif step_type == "measure_only":
                 psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-                psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
+                if "psi_reset" in step:
+                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+                else:
+                    psi_reset = psi_meas
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
                 sp = float(step_prob)
             elif step_type == "prepare_only":
@@ -520,7 +522,6 @@ def _seq_trace_worker(
     rho_sequence_packed = np.empty((num_steps, 8), dtype=np.float32)
     out_i = 0
 
-    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for step_idx, step in enumerate(psi_pairs):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
@@ -530,7 +531,10 @@ def _seq_trace_worker(
                 step_prob = 1.0
             elif step_type == "measure_only":
                 psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-                psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
+                if "psi_reset" in step:
+                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+                else:
+                    psi_reset = psi_meas
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
             elif step_type == "prepare_only":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)

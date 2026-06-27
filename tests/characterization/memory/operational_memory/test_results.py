@@ -184,3 +184,14 @@ def test_merge_cut_results_rejects_multi_cut_parts() -> None:
     })
     with pytest.raises(ValueError, match="exactly one cut"):
         merge_cut_results({1: multi})
+
+
+def test_merge_cut_results_rejects_cut_key_mismatch() -> None:
+    """Outer cut keys must match the embedded cut in each partial result."""
+    with pytest.raises(ValueError, match="does not match partial result cut"):
+        merge_cut_results({
+            2: pack_result(
+                {"entropy": 0.1, "rank": 1.1, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
+                cut=1,
+            ),
+        })

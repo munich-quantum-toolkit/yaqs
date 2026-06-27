@@ -132,7 +132,7 @@ def _sequence_worker(
         step_params.elapsed_time = duration
         step_params.num_traj = 1
         step_params.get_state = True
-        n_steps = max(1, int(np.round(duration / step_params.dt)))
+        n_steps = max(1, int(np.ceil(duration / step_params.dt)))
         step_params.times = np.linspace(0, duration, n_steps + 1)
 
         current_state = _evolve_backend_state(
@@ -198,14 +198,14 @@ def run_all_sequences(
     choi_duals = compute_dual_choi_basis(choi_basis)
 
     k = len(timesteps)
+    if k == 0:
+        msg = "No sequences for k=0."
+        raise ValueError(msg)
 
     def _enumerate_sequences(k_in: int) -> list[tuple[int, ...]]:
         return list(itertools.product(range(16), repeat=k_in))
 
     all_seqs = _enumerate_sequences(k)
-    if len(all_seqs) == 0:
-        msg = "No sequences for k=0."
-        raise ValueError(msg)
 
     n_seq = len(all_seqs)
     samples_psi_pairs = [

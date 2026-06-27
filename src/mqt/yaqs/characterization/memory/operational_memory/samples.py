@@ -97,7 +97,7 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
     phases = np.ones_like(d, dtype=np.complex128)
     nz = np.abs(d) > 1e-15
     phases[nz] = d[nz] / np.abs(d[nz])
-    u = q @ np.diag(phases.conj())
+    u = q @ np.diag(phases)
     return np.asarray(u, dtype=np.complex128)
 
 

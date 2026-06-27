@@ -183,3 +183,37 @@ def test_simulate_sequences_parallel_smoke() -> None:
     )
     assert isinstance(finals, np.ndarray)
     assert finals.shape == (2, 8)
+
+
+def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
+    """Empty sequence batches return empty arrays or trace lists instead of failing."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+
+    finals = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.1],
+        psi_pairs_list=[],
+        initial_psis=[],
+        static_ctx=None,
+        parallel=False,
+        record_step_states=False,
+    )
+    assert isinstance(finals, np.ndarray)
+    assert finals.shape == (0, 8)
+
+    packed, traces = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.1],
+        psi_pairs_list=[],
+        initial_psis=[],
+        static_ctx=None,
+        parallel=False,
+        record_step_states=False,
+        traced=True,
+    )
+    assert isinstance(packed, np.ndarray)
+    assert packed.shape == (0, 8)
+    assert traces == []

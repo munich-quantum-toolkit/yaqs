@@ -13,6 +13,7 @@ import contextlib
 import multiprocessing
 import os
 import sys
+from typing import Any, cast
 
 import numba
 import pytest
@@ -174,6 +175,33 @@ def test_call_serial_capped_preserves_order() -> None:
 
     assert call_serial_capped(worker, 3) == 6
     assert seen == [3]
+
+
+def test_call_serial_capped_restores_numba_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serial capped execution restores the caller's Numba thread count."""
+    calls: list[int] = []
+    monkeypatch.setattr(parallel_utils, "get_numba_threads", lambda: 4)
+    monkeypatch.setattr(parallel_utils, "safe_set_numba_threads", lambda n: calls.append(int(n)))
+
+    def worker() -> str:
+        return "ok"
+
+    assert call_serial_capped(worker, n_threads=1) == "ok"
+    assert calls == [1, 4]
+
+
+def test_execution_config_normalizes_retry_exception_list() -> None:
+    """retry_exceptions accepts lists and stores a tuple."""
+    cfg = ExecutionConfig(retry_exceptions=cast("Any", [ValueError, RuntimeError]))
+    assert cfg.retry_exceptions == (ValueError, RuntimeError)
+
+
+def test_execution_config_rejects_invalid_retry_exceptions() -> None:
+    """Non-exception retry targets fail at construction time."""
+    with pytest.raises(TypeError, match="must be exception classes"):
+        ExecutionConfig(retry_exceptions=cast("Any", (ValueError, "oops")))
+    with pytest.raises(TypeError, match="tuple or list"):
+        ExecutionConfig(retry_exceptions=cast("Any", "ValueError"))
 
 
 def test_run_indexed_jobs_serial_ordering() -> None:

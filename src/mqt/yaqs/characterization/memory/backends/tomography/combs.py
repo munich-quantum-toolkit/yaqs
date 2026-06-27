@@ -50,7 +50,10 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
             return np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
         if step_type == "measure_only":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            psi_reset = np.asarray(step.get("psi_reset", _Z0), dtype=np.complex128).reshape(2)
+            if "psi_reset" in step:
+                psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+            else:
+                psi_reset = psi_meas
             return InterventionMap(
                 rho_prep=np.outer(psi_reset, psi_reset.conj()),
                 effect=np.outer(psi_meas, psi_meas.conj()),
@@ -80,6 +83,9 @@ def convert_probe_callable(
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
     """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`.
 
+    Args:
+        step: Structured dict step or measure/prepare ket pair.
+
     Returns:
         Callable implementing the single-qubit map for ``step``.
     """
@@ -96,6 +102,10 @@ def convert_probe_callable(
 
 def evaluate_dense_probes(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
     """Evaluate split-cut probe Pauli responses on a dense comb.
+
+    Args:
+        comb: Dense reference comb backend.
+        probe_set: Sampled split-cut probes.
 
     Returns:
         Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.

@@ -162,6 +162,18 @@ def safe_set_numba_threads(n_threads: int) -> None:
         numba.set_num_threads(n_threads)
 
 
+def get_numba_threads() -> int | None:
+    """Return the current Numba thread count when available.
+
+    Returns:
+        Active Numba thread count, or ``None`` if Numba is unavailable.
+    """
+    with contextlib.suppress(ImportError, AttributeError, ValueError, RuntimeError):
+        numba = importlib.import_module("numba")
+        return int(numba.get_num_threads())
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Process-pool orchestration (used by Simulator, MemoryCharacterizer, and internals)
 # ---------------------------------------------------------------------------
@@ -180,6 +192,26 @@ class ExecutionConfig:
     mp_context: MPContext = "auto"
     max_retries: int = 10
     retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError)
+
+    def __post_init__(self) -> None:
+        """Normalize and validate retry exception targets at construction time.
+
+        Raises:
+            TypeError: If ``retry_exceptions`` is not a tuple/list of exception classes.
+        """
+        raw = self.retry_exceptions
+        if isinstance(raw, tuple):
+            excs = raw
+        elif isinstance(raw, list):
+            excs = tuple(raw)
+        else:
+            msg = f"retry_exceptions must be a tuple or list of exception classes, got {type(raw).__name__}."
+            raise TypeError(msg)
+        for exc in excs:
+            if not isinstance(exc, type) or not issubclass(exc, BaseException):
+                msg = f"retry_exceptions entries must be exception classes, got {exc!r}."
+                raise TypeError(msg)
+        object.__setattr__(self, "retry_exceptions", excs)
 
     def resolved_max_workers(self) -> int:
         """Return the effective worker count."""
@@ -286,9 +318,14 @@ def call_serial_capped(fn: Callable[..., TRes], /, *args: object, n_threads: int
     Returns:
         Value returned by ``fn``.
     """
-    safe_set_numba_threads(n_threads)
-    with threadpool_limits_one():
-        return fn(*args)
+    prev_threads = get_numba_threads()
+    try:
+        safe_set_numba_threads(n_threads)
+        with threadpool_limits_one():
+            return fn(*args)
+    finally:
+        if prev_threads is not None:
+            safe_set_numba_threads(prev_threads)
 
 
 def run_backend_parallel(

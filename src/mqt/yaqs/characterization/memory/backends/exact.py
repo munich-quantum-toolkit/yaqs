@@ -217,6 +217,6 @@ def simulate_exact(
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
-    pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4).astype(np.float32)
+    pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
     w = compute_trace_weights(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
     return pauli_xyz, w, traces

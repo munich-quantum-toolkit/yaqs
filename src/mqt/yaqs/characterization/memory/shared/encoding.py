@@ -174,6 +174,9 @@ def decode_packed_pauli_batch(packed: np.ndarray, *, normalize: bool = True) -> 
         ValueError: If the last dimension of ``packed`` is not 8.
     """
     p = np.asarray(packed, dtype=np.float32)
+    if p.ndim == 0:
+        msg = f"decode_packed_pauli_batch: expected last dim 8, got shape {p.shape}."
+        raise ValueError(msg)
     if p.shape[-1] != 8:
         msg = f"decode_packed_pauli_batch: expected last dim 8, got shape {p.shape}."
         raise ValueError(msg)

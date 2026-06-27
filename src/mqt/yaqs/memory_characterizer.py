@@ -810,7 +810,6 @@ class MemoryCharacterizer:
             TypeError: If ``target`` does not support surrogate-style prediction.
         """
         local_rng = rng if rng is not None else np.random.default_rng()
-        rho_mat = coerce_rho_matrix(rho0)
         seq = sequence
 
         if matches_comb(target):
@@ -829,6 +828,7 @@ class MemoryCharacterizer:
             rho_out = target.predict(callables)
             return np.asarray(rho_out, dtype=np.complex128)
 
+        rho_mat = coerce_rho_matrix(rho0)
         resolved_k = _resolve_k(target, k)
         predict_fn = getattr(target, "predict", None)
         if not callable(predict_fn):

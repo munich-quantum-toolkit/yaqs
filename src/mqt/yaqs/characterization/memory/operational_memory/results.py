@@ -216,5 +216,9 @@ def merge_cut_results(results: dict[int, CharacterizationResult]) -> Characteriz
         if len(part.by_cut) != 1:
             msg = "merge expects each CharacterizationResult to hold exactly one cut."
             raise ValueError(msg)
-        by_cut[int(cut_key)] = part.by_cut[int(cut_key)]
+        inner_cut = next(iter(part.by_cut))
+        if int(cut_key) != int(inner_cut):
+            msg = f"merge cut key {cut_key} does not match partial result cut {inner_cut}."
+            raise ValueError(msg)
+        by_cut[int(cut_key)] = part.by_cut[inner_cut]
     return CharacterizationResult(by_cut=by_cut)

@@ -84,6 +84,16 @@ def test_dict_step_branch_weight_measure_only() -> None:
     assert compute_branch_weight(steps, cut=2) == pytest.approx(1.0)
 
 
+def test_measure_only_without_reset_projects_onto_measurement() -> None:
+    """Two pre-cut measure_only steps use the measured state, not |0>, by default."""
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
+    steps = [
+        {"type": "measure_only", "psi_meas": plus},
+        {"type": "measure_only", "psi_meas": _Z},
+    ]
+    assert compute_branch_weight(steps, cut=2) == pytest.approx(0.25)
+
+
 _PSI0_L2 = np.zeros(4, dtype=np.complex128)
 _PSI0_L2[0] = 1.0 + 0.0j
 

@@ -1337,3 +1337,29 @@ def test_from_local_ops_tensor_product() -> None:
     dense = mpo.to_matrix()
 
     np.testing.assert_allclose(dense, np.kron(A, B), atol=1e-12)
+
+
+def test_mpo_add_two_site_matches_dense_sum() -> None:
+    """Two-site __add__ produces the expected dense operator sum."""
+    mpo_a = MPO.identity(2)
+    mpo_b = MPO.identity(2)
+    summed = mpo_a + mpo_b
+    np.testing.assert_allclose(summed.to_matrix(), 2.0 * mpo_a.to_matrix(), atol=1e-12)
+    assert summed.length == 2
+    assert summed.physical_dimension == mpo_a.physical_dimension
+
+
+def test_mpo_add_single_site_bond_stacking() -> None:
+    """Single-site __add__ stacks bond dimensions on the only tensor."""
+    mpo_a = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    mpo_b = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    summed = mpo_a + mpo_b
+    assert summed.length == 1
+    assert summed.tensors[0].shape == (2, 2, 2, 2)
+
+
+def test_mpo_sum_matches_iterated_addition() -> None:
+    """mpo_sum agrees with repeated __add__ for two-site identity MPOs."""
+    mpos = [MPO.identity(2), MPO.identity(2), MPO.identity(2)]
+    ref = 3.0 * MPO.identity(2).to_matrix()
+    np.testing.assert_allclose(MPO.mpo_sum(mpos).to_matrix(), ref, atol=1e-12)

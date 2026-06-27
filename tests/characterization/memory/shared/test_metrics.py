@@ -43,6 +43,22 @@ def test_trace_distance_basic_pure_states() -> None:
     assert np.isclose(dist, 1.0)
 
 
+def test_rel_fro_error_rejects_shape_mismatch() -> None:
+    """Mismatched matrix shapes are rejected instead of broadcasting."""
+    a = np.eye(2, dtype=np.complex128)
+    b = np.eye(3, dtype=np.complex128)
+    with pytest.raises(ValueError, match="must share the same shape"):
+        compute_rel_fro_error(a, b)
+
+
+def test_trace_distance_rejects_non_square_inputs() -> None:
+    """Non-square density matrices are rejected."""
+    rho = np.zeros((2, 3), dtype=np.complex128)
+    sigma = np.zeros((2, 3), dtype=np.complex128)
+    with pytest.raises(ValueError, match="must be square matrices"):
+        compute_trace_distance(rho, sigma)
+
+
 def test_rho8_metrics_zero_when_equal() -> None:
     """Packed-state metrics vanish when comparing identical inputs."""
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)

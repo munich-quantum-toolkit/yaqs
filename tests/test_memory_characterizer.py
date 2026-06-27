@@ -270,6 +270,16 @@ def test_predict_comb_rejects_return_sequence(ham_and_params: tuple[Hamiltonian,
         mc.predict(comb, rho0, "haar", k=1, return_sequence=True)
 
 
+def test_predict_comb_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Comb predict does not validate rho0 because it is unused."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    rho_out = mc.predict(comb, np.array([99.0]), "haar", k=1)
+    assert rho_out.shape == (2, 2)
+    assert np.all(np.isfinite(rho_out))
+
+
 def test_build_comb_forwards_parallel_override(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
     monkeypatch: pytest.MonkeyPatch,

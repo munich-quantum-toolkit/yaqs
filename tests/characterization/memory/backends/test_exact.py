@@ -5,8 +5,6 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box probe construction for delayed-break geometry
-
 """Tests for simulator reference probe backends."""
 
 from __future__ import annotations
@@ -24,9 +22,9 @@ from mqt.yaqs.characterization.memory.backends.exact import (
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
     ProbeSet,
-    _sample_cut_measurement_only,
-    _sample_cut_preparation_only,
-    _sample_probe_step,
+    _sample_cut_measurement_only,  # noqa: PLC2701
+    _sample_cut_preparation_only,  # noqa: PLC2701
+    _sample_probe_step,  # noqa: PLC2701
     resolve_unitary_sampler,
     sample_probes,
 )
@@ -317,3 +315,19 @@ def test_simulate_exact_rejects_mismatched_psi_pairs_list() -> None:
             parallel=False,
             psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
         )
+
+
+def test_simulate_exact_preserves_float64_probe_coefficients() -> None:
+    """Exact probe decoding keeps float64 precision through to the memory matrix."""
+    rng = np.random.default_rng(0)
+    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=rng)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    pauli, _weights, _traces = simulate_exact(
+        probe_set=probe_set,
+        operator=op,
+        sim_params=params,
+        initial_psi=np.array([1.0, 0.0], dtype=np.complex128),
+        parallel=False,
+    )
+    assert pauli.dtype == np.float64

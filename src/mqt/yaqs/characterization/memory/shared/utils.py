@@ -70,6 +70,9 @@ def resolve_characterizer_representation(
 def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
     """Map characterizer representation to the internal stochastic solver name.
 
+    Args:
+        rep: Characterizer representation (``"vector"`` or ``"mps"``).
+
     Returns:
         ``"MCWF"`` for ``vector`` and ``"TJM"`` for ``mps``.
     """
@@ -274,7 +277,14 @@ def _reprepare_backend_state_forced(
 
 
 def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return a 2x2 unitary whose first column is ``psi`` (normalized computational |0> -> ``psi``)."""
+    """Return a 2x2 unitary whose first column is ``psi`` (normalized computational |0> -> ``psi``).
+
+    Args:
+        psi: Target single-qubit ket (length 2).
+
+    Returns:
+        Unitary matrix mapping the computational ``|0>`` basis state to ``psi``.
+    """
     p = np.asarray(psi, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
     p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
