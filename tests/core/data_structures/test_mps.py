@@ -448,6 +448,28 @@ def test_local_expect_qudit_observable_num_sites() -> None:
     np.testing.assert_allclose(val, 2.0, atol=1e-12)
 
 
+def test_local_expect_qudit_two_site_correlator_mixed_dimensions() -> None:
+    """A two-site correlator observable on a qubit (d=2) and a qutrit (d=3) works via ``num_sites=2``.
+
+    The projector ``|1,2><1,2|`` on a state deterministically prepared in level (1, 2) should
+    yield expectation value 1.0. Regression test for the qubit-only ``(2,2,2,2)`` reshape that
+    used to crash ``BaseGate.set_sites()`` for any two-site observable with mixed dimensions.
+    """
+    proj = np.zeros((2 * 3, 2 * 3), dtype=np.complex128)
+    proj[1 * 3 + 2, 1 * 3 + 2] = 1.0
+    corr_op = BaseGate(proj, num_sites=2)
+    observable = Observable(corr_op, sites=[0, 1])
+
+    mps = MPS(length=2, physical_dimensions=[2, 3], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=np.complex128)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=np.complex128)
+    mps.tensors[1][2, 0, 0] = 1.0
+
+    val = mps.local_expect(observable, sites=[0, 1])
+    np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2

@@ -201,7 +201,7 @@ class BaseGate:
 
         # store as the proper type
         self.sites = sites_list
-        if self.interaction == 2:
+        if self.interaction == 2 and self.matrix.shape[0] == 4:
             self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
             self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
