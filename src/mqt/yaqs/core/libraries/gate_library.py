@@ -141,15 +141,21 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
     sites: list[int]
 
-    def __init__(self, mat: ArrayLike) -> None:
+    def __init__(self, mat: ArrayLike, *, num_sites: int | None = None) -> None:
         """Initializes a BaseGate instance with the given matrix.
 
         Args:
             mat: The matrix representation of the gate.
+            num_sites: Explicit number of sites this gate/observable acts on. When
+                given, bypasses the power-of-2 qubit-count inference entirely —
+                needed for e.g. a single qudit observable whose matrix dimension
+                (like 4) would otherwise be misread as 2 qubits. When omitted
+                (default), behavior is unchanged from before this parameter existed.
 
         Raises:
             ValueError: If the matrix is not a square 2-D array.
-            ValueError: If the matrix dimension is not a power of 2.
+            ValueError: If the matrix dimension is not a power of 2 and ``num_sites``
+                is not given.
         """
         matrix = np.asarray(mat, dtype=np.complex128)
         if matrix.ndim != 2:
@@ -160,10 +166,13 @@ class BaseGate:
             raise ValueError(msg)
 
         dim = matrix.shape[0]
-        interaction = int(np.log2(dim))
-        if dim < 1 or 2**interaction != dim:
-            msg = f"Matrix dimension {dim} must be a power of 2."
-            raise ValueError(msg)
+        if num_sites is not None:
+            interaction = num_sites
+        else:
+            interaction = int(np.log2(dim))
+            if dim < 1 or 2**interaction != dim:
+                msg = f"Matrix dimension {dim} must be a power of 2."
+                raise ValueError(msg)
 
         self.matrix = matrix
         self.tensor = matrix

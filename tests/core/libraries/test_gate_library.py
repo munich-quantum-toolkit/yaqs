@@ -527,6 +527,19 @@ def test_gate_constructor() -> None:
         BaseGate(non_square_matrix)
 
 
+def test_gate_constructor_num_sites() -> None:
+    """A single d=4 qudit observable defaults to (wrong) interaction=2 without num_sites, 1 with it."""
+    d4_matrix = np.diag([0, 1, 2, 3]).astype(np.complex128)
+
+    gate_without = BaseGate(d4_matrix)
+    assert gate_without.interaction == 2, "Without num_sites, d=4 is (wrongly) guessed as 2 qubits"
+
+    gate = BaseGate(d4_matrix, num_sites=1)
+    assert gate.interaction == 1
+    gate.set_sites(2)
+    assert gate.sites == [2]
+
+
 def test_set_sites() -> None:
     """Test the set_sites method of the BaseGate class.
 

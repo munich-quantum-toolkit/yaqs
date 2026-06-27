@@ -823,7 +823,8 @@ class MPS:
             A deep copy of the state is used to prevent modifications to the original MPS.
         """
         temp_state = copy.deepcopy(self)
-        if operator.gate.matrix.shape[0] == 2:  # Local observable
+        num_sites = len(operator.sites) if isinstance(operator.sites, list) else 1
+        if num_sites == 1:  # Local observable
             i = None
             if isinstance(sites, list):
                 i = sites[0]
@@ -839,7 +840,7 @@ class MPS:
             a = temp_state.tensors[i]
             temp_state.tensors[i] = oe.contract("ab, bcd->acd", operator.gate.matrix, a)
 
-        elif operator.gate.matrix.shape[0] == 4:  # Two-site correlator
+        elif num_sites == 2:  # Two-site correlator
             assert isinstance(sites, list)
             assert isinstance(operator.sites, list)
             i, j = sites

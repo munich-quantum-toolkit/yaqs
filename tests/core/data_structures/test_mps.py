@@ -431,6 +431,23 @@ def test_local_expect_x_on_plus_state() -> None:
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
 
+def test_local_expect_qudit_observable_num_sites() -> None:
+    """A single d=4 qudit observable (number operator) works via ``num_sites=1``.
+
+    The number operator ``diag(0,1,2,3)`` on a single d=4 qudit initialized to
+    level 2 should yield expectation value 2.
+    """
+    number_op = BaseGate(np.diag([0, 1, 2, 3]).astype(np.complex128), num_sites=1)
+    observable = Observable(number_op, sites=0)
+
+    mps = MPS(length=1, physical_dimensions=[4], state="zeros")
+    mps.tensors[0] = np.zeros((4, 1, 1), dtype=np.complex128)
+    mps.tensors[0][2, 0, 0] = 1.0
+
+    val = mps.local_expect(observable, sites=0)
+    np.testing.assert_allclose(val, 2.0, atol=1e-12)
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2

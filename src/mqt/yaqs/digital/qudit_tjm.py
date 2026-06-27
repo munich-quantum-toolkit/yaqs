@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
+from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
-    from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+    from ..core.data_structures.simulation_parameters import StrongSimParams
     from .utils.qudit_dag_utils import QuditDAG, QuditOpNode
 
 
@@ -197,7 +198,7 @@ def _gate_matrix_in_ascending_site_order(node: QuditOpNode) -> tuple[NDArray[np.
 
 def qudit_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, object],
-) -> tuple[None, None, MPS | None]:
+) -> tuple[NDArray[np.float64], None, MPS | None]:
     """Simulate a qudit circuit using the Tensor Jump Method (single trajectory).
 
     Mirrors :func:`mqt.yaqs.digital.digital_tjm.digital_tjm`'s control flow, driven by
@@ -217,6 +218,9 @@ def qudit_tjm(
         final MPS if ``sim_params.get_state``, else ``None``.
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
+    if isinstance(sim_params, WeakSimParams):
+        msg = "Shot-based qudit simulation (WeakSimParams) is not implemented yet"
+        raise NotImplementedError(msg)
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
@@ -242,5 +246,7 @@ def qudit_tjm(
 
                 dag.remove_op_node(node)
 
+    results = np.zeros((len(sim_params.observables), 1))
+    state.evaluate_observables(sim_params, results, column_index=0)
     final = state if sim_params.get_state else None
-    return None, None, final
+    return results, None, final

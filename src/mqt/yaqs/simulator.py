@@ -1222,10 +1222,32 @@ class Simulator:
             msg = "State physical dimensions do not match the circuit's qudit dimensions."
             raise ValueError(msg)
 
+        if isinstance(sim_params, WeakSimParams):
+            msg = "Shot-based qudit simulation (WeakSimParams) is not yet implemented."
+            raise NotImplementedError(msg)
+
+        has_noise = noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes)
+        if has_noise:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
+            num_traj = sim_params.num_traj
+        else:
+            num_traj = 1
+
+        _prepare_result_observables(result, sim_params, num_traj=num_traj)
+
         qudit_tjm_module = importlib.import_module("mqt.yaqs.digital.qudit_tjm")
-        _, _, final_mps = qudit_tjm_module.qudit_tjm((0, mps, noise_model, sim_params, operator))
-        if final_mps is not None:
-            result.output_state = State.from_mps(final_mps)
+        final_mps: MPS | None = None
+        for traj_idx in range(num_traj):
+            results, _, traj_final_mps = qudit_tjm_module.qudit_tjm((traj_idx, mps, noise_model, sim_params, operator))
+            _store_observable_trajectory(result, sim_params, traj_index=traj_idx, sorted_traj_data=results[:, 0])
+
+            if traj_final_mps is not None:
+                final_mps = traj_final_mps
+
+        _store_final_mps(result, final_mps)
+        aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)
