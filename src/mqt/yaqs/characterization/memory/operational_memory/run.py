@@ -37,7 +37,8 @@ class OperationalMemoryBackend(Protocol):
             probe_set: Sampled split-cut probes.
 
         Returns:
-            Tuple ``(pauli_xyz_ij, weights_ij)`` with shapes ``(n_p, n_f, 4)`` and ``(n_p, n_f)``.
+            Tuple ``(pauli_xyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
+            ``(n_pasts, n_futures)``.
         """
 
 
@@ -134,8 +135,7 @@ def run_operational_memory(
             different ``cut`` or ``k``, or ``delay > 0`` with a backend that does not
             support custom sequences.
     """
-    dd = int(delay)
-    if dd < 0:
+    if delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
     execution_override: ExecutionConfig | None = None
@@ -162,14 +162,14 @@ def run_operational_memory(
         )
     psi_pairs_list = None
     sim_probe_set = probe_set
-    if dd > 0:
+    if delay > 0:
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if not isinstance(process, ExactBackend):
             msg = "delay > 0 requires an exact Hamiltonian characterize backend."
             raise ValueError(msg)
-        psi_pairs_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=dd)
-        sim_probe_set = replace(probe_set, k=delayed_sequence_length(k=int(k), delay=dd))
+        psi_pairs_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
+        sim_probe_set = replace(probe_set, k=delayed_sequence_length(k=k, delay=delay))
     if execution_override is not None:
         # Same deferred import as above (ExactBackend ↔ operational_memory cycle).
         from ..backends.exact import ExactBackend  # noqa: PLC0415
@@ -182,7 +182,7 @@ def run_operational_memory(
             )
         else:
             pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
-    elif dd > 0:
+    elif delay > 0:
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         assert isinstance(process, ExactBackend)

@@ -592,7 +592,6 @@ class MemoryCharacterizer:
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
         resolved_probe_set = resolve_probe_bundle(probe_set)
-        reset_delay = int(delay)
 
         if matches_hamiltonian(target):
             if sim_params is None:
@@ -613,7 +612,7 @@ class MemoryCharacterizer:
                 probe_set=resolved_probe_set,
                 initial_psi=initial_psi,
                 probe_kw=probe_kw,
-                delay=reset_delay,
+                delay=delay,
             )
 
         resolved_k = _resolve_k(target, k)
@@ -632,7 +631,7 @@ class MemoryCharacterizer:
                 probe_set=resolved_probe_set,
                 parallel=parallel,
                 probe_kw=probe_kw,
-                delay=reset_delay,
+                delay=delay,
             )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
@@ -646,7 +645,7 @@ class MemoryCharacterizer:
                 probe_set=None,
                 parallel=parallel,
                 probe_kw=probe_kw,
-                delay=reset_delay,
+                delay=delay,
             )
         return merge_cut_results(parts)
 

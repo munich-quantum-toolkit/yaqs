@@ -144,12 +144,12 @@ def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
     Returns:
         Array of shape ``(n_pasts, n_futures)`` constant across future columns per past.
     """
-    n_p = len(probe_set.past_pairs)
-    n_f = len(probe_set.future_pairs)
-    c = int(probe_set.cut)
-    w = np.empty((n_p, n_f), dtype=np.float64)
-    for i in range(n_p):
-        w_i = compute_branch_weight(assemble_probe_sequence(probe_set, i, 0), cut=c)
+    n_pasts = len(probe_set.past_pairs)
+    n_futures = len(probe_set.future_pairs)
+    cut = probe_set.cut
+    w = np.empty((n_pasts, n_futures), dtype=np.float64)
+    for i in range(n_pasts):
+        w_i = compute_branch_weight(assemble_probe_sequence(probe_set, i, 0), cut=cut)
         w[i, :] = w_i
     return w
 
@@ -184,12 +184,10 @@ def compute_trace_weights(
     Returns:
         Branch-weight array of shape ``(n_pasts, n_futures)``.
     """
-    n_p, n_f = int(n_pasts), int(n_futures)
-    w = np.zeros((n_p, n_f), dtype=np.float64)
-    c = int(cut)
-    for ii in range(n_p):
-        for jj in range(n_f):
-            probs = traces[ii * n_f + jj]["step_probs"]
-            n = min(c, len(probs))
-            w[ii, jj] = float(np.prod(probs[:n])) if n else 1.0
+    w = np.zeros((n_pasts, n_futures), dtype=np.float64)
+    for past_idx in range(n_pasts):
+        for future_idx in range(n_futures):
+            probs = traces[past_idx * n_futures + future_idx]["step_probs"]
+            n = min(cut, len(probs))
+            w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
     return w

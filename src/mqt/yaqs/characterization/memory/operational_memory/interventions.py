@@ -134,15 +134,14 @@ def expand_sequence(
     Raises:
         ValueError: If an explicit list length does not match ``k``.
     """
-    kk = int(k)
     if isinstance(spec, str):
         resolved = normalize_style(spec)
-        return [resolved] * kk
+        return [resolved] * k
     slots = list(spec)
-    if len(slots) == 1 and kk > 1:
-        return [slots[0]] * kk
-    if len(slots) != kk:
-        msg = f"intervention sequence length must be k={kk}, got {len(slots)}."
+    if len(slots) == 1 and k > 1:
+        return [slots[0]] * k
+    if len(slots) != k:
+        msg = f"intervention sequence length must be k={k}, got {len(slots)}."
         raise ValueError(msg)
     return slots
 

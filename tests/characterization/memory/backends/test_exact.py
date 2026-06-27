@@ -61,11 +61,9 @@ def _sample_split_delayed_break_probes(
     Returns:
         Tuple of probe set metadata and flat sequence grid for ``simulate_exact``.
     """
-    c_left = int(left_cut)
-    tt = int(tau)
-    kk = int(k)
-    past_full = c_left - 1
-    future_tail = kk - (c_left + tt + 1)
+    past_len = left_cut - 1
+    bridge_len = tau
+    future_tail = k - (left_cut + bridge_len + 1)
     unitary_sampler = resolve_unitary_sampler("haar")
 
     past_pairs: list[list[Any]] = []
@@ -73,7 +71,7 @@ def _sample_split_delayed_break_probes(
     for _ in range(n_pasts):
         pairs_i = [
             _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
-            for _ in range(past_full)
+            for _ in range(past_len)
         ]
         _feat_m, psi_m = _sample_cut_measurement_only(rng)
         past_cut_meas.append(psi_m)
@@ -91,7 +89,7 @@ def _sample_split_delayed_break_probes(
 
     z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     u_id = np.eye(2, dtype=np.complex128)
-    bridge = [{"type": "unitary", "U": u_id} for _ in range(tt)]
+    bridge = [{"type": "unitary", "U": u_id} for _ in range(bridge_len)]
     all_pairs: list[list[Any]] = []
     for i in range(n_pasts):
         for j in range(n_futures):
@@ -103,10 +101,10 @@ def _sample_split_delayed_break_probes(
             all_pairs.append(full)
 
     probe_set = ProbeSet(
-        cut=c_left,
-        k=kk,
-        past_features=np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32),
-        future_features=np.zeros((n_futures, max(1, 1 + tt + future_tail), 32), dtype=np.float32),
+        cut=left_cut,
+        k=k,
+        past_features=np.zeros((n_pasts, max(1, past_len + 1), 32), dtype=np.float32),
+        future_features=np.zeros((n_futures, max(1, 1 + bridge_len + future_tail), 32), dtype=np.float32),
         past_pairs=past_pairs,
         past_cut_meas=past_cut_meas,
         future_prep_cut=future_prep_cut,

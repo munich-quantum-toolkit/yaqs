@@ -34,12 +34,12 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         ValueError: If past/future branch lengths, cut-branch array sizes, or the assembled
             sequence length do not match ``probe_set`` metadata.
     """
-    c = int(probe_set.cut)
-    kk = int(probe_set.k)
-    past_len = c - 1
-    future_len = kk - c
-    n_p = len(probe_set.past_pairs)
-    n_f = len(probe_set.future_pairs)
+    cut = probe_set.cut
+    sequence_length = probe_set.k
+    past_len = cut - 1
+    future_len = sequence_length - cut
+    n_pasts = len(probe_set.past_pairs)
+    n_futures = len(probe_set.future_pairs)
     past_pairs = probe_set.past_pairs[i]
     future_pairs = probe_set.future_pairs[j]
     if len(past_pairs) != past_len:
@@ -48,17 +48,17 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     if len(future_pairs) != future_len:
         msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
         raise ValueError(msg)
-    if len(probe_set.past_cut_meas) != n_p:
-        msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_p}"
+    if len(probe_set.past_cut_meas) != n_pasts:
+        msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_pasts}"
         raise ValueError(msg)
-    if len(probe_set.future_prep_cut) != n_f:
-        msg = f"future_prep_cut length {len(probe_set.future_prep_cut)} != n_futures={n_f}"
+    if len(probe_set.future_prep_cut) != n_futures:
+        msg = f"future_prep_cut length {len(probe_set.future_prep_cut)} != n_futures={n_futures}"
         raise ValueError(msg)
     full: list[Any] = list(past_pairs)
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
     full.extend(future_pairs)
-    if len(full) != kk:
-        msg = f"assembled probe sequence length {len(full)} != k={kk}"
+    if len(full) != sequence_length:
+        msg = f"assembled probe sequence length {len(full)} != k={sequence_length}"
         raise ValueError(msg)
     return full
 
@@ -75,18 +75,18 @@ def assemble_probe_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]
     Raises:
         RuntimeError: If an assembled sequence length does not match ``k``.
     """
-    n_p = len(probe_set.past_pairs)
-    n_f = len(probe_set.future_pairs)
-    kk = int(probe_set.k)
+    n_pasts = len(probe_set.past_pairs)
+    n_futures = len(probe_set.future_pairs)
+    sequence_length = probe_set.k
     all_pairs: list[list[Any]] = []
-    for i in range(n_p):
-        for j in range(n_f):
+    for i in range(n_pasts):
+        for j in range(n_futures):
             full = assemble_probe_sequence(probe_set, i, j)
-            if len(full) != kk:
+            if len(full) != sequence_length:
                 msg = "internal: full sequence length mismatch"
                 raise RuntimeError(msg)
             all_pairs.append(full)
-    return all_pairs, n_p, n_f
+    return all_pairs, n_pasts, n_futures
 
 
 def delayed_sequence_length(*, k: int, delay: int) -> int:
@@ -102,11 +102,10 @@ def delayed_sequence_length(*, k: int, delay: int) -> int:
     Raises:
         ValueError: If ``delay`` is negative.
     """
-    dd = int(delay)
-    if dd < 0:
+    if delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
-    return int(k) + dd + 1 if dd > 0 else int(k)
+    return k + delay + 1 if delay > 0 else k
 
 
 def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int = 0) -> list[Any]:
@@ -129,13 +128,12 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
         ``delay > 0``, the cut step becomes ``(meas, |0>)``, followed by ``delay``
         ``(|0>, |0>)`` slots, then ``(|0>, prep)`` before the future unitaries.
     """
-    dd = int(delay)
-    if dd == 0:
+    if delay == 0:
         return assemble_probe_sequence(probe_set, i, j)
-    c = int(probe_set.cut)
-    kk = int(probe_set.k)
-    past_len = c - 1
-    future_len = kk - c
+    cut = probe_set.cut
+    sequence_length = probe_set.k
+    past_len = cut - 1
+    future_len = sequence_length - cut
     past_pairs = probe_set.past_pairs[i]
     future_pairs = probe_set.future_pairs[j]
     if len(past_pairs) != past_len:
@@ -144,13 +142,12 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     if len(future_pairs) != future_len:
         msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
         raise ValueError(msg)
-    z0 = _Z0
     full: list[Any] = list(past_pairs)
-    full.append((probe_set.past_cut_meas[i], z0))
-    full.extend((z0, z0) for _ in range(dd))
-    full.append((z0, probe_set.future_prep_cut[j]))
+    full.append((probe_set.past_cut_meas[i], _Z0))
+    full.extend((_Z0, _Z0) for _ in range(delay))
+    full.append((_Z0, probe_set.future_prep_cut[j]))
     full.extend(future_pairs)
-    expected = delayed_sequence_length(k=kk, delay=dd)
+    expected = delayed_sequence_length(k=sequence_length, delay=delay)
     if len(full) != expected:
         msg = f"assembled delayed sequence length {len(full)} != k+delay+1={expected}"
         raise ValueError(msg)
@@ -174,18 +171,17 @@ def assemble_delayed_probe_grid(
     Raises:
         RuntimeError: If an assembled sequence length does not match the expected length.
     """
-    dd = int(delay)
-    if dd == 0:
+    if delay == 0:
         return assemble_probe_grid(probe_set)
-    n_p = len(probe_set.past_pairs)
-    n_f = len(probe_set.future_pairs)
-    expected = delayed_sequence_length(k=int(probe_set.k), delay=dd)
+    n_pasts = len(probe_set.past_pairs)
+    n_futures = len(probe_set.future_pairs)
+    expected = delayed_sequence_length(k=probe_set.k, delay=delay)
     all_pairs: list[list[Any]] = []
-    for i in range(n_p):
-        for j in range(n_f):
-            full = assemble_delayed_probe_sequence(probe_set, i, j, delay=dd)
+    for i in range(n_pasts):
+        for j in range(n_futures):
+            full = assemble_delayed_probe_sequence(probe_set, i, j, delay=delay)
             if len(full) != expected:
                 msg = "internal: delayed sequence length mismatch"
                 raise RuntimeError(msg)
             all_pairs.append(full)
-    return all_pairs, n_p, n_f
+    return all_pairs, n_pasts, n_futures

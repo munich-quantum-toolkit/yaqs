@@ -265,9 +265,7 @@ def sample_probes(
     Raises:
         ValueError: If ``cut`` or ``intervention_mode`` is invalid.
     """
-    c = int(cut)
-    kk = int(k)
-    if not (1 <= c <= kk):
+    if not (1 <= cut <= k):
         msg = f"cut must satisfy 1 <= cut <= k, got cut={cut}, k={k}"
         raise ValueError(msg)
     mode = str(intervention_mode).strip().lower()
@@ -275,8 +273,8 @@ def sample_probes(
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
         raise ValueError(msg)
     unitary_sampler = resolve_unitary_sampler(unitary_ensemble) if mode == "unitary_break_mp" else None
-    past_full = c - 1
-    future_full = kk - c
+    past_full = cut - 1
+    future_full = k - cut
 
     past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
     past_pairs: list[list[Any]] = []
@@ -307,8 +305,8 @@ def sample_probes(
         future_pairs.append(pairs_j)
 
     return ProbeSet(
-        cut=c,
-        k=kk,
+        cut=cut,
+        k=k,
         past_features=past_features,
         future_features=future_features,
         past_pairs=past_pairs,
