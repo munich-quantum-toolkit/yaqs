@@ -138,13 +138,16 @@ def run_operational_memory(
     if delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
-    execution_override: ExecutionConfig | None = None
-    if parallel is not None:
-        # Deferred import avoids a circular dependency with ExactBackend.
+
+    exact_backend_cls: type | None = None
+    if delay > 0 or parallel is not None:
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
-        if isinstance(process, ExactBackend):
-            execution_override = process.execution_config(parallel=parallel)
+        exact_backend_cls = ExactBackend
+
+    execution_override: ExecutionConfig | None = None
+    if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
+        execution_override = process.execution_config(parallel=parallel)
     if probe_set is not None and (int(probe_set.cut) != int(cut) or int(probe_set.k) != int(k)):
         msg = f"probe_set was built for cut={probe_set.cut}, k={probe_set.k}, but cut={cut}, k={k} were requested."
         raise ValueError(msg)
@@ -163,33 +166,23 @@ def run_operational_memory(
     psi_pairs_list = None
     sim_probe_set = probe_set
     if delay > 0:
-        from ..backends.exact import ExactBackend  # noqa: PLC0415
-
-        if not isinstance(process, ExactBackend):
+        if exact_backend_cls is None or not isinstance(process, exact_backend_cls):
             msg = "delay > 0 requires an exact Hamiltonian characterize backend."
             raise ValueError(msg)
         psi_pairs_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
         sim_probe_set = replace(probe_set, k=delayed_sequence_length(k=k, delay=delay))
-    if execution_override is not None:
-        # Same deferred import as above (ExactBackend ↔ operational_memory cycle).
-        from ..backends.exact import ExactBackend  # noqa: PLC0415
 
-        if isinstance(process, ExactBackend):
-            pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(
-                sim_probe_set,
-                psi_pairs_list=psi_pairs_list,
-                _execution=execution_override,
-            )
-        else:
-            pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
-    elif delay > 0:
-        from ..backends.exact import ExactBackend  # noqa: PLC0415
-
-        assert isinstance(process, ExactBackend)
-        pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(
-            sim_probe_set,
-            psi_pairs_list=psi_pairs_list,
-        )
+    if (
+        exact_backend_cls is not None
+        and isinstance(process, exact_backend_cls)
+        and (delay > 0 or execution_override is not None)
+    ):
+        eval_kwargs: dict[str, Any] = {}
+        if psi_pairs_list is not None:
+            eval_kwargs["psi_pairs_list"] = psi_pairs_list
+        if execution_override is not None:
+            eval_kwargs["_execution"] = execution_override
+        pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
     else:
         pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
     m_raw, memory_matrix = assemble_memory_matrix(pauli_xyz_ij, weights_ij)

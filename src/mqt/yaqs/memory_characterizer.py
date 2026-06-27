@@ -587,11 +587,16 @@ class MemoryCharacterizer:
             TypeError: If a Hamiltonian is given without ``sim_params``.
             ValueError: If ``k`` is missing for a Hamiltonian target, both ``cut`` and
                 ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is reused
-                across multiple cuts, or ``delay > 0`` on a non-exact backend.
+                across multiple cuts, ``delay > 0`` on a comb/surrogate target, or
+                ``delay > 0`` on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
         resolved_probe_set = resolve_probe_bundle(probe_set)
+
+        if delay > 0 and not matches_hamiltonian(target):
+            msg = "delay > 0 is supported for Hamiltonian characterize() only."
+            raise ValueError(msg)
 
         if matches_hamiltonian(target):
             if sim_params is None:
@@ -697,6 +702,8 @@ class MemoryCharacterizer:
         delay: int = 0,
     ) -> CharacterizationResult:
         """Characterize a comb or surrogate via internal split-cut probing.
+
+        ``delay > 0`` is rejected in :meth:`characterize` before this path is reached.
 
         Returns:
             Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.

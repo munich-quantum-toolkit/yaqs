@@ -567,3 +567,30 @@ def test_characterize_delay_rejects_negative() -> None:
     ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
     with pytest.raises(ValueError, match="delay must be >= 0"):
         mc.characterize(ham, _paper_params(), k=6, cut=4, delay=-1)
+
+
+def test_characterize_delay_rejects_comb(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Reset delay is supported for Hamiltonian characterize() only."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    comb = mc.build_comb(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+    with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
+        mc.characterize(comb, cut=1, k=2, delay=1)
+
+
+def test_characterize_delay_reuses_prior_result_probes() -> None:
+    """A prior characterize() result can anchor a delay sweep via probe_set=."""
+    mc = _paper_mc()
+    ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
+    anchor = mc.characterize(
+        ham,
+        _paper_params(),
+        k=6,
+        cut=4,
+        delay=0,
+        n_pasts=4,
+        n_futures=4,
+        rng=np.random.default_rng(999_991),
+    )
+    delayed = mc.characterize(ham, _paper_params(), k=6, cut=4, delay=1, probe_set=anchor)
+    assert np.isfinite(delayed.entropy(4))
