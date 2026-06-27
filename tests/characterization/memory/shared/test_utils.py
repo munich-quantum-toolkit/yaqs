@@ -16,12 +16,12 @@ import pytest
 
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
+    _apply_prepare_only_step,
     _evolve_backend_state,
     _initialize_backend_state,
     _reprepare_backend_state_forced,
     _reprepare_site_zero_forced,
     _reprepare_site_zero_vector_forced,
-    _reset_backend_site_zero_to_product_ket,
     _single_qubit_unitary_mapping_basis0_to_ket,
     assemble_state_from_expectations,
     extract_site0_rho,
@@ -135,20 +135,15 @@ def test_reprepare_site_zero_helpers_mcwf_and_mps() -> None:
 
 
 def test_reset_and_unitary_backend_helpers() -> None:
-    """Hard reset and local unitaries dispatch on MCWF and TJM backends."""
+    """Local unitaries dispatch on MCWF and TJM backends."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     x = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
     u = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
 
     vec = np.zeros(4, dtype=np.complex128)
     vec[0] = 1.0
-    reset_vec = _reset_backend_site_zero_to_product_ket(vec, z, "MCWF", chain_length=2)
-    assert isinstance(reset_vec, np.ndarray)
-    assert reset_vec.shape == (4,)
 
     mps = MPS(length=2, state="zeros")
-    reset_mps = _reset_backend_site_zero_to_product_ket(mps, x, "TJM", chain_length=2)
-    assert isinstance(reset_mps, MPS)
 
     u_vec = _apply_backend_unitary_site_zero(vec, u, "MCWF")
     assert isinstance(u_vec, np.ndarray)
@@ -161,6 +156,20 @@ def test_reset_and_unitary_backend_helpers() -> None:
     zero_ket = np.zeros(2, dtype=np.complex128)
     u_default = _single_qubit_unitary_mapping_basis0_to_ket(zero_ket)
     assert u_default.shape == (2, 2)
+
+
+def test_prepare_only_soft_preserves_entanglement_on_two_qubits() -> None:
+    """Multi-qubit prepare_only reprepares site 0 without resetting other sites."""
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, order=1, get_state=True)
+    params.elapsed_time = 0.1
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    vec = _initialize_backend_state(op, solver="MCWF")
+    vec = _evolve_backend_state(vec, op, None, params, "MCWF", static_ctx=static_ctx)
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
+
+    soft, _ = _apply_prepare_only_step(vec, plus, "MCWF", chain_length=2)
+    assert not np.allclose(soft, vec, atol=1e-8)
 
 
 def test_evolve_backend_state_mcwf_path() -> None:

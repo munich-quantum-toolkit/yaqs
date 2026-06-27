@@ -23,9 +23,9 @@ from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.utils import (
     _apply_backend_unitary_site_zero,
+    _apply_prepare_only_step,
     _evolve_backend_state,
     _reprepare_backend_state_forced,
-    _reset_backend_site_zero_to_product_ket,
     extract_site0_rho,
     resolve_stochastic_solver,
 )
@@ -297,7 +297,7 @@ def _simulate_seq_core(
     for step_idx, step in enumerate(psi_pairs):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
-            if step_type in {"unitary", "depolarizing_pauli"}:
+            if step_type == "unitary":
                 u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
                 state = _apply_backend_unitary_site_zero(state, u, solver)
                 sp = 1.0
@@ -311,16 +311,12 @@ def _simulate_seq_core(
                 sp = float(step_prob)
             elif step_type == "prepare_only":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state = _reset_backend_site_zero_to_product_ket(
-                    state, psi_prep, solver, chain_length=int(hamiltonian.length)
+                state, sp = _apply_prepare_only_step(
+                    state,
+                    psi_prep,
+                    solver,
+                    chain_length=int(hamiltonian.length),
                 )
-                sp = 1.0
-            elif step_type == "reset_only":
-                psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-                state = _reset_backend_site_zero_to_product_ket(
-                    state, psi_r, solver, chain_length=int(hamiltonian.length)
-                )
-                sp = 1.0
             else:
                 msg = f"Unsupported step type: {step_type!r}"
                 raise ValueError(msg)
@@ -525,7 +521,7 @@ def _seq_trace_worker(
     for step_idx, step in enumerate(psi_pairs):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
-            if step_type in {"unitary", "depolarizing_pauli"}:
+            if step_type == "unitary":
                 u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
                 state = _apply_backend_unitary_site_zero(state, u, solver)
                 step_prob = 1.0
@@ -538,16 +534,12 @@ def _seq_trace_worker(
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
             elif step_type == "prepare_only":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state = _reset_backend_site_zero_to_product_ket(
-                    state, psi_prep, solver, chain_length=int(hamiltonian.length)
+                state, step_prob = _apply_prepare_only_step(
+                    state,
+                    psi_prep,
+                    solver,
+                    chain_length=int(hamiltonian.length),
                 )
-                step_prob = 1.0
-            elif step_type == "reset_only":
-                psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-                state = _reset_backend_site_zero_to_product_ket(
-                    state, psi_r, solver, chain_length=int(hamiltonian.length)
-                )
-                step_prob = 1.0
             else:
                 msg_0 = f"Unsupported step type: {step_type!r}"
                 raise ValueError(msg_0)

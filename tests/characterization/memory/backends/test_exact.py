@@ -98,7 +98,7 @@ def _sample_split_delayed_break_probes(
             full = list(past_pairs[i])
             full.append((past_cut_meas[i], z0))
             full.extend(bridge)
-            full.append({"type": "prepare_only", "psi_prep": future_prep_cut[j]})
+            full.append((z0, np.asarray(future_prep_cut[j], dtype=np.complex128)))
             full.extend(future_pairs[j])
             all_pairs.append(full)
 
@@ -257,6 +257,34 @@ def test_delayed_break_custom_psi_pairs_list_geometry() -> None:
         assert len(seq) == k
         bridge = seq[left_cut : left_cut + tau]
         assert all(step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in bridge)
+        assert isinstance(seq[left_cut + tau], tuple)
+
+
+def test_delayed_break_soft_future_prepare_retains_past_response() -> None:
+    """Right-cut preparation uses (|0>, sigma_p) so past rows differ in final tomography."""
+    rng = np.random.default_rng(4)
+    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+        left_cut=4,
+        tau=0,
+        k=10,
+        n_pasts=8,
+        n_futures=4,
+        rng=rng,
+    )
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
+    pauli, _, _ = simulate_exact(
+        probe_set=probe_set,
+        operator=op,
+        sim_params=params,
+        initial_psi=_product_initial_state(2),
+        parallel=False,
+        psi_pairs_list=psi_pairs_list,
+    )
+    past_std = float(np.std(pauli[:, 0, 1:4], axis=0).mean())
+    future_std = float(np.std(pauli[0, :, 1:4], axis=0).mean())
+    assert past_std > 1e-4
+    assert future_std > 1e-4
 
 
 def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:

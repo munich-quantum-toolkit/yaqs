@@ -53,7 +53,7 @@ def _step_probability(rho: np.ndarray, step: ProbeStep) -> float:
     """
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
-        if step_type in {"unitary", "depolarizing_pauli", "prepare_only", "reset_only"}:
+        if step_type in {"unitary", "prepare_only"}:
             return 1.0
         if step_type == "measure_only":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
@@ -80,7 +80,7 @@ def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
     r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
-        if step_type in {"unitary", "depolarizing_pauli"}:
+        if step_type == "unitary":
             u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
             out = u @ r @ u.conj().T
         elif step_type == "measure_only":
@@ -98,10 +98,6 @@ def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
         elif step_type == "prepare_only":
             psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
             ket = psi_prep / max(float(np.linalg.norm(psi_prep)), 1e-15)
-            out = np.outer(ket, ket.conj())
-        elif step_type == "reset_only":
-            psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-            ket = psi_r / max(float(np.linalg.norm(psi_r)), 1e-15)
             out = np.outer(ket, ket.conj())
         else:
             msg = f"Unsupported probe step type: {step_type!r}"

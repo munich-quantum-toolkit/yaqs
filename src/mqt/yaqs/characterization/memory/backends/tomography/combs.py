@@ -64,9 +64,6 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
                 rho_prep=np.outer(psi_prep, psi_prep.conj()),
                 effect=np.eye(2, dtype=np.complex128),
             )
-        if step_type == "reset_only":
-            psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-            return InterventionMap(rho_prep=np.outer(psi_r, psi_r.conj()), effect=np.eye(2, dtype=np.complex128))
         msg = f"Unsupported probe step type: {step_type!r}"
         raise ValueError(msg)
     psi_meas, psi_prep = step

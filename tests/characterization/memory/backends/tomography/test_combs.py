@@ -207,10 +207,6 @@ def test_convert_probe_step_dict_variants() -> None:
     assert po.rho_prep.shape == (2, 2)
     np.testing.assert_allclose(po.effect, np.eye(2), atol=1e-12)
 
-    ro = convert_probe_step({"type": "reset_only", "psi_reset": z})
-    assert isinstance(ro, InterventionMap)
-    assert ro.rho_prep.shape == (2, 2)
-
     mp = convert_probe_step((x, z))
     assert isinstance(mp, InterventionMap)
     assert mp.effect.shape == (2, 2)

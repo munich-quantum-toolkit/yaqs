@@ -205,12 +205,11 @@ def test_simulate_sequences_dict_step_types() -> None:
         {"type": "unitary", "U": u},
         {"type": "measure_only", "psi_meas": z, "psi_reset": z},
         {"type": "prepare_only", "psi_prep": x},
-        {"type": "reset_only", "psi_reset": z},
     ]
     finals = simulate_sequences(
         operator=op,
         sim_params=params,
-        timesteps=[0.0] * 5,
+        timesteps=[0.0] * 4,
         psi_pairs_list=[steps],
         initial_psis=[z.copy()],
         static_ctx=static_ctx,
@@ -223,7 +222,7 @@ def test_simulate_sequences_dict_step_types() -> None:
 
 
 def test_prepare_only_unconditional_from_non_zero_state() -> None:
-    """prepare_only resets site 0 without conditioning on |0>."""
+    """prepare_only assigns site 0 on single-qubit chains (comb-style, no |0> projection)."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -245,6 +244,52 @@ def test_prepare_only_unconditional_from_non_zero_state() -> None:
     rho2 = unpack_rho8(np.asarray(finals[0], dtype=np.float64))
     target = np.outer(plus, plus.conj())
     np.testing.assert_allclose(rho2, target, atol=1e-10)
+
+
+def test_prepare_only_retains_past_sensitivity_on_open_chain() -> None:
+    """Multi-qubit prepare_only must not clamp the environment (ell-benchmark regression)."""
+    from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
+    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
+
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, order=1)
+    psi0 = np.zeros(4, dtype=np.complex128)
+    psi0[0] = 1.0
+    z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
+    u_a = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    u_b = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+
+    def _past_row_response(u_first: np.ndarray) -> np.ndarray:
+        seq = [
+            {"type": "unitary", "U": u_first},
+            (z0, z0),
+            {"type": "prepare_only", "psi_prep": plus},
+            {"type": "unitary", "U": u_a},
+        ]
+        probe_set = ProbeSet(
+            cut=2,
+            k=4,
+            past_features=np.zeros((1, 2, 32), dtype=np.float32),
+            future_features=np.zeros((1, 2, 32), dtype=np.float32),
+            past_pairs=[[{"type": "unitary", "U": u_first}]],
+            past_cut_meas=[z0.copy()],
+            future_prep_cut=[plus.copy()],
+            future_pairs=[[{"type": "unitary", "U": u_a}]],
+        )
+        pauli, _, _ = simulate_exact(
+            probe_set=probe_set,
+            operator=op,
+            sim_params=params,
+            initial_psi=psi0,
+            parallel=False,
+            psi_pairs_list=[seq],
+        )
+        return np.asarray(pauli[0, 0, 1:4], dtype=np.float64)
+
+    soft_a = _past_row_response(u_a)
+    soft_b = _past_row_response(u_b)
+    assert float(np.linalg.norm(soft_a - soft_b)) > 1e-4
 
 
 def test_simulate_sequences_trace_worker_early_termination_fill() -> None:

@@ -292,42 +292,49 @@ def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> 
     return np.array([[a, -np.conj(b)], [b, np.conj(a)]], dtype=np.complex128)
 
 
-def _reset_backend_site_zero_to_product_ket(
+_SITE0_KET = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+
+
+def _apply_prepare_only_step(
     state: MPS | NDArray[np.complex128],
-    psi_reset: NDArray[np.complex128],
+    psi_prep: NDArray[np.complex128],
     solver: str,
     *,
     chain_length: int,
-) -> MPS | NDArray[np.complex128]:
-    """Clamp site 0 to ``psi_reset`` and all other sites to |0> (deterministic, unit weight).
+) -> tuple[MPS | NDArray[np.complex128], float]:
+    """Apply a ``prepare_only`` intervention on site 0.
 
-    Used for hard-reset / memory-gap probes: destroys correlations and carries no branch weight.
+    * ``chain_length == 1``: unconditional assignment to ``|ψ⟩`` (comb reference).
+    * ``chain_length > 1``: project site 0 onto ``|0⟩``, reprepare to ``|ψ⟩``; other
+      sites are unchanged.
+
+    Branch weight is always ``1.0``.
 
     Args:
         state: Current backend state.
-        psi_reset: Single-qubit ket for site 0.
+        psi_prep: Target site-0 ket.
         solver: Backend solver name.
         chain_length: Number of qubits in the chain.
 
     Returns:
-        Updated backend state with site 0 set to ``psi_reset`` and remaining sites in |0>.
+        Tuple ``(state_out, 1.0)``.
     """
-    p = np.asarray(psi_reset, dtype=np.complex128).reshape(2)
+    p = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
-    p = np.array([1.0 + 0j, 0.0 + 0j], dtype=np.complex128) if nrm < 1e-15 else p / nrm
-    if solver == "MCWF":
-        assert isinstance(state, np.ndarray)
-        chain_len = int(chain_length)
-        rest_dim = 2 ** (chain_len - 1)
-        psi_rest = np.zeros(rest_dim, dtype=np.complex128)
-        psi_rest[0] = 1.0 + 0.0j
-        return np.kron(p, psi_rest).astype(np.complex128).reshape(-1)
-    assert isinstance(state, MPS)
-    u = _single_qubit_unitary_mapping_basis0_to_ket(p)
-    new_mps = MPS(length=int(chain_length), state="zeros")
-    t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
-    new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
-    return new_mps
+    p = _SITE0_KET if nrm < 1e-15 else p / nrm
+    if int(chain_length) == 1:
+        if solver == "MCWF":
+            if not isinstance(state, np.ndarray):
+                msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
+                raise TypeError(msg)
+            return p.astype(np.complex128).copy(), 1.0
+        u = _single_qubit_unitary_mapping_basis0_to_ket(p)
+        new_mps = MPS(length=1, state="zeros")
+        t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
+        new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
+        return new_mps, 1.0
+    state_out, _prob = _reprepare_backend_state_forced(state, _SITE0_KET, p, solver)
+    return state_out, 1.0
 
 
 def _apply_backend_unitary_site_zero(
