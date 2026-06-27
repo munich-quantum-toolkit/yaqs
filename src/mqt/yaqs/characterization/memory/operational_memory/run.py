@@ -9,11 +9,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
 from .branch_weights import compute_analytic_weights
+from .grid import assemble_delayed_probe_grid, delayed_sequence_length
 from .memory_matrix import assemble_memory_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
 
@@ -104,13 +106,14 @@ def run_operational_memory(
     intervention_mode: str = "unitary_break_mp",
     unitary_ensemble: str = "haar",
     parallel: bool | None = None,
+    delay: int = 0,
 ) -> dict[str, Any]:
     """Run split-cut probing and assemble memory-matrix diagnostics.
 
     Args:
         process: Operational-memory backend (exact, comb, or surrogate).
         cut: Causal cut index.
-        k: Total sequence length.
+        k: Base sequence length (past + cut + future legs; excludes ``delay`` slots).
         n_pasts: Past probe count when sampling internally.
         n_futures: Future probe count when sampling internally.
         rng: RNG for internal probe sampling.
@@ -120,14 +123,20 @@ def run_operational_memory(
             :func:`~mqt.yaqs.characterization.memory.operational_memory.samples.sample_probes`.
         unitary_ensemble: Passed to internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
+        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
 
     Returns:
         Dict with ``entropy``, ``rank``, ``singular_values``, ``memory_matrix``,
         ``probe_set``, and optional ``weights_ij``.
 
     Raises:
-        ValueError: If a supplied ``probe_set`` was built for a different ``cut`` or ``k``.
+        ValueError: If a supplied ``probe_set`` was built for a different ``cut`` or ``k``,
+            or if ``delay > 0`` with a backend that does not support custom sequences.
     """
+    dd = int(delay)
+    if dd < 0:
+        msg = f"delay must be >= 0, got {delay}"
+        raise ValueError(msg)
     execution_override: ExecutionConfig | None = None
     if parallel is not None:
         # Deferred import avoids a circular dependency with ExactBackend.
@@ -150,19 +159,38 @@ def run_operational_memory(
             intervention_mode=intervention_mode,
             unitary_ensemble=unitary_ensemble,
         )
+    psi_pairs_list = None
+    sim_probe_set = probe_set
+    if dd > 0:
+        from ..backends.exact import ExactBackend  # noqa: PLC0415
+
+        if not isinstance(process, ExactBackend):
+            msg = "delay > 0 requires an exact Hamiltonian characterize backend."
+            raise ValueError(msg)
+        psi_pairs_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=dd)
+        sim_probe_set = replace(probe_set, k=delayed_sequence_length(k=int(k), delay=dd))
     if execution_override is not None:
         # Same deferred import as above (ExactBackend ↔ operational_memory cycle).
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if isinstance(process, ExactBackend):
             pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(
-                probe_set,
+                sim_probe_set,
+                psi_pairs_list=psi_pairs_list,
                 _execution=execution_override,
             )
         else:
-            pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, probe_set)
+            pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
+    elif dd > 0:
+        from ..backends.exact import ExactBackend  # noqa: PLC0415
+
+        assert isinstance(process, ExactBackend)
+        pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(
+            sim_probe_set,
+            psi_pairs_list=psi_pairs_list,
+        )
     else:
-        pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, probe_set)
+        pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
     m_raw, memory_matrix = assemble_memory_matrix(pauli_xyz_ij, weights_ij)
     ana = compute_spectrum(memory_matrix)
     out: dict[str, Any] = {

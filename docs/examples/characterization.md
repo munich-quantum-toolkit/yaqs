@@ -130,6 +130,47 @@ print(f"S_V = {memory.entropy(1):.4f}, R = {memory.rank(1):.3f}")
 
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
 
+### Reset delay at the causal break
+
+Pass `delay=N` to insert `N` soft-reset slots ``(|0>, |0>)`` at the causal cut.
+Each slot projects the probe site onto ``|0>`` and reprepares ``|0>`` while the rest of
+the chain (the environment) continues evolving — useful for studying how long a reset
+bridge must be before future probes lose sensitivity to the past.
+
+`k` and `cut` are unchanged from the standard split-cut geometry; the physical sequence
+length becomes ``k + delay + 1``. Reuse the same `probe_set` when sweeping `delay`.
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+ham_delay = Hamiltonian.ising(length=6, J=1.0, g=1.0)
+params_delay = AnalogSimParams(dt=0.1)
+mc_delay = MemoryCharacterizer(parallel=False, show_progress=False)
+anchor = mc_delay.characterize(
+    ham_delay,
+    params_delay,
+    k=6,
+    cut=4,
+    delay=0,
+    n_pasts=6,
+    n_futures=6,
+    rng=np.random.default_rng(999_991),
+)
+for delay in (0, 1, 2):
+    result = mc_delay.characterize(
+        ham_delay,
+        params_delay,
+        k=6,
+        cut=4,
+        delay=delay,
+        probe_set=anchor,
+    )
+    print(f"delay={delay}  S_V={result.entropy(4):.4f}")
+```
+
+`delay > 0` is supported for Hamiltonian (exact) characterize only.
+
 ## Characterize with a surrogate
 
 `characterize(model, ...)` evaluates the **same** operational memory quantity at cut `c`, using the surrogate as the process backend. It is not a training-quality score.

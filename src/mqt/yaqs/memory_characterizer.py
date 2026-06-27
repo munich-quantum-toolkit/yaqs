@@ -514,6 +514,7 @@ class MemoryCharacterizer:
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
+        delay: int = 0,
         **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
 
@@ -533,6 +534,7 @@ class MemoryCharacterizer:
         rng: Generator | None = None,
         probe_set: Any | None = None,
         parallel: bool | None = None,
+        delay: int = 0,
         **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
 
@@ -553,6 +555,7 @@ class MemoryCharacterizer:
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
         parallel: bool | None = None,
+        delay: int = 0,
         **probe_kwargs: Any,
     ) -> CharacterizationResult:
         """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb.
@@ -574,6 +577,7 @@ class MemoryCharacterizer:
             probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
             parallel: Override parallelism for comb/surrogate probing.
+            delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
             **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
 
         Returns:
@@ -582,12 +586,13 @@ class MemoryCharacterizer:
         Raises:
             TypeError: If a Hamiltonian is given without ``sim_params``.
             ValueError: If ``k`` is missing for a Hamiltonian target, both ``cut`` and
-                ``cuts`` are given, ``cuts`` is an empty list, or ``probe_set`` is reused
-                across multiple cuts.
+                ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is reused
+                across multiple cuts, or ``delay > 0`` on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
         resolved_probe_set = resolve_probe_bundle(probe_set)
+        reset_delay = int(delay)
 
         if matches_hamiltonian(target):
             if sim_params is None:
@@ -608,6 +613,7 @@ class MemoryCharacterizer:
                 probe_set=resolved_probe_set,
                 initial_psi=initial_psi,
                 probe_kw=probe_kw,
+                delay=reset_delay,
             )
 
         resolved_k = _resolve_k(target, k)
@@ -626,6 +632,7 @@ class MemoryCharacterizer:
                 probe_set=resolved_probe_set,
                 parallel=parallel,
                 probe_kw=probe_kw,
+                delay=reset_delay,
             )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
@@ -639,6 +646,7 @@ class MemoryCharacterizer:
                 probe_set=None,
                 parallel=parallel,
                 probe_kw=probe_kw,
+                delay=reset_delay,
             )
         return merge_cut_results(parts)
 
@@ -687,6 +695,7 @@ class MemoryCharacterizer:
         probe_set: ProbeSet | None,
         parallel: bool | None,
         probe_kw: dict[str, Any],
+        delay: int = 0,
     ) -> CharacterizationResult:
         """Characterize a comb or surrogate via internal split-cut probing.
 
@@ -704,6 +713,7 @@ class MemoryCharacterizer:
             probe_set=probe_set,
             return_raw=True,
             parallel=parallel if parallel is not None else self._execution.parallel,
+            delay=delay,
             **probe_kw,
         )
         return pack_result(out, cut=resolved_cut)
@@ -722,6 +732,7 @@ class MemoryCharacterizer:
         probe_set: ProbeSet | None,
         initial_psi: np.ndarray | None,
         probe_kw: dict[str, Any],
+        delay: int = 0,
     ) -> CharacterizationResult:
         """Characterize a Hamiltonian via exact stochastic sequences and branch weights.
 
@@ -773,6 +784,7 @@ class MemoryCharacterizer:
                 k=int(k),
                 probe_set=local_probe_set,
                 return_raw=True,
+                delay=delay,
             )
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]

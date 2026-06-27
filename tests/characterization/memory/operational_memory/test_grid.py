@@ -13,8 +13,10 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.grid import (
+    assemble_delayed_probe_grid,
     assemble_probe_grid,
     assemble_probe_sequence,
+    delayed_sequence_length,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 
@@ -91,3 +93,24 @@ def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
     )
     with pytest.raises(ValueError, match="future_prep_cut length 2 != n_futures=1"):
         assemble_probe_sequence(probe_set, i=0, j=0)
+
+
+def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
+    """delay>0 lengthens sequences by delay+1 and adds (|0>,|0>) bridge slots."""
+    rng = np.random.default_rng(9)
+    cut, k, delay = 3, 5, 2
+    probe_set = sample_probes(cut=cut, k=k, n_pasts=2, n_futures=2, rng=rng)
+    delayed_pairs, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
+    expected_len = delayed_sequence_length(k=k, delay=delay)
+    assert expected_len == k + delay + 1
+    assert all(len(seq) == expected_len for seq in delayed_pairs)
+    z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    for seq in delayed_pairs:
+        reset_pairs = sum(
+            1
+            for step in seq
+            if isinstance(step, tuple)
+            and np.allclose(step[0], z0)
+            and np.allclose(step[1], z0)
+        )
+        assert reset_pairs == delay

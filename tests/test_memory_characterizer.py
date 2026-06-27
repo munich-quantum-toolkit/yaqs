@@ -525,3 +525,37 @@ def test_paper_modes_rank_rises_with_coupling() -> None:
 
     assert effective_rank(0.5) < effective_rank(2.0)
     assert effective_rank(2.0) >= 4
+
+
+def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
+    """Smoke reset-delay benchmark: memory grows with delay at moderate coupling."""
+    mc = _paper_mc()
+    cut = 4
+    k = 6
+    n_pasts = n_futures = 6
+    probe_set = sample_probes(
+        cut=cut,
+        k=k,
+        n_pasts=n_pasts,
+        n_futures=n_futures,
+        rng=np.random.default_rng(999_991),
+        intervention_mode="unitary_break_mp",
+        unitary_ensemble="haar",
+    )
+    ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
+    entropies: list[float] = []
+    for delay in (0, 1, 2):
+        result = mc.characterize(
+            ham,
+            _paper_params(),
+            k=k,
+            cut=cut,
+            delay=delay,
+            n_pasts=n_pasts,
+            n_futures=n_futures,
+            probe_set=probe_set,
+            initial_psi=make_zero_psi(_PAPER_L),
+        )
+        entropies.append(float(result.entropy(cut)))
+    assert entropies[-1] > entropies[0] + 0.001
+    assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))

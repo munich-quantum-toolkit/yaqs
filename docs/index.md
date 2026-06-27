@@ -79,6 +79,7 @@ flowchart LR
 | I want to…                                       | Read                                      |
 | ------------------------------------------------ | ----------------------------------------- |
 | Characterize operational memory (start here)     | {doc}`examples/characterization`          |
+| Study reset delay at the causal cut              | {doc}`examples/characterization` § Reset delay |
 | Predict dynamics with a trained surrogate        | {doc}`examples/characterization`          |
 | Reference dynamics at small `k` (reference comb) | {doc}`examples/reference_exact_combs`     |
 | Tune surrogate training                          | {doc}`examples/process_tensor_surrogates` |

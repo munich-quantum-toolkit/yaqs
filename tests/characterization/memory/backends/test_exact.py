@@ -21,10 +21,6 @@ from mqt.yaqs.characterization.memory.backends.exact import (
     ExactBackend,
     simulate_exact,
 )
-from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
-    assemble_memory_matrix,
-    compute_spectrum,
-)
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
     ProbeSet,
     _sample_cut_measurement_only,  # noqa: PLC2701
@@ -118,87 +114,6 @@ def _sample_split_delayed_break_probes(
         future_pairs=future_pairs,
     )
     return probe_set, all_pairs
-
-
-def _build_soft_ell_delay_probes(
-    *,
-    past_pairs: list[list[Any]],
-    past_cut_meas: list[np.ndarray],
-    future_prep_cut: list[np.ndarray],
-    future_pairs: list[list[Any]],
-    past_len: int,
-    future_len: int,
-    ell: int,
-) -> tuple[ProbeSet, list[list[Any]]]:
-    """Delayed-bridge probes with ``ell`` soft (|0>,|0>) reset slots.
-
-    Returns:
-        Probe metadata and the flat intervention-sequence grid.
-    """
-    n_pasts = len(past_pairs)
-    n_futures = len(future_pairs)
-    left_cut = int(past_len + 1)
-    ell_i = int(ell)
-    k_this = int(past_len + 1 + ell_i + 1 + future_len)
-    z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    all_pairs: list[list[Any]] = []
-    for i in range(n_pasts):
-        for j in range(n_futures):
-            full: list[Any] = list(past_pairs[i])
-            full.append((np.asarray(past_cut_meas[i], dtype=np.complex128), z0))
-            full.extend((z0, z0) for _ in range(ell_i))
-            full.append((z0, np.asarray(future_prep_cut[j], dtype=np.complex128)))
-            full.extend(future_pairs[j])
-            all_pairs.append(full)
-
-    probe_set = ProbeSet(
-        cut=left_cut,
-        k=k_this,
-        past_features=np.zeros((n_pasts, max(1, past_len + 1), 32), dtype=np.float32),
-        future_features=np.zeros((n_futures, max(1, 1 + ell_i + future_len), 32), dtype=np.float32),
-        past_pairs=copy.deepcopy(past_pairs),
-        past_cut_meas=[np.asarray(x, dtype=np.complex128) for x in past_cut_meas],
-        future_prep_cut=[np.asarray(x, dtype=np.complex128) for x in future_prep_cut],
-        future_pairs=copy.deepcopy(future_pairs),
-    )
-    return probe_set, all_pairs
-
-
-def _sample_ell_past_future_base(
-    *,
-    n_pasts: int,
-    n_futures: int,
-    rng: np.random.Generator,
-    past_len: int,
-    future_len: int,
-) -> tuple[list[list[Any]], list[np.ndarray], list[np.ndarray], list[list[Any]]]:
-    """Sample one past/future ensemble for ell-delay sweeps.
-
-    Returns:
-        Past pairs, past cut measurements, future preparations, and future pairs.
-    """
-    unitary_sampler = resolve_unitary_sampler("haar")
-    past_pairs: list[list[Any]] = []
-    past_cut_meas: list[np.ndarray] = []
-    for _ in range(n_pasts):
-        pairs_i = [
-            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
-            for _ in range(past_len)
-        ]
-        _feat_m, psi_m = _sample_cut_measurement_only(rng)
-        past_cut_meas.append(psi_m)
-        past_pairs.append(pairs_i)
-
-    future_prep_cut: list[np.ndarray] = []
-    future_pairs: list[list[Any]] = []
-    for _ in range(n_futures):
-        _feat_p, psi_p = _sample_cut_preparation_only(rng)
-        future_prep_cut.append(psi_p)
-        future_pairs.append([
-            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
-            for _ in range(future_len)
-        ])
-    return past_pairs, past_cut_meas, future_prep_cut, future_pairs
 
 
 def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
@@ -445,48 +360,3 @@ def test_simulate_exact_preserves_float64_probe_coefficients() -> None:
         parallel=False,
     )
     assert pauli.dtype == np.float64
-
-
-def test_paper_ell_delay_entropy_nondecreasing_at_unit_coupling() -> None:
-    """Smoke ell-delay benchmark: memory grows with delay at moderate coupling."""
-    past_len = 3
-    future_len = 2
-    n_pasts = n_futures = 6
-    base = _sample_ell_past_future_base(
-        n_pasts=n_pasts,
-        n_futures=n_futures,
-        rng=np.random.default_rng(999_991),
-        past_len=past_len,
-        future_len=future_len,
-    )
-    op = MPO.ising(length=6, J=1.0, g=1.0)
-    params = AnalogSimParams(dt=0.1)
-    psi0 = _product_initial_state(6)
-    entropies: list[float] = []
-    for ell in (0, 1, 2):
-        probe_set, psi_pairs = _build_soft_ell_delay_probes(
-            past_pairs=base[0],
-            past_cut_meas=base[1],
-            future_prep_cut=base[2],
-            future_pairs=base[3],
-            past_len=past_len,
-            future_len=future_len,
-            ell=ell,
-        )
-        pauli, weights, _ = simulate_exact(
-            probe_set=probe_set,
-            operator=op,
-            sim_params=params,
-            initial_psi=psi0,
-            parallel=False,
-            psi_pairs_list=psi_pairs,
-        )
-        _raw, memory_matrix = assemble_memory_matrix(
-            pauli,
-            weights,
-            center=True,
-            log_weight_warnings=False,
-        )
-        entropies.append(float(compute_spectrum(memory_matrix, discarded_weight_threshold=None)["entropy"]))
-    assert entropies[-1] > entropies[0] + 0.001
-    assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
