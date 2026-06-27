@@ -16,6 +16,59 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
+from mqt.yaqs.memory_characterizer import make_zero_psi
+
+_PAPER_L = 6
+_PAPER_K = 20
+_PAPER_G = 1.0
+_PAPER_SEED = 0
+
+
+def _paper_params() -> AnalogSimParams:
+    return AnalogSimParams(dt=0.1)
+
+
+def _paper_mc() -> MemoryCharacterizer:
+    return MemoryCharacterizer(parallel=False, show_progress=False)
+
+
+def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, k: int = _PAPER_K) -> ProbeSet:
+    rng = np.random.default_rng(_PAPER_SEED + 10_000 * int(cut))
+    return sample_probes(
+        cut=int(cut),
+        k=int(k),
+        n_pasts=int(n_pasts),
+        n_futures=int(n_futures),
+        rng=rng,
+        intervention_mode="unitary_break_mp",
+        unitary_ensemble="haar",
+    )
+
+
+def _entropy_at_j(
+    mc: MemoryCharacterizer,
+    *,
+    cut: int,
+    j: float,
+    n_pasts: int,
+    n_futures: int,
+    probe_set: ProbeSet,
+    length: int = _PAPER_L,
+    k: int = _PAPER_K,
+) -> float:
+    ham = Hamiltonian.ising(length=length, J=float(j), g=_PAPER_G)
+    result = mc.characterize(
+        ham,
+        _paper_params(),
+        k=int(k),
+        cut=int(cut),
+        n_pasts=int(n_pasts),
+        n_futures=int(n_futures),
+        probe_set=probe_set,
+        initial_psi=make_zero_psi(length),
+    )
+    return float(result.entropy(int(cut)))
 
 
 @pytest.fixture
@@ -396,3 +449,79 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
     assert entropies[0] < 0.05
     assert entropies[-1] > entropies[0] + 0.1
     assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
+
+
+def test_paper_cut_vs_j_entropy_rises_with_coupling() -> None:
+    """Smoke cut x J benchmark: stronger coupling yields larger cross-cut memory."""
+    mc = _paper_mc()
+    cut = 2
+    n_pasts = n_futures = 8
+    probe_set = _sample_cut_probes(cut=cut, n_pasts=n_pasts, n_futures=n_futures)
+    s_j0 = _entropy_at_j(mc, cut=cut, j=0.0, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
+    s_j05 = _entropy_at_j(mc, cut=cut, j=0.5, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
+    s_j2 = _entropy_at_j(mc, cut=cut, j=2.0, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
+    assert s_j0 < 0.01
+    assert s_j2 > s_j05 + 0.005
+
+
+def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
+    """Smoke finite-size benchmark: integrated memory weakens as the bath grows."""
+    mc = _paper_mc()
+    k = 4
+    n_pasts = n_futures = 6
+    cuts = list(range(1, k + 1))
+    probe_sets = {c: _sample_cut_probes(cut=c, k=k, n_pasts=n_pasts, n_futures=n_futures) for c in cuts}
+    jv = 1.0
+
+    def integrated_entropy(length: int) -> float:
+        ent = {
+            c: _entropy_at_j(
+                mc,
+                cut=c,
+                j=jv,
+                n_pasts=n_pasts,
+                n_futures=n_futures,
+                probe_set=probe_sets[c],
+                length=length,
+                k=k,
+            )
+            for c in cuts
+        }
+        return float(sum(ent.values()))
+
+    assert integrated_entropy(2) > integrated_entropy(3) + 0.0002
+
+
+def test_paper_modes_rank_rises_with_coupling() -> None:
+    """Smoke modes benchmark: effective rank grows with coupling at a fixed cut."""
+    mc = _paper_mc()
+    cut = 2
+    m_spectrum = 8
+    rank_tol = 1e-16
+
+    def effective_rank(j: float) -> int:
+        probe_seed = _PAPER_SEED + 900_000 + 100_000 * cut + 100 * round(100 * j)
+        probe_set = sample_probes(
+            cut=cut,
+            k=_PAPER_K,
+            n_pasts=m_spectrum,
+            n_futures=m_spectrum,
+            rng=np.random.default_rng(probe_seed),
+            intervention_mode="unitary_break_mp",
+            unitary_ensemble="haar",
+        )
+        result = mc.characterize(
+            Hamiltonian.ising(length=_PAPER_L, J=float(j), g=_PAPER_G),
+            _paper_params(),
+            k=_PAPER_K,
+            cut=cut,
+            n_pasts=m_spectrum,
+            n_futures=m_spectrum,
+            probe_set=probe_set,
+            initial_psi=make_zero_psi(_PAPER_L),
+        )
+        s = result.singular_values(cut)
+        return int(np.sum(s > rank_tol))
+
+    assert effective_rank(0.5) < effective_rank(2.0)
+    assert effective_rank(2.0) >= 4

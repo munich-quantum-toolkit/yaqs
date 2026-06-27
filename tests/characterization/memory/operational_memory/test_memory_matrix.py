@@ -136,3 +136,45 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
         rtol=1e-10,
         atol=1e-10,
     )
+
+
+def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> None:
+    """Smoke convergence benchmark: larger probe grids resolve stronger memory."""
+    cut = 2
+    m_values = (4, 16)
+    m_max = max(m_values)
+    op = MPO.ising(length=6, J=2.0, g=1.0)
+    params = AnalogSimParams(dt=0.1)
+    psi0 = np.zeros(2**6, dtype=np.complex128)
+    psi0[0] = 1.0 + 0.0j
+    draw_seed = 100_000 * cut + 10 * round(100 * 2.0)
+    probe_set = sample_probes(
+        cut=cut,
+        k=20,
+        n_pasts=m_max,
+        n_futures=m_max,
+        rng=np.random.default_rng(draw_seed),
+        intervention_mode="unitary_break_mp",
+        unitary_ensemble="haar",
+    )
+    pauli, weights, _ = simulate_exact(
+        probe_set=probe_set,
+        operator=op,
+        sim_params=params,
+        initial_psi=psi0,
+        parallel=False,
+    )
+    entropies: list[float] = []
+    for m in m_values:
+        p_sub = np.asarray(pauli[:m, :m, ...])
+        w = np.asarray(weights)
+        w_sub = w[:m, :m, ...] if w.ndim >= 2 else w[:m, ...]
+        _raw, memory_matrix = assemble_memory_matrix(
+            p_sub,
+            w_sub,
+            center=True,
+            log_weight_warnings=False,
+        )
+        entropies.append(float(compute_spectrum(memory_matrix, discarded_weight_threshold=None)["entropy"]))
+    assert entropies[-1] > entropies[0] * 1.05
+    assert entropies[-1] > 0.015
