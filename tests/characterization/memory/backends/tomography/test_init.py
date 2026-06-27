@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-import mqt.yaqs.characterization.memory.backends.tomography as tomography
+from mqt.yaqs.characterization.memory.backends import tomography
 
 
 def test_tomography_package_reexports() -> None:
