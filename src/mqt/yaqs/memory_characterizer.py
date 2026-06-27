@@ -582,7 +582,8 @@ class MemoryCharacterizer:
         Raises:
             TypeError: If a Hamiltonian is given without ``sim_params``.
             ValueError: If ``k`` is missing for a Hamiltonian target, both ``cut`` and
-                ``cuts`` are given, or ``probe_set`` is reused across multiple cuts.
+                ``cuts`` are given, ``cuts`` is an empty list, or ``probe_set`` is reused
+                across multiple cuts.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
@@ -659,12 +660,16 @@ class MemoryCharacterizer:
             Sorted list of cut indices to evaluate.
 
         Raises:
-            ValueError: If both ``cut`` and ``cuts`` are provided.
+            ValueError: If both ``cut`` and ``cuts`` are provided, or ``cuts`` is an
+                empty list.
         """
         if cuts is not None and cut is not None:
             msg = "Specify only one of cut=... or cuts=..., not both."
             raise ValueError(msg)
         if cuts is not None:
+            if cuts != "all" and len(cuts) == 0:
+                msg = "cuts must be 'all' or a non-empty list of cut indices."
+                raise ValueError(msg)
             return list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
         if cut is not None:
             return [int(cut)]

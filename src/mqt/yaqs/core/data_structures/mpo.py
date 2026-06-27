@@ -145,7 +145,12 @@ class MPO:
             raise ValueError(msg)
 
         tensor_phys = tensor.reshape(d2, dim_left * dim_right)
-        tensor_new = op_mat @ tensor_phys if left_action else tensor_phys @ op_mat
+        if left_action:
+            tensor_new = op_mat @ tensor_phys
+        else:
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            op4 = op_mat.reshape(d_out, d_in, d_out, d_in)
+            tensor_new = np.einsum("oiOI,oib->oOb", op4, tensor_view).reshape(d2, dim_left * dim_right)
         self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
 
     def partial_trace_site(self, site: int) -> None:

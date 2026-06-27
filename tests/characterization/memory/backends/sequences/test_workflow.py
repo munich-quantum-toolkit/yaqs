@@ -61,6 +61,19 @@ def test_simulate_sequences_input_validation_errors() -> None:
             e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
         )
 
+    with pytest.raises(ValueError, match="context_vec is only used when record_step_states=True"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.1, 0.1],
+            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+            initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
+            static_ctx=None,
+            parallel=False,
+            record_step_states=False,
+            context_vec=np.zeros(4, dtype=np.float32),
+        )
+
 
 def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
     """MCWF simulation returns final packed states or sequence traces."""

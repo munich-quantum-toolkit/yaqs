@@ -130,6 +130,7 @@ def run_operational_memory(
     """
     execution_override: ExecutionConfig | None = None
     if parallel is not None:
+        # Deferred import avoids a circular dependency with ExactBackend.
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if isinstance(process, ExactBackend):
@@ -150,6 +151,7 @@ def run_operational_memory(
             unitary_ensemble=unitary_ensemble,
         )
     if execution_override is not None:
+        # Same deferred import as above (ExactBackend ↔ operational_memory cycle).
         from ..backends.exact import ExactBackend  # noqa: PLC0415
 
         if isinstance(process, ExactBackend):

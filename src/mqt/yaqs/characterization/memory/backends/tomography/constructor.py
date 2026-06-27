@@ -30,6 +30,7 @@ install it as :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`, then dispatch wi
 from __future__ import annotations
 
 import copy
+import itertools
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -170,6 +171,19 @@ def run_all_sequences(
     Prefer :func:`build_process_tensor` for the validated user entry; this routine assumes
     ``timesteps`` and solver compatibility are already correct.
 
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Per-step evolution durations (length ``k``).
+        parallel: Whether to parallelize over sequences.
+        num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
+        noise_model: Optional open-system noise model.
+        basis: Tomography basis name.
+        basis_seed: Optional seed when ``basis="random"``.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        show_progress: Whether to show a progress bar.
+        _execution: Optional internal execution configuration.
+
     Returns:
         Exhaustive :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
@@ -186,8 +200,6 @@ def run_all_sequences(
     k = len(timesteps)
 
     def _enumerate_sequences(k_in: int) -> list[tuple[int, ...]]:
-        import itertools  # noqa: PLC0415
-
         return list(itertools.product(range(16), repeat=k_in))
 
     all_seqs = _enumerate_sequences(k)
@@ -345,6 +357,25 @@ def build_process_tensor(
 
     - ``return_type="dense"``: reconstruct and return a :class:`DenseComb`.
     - ``return_type="mpo"``: build and return an :class:`MPOComb`.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Optional per-step durations (defaults to ``[sim_params.elapsed_time]``).
+        noise_model: Optional open-system noise model.
+        parallel: Whether to parallelize over sequences.
+        num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
+        basis: Tomography basis name.
+        basis_seed: Optional seed when ``basis="random"``.
+        return_type: ``"dense"`` or ``"mpo"`` comb representation.
+        check: Run self-consistency check for dense reconstruction.
+        atol: Absolute tolerance for the dense self-check.
+        compress_every: MPO rank-1 accumulation compress interval.
+        tol: MPO compression tolerance.
+        max_bond_dim: Optional MPO bond-dimension cap.
+        n_sweeps: MPO compression sweeps.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        _execution: Optional internal execution configuration.
 
     Returns:
         Dense or MPO comb wrapper depending on ``return_type``.

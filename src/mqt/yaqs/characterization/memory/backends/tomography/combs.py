@@ -391,6 +391,12 @@ class DenseComb:
             rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
 
         k_steps = self._k_steps()
+        if k_steps == 0:
+            if past not in {"all", "first", "last"}:
+                msg = f"Unknown past='{past}'."
+                raise ValueError(msg)
+            return 0.0
+
         dims = [2] + [4] * k_steps
         if past == "all":
             keep_past = list(range(1, k_steps + 1))
@@ -579,6 +585,23 @@ class MPOComb(MPO):
             ValueError: If the interventions list is empty or length mismatches the comb.
         """
         if not interventions:
+            if self.length == 1:
+                reduced = self.partial_trace_sites([0])
+                rho = reduced.to_matrix()
+                rho = 0.5 * (rho + rho.conj().T)
+                tr = np.trace(rho)
+                if abs(tr) > 1e-12:
+                    rho /= tr
+                else:
+                    rho = np.eye(2, dtype=np.complex128) / 2.0
+                w, eig_vecs = np.linalg.eigh(rho)
+                w = np.clip(w, 0.0, None)
+                rho = (eig_vecs * w) @ eig_vecs.conj().T
+                tr = np.trace(rho)
+                if abs(tr) > 1e-12:
+                    rho /= tr
+                return rho.astype(np.complex128, copy=False)
+
             msg = "interventions list must be non-empty."
             raise ValueError(msg)
 

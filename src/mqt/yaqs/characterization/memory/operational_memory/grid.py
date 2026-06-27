@@ -27,13 +27,24 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         Intervention sequence of length ``probe_set.k``.
 
     Raises:
-        ValueError: If the assembled sequence length does not equal ``probe_set.k``.
+        ValueError: If past/future branch lengths are inconsistent or the assembled
+            sequence length does not equal ``probe_set.k``.
     """
     c = int(probe_set.cut)
     kk = int(probe_set.k)
-    full: list[Any] = [probe_set.past_pairs[i][t] for t in range(c - 1)]
+    past_len = c - 1
+    future_len = kk - c
+    past_pairs = probe_set.past_pairs[i]
+    future_pairs = probe_set.future_pairs[j]
+    if len(past_pairs) != past_len:
+        msg = f"past_pairs[{i}] length {len(past_pairs)} != cut-1={past_len}"
+        raise ValueError(msg)
+    if len(future_pairs) != future_len:
+        msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
+        raise ValueError(msg)
+    full: list[Any] = list(past_pairs)
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
-    full.extend(probe_set.future_pairs[j][t] for t in range(kk - c))
+    full.extend(future_pairs)
     if len(full) != kk:
         msg = f"assembled probe sequence length {len(full)} != k={kk}"
         raise ValueError(msg)

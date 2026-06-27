@@ -42,7 +42,7 @@ def test_assemble_probe_grid_size() -> None:
 
 
 def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
-    """Direct callers get a length-k invariant check."""
+    """Direct callers get explicit branch-length validation."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     probe_set = ProbeSet(
         cut=1,
@@ -54,5 +54,22 @@ def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
         future_prep_cut=[z],
         future_pairs=[[{"type": "unitary", "U": np.eye(2, dtype=np.complex128)}]],
     )
-    with pytest.raises((ValueError, IndexError)):
+    with pytest.raises(ValueError, match="future_pairs\\[0\\] length 1 != k-cut=2"):
+        assemble_probe_sequence(probe_set, i=0, j=0)
+
+
+def test_assemble_probe_sequence_rejects_short_past_branch() -> None:
+    """Undersized past branch lists are rejected before indexed access."""
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    probe_set = ProbeSet(
+        cut=3,
+        k=3,
+        past_features=np.zeros((1, 3, 32), dtype=np.float32),
+        future_features=np.zeros((1, 1, 32), dtype=np.float32),
+        past_pairs=[[{"type": "unitary", "U": np.eye(2, dtype=np.complex128)}]],
+        past_cut_meas=[z],
+        future_prep_cut=[z],
+        future_pairs=[[]],
+    )
+    with pytest.raises(ValueError, match="past_pairs\\[0\\] length 1 != cut-1=2"):
         assemble_probe_sequence(probe_set, i=0, j=0)

@@ -40,10 +40,23 @@ _PSI0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
 def _params() -> AnalogSimParams:
+    """Return analog simulation parameters for tight exact-backend tests.
+
+    Returns:
+        :class:`~mqt.yaqs.AnalogSimParams` with a small bond dimension and timestep.
+    """
     return AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
 
 
 def _trace_final_weight(trace: dict[str, object]) -> float:
+    """Extract the final cumulative weight from a traced rollout dict.
+
+    Returns:
+        Final cumulative intervention weight.
+
+    Raises:
+        TypeError: If ``cumulative_weight_final`` is not numeric.
+    """
     val = trace["cumulative_weight_final"]
     if not isinstance(val, (int, float)):
         msg = "cumulative_weight_final must be numeric"
@@ -278,6 +291,12 @@ def _entropy_from_cumulative_weights(
     psi0: np.ndarray,
 ) -> float:
     """Entropy using cumulative_weight_final from traced exact rollouts.
+
+    Args:
+        probe_set: Split-cut probe bundle to simulate.
+        op: Hamiltonian MPO.
+        params: Analog simulation parameters.
+        psi0: Initial state vector.
 
     Returns:
         Von Neumann entropy of the assembled memory matrix.

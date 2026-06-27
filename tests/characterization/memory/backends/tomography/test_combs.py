@@ -119,7 +119,7 @@ def test_mpocomb_predict_smoke_identity_map() -> None:
 
 
 def test_mpocomb_predict_raises_on_empty_interventions() -> None:
-    """Predict rejects an empty intervention list."""
+    """Predict rejects empty interventions when k>0."""
     data = SequenceData(
         sequences=[(0,)],
         outputs=[np.eye(2, dtype=np.complex128)],
@@ -132,6 +132,23 @@ def test_mpocomb_predict_raises_on_empty_interventions() -> None:
     comb = data.to_mpo_comb(compress_every=1)
     with pytest.raises(ValueError, match="interventions list must be non-empty"):
         comb.predict([])
+
+
+def test_mpocomb_predict_zero_steps() -> None:
+    """MPOComb.predict([]) returns the stored output when k=0."""
+    rho = np.array([[0.6, 0.1 + 0.0j], [0.1 - 0.0j, 0.4]], dtype=np.complex128)
+    data = SequenceData(
+        sequences=[()],
+        outputs=[rho],
+        weights=[1.0],
+        choi_basis=[],
+        choi_indices=[],
+        choi_duals=[],
+        timesteps=[],
+    )
+    comb = data.to_mpo_comb(compress_every=1)
+    rho_out = comb.predict([])
+    np.testing.assert_allclose(rho_out, rho, atol=1e-10)
 
 
 def test_mpocomb_predict_raises_on_length_mismatch() -> None:
@@ -221,6 +238,15 @@ def test_dense_comb_predict_zero_steps() -> None:
     comb = DenseComb(rho.reshape(2, 2), timesteps=[])
     rho_out = comb.predict([])
     np.testing.assert_allclose(rho_out, rho, atol=1e-12)
+
+
+def test_densecomb_qmi_zero_steps() -> None:
+    """QMI is zero when the comb has no past intervention legs."""
+    rho = np.array([[0.7, 0.0], [0.0, 0.3]], dtype=np.complex128)
+    comb = DenseComb(rho.reshape(2, 2), timesteps=[])
+    assert comb.qmi(past="all") == pytest.approx(0.0)
+    assert comb.qmi(past="first") == pytest.approx(0.0)
+    assert comb.qmi(past="last") == pytest.approx(0.0)
 
 
 def test_convert_probe_callable_unitary_and_map() -> None:

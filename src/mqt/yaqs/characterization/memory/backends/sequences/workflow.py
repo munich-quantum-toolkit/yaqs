@@ -77,7 +77,8 @@ def simulate_sequences(
         timesteps_rows: Optional per-sequence durations, each of length ``k+1``.
         operators_list: Optional per-sequence Hamiltonians, length ``k+1`` per sequence.
         static_ctx_list: Optional per-sequence MCWF contexts, length ``k+1`` per sequence.
-        context_vec: Optional static context vector attached to each trace.
+        context_vec: Optional static context vector attached to each trace when
+            ``record_step_states=True`` (ignored otherwise).
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
@@ -107,6 +108,10 @@ def simulate_sequences(
             raise ValueError(msg)
     elif e_features_rows is not None:
         msg = "e_features_rows is only used when record_step_states=True."
+        raise ValueError(msg)
+
+    if context_vec is not None and not record_step_states:
+        msg = "context_vec is only used when record_step_states=True."
         raise ValueError(msg)
 
     _validate_comb_sequence_inputs(

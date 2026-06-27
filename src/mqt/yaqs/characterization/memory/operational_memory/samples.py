@@ -142,7 +142,7 @@ def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
     """
     cliffords = enumerate_clifford_unitaries()
     idx = int(rng.integers(0, len(cliffords)))
-    return np.asarray(cliffords[idx], dtype=np.complex128)
+    return np.asarray(cliffords[idx], dtype=np.complex128).copy()
 
 
 def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
@@ -194,7 +194,7 @@ def _sample_probe_step(
     rng: np.random.Generator,
     *,
     intervention_mode: str,
-    unitary_sampler: Callable[[np.random.Generator], np.ndarray],
+    unitary_sampler: Callable[[np.random.Generator], np.ndarray] | None,
 ) -> tuple[np.ndarray, ProbeStep]:
     """Sample one within-sequence intervention step.
 
@@ -205,10 +205,16 @@ def _sample_probe_step(
 
     Returns:
         Tuple ``(choi_features, step)`` where ``step`` is an MP pair or unitary dict.
+
+    Raises:
+        ValueError: If ``unitary_sampler`` is missing for unitary-break modes.
     """
     if intervention_mode == "measure_prepare":
         feat, pair = _sample_step(rng)
         return feat, pair
+    if unitary_sampler is None:
+        msg = "unitary_sampler is required for unitary-break intervention modes."
+        raise ValueError(msg)
     u = unitary_sampler(rng)
     return encode_unitary_choi(u), {"type": "unitary", "U": u}
 
@@ -268,7 +274,7 @@ def sample_probes(
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
         raise ValueError(msg)
-    unitary_sampler = resolve_unitary_sampler(unitary_ensemble)
+    unitary_sampler = resolve_unitary_sampler(unitary_ensemble) if mode == "unitary_break_mp" else None
     past_full = c - 1
     future_full = kk - c
 

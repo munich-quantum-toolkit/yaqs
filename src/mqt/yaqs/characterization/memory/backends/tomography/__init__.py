@@ -5,9 +5,6 @@
 #
 # Licensed under the MIT License
 
-# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
-# SPDX-License-Identifier: MIT
-
 """Process-tensor tomography (exact/exhaustive).
 
 This subpackage constructs a process tensor from exhaustive discrete intervention sequences (size

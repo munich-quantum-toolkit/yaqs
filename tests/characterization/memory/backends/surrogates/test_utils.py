@@ -103,3 +103,17 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
     psi_tensor = np.reshape(psi_pur, (2, 2, 2))
     rho_reduced = np.einsum("abc,dbc->ad", psi_tensor, psi_tensor.conj())
     np.testing.assert_allclose(rho_reduced, rho, atol=1e-10)
+
+    psi_pur_sample_out = _initial_mcwf_state_from_rho0(
+        rho,
+        length=3,
+        rng=rng,
+        init_mode="purified",
+        return_eig_sample=True,
+    )
+    assert isinstance(psi_pur_sample_out, tuple)
+    psi_pur_sample, idx_p, p_p = psi_pur_sample_out
+    assert psi_pur_sample.shape == (2**3,)
+    assert 0 <= idx_p < 2**3
+    assert 0.0 <= p_p <= 1.0
+    np.testing.assert_allclose(np.linalg.norm(psi_pur_sample), 1.0, atol=1e-12)

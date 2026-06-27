@@ -194,3 +194,24 @@ def test_run_indexed_jobs_serial_ordering() -> None:
     )
     assert calls == [0, 1, 2, 3]
     assert results == {i: i + 10 for i in range(4)}
+
+
+def test_run_indexed_jobs_uses_serial_when_max_workers_is_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single resolved worker avoids spawning a process pool."""
+    monkeypatch.setattr(parallel_utils, "available_cpus", lambda: 1)
+    calls: list[int] = []
+
+    def worker(job_idx: int, _payload: dict[str, int]) -> int:
+        calls.append(job_idx)
+        return job_idx
+
+    config = ExecutionConfig(parallel=True, show_progress=False)
+    results = run_indexed_jobs(
+        worker,
+        payload={},
+        n_jobs=3,
+        config=config,
+        desc="test",
+    )
+    assert calls == [0, 1, 2]
+    assert results == {0: 0, 1: 1, 2: 2}

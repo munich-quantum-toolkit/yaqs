@@ -265,7 +265,14 @@ class TransformerComb(nn.Module):
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
+
+        Raises:
+            ValueError: If ``probe_set.k`` differs from the model training horizon.
         """
+        expected_k = self._k_for_probe()
+        if int(probe_set.k) != expected_k:
+            msg = f"ProbeSet k={probe_set.k} does not match model sequence_length={expected_k}."
+            raise ValueError(msg)
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1

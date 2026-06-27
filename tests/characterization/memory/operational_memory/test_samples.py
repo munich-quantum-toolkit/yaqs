@@ -65,3 +65,29 @@ def test_sample_probes_cut_validation() -> None:
     rng = np.random.default_rng(2)
     with pytest.raises(ValueError, match="cut must satisfy"):
         sample_probes(cut=0, k=2, n_pasts=2, n_futures=2, rng=rng)
+
+
+def test_sample_random_clifford_unitary_returns_copy() -> None:
+    """Mutating a sampled Clifford matrix must not affect later draws."""
+    clifford_sampler = resolve_unitary_sampler("clifford")
+    a = clifford_sampler(np.random.default_rng(7))
+    b = clifford_sampler(np.random.default_rng(7))
+    np.testing.assert_allclose(a, b, atol=1e-12)
+    a[0, 0] = 999.0 + 0.0j
+    c = clifford_sampler(np.random.default_rng(7))
+    np.testing.assert_allclose(b, c, atol=1e-12)
+
+
+def test_sample_probes_measure_prepare_ignores_unitary_ensemble() -> None:
+    """Measure-prepare mode does not validate unitary_ensemble."""
+    rng = np.random.default_rng(3)
+    probe_set = sample_probes(
+        cut=1,
+        k=2,
+        n_pasts=2,
+        n_futures=2,
+        rng=rng,
+        intervention_mode="measure_prepare",
+        unitary_ensemble="not-a-real-ensemble",
+    )
+    assert probe_set.k == 2

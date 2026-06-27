@@ -132,3 +132,26 @@ def test_assemble_fixed_basis_shapes() -> None:
     assert len(choi_mats) == 16
     assert len(choi_idx) == 16
     assert feat.shape == (16, 32)
+
+
+def test_assemble_fixed_basis_random_uses_same_basis_set() -> None:
+    """Random bundles derive Choi tables from the basis_set returned by the same call."""
+    basis_set, choi_mats, choi_idx, feat = assemble_fixed_basis(basis="random", basis_seed=99)
+    assert len(basis_set) == 4
+    assert len(choi_mats) == len(choi_idx) == 16
+    for idx, (p, m) in enumerate(choi_idx):
+        _, _, rho_p = basis_set[p]
+        _, _, e_m = basis_set[m]
+        expected = np.kron(rho_p, e_m.T)
+        np.testing.assert_allclose(choi_mats[idx], expected, atol=1e-12)
+    assert feat.shape == (16, 32)
+
+
+def test_assemble_fixed_basis_random_unseeded_internal_consistency() -> None:
+    """Unseeded random bundles use the same-call basis_set for Choi tables."""
+    basis_set, choi_mats, choi_idx, _feat = assemble_fixed_basis(basis="random")
+    assert len(basis_set) == 4
+    for idx, (p, m) in enumerate(choi_idx):
+        _, _, rho_p = basis_set[p]
+        _, _, e_m = basis_set[m]
+        np.testing.assert_allclose(choi_mats[idx], np.kron(rho_p, e_m.T), atol=1e-12)

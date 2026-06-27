@@ -5,9 +5,6 @@
 #
 # Licensed under the MIT License
 
-# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
-# SPDX-License-Identifier: MIT
-
 """Shared helpers for process-tensor tomography and surrogate backends.
 
 Submodules (import explicitly; symbols are not re-exported here):

@@ -157,7 +157,7 @@ def test_probes_raises_when_not_recorded() -> None:
         {"entropy": 0.0, "rank": 1.0, "singular_values": np.array([1.0]), "memory_matrix": np.eye(2)},
         cut=1,
     )
-    with pytest.raises(ValueError, match="No probe data"):
+    with pytest.raises(ValueError, match="No probe data recorded for cut=1"):
         packed.probes()
 
 

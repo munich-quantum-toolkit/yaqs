@@ -5,9 +5,6 @@
 #
 # Licensed under the MIT License
 
-# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
-# SPDX-License-Identifier: MIT
-
 """Exhaustive discrete-basis process-tensor data + reconstruction helpers.
 
 The main product of :func:`~mqt.yaqs.characterization.memory.backends.tomography.constructor.build_process_tensor`

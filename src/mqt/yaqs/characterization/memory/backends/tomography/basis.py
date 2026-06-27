@@ -5,9 +5,6 @@
 #
 # Licensed under the MIT License
 
-# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
-# SPDX-License-Identifier: MIT
-
 """Discrete Choi basis and dual frame utilities for tomography estimation."""
 
 from __future__ import annotations

@@ -66,6 +66,39 @@ def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, Analog
     assert second.rank(1) == first.rank(1)
 
 
+def test_characterize_rejects_cut_and_cuts_together(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """cut= and cuts= are mutually exclusive."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match="Specify only one of cut="):
+        mc.characterize(ham, params, k=2, cut=1, cuts=[1, 2])
+
+
+def test_characterize_rejects_empty_cuts(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """An explicit empty cuts list is rejected up front."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match="cuts must be 'all' or a non-empty list"):
+        mc.characterize(ham, params, k=2, cuts=[])
+
+
+def test_characterize_rejects_probe_set_for_multi_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """probe_set cannot be reused when characterize sweeps multiple cuts."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    first = mc.characterize(
+        ham,
+        params,
+        k=2,
+        cut=1,
+        n_pasts=3,
+        n_futures=3,
+        rng=np.random.default_rng(0),
+    )
+    with pytest.raises(ValueError, match="probe_set cannot be reused across multiple cuts"):
+        mc.characterize(ham, params, k=2, cuts="all", probe_set=first)
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("torch") is None,
     reason="torch not installed",

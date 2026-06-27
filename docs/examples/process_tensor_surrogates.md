@@ -7,12 +7,12 @@ mystnb:
   execution_timeout: 600
 ---
 
+# Process Tensor Surrogates (TransformerComb)
+
 ```{code-cell} ipython3
 :tags: [remove-cell]
 %config InlineBackend.figure_formats = ['svg']
 ```
-
-# Process Tensor Surrogates (TransformerComb)
 
 ```{note}
 Start with {doc}`characterization` for the main predict/characterize funnel. This page covers surrogate training details and optional architecture knobs.

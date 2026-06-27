@@ -131,7 +131,7 @@ class CharacterizationResult:
         c = self._resolve_cut(cut)
         entry = self.by_cut[c]
         if entry.probe_set is None:
-            msg = f"No probe data recorded for cut={cut}."
+            msg = f"No probe data recorded for cut={c}."
             raise ValueError(msg)
         ps = entry.probe_set
         return {

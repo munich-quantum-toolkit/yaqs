@@ -370,14 +370,15 @@ def run_indexed_jobs(
         Mapping from job index to worker result.
     """
     results: dict[int, TRes] = {}
-    if config.parallel and n_jobs > 1:
+    max_workers = config.resolved_max_workers()
+    if config.parallel and n_jobs > 1 and max_workers > 1:
         results.update(
             dict(
                 run_backend_parallel(
                     worker_fn=worker_fn,
                     payload=payload,
                     n_jobs=n_jobs,
-                    max_workers=config.resolved_max_workers(),
+                    max_workers=max_workers,
                     show_progress=config.show_progress,
                     desc=desc,
                     max_retries=config.max_retries,

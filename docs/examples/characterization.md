@@ -123,7 +123,7 @@ print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ---
 tags: [remove-output]
 ---
-memory = mc.characterize(ham, params, cut=1, k=1, n_pasts=6, n_futures=6)
+memory = mc.characterize(ham, params, cut=1, k=2, n_pasts=6, n_futures=6)
 print(memory.summary())
 print(f"S_V = {memory.entropy(1):.4f}, R = {memory.rank(1):.3f}")
 ```

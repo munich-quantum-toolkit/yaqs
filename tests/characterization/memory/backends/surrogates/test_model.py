@@ -343,3 +343,13 @@ def test_transformercomb_evaluate_probes_with_past_and_future_segments() -> None
     probe_set = _make_probe_set(cut=2, k=3, n_p=1, n_f=2)
     out = model.evaluate_probes(probe_set)
     assert out.shape == (1, 2, 4)
+
+
+def test_transformercomb_evaluate_probes_rejects_k_mismatch() -> None:
+    """evaluate_probes rejects ProbeSet k values that differ from training horizon."""
+    pytest.importorskip("torch")
+
+    model = _tiny_model(sequence_length=2)
+    probe_set = _make_probe_set(cut=1, k=3, n_p=1, n_f=1)
+    with pytest.raises(ValueError, match="ProbeSet k=3 does not match model sequence_length=2"):
+        model.evaluate_probes(probe_set)
