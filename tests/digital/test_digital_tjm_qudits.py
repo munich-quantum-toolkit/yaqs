@@ -18,7 +18,7 @@ from mqt.qudits.quantum_circuit import QuantumCircuit as QuditCircuit
 
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.digital.qudit_tjm import (
     apply_single_qudit_gate,
@@ -160,3 +160,72 @@ def test_simulator_run_dispatches_to_qudit_path() -> None:
     final_mps = result.output_state.mps
     np.testing.assert_allclose(np.abs(final_mps.tensors[0][:, 0, 0]), [0, 1], atol=1e-9)
     np.testing.assert_allclose(np.abs(final_mps.tensors[1][:, 0, 0]), [0, 1, 0], atol=1e-9)
+
+
+def test_qudit_tjm_weak_sim_no_noise_returns_shot_counts() -> None:
+    """qudit_tjm with WeakSimParams and no noise returns a single-call shot-count histogram."""
+    circuit = QuditCircuit(2, [2, 3])
+    circuit.x(0)
+    circuit.cx([0, 1])
+
+    state = State(2, physical_dimensions=[2, 3], initial="zeros")
+    state.ensure_encoded("mps")
+    mps = state.mps
+    sim_params = WeakSimParams(shots=20, random_seed=0)
+
+    counts, diagnostics, final_mps = qudit_tjm((0, mps, None, sim_params, circuit))
+
+    assert diagnostics is None
+    assert final_mps is None
+    # X(0) -> |1>|0>, CX flips the qutrit target -> |1>|1>: mixed-radix outcome 1*1 + 1*2 = 3.
+    assert counts == {3: 20}
+
+
+def test_qudit_tjm_weak_sim_with_noise_returns_single_shot() -> None:
+    """qudit_tjm with WeakSimParams and noise returns exactly one shot per call."""
+    circuit = QuditCircuit(2, [2, 2])
+    circuit.x(0)
+    circuit.cx([0, 1])
+
+    state = State(2, physical_dimensions=[2, 2], initial="zeros")
+    state.ensure_encoded("mps")
+    mps = state.mps
+    sim_params = WeakSimParams(shots=20, random_seed=0)
+
+    lowering = np.array([[0, 0], [1, 0]], dtype=complex)
+    noise_model = NoiseModel(processes=[{"name": "custom", "sites": [0], "strength": 0.1, "matrix": lowering}])
+
+    counts, _, _ = qudit_tjm((0, mps, noise_model, sim_params, circuit))
+
+    assert sum(counts.values()) == 1
+
+
+def test_simulator_run_dispatches_weak_sim_qudit_path() -> None:
+    """Simulator.run() correctly dispatches a qudit circuit with WeakSimParams end to end."""
+    circuit = QuditCircuit(2, [2, 3])
+    circuit.x(0)
+    circuit.cx([0, 1])
+
+    state = State(2, physical_dimensions=[2, 3], initial="zeros")
+    sim_params = WeakSimParams(shots=20, random_seed=0)
+
+    result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params)
+
+    assert sum(result.counts.values()) == 20
+
+
+def test_simulator_run_dispatches_weak_sim_qudit_path_with_noise() -> None:
+    """Simulator.run() with WeakSimParams and noise runs one trajectory per shot for qudits."""
+    circuit = QuditCircuit(2, [2, 2])
+    circuit.x(0)
+    circuit.cx([0, 1])
+
+    state = State(2, physical_dimensions=[2, 2], initial="zeros")
+    sim_params = WeakSimParams(shots=15, random_seed=0)
+
+    lowering = np.array([[0, 0], [1, 0]], dtype=complex)
+    noise_model = NoiseModel(processes=[{"name": "custom", "sites": [0], "strength": 0.1, "matrix": lowering}])
+
+    result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, noise_model)
+
+    assert sum(result.counts.values()) == 15

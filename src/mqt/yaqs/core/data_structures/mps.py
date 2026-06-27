@@ -1097,14 +1097,15 @@ class MPS:
         bitstring = []
 
         basis = basis.upper()
+
         if basis == "Z":
-            rotation = np.eye(2, dtype=complex)
+            rotation = None  # built per-site below, since dimension can vary
         elif basis == "X":
             # H gate to rotate X to Z
-            rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+            rotation = None
         elif basis == "Y":
-            # Rotate Y to Z: H Sdag (or equivalent)
-            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
+            # Rotate Y to Z: eigenbasis of the Heisenberg-Weyl product X_d @ Z_d, built per-site below
+            rotation = None
         else:
             msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
             raise ValueError(msg)
@@ -1113,9 +1114,32 @@ class MPS:
             rng = np.random.default_rng()
 
         for site, tensor in enumerate(temp_state.tensors):
+            # Generalized X Matrix used from MQT Qudits
+            if rotation is not None:
+                site_rotation = rotation
+            elif basis == "X":
+                dim = tensor.shape[0]
+                omega = np.exp(2j * np.pi / dim)
+                indices = np.arange(dim)
+                site_rotation = (omega ** np.outer(indices, indices)) / np.sqrt(dim)
+            elif basis == "Y":
+                # Generalized Y via Heisenberg-Weyl group: eigenbasis of X_d @ Z_d, ordered
+                # by ascending eigenvalue phase (reduces to the qubit Y eigenbasis for d=2).
+                dim = tensor.shape[0]
+                shift = np.zeros((dim, dim), dtype=complex)
+                for i in range(dim):
+                    shift[(i + 1) % dim, i] = 1
+                omega = np.exp(2j * np.pi / dim)
+                clock = np.diag(omega ** np.arange(dim))
+                eigvals, eigvecs = np.linalg.eig(shift @ clock)
+                order = np.argsort(np.angle(eigvals))
+                site_rotation = eigvecs[:, order].conj().T
+            else:
+                site_rotation = np.eye(tensor.shape[0], dtype=complex)
+
             # Rotate the tensor to the measurement basis
             # tensor shape is (p, l, r)
-            rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
+            rotated_tensor = oe.contract("ab, bcd->acd", site_rotation, tensor)
 
             reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
             probabilities = np.diag(reduced_density_matrix).real
@@ -1133,7 +1157,12 @@ class MPS:
                     / np.sqrt(probabilities[chosen_index])
                     * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
                 )
-        return sum(c << i for i, c in enumerate(bitstring))
+        outcome = 0
+        stride = 1
+        for c, dim in zip(bitstring, temp_state.physical_dimensions, strict=False):
+            outcome += c * stride
+            stride *= dim
+        return outcome
 
     def measure_shots(self, shots: int, basis: str = "Z") -> dict[int, int]:
         """Perform multiple single-shot measurements on an MPS and aggregate the results.

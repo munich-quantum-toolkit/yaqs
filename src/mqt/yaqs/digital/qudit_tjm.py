@@ -32,7 +32,7 @@ from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.random_utils import make_trajectory_rng
-from .digital_tjm import create_local_noise_model
+from .digital_tjm import _per_call_shots, create_local_noise_model
 from .utils.qudit_dag_utils import circuit_to_dag
 
 if TYPE_CHECKING:
@@ -198,13 +198,12 @@ def _gate_matrix_in_ascending_site_order(node: QuditOpNode) -> tuple[NDArray[np.
 
 def qudit_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, object],
-) -> tuple[NDArray[np.float64], None, MPS | None]:
+) -> tuple[NDArray[np.float64] | dict[int, int], None, MPS | None]:
     """Simulate a qudit circuit using the Tensor Jump Method (single trajectory).
 
     Mirrors :func:`mqt.yaqs.digital.digital_tjm.digital_tjm`'s control flow, driven by
     :class:`~mqt.yaqs.digital.utils.qudit_dag_utils.QuditDAG` instead of Qiskit's
-    ``DAGCircuit``. MVP scope: no observable evaluation (see project issue), no
-    diagnostics recording, single trajectory.
+    ``DAGCircuit``. No diagnostics recording (unlike the qubit path).
 
     Args:
         args: ``(traj_idx, initial_state, noise_model, sim_params, circuit)``. ``circuit`` is
@@ -213,14 +212,12 @@ def qudit_tjm(
             :mod:`importlib`.
 
     Returns:
-        ``(None, None, final_state)``: the first two slots mirror ``digital_tjm``'s
-        observable-results/diagnostics slots (both unused in the MVP); ``final_state`` is the
-        final MPS if ``sim_params.get_state``, else ``None``.
+        If ``sim_params`` is :class:`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams`,
+        the observable expectation values. If ``WeakSimParams``, the shot-count dictionary. The
+        second slot (diagnostics) is always ``None``. ``final_state`` is the final MPS if
+        ``sim_params.get_state``, else ``None``.
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
-    if isinstance(sim_params, WeakSimParams):
-        msg = "Shot-based qudit simulation (WeakSimParams) is not implemented yet"
-        raise NotImplementedError(msg)
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
@@ -245,6 +242,14 @@ def qudit_tjm(
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
                 dag.remove_op_node(node)
+
+    if isinstance(sim_params, WeakSimParams):
+        per_call_shots = _per_call_shots(sim_params)
+        if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+            counts = state.measure_shots(per_call_shots)
+            final = state if sim_params.get_state else None
+            return counts, None, final
+        return state.measure_shots(shots=1), None, state if sim_params.get_state else None
 
     results = np.zeros((len(sim_params.observables), 1))
     state.evaluate_observables(sim_params, results, column_index=0)

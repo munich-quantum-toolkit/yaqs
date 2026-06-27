@@ -611,6 +611,82 @@ def test_measure_shots_basis() -> None:
     assert sum(results.values()) == 20
 
 
+def test_single_shot_qudit_mixed_radix_encoding() -> None:
+    """measure_single_shot encodes outcomes via mixed-radix, not binary bit-shift, for qudits.
+
+    A mixed-dimension MPS ([2, 3, 4]) deterministically prepared in level (1, 2, 3) must
+    measure to ``1*1 + 2*2 + 3*(2*3) = 23`` in the "Z" basis, not the binary bit-shift result.
+    """
+    mps = MPS(length=3, physical_dimensions=[2, 3, 4], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=complex)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=complex)
+    mps.tensors[1][2, 0, 0] = 1.0
+    mps.tensors[2] = np.zeros((4, 1, 1), dtype=complex)
+    mps.tensors[2][3, 0, 0] = 1.0
+
+    rng = np.random.default_rng(0)
+    outcome = mps.measure_single_shot(basis="Z", rng=rng)
+    assert outcome == 1 * 1 + 2 * 2 + 3 * (2 * 3)
+
+
+def test_single_shot_qudit_y_basis_is_heisenberg_weyl_eigenbasis() -> None:
+    """measure_single_shot's "Y" basis for qudits is the eigenbasis of the Heisenberg-Weyl product X_d @ Z_d.
+
+    A qutrit prepared in the k-th eigenstate of X_d @ Z_d (eigenvalues ordered by ascending
+    phase, matching the qubit Y convention for d=2) must measure deterministically to outcome k
+    in the "Y" basis.
+    """
+    dim = 3
+    shift = np.zeros((dim, dim), dtype=complex)
+    for i in range(dim):
+        shift[(i + 1) % dim, i] = 1
+    omega = np.exp(2j * np.pi / dim)
+    clock = np.diag(omega ** np.arange(dim))
+    eigvals, eigvecs = np.linalg.eig(shift @ clock)
+    order = np.argsort(np.angle(eigvals))
+    site_rotation = eigvecs[:, order].conj().T
+
+    rng = np.random.default_rng(0)
+    for k in range(dim):
+        mps = MPS(length=1, physical_dimensions=[dim], state="zeros")
+        mps.tensors[0][:, 0, 0] = np.conj(site_rotation[k, :])
+        outcomes = {mps.measure_single_shot(basis="Y", rng=rng) for _ in range(20)}
+        assert outcomes == {k}
+
+
+def test_single_shot_qudit_x_basis_is_dft_eigenbasis() -> None:
+    """measure_single_shot's "X" basis for qudits is the generalized-Hadamard (DFT) eigenbasis.
+
+    A qutrit prepared in the k-th eigenstate of the generalized shift operator (the k-th column
+    of the DFT matrix's conjugate transpose) must measure deterministically to outcome k in the
+    "X" basis.
+    """
+    dim = 3
+    omega = np.exp(2j * np.pi / dim)
+    indices = np.arange(dim)
+    dft_matrix = (omega ** np.outer(indices, indices)) / np.sqrt(dim)
+
+    rng = np.random.default_rng(0)
+    for k in range(dim):
+        mps = MPS(length=1, physical_dimensions=[dim], state="zeros")
+        mps.tensors[0][:, 0, 0] = np.conj(dft_matrix[k, :])
+        outcomes = {mps.measure_single_shot(basis="X", rng=rng) for _ in range(20)}
+        assert outcomes == {k}
+
+
+def test_measure_shots_qudit_aggregates_mixed_radix_outcomes() -> None:
+    """measure_shots aggregates qudit outcomes consistently with the mixed-radix encoding."""
+    mps = MPS(length=2, physical_dimensions=[2, 3], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=complex)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=complex)
+    mps.tensors[1][2, 0, 0] = 1.0
+
+    results = mps.measure_shots(shots=10, basis="Z")
+    assert results == {1 + 2 * 2: 10}
+
+
 def test_inplace_measure() -> None:
     """Test the in-place .measure(site, basis) method.
 

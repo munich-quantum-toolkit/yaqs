@@ -1222,9 +1222,43 @@ class Simulator:
             msg = "State physical dimensions do not match the circuit's qudit dimensions."
             raise ValueError(msg)
 
+        qudit_tjm_module = importlib.import_module("mqt.yaqs.digital.qudit_tjm")
+
         if isinstance(sim_params, WeakSimParams):
-            msg = "Shot-based qudit simulation (WeakSimParams) is not yet implemented."
-            raise NotImplementedError(msg)
+            noisy = noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes)
+            if noisy:
+                if sim_params.get_state:
+                    msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                    raise ValueError(msg)
+                effective_num_traj = sim_params.shots
+                per_call_shots = 1
+            else:
+                effective_num_traj = 1
+                per_call_shots = sim_params.shots
+
+            result.measurements = [None] * effective_num_traj if noisy else [None]
+
+            WORKER_CTX["per_call_shots"] = per_call_shots
+            final_mps: MPS | None = None
+            for traj_idx in range(effective_num_traj):
+                shot_counts, _, traj_final_mps = qudit_tjm_module.qudit_tjm((
+                    traj_idx,
+                    mps,
+                    noise_model,
+                    sim_params,
+                    operator,
+                ))
+                if noisy:
+                    result.measurements[traj_idx] = _expect_shot_counts(shot_counts)
+                else:
+                    result.measurements[0] = _expect_shot_counts(shot_counts)
+                if traj_final_mps is not None:
+                    final_mps = traj_final_mps
+            WORKER_CTX.pop("per_call_shots", None)
+
+            _store_final_mps(result, final_mps)
+            aggregate_counts(result)
+            return
 
         has_noise = noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes)
         if has_noise:
@@ -1237,10 +1271,10 @@ class Simulator:
 
         _prepare_result_observables(result, sim_params, num_traj=num_traj)
 
-        qudit_tjm_module = importlib.import_module("mqt.yaqs.digital.qudit_tjm")
-        final_mps: MPS | None = None
+        final_mps = None
         for traj_idx in range(num_traj):
             results, _, traj_final_mps = qudit_tjm_module.qudit_tjm((traj_idx, mps, noise_model, sim_params, operator))
+            results = cast("NDArray[np.float64]", results)
             _store_observable_trajectory(result, sim_params, traj_index=traj_idx, sorted_traj_data=results[:, 0])
 
             if traj_final_mps is not None:
