@@ -109,6 +109,8 @@ def _validate_comb_sequence_inputs(
         ValueError: If sequence lengths or optional per-sequence schedules are inconsistent.
     """
     num_sequences = len(psi_pairs_list)
+    if num_sequences == 0:
+        return
     if timesteps_rows is None:
         ks = [len(p) for p in psi_pairs_list]
         if len(set(ks)) != 1:

@@ -121,7 +121,8 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
         Intervention sequence of length :func:`delayed_sequence_length`.
 
     Raises:
-        ValueError: If past/future branch lengths or the assembled length do not match.
+        ValueError: If past/future branch lengths, cut-branch array sizes, or the assembled
+            length do not match.
 
     Note:
         When ``delay=0``, the result matches :func:`assemble_probe_sequence`. For
@@ -134,6 +135,8 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     sequence_length = probe_set.k
     past_len = cut - 1
     future_len = sequence_length - cut
+    n_pasts = len(probe_set.past_pairs)
+    n_futures = len(probe_set.future_pairs)
     past_pairs = probe_set.past_pairs[i]
     future_pairs = probe_set.future_pairs[j]
     if len(past_pairs) != past_len:
@@ -141,6 +144,12 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
         raise ValueError(msg)
     if len(future_pairs) != future_len:
         msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
+        raise ValueError(msg)
+    if len(probe_set.past_cut_meas) != n_pasts:
+        msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_pasts}"
+        raise ValueError(msg)
+    if len(probe_set.future_prep_cut) != n_futures:
+        msg = f"future_prep_cut length {len(probe_set.future_prep_cut)} != n_futures={n_futures}"
         raise ValueError(msg)
     full: list[Any] = list(past_pairs)
     full.append((probe_set.past_cut_meas[i], _Z0))

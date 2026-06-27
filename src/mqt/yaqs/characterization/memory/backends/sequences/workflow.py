@@ -100,13 +100,6 @@ def simulate_sequences(
         msg = "psi_pairs_list and initial_psis must have equal length."
         raise ValueError(msg)
 
-    if num_sequences == 0:
-        if traced:
-            return np.zeros((0, 8), dtype=np.float32), []
-        if record_step_states:
-            return []
-        return np.zeros((0, 8), dtype=np.float32)
-
     if record_step_states:
         if e_features_rows is None:
             msg = "record_step_states=True requires e_features_rows (per-sequence Choi feature rows)."
@@ -129,6 +122,13 @@ def simulate_sequences(
         operators_list=operators_list,
         static_ctx_list=static_ctx_list,
     )
+
+    if num_sequences == 0:
+        if traced:
+            return np.zeros((0, 8), dtype=np.float32), []
+        if record_step_states:
+            return []
+        return np.zeros((0, 8), dtype=np.float32)
 
     # Pickle-stable payload — schema documented in :mod:`.workers`.
     job_payload: dict[str, Any] = {

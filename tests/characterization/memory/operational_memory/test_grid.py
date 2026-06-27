@@ -128,3 +128,21 @@ def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
             1 for step in seq if isinstance(step, tuple) and np.allclose(step[0], z0) and np.allclose(step[1], z0)
         )
         assert reset_pairs == delay
+
+
+def test_assemble_delayed_probe_sequence_rejects_mismatched_cut_arrays() -> None:
+    """Delayed assembly validates cut-branch arrays before indexed access."""
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    u = np.eye(2, dtype=np.complex128)
+    probe_set = ProbeSet(
+        cut=2,
+        k=4,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=np.zeros((1, 3, 32), dtype=np.float32),
+        past_pairs=[[{"type": "unitary", "U": u}]],
+        past_cut_meas=[z],
+        future_prep_cut=[z, z],
+        future_pairs=[[{"type": "unitary", "U": u}, {"type": "unitary", "U": u}]],
+    )
+    with pytest.raises(ValueError, match="future_prep_cut length 2 != n_futures=1"):
+        assemble_delayed_probe_sequence(probe_set, i=0, j=0, delay=1)

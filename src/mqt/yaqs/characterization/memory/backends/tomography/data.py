@@ -44,7 +44,6 @@ def _rank1_mpo_term(
     Returns:
         MPO representing the rank-1 contribution.
     """
-    len(dual_ops)
     tensors: list[np.ndarray] = [(weight * rho_final).reshape(2, 2, 1, 1)]
     tensors.extend(D.reshape(4, 4, 1, 1) for D in dual_ops)
 

@@ -136,7 +136,6 @@ def test_reprepare_site_zero_helpers_mcwf_and_mps() -> None:
 
 def test_reset_and_unitary_backend_helpers() -> None:
     """Local unitaries dispatch on MCWF and TJM backends."""
-    np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     x = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
     u = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
 

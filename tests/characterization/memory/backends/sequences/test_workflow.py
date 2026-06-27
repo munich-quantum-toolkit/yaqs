@@ -217,3 +217,35 @@ def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
     assert isinstance(packed, np.ndarray)
     assert packed.shape == (0, 8)
     assert traces == []
+
+
+def test_simulate_sequences_empty_workload_rejects_invalid_mode_options() -> None:
+    """Empty batches still run mode validation before returning early."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+
+    with pytest.raises(ValueError, match="context_vec is only used when record_step_states=True"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.1],
+            psi_pairs_list=[],
+            initial_psis=[],
+            static_ctx=None,
+            parallel=False,
+            record_step_states=False,
+            context_vec=np.zeros(4, dtype=np.float32),
+        )
+
+    with pytest.raises(ValueError, match="e_features_rows is only used when record_step_states=True"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.1],
+            psi_pairs_list=[],
+            initial_psis=[],
+            static_ctx=None,
+            parallel=False,
+            record_step_states=False,
+            e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
+        )
