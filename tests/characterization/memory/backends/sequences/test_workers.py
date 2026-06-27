@@ -14,6 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
     _comb_durations_ops_ctx,
     _get_times_cached,
@@ -21,6 +22,7 @@ from mqt.yaqs.characterization.memory.backends.sequences.workers import (
     _validate_comb_sequence_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.characterization.memory.shared.encoding import unpack_rho8
 from mqt.yaqs.characterization.memory.shared.utils import make_mcwf_static_context
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -247,10 +249,7 @@ def test_prepare_only_unconditional_from_non_zero_state() -> None:
 
 
 def test_prepare_only_retains_past_sensitivity_on_open_chain() -> None:
-    """Multi-qubit prepare_only must not clamp the environment (ell-benchmark regression)."""
-    from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
-    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
-
+    """Multi-qubit prepare_only must not clamp the environment (reset-delay regression)."""
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, order=1)
     psi0 = np.zeros(4, dtype=np.complex128)

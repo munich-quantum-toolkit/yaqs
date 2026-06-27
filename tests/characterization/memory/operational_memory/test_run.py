@@ -361,3 +361,56 @@ def test_evaluate_probes_weighted_for_preserves_float64() -> None:
     pauli, _weights = evaluate_probes_weighted_for(HighPrecisionBackend(), probe_set)
     assert pauli.dtype == np.float64
     assert pauli[0, 0, 1] == pytest.approx(1e-7)
+
+
+def test_run_operational_memory_delay_rejects_negative() -> None:
+    """Negative reset delay is rejected before simulation."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    backend = ExactBackend(operator=op, sim_params=_params(), initial_psi=_PSI0, parallel=False)
+    with pytest.raises(ValueError, match="delay must be >= 0"):
+        run_operational_memory(process=backend, cut=1, k=2, delay=-1)
+
+
+def test_run_operational_memory_delay_rejects_comb_backend() -> None:
+    """Reset delay requires the exact sequence backend."""
+    rng = np.random.default_rng(0)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    comb = build_process_tensor(
+        op,
+        _params(),
+        timesteps=[0.05],
+        num_trajectories=20,
+        parallel=False,
+        return_type="dense",
+    )
+    probe_set = sample_probes(cut=1, k=2, n_pasts=2, n_futures=2, rng=rng)
+    with pytest.raises(ValueError, match="delay > 0 requires an exact Hamiltonian"):
+        run_operational_memory(process=comb, cut=1, k=2, probe_set=probe_set, delay=1)
+
+
+def test_run_operational_memory_delay_zero_matches_default() -> None:
+    """Explicit delay=0 matches the default split-cut path."""
+    rng = np.random.default_rng(6)
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    psi0 = np.zeros(4, dtype=np.complex128)
+    psi0[0] = 1.0 + 0.0j
+    probe_set = sample_probes(cut=2, k=4, n_pasts=3, n_futures=2, rng=rng)
+    backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
+    out_default = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
+    out_zero = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set, delay=0)
+    assert out_zero["entropy"] == pytest.approx(out_default["entropy"], rel=1e-10, abs=1e-10)
+
+
+def test_run_operational_memory_delay_exact_returns_finite_entropy() -> None:
+    """Exact backend accepts delay>0 and returns finite memory diagnostics."""
+    rng = np.random.default_rng(7)
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    psi0 = np.zeros(4, dtype=np.complex128)
+    psi0[0] = 1.0 + 0.0j
+    probe_set = sample_probes(cut=3, k=5, n_pasts=3, n_futures=2, rng=rng)
+    backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
+    out = run_operational_memory(process=backend, cut=3, k=5, probe_set=probe_set, delay=2)
+    assert np.isfinite(out["entropy"])
+    assert out["pauli_xyz_ij"].shape == (3, 2, 4)

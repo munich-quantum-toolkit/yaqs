@@ -559,3 +559,11 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
         entropies.append(float(result.entropy(cut)))
     assert entropies[-1] > entropies[0] + 0.001
     assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
+
+
+def test_characterize_delay_rejects_negative() -> None:
+    """Negative reset delay is rejected by characterize()."""
+    mc = _paper_mc()
+    ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
+    with pytest.raises(ValueError, match="delay must be >= 0"):
+        mc.characterize(ham, _paper_params(), k=6, cut=4, delay=-1)

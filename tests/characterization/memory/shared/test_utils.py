@@ -136,7 +136,7 @@ def test_reprepare_site_zero_helpers_mcwf_and_mps() -> None:
 
 def test_reset_and_unitary_backend_helpers() -> None:
     """Local unitaries dispatch on MCWF and TJM backends."""
-    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     x = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
     u = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
 
@@ -169,6 +169,8 @@ def test_prepare_only_soft_preserves_entanglement_on_two_qubits() -> None:
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
 
     soft, _ = _apply_prepare_only_step(vec, plus, "MCWF", chain_length=2)
+    assert isinstance(vec, np.ndarray)
+    assert isinstance(soft, np.ndarray)
     assert not np.allclose(soft, vec, atol=1e-8)
 
 

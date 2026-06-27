@@ -14,6 +14,7 @@ import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.grid import (
     assemble_delayed_probe_grid,
+    assemble_delayed_probe_sequence,
     assemble_probe_grid,
     assemble_probe_sequence,
     delayed_sequence_length,
@@ -95,6 +96,23 @@ def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
         assemble_probe_sequence(probe_set, i=0, j=0)
 
 
+def test_delayed_sequence_length_rejects_negative() -> None:
+    """Negative reset delay is rejected at assembly time."""
+    with pytest.raises(ValueError, match="delay must be >= 0"):
+        delayed_sequence_length(k=5, delay=-1)
+
+
+def test_assemble_delayed_probe_sequence_delay_zero_matches_standard() -> None:
+    """delay=0 delegates to the standard split-cut assembler."""
+    rng = np.random.default_rng(1)
+    probe_set = sample_probes(cut=2, k=4, n_pasts=3, n_futures=2, rng=rng)
+    assert assemble_delayed_probe_sequence(probe_set, 0, 1, delay=0) == assemble_probe_sequence(
+        probe_set,
+        0,
+        1,
+    )
+
+
 def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
     """delay>0 lengthens sequences by delay+1 and adds (|0>,|0>) bridge slots."""
     rng = np.random.default_rng(9)
@@ -107,10 +125,6 @@ def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
     z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for seq in delayed_pairs:
         reset_pairs = sum(
-            1
-            for step in seq
-            if isinstance(step, tuple)
-            and np.allclose(step[0], z0)
-            and np.allclose(step[1], z0)
+            1 for step in seq if isinstance(step, tuple) and np.allclose(step[0], z0) and np.allclose(step[1], z0)
         )
         assert reset_pairs == delay

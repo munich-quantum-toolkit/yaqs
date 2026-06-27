@@ -130,8 +130,9 @@ def run_operational_memory(
         ``probe_set``, and optional ``weights_ij``.
 
     Raises:
-        ValueError: If a supplied ``probe_set`` was built for a different ``cut`` or ``k``,
-            or if ``delay > 0`` with a backend that does not support custom sequences.
+        ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
+            different ``cut`` or ``k``, or ``delay > 0`` with a backend that does not
+            support custom sequences.
     """
     dd = int(delay)
     if dd < 0:

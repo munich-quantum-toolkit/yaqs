@@ -318,6 +318,10 @@ def _apply_prepare_only_step(
 
     Returns:
         Tuple ``(state_out, 1.0)``.
+
+    Raises:
+        TypeError: If ``solver`` is ``"MCWF"``, ``chain_length == 1``, and ``state`` is not a
+            dense :class:`~numpy.ndarray`.
     """
     p = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))

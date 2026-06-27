@@ -132,13 +132,13 @@ Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid size
 
 ### Reset delay at the causal break
 
-Pass `delay=N` to insert `N` soft-reset slots ``(|0>, |0>)`` at the causal cut.
-Each slot projects the probe site onto ``|0>`` and reprepares ``|0>`` while the rest of
+Pass `delay=N` to insert `N` soft-reset slots `(|0>, |0>)` at the causal cut.
+Each slot projects the probe site onto `|0>` and reprepares `|0>` while the rest of
 the chain (the environment) continues evolving — useful for studying how long a reset
 bridge must be before future probes lose sensitivity to the past.
 
 `k` and `cut` are unchanged from the standard split-cut geometry; the physical sequence
-length becomes ``k + delay + 1``. Reuse the same `probe_set` when sweeping `delay`.
+length becomes `k + delay + 1`. Reuse the same `probe_set` when sweeping `delay`.
 
 ```{code-cell} ipython3
 ---

@@ -90,14 +90,14 @@ def assemble_probe_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]
 
 
 def delayed_sequence_length(*, k: int, delay: int) -> int:
-    """Return the physical sequence length when ``delay`` reset slots are inserted at the cut.
+    """Compute the physical sequence length with reset delay at the causal break.
 
     Args:
-        k: Base split-cut sequence length (``delay=0``).
-        delay: Number of ``(|0>, |0>)`` soft-reset slots at the causal break.
+        k: Base split-cut sequence length when ``delay=0``.
+        delay: Number of ``(|0>, |0>)`` soft-reset slots inserted at the break.
 
     Returns:
-        ``k + delay + 1`` when ``delay > 0``, otherwise ``k``.
+        ``k + delay + 1`` when ``delay > 0``; otherwise ``k``.
 
     Raises:
         ValueError: If ``delay`` is negative.
@@ -110,23 +110,24 @@ def delayed_sequence_length(*, k: int, delay: int) -> int:
 
 
 def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int = 0) -> list[Any]:
-    """Build a probe sequence, optionally inserting soft-reset slots at the causal break.
-
-    When ``delay=0``, this matches :func:`assemble_probe_sequence`. Otherwise the cut
-    step becomes ``(meas, |0>)``, followed by ``delay`` ``(|0>, |0>)`` slots, then
-    ``(|0>, prep)`` before the future unitaries.
+    """Build a probe sequence with optional soft-reset delay at the causal break.
 
     Args:
         probe_set: Sampled split-cut probes at base length ``k``.
         i: Past index.
         j: Future index.
-        delay: Soft-reset slots to insert at the break.
+        delay: Number of ``(|0>, |0>)`` slots to insert at the break.
 
     Returns:
         Intervention sequence of length :func:`delayed_sequence_length`.
 
     Raises:
         ValueError: If past/future branch lengths or the assembled length do not match.
+
+    Note:
+        When ``delay=0``, the result matches :func:`assemble_probe_sequence`. For
+        ``delay > 0``, the cut step becomes ``(meas, |0>)``, followed by ``delay``
+        ``(|0>, |0>)`` slots, then ``(|0>, prep)`` before the future unitaries.
     """
     dd = int(delay)
     if dd == 0:
@@ -165,7 +166,7 @@ def assemble_delayed_probe_grid(
 
     Args:
         probe_set: Sampled split-cut probes at base length ``k``.
-        delay: Soft-reset slots to insert at the break.
+        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the break.
 
     Returns:
         Tuple ``(all_pairs, n_pasts, n_futures)``.
