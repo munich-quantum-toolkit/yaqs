@@ -55,6 +55,9 @@ class NoiseModel:
               1-site and adjacent 2-site processes).
             - ``factors``: tuple of two 1-site operator matrices (for long-range
               2-site processes).
+            - ``dim``: optional qudit dimension for 1-site processes built from a
+              named operator (no explicit ``matrix`` given). Defaults to the qubit
+              (d=2) operator when omitted; see ``NoiseModel.get_operator``.
         scheduled_jumps: A list of scheduled jump dictionaries applied at specific
             times.
     """
@@ -84,7 +87,7 @@ class NoiseModel:
                 assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
                 jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
                 if "matrix" not in jump_dict:
-                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"])
+                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"], d=jump_dict.get("dim"))
                 self.scheduled_jumps.append(jump_dict)
 
         if processes is None:
@@ -170,7 +173,7 @@ class NoiseModel:
 
             # One-site: ensure matrix
             if "matrix" not in proc:
-                proc["matrix"] = NoiseModel.get_operator(name)
+                proc["matrix"] = NoiseModel.get_operator(name, d=proc.get("dim"))
             filled_processes.append(proc)
 
         self.processes = filled_processes
@@ -251,18 +254,22 @@ class NoiseModel:
         return new_model
 
     @staticmethod
-    def get_operator(name: str) -> NDArray[np.complex128]:
+    def get_operator(name: str, d: int | None = None) -> NDArray[np.complex128]:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:
             name: Name of the noise process (e.g., 'xx', 'zz').
+            d: Optional qudit dimension. When given (and not 2), the operator is
+                built for a d-level system instead of the qubit (d=2) default —
+                see ``NoiseLibrary``'s ``Raising``/``Lowering``/``PauliZ``/``PauliX``/
+                ``PauliY`` classes for the generalized constructions.
 
         Returns:
             The matrix representation of the operator.
         """
-        if name in PAULI_MAP:
+        if name in PAULI_MAP and d is None:
             return PAULI_MAP[name]
         operator_class = getattr(NoiseLibrary, name)
 
-        operator: BaseGate = operator_class()
+        operator: BaseGate = operator_class(d) if d is not None else operator_class()
         return operator.matrix
