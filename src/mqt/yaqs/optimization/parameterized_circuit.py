@@ -25,11 +25,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from qiskit.circuit.library import CXGate
+from qiskit.synthesis import OneQubitEulerDecomposer, TwoQubitBasisDecomposer
 
+from ..core.libraries.circuit_library import brickwall_matrix_product_disentangler_bonds
 from ..core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
@@ -54,6 +57,32 @@ PARAMETRIC_DERIVATIVE_OPERATORS: dict[str, NDArray[np.complex128]] = {
 #: Gate-library names that take a single rotation-angle parameter.
 SINGLE_ANGLE_GATES = frozenset(PARAMETRIC_DERIVATIVE_OPERATORS)
 
+_ONE_QUBIT_DECOMPOSER = OneQubitEulerDecomposer("ZYZ")
+_TWO_QUBIT_DECOMPOSER = TwoQubitBasisDecomposer(CXGate())
+
+
+def brickwall_matrix_product_disentangler_num_parameters(
+    num_qubits: int,
+    depth: int,
+    *,
+    initial_single_qubit_layer: bool = False,
+) -> int:
+    """Return the number of scalar Krotov parameters in the BMPD architecture.
+
+    Args:
+        num_qubits: Number of qubits.
+        depth: Number of BMPD entangling gates per pair.
+        initial_single_qubit_layer: Whether to include a trainable U3 product-state
+            preparation layer with three scalar parameters per qubit.
+
+    Returns:
+        Number of scalar parameters expected by
+        :func:`create_brickwall_matrix_product_disentangler_parameterized_circuit`.
+    """
+    num_bmpd_gates = sum(len(layer) for layer in brickwall_matrix_product_disentangler_bonds(num_qubits, depth))
+    initial_params = 3 * num_qubits if initial_single_qubit_layer else 0
+    return initial_params + 9 * num_bmpd_gates
+
 
 def _swap_two_site_convention(mat: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Permute a two-qubit matrix between ``|q_a, q_b>`` and ``|q_b, q_a>`` ordering.
@@ -66,6 +95,48 @@ def _swap_two_site_convention(mat: NDArray[np.complex128]) -> NDArray[np.complex
     """
     tensor = mat.reshape(2, 2, 2, 2)
     return np.asarray(tensor.transpose(1, 0, 3, 2).reshape(4, 4), dtype=np.complex128)
+
+
+def _validate_disentangler_sites(sites: Sequence[int], num_qubits: int) -> tuple[int, ...]:
+    """Validate one- or two-qubit disentangler sites.
+
+    Returns:
+        Validated sites as a tuple.
+
+    Raises:
+        ValueError: If the sites are invalid for an SMPD gate.
+    """
+    site_tuple = tuple(int(site) for site in sites)
+    if len(site_tuple) not in {1, 2}:
+        msg = f"Only one- and two-qubit SMPD gates are supported, got sites={site_tuple!r}."
+        raise ValueError(msg)
+    if len(set(site_tuple)) != len(site_tuple):
+        msg = f"SMPD gate acts on duplicate sites {site_tuple!r}."
+        raise ValueError(msg)
+    if any(site < 0 or site >= num_qubits for site in site_tuple):
+        msg = f"SMPD gate sites {site_tuple!r} outside range(0, {num_qubits})."
+        raise ValueError(msg)
+    return site_tuple
+
+
+def _validate_disentangler_unitary(matrix: NDArray[np.complex128], num_sites: int) -> NDArray[np.complex128]:
+    """Validate a dense one- or two-qubit SMPD gate matrix.
+
+    Returns:
+        Validated dense unitary matrix.
+
+    Raises:
+        ValueError: If the matrix shape or unitarity check fails.
+    """
+    expected_dim = 2**num_sites
+    mat = np.asarray(matrix, dtype=np.complex128)
+    if mat.shape != (expected_dim, expected_dim):
+        msg = f"Expected a {(expected_dim, expected_dim)} SMPD unitary for {num_sites} sites, got {mat.shape}."
+        raise ValueError(msg)
+    if not np.allclose(mat.conj().T @ mat, np.eye(expected_dim, dtype=np.complex128), atol=1e-10):
+        msg = "SMPD gate matrix must be unitary."
+        raise ValueError(msg)
+    return mat
 
 
 @dataclass
@@ -159,7 +230,7 @@ class ParameterizedCircuit:
                     f"Supported: {sorted(SINGLE_ANGLE_GATES)}."
                 )
                 raise ValueError(msg)
-            if (gate.data_map is not None or gate.angle_offset != 0.0) and not gate.is_parametric:
+            if (gate.data_map is not None or not np.isclose(gate.angle_offset, 0.0)) and not gate.is_parametric:
                 msg = f"Gate '{gate.name}' has an angle map but is not a one-parameter gate."
                 raise ValueError(msg)
             if gate.param_index is not None:
@@ -173,7 +244,8 @@ class ParameterizedCircuit:
             raise ValueError(msg)
         self.num_params = num_params
 
-    def angle(self, gate: ParameterizedGate, theta: NDArray[np.float64], x: NDArray[np.float64] | None) -> float:
+    @staticmethod
+    def angle(gate: ParameterizedGate, theta: NDArray[np.float64], x: NDArray[np.float64] | None) -> float:
         """Evaluate the scalar angle map of a one-parameter gate.
 
         Args:
@@ -227,7 +299,8 @@ class ParameterizedCircuit:
             matrix = _swap_two_site_convention(matrix)
         return matrix, tuple(sorted(gate.sites))
 
-    def derivative_operator(self, gate: ParameterizedGate) -> tuple[NDArray[np.complex128], tuple[int, ...]]:
+    @staticmethod
+    def derivative_operator(gate: ParameterizedGate) -> tuple[NDArray[np.complex128], tuple[int, ...]]:
         """Return the derivative operator of a trainable gate in ascending-site convention.
 
         The operator ``D`` satisfies ``dU/d(alpha) = D @ U``, so that the gate-local
@@ -325,9 +398,233 @@ class ParameterizedCircuit:
         return cls(num_qubits=circuit.num_qubits, gates=gates, num_params=len(param_order))
 
 
+def _append_u3_parameterization(
+    gates: list[ParameterizedGate],
+    site: int,
+    base_index: int,
+    *,
+    adjoint: bool,
+) -> None:
+    """Append a scalar RZ-RY-RZ decomposition of a U3 gate or its adjoint."""
+    theta, phi, lam = base_index, base_index + 1, base_index + 2
+    if adjoint:
+        gates.extend((
+            ParameterizedGate("rz", (site,), param_index=phi, angle_scale=-1.0),
+            ParameterizedGate("ry", (site,), param_index=theta, angle_scale=-1.0),
+            ParameterizedGate("rz", (site,), param_index=lam, angle_scale=-1.0),
+        ))
+        return
+
+    gates.extend((
+        ParameterizedGate("rz", (site,), param_index=lam),
+        ParameterizedGate("ry", (site,), param_index=theta),
+        ParameterizedGate("rz", (site,), param_index=phi),
+    ))
+
+
+def _append_bmpd_gate_adjoint(
+    gates: list[ParameterizedGate],
+    sites: Sequence[int],
+    base_index: int,
+) -> None:
+    """Append the scalar state-preparation adjoint of one BMPD two-qubit block."""
+    left_site, right_site = sites
+    gates.extend((
+        ParameterizedGate("rxx", (left_site, right_site), param_index=base_index + 6, angle_scale=-1.0),
+        ParameterizedGate("ryy", (left_site, right_site), param_index=base_index + 7, angle_scale=-1.0),
+        ParameterizedGate("rzz", (left_site, right_site), param_index=base_index + 8, angle_scale=-1.0),
+    ))
+    _append_u3_parameterization(gates, left_site, base_index, adjoint=True)
+    _append_u3_parameterization(gates, right_site, base_index + 3, adjoint=True)
+
+
+def _append_numeric_trainable_angle(
+    gates: list[ParameterizedGate],
+    initial_theta: list[float],
+    name: str,
+    sites: tuple[int, ...],
+    angle: float,
+) -> None:
+    """Append one trainable scalar gate initialized to a numeric angle."""
+    param_index = len(initial_theta)
+    initial_theta.append(float(angle))
+    gates.append(ParameterizedGate(name, sites, param_index=param_index))
+
+
+def _append_numeric_u_gate(
+    gates: list[ParameterizedGate],
+    initial_theta: list[float],
+    site: int,
+    theta: float,
+    phi: float,
+    lam: float,
+) -> None:
+    """Append a numeric U3 gate as trainable scalar RZ-RY-RZ factors."""
+    site_tuple = (site,)
+    _append_numeric_trainable_angle(gates, initial_theta, "rz", site_tuple, lam)
+    _append_numeric_trainable_angle(gates, initial_theta, "ry", site_tuple, theta)
+    _append_numeric_trainable_angle(gates, initial_theta, "rz", site_tuple, phi)
+
+
+def _append_decomposed_instruction(
+    gates: list[ParameterizedGate],
+    initial_theta: list[float],
+    name: str,
+    params: Sequence[float],
+    sites: tuple[int, ...],
+) -> None:
+    """Append a Qiskit decomposition instruction in Krotov-compatible form.
+
+    Raises:
+        ValueError: If the decomposition emits an unsupported instruction.
+    """
+    if name in {"barrier", "measure"}:
+        return
+    if name in {"u", "u3"}:
+        if len(params) != 3:
+            msg = f"Expected three parameters for Qiskit '{name}' instruction, got {len(params)}."
+            raise ValueError(msg)
+        _append_numeric_u_gate(gates, initial_theta, sites[0], float(params[0]), float(params[1]), float(params[2]))
+        return
+    if name in SINGLE_ANGLE_GATES:
+        if len(params) != 1:
+            msg = f"Expected one parameter for Qiskit '{name}' instruction, got {len(params)}."
+            raise ValueError(msg)
+        _append_numeric_trainable_angle(gates, initial_theta, name, sites, float(params[0]))
+        return
+    if not params and hasattr(GateLibrary, name):
+        gates.append(ParameterizedGate(name, sites))
+        return
+    msg = f"Unsupported instruction '{name}' in SMPD KAK decomposition."
+    raise ValueError(msg)
+
+
+def _append_decomposed_circuit(
+    gates: list[ParameterizedGate],
+    initial_theta: list[float],
+    site_tuple: tuple[int, ...],
+    matrix: NDArray[np.complex128],
+) -> None:
+    """Decompose one dense SMPD matrix and append Krotov-compatible factors."""
+    if len(site_tuple) == 1:
+        decomposed = _ONE_QUBIT_DECOMPOSER(matrix)
+    else:
+        decomposed = _TWO_QUBIT_DECOMPOSER(_swap_two_site_convention(matrix))
+
+    for instruction in decomposed.data:
+        local_sites = tuple(decomposed.find_bit(qubit).index for qubit in instruction.qubits)
+        physical_sites = tuple(site_tuple[local_site] for local_site in local_sites)
+        _append_decomposed_instruction(
+            gates,
+            initial_theta,
+            instruction.operation.name,
+            tuple(float(param) for param in instruction.operation.params),
+            physical_sites,
+        )
+
+
+def create_brickwall_matrix_product_disentangler_parameterized_circuit(
+    num_qubits: int,
+    depth: int,
+    *,
+    initial_single_qubit_layer: bool = False,
+) -> ParameterizedCircuit:
+    """Create a Krotov-compatible scalar-parameter BMPD state-preparation circuit.
+
+    This is the parameterized counterpart of
+    :func:`mqt.yaqs.core.libraries.circuit_library.create_brickwall_matrix_product_disentangler_ansatz_circuit`.
+    Each dense nine-parameter BMPD block
+    ``RXX(t6) RYY(t7) RZZ(t8) (U3(t0,t1,t2) x U3(t3,t4,t5))`` is emitted as
+    supported one-parameter primitive gates in its state-preparation adjoint form.
+
+    The trainable vector uses the same ordering as the dense BMPD ansatz: optional
+    initial U3 product-state parameters first, then all nine-parameter BMPD rows
+    flattened in disentangling-layer order with ascending bonds inside each layer.
+
+    Args:
+        num_qubits: Number of qubits.
+        depth: Number of entangling gates per pair. The architecture has
+            ``2 * depth`` brickwall layers.
+        initial_single_qubit_layer: Whether to prepend a trainable U3 product-state
+            layer with three scalar parameters per qubit.
+
+    Returns:
+        A :class:`ParameterizedCircuit` whose trainable factors are all supported
+        by the deterministic MPS Krotov optimizer.
+    """
+    gates: list[ParameterizedGate] = []
+    parameter_offset = 0
+
+    if initial_single_qubit_layer:
+        for site in range(num_qubits):
+            _append_u3_parameterization(gates, site, parameter_offset + 3 * site, adjoint=False)
+        parameter_offset = 3 * num_qubits
+
+    row_layers: list[list[tuple[int, tuple[int, int]]]] = []
+    row_index = 0
+    for layer in brickwall_matrix_product_disentangler_bonds(num_qubits, depth):
+        indexed_layer: list[tuple[int, tuple[int, int]]] = []
+        for sites in layer:
+            indexed_layer.append((row_index, sites))
+            row_index += 1
+        row_layers.append(indexed_layer)
+
+    for indexed_layer in reversed(row_layers):
+        for row, sites in indexed_layer:
+            _append_bmpd_gate_adjoint(gates, sites, parameter_offset + 9 * row)
+
+    num_params = brickwall_matrix_product_disentangler_num_parameters(
+        num_qubits,
+        depth,
+        initial_single_qubit_layer=initial_single_qubit_layer,
+    )
+    return ParameterizedCircuit(num_qubits=num_qubits, gates=gates, num_params=num_params)
+
+
+def create_sequential_matrix_product_disentangler_parameterized_circuit(
+    num_qubits: int,
+    dense_gates: Sequence[tuple[NDArray[np.complex128], Sequence[int]]],
+) -> tuple[ParameterizedCircuit, NDArray[np.float64]]:
+    """Convert an SMPD dense gate sequence into a Krotov-compatible circuit.
+
+    One-qubit dense unitaries are decomposed into trainable ``rz-ry-rz`` factors.
+    Two-qubit dense unitaries are decomposed with Qiskit's KAK/Weyl decomposition
+    into trainable one-qubit scalar rotations around fixed ``cx`` gates. The returned
+    initial parameter vector reproduces the original dense SMPD circuit up to a
+    global phase.
+
+    Args:
+        num_qubits: Number of qubits.
+        dense_gates: SMPD state-preparation gates as ``(matrix, sites)`` tuples,
+            in the same convention accepted by
+            :func:`mqt.yaqs.core.libraries.circuit_library.create_sequential_matrix_product_disentangler_circuit`.
+
+    Returns:
+        A tuple ``(circuit, initial_theta)`` where ``circuit`` is a
+        :class:`ParameterizedCircuit` suitable for deterministic MPS Krotov
+        optimization and ``initial_theta`` initializes it to the supplied dense
+        SMPD circuit.
+    """
+    gates: list[ParameterizedGate] = []
+    initial_theta: list[float] = []
+
+    for matrix, sites in dense_gates:
+        site_tuple = _validate_disentangler_sites(sites, num_qubits)
+        mat = _validate_disentangler_unitary(matrix, len(site_tuple))
+        _append_decomposed_circuit(gates, initial_theta, site_tuple, mat)
+
+    return ParameterizedCircuit(num_qubits=num_qubits, gates=gates, num_params=len(initial_theta)), np.asarray(
+        initial_theta,
+        dtype=np.float64,
+    )
+
+
 __all__ = [
     "PARAMETRIC_DERIVATIVE_OPERATORS",
     "SINGLE_ANGLE_GATES",
     "ParameterizedCircuit",
     "ParameterizedGate",
+    "brickwall_matrix_product_disentangler_num_parameters",
+    "create_brickwall_matrix_product_disentangler_parameterized_circuit",
+    "create_sequential_matrix_product_disentangler_parameterized_circuit",
 ]

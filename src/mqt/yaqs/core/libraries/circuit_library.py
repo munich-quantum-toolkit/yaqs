@@ -19,10 +19,270 @@ from __future__ import annotations
 
 # ignore non-lowercase argument names for physics notation
 # ruff: noqa: N803
+from collections.abc import Sequence
+
 import numpy as np
 from qiskit.circuit import QuantumCircuit, QuantumRegister
+from qiskit.circuit.library import UnitaryGate
 
 from .circuit_library_utils import add_random_single_qubit_rotation
+
+DisentanglerGateSequence = Sequence[tuple[np.ndarray, Sequence[int]]]
+
+
+def _validate_num_qubits(num_qubits: int) -> None:
+    """Validate the number of circuit qubits.
+
+    Raises:
+        ValueError: If ``num_qubits`` is not positive.
+    """
+    if num_qubits <= 0:
+        msg = f"num_qubits must be positive, got {num_qubits}."
+        raise ValueError(msg)
+
+
+def _validate_sites(sites: Sequence[int], num_qubits: int) -> tuple[int, ...]:
+    """Validate one- or two-qubit sites.
+
+    Returns:
+        Validated sites as a tuple.
+
+    Raises:
+        ValueError: If the sites do not define a valid one- or two-qubit operation.
+    """
+    site_tuple = tuple(int(site) for site in sites)
+    if len(site_tuple) not in {1, 2}:
+        msg = f"Only one- and two-qubit disentangler gates are supported, got sites={site_tuple!r}."
+        raise ValueError(msg)
+    if len(set(site_tuple)) != len(site_tuple):
+        msg = f"Disentangler gate acts on duplicate sites {site_tuple!r}."
+        raise ValueError(msg)
+    if any(site < 0 or site >= num_qubits for site in site_tuple):
+        msg = f"Disentangler gate sites {site_tuple!r} outside range(0, {num_qubits})."
+        raise ValueError(msg)
+    return site_tuple
+
+
+def _validate_dense_unitary(matrix: np.ndarray, num_sites: int) -> np.ndarray:
+    """Validate a dense one- or two-qubit unitary matrix.
+
+    Returns:
+        Validated dense unitary matrix.
+
+    Raises:
+        ValueError: If the matrix shape or unitarity check fails.
+    """
+    expected_dim = 2**num_sites
+    mat = np.asarray(matrix, dtype=np.complex128)
+    if mat.shape != (expected_dim, expected_dim):
+        msg = f"Expected a {(expected_dim, expected_dim)} unitary for {num_sites} sites, got {mat.shape}."
+        raise ValueError(msg)
+    if not np.allclose(mat.conj().T @ mat, np.eye(expected_dim, dtype=np.complex128), atol=1e-10):
+        msg = "Disentangler gate matrix must be unitary."
+        raise ValueError(msg)
+    return mat
+
+
+def _append_qsptoolkit_dense_gate(circuit: QuantumCircuit, matrix: np.ndarray, sites: Sequence[int]) -> None:
+    """Append a dense gate using the same matrix/qubit convention as qsptoolkit."""
+    site_tuple = _validate_sites(sites, circuit.num_qubits)
+    mat = _validate_dense_unitary(matrix, len(site_tuple))
+    qiskit_sites = list(reversed(site_tuple))
+    circuit.append(UnitaryGate(mat), qiskit_sites)
+
+
+def create_sequential_matrix_product_disentangler_circuit(
+    num_qubits: int,
+    gates: DisentanglerGateSequence,
+) -> QuantumCircuit:
+    """Create an SMPD state-preparation circuit from dense gate matrices.
+
+    This mirrors the circuit surface of
+    ``qsptoolkit.sequential_disentangler.SequentialMatrixProductDisentangler.get_gates()``:
+    ``gates`` must already be in state-preparation order and contain tuples of
+    ``(unitary_matrix, sites)``. The matrix convention is the qsptoolkit/quimb
+    convention, so two-qubit dense matrices are appended to Qiskit with reversed
+    qargs. The resulting circuit can be simulated by YAQS digital TJM using the
+    native Qiskit ``UnitaryGate`` support.
+
+    Args:
+        num_qubits: Number of qubits in the circuit.
+        gates: State-preparation gate sequence as ``(matrix, sites)`` tuples.
+
+    Returns:
+        Qiskit circuit containing dense one- and two-qubit ``UnitaryGate`` operations.
+    """
+    _validate_num_qubits(num_qubits)
+    circuit = QuantumCircuit(num_qubits)
+    for matrix, sites in gates:
+        _append_qsptoolkit_dense_gate(circuit, matrix, sites)
+    return circuit
+
+
+def create_brickwall_matrix_product_disentangler_circuit(
+    num_qubits: int,
+    gates: DisentanglerGateSequence,
+) -> QuantumCircuit:
+    """Create a BMPD state-preparation circuit from dense gate matrices.
+
+    This mirrors the circuit surface of
+    ``qsptoolkit.brickwall_disentangler.BrickwallMatrixProductDisentangler.get_gates()``:
+    ``gates`` must already be in state-preparation order and contain tuples of
+    ``(unitary_matrix, sites)``. The matrix convention matches qsptoolkit/quimb,
+    which requires reversing dense-gate qargs when appending to Qiskit.
+
+    Args:
+        num_qubits: Number of qubits in the circuit.
+        gates: State-preparation gate sequence as ``(matrix, sites)`` tuples.
+
+    Returns:
+        Qiskit circuit containing dense one- and two-qubit ``UnitaryGate`` operations.
+    """
+    return create_sequential_matrix_product_disentangler_circuit(num_qubits, gates)
+
+
+def _u3_matrix(theta: float, phi: float, lam: float) -> np.ndarray:
+    """Return the U3 matrix used by the BMPD generic disentangling gate."""
+    cos = np.cos(theta / 2)
+    sin = np.sin(theta / 2)
+    return np.array(
+        [
+            [cos, -np.exp(1j * lam) * sin],
+            [np.exp(1j * phi) * sin, np.exp(1j * (phi + lam)) * cos],
+        ],
+        dtype=np.complex128,
+    )
+
+
+def _rxx_matrix(theta: float) -> np.ndarray:
+    """Return the two-qubit RXX matrix used by qsptoolkit BMPD."""
+    cos = np.cos(theta / 2)
+    isin = 1j * np.sin(theta / 2)
+    return np.array(
+        [[cos, 0, 0, -isin], [0, cos, -isin, 0], [0, -isin, cos, 0], [-isin, 0, 0, cos]],
+        dtype=np.complex128,
+    )
+
+
+def _ryy_matrix(theta: float) -> np.ndarray:
+    """Return the two-qubit RYY matrix used by qsptoolkit BMPD."""
+    cos = np.cos(theta / 2)
+    isin = 1j * np.sin(theta / 2)
+    return np.array(
+        [[cos, 0, 0, isin], [0, cos, -isin, 0], [0, -isin, cos, 0], [isin, 0, 0, cos]],
+        dtype=np.complex128,
+    )
+
+
+def _rzz_matrix(theta: float) -> np.ndarray:
+    """Return the two-qubit RZZ matrix used by qsptoolkit BMPD."""
+    exp_neg = np.exp(-0.5j * theta)
+    exp_pos = np.exp(0.5j * theta)
+    return np.diag([exp_neg, exp_pos, exp_pos, exp_neg]).astype(np.complex128)
+
+
+def bmpd_general_disentangling_gate(params: Sequence[float] | np.ndarray) -> np.ndarray:
+    """Build the qsptoolkit BMPD 9-parameter two-qubit disentangling gate.
+
+    The matrix is
+    ``RXX(t6) @ RYY(t7) @ RZZ(t8) @ kron(U3(t0,t1,t2), U3(t3,t4,t5))``,
+    matching ``qsptoolkit.brickwall_disentangler.general_disentangling_gate``
+    after flattening its ``(2, 2, 2, 2)`` tensor to a ``4 x 4`` matrix.
+
+    Args:
+        params: Sequence of nine real gate parameters.
+
+    Returns:
+        Dense ``4 x 4`` unitary matrix.
+
+    Raises:
+        ValueError: If ``params`` does not contain exactly nine values.
+    """
+    theta = np.asarray(params, dtype=np.float64)
+    if theta.shape != (9,):
+        msg = f"BMPD generic disentangling gate expects 9 parameters, got shape {theta.shape}."
+        raise ValueError(msg)
+
+    ua = _u3_matrix(theta[0], theta[1], theta[2])
+    ub = _u3_matrix(theta[3], theta[4], theta[5])
+    entangler = _rxx_matrix(theta[6]) @ _ryy_matrix(theta[7]) @ _rzz_matrix(theta[8])
+    return np.asarray(entangler @ np.kron(ua, ub), dtype=np.complex128)
+
+
+def brickwall_matrix_product_disentangler_bonds(num_qubits: int, depth: int) -> list[list[tuple[int, int]]]:
+    """Return the BMPD brickwall bonds in disentangling-layer order.
+
+    Args:
+        num_qubits: Number of qubits in the circuit.
+        depth: Number of entangling gates per pair. The architecture has ``2 * depth`` layers.
+
+    Returns:
+        A list of layers, each containing nearest-neighbor qubit pairs.
+
+    Raises:
+        ValueError: If ``num_qubits`` or ``depth`` is invalid.
+    """
+    _validate_num_qubits(num_qubits)
+    if depth < 0:
+        msg = f"depth must be non-negative, got {depth}."
+        raise ValueError(msg)
+    return [[(site, site + 1) for site in range(layer % 2, num_qubits - 1, 2)] for layer in range(2 * depth)]
+
+
+def create_brickwall_matrix_product_disentangler_ansatz_circuit(
+    num_qubits: int,
+    depth: int,
+    parameters: Sequence[Sequence[float]] | np.ndarray,
+    *,
+    initial_single_qubit_unitaries: DisentanglerGateSequence | None = None,
+) -> QuantumCircuit:
+    """Create the BMPD brickwall state-preparation ansatz circuit.
+
+    This reproduces the dense circuit architecture produced by
+    ``BrickwallMatrixProductDisentangler.get_gates()`` when all brickwall bonds
+    are active: disentangling layers are generated in order ``0..2*depth-1``,
+    and the returned state-preparation circuit applies their adjoints in reverse
+    layer order. Optional single-qubit unitaries model the final product-state
+    layer prepared by qsptoolkit before the two-qubit brickwall gates.
+
+    Args:
+        num_qubits: Number of qubits in the circuit.
+        depth: Number of entangling gates per pair. The architecture has ``2 * depth`` layers.
+        parameters: Flat sequence of 9-parameter BMPD gates in disentangling-layer
+            order, with ascending bonds inside each layer.
+        initial_single_qubit_unitaries: Optional one-qubit ``(matrix, sites)`` gates
+            prepended to the state-preparation circuit.
+
+    Returns:
+        Qiskit circuit containing dense ``UnitaryGate`` operations.
+
+    Raises:
+        ValueError: If the number of parameter rows does not match the active brickwall bonds.
+    """
+    layers = brickwall_matrix_product_disentangler_bonds(num_qubits, depth)
+    expected = sum(len(layer) for layer in layers)
+    parameter_rows = [np.asarray(row, dtype=np.float64) for row in parameters]
+    if len(parameter_rows) != expected:
+        msg = (
+            f"Expected {expected} BMPD parameter rows for num_qubits={num_qubits}, depth={depth}; "
+            f"got {len(parameter_rows)}."
+        )
+        raise ValueError(msg)
+
+    inverse_layer_gates: list[tuple[np.ndarray, tuple[int, int]]] = []
+    row_index = 0
+    for layer in layers:
+        layer_gates: list[tuple[np.ndarray, tuple[int, int]]] = []
+        for sites in layer:
+            layer_gates.append((bmpd_general_disentangling_gate(parameter_rows[row_index]), sites))
+            row_index += 1
+        inverse_layer_gates.extend((matrix.conj().T, sites) for matrix, sites in reversed(layer_gates))
+
+    state_preparation_gates: list[tuple[np.ndarray, Sequence[int]]] = []
+    if initial_single_qubit_unitaries is not None:
+        state_preparation_gates.extend(initial_single_qubit_unitaries)
+    state_preparation_gates.extend(reversed(inverse_layer_gates))
+    return create_brickwall_matrix_product_disentangler_circuit(num_qubits, state_preparation_gates)
 
 
 def create_ising_circuit(

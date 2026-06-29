@@ -21,17 +21,47 @@ in quantum simulations within the YAQS project.
 
 from __future__ import annotations
 
+import numpy as np
+import pytest
 from qiskit.circuit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 
+from mqt.yaqs import Simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import (
+    bmpd_general_disentangling_gate,
+    brickwall_matrix_product_disentangler_bonds,
     create_1d_fermi_hubbard_circuit,
     create_2d_fermi_hubbard_circuit,
     create_2d_heisenberg_circuit,
     create_2d_ising_circuit,
+    create_brickwall_matrix_product_disentangler_ansatz_circuit,
+    create_brickwall_matrix_product_disentangler_circuit,
     create_heisenberg_circuit,
     create_ising_circuit,
+    create_sequential_matrix_product_disentangler_circuit,
     nearest_neighbour_random_circuit,
 )
+from mqt.yaqs.core.libraries.gate_library import Z
+
+
+def _random_unitary(dim: int, seed: int) -> np.ndarray:
+    """Build a deterministic random unitary matrix.
+
+    Returns:
+        Dense unitary matrix.
+    """
+    rng = np.random.default_rng(seed)
+    matrix = rng.normal(size=(dim, dim)) + 1j * rng.normal(size=(dim, dim))
+    q, r = np.linalg.qr(matrix)
+    phases = np.diag(r) / np.abs(np.diag(r))
+    return np.asarray(q * phases, dtype=np.complex128)
+
+
+def _fidelity(reference: np.ndarray, candidate: np.ndarray) -> float:
+    """Return squared state overlap fidelity."""
+    return float(abs(np.vdot(reference, candidate)) ** 2)
 
 
 def test_create_ising_circuit_valid_even() -> None:
@@ -440,3 +470,104 @@ def test_nearest_seed_reproducibility() -> None:
     qc2 = nearest_neighbour_random_circuit(4, 3, seed=123)
     # comparing OpenQASM is a quick way to verify structural equality
     assert qc1 == qc2
+
+
+def test_smpd_circuit_uses_qsptoolkit_dense_gate_ordering() -> None:
+    """SMPD dense matrices are appended with qsptoolkit's reversed Qiskit qargs."""
+    two_qubit = _random_unitary(4, seed=1)
+    one_qubit = _random_unitary(2, seed=2)
+    circuit = create_sequential_matrix_product_disentangler_circuit(
+        3,
+        [
+            (two_qubit, (0, 2)),
+            (one_qubit, (1,)),
+        ],
+    )
+
+    assert circuit.num_qubits == 3
+    assert [instruction.operation.name for instruction in circuit.data] == ["unitary", "unitary"]
+    assert [circuit.find_bit(qubit).index for qubit in circuit.data[0].qubits] == [2, 0]
+    assert [circuit.find_bit(qubit).index for qubit in circuit.data[1].qubits] == [1]
+    np.testing.assert_allclose(circuit.data[0].operation.to_matrix(), two_qubit)
+    np.testing.assert_allclose(circuit.data[1].operation.to_matrix(), one_qubit)
+
+
+def test_bmpd_gate_sequence_circuit_matches_smpd_conversion() -> None:
+    """BMPD and SMPD gate-sequence wrappers share the same qsptoolkit circuit convention."""
+    gates = [(_random_unitary(4, seed=3), (1, 2)), (_random_unitary(2, seed=4), (0,))]
+
+    smpd_circuit = create_sequential_matrix_product_disentangler_circuit(3, gates)
+    bmpd_circuit = create_brickwall_matrix_product_disentangler_circuit(3, gates)
+
+    assert bmpd_circuit == smpd_circuit
+
+
+def test_bmpd_general_disentangling_gate_is_unitary_and_identity_at_zero() -> None:
+    """The BMPD 9-parameter gate matches the expected unitary shape and zero limit."""
+    identity = bmpd_general_disentangling_gate(np.zeros(9))
+    np.testing.assert_allclose(identity, np.eye(4), atol=1e-12)
+
+    gate = bmpd_general_disentangling_gate(np.linspace(-0.4, 0.4, 9))
+    np.testing.assert_allclose(gate.conj().T @ gate, np.eye(4), atol=1e-12)
+
+    with pytest.raises(ValueError, match="expects 9 parameters"):
+        bmpd_general_disentangling_gate([0.1, 0.2])
+
+
+def test_bmpd_brickwall_bond_order() -> None:
+    """BMPD brickwall bonds follow qsptoolkit's alternating even/odd layers."""
+    assert brickwall_matrix_product_disentangler_bonds(5, 2) == [
+        [(0, 1), (2, 3)],
+        [(1, 2), (3, 4)],
+        [(0, 1), (2, 3)],
+        [(1, 2), (3, 4)],
+    ]
+
+
+def test_bmpd_ansatz_circuit_gate_order_and_validation() -> None:
+    """The BMPD ansatz emits state-preparation gates in reverse disentangling-layer order."""
+    num_qubits = 4
+    depth = 1
+    bonds = brickwall_matrix_product_disentangler_bonds(num_qubits, depth)
+    params = np.zeros((sum(len(layer) for layer in bonds), 9))
+    circuit = create_brickwall_matrix_product_disentangler_ansatz_circuit(num_qubits, depth, params)
+
+    # Disentangling layers are [(0, 1), (2, 3)], then [(1, 2)].
+    # State preparation reverses the layer order and uses Qiskit's reversed dense qargs.
+    assert [[circuit.find_bit(qubit).index for qubit in instruction.qubits] for instruction in circuit.data] == [
+        [2, 1],
+        [1, 0],
+        [3, 2],
+    ]
+
+    with pytest.raises(ValueError, match="Expected 3 BMPD parameter rows"):
+        create_brickwall_matrix_product_disentangler_ansatz_circuit(num_qubits, depth, params[:-1])
+
+
+def test_bmpd_ansatz_circuit_runs_with_tjm_full_tdvp() -> None:
+    """A generated BMPD dense-unitary circuit can be simulated by YAQS TJM with local TDVP."""
+    num_qubits = 4
+    depth = 1
+    num_gates = sum(len(layer) for layer in brickwall_matrix_product_disentangler_bonds(num_qubits, depth))
+    rng = np.random.default_rng(5)
+    params = rng.normal(scale=0.2, size=(num_gates, 9))
+    initial_unitaries = [(_random_unitary(2, seed=10 + qubit), (qubit,)) for qubit in range(num_qubits)]
+    circuit = create_brickwall_matrix_product_disentangler_ansatz_circuit(
+        num_qubits,
+        depth,
+        params,
+        initial_single_qubit_unitaries=initial_unitaries,
+    )
+
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="full-tdvp",
+        preset="exact",
+        get_state=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(State(num_qubits, initial="zeros"), circuit, sim_params)
+    assert result.output_state is not None
+
+    reference = np.asarray(Statevector(circuit).data, dtype=np.complex128)
+    candidate = result.output_state.mps.to_vec()
+    assert _fidelity(reference, candidate) == pytest.approx(1.0, abs=1e-10)
