@@ -7,7 +7,7 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806, SLF001, PLR6301
+# ruff: noqa: N806, SLF001
 
 from __future__ import annotations
 
@@ -441,6 +441,45 @@ def test_local_expect_x_on_plus_state() -> None:
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
 
+def test_local_expect_qudit_observable_num_sites() -> None:
+    """A single d=4 qudit observable (number operator) works via ``num_sites=1``.
+
+    The number operator ``diag(0,1,2,3)`` on a single d=4 qudit initialized to
+    level 2 should yield expectation value 2.
+    """
+    number_op = BaseGate(np.diag([0, 1, 2, 3]).astype(np.complex128), num_sites=1)
+    observable = Observable(number_op, sites=0)
+
+    mps = MPS(length=1, physical_dimensions=[4], state="zeros")
+    mps.tensors[0] = np.zeros((4, 1, 1), dtype=np.complex128)
+    mps.tensors[0][2, 0, 0] = 1.0
+
+    val = mps.local_expect(observable, sites=0)
+    np.testing.assert_allclose(val, 2.0, atol=1e-12)
+
+
+def test_local_expect_qudit_two_site_correlator_mixed_dimensions() -> None:
+    """A two-site correlator observable on a qubit (d=2) and a qutrit (d=3) works via ``num_sites=2``.
+
+    The projector ``|1,2><1,2|`` on a state deterministically prepared in level (1, 2) should
+    yield expectation value 1.0. Regression test for the qubit-only ``(2,2,2,2)`` reshape that
+    used to crash ``BaseGate.set_sites()`` for any two-site observable with mixed dimensions.
+    """
+    proj = np.zeros((2 * 3, 2 * 3), dtype=np.complex128)
+    proj[1 * 3 + 2, 1 * 3 + 2] = 1.0
+    corr_op = BaseGate(proj, num_sites=2)
+    observable = Observable(corr_op, sites=[0, 1])
+
+    mps = MPS(length=2, physical_dimensions=[2, 3], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=np.complex128)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=np.complex128)
+    mps.tensors[1][2, 0, 0] = 1.0
+
+    val = mps.local_expect(observable, sites=[0, 1])
+    np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2
@@ -602,6 +641,82 @@ def test_measure_shots_basis() -> None:
     assert results.get(0, 0) > 0
     assert results.get(1, 0) > 0
     assert sum(results.values()) == 20
+
+
+def test_single_shot_qudit_mixed_radix_encoding() -> None:
+    """measure_single_shot encodes outcomes via mixed-radix, not binary bit-shift, for qudits.
+
+    A mixed-dimension MPS ([2, 3, 4]) deterministically prepared in level (1, 2, 3) must
+    measure to ``1*1 + 2*2 + 3*(2*3) = 23`` in the "Z" basis, not the binary bit-shift result.
+    """
+    mps = MPS(length=3, physical_dimensions=[2, 3, 4], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=complex)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=complex)
+    mps.tensors[1][2, 0, 0] = 1.0
+    mps.tensors[2] = np.zeros((4, 1, 1), dtype=complex)
+    mps.tensors[2][3, 0, 0] = 1.0
+
+    rng = np.random.default_rng(0)
+    outcome = mps.measure_single_shot(basis="Z", rng=rng)
+    assert outcome == 1 * 1 + 2 * 2 + 3 * (2 * 3)
+
+
+def test_single_shot_qudit_y_basis_is_heisenberg_weyl_eigenbasis() -> None:
+    """measure_single_shot's "Y" basis for qudits is the eigenbasis of the Heisenberg-Weyl product X_d @ Z_d.
+
+    A qutrit prepared in the k-th eigenstate of X_d @ Z_d (eigenvalues ordered by ascending
+    phase, matching the qubit Y convention for d=2) must measure deterministically to outcome k
+    in the "Y" basis.
+    """
+    dim = 3
+    shift = np.zeros((dim, dim), dtype=complex)
+    for i in range(dim):
+        shift[(i + 1) % dim, i] = 1
+    omega = np.exp(2j * np.pi / dim)
+    clock = np.diag(omega ** np.arange(dim))
+    eigvals, eigvecs = np.linalg.eig(shift @ clock)
+    order = np.argsort(np.angle(eigvals))
+    site_rotation = eigvecs[:, order].conj().T
+
+    rng = np.random.default_rng(0)
+    for k in range(dim):
+        mps = MPS(length=1, physical_dimensions=[dim], state="zeros")
+        mps.tensors[0][:, 0, 0] = np.conj(site_rotation[k, :])
+        outcomes = {mps.measure_single_shot(basis="Y", rng=rng) for _ in range(20)}
+        assert outcomes == {k}
+
+
+def test_single_shot_qudit_x_basis_is_dft_eigenbasis() -> None:
+    """measure_single_shot's "X" basis for qudits is the generalized-Hadamard (DFT) eigenbasis.
+
+    A qutrit prepared in the k-th eigenstate of the generalized shift operator (the k-th column
+    of the DFT matrix's conjugate transpose) must measure deterministically to outcome k in the
+    "X" basis.
+    """
+    dim = 3
+    omega = np.exp(2j * np.pi / dim)
+    indices = np.arange(dim)
+    dft_matrix = (omega ** np.outer(indices, indices)) / np.sqrt(dim)
+
+    rng = np.random.default_rng(0)
+    for k in range(dim):
+        mps = MPS(length=1, physical_dimensions=[dim], state="zeros")
+        mps.tensors[0][:, 0, 0] = np.conj(dft_matrix[k, :])
+        outcomes = {mps.measure_single_shot(basis="X", rng=rng) for _ in range(20)}
+        assert outcomes == {k}
+
+
+def test_measure_shots_qudit_aggregates_mixed_radix_outcomes() -> None:
+    """measure_shots aggregates qudit outcomes consistently with the mixed-radix encoding."""
+    mps = MPS(length=2, physical_dimensions=[2, 3], state="zeros")
+    mps.tensors[0] = np.zeros((2, 1, 1), dtype=complex)
+    mps.tensors[0][1, 0, 0] = 1.0
+    mps.tensors[1] = np.zeros((3, 1, 1), dtype=complex)
+    mps.tensors[1][2, 0, 0] = 1.0
+
+    results = mps.measure_shots(shots=10, basis="Z")
+    assert results == {1 + 2 * 2: 10}
 
 
 def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:

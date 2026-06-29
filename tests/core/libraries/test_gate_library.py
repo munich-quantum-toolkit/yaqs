@@ -527,6 +527,35 @@ def test_gate_constructor() -> None:
         BaseGate(non_square_matrix)
 
 
+def test_gate_constructor_num_sites() -> None:
+    """A single d=4 qudit observable defaults to (wrong) interaction=2 without num_sites, 1 with it."""
+    d4_matrix = np.diag([0, 1, 2, 3]).astype(np.complex128)
+
+    gate_without = BaseGate(d4_matrix)
+    assert gate_without.interaction == 2, "Without num_sites, d=4 is (wrongly) guessed as 2 qubits"
+
+    gate = BaseGate(d4_matrix, num_sites=1)
+    assert gate.interaction == 1
+    gate.set_sites(2)
+    assert gate.sites == [2]
+
+
+def test_set_sites_two_site_qudit_correlator_skips_qubit_reshape() -> None:
+    """set_sites() must not attempt the qubit-only (2,2,2,2) reshape for a non-qubit two-site observable.
+
+    A two-site correlator on a qubit (d=2) and a qutrit (d=3) has a 6x6 matrix, which cannot be
+    reshaped into (2,2,2,2) (16 elements vs. 36). ``set_sites()`` should simply skip building
+    ``tensor``/``mpo_tensors`` for this case instead of raising, since observable evaluation
+    (``MPS.local_expect``) only needs ``matrix``.
+    """
+    proj = np.zeros((6, 6), dtype=np.complex128)
+    proj[5, 5] = 1.0
+    gate = BaseGate(proj, num_sites=2)
+    gate.set_sites(0, 1)
+    assert gate.sites == [0, 1]
+    assert not hasattr(gate, "mpo_tensors")
+
+
 def test_set_sites() -> None:
     """Test the set_sites method of the BaseGate class.
 

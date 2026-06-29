@@ -35,6 +35,23 @@ class Raising:
             if row - col == 1:
                 matrix[row][col] = 1
 
+    def __init__(self, d: int | None = None) -> None:
+        """Optionally build a generalized d-level ladder (excitation) operator.
+
+        For a d-level qudit this is ``sum_{j=0}^{d-2} |j+1><j|`` — shifts population
+        one level up. Reduces exactly to the qubit matrix above for ``d=2``.
+
+        Args:
+            d: Dimension of the Hilbert space. When omitted (default), the
+                qubit (d=2) class-level matrix above is used unchanged.
+        """
+        if d is not None and d != 2:
+            self.d = d
+            matrix = np.zeros((d, d), dtype=np.complex128)
+            for level in range(d - 1):
+                matrix[level + 1, level] = 1.0
+            self.matrix = matrix
+
 
 class Lowering:
     """Class representing relaxation noise.
@@ -52,6 +69,23 @@ class Lowering:
             if col - row == 1:
                 matrix[row][col] = 1
 
+    def __init__(self, d: int | None = None) -> None:
+        """Optionally build a generalized d-level ladder (relaxation) operator.
+
+        For a d-level qudit this is ``sum_{j=0}^{d-2} |j><j+1|`` — shifts population
+        one level down. Reduces exactly to the qubit matrix above for ``d=2``.
+
+        Args:
+            d: Dimension of the Hilbert space. When omitted (default), the
+                qubit (d=2) class-level matrix above is used unchanged.
+        """
+        if d is not None and d != 2:
+            self.d = d
+            matrix = np.zeros((d, d), dtype=np.complex128)
+            for level in range(d - 1):
+                matrix[level, level + 1] = 1.0
+            self.matrix = matrix
+
 
 class PauliZ:
     """Class representing PauliZ (dephasing) noise.
@@ -62,6 +96,21 @@ class PauliZ:
     """
 
     matrix = np.array([[1, 0], [0, -1]])
+
+    def __init__(self, d: int | None = None) -> None:
+        """Optionally build a generalized d-level dephasing (clock) operator.
+
+        For a d-level qudit this is ``diag(omega**0, ..., omega**(d-1))`` with
+        ``omega = exp(2j*pi/d)``. Reduces exactly to the qubit matrix above for ``d=2``.
+
+        Args:
+            d: Dimension of the Hilbert space. When omitted (default), the
+                qubit (d=2) class-level matrix above is used unchanged.
+        """
+        if d is not None and d != 2:
+            self.d = d
+            omega = np.exp(2j * np.pi / d)
+            self.matrix = np.diag(omega ** np.arange(d))
 
 
 class PauliX:
@@ -74,6 +123,23 @@ class PauliX:
 
     matrix = np.array([[0, 1], [1, 0]])
 
+    def __init__(self, d: int | None = None) -> None:
+        """Build a generalized d-level shift operator.
+
+        Unlike Raising/Lowering, this is cyclic (wraps from the top level back
+        to 0) and not an involution for d>2 -- a deliberate modeling choice,
+        not just a formula generalization.
+
+        Args:
+            d: Hilbert space dimension. Omitted (default) keeps the qubit (d=2) matrix above.
+        """
+        if d is not None and d != 2:
+            self.d = d
+            matrix = np.zeros((d, d), dtype=np.complex128)
+            for j in range(d):
+                matrix[(j + 1) % d, j] = 1.0
+            self.matrix = matrix
+
 
 class PauliY:
     """Class representing PauliY (bit-phase flip) noise.
@@ -84,6 +150,24 @@ class PauliY:
     """
 
     matrix = np.array([[0, -1j], [1j, 0]])
+
+    def __init__(self, d: int | None = None) -> None:
+        """Build a generalized d-level Heisenberg-Weyl operator (X_d @ Z_d).
+
+        Not Hermitian for d>2 and inherits the cyclic wrap-around of the shift
+        operator -- a deliberate modeling choice, not just a formula generalization.
+
+        Args:
+            d: Hilbert space dimension. Omitted (default) keeps the qubit (d=2) matrix above.
+        """
+        if d is not None and d != 2:
+            self.d = d
+            omega = np.exp(2j * np.pi / d)
+            shift = np.zeros((d, d), dtype=np.complex128)
+            for j in range(d):
+                shift[(j + 1) % d, j] = 1.0
+            clock = np.diag(omega ** np.arange(d))
+            self.matrix = shift @ clock
 
 
 class TwoSiteRaising:

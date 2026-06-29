@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import importlib
 
 # ruff: noqa: E402
 # ---------------------------------------------------------------------------
@@ -485,6 +486,12 @@ def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[i
     return cast("dict[int, int]", payload)
 
 
+def _looks_like_qudit_circuit(operator: object) -> bool:
+    return (
+        hasattr(operator, "dimensions") and hasattr(operator, "num_qudits") and not isinstance(operator, QuantumCircuit)
+    )
+
+
 # ---------------------------------------------------------------------------
 # 8) SAFETY WRAPPER FOR SERIAL BACKEND CALLS
 # Wrap a single backend call in a context that (again) caps threadpools.
@@ -749,13 +756,18 @@ class Simulator:
             if isinstance(initial_state, list):
                 msg = "Circuit simulation requires a single State initial_state."
                 raise TypeError(msg)
-            if not isinstance(operator, QuantumCircuit):
-                msg = "Circuit simulation requires a QuantumCircuit operator."
-                raise TypeError(msg)
             if not isinstance(initial_state, State):
                 msg = "Circuit simulation requires a State initial_state."
                 raise TypeError(msg)
-            self._run_circuit(initial_state, operator, sim_params, noise_model, result)
+            if _looks_like_qudit_circuit(operator):
+                self._run_circuit_qudit(  # pragma: no cover - requires optional mqt-qudits
+                    initial_state, operator, sim_params, noise_model, result
+                )
+            elif isinstance(operator, QuantumCircuit):
+                self._run_circuit(initial_state, operator, sim_params, noise_model, result)
+            else:
+                msg = "Circuit simulation requires a QuantumCircuit or qudit QuantumCircuit operator."
+                raise TypeError(msg)
 
         return result
 
@@ -1222,6 +1234,115 @@ class Simulator:
             self._run_strong_sim(mps, operator, sim_params, noise_model, result)
         elif isinstance(sim_params, WeakSimParams):
             self._run_weak_sim(mps, operator, sim_params, noise_model, result)
+
+    # -----------------------------------------------------------------------
+    # Qudit circuit simulation (mqt.yaqs.digital.qudit_tjm, optional mqt-qudits dependency)
+    # -----------------------------------------------------------------------
+    @staticmethod
+    def _run_circuit_qudit(  # pragma: no cover - requires optional mqt-qudits
+        initial_state: State,
+        operator: object,
+        sim_params: StrongSimParams | WeakSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run a single-trajectory qudit circuit simulation.
+
+        ``operator`` is loosely typed (``object``) on purpose: this method must not statically
+        import anything from ``mqt.yaqs.digital.qudit_tjm``, which transitively imports the
+        optional ``mqt-qudits`` package. A static import here fails to resolve under ``ty``
+        whenever ``mqt-qudits`` is not installed. ``mqt.yaqs.digital.qudit_tjm`` is loaded
+        dynamically via :mod:`importlib` instead.
+
+        Args:
+            initial_state: The initial system state (must use MPS representation).
+            operator: An ``mqt.qudits.quantum_circuit.QuantumCircuit``.
+            sim_params: Simulation parameters for circuit simulation.
+            noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``initial_state.representation`` is not ``"mps"``, or if the
+                state's site count/physical dimensions do not match ``operator``.
+        """
+        if initial_state.representation != "mps":
+            msg = (
+                "Circuit simulation requires State.representation='mps'. "
+                "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
+            )
+            raise ValueError(msg)
+        initial_state.ensure_encoded("mps")
+        mps = initial_state.mps
+
+        num_qudits = getattr(operator, "num_qudits")  # noqa: B009
+        dimensions = getattr(operator, "dimensions")  # noqa: B009
+        if mps.length != num_qudits:
+            msg = "State and circuit qudit counts do not match."
+            raise ValueError(msg)
+        if list(mps.physical_dimensions) != list(dimensions):
+            msg = "State physical dimensions do not match the circuit's qudit dimensions."
+            raise ValueError(msg)
+
+        qudit_tjm_module = importlib.import_module("mqt.yaqs.digital.qudit_tjm")
+
+        if isinstance(sim_params, WeakSimParams):
+            noisy = noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes)
+            if noisy:
+                if sim_params.get_state:
+                    msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                    raise ValueError(msg)
+                effective_num_traj = sim_params.shots
+                per_call_shots = 1
+            else:
+                effective_num_traj = 1
+                per_call_shots = sim_params.shots
+
+            result.measurements = [None] * effective_num_traj if noisy else [None]
+
+            WORKER_CTX["per_call_shots"] = per_call_shots
+            final_mps: MPS | None = None
+            for traj_idx in range(effective_num_traj):
+                shot_counts, _, traj_final_mps = qudit_tjm_module.qudit_tjm((
+                    traj_idx,
+                    mps,
+                    noise_model,
+                    sim_params,
+                    operator,
+                ))
+                if noisy:
+                    result.measurements[traj_idx] = _expect_shot_counts(shot_counts)
+                else:
+                    result.measurements[0] = _expect_shot_counts(shot_counts)
+                if traj_final_mps is not None:
+                    final_mps = traj_final_mps
+            WORKER_CTX.pop("per_call_shots", None)
+
+            _store_final_mps(result, final_mps)
+            aggregate_counts(result)
+            return
+
+        has_noise = noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes)
+        if has_noise:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
+            num_traj = sim_params.num_traj
+        else:
+            num_traj = 1
+
+        _prepare_result_observables(result, sim_params, num_traj=num_traj)
+
+        final_mps = None
+        for traj_idx in range(num_traj):
+            results, _, traj_final_mps = qudit_tjm_module.qudit_tjm((traj_idx, mps, noise_model, sim_params, operator))
+            results = cast("NDArray[np.float64]", results)
+            _store_observable_trajectory(result, sim_params, traj_index=traj_idx, sorted_traj_data=results[:, 0])
+
+            if traj_final_mps is not None:
+                final_mps = traj_final_mps
+
+        _store_final_mps(result, final_mps)
+        aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)

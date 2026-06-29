@@ -24,7 +24,7 @@ import pytest
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Z
-from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
+from mqt.yaqs.core.libraries.noise_library import Lowering, PauliX, PauliY, PauliZ, Raising
 
 
 def _allclose(a: np.ndarray, b: np.ndarray) -> bool:
@@ -122,6 +122,51 @@ def test_one_site_matrix_auto() -> None:
     assert "matrix" in p, "1-site process should have matrix auto-filled"
     assert p["matrix"].shape == (2, 2)
     assert _allclose(p["matrix"], PauliX.matrix)
+
+
+def test_qudit_operator_classes_default_to_qubit_matrix() -> None:
+    """NoiseLibrary's generalized operator classes leave the qubit (d=2) default unchanged."""
+    assert _allclose(Raising().matrix, Raising.matrix)
+    assert _allclose(Lowering().matrix, Lowering.matrix)
+    assert _allclose(PauliZ().matrix, PauliZ.matrix)
+    assert _allclose(PauliX().matrix, PauliX.matrix)
+    assert _allclose(PauliY().matrix, PauliY.matrix)
+
+
+def test_qudit_operator_classes_generalize_for_d_greater_than_two() -> None:
+    """NoiseLibrary's Raising/Lowering/PauliZ/PauliX/PauliY build correct d-level matrices."""
+    d = 4
+    expected_raising = np.zeros((d, d), dtype=np.complex128)
+    for level in range(d - 1):
+        expected_raising[level + 1, level] = 1.0
+    assert _allclose(Raising(d).matrix, expected_raising)
+    assert _allclose(Lowering(d).matrix, expected_raising.T)
+
+    omega = np.exp(2j * np.pi / d)
+    assert _allclose(PauliZ(d).matrix, np.diag(omega ** np.arange(d)))
+
+    expected_shift = np.zeros((d, d), dtype=np.complex128)
+    for j in range(d):
+        expected_shift[(j + 1) % d, j] = 1.0
+    assert _allclose(PauliX(d).matrix, expected_shift)
+    assert _allclose(PauliY(d).matrix, expected_shift @ np.diag(omega ** np.arange(d)))
+
+
+def test_noise_model_one_site_qudit_dim_auto_fills_matrix() -> None:
+    """NoiseModel auto-fills a d-level matrix when 'dim' is given without an explicit 'matrix'.
+
+    Mirrors the qubit-only ``test_one_site_matrix_auto`` above, but for a qudit
+    process built via the new ``"dim"`` key instead of an explicit ``"matrix"``.
+    """
+    nm = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.3, "dim": 4}])
+    p = nm.processes[0]
+    assert p["matrix"].shape == (4, 4)
+    assert _allclose(p["matrix"], Lowering(4).matrix)
+
+    # Qubit-only shorthand (no 'dim') must remain unaffected.
+    nm_qubit = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.3}])
+    assert nm_qubit.processes[0]["matrix"].shape == (2, 2)
+    assert _allclose(nm_qubit.processes[0]["matrix"], Lowering.matrix)
 
 
 def test_adjacent_two_site_matrix_auto() -> None:
