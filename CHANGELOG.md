@@ -11,6 +11,9 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
+- added orthogonality center tracking ([#477]) ([**@aaronleesander**])
+- extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
 - extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
 - OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
 - improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
@@ -27,6 +30,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- added trapped-ion position-grid guide and `hamiltonians` factory section ([#476]) ([**@linusschulte**])
 - simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
@@ -44,6 +48,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- fixed mcwf/lindblad ordering not matching tjm ([#481]) ([**@aaronleesander**])
+- added regression tests for tjm and mcwf jump probabilities ([#479]) ([**@aaronleesander**])
 - fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
@@ -139,6 +145,11 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
+[#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
+[#479]: https://github.com/munich-quantum-toolkit/yaqs/pull/479
+[#477]: https://github.com/munich-quantum-toolkit/yaqs/pull/477
+[#475]: https://github.com/munich-quantum-toolkit/yaqs/pull/475
 [#467]: https://github.com/munich-quantum-toolkit/yaqs/pull/467
 [#465]: https://github.com/munich-quantum-toolkit/yaqs/pull/465
 [#396]: https://github.com/munich-quantum-toolkit/yaqs/pull/396
@@ -202,6 +213,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@Marerido**]: https://github.com/Marerido
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
+[**@linusschulte**]: https://github.com/linusschulte
 
 <!-- General links -->
 

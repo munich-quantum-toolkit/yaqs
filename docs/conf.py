@@ -66,6 +66,7 @@ redirects = {
     "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
     "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
     "examples/solver_comparison": "examples/representation_comparison.html",
+    "examples/fermi_hubbard_mpo": "examples/hamiltonians.html#fermi-hubbard-1d",
 }
 
 source_suffix = [".rst", ".md"]
@@ -116,6 +117,18 @@ nb_mime_priority_overrides = [
     ("latex", "image/svg+xml", 15),
 ]
 nb_execution_raise_on_error = True
+# Suppress noisy but harmless warnings during notebook execution (complex casts, etc.).
+nb_prolog = """
+import warnings
+
+warnings.filterwarnings("ignore", message=".*cast.*complex.*")
+warnings.filterwarnings("ignore", message=".*Casting complex values to real.*")
+try:
+    from numpy.exceptions import ComplexWarning
+except ImportError:
+    from numpy import ComplexWarning
+warnings.filterwarnings("ignore", category=ComplexWarning)
+"""
 
 
 class CDAStyle(UnsrtStyle):

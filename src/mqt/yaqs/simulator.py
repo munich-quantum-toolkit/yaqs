@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.mpo import MPO
     from .core.data_structures.mps import MPS
+    from .parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -115,7 +116,13 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
-from .parallel_utils import MPContext, available_cpus, get_parallel_context, limit_worker_threads
+from .parallel_utils import (
+    MPContext,
+    available_cpus,
+    get_parallel_context,
+    limit_worker_threads,
+    safe_set_numba_threads,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -182,12 +189,7 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
 
     # 3. Numba Threading (Runtime)
     # Some Numba versions ignore env vars if imported before.
-    try:
-        import numba  # noqa: PLC0415
-
-        numba.set_num_threads(n_threads)
-    except ImportError:
-        pass
+    safe_set_numba_threads(n_threads)
 
 
 # ---------------------------------------------------------------------------
@@ -236,11 +238,15 @@ def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], None, np.ndarray |
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
-def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, None]:
+def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
 
+    Args:
+        _traj_idx: Trajectory index (unused; Lindblad evolution is deterministic in rho).
+
     Returns:
-        Observable expectation values over time for one trajectory.
+        tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
+            Observable expectation values over time and optional final density matrix.
     """
     return lindblad_evolve(WORKER_CTX["ctx"])
 
@@ -421,9 +427,51 @@ def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
         result.output_state = State.from_mps(final_mps)
 
 
-def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
+def _store_mcwf_final_state(
+    result: Result,
+    psi: np.ndarray | None,
+    *,
+    length: int | None = None,
+    physical_dimensions: list[int] | int | None = None,
+) -> None:
+    """Store the final MCWF state vector on ``result.output_state``.
+
+    If ``psi`` is not ``None``, this function stores a vector
+    :class:`~mqt.yaqs.core.data_structures.state.State` on ``result.output_state``
+    while preserving the original lattice length and local dimensions.
+
+    Args:
+        result: Output container for the simulation run.
+        psi: Final state vector, or ``None`` when ``get_state`` is ``False``.
+        length: Number of lattice sites from the initial state. Passed through so
+            non-qubit vector states do not need to infer a qubit chain length.
+        physical_dimensions: Per-site physical dimensions from the initial state.
+    """
     if psi is not None:
-        result.output_state = State(vector=psi)
+        result.output_state = State(length=length, vector=psi, physical_dimensions=physical_dimensions)
+
+
+def _store_lindblad_final_state(
+    result: Result,
+    rho: np.ndarray | None,
+    *,
+    length: int,
+    physical_dimensions: list[int] | int | None,
+) -> None:
+    """Store the final Lindblad density matrix on ``result.output_state``.
+
+    Args:
+        result: Output container for the simulation run.
+        rho: Final density matrix, or ``None`` when ``get_state`` is ``False``.
+        length: Number of lattice sites from the initial state.
+        physical_dimensions: Per-site physical dimensions from the initial state.
+    """
+    if rho is not None:
+        result.output_state = State(
+            density_matrix=rho,
+            length=length,
+            physical_dimensions=physical_dimensions,
+        )
 
 
 def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[int, int]:
@@ -470,12 +518,7 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
         - If enforcing thread limits fails, falls back silently to direct call.
     """
     # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
-    try:
-        import numba  # noqa: PLC0415
-
-        numba.set_num_threads(n_threads)
-    except (ImportError, AttributeError):
-        pass
+    safe_set_numba_threads(n_threads)
 
     if threadpool_limits is not None:
         # Caps any pools entered/created within the context
@@ -755,9 +798,10 @@ class Simulator:
             result: Output container populated during this run.
 
         Raises:
-            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``,
-                or if ``get_state=True`` is combined with a non-trivial noise model
-                (the trajectory ensemble has no single representative state).
+            ValueError: If ``get_state=True`` is combined with a non-trivial noise model
+                on ``mps`` or ``vector`` representations (the trajectory ensemble has no
+                single representative state). Lindblad ``density_matrix`` evolution always
+                returns the exact ensemble-averaged state when ``get_state=True``.
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
@@ -793,10 +837,6 @@ class Simulator:
         else:
             backend = analog_tjm_2
 
-        if state_rep == "density_matrix" and sim_params.get_state:
-            msg = "get_state=True is not supported for State.representation='density_matrix'."
-            raise ValueError(msg)
-
         if (
             noise_model is None
             or all(proc["strength"] == 0 for proc in noise_model.processes)
@@ -827,6 +867,7 @@ class Simulator:
                 worker_params,
                 psi_initial=None if mps is not None else initial_state.vector,
                 num_sites=initial_state.length if mps is None else None,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": ctx}
@@ -839,6 +880,7 @@ class Simulator:
                 worker_params,
                 rho_initial=initial_state.density_matrix,
                 num_sites=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": lindblad_ctx}
@@ -857,6 +899,7 @@ class Simulator:
 
         final_mps: MPS | None = None
         final_psi: np.ndarray | None = None
+        final_rho: np.ndarray | None = None
 
         if self.parallel and effective_num_traj > 1:
             for i, traj_payload in run_backend_parallel(
@@ -877,6 +920,8 @@ class Simulator:
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
+                    elif state_rep == "density_matrix":
+                        final_rho = cast("np.ndarray", traj_final)
                     else:
                         final_mps = cast("MPS", traj_final)
         else:
@@ -900,11 +945,25 @@ class Simulator:
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
+                    elif state_rep == "density_matrix":
+                        final_rho = cast("np.ndarray", traj_final)
                     else:
                         final_mps = cast("MPS", traj_final)
 
         if state_rep == "vector":
-            _store_mcwf_final_state(result, final_psi)
+            _store_mcwf_final_state(
+                result,
+                final_psi,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            )
+        elif state_rep == "density_matrix":
+            _store_lindblad_final_state(
+                result,
+                final_rho,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            )
         else:
             _store_final_mps(result, final_mps)
 
@@ -1340,10 +1399,9 @@ class Simulator:
         multi_time_matrix: NDArray[np.complex128] | None = None
         if n_pairs > 0:
             multi_time_matrix = np.zeros((len(initial_states), n_pairs, n_cols), dtype=np.complex128)
-            result.multi_time_times = (
-                sim_params.times
-                if sim_params.sample_timesteps
-                else np.array([sim_params.elapsed_time], dtype=np.float64)
+            result.multi_time_times = np.asarray(
+                sim_params.times if sim_params.sample_timesteps else [sim_params.elapsed_time],
+                dtype=np.float64,
             )
 
         payload: dict[str, Any] = {

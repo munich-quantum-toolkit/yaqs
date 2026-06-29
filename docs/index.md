@@ -56,22 +56,24 @@ flowchart LR
 
 ### Learning paths
 
-| I want to…                                               | Read                                      |
-| -------------------------------------------------------- | ----------------------------------------- |
-| Run my first simulation in under a minute                | {doc}`examples/quickstart`                |
-| Configure truncation, presets, and trajectories          | {doc}`examples/simulation_parameters`     |
-| Simulate open-system (analog) dynamics with noise        | {doc}`examples/analog_simulation`         |
-| Model realistic noise (Gaussian and other distributions) | {doc}`examples/realistic_noise_models`    |
-| Compare scalable MPS, MCWF, and Lindblad analog paths    | {doc}`examples/representation_comparison` |
-| Simulate a noisy circuit and read observables            | {doc}`examples/circuit_simulation`        |
-| Get hardware-like shot histograms                        | {doc}`examples/weak_circuit_simulation`   |
-| Verify two circuits are equivalent                       | {doc}`examples/equivalence_checking`      |
-| Two-time correlations and typicality ensembles           | {doc}`examples/ensemble_evolution`        |
-| Scheduled jumps at fixed times                           | {doc}`examples/scheduled_jumps`           |
-| Fermi–Hubbard MPO and analog evolution                   | {doc}`examples/fermi_hubbard_mpo`         |
-| Transmon–resonator SWAP (noiseless vs noisy)             | {doc}`examples/transmon_emulation`        |
-| Process tensor tomography                                | {doc}`examples/process_tomography`        |
-| Custom gate translation from Qiskit                      | {doc}`examples/custom_gates`              |
+| I want to…                                                    | Read                                       |
+| ------------------------------------------------------------- | ------------------------------------------ |
+| Run my first simulation in under a minute                     | {doc}`examples/quickstart`                 |
+| Configure truncation, presets, and trajectories               | {doc}`examples/simulation_parameters`      |
+| Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …) | {doc}`examples/hamiltonians`               |
+| Simulate open-system (analog) dynamics with noise             | {doc}`examples/analog_simulation`          |
+| Model realistic noise (log-normal and other distributions)    | {doc}`examples/realistic_noise_models`     |
+| Define custom single-site jump operators                      | {doc}`examples/realistic_noise_models` § 6 |
+| Compare scalable MPS, MCWF, and Lindblad analog paths         | {doc}`examples/representation_comparison`  |
+| Simulate a noisy circuit and read observables                 | {doc}`examples/circuit_simulation`         |
+| Get hardware-like shot histograms                             | {doc}`examples/weak_circuit_simulation`    |
+| Verify two circuits are equivalent                            | {doc}`examples/equivalence_checking`       |
+| Two-time correlations and typicality ensembles                | {doc}`examples/ensemble_evolution`         |
+| Scheduled jumps at fixed times                                | {doc}`examples/scheduled_jumps`            |
+| Transmon–resonator SWAP (noiseless vs noisy)                  | {doc}`examples/transmon_emulation`         |
+| Trapped-ion position-grid dynamics                            | {doc}`examples/trapped_ion`                |
+| Process tensor tomography                                     | {doc}`examples/process_tomography`         |
+| Custom gate translation                                       | {doc}`examples/custom_gates`               |
 
 ```{toctree}
 :caption: Getting started
@@ -92,13 +94,14 @@ examples/simulation_parameters
 :maxdepth: 1
 :titlesonly:
 
+examples/hamiltonians
 examples/analog_simulation
 examples/realistic_noise_models
 examples/scheduled_jumps
 examples/ensemble_evolution
 examples/representation_comparison
 examples/transmon_emulation
-examples/fermi_hubbard_mpo
+examples/trapped_ion
 examples/process_tomography
 ```
 

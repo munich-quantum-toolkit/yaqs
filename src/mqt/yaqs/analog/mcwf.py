@@ -26,6 +26,7 @@ store ``U_step``. For larger lattices use ``representation='mps'`` instead.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -34,6 +35,7 @@ import numpy as np
 import scipy.sparse
 
 from ..core import linalg
+from ..core.data_structures.state_utils import resolve_physical_dimensions
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
 
@@ -76,6 +78,7 @@ def preprocess_mcwf(
     *,
     psi_initial: NDArray[np.complex128] | None = None,
     num_sites: int | None = None,
+    physical_dimensions: int | list[int] | None = None,
     h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
@@ -90,6 +93,8 @@ def preprocess_mcwf(
         sim_params: Simulation parameters.
         psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
         num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        physical_dimensions: Per-site physical dimensions used to validate dense
+            vector and sparse Hamiltonian sizes. Defaults to qubits.
         h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
@@ -102,6 +107,7 @@ def preprocess_mcwf(
     """
     if initial_state is not None:
         num_sites = initial_state.length
+        physical_dimensions = initial_state.physical_dimensions
     elif psi_initial is not None:
         if num_sites is None:
             msg = "num_sites is required when preprocess_mcwf is called with psi_initial only."
@@ -110,11 +116,12 @@ def preprocess_mcwf(
         msg = "preprocess_mcwf requires initial_state or psi_initial."
         raise ValueError(msg)
 
-    dim = 2**num_sites
+    dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
+    site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
-    if num_sites > 14:
+    if dim > 2**14:
         msg = (
-            f"System size {num_sites} is too large for representation='vector' even with sparse matrices. "
+            f"Hilbert-space dimension {dim} is large for representation='vector' even with sparse matrices. "
             "Simulation may be very slow or run out of memory. "
             "Consider using representation='mps' for larger systems."
         )
@@ -155,7 +162,7 @@ def preprocess_mcwf(
             strength = process["strength"]
             if strength <= 0:
                 continue
-            op_full = _embed_operator_sparse(process, num_sites)
+            op_full = _embed_operator_sparse(process, num_sites, physical_dimensions=site_dims)
             jump_ops.append(np.sqrt(strength) * op_full)
 
     is_unitary = len(jump_ops) == 0
@@ -184,7 +191,7 @@ def preprocess_mcwf(
         if obs.gate.name in {"entropy", "schmidt_spectrum"}:
             embedded_observables.append(None)
         else:
-            op = _embed_observable_sparse(obs, num_sites)
+            op = _embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims)
             embedded_observables.append(op)
 
     return MCWFContext(
@@ -267,6 +274,7 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
     num_steps = len(sim_params.times)
     num_cols = num_steps if sim_params.sample_timesteps else 1
     results = np.zeros((num_obs, num_cols), dtype=np.float64)
+    heff_op = cast("Any", ctx.heff)
 
     def measure(current_psi: NDArray[np.complex128], col: int) -> None:
         for i, op_mat in enumerate(ctx.embedded_observables):
@@ -295,10 +303,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
                 psi = _apply_noisy_step(psi_before, psi_next, ctx, rng)
         elif ctx.is_unitary:
             # Noiseless but Hilbert space too large to store U_step: Hermitian Lanczos per step.
-            psi = expm_krylov(lambda v: ctx.heff @ v, psi, dt)  # ty: ignore[unsupported-operator]
+            psi = expm_krylov(lambda v: heff_op @ v, psi, dt)
         else:
             # Noisy and no stored U_step: general non-Hermitian Arnoldi per step.
-            psi_next = expm_arnoldi(lambda v: ctx.heff @ v, psi, dt)  # ty: ignore[unsupported-operator]
+            psi_next = expm_arnoldi(lambda v: heff_op @ v, psi, dt)
             psi = _apply_noisy_step(psi, psi_next, ctx, rng)
 
         if sim_params.sample_timesteps:

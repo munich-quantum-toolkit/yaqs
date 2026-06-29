@@ -34,6 +34,8 @@ from .sweep_utils import (
 )
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
     from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
@@ -72,7 +74,7 @@ def sweep_1site(
 
     right_blocks = initialize_right_environments(state, operator)
 
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -153,6 +155,8 @@ def sweep_1site(
             krylov_tol=sim_params.krylov_tol,
         )
 
+    state.set_center(0)
+
 
 def sweep_2site(
     state: MPS,
@@ -179,7 +183,7 @@ def sweep_2site(
     plan = sweep_plan if sweep_plan is not None else [step_scale]
 
     right_blocks = initialize_right_environments(state, operator)
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -209,6 +213,7 @@ def sweep_2site(
                 "right",
                 dynamic=False,
             )
+            state.update_center_after_split(i, i + 1, "right")
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -239,6 +244,7 @@ def sweep_2site(
             "left",
             dynamic=False,
         )
+        state.update_center_after_split(i, i + 1, "left")
 
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
@@ -274,12 +280,15 @@ def sweep_2site(
                 "left",
                 dynamic=False,
             )
+            state.update_center_after_split(i, i + 1, "left")
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
 
         if drift_renorm and uses_fixed_chi(sim_params):
             renorm_drift(state, sim_params)
+
+    state.set_center(0)
 
 
 def sweep_dynamic(
@@ -316,7 +325,7 @@ def sweep_dynamic(
     num_sites = operator.length
 
     right_blocks = initialize_right_environments(state, operator)
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = operator.tensors[0].shape[2]
     eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
@@ -383,6 +392,7 @@ def sweep_dynamic(
                 "right",
                 dynamic=True,
             )
+            state.update_center_after_split(i, i + 1, "right")
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -409,6 +419,7 @@ def sweep_dynamic(
                 "right",
                 dynamic=True,
             )
+            state.update_center_after_split(i, i + 1, "right")
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -480,6 +491,7 @@ def sweep_dynamic(
                 "left",
                 dynamic=True,
             )
+            state.update_center_after_split(i - 1, i, "left")
             right_blocks[i - 1] = update_right_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
@@ -495,3 +507,5 @@ def sweep_dynamic(
 
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
+
+    state.set_center(0)

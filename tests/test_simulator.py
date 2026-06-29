@@ -18,6 +18,7 @@ qubit counts.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import multiprocessing
 import os
@@ -27,6 +28,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 import numba
 import numpy as np
 import pytest
+import scipy.sparse
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
@@ -248,19 +250,17 @@ def test_threading_config() -> None:
         assert os.environ.get("NUMBA_NUM_THREADS") == "1"
 
     finally:
-        # Restore state
-        numba.set_num_threads(original_numba_threads)
-
-        # Restore environment variables
-        # 1. Remove keys that were added
+        # Restore environment variables before touching the Numba runtime pool.
         for key in list(os.environ):
             if key not in env_snapshot:
                 del os.environ[key]
 
-        # 2. Restore keys that were modified/deleted
         for key, value in env_snapshot.items():
             if os.environ.get(key) != value:
                 os.environ[key] = value
+
+        with contextlib.suppress(Exception):
+            numba.set_num_threads(original_numba_threads)
 
 
 def test_analog_simulation() -> None:
@@ -406,16 +406,198 @@ def test_analog_simulation_get_state() -> None:
         np.testing.assert_allclose(1, fidelity)
 
 
-def test_density_matrix_get_state_rejected() -> None:
-    """density_matrix evolution does not support returning an output state."""
+def test_trapped_ion_position_grid_vector_and_mps_simulation_agree() -> None:
+    """Noiseless vector and MPS evolution agree for a displaced ion in a static harmonic well."""
+    initial_displacement = 1.0
+    omega = 1.0
+    half_period = np.pi / omega
+
+    positions = np.linspace(-8.0, 8.0, 33, dtype=np.float64)
+    grid_dim = len(positions)
+    initial_grid_state = np.exp(-0.5 * (positions - initial_displacement) ** 2).astype(np.complex128)
+    initial_grid_state /= np.linalg.norm(initial_grid_state)
+
+    hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ion(positions, masses=[1.0], omega=omega))
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=half_period,
+        dt=half_period / 16,
+        num_traj=1,
+        max_bond_dim=None,
+        svd_threshold=1e-12,
+        krylov_tol=1e-12,
+        order=2,
+        preset="exact",
+        get_state=True,
+        sample_timesteps=False,
+    )
+
+    vector_state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim])
+    mps_state = State(length=1, tensors=[initial_grid_state.reshape(grid_dim, 1, 1)], physical_dimensions=[grid_dim])
+
+    vector_result = Simulator(parallel=False, show_progress=False).run(vector_state, hamiltonian, sim_params, None)
+    mps_result = Simulator(parallel=False, show_progress=False).run(mps_state, hamiltonian, sim_params, None)
+
+    assert vector_result.output_state is not None
+    assert mps_result.output_state is not None
+    vector_final = vector_result.output_state.vector
+    mps_final = mps_result.output_state.mps.to_vec()
+    overlap = np.vdot(vector_final, mps_final)
+
+    np.testing.assert_allclose(np.abs(overlap) ** 2, 1.0, atol=1e-12)
+    # A displaced harmonic-oscillator ground state reaches the opposite turning point
+    # after half a trap period. The tolerance accounts for the finite grid/discretized kinetic operator.
+    np.testing.assert_allclose(
+        float(np.sum(positions * np.abs(vector_final) ** 2)),
+        -initial_displacement,
+        atol=3e-2,
+    )
+
+
+def test_density_matrix_get_state() -> None:
+    """density_matrix evolution returns the final density matrix when get_state=True."""
     psi = State(2, initial="zeros", representation="density_matrix")
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
         get_state=True,
     )
-    with pytest.raises(ValueError, match=r"get_state=True is not supported for State\.representation='density_matrix'"):
-        Simulator(show_progress=False).run(psi, h, sim_params, None)
+    result = Simulator(show_progress=False).run(psi, h, sim_params, None)
+    assert result.output_state is not None
+    assert result.output_state.representation == "density_matrix"
+    rho = result.output_state.density_matrix
+    assert rho.shape == (4, 4)
+    assert np.isclose(np.trace(rho), 1.0)
+
+
+def test_density_matrix_get_state_noisy() -> None:
+    """Noisy Lindblad evolution still returns the exact ensemble-averaged density matrix."""
+    n_sites = 1
+    initial_state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    t = 1.0
+    noise_model = NoiseModel(
+        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=t,
+        dt=0.1,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    assert result.output_state is not None
+    rho = result.output_state.density_matrix
+    expected = np.array(
+        [[1.0 - np.exp(-gamma * t), 0.0], [0.0, np.exp(-gamma * t)]],
+        dtype=np.complex128,
+    )
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
+    assert np.isclose(np.trace(rho), 1.0)
+    assert np.allclose(rho.imag, 0.0, atol=1e-10)
+
+
+def test_density_matrix_non_qubit_physical_dimension() -> None:
+    """Lindblad density-matrix evolution supports non-qubit local dimensions."""
+    physical_dimension = 3
+    rho_initial = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    rho_initial[2, 2] = 1.0
+    initial_state = State(length=1, density_matrix=rho_initial, physical_dimensions=[physical_dimension])
+    hamiltonian = Hamiltonian(
+        sparse_matrix=scipy.sparse.csr_matrix((physical_dimension, physical_dimension), dtype=np.complex128),
+        length=1,
+        physical_dimension=physical_dimension,
+    )
+
+    lowering_21 = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    lowering_21[1, 2] = 1.0
+    gamma = 0.7
+    elapsed_time = 0.4
+    noise_model = NoiseModel(
+        processes=[{"name": "qutrit_decay_2_to_1", "sites": [0], "strength": gamma, "matrix": lowering_21}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        get_state=True,
+    )
+
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+
+    assert result.output_state is not None
+    assert result.output_state.length == 1
+    assert result.output_state.physical_dimensions == [physical_dimension]
+    rho = result.output_state.density_matrix
+    expected = np.zeros_like(rho)
+    expected[1, 1] = 1.0 - np.exp(-gamma * elapsed_time)
+    expected[2, 2] = np.exp(-gamma * elapsed_time)
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
+
+
+def test_density_matrix_get_state_at_elapsed_time() -> None:
+    """get_state returns rho at elapsed_time, not the overshot final grid point."""
+    n_sites = 1
+    initial_state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    elapsed_time = 0.25
+    noise_model = NoiseModel(
+        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        get_state=True,
+        sample_timesteps=False,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    assert result.output_state is not None
+    rho = result.output_state.density_matrix
+    expected = np.array(
+        [[1.0 - np.exp(-gamma * elapsed_time), 0.0], [0.0, np.exp(-gamma * elapsed_time)]],
+        dtype=np.complex128,
+    )
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
+    assert not np.isclose(rho[1, 1].real, np.exp(-gamma * sim_params.times[-1]), atol=1e-3)
+
+
+def test_density_matrix_get_state_preserves_metadata() -> None:
+    """Lindblad ``get_state`` copies lattice metadata onto ``result.output_state``."""
+    pdim = 2
+    initial_state = State(2, initial="zeros", representation="density_matrix", physical_dimensions=[pdim, pdim])
+    hamiltonian = Hamiltonian.ising(2, J=0.0, g=0.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    assert result.output_state is not None
+    assert result.output_state.length == 2
+    assert result.output_state.physical_dimensions == [pdim, pdim]
+    assert result.output_state.representation == "density_matrix"
+
+
+def test_density_matrix_without_get_state_leaves_output_state_empty() -> None:
+    """No ``output_state`` is stored when ``get_state`` is false for Lindblad runs."""
+    initial_state = State(1, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=False,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    assert result.output_state is None
 
 
 @pytest.mark.parametrize(

@@ -88,7 +88,7 @@ def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]
     for p, (_, _, rho_p) in enumerate(basis_set):
         for m, (_, _, e_m) in enumerate(basis_set):
             b_pm = np.kron(rho_p, e_m.T)
-            choi_matrices.append(b_pm)
+            choi_matrices.append(np.asarray(b_pm, dtype=np.complex128))
             indices.append((p, m))
 
     return choi_matrices, indices
@@ -121,7 +121,7 @@ def calculate_dual_choi_basis(basis_matrices: list[NDArray[np.complex128]]) -> l
     dual_frame = dual_frame_dag.conj().T
 
     # Unpack columns of dual_frame into matrices
-    return [dual_frame[:, k].reshape(dim, dim) for k in range(dual_frame.shape[1])]
+    return [dual_frame[:, k].reshape(dim, dim).astype(np.complex128) for k in range(dual_frame.shape[1])]
 
 
 def _reprepare_site_zero_forced(
@@ -137,8 +137,11 @@ def _reprepare_site_zero_forced(
     Returns:
         float: The probability of this projection occurring.
     """
-    # Force right-canonical form at site 0 to extract proper environment state
-    mps.set_canonical_form(orthogonality_center=0)
+    # Force mixed-canonical form at site 0 to extract proper environment state.
+    if mps.orthogonality_center is not None and mps.orthogonality_center != 0:
+        mps.shift_center_to(0)
+    elif mps.orthogonality_center is None:
+        mps.set_canonical_form(orthogonality_center=0)
     t_mps = mps.tensors[0]
 
     # Contract site 0 with <proj_state|
@@ -156,6 +159,7 @@ def _reprepare_site_zero_forced(
         new_tensor[s, 0, :] = new_state[s] * env_vec
 
     mps.tensors[0] = new_tensor
+    mps.set_center(0)
 
     # Final Renormalization
     final_norm = mps.norm()
@@ -192,7 +196,7 @@ def _reprepare_site_zero_vector_forced(
         env_vec /= np.sqrt(prob)
 
     new_psi = np.outer(new_state, env_vec).flatten()
-    return new_psi, prob
+    return np.asarray(new_psi, dtype=np.complex128), prob
 
 
 def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
@@ -257,7 +261,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     # We only need the final output state after all evolution steps
     def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
         if isinstance(state, np.ndarray):
-            rho = np.reshape(state, (2, -1))
+            rho = np.reshape(np.asarray(state, dtype=np.complex128), (2, -1))
             return rho @ rho.conj().T
         assert isinstance(state, MPS)
         trace = float(state.norm() ** 2)

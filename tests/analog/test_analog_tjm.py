@@ -21,6 +21,7 @@ The tests cover:
     with and without sampling timesteps.
   - Analog simulation (order=1): Checking the shape of the results when running a first order evolution,
     with and without sampling timesteps.
+  - Lowering noise: TJM jump probabilities and ensemble observables must agree with MCWF.
 
 These tests ensure that the evolution functions correctly integrate the MPS state under the
 specified Hamiltonian and noise model, and that observable measurements are properly aggregated.
@@ -31,6 +32,8 @@ specified Hamiltonian and noise model, and that observable measurements are prop
 
 from __future__ import annotations
 
+import copy
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -45,10 +48,19 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.analog.analog_tjm import initialize, step_through
+from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import X, Z
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.methods.stochastic_process import calculate_stochastic_factor, stochastic_process
+from mqt.yaqs.core.methods.tdvp.tdvp import tdvp
 from tests.conftest import YAQS_TEST_SEED
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from numpy.typing import NDArray
 
 
 def test_initialize() -> None:
@@ -180,3 +192,172 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
     z_mean = np.real(results)
     assert np.isfinite(z_mean).all()
     assert np.all(np.abs(z_mean) <= 1.0 + 1e-6)
+
+
+class _NeverJumpRng:
+    """RNG stub that always takes the no-jump branch in ``stochastic_process``."""
+
+    @staticmethod
+    def random() -> float:
+        return 1.0
+
+
+def _lowering_noise_model(length: int, *, gamma: float = 1.0) -> NoiseModel:
+    return NoiseModel([{"name": "lowering", "sites": [i], "strength": gamma} for i in range(length)])
+
+
+def _zero_hamiltonian_mpo(length: int) -> MPO:
+    mpo = MPO.identity(length)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    return mpo
+
+
+def _mcwf_jump_probability(state: MPS, ctx: MCWFContext) -> float:
+    """Reference jump probability for one MCWF step from the current MPS.
+
+    Returns:
+        Jump probability ``1 - ||exp(-i H_eff dt) |psi>||^2`` for the given state.
+    """
+    psi: NDArray[np.complex128] = state.to_vec()
+    psi /= np.linalg.norm(psi)
+    assert ctx.step_propagator is not None, "Test systems must fit the dense MCWF propagator."
+    psi_next = ctx.step_propagator @ psi
+    return float(1.0 - np.vdot(psi_next, psi_next).real)
+
+
+def _tjm_jump_probability_after_dissipation(
+    state: MPS,
+    noise_model: NoiseModel,
+    dt: float,
+    sim_params: AnalogSimParams,
+) -> float:
+    dissipated = copy.deepcopy(state)
+    apply_dissipation(dissipated, noise_model, dt, sim_params)
+    assert dissipated.orthogonality_center == 0
+    return float(calculate_stochastic_factor(dissipated))
+
+
+def _entangled_after_tdvp(*, length: int, dt: float) -> MPS:
+    state = MPS(length, state="ones")
+    hamiltonian = MPO.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    tdvp(state, hamiltonian, sim_params)
+    return state
+
+
+@pytest.mark.parametrize(
+    "prepare_state",
+    [
+        pytest.param(lambda: MPS(5, state="ones"), id="product_all_excited"),
+        pytest.param(lambda: _entangled_after_tdvp(length=5, dt=0.05), id="entangled_ising_tdvp"),
+    ],
+)
+def test_lowering_jump_probability_matches_mcwf_after_dissipation(
+    prepare_state: Callable[[], MPS],
+) -> None:
+    """TJM dissipative norm loss must match the MCWF jump probability for lowering noise."""
+    length = 5
+    dt = 0.05
+    state = prepare_state()
+    hamiltonian = _zero_hamiltonian_mpo(length)
+    noise_model = _lowering_noise_model(length)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    ctx = preprocess_mcwf(state, hamiltonian, noise_model, sim_params)
+
+    p_mcwf = _mcwf_jump_probability(state, ctx)
+    p_tjm = _tjm_jump_probability_after_dissipation(state, noise_model, dt, sim_params)
+
+    np.testing.assert_allclose(p_tjm, p_mcwf, rtol=0.0, atol=5e-4)
+
+
+@pytest.mark.parametrize(
+    "hamiltonian_factory",
+    [
+        pytest.param(_zero_hamiltonian_mpo, id="h_zero"),
+    ],
+)
+def test_lowering_jump_probability_stable_over_repeated_no_jump_steps(
+    hamiltonian_factory: Callable[[int], MPO],
+) -> None:
+    """Jump probabilities must stay aligned with MCWF across many dissipative substeps."""
+    length = 5
+    dt = 0.05
+    n_steps = 10
+
+    hamiltonian = hamiltonian_factory(length)
+    noise_model = _lowering_noise_model(length)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    ctx = preprocess_mcwf(MPS(length, state="ones"), hamiltonian, noise_model, sim_params)
+
+    state = MPS(length, state="ones")
+    state.normalize("B")
+    never_jump = _NeverJumpRng()
+
+    for _ in range(n_steps):
+        p_mcwf = _mcwf_jump_probability(state, ctx)
+        p_tjm = _tjm_jump_probability_after_dissipation(state, noise_model, dt, sim_params)
+        np.testing.assert_allclose(p_tjm, p_mcwf, rtol=0.0, atol=1e-3)
+
+        apply_dissipation(state, noise_model, dt, sim_params)
+        stochastic_process(state, noise_model, dt, sim_params, rng=cast("np.random.Generator", never_jump))
+        state.normalize("B")
+
+
+def test_tjm_and_mcwf_lowering_mean_excitation_agreement() -> None:
+    """End-to-end smoke: ensemble-averaged excitation density from TJM and MCWF should agree.
+
+    The per-step jump-probability checks above are the primary regression guard; this
+    single short trajectory ensemble only verifies that the full solvers stay consistent.
+    """
+    length = 5
+    gamma = 1.0
+    t_max = 1.5
+    dt = 0.1
+    num_traj = 20
+
+    hamiltonian = Hamiltonian.ising(length, J=0.0, g=0.0)
+    noise_model = _lowering_noise_model(length, gamma=gamma)
+    observables = [Observable("z", sites=i) for i in range(length)]
+
+    sim = Simulator(parallel=True, show_progress=False)
+
+    tjm_params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=t_max,
+        dt=dt,
+        num_traj=num_traj,
+        random_seed=YAQS_TEST_SEED,
+        max_bond_dim=64,
+        svd_threshold=1e-10,
+        order=1,
+    )
+    mcwf_params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=t_max,
+        dt=dt,
+        num_traj=num_traj,
+        random_seed=YAQS_TEST_SEED,
+        max_bond_dim=64,
+        svd_threshold=1e-10,
+    )
+
+    tjm_result = sim.run(
+        State(length, initial="ones", representation="mps"),
+        hamiltonian,
+        tjm_params,
+        noise_model,
+    )
+    mcwf_result = sim.run(
+        State(length, initial="ones", representation="vector"),
+        hamiltonian,
+        mcwf_params,
+        noise_model,
+    )
+
+    n_tjm = np.mean([(1.0 - z) / 2.0 for z in tjm_result.expectation_values], axis=0)
+    n_mcwf = np.mean([(1.0 - z) / 2.0 for z in mcwf_result.expectation_values], axis=0)
+
+    # v0.5.0 showed ~0.03 excess excitation in TJM at t=2; keep tolerance below that.
+    mean_abs_diff = float(np.mean(np.abs(n_tjm - n_mcwf)))
+    assert mean_abs_diff < 0.03, f"mean |n_TJM - n_MCWF| = {mean_abs_diff:.4f}"

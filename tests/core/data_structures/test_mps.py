@@ -7,21 +7,31 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806
+# ruff: noqa: N806, SLF001
 
 from __future__ import annotations
 
 import copy
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import numpy as np
 import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
+from typing_extensions import Self
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from numpy.typing import NDArray
 
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -709,6 +719,133 @@ def test_measure_shots_qudit_aggregates_mixed_radix_outcomes() -> None:
     assert results == {1 + 2 * 2: 10}
 
 
+def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``measure_shots`` must not spawn extra workers inside a pytest-xdist worker."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    psi = MPS(length=2, state="zeros")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        psi.measure_shots(shots=5)
+    mock_executor.assert_not_called()
+
+
+def test_measure_shots_single_shot() -> None:
+    """A single shot uses the fast path without a process pool."""
+    psi = MPS(length=1, state="zeros")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        results = psi.measure_shots(shots=1)
+    mock_executor.assert_not_called()
+    assert results == {0: 1}
+
+
+def test_measure_shots_serial_when_one_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multiple shots fall back to a serial loop when only one worker is available."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    psi = MPS(length=1, state="x+")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        results = psi.measure_shots(shots=5, basis="X")
+    mock_executor.assert_not_called()
+    assert results == {0: 5}
+
+
+class _NoOpPbar:
+    """No-op tqdm stand-in for tests."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def update(self, _n: int = 1) -> None:
+        return None
+
+
+class _ImmediateFuture:
+    """Minimal future stand-in that runs the submitted callable immediately."""
+
+    def __init__(self, fn: Callable[[int], int], shot_idx: int) -> None:
+        self._outcome = fn(shot_idx)
+
+    def result(self) -> int:
+        return self._outcome
+
+
+class _ImmediateProcessPoolExecutor:
+    """Process pool test double that still exercises worker init and submission."""
+
+    def __init__(
+        self,
+        *,
+        max_workers: int,
+        mp_context: object,
+        initializer: Callable[..., None] | None,
+        initargs: tuple[object, ...],
+    ) -> None:
+        self.max_workers = max_workers
+        _ = mp_context
+        self.initializer = initializer
+        if initializer is not None:
+            initializer(*initargs)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def submit(self, fn: Callable[[int], int], shot_idx: int) -> _ImmediateFuture:
+        return _ImmediateFuture(fn, shot_idx)
+
+
+def test_measure_shots_parallel_pool_submits_bounded_workers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Parallel ``measure_shots`` initializes worker context and aggregates all outcomes."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 8)
+    monkeypatch.setattr(mps_mod, "get_parallel_context", lambda _mode: None)
+
+    created: list[_ImmediateProcessPoolExecutor] = []
+
+    def _factory(
+        *,
+        max_workers: int,
+        mp_context: object,
+        initializer: Callable[..., None] | None,
+        initargs: tuple[object, ...],
+    ) -> _ImmediateProcessPoolExecutor:
+        executor = _ImmediateProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=mp_context,
+            initializer=initializer,
+            initargs=initargs,
+        )
+        created.append(executor)
+        return executor
+
+    psi = MPS(length=1, state="x+")
+    with (
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor", side_effect=_factory),
+        patch("mqt.yaqs.core.data_structures.mps.wait", side_effect=lambda futures, **_: (list(futures), [])),
+        patch("mqt.yaqs.core.data_structures.mps.tqdm", _NoOpPbar),
+    ):
+        results = psi.measure_shots(shots=6, basis="X")
+
+    assert len(created) == 1
+    assert created[0].max_workers == 6
+    assert results == {0: 6}
+
+
+def test_measure_shots_worker_helpers() -> None:
+    """Worker helpers measure using the process-global MPS context."""
+    psi = MPS(length=1, state="x+")
+    mps_mod._measure_shots_worker_init(psi, "X")
+    assert mps_mod._measure_shots_worker(0) == 0
+    assert mps_mod._measure_shots_worker(3) == 0
+
+
 def test_inplace_measure() -> None:
     """Test the in-place .measure(site, basis) method.
 
@@ -854,7 +991,11 @@ def test_check_canonical_form_full() -> None:
     delta_mid = np.zeros((2, 2, 2), dtype=np.complex128)
     delta_mid[0, 0, 0] = np.array(1, dtype=np.complex128)
     delta_mid[1, 1, 1] = np.array(1, dtype=np.complex128)
-    tensors = [delta_left, delta_mid, delta_right]
+    tensors: list[NDArray[np.complex128]] = [
+        delta_left,
+        delta_mid,
+        delta_right,
+    ]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
     assert res == [0, 1, 2]
@@ -965,6 +1106,7 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
     # invariants
     assert np.isclose(mps.norm(), norm_before, atol=1e-12)
     assert mps.check_canonical_form()[0] == 0
+    assert mps.orthogonality_center == 0
 
     # expected staircase
     for i, T in enumerate(mps.tensors):
@@ -1080,12 +1222,12 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
     # record the full state-vector for fidelity check
     before_vec = mps.to_vec()
     # record the center and canonical-split
-    before_center = mps.check_canonical_form()[0]
+    before_center = mps.orthogonality_center
     assert before_center == center
 
     # do a "no-real" truncation (tiny threshold, generous max bond)
     mps.compress(threshold=1e-16, max_bond_dim=100)
-    after_center = mps.check_canonical_form()[0]
+    after_center = mps.orthogonality_center
     assert after_center == center
 
     # fidelity of state stays unity
@@ -1095,14 +1237,14 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
 
     # also check left/right canonicity around that center
     L = mps.length
-    for i in range(before_center):
+    for i in range(center):
         # left-canonical test
         A = mps.tensors[i]
         conjA = np.conj(A)
         gram = oe.contract("ijk, ijl->kl", conjA, A)
         # identity on the i-th right bond
         assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
-    for i in range(before_center + 1, L):
+    for i in range(center + 1, L):
         # right-canonical test
         A = mps.tensors[i]
         conjA = np.conj(A)
@@ -1404,6 +1546,172 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     assert np.isclose(z1, 1.0, atol=1e-12)
     assert np.isclose(x2, 0.0, atol=1e-12)
     assert np.isclose(z3, 1.0, atol=1e-12)
+
+
+def _dense_z_expectation(mps: MPS, site: int) -> float:
+    """Reference Z expectation on ``site`` matching ``MPS.to_vec`` bit ordering.
+
+    Args:
+        mps: State to evaluate.
+        site: Site index for the Pauli-Z operator.
+
+    Returns:
+        Real expectation value of Z on ``site``.
+    """
+    psi = mps.to_vec()
+    z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+    op = embed_one_site_operator(z, mps.length, site)
+    return float(np.real(np.vdot(psi, op @ psi)))
+
+
+def test_expect_matches_dense_without_manual_canonicalization() -> None:
+    """``expect`` must be correct on entangled MPS without ``set_canonical_form``."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    assert mps.orthogonality_center == 0
+    for site in range(mps.length):
+        obs = Observable(GateLibrary.z(), site)
+        assert mps.expect(obs) == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
+
+
+def test_evaluate_observables_with_nonzero_initial_center() -> None:
+    """``evaluate_observables`` works when the copy starts away from site 0."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_canonical_form(3)
+    assert mps.orthogonality_center == 3
+
+    obs_seq = [Observable(GateLibrary.z(), s) for s in range(4)]
+    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
+    results = np.empty((4, 1), dtype=np.float64)
+    mps.evaluate_observables(sim_params, results, column_index=0)
+
+    for site in range(4):
+        assert results[site, 0] == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
+
+
+def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
+    """Shift helpers assert when the requested center disagrees with tracking."""
+    mps = MPS(3, state="zeros")
+    assert mps.orthogonality_center == 0
+    mps.set_center(1)
+    with pytest.raises(AssertionError):
+        mps.shift_orthogonality_center_right(0)
+
+
+def test_orthogonality_center_preserved_by_deepcopy() -> None:
+    """Deep copies carry the tracked orthogonality center."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(2)
+    copied = copy.deepcopy(mps)
+    assert copied.orthogonality_center == 2
+
+
+def test_single_qubit_gate_gauge_policy() -> None:
+    """Off-center single-qubit updates invalidate gauge; on-center updates preserve it."""
+    mps = MPS(3, state="zeros")
+    assert mps.orthogonality_center == 0
+    gate = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    mps.tensors[1] = oe.contract("ab, bcd->acd", gate, mps.tensors[1])
+    if mps.orthogonality_center != 1:
+        mps.set_center(None)
+    assert mps.orthogonality_center is None
+
+    mps2 = MPS(1, state="x+")
+    assert mps2.orthogonality_center == 0
+    mps2.tensors[0] = oe.contract("ab, bcd->acd", gate, mps2.tensors[0])
+    assert mps2.orthogonality_center == 0
+
+
+def test_update_center_after_split() -> None:
+    """``update_center_after_split`` sets the tracked center from SVD distribution."""
+    mps = MPS(4, state="zeros")
+    mps.update_center_after_split(1, 2, "right")
+    assert mps.orthogonality_center == 2
+    mps.update_center_after_split(0, 1, "left")
+    assert mps.orthogonality_center == 0
+    mps.update_center_after_split(1, 2, "sqrt")
+    assert mps.orthogonality_center is None
+
+
+def test_compress_restores_center_when_gauge_unknown() -> None:
+    """``compress`` assigns ``orthogonality_center`` after sweeping from inferred center."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_center(None)
+    assert mps.orthogonality_center is None
+    mps.compress(threshold=1e-12, max_bond_dim=8)
+    assert mps.orthogonality_center is not None
+    obs = Observable(GateLibrary.z(), 2)
+    assert isinstance(mps.expect(obs), float)
+
+
+def test_measure_single_shot_off_center() -> None:
+    """``measure_single_shot`` site-0 marginal matches ``measure`` when center starts away from site 0."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_canonical_form(2)
+
+    def local_z_probabilities(state: MPS, site: int) -> np.ndarray:
+        temp = copy.deepcopy(state)
+        if temp.orthogonality_center is not None:
+            if temp.orthogonality_center != site:
+                temp.shift_center_to(site)
+        else:
+            temp.set_canonical_form(site)
+        tensor = temp.tensors[site]
+        reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
+        probabilities = np.diag(reduced_density_matrix).real.copy()
+        return probabilities / probabilities.sum()
+
+    site0_probs = local_z_probabilities(mps, 0)
+    z_expectation = mps.mixed_expectation(mps, Observable(Z(), 0)).real
+    np.testing.assert_allclose(site0_probs[0], (1 + z_expectation) / 2, atol=1e-10)
+
+    rng = np.random.default_rng(0)
+    shots = 3000
+    for bit in (0, 1):
+        measure_frac = sum(copy.deepcopy(mps).measure(0, rng=rng) == bit for _ in range(shots)) / shots
+        single_shot_frac = sum((mps.measure_single_shot(rng=rng) & 1) == bit for _ in range(shots)) / shots
+        assert measure_frac == pytest.approx(site0_probs[bit], abs=0.05)
+        assert single_shot_frac == pytest.approx(site0_probs[bit], abs=0.05)
+
+
+def test_assert_center_unknown_gauge_raises() -> None:
+    """``assert_center`` rejects an unknown gauge."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(None)
+    with pytest.raises(ValueError, match="gauge unknown"):
+        mps.assert_center(0, context="test")
+
+
+def test_assert_center_mismatch_raises() -> None:
+    """``assert_center`` rejects a tracked center that differs from the expected site."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(2)
+    with pytest.raises(ValueError, match="expected site 0"):
+        mps.assert_center(0, context="test")
+
+
+def test_shift_center_to_unknown_gauge_raises() -> None:
+    """``shift_center_to`` cannot run when the gauge is unknown."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(None)
+    with pytest.raises(ValueError, match="gauge is unknown"):
+        mps.shift_center_to(1)
+
+
+def test_check_covers_sites() -> None:
+    """``check_covers_sites`` reports whether the tracked center supports local contraction."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(1)
+    assert mps.check_covers_sites(1) is True
+    assert mps.check_covers_sites(0) is False
+    assert mps.check_covers_sites([0, 1]) is True
+    assert mps.check_covers_sites([1, 2]) is True
+    assert mps.check_covers_sites([0, 2]) is False
+    assert mps.check_covers_sites([0, 1, 2]) is False
+    mps.set_center(None)
 
 
 def test_evaluate_observables_meta_validation_errors() -> None:

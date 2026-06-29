@@ -105,7 +105,7 @@ def update_right_environment(
     tensor = np.tensordot(ket, right_env, axes=1)
     tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
     tensor = tensor.transpose((2, 1, 0, 3))
-    return np.tensordot(tensor, bra.conj(), axes=((2, 3), (0, 2)))
+    return np.asarray(np.tensordot(tensor, bra.conj(), axes=((2, 3), (0, 2))), dtype=np.complex128)
 
 
 def update_left_environment(
@@ -133,7 +133,7 @@ def update_left_environment(
     """
     tensor = np.tensordot(left_env, bra.conj(), axes=(2, 1))
     tensor = np.tensordot(op, tensor, axes=((0, 2), (2, 1)))
-    return np.tensordot(ket, tensor, axes=((0, 1), (0, 2)))
+    return np.asarray(np.tensordot(ket, tensor, axes=((0, 1), (0, 2))), dtype=np.complex128)
 
 
 def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex128]]:
@@ -158,7 +158,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
         msg = "The lengths of the state and the operator must match."
         raise ValueError(msg)
 
-    right_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    right_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
     right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=np.complex128)
@@ -223,7 +223,7 @@ def project_bond(
 
     """
     tensor = np.tensordot(bond_tensor, right_env, axes=1)
-    return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
+    return np.asarray(np.tensordot(left_env, tensor, axes=((0, 1), (0, 1))), dtype=np.complex128)
 
 
 # --- Dense effective operator ---

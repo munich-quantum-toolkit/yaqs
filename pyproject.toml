@@ -134,6 +134,7 @@ default.extend-ignore-re = [
 wille = "wille"
 aer = "aer"
 ket   = "ket"
+arange = "arange"  # NumPy; typos otherwise "corrects" to arrange
 
 
 [tool.repo-review.ignore]

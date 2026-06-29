@@ -107,27 +107,24 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
 Pick a preset — no other truncation arguments required:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 # Default: balanced preset fills in all truncation settings
 analog_params = AnalogSimParams()
-print("default", _trunc_summary(analog_params))
 
 for name in ("fast", "balanced", "accurate", "exact"):
-    params = AnalogSimParams(preset=name)
-    print(name, _trunc_summary(params))
+    _trunc_summary(AnalogSimParams(preset=name))
 ```
 
 Override **one** field; the rest stay from `"balanced"`:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 balanced = AnalogSimParams(preset="balanced")
 tighter_krylov = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
-
-print("balanced preset only", _trunc_summary(balanced))
-print("override krylov_tol only", _trunc_summary(tighter_krylov))
-# svd_threshold, max_bond_dim, and num_traj still come from "balanced"
-assert tighter_krylov.svd_threshold == balanced.svd_threshold
-assert tighter_krylov.max_bond_dim == balanced.max_bond_dim
-assert tighter_krylov.num_traj == balanced.num_traj
 ```
 
 Override **several** fields when you know exactly what you want; the remaining preset fields still apply:
@@ -233,10 +230,11 @@ Used for noisy weak simulation. **`shots` is always required** and is not part o
 YAQS stores weak-simulation measurement histograms in `Result.counts` as a `dict[int, int]`. The integer key encodes the measured bitstring with **site 0 as the least-significant bit** (little-endian). This matches Qiskit’s default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via `int(bitstring, 2)`.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 weak_balanced = WeakSimParams(shots=1000)
 weak_exact = WeakSimParams(shots=1000, preset="exact")
-print("balanced", _trunc_summary(weak_balanced))
-print("exact", _trunc_summary(weak_exact))
 ```
 
 See {doc}`weak_circuit_simulation` for a full example with measurement histograms.

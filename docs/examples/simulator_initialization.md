@@ -56,13 +56,10 @@ state = State(L, initial="zeros")
 Calling `Simulator()` with no arguments gives you parallel execution across most of your CPU cores, a `tqdm` progress bar, an `"auto"` multiprocessing context, and a generous retry policy.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 sim = Simulator()
-print("parallel:        ", sim.parallel)
-print("max_workers:     ", sim.max_workers)
-print("show_progress:   ", sim.show_progress)
-print("mp_context:      ", sim.mp_context)
-print("max_retries:     ", sim.max_retries)
-print("retry_exceptions:", sim.retry_exceptions)
 ```
 
 Every option is keyword-only, so you can override one without specifying the others:
@@ -76,13 +73,14 @@ quiet_sim = Simulator(show_progress=False)
 A `Simulator` instance is **stateless** with respect to the physics; the same instance can drive arbitrarily many {meth}`~mqt.yaqs.Simulator.run` calls. This is the recommended pattern in scripts and notebooks because it keeps execution configuration in one place.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 sim = Simulator(show_progress=False)
 
 for noise_strength in (0.0, 0.05, 0.1):
     params = make_params()
-    # ... build a NoiseModel from `noise_strength` here in real code ...
     result = sim.run(state, H, params, noise_model=None)
-    print(f"gamma={noise_strength}: <Z_0>={float(result.expectation_values[0][0]):+.4f}")
 ```
 
 Each call constructs a short-lived `ProcessPoolExecutor` when `parallel=True`; pools are not persisted across {meth}`~mqt.yaqs.Simulator.run` calls, so you can safely change `sim.max_workers` (or replace `sim` entirely) between calls.
@@ -98,6 +96,9 @@ Each call constructs a short-lived `ProcessPoolExecutor` when `parallel=True`; p
 Both modes produce identical results for a fixed `random_seed`:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 import numpy as np
 
 params_serial = make_params()
@@ -107,10 +108,6 @@ result_serial = sim_serial.run(state, H, params_serial)
 params_parallel = make_params()
 sim_parallel = Simulator(parallel=True, max_workers=2, show_progress=False)
 result_parallel = sim_parallel.run(state, H, params_parallel)
-
-for vals_s, vals_p in zip(result_serial.expectation_values, result_parallel.expectation_values, strict=True):
-    np.testing.assert_allclose(vals_s, vals_p, atol=1e-10)
-print("Serial and parallel results match.")
 ```
 
 ```{note}
@@ -122,10 +119,13 @@ For runs with `num_traj == 1` (e.g. noise-free analog/circuit dynamics, Lindblad
 When `max_workers` is left as `None`, the simulator picks `max(1, available_cpus() - 1)` to leave one core free for the parent process and the OS:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs.simulator import available_cpus
 
-print("available CPUs YAQS would use:", available_cpus())
-print("default max_workers:          ", Simulator().max_workers)
+cpus = available_cpus()
+default_workers = Simulator().max_workers
 ```
 
 {func}`~mqt.yaqs.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
@@ -145,8 +145,10 @@ Override the resolution either by setting the environment variable…
 …or by passing `max_workers` explicitly:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 sim_four = Simulator(max_workers=4, show_progress=False)
-print("fixed max_workers:", sim_four.max_workers)
 ```
 
 ## `show_progress`: tqdm bars
@@ -171,15 +173,16 @@ The bar is suppressed regardless of `parallel`, so the same flag also silences s
 | `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs.parallel_utils import get_parallel_context
 
 for choice in ("auto", "fork", "spawn"):
     try:
-        ctx = get_parallel_context(choice)
-    except ValueError as exc:
-        print(f"{choice}: not available on this platform ({exc})")
-    else:
-        print(f"{choice}: start_method={ctx.get_start_method()}")
+        get_parallel_context(choice)
+    except ValueError:
+        continue
 ```
 
 If you mix YAQS with GPU libraries or anything that does not survive `fork()`, force `mp_context="spawn"`.
@@ -193,8 +196,11 @@ Long parallel runs occasionally encounter transient worker failures: a worker is
 - `OSError`
 
 ```{code-cell} ipython3
-print("default max_retries:    ", Simulator().max_retries)
-print("default retry_exceptions:", Simulator().retry_exceptions)
+---
+tags: [remove-output]
+---
+default_retries = Simulator().max_retries
+retry_types = Simulator().retry_exceptions
 ```
 
 Tighten the policy for fail-fast development (e.g. when bisecting an error):
@@ -222,49 +228,40 @@ Permanent errors (e.g. `ValueError` from your physics setup, `AssertionError` fr
 {meth}`~mqt.yaqs.Simulator.run` returns a {class}`~mqt.yaqs.Result` that holds every simulation output through a small, stable surface. The {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` you passed in is referenced unchanged at `result.sim_params`:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 sim = Simulator(show_progress=False)
 params = make_params()
 result = sim.run(state, H, params)
-
-print("type:                 ", type(result).__name__)
-print("len(observables):     ", len(result.observables))
-print("len(expectation_values):", len(result.expectation_values))
-print("len(trajectories):    ", len(result.trajectories))
-print("times:                ", result.times)
-print("noise_model:          ", result.noise_model)
-print("output_state:         ", result.output_state)
-print("counts (weak only):   ", result.counts)
-print("multi_time_times:     ", result.multi_time_times)
-print("multi_time_results:   ", result.multi_time_results)
-print("runtime_cost:         ", result.runtime_cost)
-print("max_bond:             ", result.max_bond)
-print("total_bond:           ", result.total_bond)
 ```
 
 The properties that don't apply to your simulation kind return `None` (or an empty list for `observables` in weak simulations), so you can branch on them safely. The full set is:
 
-| Property                                 | Populated for                                                                       |
-| ---------------------------------------- | ----------------------------------------------------------------------------------- |
-| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                        |
-| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                  |
-| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                     |
-| `times`                                  | Shared analog time grid; `None` for digital circuits.                               |
-| `runtime_cost`                           | MPS-backed analog and strong digital runs (contraction-cost heuristic over time).   |
-| `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).       |
-| `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).        |
-| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                            |
-| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams` (no noise).    |
-| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                   |
-| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes). |
+| Property                                 | Populated for                                                                                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                                                                                                         |
+| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                   |
+| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                      |
+| `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                |
+| `runtime_cost`                           | MPS-backed analog and strong digital runs (contraction-cost heuristic over time).                                                                                    |
+| `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).                                                                                        |
+| `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).                                                                                         |
+| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                             |
+| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
+| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                    |
+| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes).                                                                                  |
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and resume analysis from disk:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 import pickle
 
 blob = pickle.dumps(result)
 restored: Result = pickle.loads(blob)  # noqa: S301
-print("restored observable count:", len(restored.observables))
 ```
 
 ## Choosing settings for common scenarios

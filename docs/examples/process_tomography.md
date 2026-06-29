@@ -50,7 +50,7 @@ sim_params = AnalogSimParams(
 ## 2. Single-step tomography
 
 Run tomography for a single evolution segment of length `t = 0.1`.
-100 trajectories per preparation sequence are sufficient for a quick demonstration.
+A few dozen trajectories per preparation sequence are enough for this demonstration.
 
 ```{code-cell} ipython3
 ---
@@ -62,22 +62,22 @@ pt_single = run(
     operator,
     sim_params,
     timesteps=[0.1],
-    num_trajectories=100,
+    num_trajectories=40,
 )
-
-print(f"Process tensor shape: {pt_single.tensor.shape}")  # (4, 6)
 ```
 
 The tensor has shape `(4, N)` where `4` encodes the vectorised output density matrix
-and `N = 6` is the number of Pauli frame states used as input probes.
+and `N = 16` is the number of input probes in the Pauli/Liouville frame for this two-qubit chain.
 
 ## 3. Quantum Mutual Information
 
 The **Quantum Mutual Information** quantifies how much information is preserved by the channel between the input state ensemble and the final output:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 qmi = pt_single.quantum_mutual_information(base=2)
-print(f"Quantum Mutual Information (single step): {qmi:.4f} bits")
 ```
 
 For unitary channels, this value approaches the entropy of the average input state (~0.907 bits for the standard 4-state Pauli frame).
@@ -95,10 +95,8 @@ pt_two = run(
     operator,
     sim_params,
     timesteps=[0.1, 0.1],       # two segments of dt each
-    num_trajectories=100,
+    num_trajectories=40,
 )
-
-print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 16, 16)
 ```
 
 ## 5. Predicting held-out states
@@ -108,6 +106,9 @@ and any _arbitrary local interventions_ applied between time steps without addit
 The prediction uses a dual-frame polynomial sum — an efficient linear-algebraic operation:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 import numpy as np
 
 # Choose an arbitrary mixed input state
@@ -118,26 +119,20 @@ def _random_rho(rng: np.random.Generator) -> np.ndarray:
     psi = rng.standard_normal(2) + 1j * rng.standard_normal(2)
     psi /= np.linalg.norm(psi)
     rho = np.outer(psi, psi.conj())
-    # Mix with identity to make it a proper mixed state
     return 0.7 * rho + 0.3 * 0.5 * np.eye(2, dtype=complex)
 
 rho_0 = _random_rho(rng)
 
-# The first intervention is the preparation of the initial state at t=0
 def initial_prep(rho: np.ndarray) -> np.ndarray:
     return rho_0
 
-# Define an arbitrary CPTP intervention map applied at the intermediate timestep
 def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
     x_mat = np.array([[0, 1], [1, 0]], dtype=complex)
     return x_mat @ rho @ x_mat.conj().T
 
-# Predict final state — no simulator call needed!
 rho_pred = pt_two.predict_final_state(
     interventions=[initial_prep, x_gate_intervention]
 )
-print("Predicted output density matrix:")
-print(np.round(rho_pred, 4))
 ```
 
 The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
