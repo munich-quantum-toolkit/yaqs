@@ -760,7 +760,9 @@ class Simulator:
                 msg = "Circuit simulation requires a State initial_state."
                 raise TypeError(msg)
             if _looks_like_qudit_circuit(operator):
-                self._run_circuit_qudit(initial_state, operator, sim_params, noise_model, result)
+                self._run_circuit_qudit(  # pragma: no cover - requires optional mqt-qudits
+                    initial_state, operator, sim_params, noise_model, result
+                )
             elif isinstance(operator, QuantumCircuit):
                 self._run_circuit(initial_state, operator, sim_params, noise_model, result)
             else:
@@ -1237,7 +1239,7 @@ class Simulator:
     # Qudit circuit simulation (mqt.yaqs.digital.qudit_tjm, optional mqt-qudits dependency)
     # -----------------------------------------------------------------------
     @staticmethod
-    def _run_circuit_qudit(
+    def _run_circuit_qudit(  # pragma: no cover - requires optional mqt-qudits
         initial_state: State,
         operator: object,
         sim_params: StrongSimParams | WeakSimParams,
