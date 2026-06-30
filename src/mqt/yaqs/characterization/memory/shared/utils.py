@@ -25,6 +25,8 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
+from ..shared.encoding import SITE0_KET
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -307,9 +309,6 @@ def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> 
     return np.array([[a, -np.conj(b)], [b, np.conj(a)]], dtype=np.complex128)
 
 
-_SITE0_KET = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-
-
 def _apply_cut_preparation_step(
     state: MPS | NDArray[np.complex128],
     psi_prep: NDArray[np.complex128],
@@ -340,7 +339,7 @@ def _apply_cut_preparation_step(
     """
     p = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
     nrm = float(np.linalg.norm(p))
-    p = _SITE0_KET if nrm < 1e-15 else p / nrm
+    p = SITE0_KET if nrm < 1e-15 else p / nrm
     if int(chain_length) == 1:
         if solver == "MCWF":
             if not isinstance(state, np.ndarray):
@@ -352,7 +351,7 @@ def _apply_cut_preparation_step(
         t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
         new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
         return new_mps, 1.0
-    state_out, _prob = _reprepare_backend_state_forced(state, _SITE0_KET, p, solver)
+    state_out, _prob = _reprepare_backend_state_forced(state, SITE0_KET, p, solver)
     return state_out, 1.0
 
 

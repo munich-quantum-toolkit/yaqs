@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
 
+from ..shared.interventions import DEFAULT_INTERVENTION_STYLE
 from .branch_weights import compute_branch_weights
-from .grid import assemble_delayed_probe_grid, compute_delayed_length
+from .grid import assemble_probe_grid, compute_delayed_length
 from .response_matrix import assemble_response_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
 
@@ -100,8 +101,7 @@ def run_operational_memory(
     rng: np.random.Generator | None = None,
     probe_set: ProbeSet | None = None,
     return_raw: bool = False,
-    intervention_mode: str = "split_cut_unitary",
-    unitary_ensemble: str = "haar",
+    intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     parallel: bool | None = None,
     delay: int = 0,
 ) -> dict[str, Any]:
@@ -116,9 +116,7 @@ def run_operational_memory(
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
         return_raw: If True, include uncentered ``response_matrix_raw``.
-        intervention_mode: Passed to internal
-            :func:`~mqt.yaqs.characterization.memory.operational_memory.samples.sample_probes`.
-        unitary_ensemble: Passed to internal sampling.
+        intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
 
@@ -162,8 +160,7 @@ def run_operational_memory(
             n_pasts=n_pasts,
             n_futures=n_futures,
             rng=rng,
-            intervention_mode=intervention_mode,
-            unitary_ensemble=unitary_ensemble,
+            intervention_style=intervention_style,
         )
     intervention_steps_list = None
     sim_probe_set = probe_set
@@ -171,7 +168,7 @@ def run_operational_memory(
         if exact_backend_cls is None or not isinstance(process, exact_backend_cls):
             msg = "delay > 0 requires an exact Hamiltonian characterize backend."
             raise ValueError(msg)
-        intervention_steps_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
+        intervention_steps_list, _, _ = assemble_probe_grid(probe_set, delay=delay)
         sim_probe_set = replace(
             probe_set, num_interventions=compute_delayed_length(num_interventions=num_interventions, delay=delay)
         )

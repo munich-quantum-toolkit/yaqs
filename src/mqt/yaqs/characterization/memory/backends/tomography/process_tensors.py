@@ -16,7 +16,7 @@ import numpy as np
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 from ...operational_memory.grid import assemble_probe_sequence
-from ...shared.encoding import encode_rho_pauli
+from ...shared.encoding import DEFAULT_INITIAL_RHO0, encode_rho_pauli
 from ...shared.intervention_steps import build_intervention_operator
 
 if TYPE_CHECKING:
@@ -25,10 +25,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
-
-DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-_RHO0 = DEFAULT_INITIAL_RHO0
-_Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
 def validate_initial_rho(

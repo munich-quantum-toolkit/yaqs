@@ -153,8 +153,7 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
         n_pasts=m_max,
         n_futures=m_max,
         rng=np.random.default_rng(draw_seed),
-        intervention_mode="split_cut_unitary",
-        unitary_ensemble="haar",
+        intervention_style="haar",
     )
     pauli, weights, _ = simulate_exact(
         probe_set=probe_set,

@@ -13,8 +13,6 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.grid import (
-    assemble_delayed_probe_grid,
-    assemble_delayed_probe_sequence,
     assemble_probe_grid,
     assemble_probe_sequence,
     compute_delayed_length,
@@ -102,23 +100,19 @@ def test_compute_delayed_length_rejects_negative() -> None:
         compute_delayed_length(num_interventions=5, delay=-1)
 
 
-def test_assemble_delayed_probe_sequence_delay_zero_matches_standard() -> None:
-    """delay=0 delegates to the standard split-cut assembler."""
+def test_assemble_probe_sequence_delay_zero_explicit() -> None:
+    """delay=0 is the default split-cut assembler."""
     rng = np.random.default_rng(1)
     probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
-    assert assemble_delayed_probe_sequence(probe_set, 0, 1, delay=0) == assemble_probe_sequence(
-        probe_set,
-        0,
-        1,
-    )
+    assert assemble_probe_sequence(probe_set, 0, 1, delay=0) == assemble_probe_sequence(probe_set, 0, 1)
 
 
-def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
+def test_assemble_probe_grid_inserts_reset_slots() -> None:
     """delay>0 lengthens sequences by delay+1 and adds (|0>,|0>) bridge slots."""
     rng = np.random.default_rng(9)
     cut, k, delay = 3, 5, 2
     probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=2, n_futures=2, rng=rng)
-    delayed_pairs, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
+    delayed_pairs, _, _ = assemble_probe_grid(probe_set, delay=delay)
     expected_len = compute_delayed_length(num_interventions=k, delay=delay)
     assert expected_len == k + delay + 1
     assert all(len(seq) == expected_len for seq in delayed_pairs)
@@ -130,7 +124,7 @@ def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
         assert reset_pairs == delay
 
 
-def test_assemble_delayed_probe_sequence_rejects_mismatched_cut_arrays() -> None:
+def test_assemble_probe_sequence_rejects_mismatched_cut_arrays_with_delay() -> None:
     """Delayed assembly validates cut-branch arrays before indexed access."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     u = np.eye(2, dtype=np.complex128)
@@ -145,4 +139,4 @@ def test_assemble_delayed_probe_sequence_rejects_mismatched_cut_arrays() -> None
         future_pairs=[[{"type": "unitary", "U": u}, {"type": "unitary", "U": u}]],
     )
     with pytest.raises(ValueError, match="future_prep_cut length 2 != n_futures=1"):
-        assemble_delayed_probe_sequence(probe_set, i=0, j=0, delay=1)
+        assemble_probe_sequence(probe_set, i=0, j=0, delay=1)

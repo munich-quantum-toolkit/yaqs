@@ -42,8 +42,7 @@ def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, num_interventi
         n_pasts=int(n_pasts),
         n_futures=int(n_futures),
         rng=rng,
-        intervention_mode="split_cut_unitary",
-        unitary_ensemble="haar",
+        intervention_style="haar",
     )
 
 
@@ -526,8 +525,7 @@ def test_paper_modes_rank_rises_with_coupling() -> None:
             n_pasts=m_spectrum,
             n_futures=m_spectrum,
             rng=np.random.default_rng(probe_seed),
-            intervention_mode="split_cut_unitary",
-            unitary_ensemble="haar",
+            intervention_style="haar",
         )
         result = mc.characterize(
             Hamiltonian.ising(length=_PAPER_L, J=float(j), g=_PAPER_G),
@@ -558,8 +556,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
         n_pasts=n_pasts,
         n_futures=n_futures,
         rng=np.random.default_rng(999_991),
-        intervention_mode="split_cut_unitary",
-        unitary_ensemble="haar",
+        intervention_style="haar",
     )
     ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
     entropies: list[float] = []

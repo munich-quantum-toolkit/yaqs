@@ -40,13 +40,13 @@ def test_resolve_unitary_sampler_clifford_draws_from_clifford_group() -> None:
 
 
 def test_resolve_unitary_sampler_rejects_unknown() -> None:
-    """Unknown ensemble names raise ValueError."""
-    with pytest.raises(ValueError, match="unitary_ensemble"):
+    """Unknown unitary styles raise ValueError."""
+    with pytest.raises(ValueError, match="style must be"):
         resolve_unitary_sampler("so3")
 
 
 def test_sample_probes_measure_prepare_mode() -> None:
-    """Measure-prepare mode produces MP tuple steps on legs."""
+    """Measure-prepare style produces MP tuple steps on legs."""
     rng = np.random.default_rng(1)
     probe_set = sample_probes(
         cut=2,
@@ -54,7 +54,7 @@ def test_sample_probes_measure_prepare_mode() -> None:
         n_pasts=3,
         n_futures=2,
         rng=rng,
-        intervention_mode="measure_prepare",
+        intervention_style="measure_prepare",
     )
     seq = probe_set.past_pairs[0] + [(probe_set.past_cut_meas[0], probe_set.future_prep_cut[0])]
     assert all(isinstance(step, tuple) for step in seq)
@@ -76,18 +76,3 @@ def test_sample_random_clifford_unitary_returns_copy() -> None:
     a[0, 0] = 999.0 + 0.0j
     c = clifford_sampler(np.random.default_rng(7))
     np.testing.assert_allclose(b, c, atol=1e-12)
-
-
-def test_sample_probes_measure_prepare_ignores_unitary_ensemble() -> None:
-    """Measure-prepare mode does not validate unitary_ensemble."""
-    rng = np.random.default_rng(3)
-    probe_set = sample_probes(
-        cut=1,
-        num_interventions=2,
-        n_pasts=2,
-        n_futures=2,
-        rng=rng,
-        intervention_mode="measure_prepare",
-        unitary_ensemble="not-a-real-ensemble",
-    )
-    assert probe_set.num_interventions == 2

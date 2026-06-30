@@ -109,8 +109,7 @@ def test_trace_weights_match_cumulative_final_split_cut_unitary() -> None:
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="split_cut_unitary",
-        unitary_ensemble="haar",
+        intervention_style="haar",
     )
     _, weights_cut, traces = simulate_exact(
         probe_set=probe_set,
@@ -145,8 +144,7 @@ def test_exact_weights_positive_l2_quick_geometry() -> None:
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="split_cut_unitary",
-        unitary_ensemble="haar",
+        intervention_style="haar",
     )
     _, weights, traces = simulate_exact(
         probe_set=probe_set,

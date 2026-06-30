@@ -10,21 +10,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
 from ..shared.encoding import extract_ket
 from ..shared.interventions import (
+    DEFAULT_INTERVENTION_STYLE,
+    InterventionStyle,
     _sample_mp,
     encode_choi_features,
     encode_unitary_choi,
+    normalize_style,
     resolve_unitary_sampler,
     sample_intervention_parts,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 
 @dataclass(slots=True)
@@ -85,29 +85,21 @@ def sample_cut_preparation(rng: np.random.Generator) -> tuple[np.ndarray, np.nda
 def sample_probe(
     rng: np.random.Generator,
     *,
-    intervention_mode: str,
-    unitary_sampler: Callable[[np.random.Generator], np.ndarray] | None,
+    intervention_style: InterventionStyle,
 ) -> tuple[np.ndarray, Any]:
     """Sample one within-sequence intervention step.
 
     Args:
         rng: NumPy random generator.
-        intervention_mode: ``"measure_prepare"`` or unitary-break mode.
-        unitary_sampler: Callable ``rng -> U`` for unitary-break modes.
+        intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
 
     Returns:
         Tuple ``(choi_features, step)`` where ``step`` is an MP pair or unitary dict.
-
-    Raises:
-        ValueError: If ``unitary_sampler`` is missing for unitary-break modes.
     """
-    if intervention_mode == "measure_prepare":
+    if intervention_style == "measure_prepare":
         feat, pair = _sample_mp(rng)
         return feat, pair
-    if unitary_sampler is None:
-        msg = "unitary_sampler is required for unitary-break intervention modes."
-        raise ValueError(msg)
-    u = unitary_sampler(rng)
+    u = resolve_unitary_sampler(intervention_style)(rng)
     return encode_unitary_choi(u), {"type": "unitary", "U": u}
 
 
@@ -118,8 +110,7 @@ def sample_probes(
     n_pasts: int,
     n_futures: int,
     rng: np.random.Generator,
-    intervention_mode: str = "split_cut_unitary",
-    unitary_ensemble: str = "haar",
+    intervention_style: str = DEFAULT_INTERVENTION_STYLE,
 ) -> ProbeSet:
     """Sample random split-cut past/future probe ensembles.
 
@@ -129,23 +120,18 @@ def sample_probes(
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
         rng: NumPy random generator.
-        intervention_mode: ``"split_cut_unitary"`` or ``"measure_prepare"``.
-        unitary_ensemble: ``"haar"`` or ``"clifford"`` (unitary-break modes only).
+        intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
 
     Returns:
         Populated :class:`ProbeSet`.
 
     Raises:
-        ValueError: If ``cut`` or ``intervention_mode`` is invalid.
+        ValueError: If ``cut`` is invalid.
     """
     if not (1 <= cut <= num_interventions):
         msg = f"cut must satisfy 1 <= cut <= num_interventions, got cut={cut}, num_interventions={num_interventions}"
         raise ValueError(msg)
-    mode = str(intervention_mode).strip().lower()
-    if mode not in {"split_cut_unitary", "measure_prepare"}:
-        msg = f"intervention_mode must be 'split_cut_unitary' or 'measure_prepare', got {intervention_mode!r}"
-        raise ValueError(msg)
-    unitary_sampler = resolve_unitary_sampler(unitary_ensemble) if mode == "split_cut_unitary" else None
+    style = normalize_style(intervention_style)
     past_full = cut - 1
     future_full = num_interventions - cut
 
@@ -155,7 +141,7 @@ def sample_probes(
     for i in range(n_pasts):
         pairs_i: list[Any] = []
         for t in range(past_full):
-            feat, step = sample_probe(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            feat, step = sample_probe(rng, intervention_style=style)
             past_features[i, t] = feat
             pairs_i.append(step)
         feat_m, psi_m = sample_cut_measurement(rng)
@@ -172,7 +158,7 @@ def sample_probes(
         future_prep_cut.append(psi_p)
         pairs_j: list[Any] = []
         for t in range(future_full):
-            feat, step = sample_probe(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            feat, step = sample_probe(rng, intervention_style=style)
             future_features[j, 1 + t] = feat
             pairs_j.append(step)
         future_pairs.append(pairs_j)

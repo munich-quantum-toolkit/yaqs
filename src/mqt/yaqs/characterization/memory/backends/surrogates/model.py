@@ -27,14 +27,11 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...shared.encoding import decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
+from ...shared.encoding import DEFAULT_INITIAL_RHO0, decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
 from ...shared.interventions import encode_choi_features
 
 if TYPE_CHECKING:
     from ...operational_memory.samples import ProbeSet
-
-# Computational-basis |0><0| (same convention as workflow sequence simulation).
-_RHO0_PROJECTOR = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
 def _sinusoidal_positional_encoding(
@@ -183,7 +180,7 @@ class ProcessTensorSurrogate(nn.Module):
         Raises:
             ValueError: If packed length does not match ``d_rho``.
         """
-        packed = pack_rho8(normalize_backend_rho(_RHO0_PROJECTOR)).astype(np.float32)
+        packed = pack_rho8(normalize_backend_rho(DEFAULT_INITIAL_RHO0)).astype(np.float32)
         if packed.shape[0] != self.d_rho:
             msg = f"rho8 packing length {packed.shape[0]} does not match d_rho={self.d_rho}."
             raise ValueError(msg)

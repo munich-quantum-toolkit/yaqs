@@ -237,39 +237,23 @@ def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
     return _flatten_choi4(choi).astype(np.float32)
 
 
-def resolve_unitary_sampler(unitary_ensemble: str) -> Callable[[np.random.Generator], np.ndarray]:
-    """Map ensemble name to a unitary sampling callable.
+def resolve_unitary_sampler(style: str) -> Callable[[np.random.Generator], np.ndarray]:
+    """Map a unitary intervention style to a sampling callable.
 
     Args:
-        unitary_ensemble: ``"haar"`` or ``"clifford"``.
+        style: ``"haar"`` or ``"clifford"``.
 
     Returns:
         Callable ``rng -> U`` that draws a single-qubit unitary.
 
     Raises:
-        ValueError: If ``unitary_ensemble`` is unsupported.
+        ValueError: If ``style`` is not a unitary intervention style.
     """
-    ensemble = str(unitary_ensemble).strip().lower()
-    if ensemble not in {"haar", "clifford"}:
-        msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
+    resolved = normalize_style(style)
+    if resolved == "measure_prepare":
+        msg = f"intervention style must be 'haar' or 'clifford' for unitary sampling, got {style!r}."
         raise ValueError(msg)
-    return _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
-
-
-def _unitary_sampler_for_style(
-    intervention_style: InterventionStyle,
-) -> Callable[[np.random.Generator], np.ndarray]:
-    """Return the unitary sampler callable for an intervention style.
-
-    Args:
-        intervention_style: ``"haar"`` or ``"clifford"``.
-
-    Returns:
-        Callable ``rng -> U`` that draws a single-qubit unitary.
-    """
-    if intervention_style == "clifford":
-        return _sample_random_clifford_unitary
-    return _sample_random_unitary
+    return _sample_random_clifford_unitary if resolved == "clifford" else _sample_random_unitary
 
 
 def _sample_mp(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
@@ -306,22 +290,6 @@ def normalize_style(style: str) -> InterventionStyle:
     raise ValueError(msg)
 
 
-def map_probe_kwargs(style: str) -> dict[str, str]:
-    """Map user intervention style to internal split-cut probe keyword arguments.
-
-    Args:
-        style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
-
-    Returns:
-        Dict with ``intervention_mode`` and ``unitary_ensemble`` keys for probing.
-    """
-    resolved = normalize_style(style)
-    if resolved == "measure_prepare":
-        return {"intervention_mode": "measure_prepare", "unitary_ensemble": "haar"}
-    ensemble = "clifford" if resolved == "clifford" else "haar"
-    return {"intervention_mode": "split_cut_unitary", "unitary_ensemble": ensemble}
-
-
 def encode_intervention(slot: Intervention, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
     """Encode one intervention slot to a simulator step and Choi feature row.
 
@@ -350,7 +318,7 @@ def encode_intervention(slot: Intervention, rng: np.random.Generator) -> tuple[A
         psi_meas = extract_ket(effect)
         psi_prep = extract_ket(rho_prep)
         return (psi_meas, psi_prep), feat
-    u = _unitary_sampler_for_style(resolved)(rng)
+    u = resolve_unitary_sampler(resolved)(rng)
     return {"type": "unitary", "U": u}, encode_unitary_choi(u)
 
 

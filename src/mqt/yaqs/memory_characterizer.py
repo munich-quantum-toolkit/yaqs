@@ -39,7 +39,7 @@ from mqt.yaqs.characterization.memory.shared.interventions import (
     InterventionSequence,
     encode_interventions,
     expand_interventions,
-    map_probe_kwargs,
+    normalize_style,
 )
 from mqt.yaqs.characterization.memory.shared.utils import (
     DEFAULT_VECTOR_MAX_QUBITS,
@@ -571,7 +571,7 @@ class MemoryCharacterizer:
             initial_psi: Optional initial state for Hamiltonian exact simulation.
             parallel: Override parallelism for process-tensor/surrogate probing.
             delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
-            **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
+            **probe_kwargs: Advanced overrides; only ``intervention_style`` is supported.
 
         Returns:
             Diagnostics with per-cut entropy, modes, spectrum, and stored probes.
@@ -584,7 +584,10 @@ class MemoryCharacterizer:
                 target, or ``delay > 0`` on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
-        probe_kw = {**map_probe_kwargs(intervention_style), **probe_kwargs}
+        if "intervention_mode" in probe_kwargs or "unitary_ensemble" in probe_kwargs:
+            msg = "Use intervention_style= instead of intervention_mode= / unitary_ensemble=."
+            raise ValueError(msg)
+        resolved_style = normalize_style(probe_kwargs.get("intervention_style", intervention_style))
         resolved_probe_set = _resolve_probe_bundle(probe_set)
 
         if delay > 0 and not _matches_hamiltonian(target):
@@ -609,7 +612,7 @@ class MemoryCharacterizer:
                 rng=rng,
                 probe_set=resolved_probe_set,
                 initial_psi=initial_psi,
-                probe_kw=probe_kw,
+                intervention_style=resolved_style,
                 delay=delay,
             )
 
@@ -628,7 +631,7 @@ class MemoryCharacterizer:
                 rng=rng,
                 probe_set=resolved_probe_set,
                 parallel=parallel,
-                probe_kw=probe_kw,
+                intervention_style=resolved_style,
                 delay=delay,
             )
         parts: dict[int, CharacterizationResult] = {}
@@ -642,7 +645,7 @@ class MemoryCharacterizer:
                 rng=rng,
                 probe_set=None,
                 parallel=parallel,
-                probe_kw=probe_kw,
+                intervention_style=resolved_style,
                 delay=delay,
             )
         return merge_cut_results(parts)
@@ -758,7 +761,7 @@ class MemoryCharacterizer:
         rng: Generator | None,
         probe_set: ProbeSet | None,
         parallel: bool | None,
-        probe_kw: dict[str, Any],
+        intervention_style: str,
         delay: int = 0,
     ) -> CharacterizationResult:
         """Characterize a process tensor or surrogate via internal split-cut probing.
@@ -780,7 +783,7 @@ class MemoryCharacterizer:
             return_raw=True,
             parallel=parallel if parallel is not None else self._execution.parallel,
             delay=delay,
-            **probe_kw,
+            intervention_style=intervention_style,
         )
         return pack_result(out, cut=resolved_cut)
 
@@ -797,7 +800,7 @@ class MemoryCharacterizer:
         rng: Generator | None,
         probe_set: ProbeSet | None,
         initial_psi: np.ndarray | None,
-        probe_kw: dict[str, Any],
+        intervention_style: str,
         delay: int = 0,
     ) -> CharacterizationResult:
         """Characterize a Hamiltonian via exact stochastic sequences and branch weights.
@@ -842,7 +845,7 @@ class MemoryCharacterizer:
                     n_pasts=n_pasts,
                     n_futures=n_futures,
                     rng=local_rng,
-                    **probe_kw,
+                    intervention_style=intervention_style,
                 )
             out = run_operational_memory(
                 process=backend,

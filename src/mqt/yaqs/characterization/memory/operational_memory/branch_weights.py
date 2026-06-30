@@ -17,13 +17,11 @@ from mqt.yaqs.characterization.memory.shared.intervention_steps import (
     apply_intervention_to_rho,
     compute_intervention_probability,
 )
-
+from mqt.yaqs.characterization.memory.shared.encoding import DEFAULT_INITIAL_RHO0
 from .grid import assemble_probe_sequence
 
 if TYPE_CHECKING:
     from .samples import ProbeSet
-
-_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
 def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
@@ -36,7 +34,7 @@ def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
     Returns:
         Cumulative branch weight ``prod_t p_t`` for ``t < cut``.
     """
-    rho = _RHO0.copy()
+    rho = DEFAULT_INITIAL_RHO0.copy()
     weight = 1.0
     for t in range(min(int(cut), len(steps))):
         sp = compute_intervention_probability(rho, steps[t])

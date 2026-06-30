@@ -126,7 +126,7 @@ def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="split_cut_unitary",
+        intervention_style="haar",
     )
     w_analytic = compute_branch_weights(probe_set)
     _, w_exact, _ = simulate_exact(
@@ -159,7 +159,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
         n_pasts=5,
         n_futures=4,
         rng=rng,
-        intervention_mode="split_cut_unitary",
+        intervention_style="haar",
     )
     exact = ExactBackend(
         operator=op,

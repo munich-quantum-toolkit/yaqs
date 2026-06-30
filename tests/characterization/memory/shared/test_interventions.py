@@ -17,8 +17,8 @@ from mqt.yaqs.characterization.memory.shared.interventions import (
     encode_intervention,
     encode_interventions,
     expand_interventions,
-    map_probe_kwargs,
     normalize_style,
+    resolve_unitary_sampler,
     sample_train_interventions,
 )
 
@@ -41,20 +41,10 @@ def test_normalize_style_rejects_unknown() -> None:
         normalize_style("random_unitary")
 
 
-def test_map_probe_kwargs_matches_paper_experiments() -> None:
-    """Haar style maps to split_cut_unitary + haar (experiments/ default)."""
-    assert map_probe_kwargs("haar") == {
-        "intervention_mode": "split_cut_unitary",
-        "unitary_ensemble": "haar",
-    }
-    assert map_probe_kwargs("clifford") == {
-        "intervention_mode": "split_cut_unitary",
-        "unitary_ensemble": "clifford",
-    }
-    assert map_probe_kwargs("measure_prepare") == {
-        "intervention_mode": "measure_prepare",
-        "unitary_ensemble": "haar",
-    }
+def test_resolve_unitary_sampler_rejects_measure_prepare() -> None:
+    """Unitary sampling is only defined for Haar and Clifford styles."""
+    with pytest.raises(ValueError, match="intervention style must be"):
+        resolve_unitary_sampler("measure_prepare")
 
 
 def test_expand_interventions_broadcasts_scalar_style() -> None:

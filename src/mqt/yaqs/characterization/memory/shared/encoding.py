@@ -29,6 +29,10 @@ PAULI_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
 PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
 PAULI_BASIS = (PAULI_I, PAULI_X, PAULI_Y, PAULI_Z)
 
+# Site-0 reference state after U_0 from |0⟩^⊗L (process-tensor / branch-weight convention).
+SITE0_KET = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
 
 def _flatten_choi4(j: np.ndarray) -> np.ndarray:
     """Flatten a 4x4 Choi matrix into 32 real features.

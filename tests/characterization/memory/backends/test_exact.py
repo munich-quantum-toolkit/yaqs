@@ -22,12 +22,12 @@ from mqt.yaqs.characterization.memory.backends.exact import (
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
     ProbeSet,
-    resolve_unitary_sampler,
     sample_cut_measurement,
     sample_cut_preparation,
     sample_probe,
     sample_probes,
 )
+from mqt.yaqs.characterization.memory.shared.encoding import SITE0_KET
 from mqt.yaqs.characterization.memory.shared.utils import validate_stochastic_solver
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -64,15 +64,11 @@ def _sample_split_delayed_break_probes(
     past_len = left_cut - 1
     bridge_len = tau
     future_tail = num_interventions - (left_cut + bridge_len + 1)
-    unitary_sampler = resolve_unitary_sampler("haar")
 
     past_pairs: list[list[Any]] = []
     past_cut_meas: list[np.ndarray] = []
     for _ in range(n_pasts):
-        pairs_i = [
-            sample_probe(rng, intervention_mode="split_cut_unitary", unitary_sampler=unitary_sampler)[1]
-            for _ in range(past_len)
-        ]
+        pairs_i = [sample_probe(rng, intervention_style="haar")[1] for _ in range(past_len)]
         _feat_m, psi_m = sample_cut_measurement(rng)
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
@@ -82,12 +78,9 @@ def _sample_split_delayed_break_probes(
     for _ in range(n_futures):
         _feat_p, psi_p = sample_cut_preparation(rng)
         future_prep_cut.append(psi_p)
-        future_pairs.append([
-            sample_probe(rng, intervention_mode="split_cut_unitary", unitary_sampler=unitary_sampler)[1]
-            for _ in range(future_tail)
-        ])
+        future_pairs.append([sample_probe(rng, intervention_style="haar")[1] for _ in range(future_tail)])
 
-    z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    z0 = SITE0_KET
     u_id = np.eye(2, dtype=np.complex128)
     bridge = [{"type": "unitary", "U": u_id} for _ in range(bridge_len)]
     all_pairs: list[list[Any]] = []
