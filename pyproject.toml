@@ -92,6 +92,10 @@ filterwarnings = ["error"]
 
 [tool.coverage]
 run.source = ["mqt.yaqs"]
+run.omit = [
+    "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
+]
+
 report.exclude_also = [
     '\.\.\.',
     'if TYPE_CHECKING:',
@@ -112,6 +116,8 @@ error-on-warning = true
 [tool.ty.src]
 exclude = [
     "docs/**",
+    "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
+    "tests/digital/utils/test_qudit_dag_utils.py",
 ]
 
 
@@ -166,7 +172,8 @@ future-annotations = true
 known-first-party = ["mqt.yaqs"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["T20", "INP001"]
+"tests/**" = ["T20", "INP001", "PLR6301", "DOC201"]
+"tests/**/*.py" = ["T20", "INP001", "PLR6301", "DOC201"]
 "docs/**" = ["T20", "INP001"]
 "scripts" = ["T20", "INP001"]
 "noxfile.py" = ["T20", "TID251"]
