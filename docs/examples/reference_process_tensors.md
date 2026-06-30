@@ -72,7 +72,7 @@ print(type(pt_mpo).__name__, pt_mpo.to_dense().to_matrix().shape)
 ## 4. Predict with the reference process tensor
 
 `mc.predict(pt, rho0, sequence, num_interventions=...)` returns site-0 reduced-state dynamics from the tomographic process tensor.
-``rho0`` must match ``pt.initial_rho`` (the site-0 reference after ``U_0`` from ``|0⟩^⊗L``).
+`rho0` must match `pt.initial_rho` (the site-0 reference after `U_0` from `|0⟩^⊗L`).
 
 ```{code-cell} ipython3
 ---

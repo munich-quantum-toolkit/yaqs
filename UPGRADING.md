@@ -154,12 +154,12 @@ pt = mc.build_process_tensor(ham, params, timesteps=[0.1])  # small-k reference
 result = mc.characterize(ham, params, cut=2, num_interventions=4)  # operational memory S_V(c)
 ```
 
-| Legacy intent        | Replacement                                         |
-| -------------------- | --------------------------------------------------- |
-| Train surrogate      | `mc.train(...)`                                     |
-| Predict dynamics     | `mc.predict(model, ...)` or `mc.predict(pt, ...)` |
-| Build reference process tensor | `mc.build_process_tensor(...)`                |
-| Memory metrics       | `mc.characterize(target, cut=..., num_interventions=...)` |
+| Legacy intent                  | Replacement                                               |
+| ------------------------------ | --------------------------------------------------------- |
+| Train surrogate                | `mc.train(...)`                                           |
+| Predict dynamics               | `mc.predict(model, ...)` or `mc.predict(pt, ...)`         |
+| Build reference process tensor | `mc.build_process_tensor(...)`                            |
+| Memory metrics                 | `mc.characterize(target, cut=..., num_interventions=...)` |
 
 ### Top-level public API
 

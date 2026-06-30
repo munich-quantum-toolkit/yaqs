@@ -43,11 +43,11 @@ rho_ref = mc.predict(pt, rho0, sequence, num_interventions=num_interventions)
 
 ## Verb × backend
 
-|                    | **predict**                            | **characterize**                    |
-| ------------------ | -------------------------------------- | ----------------------------------- |
-| **Surrogate**      | Primary production dynamics            | Same `S_V(c)` via surrogate process |
-| **Hamiltonian**    | —                                      | Primary memory metric               |
-| **Reference PT**   | Primary reference dynamics (small `num_interventions`) | Optional reference metric |
+|                  | **predict**                                            | **characterize**                    |
+| ---------------- | ------------------------------------------------------ | ----------------------------------- |
+| **Surrogate**    | Primary production dynamics                            | Same `S_V(c)` via surrogate process |
+| **Hamiltonian**  | —                                                      | Primary memory metric               |
+| **Reference PT** | Primary reference dynamics (small `num_interventions`) | Optional reference metric           |
 
 ## Setup
 
@@ -205,11 +205,11 @@ print(ref.summary())
 | Access                      | Meaning                                                          |
 | --------------------------- | ---------------------------------------------------------------- |
 | `result.entropy(c)`         | Cross-cut memory entropy `S_V(c)` (natural log of mode weights)  |
-| `result.modes(c)`            | Effective mode number `R(c) = exp(S_V(c))`                       |
+| `result.modes(c)`           | Effective mode number `R(c) = exp(S_V(c))`                       |
 | `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c`     |
-| `result.response_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`                |
+| `result.response_matrix(c)` | Centered response matrix :math:`\widetilde{V}(c)`                |
 | `result.probes(c)`          | Probe feature arrays used at cut `c` (for logging or inspection) |
-| `result.summary()`          | Human-readable entropy/modes table                                |
+| `result.summary()`          | Human-readable entropy/modes table                               |
 
 ## Representation
 
@@ -229,9 +229,9 @@ Following the black-box split-cut construction:
 
 ### Break weights :math:`w_{\alpha,m}`
 
-| Backend                        | How `weights_ij` are obtained                                                                                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Hamiltonian**                | Product of simulated intervention probabilities along each probe sequence through cut `c` (traced full-state simulation).      |
+| Backend                        | How `weights_ij` are obtained                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Hamiltonian**                | Product of simulated intervention probabilities along each probe sequence through cut `c` (traced full-state simulation).  |
 | **Process tensor / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (branch-weight path). |
 
 In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).
