@@ -105,7 +105,7 @@ def test_process_tensor_run_operational_memory_returns_cut_weights() -> None:
     pt = build_process_tensor(
         op,
         _params(),
-        timesteps=[0.05],
+        timesteps=[0.05, 0.05],
         num_trajectories=20,
         parallel=False,
         return_type="dense",
@@ -147,7 +147,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
     pt = build_process_tensor(
         op,
         params,
-        timesteps=[0.05, 0.05],
+        timesteps=[0.05, 0.05, 0.05],
         num_trajectories=50,
         parallel=False,
         return_type="dense",
@@ -188,7 +188,7 @@ def test_mpo_process_tensor_entropy_matches_dense() -> None:
     mpo_pt = build_process_tensor(
         op,
         params,
-        timesteps=[0.05],
+        timesteps=[0.05, 0.05],
         num_trajectories=40,
         parallel=False,
         return_type="mpo",
@@ -209,7 +209,7 @@ def test_evaluate_probes_weighted_for_process_tensor_uses_analytic_weights() -> 
     pt = build_process_tensor(
         op,
         _params(),
-        timesteps=[0.05],
+        timesteps=[0.05, 0.05],
         num_trajectories=20,
         parallel=False,
         return_type="dense",
@@ -266,7 +266,7 @@ def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
     pt = build_process_tensor(
         op,
         _params(),
-        timesteps=[0.05],
+        timesteps=[0.05, 0.05],
         num_trajectories=20,
         parallel=False,
         return_type="dense",
@@ -378,7 +378,7 @@ def test_run_operational_memory_delay_rejects_process_tensor_backend() -> None:
     pt = build_process_tensor(
         op,
         _params(),
-        timesteps=[0.05],
+        timesteps=[0.05, 0.05],
         num_trajectories=20,
         parallel=False,
         return_type="dense",

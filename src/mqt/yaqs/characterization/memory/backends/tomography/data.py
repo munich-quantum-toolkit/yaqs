@@ -29,6 +29,11 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+def _num_intervention_steps(timesteps: list[float]) -> int:
+    """Return intervention-leg count ``k`` from a process-tensor schedule of length ``k + 1``."""
+    return max(0, len(timesteps) - 1)
+
+
 def _rank1_mpo_term(
     rho_final: NDArray[np.complex128],
     dual_ops: list[NDArray[np.complex128]],
@@ -109,7 +114,7 @@ def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], N
         Tuple ``(out_vecs, seq_weights)`` where ``out_vecs`` has shape ``(4, 16, ..., 16)`` and
         ``seq_weights`` has shape ``(16, ..., 16)`` for ``num_interventions`` steps.
     """
-    num_steps = len(data.timesteps)
+    num_steps = _num_intervention_steps(data.timesteps)
     out_vecs = np.zeros([4] + [16] * num_steps, dtype=np.complex128)
     seq_weights = np.zeros([16] * num_steps, dtype=np.float64)
     for i, alpha in enumerate(data.sequences):
@@ -270,7 +275,7 @@ class SequenceData:
         Returns:
             MPO process-tensor representation.
         """
-        num_steps = len(self.timesteps)
+        num_steps = _num_intervention_steps(self.timesteps)
         mpo = accumulate_rank1_terms(
             _iter_rank1_terms(self),
             num_steps=num_steps,

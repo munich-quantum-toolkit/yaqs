@@ -47,7 +47,7 @@ tags: [remove-output]
 pt_single = mc.build_process_tensor(
     hamiltonian,
     sim_params,
-    timesteps=[0.1],
+    timesteps=[0.1, 0.1],
     return_type="dense",
 )
 print(f"Process tensor Choi matrix shape: {pt_single.to_matrix().shape}")
@@ -62,7 +62,7 @@ tags: [remove-output]
 pt_mpo = mc.build_process_tensor(
     hamiltonian,
     sim_params,
-    timesteps=[0.1],
+    timesteps=[0.1, 0.1],
     return_type="mpo",
     compress_every=1,
 )

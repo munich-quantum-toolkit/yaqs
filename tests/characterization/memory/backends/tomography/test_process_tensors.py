@@ -179,7 +179,7 @@ def _tiny_process_tensor(*, num_interventions: int) -> DenseProcessTensor:
     """
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-    timesteps = [0.0] * num_interventions
+    timesteps = [0.0] * (num_interventions + 1)
     return cast(
         "DenseProcessTensor",
         MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
@@ -344,7 +344,7 @@ def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     mpo_pt = cast(
         "MPOProcessTensor",
-        mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="mpo", compress_every=1),
+        mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0, 0.0], return_type="mpo", compress_every=1),
     )
     dense_pt = mpo_pt.to_dense()
 

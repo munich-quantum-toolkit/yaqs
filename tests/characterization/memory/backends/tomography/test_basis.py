@@ -103,7 +103,7 @@ def test_basis_reproduction_h0_identity_map() -> None:
     """End-to-end sanity: identity map yields correct prediction for H=0."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = build_process_tensor(op, params, timesteps=[0.1], parallel=False, return_type="dense")
+    pt = build_process_tensor(op, params, timesteps=[0.1, 0.1], parallel=False, return_type="dense")
 
     def identity_map(rho: np.ndarray) -> np.ndarray:
         return rho

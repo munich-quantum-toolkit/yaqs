@@ -35,22 +35,22 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.parallel_utils import (
     ExecutionConfig,
     merge_execution_config,
-    resolve_worker_ctx,
     run_indexed_jobs,
-    unpack_flat_job,
 )
 
 from ...shared.utils import (
     StochasticSolver,
-    _evolve_backend_state,
     _initialize_backend_state,
-    _reprepare_backend_state_forced,
-    extract_site0_rho,
     make_mcwf_static_context,
     resolve_stochastic_solver,
+)
+from ..sequences.workers import (
+    _seq_final_worker,
+    _validate_process_tensor_schedule_inputs,
 )
 from .basis import (
     _finalize_sequence_averages,
@@ -67,86 +67,23 @@ if TYPE_CHECKING:
     from .basis import TomographyBasis
     from .process_tensors import DenseProcessTensor, MPOProcessTensor
 
-# Re-export for worker docstrings referencing WORKER_CTX default.
 
-
-# ---------------------------------------------------------------------------
-# Parallel job payload (pickle-stable keys for WORKER_CTX)
-# ---------------------------------------------------------------------------
-# ``run_all_sequences`` passes this dict to
-# :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs` (initializer →
-# :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`) or directly to workers on the
-# serial path. Workers use :func:`~mqt.yaqs.core.parallel_utils.resolve_worker_ctx`
-# and :func:`~mqt.yaqs.core.parallel_utils.unpack_flat_job`.
-#
-#   intervention_steps           list[list[(meas, prep)]] — one inner list per sequence (length num_interventions)
-#   num_trajectories    flat-index stride (1 when ``noise_model`` is None)
-#   operator            Hamiltonian MPO
-#   sim_params          :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
-#   timesteps           list[float] duration per step (length num_interventions)
-#   noise_model         optional open-system noise
-#   mcwf_static_ctx     from ``make_mcwf_static_context`` when solver is MCWF
-
-
-# ---------------------------------------------------------------------------
-# Pool workers — signature (job_idx, payload=None)
-# ---------------------------------------------------------------------------
-def _sequence_worker(
-    job_idx: int,
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, int, np.ndarray, float]:
-    """Simulate one trajectory for one discrete-basis sequence.
+def _initial_psis_for_sequences(operator: MPO, solver: str, n_seq: int) -> list[np.ndarray | MPS]:
+    """Build one fresh initial state per discrete-basis sequence.
 
     Args:
-        job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
-        payload: Optional worker payload (defaults to :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`).
+        operator: Hamiltonian MPO.
+        solver: Backend solver name.
+        n_seq: Number of parallel sequences.
 
     Returns:
-        Tuple ``(sequence_index, trajectory_index, rho_final, weight)`` where ``rho_final`` is the
-        site-0 reduced density matrix and ``weight`` is the cumulative projection probability.
+        Initial backend states, one per sequence index.
     """
-    ctx = resolve_worker_ctx(payload)
-    s_idx, traj_idx = unpack_flat_job(job_idx, int(ctx["num_trajectories"]))
-
-    intervention_steps = ctx["intervention_steps"][s_idx]
-    operator = ctx["operator"]
-    sim_params = ctx["sim_params"]
-    timesteps: list[float] = ctx["timesteps"]
-    noise_model = ctx["noise_model"]
-
-    if noise_model is None:
-        assert int(ctx["num_trajectories"]) == 1, "num_trajectories must be 1 when noise_model is None."
-
-    solver = resolve_stochastic_solver(sim_params, solver=ctx.get("solver"))
-    current_state = _initialize_backend_state(operator, solver)
-
-    weight = 1.0
-    for step_i, (psi_meas, psi_prep) in enumerate(intervention_steps):
-        current_state, step_prob = _reprepare_backend_state_forced(current_state, psi_meas, psi_prep, solver)
-        weight *= float(step_prob)
-        if weight < 1e-15:
-            break
-
-        duration = float(timesteps[step_i])
-        step_params = copy.deepcopy(sim_params)
-        step_params.elapsed_time = duration
-        step_params.num_traj = 1
-        step_params.get_state = True
-        n_steps = max(1, int(np.ceil(duration / step_params.dt)))
-        step_params.times = np.linspace(0, duration, n_steps + 1)
-
-        current_state = _evolve_backend_state(
-            current_state,
-            operator,
-            noise_model,
-            step_params,
-            solver,
-            traj_idx=traj_idx,
-            static_ctx=ctx.get("mcwf_static_ctx"),
-        )
-
-    rho_final = extract_site0_rho(current_state)
-    return (s_idx, traj_idx, rho_final, float(weight))
+    psi0 = _initialize_backend_state(operator, solver)
+    if isinstance(psi0, np.ndarray):
+        template = np.asarray(psi0, dtype=np.complex128)
+        return [template.copy() for _ in range(n_seq)]
+    return [_initialize_backend_state(operator, solver) for _ in range(n_seq)]
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +111,7 @@ def run_all_sequences(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Per-intervention evolution durations (length ``num_interventions``).
+        timesteps: Process-tensor schedule evolution durations (length ``num_interventions + 1``).
         parallel: Whether to parallelize over sequences.
         num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
         noise_model: Optional open-system noise model.
@@ -197,13 +134,13 @@ def run_all_sequences(
     basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
 
-    num_interventions = len(timesteps)
-    if num_interventions == 0:
+    num_interventions = len(timesteps) - 1
+    if num_interventions <= 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
 
-    def _enumerate_sequences(n_interventions: int) -> list[tuple[int, ...]]:
-        return list(itertools.product(range(16), repeat=n_interventions))
+    def _enumerate_sequences(n_steps: int) -> list[tuple[int, ...]]:
+        return list(itertools.product(range(16), repeat=n_steps))
 
     all_seqs = _enumerate_sequences(num_interventions)
 
@@ -211,6 +148,14 @@ def run_all_sequences(
     samples_intervention_steps = [
         [(basis_set[choi_indices[a][1]][1], basis_set[choi_indices[a][0]][1]) for a in seq] for seq in all_seqs
     ]
+
+    _validate_process_tensor_schedule_inputs(
+        intervention_steps_list=samples_intervention_steps,
+        timesteps=timesteps,
+        timesteps_rows=None,
+        operators_list=None,
+        static_ctx_list=None,
+    )
 
     if noise_model is None:
         num_trajectories = 1
@@ -223,15 +168,19 @@ def run_all_sequences(
         raise ValueError(msg)
 
     total_jobs = n_seq * num_trajectories
-    # Pickle-stable payload — schema documented above.
-    payload = {
+    payload: dict[str, Any] = {
         "intervention_steps": samples_intervention_steps,
+        "initial_psi": _initial_psis_for_sequences(operator, stochastic_solver, n_seq),
         "num_trajectories": num_trajectories,
         "operator": operator,
         "sim_params": local_params,
         "timesteps": timesteps,
+        "timesteps_rows": None,
+        "operators_list": None,
         "noise_model": noise_model,
         "mcwf_static_ctx": mcwf_static_ctx,
+        "mcwf_static_ctx_list": None,
+        "_times_cache": {},
         "solver": stochastic_solver,
     }
 
@@ -240,7 +189,7 @@ def run_all_sequences(
 
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
     job_results = run_indexed_jobs(
-        _sequence_worker,
+        _seq_final_worker,
         payload=payload,
         n_jobs=total_jobs,
         config=exec_cfg,
@@ -290,7 +239,8 @@ def _construct_data(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Optional per-step durations (defaults to ``[sim_params.elapsed_time]``).
+        timesteps: Optional process-tensor schedule (length ``num_interventions + 1``;
+            defaults to ``[dt, dt]`` for one intervention leg).
         noise_model: Optional noise model.
         parallel: Whether to parallelize over sequences.
         num_trajectories: Number of MCWF trajectories per sequence (forced to 1 if noiseless).
@@ -306,7 +256,8 @@ def _construct_data(
         ValueError: If ``solver`` is not MCWF or TJM.
     """
     if timesteps is None:
-        timesteps = [sim_params.elapsed_time]
+        dt = float(sim_params.dt)
+        timesteps = [dt, dt]
 
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
     valid_solvers = {"MCWF", "TJM"}
@@ -362,9 +313,8 @@ def build_process_tensor(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Optional per-intervention evolution durations (length ``num_interventions``;
-            defaults to ``[sim_params.elapsed_time]``). Unlike surrogate training, tomography
-            uses one duration per intervention (no leading ``U_1`` slot).
+        timesteps: Optional process-tensor schedule evolution durations (length
+            ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
         noise_model: Optional open-system noise model.
         parallel: Whether to parallelize over sequences.
         num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).

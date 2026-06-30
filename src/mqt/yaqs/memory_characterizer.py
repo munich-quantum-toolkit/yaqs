@@ -353,10 +353,8 @@ class MemoryCharacterizer:
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            timesteps: Optional per-intervention evolution durations (length
-                ``num_interventions``; defaults from ``sim_params.elapsed_time``). This
-                tomography convention differs from surrogate training, which uses
-                ``num_interventions + 1`` slots — see :meth:`sample` and :meth:`train`.
+            timesteps: Optional process-tensor schedule evolution durations (length
+                ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
             noise_model: Optional noise model during tomography sequences.
             num_trajectories: Monte Carlo trajectories per tomography sample.
             basis: Intervention basis for process-tensor tomography.

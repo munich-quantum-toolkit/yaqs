@@ -23,7 +23,7 @@ def test_to_dense_sequence_data_minimal() -> None:
     choi_basis = [np.eye(4, dtype=np.complex128)] * 16
     choi_indices = [(0, 0)] * 16
     choi_duals = [np.eye(4, dtype=np.complex128)] * 16
-    timesteps = [0.1]
+    timesteps = [0.1, 0.1]
 
     data = SequenceData(
         sequences=seqs,
@@ -66,7 +66,7 @@ def test_to_mpo_sequence_data_minimal() -> None:
     choi_basis = [np.eye(4, dtype=np.complex128)] * 16
     choi_indices = [(0, 0)] * 16
     choi_duals = [np.eye(4, dtype=np.complex128)] * 16
-    timesteps = [0.1]
+    timesteps = [0.1, 0.1]
 
     data = SequenceData(
         sequences=seqs,

@@ -224,7 +224,7 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     """build_process_tensor returns a process tensor; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
     assert out.entropy(1) >= 0.0
 
@@ -233,7 +233,7 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
     """characterize() uses interior default cut when cut is omitted."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1, 0.1], num_trajectories=30, return_type="dense")
     rng = np.random.default_rng(0)
     default_cut = (2 + 1) // 2
     ent_default = mc.characterize(pt, num_interventions=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
@@ -297,7 +297,7 @@ def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogS
     """predict(process_tensor, rho0, sequence, num_interventions=...) returns a valid density matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     rho_out = mc.predict(pt, rho0, "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
@@ -317,7 +317,7 @@ def test_predict_process_tensor_rejects_return_sequence(ham_and_params: tuple[Ha
     """predict(process_tensor, ..., return_sequence=True) is not supported."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(ValueError, match="return_sequence=True"):
         mc.predict(pt, rho0, "haar", num_interventions=1, return_sequence=True)
@@ -327,7 +327,7 @@ def test_predict_process_tensor_ignores_invalid_rho0(ham_and_params: tuple[Hamil
     """Process-tensor predict does not validate rho0 because it is unused."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     rho_out = mc.predict(pt, np.array([99.0]), "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
@@ -352,7 +352,7 @@ def test_build_process_tensor_forwards_parallel_override(
     )
     mc = MemoryCharacterizer(parallel=True, show_progress=False)
     with pytest.raises(RuntimeError, match="stop"):
-        mc.build_process_tensor(ham, params, timesteps=[0.1], parallel=False)
+        mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], parallel=False)
     assert seen == [False]
 
 
@@ -573,7 +573,7 @@ def test_characterize_delay_rejects_process_tensor(ham_and_params: tuple[Hamilto
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1, 0.1], return_type="dense")
     with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
         mc.characterize(pt, cut=1, num_interventions=2, delay=1)
 
