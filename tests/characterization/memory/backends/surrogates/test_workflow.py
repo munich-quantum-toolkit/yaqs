@@ -87,11 +87,11 @@ def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
 
 
 def test_sample_train_dataset_timesteps_length_mismatch_raises() -> None:
-    """sample_train_dataset enforces comb schedule length k+1."""
+    """sample_train_dataset enforces process-tensor schedule length num_interventions+1."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
-    with pytest.raises(ValueError, match="Comb schedule: timesteps length must be num_interventions\\+1"):
+    with pytest.raises(ValueError, match="Process-tensor schedule: timesteps length must be num_interventions\\+1"):
         sample_train_dataset(op, params, num_interventions=2, n=1, timesteps=[0.1])
 
 

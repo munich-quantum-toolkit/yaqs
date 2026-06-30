@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Parallel pool workers for comb-schedule sequence simulation.
+"""Parallel pool workers for process-tensor schedule sequence simulation.
 
 Workers follow the standard :mod:`mqt.yaqs.core.parallel_utils` pattern:
 ``(job_idx, payload=None)`` with flat indexing ``sequence_index * num_trajectories + trajectory_index``.
@@ -83,19 +83,19 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 #   initial_psi             list of initial states (one per sequence)
 #   num_trajectories        flat-index stride (1 when noise_model is None)
 #   operator, sim_params    Hamiltonian MPO and analog parameters
-#   timesteps               comb schedule: ``k+1`` evolution segments (``U_1`` … ``U_{k+1}``)
-#   timesteps_rows          optional per-sequence durations, each length ``k+1``
-#   operators_list          optional per-sequence MPOs, length ``k+1`` per sequence
+#   timesteps               process-tensor schedule: ``num_interventions+1`` evolution segments
+#   timesteps_rows          optional per-sequence durations, each length ``num_interventions+1``
+#   operators_list          optional per-sequence MPOs, length ``num_interventions+1`` per sequence
 #   noise_model             None for deterministic surrogate sequences
 #   mcwf_static_ctx         static MCWF context for the whole sequence
-#   mcwf_static_ctx_list    optional per-evolution-slot context (length ``k+1``)
-#   e_features_rows         per-sequence Choi rows ``(k, d_e)`` — required for trace workers
+#   mcwf_static_ctx_list    optional per-evolution-slot context (length ``num_interventions+1``)
+#   e_features_rows         per-sequence Choi rows ``(num_interventions, d_e)`` — required for trace workers
 
 
 # ---------------------------------------------------------------------------
-# Comb schedule — ``k`` instruments, ``k+1`` free evolutions
+# Process-tensor schedule — ``num_interventions`` instruments, ``num_interventions+1`` evolutions
 # ---------------------------------------------------------------------------
-def _validate_comb_sequence_inputs(
+def _validate_process_tensor_schedule_inputs(
     *,
     intervention_steps_list: list[list[Any]],
     timesteps: list[float],
@@ -103,7 +103,7 @@ def _validate_comb_sequence_inputs(
     operators_list: list[list[MPO]] | None,
     static_ctx_list: list[list[MCWFContext | None]] | None,
 ) -> None:
-    """Require compatible lengths for the process-tensor / comb convention.
+    """Require compatible lengths for the process-tensor schedule convention.
 
     Raises:
         ValueError: If sequence lengths or optional per-sequence schedules are inconsistent.
@@ -112,15 +112,16 @@ def _validate_comb_sequence_inputs(
     if num_sequences == 0:
         return
     if timesteps_rows is None:
-        ks = [len(p) for p in intervention_steps_list]
-        if len(set(ks)) != 1:
-            msg = "All sequences must share the same k when `timesteps_rows` is omitted."
+        intervention_counts = [len(p) for p in intervention_steps_list]
+        if len(set(intervention_counts)) != 1:
+            msg = "All sequences must share the same num_interventions when `timesteps_rows` is omitted."
             raise ValueError(msg)
-        k0 = ks[0]
-        if len(timesteps) != k0 + 1:
+        n_interventions = intervention_counts[0]
+        if len(timesteps) != n_interventions + 1:
             msg = (
-                "Comb schedule: `timesteps` must have length k+1 "
-                f"({k0 + 1} for k={k0} intervention steps), got {len(timesteps)}."
+                "Process-tensor schedule: `timesteps` must have length num_interventions+1 "
+                f"({n_interventions + 1} for num_interventions={n_interventions} intervention steps), "
+                f"got {len(timesteps)}."
             )
             raise ValueError(msg)
     else:
@@ -128,33 +129,40 @@ def _validate_comb_sequence_inputs(
             msg = "`timesteps_rows` length must match number of sequences."
             raise ValueError(msg)
         for i, pairs in enumerate(intervention_steps_list):
-            k = len(pairs)
-            if len(timesteps_rows[i]) != k + 1:
-                msg = f"Sequence {i}: `timesteps_rows[{i}]` must have length k+1={k + 1}, got {len(timesteps_rows[i])}."
+            n_interventions = len(pairs)
+            if len(timesteps_rows[i]) != n_interventions + 1:
+                msg = (
+                    f"Sequence {i}: `timesteps_rows[{i}]` must have length "
+                    f"num_interventions+1={n_interventions + 1}, got {len(timesteps_rows[i])}."
+                )
                 raise ValueError(msg)
     if operators_list is not None:
         if len(operators_list) != num_sequences:
             msg = "`operators_list` length must match number of sequences."
             raise ValueError(msg)
         for i, pairs in enumerate(intervention_steps_list):
-            k = len(pairs)
-            if len(operators_list[i]) != k + 1:
-                msg = f"Sequence {i}: `operators_list[{i}]` must have length k+1={k + 1}, got {len(operators_list[i])}."
+            n_interventions = len(pairs)
+            if len(operators_list[i]) != n_interventions + 1:
+                msg = (
+                    f"Sequence {i}: `operators_list[{i}]` must have length "
+                    f"num_interventions+1={n_interventions + 1}, got {len(operators_list[i])}."
+                )
                 raise ValueError(msg)
     if static_ctx_list is not None:
         if len(static_ctx_list) != num_sequences:
             msg = "`static_ctx_list` length must match number of sequences."
             raise ValueError(msg)
         for i, pairs in enumerate(intervention_steps_list):
-            k = len(pairs)
-            if len(static_ctx_list[i]) != k + 1:
+            n_interventions = len(pairs)
+            if len(static_ctx_list[i]) != n_interventions + 1:
                 msg = (
-                    f"Sequence {i}: `static_ctx_list[{i}]` must have length k+1={k + 1}, got {len(static_ctx_list[i])}."
+                    f"Sequence {i}: `static_ctx_list[{i}]` must have length "
+                    f"num_interventions+1={n_interventions + 1}, got {len(static_ctx_list[i])}."
                 )
                 raise ValueError(msg)
 
 
-def _comb_durations_ops_ctx(
+def _process_tensor_schedule_durations_ops_ctx(
     *,
     sequence_idx: int,
     num_interventions: int,
@@ -165,20 +173,20 @@ def _comb_durations_ops_ctx(
     mcwf_static_ctx: MCWFContext | None,
     mcwf_static_ctx_list: list[list[MCWFContext | None]] | None,
 ) -> tuple[list[float], list[MPO], list[MCWFContext | None]]:
-    """Resolve per-sequence comb durations, Hamiltonians, and MCWF contexts.
+    """Resolve per-sequence process-tensor schedule durations, Hamiltonians, and MCWF contexts.
 
     Args:
         sequence_idx: Index of the sequence being simulated.
-        k: Number of intervention steps.
-        timesteps: Default comb schedule of length ``k+1``.
-        timesteps_rows: Optional per-sequence durations, each length ``k+1``.
+        num_interventions: Number of intervention steps.
+        timesteps: Default process-tensor schedule of length ``num_interventions+1``.
+        timesteps_rows: Optional per-sequence durations, each length ``num_interventions+1``.
         hamiltonian: Default Hamiltonian MPO for every evolution slot.
-        operators_list: Optional per-sequence MPO list of length ``k+1``.
+        operators_list: Optional per-sequence MPO list of length ``num_interventions+1``.
         mcwf_static_ctx: Shared static MCWF context when no per-slot list is given.
-        mcwf_static_ctx_list: Optional per-sequence MCWF contexts, each length ``k+1``.
+        mcwf_static_ctx_list: Optional per-sequence MCWF contexts, each length ``num_interventions+1``.
 
     Returns:
-        Tuple ``(durations, operators, mcwf_contexts)`` with one entry per comb slot.
+        Tuple ``(durations, operators, mcwf_contexts)`` with one entry per evolution slot.
     """
     if timesteps_rows is not None:
         durs = [float(timesteps_rows[sequence_idx][i]) for i in range(num_interventions + 1)]
@@ -233,7 +241,7 @@ def _simulate_seq_core(
     worker_ctx: dict[str, Any],
     collect_trace: bool,
 ) -> tuple[np.ndarray, float, dict[str, Any] | None]:
-    """Shared comb sequence: ``U_1`` then ``k`` times (reprepare → ``U``).
+    """Shared process-tensor schedule: ``U_1`` then ``num_interventions`` times (reprepare → ``U``).
 
     Optionally collect a per-sequence trace dict when ``collect_trace`` is set.
 
@@ -265,7 +273,7 @@ def _simulate_seq_core(
     step_params.get_state = True
 
     num_interventions = len(intervention_steps)
-    durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
+    durs, ops, mcwf_ctxs = _process_tensor_schedule_durations_ops_ctx(
         sequence_idx=sequence_idx,
         num_interventions=num_interventions,
         timesteps=timesteps,
@@ -390,8 +398,9 @@ def _seq_final_worker(
 
     Returns:
         ``(sequence_index, trajectory_index, rho_final_site0, cumulative_weight)`` where
-        ``rho_final_site0`` is the reduced state on site 0 after the last evolution segment ``U_{k+1}``
-        (comb schedule: ``k`` instruments, ``k+1`` evolutions).
+        ``rho_final_site0`` is the reduced state on site 0 after the last evolution segment
+        (process-tensor schedule: ``num_interventions`` instruments,
+        ``num_interventions+1`` evolutions).
     """
     worker_ctx = resolve_worker_ctx(job_payload)
     sequence_idx, trajectory_idx = unpack_flat_job(job_idx, int(worker_ctx["num_trajectories"]))
@@ -449,7 +458,8 @@ def _seq_trace_worker(
         ``(sequence_index, trajectory_index, rho0_packed, choi_features_matrix, rho_seq_packed, weight)`` where
         ``choi_features_matrix`` is ``(num_steps, d_e)`` and ``rho_seq_packed`` is ``(num_steps, 8)``.
         Here ``rho0_packed`` is the reduced state on site 0 **after** the first free evolution ``U_1`` and
-        **before** the first instrument (comb boundary), matching the process-tensor slicing convention.
+        **before** the first instrument (process-tensor schedule boundary), matching the
+        process-tensor slicing convention.
 
     Raises:
         ValueError: If required feature rows are missing or shapes are inconsistent.
@@ -487,7 +497,7 @@ def _seq_trace_worker(
         num_steps=num_steps,
     )
 
-    durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
+    durs, ops, mcwf_ctxs = _process_tensor_schedule_durations_ops_ctx(
         sequence_idx=sequence_idx,
         num_interventions=num_steps,
         timesteps=timesteps,
@@ -498,7 +508,7 @@ def _seq_trace_worker(
         mcwf_static_ctx_list=mcwf_ctx_per_step,
     )
 
-    # U_1: reduced state immediately before the first instrument (comb boundary).
+    # U_1: reduced state immediately before the first instrument (schedule boundary).
     duration = float(durs[0])
     step_params.elapsed_time = duration
     step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)

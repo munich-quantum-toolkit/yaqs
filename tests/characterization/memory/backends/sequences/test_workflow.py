@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for comb-schedule sequence simulation."""
+"""Tests for process-tensor schedule sequence simulation."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def test_simulate_sequences_input_validation_errors() -> None:
-    """simulate_sequences validates comb schedule and trace feature inputs."""
+    """simulate_sequences validates process-tensor schedule and trace feature inputs."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
 

@@ -107,7 +107,7 @@ def resolve_stochastic_solver(
     chain_length: int | None = None,
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
 ) -> StochasticSolver:
-    """Return the stochastic unraveling backend for comb-sequence simulation.
+    """Return the stochastic unraveling backend for process-tensor schedule simulation.
 
     Returns:
         Resolved solver name ``"MCWF"`` or ``"TJM"``.
@@ -304,7 +304,7 @@ def _apply_cut_preparation_step(
 ) -> tuple[MPS | NDArray[np.complex128], float]:
     """Apply a ``cut_preparation`` intervention on site 0.
 
-    * ``chain_length == 1``: unconditional assignment to ``|ψ⟩`` (comb reference).
+    * ``chain_length == 1``: unconditional assignment to ``|ψ⟩`` (process-tensor reference).
     * ``chain_length > 1``: project site 0 onto ``|0⟩``, reprepare to ``|ψ⟩``; other
       sites are unchanged.
 

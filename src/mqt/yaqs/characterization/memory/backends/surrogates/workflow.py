@@ -103,29 +103,31 @@ def sample_train_dataset(
     Args:
         operator: Hamiltonian MPO. The chain length is inferred from ``operator.length``.
         sim_params: Analog simulation parameters.
-        k: Number of intervention steps.
+        num_interventions: Number of intervention steps.
         n: Number of sampled sequences.
         rng: Optional RNG (overrides ``seed`` if provided).
         seed: Optional seed used to create a default RNG.
         parallel: Whether to parallelize over sequences.
         show_progress: Whether to show progress bars.
-        timesteps: Optional comb evolution durations (defaults to ``[sim_params.dt] * (k+1)``).
+        timesteps: Optional process-tensor schedule evolution durations (defaults to
+            ``[sim_params.dt] * (num_interventions + 1)``).
         init_mode: Initial-state sampling mode (see :func:`sample_initial_psi`).
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
-        style: Training intervention style (``"haar"``, ``"clifford"``, or ``"measure_prepare"``).
+        intervention_style: Training intervention style (``"haar"``, ``"clifford"``, or
+            ``"measure_prepare"``).
 
     Returns:
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
 
     Raises:
-        ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
+        ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``).
     """
     chain_length = int(operator.length)
     if timesteps is None:
         timesteps = [float(sim_params.dt)] * (int(num_interventions) + 1)
     if len(timesteps) != int(num_interventions) + 1:
         msg = (
-            f"Comb schedule: timesteps length must be num_interventions+1="
+            f"Process-tensor schedule: timesteps length must be num_interventions+1="
             f"{int(num_interventions) + 1}, got {len(timesteps)}."
         )
         raise ValueError(msg)
@@ -202,7 +204,7 @@ def train_surrogate_model(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        k: Number of intervention steps.
+        num_interventions: Number of intervention steps.
         n: Number of sampled sequences.
         seed: Seed used for data generation RNG.
         parallel: Whether to parallelize data generation.
@@ -210,7 +212,7 @@ def train_surrogate_model(
         timesteps: Optional per-step durations passed to :func:`sample_train_dataset`.
         init_mode: Initial-state sampling mode passed to :func:`sample_train_dataset`.
         solver: Optional stochastic solver override passed to :func:`sample_train_dataset`.
-        style: Training intervention style passed to :func:`sample_train_dataset`.
+        intervention_style: Training intervention style passed to :func:`sample_train_dataset`.
         model_kwargs: Optional keyword arguments forwarded to :class:`ProcessTensorSurrogate`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`ProcessTensorSurrogate.fit`.
 

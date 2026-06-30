@@ -123,7 +123,7 @@ class CharacterizationResult:
             cut: Causal cut index. Optional when exactly one cut is stored.
 
         Returns:
-            Dict with keys ``cut``, ``k``, ``past_features``, and ``future_features``.
+            Dict with keys ``cut``, ``num_interventions``, ``past_features``, and ``future_features``.
 
         Raises:
             ValueError: If no probe data was recorded for the resolved cut.

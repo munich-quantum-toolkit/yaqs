@@ -152,18 +152,6 @@ def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
     return w
 
 
-def compute_analytic_weights(probe_set: ProbeSet) -> np.ndarray:
-    """Compute analytic branch weights for comb/surrogate backends.
-
-    Args:
-        probe_set: Sampled split-cut probes.
-
-    Returns:
-        Branch-weight array of shape ``(n_pasts, n_futures)``.
-    """
-    return compute_branch_weights(probe_set)
-
-
 def compute_trace_weights(
     traces: list[dict[str, Any]],
     *,

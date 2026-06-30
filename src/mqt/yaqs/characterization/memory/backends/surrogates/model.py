@@ -121,7 +121,7 @@ class ProcessTensorSurrogate(nn.Module):
             dim_ff: Feed-forward dimension inside encoder layers.
             dropout: Dropout rate.
             layernorm_in: Whether to apply a LayerNorm after the input projection.
-            num_interventions: Total sequence length ``k`` for :meth:`entropy`. Set automatically by
+            num_interventions: Total sequence length for :meth:`entropy`. Set automatically by
                 :meth:`fit` from training targets; may be set here before training.
 
         Raises:
@@ -247,10 +247,10 @@ class ProcessTensorSurrogate(nn.Module):
         return out[:, -1, :]
 
     def _num_interventions_for_probe(self) -> int:
-        """Return the trained sequence length ``k`` used for probe evaluation.
+        """Return the trained ``num_interventions`` used for probe evaluation.
 
         Returns:
-            Total intervention steps ``k`` inferred from training data or ``__init__``.
+            Total intervention steps inferred from training data or ``__init__``.
 
         Raises:
             ValueError: If ``num_interventions`` was never set.
@@ -271,7 +271,10 @@ class ProcessTensorSurrogate(nn.Module):
         """
         expected_num_interventions = self._num_interventions_for_probe()
         if int(probe_set.num_interventions) != expected_num_interventions:
-            msg = f"ProbeSet k={probe_set.num_interventions} does not match model num_interventions={expected_num_interventions}."
+            msg = (
+                f"ProbeSet num_interventions={probe_set.num_interventions} does not match "
+                f"model num_interventions={expected_num_interventions}."
+            )
             raise ValueError(msg)
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)

@@ -5,9 +5,9 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box validation of comb-schedule worker internals
+# ruff: noqa: PLC2701 -- white-box validation of process-tensor schedule worker internals
 
-"""Tests for comb-schedule worker validation and traced simulation."""
+"""Tests for process-tensor schedule worker validation and traced simulation."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
-    _comb_durations_ops_ctx,
+    _process_tensor_schedule_durations_ops_ctx,
     _get_times_cached,
     _reshape_choi_feature_rows,
-    _validate_comb_sequence_inputs,
+    _validate_process_tensor_schedule_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
@@ -51,18 +51,18 @@ def test_reshape_choi_feature_rows_rejects_malformed_inputs() -> None:
         _reshape_choi_feature_rows(np.ones((3, 4), dtype=np.float32), num_steps=2)
 
 
-def test_validate_comb_sequence_inputs_timesteps_length() -> None:
-    """Comb schedule requires timesteps of length k+1."""
+def test_validate_process_tensor_schedule_inputs_timesteps_length() -> None:
+    """Process-tensor schedule requires timesteps of length num_interventions+1."""
     intervention_steps = [[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))] * 2]
-    with pytest.raises(ValueError, match=r"timesteps.*k\+1"):
-        _validate_comb_sequence_inputs(
+    with pytest.raises(ValueError, match=r"timesteps.*num_interventions\+1"):
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=intervention_steps,
             timesteps=[0.1],
             timesteps_rows=None,
             operators_list=None,
             static_ctx_list=None,
         )
-    _validate_comb_sequence_inputs(
+    _validate_process_tensor_schedule_inputs(
         intervention_steps_list=intervention_steps,
         timesteps=[0.0, 0.0, 0.0],
         timesteps_rows=None,
@@ -71,10 +71,10 @@ def test_validate_comb_sequence_inputs_timesteps_length() -> None:
     )
 
 
-def test_validate_comb_sequence_inputs_mismatched_k_without_rows() -> None:
-    """Sequences must share k when timesteps_rows is omitted."""
-    with pytest.raises(ValueError, match="share the same k"):
-        _validate_comb_sequence_inputs(
+def test_validate_process_tensor_schedule_inputs_mismatched_num_interventions_without_rows() -> None:
+    """Sequences must share num_interventions when timesteps_rows is omitted."""
+    with pytest.raises(ValueError, match="share the same num_interventions"):
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=[
                 [(np.array([1.0, 0.0]), np.array([1.0, 0.0]))],
                 [(np.array([1.0, 0.0]), np.array([1.0, 0.0]))] * 2,
@@ -120,14 +120,14 @@ def test_simulate_sequences_traced_returns_diagnostics() -> None:
         assert "terminated_early" in trace
 
 
-def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
-    """Per-sequence timesteps, operators, and MCWF contexts must align with k."""
+def test_validate_process_tensor_schedule_inputs_per_sequence_schedules() -> None:
+    """Per-sequence timesteps, operators, and MCWF contexts must align with num_interventions."""
     intervention_steps = [[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]]
     op = MPO.ising(length=1, J=0.0, g=0.0)
     static_ctx = make_mcwf_static_context(op, AnalogSimParams(dt=0.1), noise_model=None)
 
     with pytest.raises(ValueError, match="timesteps_rows"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=intervention_steps,
             timesteps=[0.0, 0.0],
             timesteps_rows=[[0.0]],
@@ -135,7 +135,7 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
             static_ctx_list=None,
         )
     with pytest.raises(ValueError, match="length must match number of sequences"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=[intervention_steps[0], intervention_steps[0]],
             timesteps=[0.0, 0.0],
             timesteps_rows=[[0.0, 0.0]],
@@ -143,7 +143,7 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
             static_ctx_list=None,
         )
     with pytest.raises(ValueError, match="operators_list"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=intervention_steps,
             timesteps=[0.0, 0.0],
             timesteps_rows=None,
@@ -151,7 +151,7 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
             static_ctx_list=None,
         )
     with pytest.raises(ValueError, match="operators_list` length"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=[intervention_steps[0], intervention_steps[0]],
             timesteps=[0.0, 0.0],
             timesteps_rows=None,
@@ -159,7 +159,7 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
             static_ctx_list=None,
         )
     with pytest.raises(ValueError, match="static_ctx_list"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=intervention_steps,
             timesteps=[0.0, 0.0],
             timesteps_rows=None,
@@ -167,7 +167,7 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
             static_ctx_list=[[static_ctx]],
         )
     with pytest.raises(ValueError, match="static_ctx_list` length"):
-        _validate_comb_sequence_inputs(
+        _validate_process_tensor_schedule_inputs(
             intervention_steps_list=[intervention_steps[0], intervention_steps[0]],
             timesteps=[0.0, 0.0],
             timesteps_rows=None,
@@ -176,10 +176,10 @@ def test_validate_comb_sequence_inputs_per_sequence_schedules() -> None:
         )
 
 
-def test_comb_durations_ops_ctx_uses_per_sequence_rows() -> None:
-    """Per-sequence duration rows override the shared comb schedule."""
+def test_process_tensor_schedule_durations_ops_ctx_uses_per_sequence_rows() -> None:
+    """Per-sequence duration rows override the shared process-tensor schedule."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    durs, ops, ctxs = _comb_durations_ops_ctx(
+    durs, ops, ctxs = _process_tensor_schedule_durations_ops_ctx(
         sequence_idx=0,
         num_interventions=1,
         timesteps=[0.1, 0.2],
@@ -195,7 +195,7 @@ def test_comb_durations_ops_ctx_uses_per_sequence_rows() -> None:
 
 
 def test_simulate_sequences_dict_step_types() -> None:
-    """Comb workers accept structured dict intervention steps."""
+    """Process-tensor schedule workers accept structured dict intervention steps."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -223,8 +223,8 @@ def test_simulate_sequences_dict_step_types() -> None:
     assert finals.shape == (1, 8)
 
 
-def test_prepare_only_unconditional_from_non_zero_state() -> None:
-    """prepare_only assigns site 0 on single-qubit chains (comb-style, no |0> projection)."""
+def test_cut_preparation_unconditional_from_non_zero_state() -> None:
+    """cut_preparation assigns site 0 on single-qubit chains (no |0> projection)."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -248,8 +248,8 @@ def test_prepare_only_unconditional_from_non_zero_state() -> None:
     np.testing.assert_allclose(rho2, target, atol=1e-10)
 
 
-def test_prepare_only_retains_past_sensitivity_on_open_chain() -> None:
-    """Multi-qubit prepare_only must not clamp the environment (reset-delay regression)."""
+def test_cut_preparation_retains_past_sensitivity_on_open_chain() -> None:
+    """Multi-qubit cut_preparation must not clamp the environment (reset-delay regression)."""
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, order=1)
     psi0 = np.zeros(4, dtype=np.complex128)

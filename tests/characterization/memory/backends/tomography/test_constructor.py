@@ -28,7 +28,7 @@ def test_build_process_tensor_invalid_return_type_raises() -> None:
 
 
 def test_build_process_tensor_returns_dense_and_mpo_smoke() -> None:
-    """build_process_tensor returns dense and MPO comb wrappers."""
+    """build_process_tensor returns dense and MPO process-tensor wrappers."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)

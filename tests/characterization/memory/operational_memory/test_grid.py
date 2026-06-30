@@ -57,7 +57,7 @@ def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
         future_prep_cut=[z],
         future_pairs=[[{"type": "unitary", "U": np.eye(2, dtype=np.complex128)}]],
     )
-    with pytest.raises(ValueError, match="future_pairs\\[0\\] length 1 != k-cut=2"):
+    with pytest.raises(ValueError, match="future_pairs\\[0\\] length 1 != num_interventions-cut=2"):
         assemble_probe_sequence(probe_set, i=0, j=0)
 
 

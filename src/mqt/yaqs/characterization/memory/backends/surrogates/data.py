@@ -24,7 +24,7 @@ class SeqTrace:
     """One simulated intervention **sequence** with per-step reduced states.
 
     ``rho_seq[t]`` is the reduced state on site 0 **after** intervention ``t`` and the
-    subsequent evolution segment (aligned with the comb schedule).
+    subsequent evolution segment (aligned with the process-tensor schedule).
 
     ``E_features`` rows have length ``d_e`` (32 for the default single-qubit Choi flattening).
     This is not the same as a single stochastic **trajectory** when ``num_trajectories > 1``

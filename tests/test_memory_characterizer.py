@@ -221,7 +221,7 @@ def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimPar
 
 
 def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """build_process_tensor returns a comb; characterize returns CharacterizationResult diagnostics."""
+    """build_process_tensor returns a process tensor; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
@@ -229,7 +229,7 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     assert out.entropy(1) >= 0.0
 
 
-def test_characterize_comb_default_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """characterize() uses interior default cut when cut is omitted."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
@@ -293,8 +293,8 @@ def test_transformercomb_characterize_singular_values_shape(
     assert 1 <= sv.size <= min(4, 3 * 3)
 
 
-def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """predict(comb, rho0, sequence, num_interventions=...) returns a valid density matrix."""
+def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """predict(process_tensor, rho0, sequence, num_interventions=...) returns a valid density matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
@@ -313,8 +313,8 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
         mc.predict(ham, rho0, "haar", num_interventions=1)
 
 
-def test_predict_comb_rejects_return_sequence(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """predict(comb, ..., return_sequence=True) is not supported."""
+def test_predict_process_tensor_rejects_return_sequence(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """predict(process_tensor, ..., return_sequence=True) is not supported."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
@@ -323,7 +323,7 @@ def test_predict_comb_rejects_return_sequence(ham_and_params: tuple[Hamiltonian,
         mc.predict(comb, rho0, "haar", num_interventions=1, return_sequence=True)
 
 
-def test_predict_comb_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+def test_predict_process_tensor_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Comb predict does not validate rho0 because it is unused."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
@@ -569,7 +569,7 @@ def test_characterize_delay_rejects_negative() -> None:
         mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=-1)
 
 
-def test_characterize_delay_rejects_comb(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+def test_characterize_delay_rejects_process_tensor(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001 -- white-box tests exercise private comb prediction helpers
+# ruff: noqa: SLF001 -- white-box tests exercise private process-tensor prediction helpers
 
 """Tests for DenseProcessTensor and MPOProcessTensor wrappers."""
 
@@ -33,7 +33,7 @@ from mqt.yaqs.characterization.memory.operational_memory.samples import sample_p
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 
-def test_densecomb_predict_matches_helper() -> None:
+def test_dense_process_tensor_predict_matches_helper() -> None:
     """DenseProcessTensor._predict_raw matches the Choi contraction; predict physicalizes."""
     ups = np.eye(2 * 4, dtype=np.complex128)
     timesteps = [0.1]
@@ -41,25 +41,25 @@ def test_densecomb_predict_matches_helper() -> None:
     def id_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
-    comb = DenseProcessTensor(ups, timesteps)
+    pt = DenseProcessTensor(ups, timesteps)
     # Identity map Choi has trace 2; contract U = I with it gives unnormalized rho = 2*I
-    rho_raw = comb._predict_raw([id_map])
+    rho_raw = pt._predict_raw([id_map])
     np.testing.assert_allclose(rho_raw, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
-    rho = comb.predict([id_map])
+    rho = pt.predict([id_map])
     np.testing.assert_allclose(np.trace(rho), 1.0, atol=1e-12)
     np.testing.assert_allclose(rho, rho_raw / np.trace(rho_raw), atol=1e-12)
 
 
-def test_densecomb_predict_raises_on_length_mismatch() -> None:
-    """DenseProcessTensor.predict rejects intervention lists whose length mismatches k."""
+def test_dense_process_tensor_predict_raises_on_length_mismatch() -> None:
+    """DenseProcessTensor.predict rejects intervention lists whose length mismatches num_interventions."""
     ups = np.eye(2 * 4, dtype=np.complex128)
-    comb = DenseProcessTensor(ups, [0.1])
+    pt = DenseProcessTensor(ups, [0.1])
 
     def id_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
     with pytest.raises(ValueError, match="DenseProcessTensor expects"):
-        comb.predict([id_map, id_map])
+        pt.predict([id_map, id_map])
 
 
 def test_compute_entropy_dense_rejects_invalid_base() -> None:
@@ -71,31 +71,31 @@ def test_compute_entropy_dense_rejects_invalid_base() -> None:
         compute_entropy_dense(rho, base=0)
 
 
-def test_mpocomb_matrix_matches_dense() -> None:
+def test_mpo_process_tensor_matrix_matches_dense() -> None:
     """MPOProcessTensor.to_matrix should match MPO.to_matrix()."""
     mpo = MPO.ising(length=1, J=1.0, g=0.5)
     timesteps: list[float] = [0.1]
-    comb = MPOProcessTensor(mpo, timesteps)
+    pt = MPOProcessTensor(mpo, timesteps)
 
     np.testing.assert_allclose(
-        comb.to_matrix(),
+        pt.to_matrix(),
         mpo.to_matrix(),
         atol=1e-12,
     )
 
 
-def test_mpocomb_qmi_fallback_to_dense() -> None:
+def test_mpo_process_tensor_qmi_fallback_to_dense() -> None:
     """MPOProcessTensor.qmi should agree with DenseProcessTensor.qmi via dense fallback."""
     mpo = MPO.ising(length=1, J=1.0, g=0.5)
     timesteps: list[float] = [0.1]
-    comb = MPOProcessTensor(mpo, timesteps)
+    pt = MPOProcessTensor(mpo, timesteps)
 
-    q1 = comb.qmi()
-    q2 = comb.to_dense().qmi()
+    q1 = pt.qmi()
+    q2 = pt.to_dense().qmi()
     assert abs(q1 - q2) < 1e-12
 
 
-def test_mpocomb_predict_smoke_identity_map() -> None:
+def test_mpo_process_tensor_predict_smoke_identity_map() -> None:
     """MPOProcessTensor.predict returns a physical density matrix for a trivial intervention."""
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
     data = SequenceData(
@@ -107,19 +107,19 @@ def test_mpocomb_predict_smoke_identity_map() -> None:
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
     )
-    comb = data.to_mpo_process_tensor(compress_every=1)
+    pt = data.to_mpo_process_tensor(compress_every=1)
 
     def id_map(x: np.ndarray) -> np.ndarray:
         return x
 
-    rho_out = comb.predict([id_map])
+    rho_out = pt.predict([id_map])
     assert rho_out.shape == (2, 2)
     np.testing.assert_allclose(rho_out, rho_out.conj().T, atol=1e-12)
     np.testing.assert_allclose(np.trace(rho_out).real, 1.0, atol=1e-12)
 
 
-def test_mpocomb_predict_raises_on_empty_interventions() -> None:
-    """Predict rejects empty interventions when k>0."""
+def test_mpo_process_tensor_predict_raises_on_empty_interventions() -> None:
+    """Predict rejects empty interventions when num_interventions>0."""
     data = SequenceData(
         sequences=[(0,)],
         outputs=[np.eye(2, dtype=np.complex128)],
@@ -129,12 +129,12 @@ def test_mpocomb_predict_raises_on_empty_interventions() -> None:
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
     )
-    comb = data.to_mpo_process_tensor(compress_every=1)
+    pt = data.to_mpo_process_tensor(compress_every=1)
     with pytest.raises(ValueError, match="interventions list must be non-empty"):
-        comb.predict([])
+        pt.predict([])
 
 
-def test_mpocomb_predict_zero_steps() -> None:
+def test_mpo_process_tensor_predict_zero_steps() -> None:
     """MPOProcessTensor.predict([]) returns the stored output when num_interventions=0."""
     rho = np.array([[0.6, 0.1 + 0.0j], [0.1 - 0.0j, 0.4]], dtype=np.complex128)
     data = SequenceData(
@@ -146,13 +146,13 @@ def test_mpocomb_predict_zero_steps() -> None:
         choi_duals=[],
         timesteps=[],
     )
-    comb = data.to_mpo_process_tensor(compress_every=1)
-    rho_out = comb.predict([])
+    pt = data.to_mpo_process_tensor(compress_every=1)
+    rho_out = pt.predict([])
     np.testing.assert_allclose(rho_out, rho, atol=1e-10)
 
 
-def test_mpocomb_predict_raises_on_length_mismatch() -> None:
-    """Predict rejects intervention lists whose length mismatches the comb."""
+def test_mpo_process_tensor_predict_raises_on_length_mismatch() -> None:
+    """Predict rejects intervention lists whose length mismatches the process tensor."""
     data = SequenceData(
         sequences=[(0,)],
         outputs=[np.eye(2, dtype=np.complex128)],
@@ -162,20 +162,20 @@ def test_mpocomb_predict_raises_on_length_mismatch() -> None:
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
     )
-    comb = data.to_mpo_process_tensor(compress_every=1)
+    pt = data.to_mpo_process_tensor(compress_every=1)
 
     def id_map(x: np.ndarray) -> np.ndarray:
         return x
 
     with pytest.raises(ValueError, match="MPOProcessTensor length"):
-        comb.predict([id_map, id_map])
+        pt.predict([id_map, id_map])
 
 
-def _tiny_comb(*, num_interventions: int) -> DenseProcessTensor:
-    """Build a noiseless 1-site comb for comb-wrapper unit tests.
+def _tiny_process_tensor(*, num_interventions: int) -> DenseProcessTensor:
+    """Build a noiseless 1-site process tensor for wrapper unit tests.
 
     Returns:
-        Dense comb wrapper for a trivial 1-site Ising chain.
+        Dense process-tensor wrapper for a trivial 1-site Ising chain.
     """
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
@@ -215,8 +215,8 @@ def test_convert_probe_step_dict_variants() -> None:
         convert_probe_step({"type": "nope"})
 
 
-def test_prepare_only_map_independent_of_input_state() -> None:
-    """prepare_only applies unconditional preparation, not a |0>-conditioned effect."""
+def test_cut_preparation_map_independent_of_input_state() -> None:
+    """cut_preparation applies unconditional preparation, not a |0>-conditioned effect."""
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
     step_map = convert_probe_callable({"type": "cut_preparation", "psi_prep": plus})
     rho0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -228,21 +228,21 @@ def test_prepare_only_map_independent_of_input_state() -> None:
     np.testing.assert_allclose(out1, target, atol=1e-12)
 
 
-def test_dense_comb_predict_zero_steps() -> None:
+def test_dense_process_tensor_predict_zero_steps() -> None:
     """DenseProcessTensor.predict([]) returns the stored output state when num_interventions=0."""
     rho = np.array([[0.2, 0.1 + 0.1j], [0.1 - 0.1j, 0.8]], dtype=np.complex128)
-    comb = DenseProcessTensor(rho.reshape(2, 2), timesteps=[])
-    rho_out = comb.predict([])
+    pt = DenseProcessTensor(rho.reshape(2, 2), timesteps=[])
+    rho_out = pt.predict([])
     np.testing.assert_allclose(rho_out, rho, atol=1e-12)
 
 
-def test_densecomb_qmi_zero_steps() -> None:
-    """QMI is zero when the comb has no past intervention legs."""
+def test_dense_process_tensor_qmi_zero_steps() -> None:
+    """QMI is zero when the process tensor has no past intervention legs."""
     rho = np.array([[0.7, 0.0], [0.0, 0.3]], dtype=np.complex128)
-    comb = DenseProcessTensor(rho.reshape(2, 2), timesteps=[])
-    assert comb.qmi(past="all") == pytest.approx(0.0)
-    assert comb.qmi(past="first") == pytest.approx(0.0)
-    assert comb.qmi(past="last") == pytest.approx(0.0)
+    pt = DenseProcessTensor(rho.reshape(2, 2), timesteps=[])
+    assert pt.qmi(past="all") == pytest.approx(0.0)
+    assert pt.qmi(past="first") == pytest.approx(0.0)
+    assert pt.qmi(past="last") == pytest.approx(0.0)
 
 
 def test_convert_probe_callable_unitary_and_map() -> None:
@@ -283,76 +283,76 @@ def test_trace_partial_dense_and_entropy_edge_cases() -> None:
     assert compute_entropy_dense(pure) == pytest.approx(0.0, abs=1e-12)
 
 
-def test_densecomb_canonicalize_and_reduced() -> None:
-    """Canonicalization and subsystem reduction preserve comb metadata."""
-    comb = _tiny_comb(num_interventions=2)
-    canon = comb.canonicalize(hermitize=True, psd_project=True, normalize_trace=True)
+def test_dense_process_tensor_canonicalize_and_reduced() -> None:
+    """Canonicalization and subsystem reduction preserve process-tensor metadata."""
+    pt = _tiny_process_tensor(num_interventions=2)
+    canon = pt.canonicalize(hermitize=True, psd_project=True, normalize_trace=True)
     assert isinstance(canon, DenseProcessTensor)
-    assert canon.timesteps == comb.timesteps
+    assert canon.timesteps == pt.timesteps
 
-    reduced = comb.reduced(keep_last_m=1)
+    reduced = pt.reduced(keep_last_m=1)
     assert reduced.to_matrix().shape == (8, 8)
 
     with pytest.raises(ValueError, match="keep_last_m"):
-        comb.reduced(keep_last_m=0)
+        pt.reduced(keep_last_m=0)
     with pytest.raises(ValueError, match="keep_last_m"):
-        comb.reduced(keep_last_m=99)
+        pt.reduced(keep_last_m=99)
 
 
-def test_densecomb_qmi_cmi_and_conditional() -> None:
-    """Information metrics run on small combs including past-leg variants."""
-    comb_k1 = _tiny_comb(num_interventions=1)
-    comb_k2 = _tiny_comb(num_interventions=2)
+def test_dense_process_tensor_qmi_cmi_and_conditional() -> None:
+    """Information metrics run on small process tensors including past-leg variants."""
+    pt_k1 = _tiny_process_tensor(num_interventions=1)
+    pt_k2 = _tiny_process_tensor(num_interventions=2)
 
-    assert comb_k1.cmi() == pytest.approx(0.0)
-    assert comb_k1.cmi_conditional() == pytest.approx(0.0)
+    assert pt_k1.cmi() == pytest.approx(0.0)
+    assert pt_k1.cmi_conditional() == pytest.approx(0.0)
 
-    q_all = comb_k2.qmi(past="all")
-    q_last = comb_k2.qmi(past="last", assume_canonical=True)
-    q_first = comb_k2.qmi(past="first")
+    q_all = pt_k2.qmi(past="all")
+    q_last = pt_k2.qmi(past="last", assume_canonical=True)
+    q_first = pt_k2.qmi(past="first")
     assert isinstance(q_all, float)
     assert isinstance(q_last, float)
     assert isinstance(q_first, float)
 
-    cmi = comb_k2.cmi(assume_canonical=True)
-    cmi_c = comb_k2.cmi_conditional(a_label="first", b_label="final", c_label="last")
+    cmi = pt_k2.cmi(assume_canonical=True)
+    cmi_c = pt_k2.cmi_conditional(a_label="first", b_label="final", c_label="last")
     assert isinstance(cmi, float)
     assert isinstance(cmi_c, float)
 
     with pytest.raises(ValueError, match="Unknown past"):
-        comb_k2.qmi(past="middle")
+        pt_k2.qmi(past="middle")
     with pytest.raises(ValueError, match="Unknown subsystem"):
-        comb_k2.cmi_conditional(a_label="nope", b_label="final", c_label="last")
+        pt_k2.cmi_conditional(a_label="nope", b_label="final", c_label="last")
     with pytest.raises(ValueError, match="three distinct"):
-        comb_k2.cmi_conditional(a_label="first", b_label="first", c_label="last")
+        pt_k2.cmi_conditional(a_label="first", b_label="first", c_label="last")
 
 
-def test_densecomb_evaluate_probes_smoke() -> None:
-    """Dense comb probe evaluation returns Pauli tomography coefficients."""
-    comb = _tiny_comb(num_interventions=1)
+def test_dense_process_tensor_evaluate_probes_smoke() -> None:
+    """Dense process-tensor probe evaluation returns Pauli tomography coefficients."""
+    pt = _tiny_process_tensor(num_interventions=1)
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    pauli = evaluate_dense_probes(comb, probe_set)
+    pauli = evaluate_dense_probes(pt, probe_set)
     assert pauli.shape == (2, 2, 4)
-    wrapped = comb.evaluate_probes(probe_set)
+    wrapped = pt.evaluate_probes(probe_set)
     np.testing.assert_allclose(wrapped, pauli)
 
 
-def test_mpocomb_evaluate_probes_and_cmi_delegates() -> None:
+def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
     """MPOProcessTensor wrappers delegate probe and information metrics to dense."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    mpo_comb = cast(
+    mpo_pt = cast(
         "MPOProcessTensor",
         mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="mpo", compress_every=1),
     )
-    dense_comb = mpo_comb.to_dense()
+    dense_pt = mpo_pt.to_dense()
 
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=np.random.default_rng(1))
-    mpo_pauli = mpo_comb.evaluate_probes(probe_set)
-    dense_pauli = dense_comb.evaluate_probes(probe_set)
+    mpo_pauli = mpo_pt.evaluate_probes(probe_set)
+    dense_pauli = dense_pt.evaluate_probes(probe_set)
     assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
 
-    assert isinstance(mpo_comb.cmi(), float)
-    assert isinstance(mpo_comb.cmi_conditional(), float)
-    assert mpo_comb._num_interventions_for_probe() == 2
+    assert isinstance(mpo_pt.cmi(), float)
+    assert isinstance(mpo_pt.cmi_conditional(), float)
+    assert mpo_pt._num_interventions_for_probe() == 2

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Parallel comb-schedule sequence simulation."""
+"""Parallel process-tensor schedule sequence simulation."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from .workers import (
     _seq_final_worker,
     _seq_final_worker_diagnostics,
     _seq_trace_worker,
-    _validate_comb_sequence_inputs,
+    _validate_process_tensor_schedule_inputs,
 )
 
 if TYPE_CHECKING:
@@ -63,9 +63,9 @@ def simulate_sequences(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Comb schedule: ``k+1`` evolution durations per sequence when
-            ``timesteps_rows`` is omitted.
-        intervention_steps_list: One list of ``k`` intervention steps per sequence.
+        timesteps: Process-tensor schedule: ``num_interventions+1`` evolution durations per
+            sequence when ``timesteps_rows`` is omitted.
+        intervention_steps_list: One list of ``num_interventions`` intervention steps per sequence.
         initial_psis: One initial state vector per sequence.
         static_ctx: Optional static backend context (MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
@@ -74,9 +74,9 @@ def simulate_sequences(
         traced: If ``True``, return final packed states and per-sequence diagnostics
             (incompatible with ``record_step_states=True``).
         e_features_rows: Per-sequence Choi feature rows (required when ``record_step_states=True``).
-        timesteps_rows: Optional per-sequence durations, each of length ``k+1``.
-        operators_list: Optional per-sequence Hamiltonians, length ``k+1`` per sequence.
-        static_ctx_list: Optional per-sequence MCWF contexts, length ``k+1`` per sequence.
+        timesteps_rows: Optional per-sequence durations, each of length ``num_interventions+1``.
+        operators_list: Optional per-sequence Hamiltonians, length ``num_interventions+1`` per sequence.
+        static_ctx_list: Optional per-sequence MCWF contexts, length ``num_interventions+1`` per sequence.
         context_vec: Optional static context vector attached to each trace when
             ``record_step_states=True``. Raises :class:`ValueError` when set while
             ``record_step_states=False``.
@@ -115,7 +115,7 @@ def simulate_sequences(
         msg = "context_vec is only used when record_step_states=True."
         raise ValueError(msg)
 
-    _validate_comb_sequence_inputs(
+    _validate_process_tensor_schedule_inputs(
         intervention_steps_list=intervention_steps_list,
         timesteps=timesteps,
         timesteps_rows=timesteps_rows,

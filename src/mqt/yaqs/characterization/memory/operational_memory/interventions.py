@@ -121,18 +121,18 @@ def expand_interventions(
     num_interventions: int,
     _rng: np.random.Generator,
 ) -> list[Intervention]:
-    """Expand a scalar spec or per-slot list to length ``k``.
+    """Expand a scalar spec or per-slot list to length ``num_interventions``.
 
     Args:
         spec: Per-slot list or scalar intervention style.
-        k: Required sequence length.
+        num_interventions: Required sequence length.
         _rng: Unused for string specs; reserved for future stochastic expansion.
 
     Returns:
-        List of ``k`` intervention slots.
+        List of ``num_interventions`` intervention slots.
 
     Raises:
-        ValueError: If an explicit list length does not match ``k``.
+        ValueError: If an explicit list length does not match ``num_interventions``.
     """
     if isinstance(spec, str):
         resolved = normalize_style(spec)
@@ -159,11 +159,11 @@ def encode_interventions(
 
     Args:
         spec: Intervention sequence or scalar style.
-        k: Sequence length.
+        num_interventions: Sequence length.
         rng: NumPy random generator.
 
     Returns:
-        Tuple ``(steps, choi_features)`` with ``choi_features`` shaped ``(k, 32)``.
+        Tuple ``(steps, choi_features)`` with ``choi_features`` shaped ``(num_interventions, 32)``.
     """
     slots = expand_interventions(spec, num_interventions=num_interventions, _rng=rng)
     steps: list[Any] = []
@@ -180,11 +180,11 @@ def sample_train_interventions(
     intervention_style: InterventionStyle,
     rng: np.random.Generator,
 ) -> tuple[list[Any], np.ndarray]:
-    """Sample one training intervention sequence of length ``k``.
+    """Sample one training intervention sequence of length ``num_interventions``.
 
     Args:
-        k: Sequence length.
-        style: Intervention style for all slots.
+        num_interventions: Sequence length.
+        intervention_style: Intervention style for all slots.
         rng: NumPy random generator.
 
     Returns:

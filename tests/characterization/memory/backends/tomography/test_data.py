@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for tomography SequenceData comb conversion."""
+"""Tests for tomography SequenceData process-tensor conversion."""
 
 from __future__ import annotations
 

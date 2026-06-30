@@ -46,7 +46,7 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         msg = f"past_pairs[{i}] length {len(past_pairs)} != cut-1={past_len}"
         raise ValueError(msg)
     if len(future_pairs) != future_len:
-        msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
+        msg = f"future_pairs[{j}] length {len(future_pairs)} != num_interventions-cut={future_len}"
         raise ValueError(msg)
     if len(probe_set.past_cut_meas) != n_pasts:
         msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_pasts}"
@@ -58,7 +58,7 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
     full.extend(future_pairs)
     if len(full) != num_interventions:
-        msg = f"assembled probe sequence length {len(full)} != k={num_interventions}"
+        msg = f"assembled probe sequence length {len(full)} != num_interventions={num_interventions}"
         raise ValueError(msg)
     return full
 
@@ -73,7 +73,7 @@ def assemble_probe_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]
         Tuple ``(all_pairs, n_pasts, n_futures)``.
 
     Raises:
-        RuntimeError: If an assembled sequence length does not match ``k``.
+        RuntimeError: If an assembled sequence length does not match ``num_interventions``.
     """
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
@@ -97,7 +97,7 @@ def compute_delayed_length(*, num_interventions: int, delay: int) -> int:
         delay: Number of ``(|0>, |0>)`` soft-reset slots inserted at the break.
 
     Returns:
-        ``k + delay + 1`` when ``delay > 0``; otherwise ``k``.
+        ``num_interventions + delay + 1`` when ``delay > 0``; otherwise ``num_interventions``.
 
     Raises:
         ValueError: If ``delay`` is negative.
@@ -112,7 +112,7 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     """Build a probe sequence with optional soft-reset delay at the causal break.
 
     Args:
-        probe_set: Sampled split-cut probes at base length ``k``.
+        probe_set: Sampled split-cut probes at base length ``num_interventions``.
         i: Past index.
         j: Future index.
         delay: Number of ``(|0>, |0>)`` slots to insert at the break.
@@ -143,7 +143,7 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
         msg = f"past_pairs[{i}] length {len(past_pairs)} != cut-1={past_len}"
         raise ValueError(msg)
     if len(future_pairs) != future_len:
-        msg = f"future_pairs[{j}] length {len(future_pairs)} != k-cut={future_len}"
+        msg = f"future_pairs[{j}] length {len(future_pairs)} != num_interventions-cut={future_len}"
         raise ValueError(msg)
     if len(probe_set.past_cut_meas) != n_pasts:
         msg = f"past_cut_meas length {len(probe_set.past_cut_meas)} != n_pasts={n_pasts}"
@@ -158,7 +158,7 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     full.extend(future_pairs)
     expected = compute_delayed_length(num_interventions=num_interventions, delay=delay)
     if len(full) != expected:
-        msg = f"assembled delayed sequence length {len(full)} != k+delay+1={expected}"
+        msg = f"assembled delayed sequence length {len(full)} != num_interventions+delay+1={expected}"
         raise ValueError(msg)
     return full
 
@@ -171,7 +171,7 @@ def assemble_delayed_probe_grid(
     """Construct the full probe grid with optional reset delay at the causal break.
 
     Args:
-        probe_set: Sampled split-cut probes at base length ``k``.
+        probe_set: Sampled split-cut probes at base length ``num_interventions``.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the break.
 
     Returns:

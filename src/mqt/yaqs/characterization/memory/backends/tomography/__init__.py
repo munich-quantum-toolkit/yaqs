@@ -8,7 +8,7 @@
 """Process-tensor tomography (exact/exhaustive).
 
 This subpackage constructs a process tensor from exhaustive discrete intervention sequences (size
-``16^k`` for ``k`` steps), optionally under MCWF/TJM noise, and returns a
+``16**num_interventions`` for ``num_interventions`` steps), optionally under MCWF/TJM noise, and returns a
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor` or
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 """

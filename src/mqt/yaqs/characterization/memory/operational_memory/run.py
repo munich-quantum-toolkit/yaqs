@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
-from .branch_weights import compute_analytic_weights
+from .branch_weights import compute_branch_weights
 from .grid import assemble_delayed_probe_grid, compute_delayed_length
 from .memory_matrix import assemble_memory_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
@@ -24,10 +24,12 @@ if TYPE_CHECKING:
 
 
 class OperationalMemoryBackend(Protocol):
-    """Protocol for backends that evaluate weighted split-cut probes.
+    """Protocol for split-cut probing backends used in operational memory.
 
-    Implement :meth:`evaluate_probes_weighted` (for example
-    :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`).
+    Implement **either** :meth:`evaluate_probes_weighted` (simulation trace weights, e.g.
+    :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
+    :meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
+    :func:`evaluate_probes_weighted_for` dispatches to the implemented method.
     """
 
     def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
@@ -41,13 +43,6 @@ class OperationalMemoryBackend(Protocol):
             ``(n_pasts, n_futures)``.
         """
 
-
-class ProcessTensorProbeBackend(Protocol):
-    """Protocol for comb/surrogate backends exposing :meth:`evaluate_probes`.
-
-    Weighted evaluation is supplied by :func:`evaluate_probes_weighted_for`.
-    """
-
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate unweighted probe responses.
 
@@ -59,15 +54,8 @@ class ProcessTensorProbeBackend(Protocol):
         """
 
 
-MemoryProcessBackend = OperationalMemoryBackend | ProcessTensorProbeBackend
-
-
-# Back-compat alias until call sites migrate.
-_ProbeProcess = MemoryProcessBackend
-
-
 def evaluate_probes_weighted_for(
-    process: MemoryProcessBackend,
+    process: OperationalMemoryBackend,
     probe_set: ProbeSet,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate weighted probe responses; analytic weights unless the class overrides.
@@ -89,14 +77,14 @@ def evaluate_probes_weighted_for(
     evaluate_fn = getattr(process, "evaluate_probes", None)
     if callable(evaluate_fn):
         pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
-        return pauli_xyz_ij, compute_analytic_weights(probe_set)
+        return pauli_xyz_ij, compute_branch_weights(probe_set)
     msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
     raise TypeError(msg)
 
 
 def run_operational_memory(
     *,
-    process: MemoryProcessBackend,
+    process: OperationalMemoryBackend,
     cut: int,
     num_interventions: int,
     n_pasts: int = 32,
@@ -112,7 +100,7 @@ def run_operational_memory(
     """Run split-cut probing and assemble memory-matrix diagnostics.
 
     Args:
-        process: Operational-memory backend (exact, comb, or surrogate).
+        process: Operational-memory backend (exact, process tensor, or surrogate).
         cut: Causal cut index.
         num_interventions: Base sequence length (past + cut + future legs; excludes ``delay`` slots).
         n_pasts: Past probe count when sampling internally.
@@ -132,7 +120,7 @@ def run_operational_memory(
 
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
-            different ``cut`` or ``k``, or ``delay > 0`` with a backend that does not
+            different ``cut`` or ``num_interventions``, or ``delay > 0`` with a backend that does not
             support custom sequences.
     """
     if delay < 0:

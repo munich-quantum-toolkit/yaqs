@@ -58,7 +58,7 @@ def stack_choi_features(choi_matrices: list[np.ndarray]) -> np.ndarray:
     return np.stack(rows, axis=0)
 
 
-def _normalize_density_like_densecomb(rho: np.ndarray) -> np.ndarray:
+def _normalize_density_like_process_tensor(rho: np.ndarray) -> np.ndarray:
     """Project a 2x2 matrix onto a physical density matrix.
 
     Args:
@@ -219,4 +219,4 @@ def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
             rho_h /= tr2
         return rho_h
 
-    return _normalize_density_like_densecomb(rho_h)
+    return _normalize_density_like_process_tensor(rho_h)

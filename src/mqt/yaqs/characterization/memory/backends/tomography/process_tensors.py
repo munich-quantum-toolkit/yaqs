@@ -97,11 +97,11 @@ def convert_probe_callable(
     return inter
 
 
-def evaluate_dense_probes(comb: DenseProcessTensor, probe_set: ProbeSet) -> np.ndarray:
-    """Evaluate split-cut probe Pauli responses on a dense comb.
+def evaluate_dense_probes(process_tensor: DenseProcessTensor, probe_set: ProbeSet) -> np.ndarray:
+    """Evaluate split-cut probe Pauli responses on a dense process tensor.
 
     Args:
-        comb: Dense reference comb backend.
+        process_tensor: Dense reference process-tensor backend.
         probe_set: Sampled split-cut probes.
 
     Returns:
@@ -114,7 +114,7 @@ def evaluate_dense_probes(comb: DenseProcessTensor, probe_set: ProbeSet) -> np.n
         for j in range(n_f):
             steps = assemble_probe_sequence(probe_set, i, j)
             interventions = [convert_probe_callable(s) for s in steps]
-            pauli[i, j] = encode_rho_pauli(comb.predict(interventions))
+            pauli[i, j] = encode_rho_pauli(process_tensor.predict(interventions))
     return pauli
 
 
@@ -196,35 +196,36 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
 
 
 class DenseProcessTensor:
-    """Wrapper around a dense comb Choi operator Upsilon."""
+    """Wrapper around a dense process-tensor Choi operator Upsilon."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
-        """Create a dense comb wrapper.
+        """Create a dense process-tensor wrapper.
 
         Args:
-            upsilon: Dense comb matrix.
+            upsilon: Dense process-tensor matrix.
             timesteps: Per-step evolution durations.
         """
         self.upsilon = upsilon
         self.timesteps = timesteps
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Return the underlying dense comb matrix.
+        """Return the underlying dense process-tensor matrix.
 
         Returns:
-            Dense comb matrix.
+            Dense process-tensor matrix.
         """
         return self.upsilon
 
     # NOTE: previously there was a `DenseProcessTensor.fit(...)` entry point here.
     # The library now exposes only the exhaustive
-    # `build_process_tensor(...) -> SequenceData -> to_*_comb()` path.
+    # `build_process_tensor(...) -> SequenceData -> to_*_process_tensor()` path.
 
     def _num_interventions(self) -> int:
-        """Infer number of intervention steps from the comb matrix shape.
+        """Infer number of intervention steps from the process-tensor matrix shape.
 
         Returns:
-            Number of steps ``k`` such that the shape is ``(2*4**k, 2*4**k)``.
+            Number of steps ``num_interventions`` such that the shape is
+            ``(2*4**num_interventions, 2*4**num_interventions)``.
         """
         size = self.upsilon.shape[0]
         return int(np.round(np.log2(size / 2) / 2))
@@ -237,7 +238,7 @@ class DenseProcessTensor:
         normalize_trace: bool = True,
         _psd_tol: float = 1e-12,
     ) -> DenseProcessTensor:
-        """Return a canonicalized comb matrix.
+        """Return a canonicalized process-tensor matrix.
 
         Args:
             hermitize: If ``True``, symmetrize to enforce Hermiticity.
@@ -262,20 +263,20 @@ class DenseProcessTensor:
         return DenseProcessTensor(comb_mat, self.timesteps)
 
     def reduced(self, keep_last_m: int = 1) -> DenseProcessTensor:
-        """Reduce the comb by tracing out early past legs.
+        """Reduce the process tensor by tracing out early past legs.
 
         Args:
             keep_last_m: Number of most-recent past legs to keep.
 
         Returns:
-            Reduced comb as a new `DenseProcessTensor`.
+            Reduced process tensor as a new `DenseProcessTensor`.
 
         Raises:
             ValueError: If ``keep_last_m`` is out of range.
         """
         k = self._num_interventions()
         if keep_last_m > k:
-            msg = f"keep_last_m={keep_last_m} > k={k}"
+            msg = f"keep_last_m={keep_last_m} > num_interventions={k}"
             raise ValueError(msg)
         if keep_last_m <= 0:
             msg = f"keep_last_m must be >= 1, got {keep_last_m}"
@@ -294,13 +295,13 @@ class DenseProcessTensor:
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Contract the comb with interventions without physicalization.
+        """Contract the process tensor with interventions without physicalization.
 
         Args:
             interventions: List of CPTP maps, one per step.
 
         Returns:
-            Raw 2x2 complex matrix from the comb contraction (not guaranteed physical).
+            Raw 2x2 complex matrix from the process-tensor contraction (not guaranteed physical).
         """
         k_steps = len(interventions)
         if k_steps == 0:
@@ -327,7 +328,7 @@ class DenseProcessTensor:
             Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
 
         Raises:
-            ValueError: If the number of interventions does not match the comb length.
+            ValueError: If the number of interventions does not match the process-tensor length.
         """
         num_steps = self._num_interventions()
         if len(interventions) != num_steps:
@@ -481,7 +482,7 @@ class DenseProcessTensor:
             b_label: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
             c_label: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
             base: Log base for entropy.
-            normalize: Whether to normalize the comb matrix by trace.
+            normalize: Whether to normalize the process-tensor matrix by trace.
             check_psd: Whether to project onto PSD before computing entropies.
 
         Returns:
@@ -536,13 +537,13 @@ class DenseProcessTensor:
 
 
 class MPOProcessTensor(MPO):
-    """Wrapper around an MPO representation of a comb Choi operator Upsilon."""
+    """Wrapper around an MPO representation of a process-tensor Choi operator Upsilon."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
-        """Create an MPO comb wrapper.
+        """Create an MPO process-tensor wrapper.
 
         Args:
-            upsilon_mpo: MPO representation of the comb matrix.
+            upsilon_mpo: MPO representation of the process-tensor matrix.
             timesteps: Per-step evolution durations.
         """
         # Copy underlying MPO tensors/state into this subclass
@@ -556,15 +557,15 @@ class MPOProcessTensor(MPO):
         """Return the dense matrix representation.
 
         Returns:
-            Dense comb matrix.
+            Dense process-tensor matrix.
         """
         return super().to_matrix()
 
     def to_dense(self) -> DenseProcessTensor:
-        """Convert this MPO comb to a dense comb.
+        """Convert this MPO process tensor to a dense process tensor.
 
         Returns:
-            Dense comb wrapper.
+            Dense process-tensor wrapper.
         """
         return DenseProcessTensor(self.to_matrix(), self.timesteps)
 
@@ -592,7 +593,7 @@ class MPOProcessTensor(MPO):
             Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
 
         Raises:
-            ValueError: If the interventions list is empty or length mismatches the comb.
+            ValueError: If the interventions list is empty or length mismatches the process tensor.
         """
         if not interventions:
             if self.length == 1:

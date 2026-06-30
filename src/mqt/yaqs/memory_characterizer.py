@@ -155,17 +155,17 @@ def make_zero_psi(length: int) -> np.ndarray:
 
 
 def _resolve_num_interventions(target: Any, num_interventions: int | None) -> int:
-    """Infer sequence length ``k`` from an explicit value or comb/surrogate target.
+    """Infer ``num_interventions`` from an explicit value or process-tensor/surrogate target.
 
     Args:
-        target: Comb, surrogate, or other characterized object.
-        k: Optional explicit sequence length.
+        target: Process tensor, surrogate, or other characterized object.
+        num_interventions: Optional explicit intervention count.
 
     Returns:
-        Resolved ``k``.
+        Resolved ``num_interventions``.
 
     Raises:
-        ValueError: If ``k`` cannot be inferred from ``target``.
+        ValueError: If ``num_interventions`` cannot be inferred from ``target``.
     """
     if num_interventions is not None:
         return int(num_interventions)
@@ -180,14 +180,14 @@ def _resolve_num_interventions(target: Any, num_interventions: int | None) -> in
 
 
 def _default_cut(num_interventions: int, cut: int | None) -> int:
-    """Resolve causal cut, defaulting to the interior cut ``(k + 1) // 2``.
+    """Resolve causal cut, defaulting to the interior cut ``(num_interventions + 1) // 2``.
 
     Args:
-        k: Sequence length.
+        num_interventions: Intervention sequence length.
         cut: Optional explicit cut.
 
     Returns:
-        Valid cut in ``[1, k]``.
+        Valid cut in ``[1, num_interventions]``.
 
     Raises:
         ValueError: If the resolved cut is out of range.
@@ -195,7 +195,9 @@ def _default_cut(num_interventions: int, cut: int | None) -> int:
     resolved_num_interventions = int(num_interventions)
     c = (resolved_num_interventions + 1) // 2 if cut is None else int(cut)
     if not (1 <= c <= resolved_num_interventions):
-        msg = f"cut must satisfy 1 <= cut <= k ({resolved_num_interventions}), got {c}."
+        msg = (
+            f"cut must satisfy 1 <= cut <= num_interventions ({resolved_num_interventions}), got {c}."
+        )
         raise ValueError(msg)
     return c
 
@@ -227,7 +229,7 @@ def matches_hamiltonian(target: Any) -> bool:
 
 
 def matches_process_tensor(target: Any) -> bool:
-    """Return whether ``target`` is a reference comb predict target."""
+    """Return whether ``target`` is a reference process tensor predict target."""
     return isinstance(target, (DenseProcessTensor, MPOProcessTensor))
 
 
@@ -236,7 +238,7 @@ class MemoryCharacterizer:
 
     **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_process_tensor`
 
-    **Use:** :meth:`predict` (surrogate or reference-comb dynamics), :meth:`characterize` (memory metrics)
+    **Use:** :meth:`predict` (surrogate or reference process-tensor dynamics), :meth:`characterize` (memory metrics)
 
     Attributes:
         parallel: Whether sequence simulations run in parallel via a process pool.
@@ -346,17 +348,20 @@ class MemoryCharacterizer:
         n_sweeps: int = 2,
         parallel: bool | None = None,
     ) -> DenseProcessTensor | MPOProcessTensor:
-        """Build an exhaustive reference comb (validation only; scales as ``16^k``).
+        """Build an exhaustive reference process tensor (validation only; scales as ``16**num_interventions``).
 
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            timesteps: Optional per-step durations; defaults from ``sim_params.dt``.
+            timesteps: Optional per-intervention evolution durations (length
+                ``num_interventions``; defaults from ``sim_params.elapsed_time``). This
+                tomography convention differs from surrogate training, which uses
+                ``num_interventions + 1`` slots — see :meth:`sample` and :meth:`train`.
             noise_model: Optional noise model during tomography sequences.
             num_trajectories: Monte Carlo trajectories per tomography sample.
             basis: Intervention basis for process-tensor tomography.
             basis_seed: Optional RNG seed for basis construction.
-            return_type: ``"dense"`` or ``"mpo"`` comb storage.
+            return_type: ``"dense"`` or ``"mpo"`` process-tensor storage.
             check: Whether to validate CPTP properties during construction.
             atol: CPTP check tolerance.
             compress_every: MPO compression cadence during construction.
@@ -366,7 +371,7 @@ class MemoryCharacterizer:
             parallel: Override instance parallel setting.
 
         Returns:
-            Dense or MPO reference comb for small ``k`` validation.
+            Dense or MPO reference process tensor for small-horizon validation.
         """
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
@@ -410,13 +415,13 @@ class MemoryCharacterizer:
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            k: Number of intervention steps per sequence.
+            num_interventions: Number of intervention steps per sequence.
             n: Number of training sequences.
             rng: Optional RNG (overrides ``seed``).
             seed: Optional seed when ``rng`` is omitted.
-            timesteps: Optional comb schedule of length ``k + 1``.
+            timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
             init_mode: Initial-state sampling mode for training sequences.
-            style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             parallel: Override instance parallel setting.
             show_progress: Override instance progress-bar setting.
 
@@ -465,12 +470,12 @@ class MemoryCharacterizer:
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            k: Training sequence length (stored on the model).
+            num_interventions: Training sequence length (stored on the model).
             n: Number of training sequences.
             seed: Optional RNG seed for data sampling and weight init.
-            timesteps: Optional comb schedule of length ``k + 1``.
+            timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
             init_mode: Initial-state sampling mode for training sequences.
-            style: Training intervention style.
+            intervention_style: Training intervention style.
             model_kwargs: Optional overrides for :class:`ProcessTensorSurrogate` construction.
             train_kwargs: Optional overrides for the training loop.
             parallel: Override instance parallel setting.
@@ -562,25 +567,26 @@ class MemoryCharacterizer:
         delay: int = 0,
         **probe_kwargs: Any,
     ) -> CharacterizationResult:
-        """Return operational memory diagnostics for a Hamiltonian, surrogate, or comb.
+        """Return operational memory diagnostics for a Hamiltonian, surrogate, or process tensor.
 
-        For a Hamiltonian, pass ``sim_params`` and ``k``. For combs/surrogates, ``k`` is
-        inferred from the target when omitted. Default interior cut is ``(k + 1) // 2``.
+        For a Hamiltonian, pass ``sim_params`` and ``num_interventions``. For process
+        tensors and surrogates, ``num_interventions`` is inferred from the target when
+        omitted. Default interior cut is ``(num_interventions + 1) // 2``.
 
         Args:
-            target: Hamiltonian, trained surrogate, or reference comb.
+            target: Hamiltonian, trained surrogate, or reference process tensor.
             sim_params: Required for Hamiltonian targets only.
-            k: Intervention sequence length (required for Hamiltonian targets).
+            num_interventions: Intervention sequence length (required for Hamiltonian targets).
             cut: Single causal cut; mutually exclusive with ``cuts``.
             cuts: ``"all"`` or explicit list for multi-cut Hamiltonian sweeps.
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
             n_pasts: Override number of past probes.
             n_futures: Override number of future probes.
-            style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+            intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
-            parallel: Override parallelism for comb/surrogate probing.
+            parallel: Override parallelism for process-tensor/surrogate probing.
             delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
             **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
 
@@ -589,10 +595,10 @@ class MemoryCharacterizer:
 
         Raises:
             TypeError: If a Hamiltonian is given without ``sim_params``.
-            ValueError: If ``k`` is missing for a Hamiltonian target, both ``cut`` and
-                ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is reused
-                across multiple cuts, ``delay > 0`` on a comb/surrogate target, or
-                ``delay > 0`` on a non-exact backend.
+            ValueError: If ``num_interventions`` is missing for a Hamiltonian target, both
+                ``cut`` and ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is
+                reused across multiple cuts, ``delay > 0`` on a process-tensor/surrogate
+                target, or ``delay > 0`` on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(intervention_style), **probe_kwargs}
@@ -668,7 +674,7 @@ class MemoryCharacterizer:
         """Resolve the list of cuts to characterize.
 
         Args:
-            k: Sequence length.
+            num_interventions: Intervention sequence length.
             cut: Optional single cut.
             cuts: ``"all"`` or explicit cut list.
 
@@ -705,7 +711,7 @@ class MemoryCharacterizer:
         probe_kw: dict[str, Any],
         delay: int = 0,
     ) -> CharacterizationResult:
-        """Characterize a comb or surrogate via internal split-cut probing.
+        """Characterize a process tensor or surrogate via internal split-cut probing.
 
         ``delay > 0`` is rejected in :meth:`characterize` before this path is reached.
 
@@ -812,23 +818,24 @@ class MemoryCharacterizer:
     ) -> np.ndarray:
         """Predict site-0 reduced-state dynamics under an intervention sequence.
 
-        Supports trained surrogates and reference combs. For combs, ``rho0`` is accepted
-        for API symmetry but not used (the comb contracts from the tomographic reference state).
+        Supports trained surrogates and reference process tensors. For process tensors,
+        ``rho0`` is accepted for API symmetry but not used (the tensor contracts from the
+        tomographic reference state).
 
         Args:
-            target: Trained surrogate or reference comb.
+            target: Trained surrogate or reference process tensor.
             rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
             sequence: Intervention kind string, per-slot list, or expanded sequence.
-            k: Sequence length; inferred from ``target`` when omitted.
-            return_sequence: If True, return the full ``k``-step trajectory instead of the
-                final state only.
+            num_interventions: Sequence length; inferred from ``target`` when omitted.
+            return_sequence: If True, return the full ``num_interventions``-step trajectory
+                instead of the final state only.
             rng: RNG for stochastic intervention sampling.
 
         Returns:
             Final (or full) site-0 reduced density matrix.
 
         Raises:
-            ValueError: If ``return_sequence=True`` for a comb target.
+            ValueError: If ``return_sequence=True`` for a process-tensor target.
             TypeError: If ``target`` does not support surrogate-style prediction.
         """
         local_rng = rng if rng is not None else np.random.default_rng()
@@ -836,7 +843,7 @@ class MemoryCharacterizer:
 
         if matches_process_tensor(target):
             if return_sequence:
-                msg = "return_sequence=True is not supported for comb targets."
+                msg = "return_sequence=True is not supported for process tensor targets."
                 raise ValueError(msg)
             resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
             if isinstance(seq, str):

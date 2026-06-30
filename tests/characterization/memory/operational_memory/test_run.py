@@ -28,7 +28,7 @@ from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
     compute_spectrum,
 )
 from mqt.yaqs.characterization.memory.operational_memory.run import (
-    MemoryProcessBackend,
+    OperationalMemoryBackend,
     evaluate_probes_weighted_for,
     run_operational_memory,
 )
@@ -98,8 +98,8 @@ def test_compute_branch_weight_from_steps() -> None:
     assert compute_branch_weight(steps, cut=2) == pytest.approx(1.0)
 
 
-def test_comb_run_operational_memory_returns_cut_weights() -> None:
-    """Dense comb orchestration returns positive cut weights."""
+def test_process_tensor_run_operational_memory_returns_cut_weights() -> None:
+    """Dense process-tensor orchestration returns positive cut weights."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     comb = build_process_tensor(
@@ -139,7 +139,7 @@ def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
     np.testing.assert_allclose(w_analytic, w_exact, rtol=1e-10, atol=1e-12)
 
 
-def test_dense_comb_vs_exact_probe_entropy() -> None:
+def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
     """DenseProcessTensor weighted entropy agrees with exact rollout on small k."""
     rng = np.random.default_rng(42)
     op = MPO.ising(length=1, J=0.0, g=0.0)
@@ -180,8 +180,8 @@ def test_dense_comb_vs_exact_probe_entropy() -> None:
     assert out_comb["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
 
 
-def test_mpo_comb_entropy_matches_dense() -> None:
-    """MPO and dense comb backends yield the same entropy."""
+def test_mpo_process_tensor_entropy_matches_dense() -> None:
+    """MPO and dense process-tensor backends yield the same entropy."""
     rng = np.random.default_rng(1)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
@@ -202,8 +202,8 @@ def test_mpo_comb_entropy_matches_dense() -> None:
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
 
-def test_evaluate_probes_weighted_for_comb_uses_analytic_weights() -> None:
-    """Comb backends without weighted evaluate use analytic branch weights."""
+def test_evaluate_probes_weighted_for_process_tensor_uses_analytic_weights() -> None:
+    """Process-tensor backends without weighted evaluate use analytic branch weights."""
     rng = np.random.default_rng(2)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     comb = build_process_tensor(
@@ -229,7 +229,7 @@ def test_evaluate_probes_weighted_for_missing_method_raises() -> None:
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
     with pytest.raises(TypeError, match="evaluate_probes"):
-        evaluate_probes_weighted_for(cast("MemoryProcessBackend", NoProbes()), probe_set)
+        evaluate_probes_weighted_for(cast("OperationalMemoryBackend", NoProbes()), probe_set)
 
 
 def test_evaluate_probes_weighted_for_inherited_method() -> None:
@@ -245,7 +245,7 @@ def test_evaluate_probes_weighted_for_inherited_method() -> None:
         pass
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    pauli, weights = evaluate_probes_weighted_for(cast("MemoryProcessBackend", ChildBackend()), probe_set)
+    pauli, weights = evaluate_probes_weighted_for(cast("OperationalMemoryBackend", ChildBackend()), probe_set)
     assert pauli.shape == (2, 2, 4)
     assert weights.shape == (2, 2)
 
@@ -371,7 +371,7 @@ def test_run_operational_memory_delay_rejects_negative() -> None:
         run_operational_memory(process=backend, cut=1, num_interventions=2, delay=-1)
 
 
-def test_run_operational_memory_delay_rejects_comb_backend() -> None:
+def test_run_operational_memory_delay_rejects_process_tensor_backend() -> None:
     """Reset delay requires the exact sequence backend."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)

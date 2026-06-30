@@ -11,12 +11,12 @@
 :func:`build_process_tensor` (this module,
 :mod:`mqt.yaqs.characterization.memory.backends.tomography.constructor`).
 
-:func:`build_process_tensor` is the high-level user entry point returning a comb directly
+:func:`build_process_tensor` is the high-level user entry point returning a process tensor directly
 (:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor` or
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`).
 The lower-level :func:`run_all_sequences` returns
-:class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData` covering all ``16^k``
-Choi index sequences for ``k`` steps.
+:class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData` covering all
+``16**num_interventions`` Choi index sequences for ``num_interventions`` steps.
 
 **Execution model** — Same pattern as :mod:`mqt.yaqs.simulator` and
 :mod:`mqt.yaqs.characterization.memory.backends.surrogates.workflow`: build a picklable payload, optionally
@@ -79,11 +79,11 @@ if TYPE_CHECKING:
 # serial path. Workers use :func:`~mqt.yaqs.core.parallel_utils.resolve_worker_ctx`
 # and :func:`~mqt.yaqs.core.parallel_utils.unpack_flat_job`.
 #
-#   intervention_steps           list[list[(meas, prep)]] — one inner list per sequence (length k)
+#   intervention_steps           list[list[(meas, prep)]] — one inner list per sequence (length num_interventions)
 #   num_trajectories    flat-index stride (1 when ``noise_model`` is None)
 #   operator            Hamiltonian MPO
 #   sim_params          :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
-#   timesteps           list[float] duration per step (length k)
+#   timesteps           list[float] duration per step (length num_interventions)
 #   noise_model         optional open-system noise
 #   mcwf_static_ctx     from ``make_mcwf_static_context`` when solver is MCWF
 
@@ -150,7 +150,7 @@ def _sequence_worker(
 
 
 # ---------------------------------------------------------------------------
-# Orchestration — build payload, run all ``16^k`` sequences, aggregate
+# Orchestration — build payload, run all ``16**num_interventions`` sequences, aggregate
 # ---------------------------------------------------------------------------
 def run_all_sequences(
     operator: MPO,
@@ -166,7 +166,7 @@ def run_all_sequences(
     show_progress: bool = False,
     _execution: ExecutionConfig | None = None,
 ) -> SequenceData:
-    """Run the backend for every one of the ``16^k`` discrete Choi index sequences.
+    """Run the backend for every one of the ``16**num_interventions`` discrete Choi index sequences.
 
     Prefer :func:`build_process_tensor` for the validated user entry; this routine assumes
     ``timesteps`` and solver compatibility are already correct.
@@ -174,7 +174,7 @@ def run_all_sequences(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Per-step evolution durations (length ``k``).
+        timesteps: Per-intervention evolution durations (length ``num_interventions``).
         parallel: Whether to parallelize over sequences.
         num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
         noise_model: Optional open-system noise model.
@@ -188,7 +188,7 @@ def run_all_sequences(
         Exhaustive :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Raises:
-        ValueError: If ``k=0`` or the solver is unsupported.
+        ValueError: If ``num_interventions=0`` or the solver is unsupported.
     """
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
@@ -197,15 +197,15 @@ def run_all_sequences(
     basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
 
-    k = len(timesteps)
-    if k == 0:
+    num_interventions = len(timesteps)
+    if num_interventions == 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
 
-    def _enumerate_sequences(k_in: int) -> list[tuple[int, ...]]:
-        return list(itertools.product(range(16), repeat=k_in))
+    def _enumerate_sequences(n_interventions: int) -> list[tuple[int, ...]]:
+        return list(itertools.product(range(16), repeat=n_interventions))
 
-    all_seqs = _enumerate_sequences(k)
+    all_seqs = _enumerate_sequences(num_interventions)
 
     n_seq = len(all_seqs)
     samples_intervention_steps = [
@@ -353,7 +353,8 @@ def build_process_tensor(
 ) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor via exhaustive discrete-basis tomography.
 
-    This simulates **every** ``16^k`` discrete basis sequence and returns a comb directly:
+    This simulates **every** ``16**num_interventions`` discrete basis sequence and returns a
+    process tensor directly:
 
     - ``return_type="dense"``: reconstruct and return a :class:`DenseProcessTensor`.
     - ``return_type="mpo"``: build and return an :class:`MPOProcessTensor`.
@@ -361,13 +362,15 @@ def build_process_tensor(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Optional per-step durations (defaults to ``[sim_params.elapsed_time]``).
+        timesteps: Optional per-intervention evolution durations (length ``num_interventions``;
+            defaults to ``[sim_params.elapsed_time]``). Unlike surrogate training, tomography
+            uses one duration per intervention (no leading ``U_1`` slot).
         noise_model: Optional open-system noise model.
         parallel: Whether to parallelize over sequences.
         num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
         basis: Tomography basis name.
         basis_seed: Optional seed when ``basis="random"``.
-        return_type: ``"dense"`` or ``"mpo"`` comb representation.
+        return_type: ``"dense"`` or ``"mpo"`` process-tensor representation.
         check: Run self-consistency check for dense reconstruction.
         atol: Absolute tolerance for the dense self-check.
         compress_every: MPO rank-1 accumulation compress interval.
@@ -378,7 +381,7 @@ def build_process_tensor(
         _execution: Optional internal execution configuration.
 
     Returns:
-        Dense or MPO comb wrapper depending on ``return_type``.
+        Dense or MPO process-tensor wrapper depending on ``return_type``.
 
     Raises:
         ValueError: If ``return_type`` is not ``"dense"`` or ``"mpo"``.

@@ -8,7 +8,7 @@
 """Exhaustive discrete-basis process-tensor data + reconstruction helpers.
 
 The main product of :func:`~mqt.yaqs.characterization.memory.backends.tomography.constructor.build_process_tensor`
-is :class:`SequenceData`. It can be converted to dense or MPO comb representations via
+is :class:`SequenceData`. It can be converted to dense or MPO process-tensor representations via
 :meth:`SequenceData.to_dense_process_tensor` and :meth:`SequenceData.to_mpo_process_tensor`.
 """
 
@@ -65,7 +65,7 @@ def accumulate_rank1_terms(
 
     Args:
         terms: Iterable of MPO terms.
-        num_steps: Number of time steps in the comb.
+        num_steps: Number of intervention steps in the process tensor.
         dims: Output density matrix dimensions (default (2,2)).
         compress_every: Compress after accumulating this many terms.
         tol: Compression tolerance.
@@ -107,7 +107,7 @@ def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], N
 
     Returns:
         Tuple ``(out_vecs, seq_weights)`` where ``out_vecs`` has shape ``(4, 16, ..., 16)`` and
-        ``seq_weights`` has shape ``(16, ..., 16)`` for ``k`` steps.
+        ``seq_weights`` has shape ``(16, ..., 16)`` for ``num_interventions`` steps.
     """
     num_steps = len(data.timesteps)
     out_vecs = np.zeros([4] + [16] * num_steps, dtype=np.complex128)
@@ -119,7 +119,7 @@ def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], N
 
 
 def _iter_rank1_terms(data: SequenceData) -> Iterable[MPO]:
-    """Yield rank-1 MPO terms for MPO comb construction.
+    """Yield rank-1 MPO terms for MPO process-tensor construction.
 
     Args:
         data: SequenceData instance.
@@ -143,7 +143,7 @@ def assemble_upsilon(
     check: bool,
     atol: float,
 ) -> NDArray[np.complex128]:
-    """Reconstruct a dense comb matrix from packed outputs and weights.
+    """Reconstruct a dense process-tensor matrix from packed outputs and weights.
 
     Args:
         out_vecs: Packed output vectors of shape ``(4, 16, ..., 16)``.
@@ -154,7 +154,7 @@ def assemble_upsilon(
         atol: Absolute tolerance for the self-check.
 
     Returns:
-        Dense comb matrix ``Upsilon`` of shape ``(2*4**k, 2*4**k)``.
+        Dense process-tensor matrix ``Upsilon`` of shape ``(2*4**num_interventions, 2*4**num_interventions)``.
 
     Raises:
         ValueError: If shapes are inconsistent or the self-check fails.
@@ -220,7 +220,7 @@ def assemble_upsilon(
 
 @dataclass
 class SequenceData:
-    """Discrete tomography data: one row per **sequence** (Choi index tuple of length ``k``)."""
+    """Discrete tomography data: one row per **sequence** (Choi index tuple of length ``num_interventions``)."""
 
     sequences: list[tuple[int, ...]]
     outputs: list[np.ndarray]  # (2, 2) density matrices
@@ -231,14 +231,14 @@ class SequenceData:
     timesteps: list[float]
 
     def to_dense_process_tensor(self, *, check: bool = True, atol: float = 1e-8) -> DenseProcessTensor:
-        """Reconstruct a dense comb from the discrete sequence dataset.
+        """Reconstruct a dense process tensor from the discrete sequence dataset.
 
         Args:
             check: Whether to run a lightweight self-consistency check.
             atol: Absolute tolerance for the self-check.
 
         Returns:
-            Dense comb representation.
+            Dense process-tensor representation.
         """
         out_vecs, seq_weights = pack_sequence_outputs(self)
         upsilon = assemble_upsilon(
@@ -259,7 +259,7 @@ class SequenceData:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> MPOProcessTensor:
-        """Build an MPO comb via rank-1 accumulation.
+        """Build an MPO process tensor via rank-1 accumulation.
 
         Args:
             compress_every: Compress after this many terms.
@@ -268,7 +268,7 @@ class SequenceData:
             n_sweeps: Number of compression sweeps.
 
         Returns:
-            MPO comb representation.
+            MPO process-tensor representation.
         """
         num_steps = len(self.timesteps)
         mpo = accumulate_rank1_terms(

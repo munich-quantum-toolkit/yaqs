@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tests for comb-sequence simulation backends."""
+"""Tests for process-tensor schedule sequence simulation backends."""

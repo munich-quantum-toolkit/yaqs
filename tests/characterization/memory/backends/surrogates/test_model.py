@@ -346,7 +346,7 @@ def test_transformercomb_evaluate_probes_with_past_and_future_segments() -> None
 
 
 def test_transformercomb_evaluate_probes_rejects_k_mismatch() -> None:
-    """evaluate_probes rejects ProbeSet k values that differ from training horizon."""
+    """evaluate_probes rejects ProbeSet num_interventions values that differ from training horizon."""
     pytest.importorskip("torch")
 
     model = _tiny_model(num_interventions=2)

@@ -157,8 +157,8 @@ def test_reset_and_unitary_backend_helpers() -> None:
     assert u_default.shape == (2, 2)
 
 
-def test_prepare_only_soft_preserves_entanglement_on_two_qubits() -> None:
-    """Multi-qubit prepare_only reprepares site 0 without resetting other sites."""
+def test_cut_preparation_soft_preserves_entanglement_on_two_qubits() -> None:
+    """Multi-qubit cut_preparation reprepares site 0 without resetting other sites."""
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, order=1, get_state=True)
     params.elapsed_time = 0.1
