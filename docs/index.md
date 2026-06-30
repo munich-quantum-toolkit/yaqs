@@ -81,9 +81,8 @@ flowchart LR
 | Characterize operational memory (start here)     | {doc}`examples/characterization`               |
 | Study reset delay at the causal cut              | {doc}`examples/characterization` § Reset delay |
 | Predict dynamics with a trained surrogate        | {doc}`examples/characterization`               |
-| Reference dynamics at small `num_interventions` (reference process tensor) | {doc}`examples/reference_process_tensors`          |
-| Tune surrogate training                          | {doc}`examples/process_tensor_surrogates`      |
-| Memory matrix theory (advanced)                  | {doc}`examples/operational_memory`             |
+| Tune surrogate training or read response-matrix theory | {doc}`examples/characterization` § Theory |
+| Reference dynamics at small `num_interventions`  | {doc}`examples/reference_process_tensors`      |
 
 ```{toctree}
 :caption: Getting started
@@ -128,8 +127,6 @@ characterize with the Hamiltonian as the primary metric.
 :titlesonly:
 
 examples/characterization
-examples/process_tensor_surrogates
-examples/operational_memory
 examples/reference_process_tensors
 ```
 

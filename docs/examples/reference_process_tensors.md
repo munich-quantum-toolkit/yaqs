@@ -107,6 +107,4 @@ rho_pt = mc.predict(pt_single, pt_single.initial_rho, "haar", num_interventions=
 
 ## Related topics
 
-- {doc}`characterization` — primary memory characterization guide
-- {doc}`process_tensor_surrogates` — surrogate training
-- {doc}`operational_memory` — memory matrix theory (advanced)
+- {doc}`characterization` — main predict/characterize funnel and response-matrix theory

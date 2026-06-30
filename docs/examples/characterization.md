@@ -88,7 +88,11 @@ else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
-Training fixes `num_interventions` on the model. At inference, `mc.predict(model, rho0, sequence, num_interventions=n_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `n_prime` up to the trained horizon; accuracy generally decreases when `n_prime` exceeds it. See {doc}`process_tensor_surrogates` for architecture details.
+`ProcessTensorSurrogate` is a **causal transformer** conditioned on `rho0` and per-step intervention encodings: sinusoidal positional encoding and a causal attention mask ensure step `t` only sees steps `≤ t`; each step predicts the site-0 reduced density matrix.
+
+Training fixes `num_interventions` on the model. At inference, `mc.predict(model, rho0, sequence, num_interventions=n_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `n_prime` up to the trained horizon; accuracy generally decreases when `n_prime` exceeds it.
+
+For custom architecture knobs or direct dataset access, use `mc.sample(...)` and instantiate {class}`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate` yourself; user-facing dynamics should still go through `mc.predict`.
 
 ### Intervention styles
 
@@ -212,13 +216,96 @@ print(ref.summary())
 `MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` uses MCWF, `"mps"` uses TJM.
 With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (default 10).
 
-## Developer modules
+## Theory: response matrix construction
 
-Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (`operational_memory`,
-`shared`, `backends`). See {doc}`operational_memory` for the internal layout and verb-first API names.
+Operational memory quantifies how many independent ways the conditioned past remains visible in accessible future responses across a temporal cut `c`.
+
+Following the black-box split-cut construction:
+
+1. Sample past interventions :math:`\alpha=(U_1,\ldots,U_{c-1})` and future interventions :math:`\beta=(V_{c+1},\ldots,V_k)`.
+2. Insert a **causal break** at step `c`: measure an effect :math:`E_m` on the past side and prepare :math:`\sigma_p` on the future side.
+3. For each conditioned past :math:`(\alpha,m)` and future setting :math:`(p,\beta)`, record the break weight :math:`w_{\alpha,m}` and the output response :math:`\mathbf{r}(\rho_{\mathrm{out}})` — Pauli tomography :math:`(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)` with :math:`\langle I\rangle=1` for physical states. The cross-cut matrix :math:`\widetilde{V}(c)` uses the :math:`X,Y,Z` components only.
+4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights. Report :math:`R(c)=\exp(S_V(c))` via `result.modes(c)`.
+
+### Break weights :math:`w_{\alpha,m}`
+
+| Backend                        | How `weights_ij` are obtained                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Hamiltonian**                | Product of simulated intervention probabilities along each probe sequence through cut `c` (traced full-state simulation).      |
+| **Process tensor / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (branch-weight path). |
+
+In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).
+
+### Same probes across backends
+
+Run one backend first, then pass that result to `characterize(..., probe_set=...)` so both use the same past/future ensemble. Inspect sampled arrays with `result.probes(cut)`.
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+cut, num_interventions = 2, 2
+pt_compare = mc.build_process_tensor(
+    ham,
+    params,
+    timesteps=[0.1, 0.1, 0.1],
+    return_type="dense",
+)
+ham_result = mc.characterize(ham, params, cut=cut, num_interventions=num_interventions, n_pasts=6, n_futures=5)
+pt_result = mc.characterize(pt_compare, cut=cut, num_interventions=num_interventions, probe_set=ham_result)
+print(f"Hamiltonian S_V = {ham_result.entropy(cut):.4f}")
+print(f"PT S_V       = {pt_result.entropy(cut):.4f}")
+```
+
+When comparing Hamiltonian and process-tensor backends, align `cut`, `num_interventions`, and the probe grid via `probe_set`.
+
+### Spectrum and cut sweep
+
+```{code-cell} ipython3
+---
+tags: [remove-output]
+---
+import matplotlib.pyplot as plt
+
+pt_sweep = mc.build_process_tensor(
+    ham,
+    params,
+    timesteps=[0.1, 0.1, 0.1],
+    return_type="dense",
+)
+num_interventions = 2
+sv = mc.characterize(
+    pt_sweep,
+    cut=2,
+    num_interventions=num_interventions,
+    n_pasts=8,
+    n_futures=8,
+    rng=np.random.default_rng(1),
+).singular_values(2)
+
+fig, ax = plt.subplots(figsize=(5, 3))
+ax.semilogy(sv, "o-")
+ax.set_xlabel("mode index")
+ax.set_ylabel("singular value")
+ax.set_title("Spectrum of Ṽ(c) at cut c=2")
+fig.tight_layout()
+```
+
+## Internal package layout (developers)
+
+User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` only. Lower-level modules live under `mqt.yaqs.characterization.memory`:
+
+| Path                   | Role                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `operational_memory/`  | Split-cut protocol: `sample_probes`, `assemble_probe_grid`, `run_operational_memory`                |
+| `shared/`              | Choi/rho encoding, intervention-step helpers, site-0 MCWF/TJM utilities                             |
+| `backends/exact.py`    | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
+| `backends/tomography/` | Reference dense/MPO process tensors                                                                 |
+| `backends/sequences/`  | `simulate_sequences`, pool workers for the unified process-tensor schedule                          |
+| `backends/surrogates/` | `ProcessTensorSurrogate`, `SeqTrace` training traces, `sample_train_dataset`                        |
+
+Verb-first naming is used throughout (`compute_*`, `assemble_*`, `simulate_*`, `encode_*`).
 
 ## Related topics
 
-- {doc}`process_tensor_surrogates` — surrogate training and Transformer structure
-- {doc}`reference_process_tensors` — reference process-tensor predict and validation
-- {doc}`operational_memory` — construction details and theory (advanced)
+- {doc}`reference_process_tensors` — dense/MPO reference process tensors, predict validation, QMI/CMI

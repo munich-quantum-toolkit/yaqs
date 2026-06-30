@@ -31,7 +31,7 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 - **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit observables, shot-based readout, and OpenQASM 2 inputs [3] (`pip install mqt-yaqs[qasm3]` for OpenQASM 3).
 - **Equivalence checking**: Scalable comparison of quantum circuits [2].
 - **Process characterization**: Quantify non-Markovian memory in multi-time quantum processes, how much temporal history a process retains, with exact reference checks where needed ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
-- **Process tensor surrogates**: Train a causal Transformer surrogate for fast prediction of non-Markovian response to local interventions and measurement over time ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/process_tensor_surrogates.html)).
+- **Process tensor surrogates**: Train a causal Transformer surrogate for fast prediction of non-Markovian response to local interventions and measurement over time ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
 - **Hardware-oriented modeling**: Realistic noise models including Gaussian and other strength distributions, plus hardware dynamics such as transmon–resonator systems, and heterogeneous site dimensions ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
 - **Multiple backends**: Monte Carlo wavefunction and master equation evolution are available for analog simulation on smaller systems, alongside the scalable MPS trajectory path.
 
