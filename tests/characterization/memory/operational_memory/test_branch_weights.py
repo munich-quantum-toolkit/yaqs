@@ -14,10 +14,10 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    compute_born_prob,
     compute_branch_weight,
     compute_trace_weights,
 )
+from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -69,10 +69,10 @@ def _cumulative_weights_from_traces(
     return weights
 
 
-def test_compute_born_prob_identity_state() -> None:
+def test_compute_born_probability_identity_state() -> None:
     """Born probability for |0⟩ on |0⟩⟨0| is unity."""
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-    assert compute_born_prob(rho, _Z) == pytest.approx(1.0)
+    assert compute_born_probability(rho, _Z) == pytest.approx(1.0)
 
 
 def test_dict_step_branch_weight_cut_measurement() -> None:

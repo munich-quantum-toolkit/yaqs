@@ -18,8 +18,9 @@ Submodules:
 - :mod:`.interventions` — user-facing intervention encoding for predict/train paths
 """
 
+from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
+
 from .branch_weights import (
-    compute_born_prob,
     compute_branch_weight,
     compute_branch_weights,
     compute_trace_weights,
@@ -39,7 +40,7 @@ __all__ = [
     "ProbeSet",
     "assemble_probe_grid",
     "assemble_probe_sequence",
-    "compute_born_prob",
+    "compute_born_probability",
     "compute_branch_weight",
     "compute_branch_weights",
     "compute_trace_weights",

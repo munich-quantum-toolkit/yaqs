@@ -13,103 +13,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.characterization.memory.shared.intervention_steps import (
+    apply_intervention_to_rho,
+    compute_intervention_probability,
+)
+
 from .grid import assemble_probe_sequence
 
 if TYPE_CHECKING:
     from .samples import ProbeSet
 
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-
-
-def compute_born_prob(rho: np.ndarray, psi: np.ndarray) -> float:
-    """Return Born probability ``<psi|rho|psi>`` for a rank-one effect.
-
-    Args:
-        rho: ``2 x 2`` density matrix.
-        psi: Length-2 ket.
-
-    Returns:
-        Real probability in ``[0, 1]``.
-    """
-    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
-    ket = np.asarray(psi, dtype=np.complex128).reshape(2)
-    return float(np.real(np.vdot(ket, r @ ket)))
-
-
-def compute_step_prob(rho: np.ndarray, step: Any) -> float:
-    """Compute the measurement probability for one intervention step.
-
-    Args:
-        rho: ``2 x 2`` state before the step.
-        step: MP pair, unitary dict, or structured probe step.
-
-    Returns:
-        Step probability used in branch-weight accumulation.
-
-    Raises:
-        ValueError: If the step type is unsupported.
-    """
-    if isinstance(step, dict):
-        step_type = str(step.get("type", "")).lower()
-        if step_type in {"unitary", "cut_preparation"}:
-            return 1.0
-        if step_type == "cut_measurement":
-            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            return compute_born_prob(rho, psi_meas)
-        msg = f"Unsupported probe step type: {step_type!r}"
-        raise ValueError(msg)
-    psi_meas, _ = step
-    return compute_born_prob(rho, psi_meas)
-
-
-def apply_intervention(rho: np.ndarray, step: Any) -> np.ndarray:
-    """Apply one intervention step to a single-qubit state.
-
-    Args:
-        rho: ``2 x 2`` density matrix before the step.
-        step: MP pair, unitary dict, or structured probe step.
-
-    Returns:
-        Normalized ``2 x 2`` state after the step.
-
-    Raises:
-        ValueError: If the step type is unsupported.
-    """
-    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
-    if isinstance(step, dict):
-        step_type = str(step.get("type", "")).lower()
-        if step_type == "unitary":
-            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-            out = u @ r @ u.conj().T
-        elif step_type == "cut_measurement":
-            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            prob = compute_born_prob(r, psi_meas)
-            if prob > 1e-15:
-                if "psi_reset" in step:
-                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-                    ket = psi_reset / max(float(np.linalg.norm(psi_reset)), 1e-15)
-                else:
-                    ket = psi_meas / max(float(np.linalg.norm(psi_meas)), 1e-15)
-                out = np.outer(ket, ket.conj())
-            else:
-                out = np.zeros((2, 2), dtype=np.complex128)
-        elif step_type == "cut_preparation":
-            psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-            ket = psi_prep / max(float(np.linalg.norm(psi_prep)), 1e-15)
-            out = np.outer(ket, ket.conj())
-        else:
-            msg = f"Unsupported probe step type: {step_type!r}"
-            raise ValueError(msg)
-    else:
-        psi_meas, psi_prep = step
-        prob = compute_born_prob(r, psi_meas)
-        ket = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
-        ket /= max(float(np.linalg.norm(ket)), 1e-15)
-        out = np.outer(ket, ket.conj()) if prob > 1e-15 else np.zeros((2, 2), dtype=np.complex128)
-    tr = np.trace(out)
-    if abs(tr) > 1e-15:
-        out /= tr
-    return out
 
 
 def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
@@ -125,11 +39,11 @@ def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
     rho = _RHO0.copy()
     weight = 1.0
     for t in range(min(int(cut), len(steps))):
-        sp = compute_step_prob(rho, steps[t])
+        sp = compute_intervention_probability(rho, steps[t])
         weight *= sp
         if weight < 1e-15:
             return float(weight)
-        rho = apply_intervention(rho, steps[t])
+        rho = apply_intervention_to_rho(rho, steps[t])
     return float(weight)
 
 

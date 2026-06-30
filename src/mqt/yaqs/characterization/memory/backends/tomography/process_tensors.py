@@ -17,6 +17,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import encode_rho_pauli
+from ...shared.intervention_steps import build_intervention_operator
 from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ AnyInput = dict[str, Any] | tuple[Any, Any]
 
 
 def convert_probe_step(step: AnyInput) -> InterventionMap | np.ndarray:
-    """Normalize a probe-grid step to an intervention map or unitary matrix.
+    """Build an intervention map or unitary matrix for a probe-grid step.
 
     Args:
         step: Structured dict step or measure/prepare ket pair.
@@ -68,35 +69,7 @@ def convert_probe_step(step: AnyInput) -> InterventionMap | np.ndarray:
     Raises:
         ValueError: If the step type is unsupported.
     """
-    if isinstance(step, dict):
-        step_type = str(step.get("type", "")).lower()
-        if step_type == "unitary":
-            return np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-        if step_type == "cut_measurement":
-            psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-            if "psi_reset" in step:
-                psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-            else:
-                psi_reset = psi_meas
-            return InterventionMap(
-                rho_prep=np.outer(psi_reset, psi_reset.conj()),
-                effect=np.outer(psi_meas, psi_meas.conj()),
-            )
-        if step_type == "cut_preparation":
-            psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-            return InterventionMap(
-                rho_prep=np.outer(psi_prep, psi_prep.conj()),
-                effect=np.eye(2, dtype=np.complex128),
-            )
-        msg = f"Unsupported probe step type: {step_type!r}"
-        raise ValueError(msg)
-    psi_meas, psi_prep = step
-    psi_m = np.asarray(psi_meas, dtype=np.complex128).reshape(2)
-    psi_p = np.asarray(psi_prep, dtype=np.complex128).reshape(2)
-    return InterventionMap(
-        rho_prep=np.outer(psi_p, psi_p.conj()),
-        effect=np.outer(psi_m, psi_m.conj()),
-    )
+    return build_intervention_operator(step)
 
 
 def convert_probe_callable(

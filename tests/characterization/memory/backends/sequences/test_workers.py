@@ -328,7 +328,7 @@ def test_simulate_sequences_rejects_unsupported_dict_step() -> None:
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    with pytest.raises(ValueError, match="Unsupported step type"):
+    with pytest.raises(ValueError, match="Unsupported probe step type"):
         simulate_sequences(
             operator=op,
             sim_params=params,

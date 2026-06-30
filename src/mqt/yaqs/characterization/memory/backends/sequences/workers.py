@@ -21,11 +21,9 @@ import numpy as np
 from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
+from ...shared.intervention_steps import apply_intervention_to_backend
 from ...shared.utils import (
-    _apply_backend_unitary_site_zero,
-    _apply_cut_preparation_step,
     _evolve_backend_state,
-    _reprepare_backend_state_forced,
     extract_site0_rho,
     resolve_stochastic_solver,
 )
@@ -305,35 +303,12 @@ def _simulate_seq_core(
     num_evolutions_in_loop = 0
 
     for step_idx, step in enumerate(intervention_steps):
-        if isinstance(step, dict):
-            step_type = str(step.get("type", "")).lower()
-            if step_type == "unitary":
-                u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-                state = _apply_backend_unitary_site_zero(state, u, solver)
-                sp = 1.0
-            elif step_type == "cut_measurement":
-                psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-                if "psi_reset" in step:
-                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-                else:
-                    psi_reset = psi_meas
-                state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
-                sp = float(step_prob)
-            elif step_type == "cut_preparation":
-                psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, sp = _apply_cut_preparation_step(
-                    state,
-                    psi_prep,
-                    solver,
-                    chain_length=int(hamiltonian.length),
-                )
-            else:
-                msg = f"Unsupported step type: {step_type!r}"
-                raise ValueError(msg)
-        else:
-            psi_meas, psi_prep = step
-            state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
-            sp = float(step_prob)
+        state, sp = apply_intervention_to_backend(
+            state,
+            step,
+            solver=solver,
+            chain_length=int(hamiltonian.length),
+        )
         step_probs.append(sp)
         prob_skipped_renormalize.append(sp <= 1e-15)
         cumulative_weight *= sp
@@ -531,33 +506,12 @@ def _seq_trace_worker(
     out_i = 0
 
     for step_idx, step in enumerate(intervention_steps):
-        if isinstance(step, dict):
-            step_type = str(step.get("type", "")).lower()
-            if step_type == "unitary":
-                u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-                state = _apply_backend_unitary_site_zero(state, u, solver)
-                step_prob = 1.0
-            elif step_type == "cut_measurement":
-                psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
-                if "psi_reset" in step:
-                    psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
-                else:
-                    psi_reset = psi_meas
-                state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
-            elif step_type == "cut_preparation":
-                psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, step_prob = _apply_cut_preparation_step(
-                    state,
-                    psi_prep,
-                    solver,
-                    chain_length=int(hamiltonian.length),
-                )
-            else:
-                msg_0 = f"Unsupported step type: {step_type!r}"
-                raise ValueError(msg_0)
-        else:
-            psi_meas, psi_prep = step
-            state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
+        state, step_prob = apply_intervention_to_backend(
+            state,
+            step,
+            solver=solver,
+            chain_length=int(hamiltonian.length),
+        )
         cumulative_weight *= float(step_prob)
         if cumulative_weight < 1e-15:
             if out_i < num_steps:
