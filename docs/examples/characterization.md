@@ -125,7 +125,7 @@ tags: [remove-output]
 ---
 memory = mc.characterize(ham, params, cut=1, num_interventions=2, n_pasts=6, n_futures=6)
 print(memory.summary())
-print(f"S_V = {memory.entropy(1):.4f}, R = {memory.rank(1):.3f}")
+print(f"S_V = {memory.entropy(1):.4f}, R = {memory.modes(1):.3f}")
 ```
 
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
@@ -201,11 +201,11 @@ print(ref.summary())
 | Access                      | Meaning                                                          |
 | --------------------------- | ---------------------------------------------------------------- |
 | `result.entropy(c)`         | Cross-cut memory entropy `S_V(c)` (natural log of mode weights)  |
-| `result.rank(c)`            | Effective mode number `R(c) = exp(S_V(c))`                       |
+| `result.modes(c)`            | Effective mode number `R(c) = exp(S_V(c))`                       |
 | `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c`     |
 | `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`                |
 | `result.probes(c)`          | Probe feature arrays used at cut `c` (for logging or inspection) |
-| `result.summary()`          | Human-readable entropy/rank table                                |
+| `result.summary()`          | Human-readable entropy/modes table                                |
 
 ## Representation
 
@@ -220,5 +220,5 @@ Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (`op
 ## Related topics
 
 - {doc}`process_tensor_surrogates` — surrogate training and Transformer structure
-- {doc}`reference_exact_combs` — reference process-tensor predict and validation
+- {doc}`reference_process_tensors` — reference process-tensor predict and validation
 - {doc}`operational_memory` — construction details and theory (advanced)

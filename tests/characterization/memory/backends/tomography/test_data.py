@@ -34,10 +34,10 @@ def test_to_dense_sequence_data_minimal() -> None:
         choi_duals=choi_duals,
         timesteps=timesteps,
     )
-    comb = data.to_dense_process_tensor(check=False)
-    mat = comb.to_matrix()
+    pt = data.to_dense_process_tensor(check=False)
+    mat = pt.to_matrix()
     assert mat.shape == (2 * 4, 2 * 4)
-    assert comb.timesteps == timesteps
+    assert pt.timesteps == timesteps
 
 
 def test_to_dense_sequence_data_zero_step_weighted() -> None:
@@ -77,6 +77,6 @@ def test_to_mpo_sequence_data_minimal() -> None:
         choi_duals=choi_duals,
         timesteps=timesteps,
     )
-    comb = data.to_mpo_process_tensor(compress_every=1)
-    mat = comb.to_matrix()
+    pt = data.to_mpo_process_tensor(compress_every=1)
+    mat = pt.to_matrix()
     assert mat.shape == (2 * 4, 2 * 4)

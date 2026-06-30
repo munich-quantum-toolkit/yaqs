@@ -148,18 +148,18 @@ params = AnalogSimParams(dt=0.1)
 rho0 = np.eye(2, dtype=np.complex128) / 2.0
 sequence = "haar"
 
-model = mc.train(ham, params, k=4)  # surrogate training
-rho = mc.predict(model, rho0, sequence, k=4)  # fast dynamics
-comb = mc.build_comb(ham, params, timesteps=[0.1])  # small-k reference
-result = mc.characterize(ham, params, cut=2, k=4)  # operational memory S_V(c)
+model = mc.train(ham, params, num_interventions=4)  # surrogate training
+rho = mc.predict(model, rho0, sequence, num_interventions=4)  # fast dynamics
+pt = mc.build_process_tensor(ham, params, timesteps=[0.1])  # small-k reference
+result = mc.characterize(ham, params, cut=2, num_interventions=4)  # operational memory S_V(c)
 ```
 
 | Legacy intent        | Replacement                                         |
 | -------------------- | --------------------------------------------------- |
 | Train surrogate      | `mc.train(...)`                                     |
-| Predict dynamics     | `mc.predict(model, ...)` or `mc.predict(comb, ...)` |
-| Build reference comb | `mc.build_comb(...)`                                |
-| Memory metrics       | `mc.characterize(target, cut=..., k=...)`           |
+| Predict dynamics     | `mc.predict(model, ...)` or `mc.predict(pt, ...)` |
+| Build reference process tensor | `mc.build_process_tensor(...)`                |
+| Memory metrics       | `mc.characterize(target, cut=..., num_interventions=...)` |
 
 ### Top-level public API
 

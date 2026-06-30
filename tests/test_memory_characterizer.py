@@ -97,7 +97,7 @@ def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, Analo
         rng=np.random.default_rng(0),
     )
     assert out.entropy(1) >= 0.0
-    assert out.rank(1) >= 1
+    assert out.modes(1) >= 1
     assert out.memory_matrix(1).ndim == 2
 
 
@@ -116,7 +116,7 @@ def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, Analog
     )
     second = mc.characterize(ham, params, num_interventions=1, cut=1, probe_set=first)
     assert second.entropy(1) == pytest.approx(first.entropy(1))
-    assert second.rank(1) == first.rank(1)
+    assert second.modes(1) == first.modes(1)
 
 
 def test_characterize_rejects_cut_and_cuts_together(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -224,8 +224,8 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     """build_process_tensor returns a process tensor; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
-    out = mc.characterize(comb, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
     assert out.entropy(1) >= 0.0
 
 
@@ -233,12 +233,12 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
     """characterize() uses interior default cut when cut is omitted."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
     rng = np.random.default_rng(0)
     default_cut = (2 + 1) // 2
-    ent_default = mc.characterize(comb, num_interventions=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
+    ent_default = mc.characterize(pt, num_interventions=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
     ent_explicit = mc.characterize(
-        comb,
+        pt,
         cut=default_cut,
         num_interventions=2,
         n_pasts=4,
@@ -247,7 +247,7 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
     ).entropy(default_cut)
     assert ent_default == pytest.approx(ent_explicit)
     result = mc.characterize(
-        comb,
+        pt,
         cut=2,
         num_interventions=2,
         n_pasts=4,
@@ -264,7 +264,7 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
     importlib.util.find_spec("torch") is None,
     reason="torch not installed",
 )
-def test_transformercomb_characterize_singular_values_shape(
+def test_process_tensor_surrogate_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
@@ -297,9 +297,9 @@ def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogS
     """predict(process_tensor, rho0, sequence, num_interventions=...) returns a valid density matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(comb, rho0, "haar", num_interventions=1)
+    rho_out = mc.predict(pt, rho0, "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -317,18 +317,18 @@ def test_predict_process_tensor_rejects_return_sequence(ham_and_params: tuple[Ha
     """predict(process_tensor, ..., return_sequence=True) is not supported."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(ValueError, match="return_sequence=True"):
-        mc.predict(comb, rho0, "haar", num_interventions=1, return_sequence=True)
+        mc.predict(pt, rho0, "haar", num_interventions=1, return_sequence=True)
 
 
 def test_predict_process_tensor_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Comb predict does not validate rho0 because it is unused."""
+    """Process-tensor predict does not validate rho0 because it is unused."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
-    rho_out = mc.predict(comb, np.array([99.0]), "haar", num_interventions=1)
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    rho_out = mc.predict(pt, np.array([99.0]), "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -403,7 +403,7 @@ def test_characterize_paper_geometry_finite_entropy(paper_params: AnalogSimParam
         rng=np.random.default_rng(0),
     )
     assert result.entropy(4) >= 0.0
-    assert result.rank(4) >= 1.0
+    assert result.modes(4) >= 1.0
 
 
 def test_characterize_markovian_at_zero_coupling(paper_params: AnalogSimParams) -> None:
@@ -420,7 +420,7 @@ def test_characterize_markovian_at_zero_coupling(paper_params: AnalogSimParams) 
         rng=np.random.default_rng(11),
     )
     assert result.entropy(4) < 0.05
-    assert result.rank(4) == pytest.approx(1.0, abs=0.05)
+    assert result.modes(4) == pytest.approx(1.0, abs=0.05)
 
 
 def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams) -> None:
@@ -573,9 +573,9 @@ def test_characterize_delay_rejects_process_tensor(ham_and_params: tuple[Hamilto
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
     with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
-        mc.characterize(comb, cut=1, num_interventions=2, delay=1)
+        mc.characterize(pt, cut=1, num_interventions=2, delay=1)
 
 
 def test_characterize_delay_reuses_prior_result_probes() -> None:

@@ -81,7 +81,7 @@ flowchart LR
 | Characterize operational memory (start here)     | {doc}`examples/characterization`               |
 | Study reset delay at the causal cut              | {doc}`examples/characterization` § Reset delay |
 | Predict dynamics with a trained surrogate        | {doc}`examples/characterization`               |
-| Reference dynamics at small `k` (reference comb) | {doc}`examples/reference_exact_combs`          |
+| Reference dynamics at small `num_interventions` (reference process tensor) | {doc}`examples/reference_process_tensors`          |
 | Tune surrogate training                          | {doc}`examples/process_tensor_surrogates`      |
 | Memory matrix theory (advanced)                  | {doc}`examples/operational_memory`             |
 
@@ -117,8 +117,8 @@ examples/trapped_ion
 ## Characterization
 
 Characterize **non-Markovian memory** in open quantum processes via split-cut operational memory
-(`S_V`, rank, spectrum). Start with {doc}`examples/characterization` for
-`MemoryCharacterizer` workflows: predict with surrogates (or reference combs at small `k`),
+(`S_V`, modes, spectrum). Start with {doc}`examples/characterization` for
+`MemoryCharacterizer` workflows: predict with surrogates (or reference process tensors at small `num_interventions`),
 characterize with the Hamiltonian as the primary metric.
 
 ```{toctree}
@@ -130,7 +130,7 @@ characterize with the Hamiltonian as the primary metric.
 examples/characterization
 examples/process_tensor_surrogates
 examples/operational_memory
-examples/reference_exact_combs
+examples/reference_process_tensors
 ```
 
 ```{toctree}

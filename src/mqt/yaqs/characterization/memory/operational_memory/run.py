@@ -115,7 +115,7 @@ def run_operational_memory(
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
 
     Returns:
-        Dict with ``entropy``, ``rank``, ``singular_values``, ``memory_matrix``,
+        Dict with ``entropy``, ``modes``, ``singular_values``, ``memory_matrix``,
         ``probe_set``, and optional ``weights_ij``.
 
     Raises:

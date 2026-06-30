@@ -22,9 +22,9 @@ Exhaustive tomography scales as ``16**num_interventions``. For production dynami
 For the main characterization funnel, see {doc}`characterization`.
 ```
 
-Reference comb construction reconstructs the full multi-time comb matrix :math:`\Upsilon` by
-simulating every discrete intervention sequence. At very small `k`, use it for **reference dynamics**
-(`mc.predict(comb, ...)`) and optional memory-metric cross-checks (`mc.characterize(comb, ...)`).
+Reference process tensor construction reconstructs the full multi-time process tensor matrix :math:`\Upsilon` by
+simulating every discrete intervention sequence. At very small `num_interventions`, use it for **reference dynamics**
+(`mc.predict(pt, ...)`) and optional memory-metric cross-checks (`mc.characterize(pt, ...)`).
 
 ## 1. Define the system
 
@@ -38,47 +38,47 @@ mc = MemoryCharacterizer(parallel=False, show_progress=False)
 rho0 = np.eye(2, dtype=np.complex128) / 2.0
 ```
 
-## 2. Dense comb
+## 2. Dense process tensor
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-comb_single = mc.build_process_tensor(
+pt_single = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
     return_type="dense",
 )
-print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
+print(f"Process tensor Choi matrix shape: {pt_single.to_matrix().shape}")
 ```
 
-## 3. MPO comb
+## 3. MPO process tensor
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-comb_mpo = mc.build_process_tensor(
+pt_mpo = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
     return_type="mpo",
     compress_every=1,
 )
-print(type(comb_mpo).__name__, comb_mpo.to_dense().to_matrix().shape)
+print(type(pt_mpo).__name__, pt_mpo.to_dense().to_matrix().shape)
 ```
 
-## 4. Predict with the reference comb
+## 4. Predict with the reference process tensor
 
-`mc.predict(comb, rho0, sequence, num_interventions=...)` returns site-0 reduced-state dynamics from the tomographic comb.
+`mc.predict(pt, rho0, sequence, num_interventions=...)` returns site-0 reduced-state dynamics from the tomographic process tensor.
 `rho0` is accepted for API symmetry but **not used** (fixed product reference state).
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-rho_ref = mc.predict(comb_single, rho0, "haar", num_interventions=1)
+rho_ref = mc.predict(pt_single, rho0, "haar", num_interventions=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
@@ -88,19 +88,19 @@ print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ---
 tags: [remove-output]
 ---
-result = mc.characterize(comb_single, cut=1, num_interventions=1, n_pasts=6, n_futures=6)
+result = mc.characterize(pt_single, cut=1, num_interventions=1, n_pasts=6, n_futures=6)
 print(result.summary())
 ```
 
 ## 6. Validation sketch
 
-At small `k`, compare surrogate predictions against the reference comb:
+At small `num_interventions`, compare surrogate predictions against the reference process tensor:
 
 ```python
 model = mc.train(hamiltonian, sim_params, num_interventions=1, n=40)
 rho_sure = mc.predict(model, rho0, "haar", num_interventions=1)
-rho_comb = mc.predict(comb_single, rho0, "haar", num_interventions=1)
-# Compare rho_sure vs rho_comb (e.g. trace distance or fidelity)
+rho_pt = mc.predict(pt_single, rho0, "haar", num_interventions=1)
+# Compare rho_sure vs rho_pt (e.g. trace distance or fidelity)
 ```
 
 ## Related topics

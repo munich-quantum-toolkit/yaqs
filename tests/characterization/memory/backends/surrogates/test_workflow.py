@@ -112,7 +112,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     # Small but non-trivial dataset: num_interventions=2 sequences, enough samples to evaluate generalization.
     k = 2
     n = 60
-    # Fixed rank-1 leg instrument for a stable accuracy benchmark (independent of train default).
+    # Fixed rank-1 leg intervention for a stable accuracy benchmark (independent of train default).
     ds = sample_train_dataset(
         op,
         params,

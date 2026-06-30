@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Comb-schedule sequence simulation (parallel engine for exact and surrogate paths).
+"""Process-tensor schedule sequence simulation (parallel engine for exact and surrogate paths).
 
 :func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
 dispatches intervention sequences via :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`.

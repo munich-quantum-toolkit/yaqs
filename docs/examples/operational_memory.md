@@ -26,15 +26,15 @@ Following the black-box construction in the cross-cut memory framework:
 1. Sample past interventions :math:`\alpha=(U_1,\ldots,U_{c-1})` and future interventions :math:`\beta=(V_{c+1},\ldots,V_k)`.
 2. Insert a **causal break** at step `c`: measure an effect :math:`E_m` on the past side and prepare :math:`\sigma_p` on the future side.
 3. For each conditioned past :math:`(\alpha,m)` and future setting :math:`(p,\beta)`, record the break weight :math:`w_{\alpha,m}` (the probability of that conditioned past at the cut) and the output response :math:`\mathbf{r}(\rho_{\mathrm{out}})` — Pauli tomography :math:`(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)` with :math:`\langle I\rangle=1` for physical states. The cross-cut matrix :math:`\widetilde{V}(c)` uses the :math:`X,Y,Z` components only (identical to the legacy three-component pipeline).
-4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights. Report :math:`R(c)=\exp(S_V(c))` via `result.rank(c)`.
+4. Assemble the weighted response tensor, **center** over the past index to remove the Markovian background, reshape to :math:`\widetilde{V}(c)`, and take the entropy :math:`S_V(c)` of the normalized singular-value weights. Report :math:`R(c)=\exp(S_V(c))` via `result.modes(c)`.
 
 Use {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` for all memory metrics:
 
 ```python
-result = mc.characterize(target, cut=c, num_interventions=k, preset="balanced")
+result = mc.characterize(target, cut=c, num_interventions=2, preset="balanced")
 result.entropy(c)  # S_V(c)
 result.singular_values(c)  # spectrum of Ṽ(c)
-result.rank(c)  # R(c) = exp(S_V(c))
+result.modes(c)  # R(c) = exp(S_V(c))
 ```
 
 ## Break weights :math:`w_{\alpha,m}`
@@ -59,20 +59,20 @@ mc = MemoryCharacterizer(parallel=False, show_progress=False)
 rng = np.random.default_rng(0)
 ```
 
-## 2. Reference combs
+## 2. Reference process tensors
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-comb_dense = mc.build_process_tensor(
+pt_dense = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
     return_type="dense",
 )
 
-comb_mpo = mc.build_process_tensor(
+pt_mpo = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
@@ -80,8 +80,8 @@ comb_mpo = mc.build_process_tensor(
     compress_every=1,
 )
 
-print("Dense:", type(comb_dense).__name__)
-print("MPO:", type(comb_mpo).__name__)
+print("Dense:", type(pt_dense).__name__)
+print("MPO:", type(pt_mpo).__name__)
 ```
 
 ## 3. Characterize memory metrics
@@ -93,10 +93,10 @@ tags: [remove-output]
 cut, num_interventions = 2, 2
 n_p, n_f = 8, 8
 
-result = mc.characterize(comb_dense, cut=cut, num_interventions=k, n_pasts=n_p, n_futures=n_f, rng=rng)
+result = mc.characterize(pt_dense, cut=cut, num_interventions=2, n_pasts=n_p, n_futures=n_f, rng=rng)
 ent = result.entropy(cut)
 sv = result.singular_values(cut)
-rk = result.rank(cut)
+rk = result.modes(cut)
 v_c = result.memory_matrix(cut)
 
 print(f"S_V({cut}) = {ent:.4f}, R({cut}) = {rk:.3f}")
@@ -116,10 +116,10 @@ tags: [remove-output]
 ---
 cut, num_interventions = 2, 2
 
-ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, num_interventions=k, n_pasts=6, n_futures=5, rng=rng)
-comb_result = mc.characterize(comb_dense, cut=cut, num_interventions=k, probe_set=ham_result)
+ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, num_interventions=2, n_pasts=6, n_futures=5, rng=rng)
+pt_result = mc.characterize(pt_dense, cut=cut, num_interventions=2, probe_set=ham_result)
 print(f"Hamiltonian S_V = {ham_result.entropy(cut):.4f}")
-print(f"Comb S_V       = {comb_result.entropy(cut):.4f}")
+print(f"PT S_V       = {pt_result.entropy(cut):.4f}")
 print("past feature shape:", ham_result.probes(cut)["past_features"].shape)
 ```
 
@@ -132,7 +132,7 @@ tags: [remove-output]
 import matplotlib.pyplot as plt
 
 sv = mc.characterize(
-    comb_dense,
+    pt_dense,
     cut=2,
     num_interventions=2,
     n_pasts=8,
@@ -154,11 +154,11 @@ tags: [remove-output]
 num_interventions = 2
 cuts = range(1, num_interventions + 1)
 ents = [
-    mc.characterize(comb_dense, cut=c, num_interventions=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).entropy(c)
+    mc.characterize(pt_dense, cut=c, num_interventions=2, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).entropy(c)
     for c in cuts
 ]
 ranks = [
-    mc.characterize(comb_dense, cut=c, num_interventions=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).rank(c)
+    mc.characterize(pt_dense, cut=c, num_interventions=2, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).modes(c)
     for c in cuts
 ]
 
@@ -188,7 +188,7 @@ cuts = [1, 2]
 rows = []
 for jv in js:
     ham_j = Hamiltonian.ising(length=1, J=jv, g=0.0)
-    comb_j = mc.build_process_tensor(
+    pt_j = mc.build_process_tensor(
         ham_j,
         AnalogSimParams(dt=0.1, max_bond_dim=8, order=1),
         timesteps=[0.1, 0.1],
@@ -196,7 +196,7 @@ for jv in js:
     )
     for cut in cuts:
         ent_j = mc.characterize(
-            comb_j,
+            pt_j,
             cut=cut,
             num_interventions=2,
             n_pasts=8,
@@ -219,7 +219,7 @@ User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer
 | `shared/`              | Choi/rho encoding and site-0 MCWF/TJM helpers (not `mqt.yaqs.core`)                                 |
 | `backends/exact.py`    | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
 | `backends/tomography/` | Reference dense/MPO process tensors                                                                           |
-| `backends/sequences/`  | `simulate_sequences`, pool workers for comb-schedule simulation                                     |
+| `backends/sequences/`  | `simulate_sequences`, pool workers for process-tensor schedule simulation                                     |
 | `backends/surrogates/` | `ProcessTensorSurrogate`, `SeqTrace` training traces, `sample_train_dataset`                               |
 
 Verb-first naming is used throughout (`compute_*`, `assemble_*`, `simulate_*`, `encode_*`).
@@ -227,5 +227,5 @@ Verb-first naming is used throughout (`compute_*`, `assemble_*`, `simulate_*`, `
 ## Related topics
 
 - {doc}`characterization` — main user funnel
-- {doc}`reference_exact_combs` — dense and MPO reference comb construction
+- {doc}`reference_process_tensors` — dense and MPO reference process tensor construction
 - {doc}`process_tensor_surrogates` — surrogate training

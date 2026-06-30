@@ -143,7 +143,7 @@ def compute_spectrum(
         min_keep: Minimum number of singular values to retain after tail truncation.
 
     Returns:
-        Dictionary with ``entropy``, ``rank`` (:math:`R(c)`), ``singular_values``, and
+        Dictionary with ``entropy``, ``modes`` (:math:`R(c)`), ``singular_values``, and
         ``singular_values_full``.
     """
     s_full = np.linalg.svd(memory_matrix, compute_uv=False).astype(np.float64)
@@ -181,7 +181,7 @@ def compute_spectrum(
 
     return {
         "entropy": entropy,
-        "rank": effective_modes,
+        "modes": effective_modes,
         "singular_values": s,
         "singular_values_full": s_full,
     }

@@ -32,7 +32,7 @@ class SeqTrace:
     which returns :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Attributes:
-        rho_0: Packed ``2 x 2`` rho before the first instrument, shape ``(8,)``.
+        rho_0: Packed ``2 x 2`` rho before the first intervention, shape ``(8,)``.
         E_features: Per-step Choi feature rows, shape ``(K, d_e)``.
         rho_seq: Packed per-step reduced states, shape ``(K, 8)``.
         context: Optional static context vector, shape ``(d_ctx,)``.

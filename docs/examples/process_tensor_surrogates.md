@@ -76,7 +76,7 @@ else:
 if torch is not None:
     memory = mc.characterize(model, cut=2, num_interventions=4, n_pasts=8, n_futures=8)
     print(f"S_V(2) = {memory.entropy(2):.4f}")
-    print(f"R(2) = {memory.rank(2):.3f}")
+    print(f"R(2) = {memory.modes(2):.3f}")
 ```
 
 ## Advanced: custom architecture and `sample`
@@ -86,5 +86,5 @@ For full control over architecture, training loops, or batched tensor shapes, us
 ## Related topics
 
 - {doc}`characterization` — main predict/characterize funnel
-- {doc}`reference_exact_combs` — reference process tensor at small `num_interventions`
+- {doc}`reference_process_tensors` — reference process tensor at small `num_interventions`
 - {doc}`operational_memory` — response-matrix construction (advanced)

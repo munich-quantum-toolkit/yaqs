@@ -93,7 +93,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 
 
 # ---------------------------------------------------------------------------
-# Process-tensor schedule — ``num_interventions`` instruments, ``num_interventions+1`` evolutions
+# Process-tensor schedule — ``num_interventions`` interventions, ``num_interventions+1`` evolutions
 # ---------------------------------------------------------------------------
 def _validate_process_tensor_schedule_inputs(
     *,
@@ -399,7 +399,7 @@ def _seq_final_worker(
     Returns:
         ``(sequence_index, trajectory_index, rho_final_site0, cumulative_weight)`` where
         ``rho_final_site0`` is the reduced state on site 0 after the last evolution segment
-        (process-tensor schedule: ``num_interventions`` instruments,
+        (process-tensor schedule: ``num_interventions`` interventions,
         ``num_interventions+1`` evolutions).
     """
     worker_ctx = resolve_worker_ctx(job_payload)
@@ -458,7 +458,7 @@ def _seq_trace_worker(
         ``(sequence_index, trajectory_index, rho0_packed, choi_features_matrix, rho_seq_packed, weight)`` where
         ``choi_features_matrix`` is ``(num_steps, d_e)`` and ``rho_seq_packed`` is ``(num_steps, 8)``.
         Here ``rho0_packed`` is the reduced state on site 0 **after** the first free evolution ``U_1`` and
-        **before** the first instrument (process-tensor schedule boundary), matching the
+        **before** the first intervention (process-tensor schedule boundary), matching the
         process-tensor slicing convention.
 
     Raises:
@@ -508,7 +508,7 @@ def _seq_trace_worker(
         mcwf_static_ctx_list=mcwf_ctx_per_step,
     )
 
-    # U_1: reduced state immediately before the first instrument (schedule boundary).
+    # U_1: reduced state immediately before the first intervention (schedule boundary).
     duration = float(durs[0])
     step_params.elapsed_time = duration
     step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)

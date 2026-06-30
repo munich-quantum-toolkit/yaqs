@@ -102,7 +102,7 @@ def test_process_tensor_run_operational_memory_returns_cut_weights() -> None:
     """Dense process-tensor orchestration returns positive cut weights."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    comb = build_process_tensor(
+    pt = build_process_tensor(
         op,
         _params(),
         timesteps=[0.05],
@@ -110,7 +110,7 @@ def test_process_tensor_run_operational_memory_returns_cut_weights() -> None:
         parallel=False,
         return_type="dense",
     )
-    out = run_operational_memory(process=comb, cut=1, num_interventions=1, n_pasts=4, n_futures=3, rng=rng)
+    out = run_operational_memory(process=pt, cut=1, num_interventions=1, n_pasts=4, n_futures=3, rng=rng)
     assert "weights_ij" in out
     assert out["weights_ij"].shape == (4, 3)
     assert np.all(out["weights_ij"] > 0.0)
@@ -144,7 +144,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
     rng = np.random.default_rng(42)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
-    comb = build_process_tensor(
+    pt = build_process_tensor(
         op,
         params,
         timesteps=[0.05, 0.05],
@@ -152,7 +152,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
         parallel=False,
         return_type="dense",
     )
-    assert isinstance(comb, DenseProcessTensor)
+    assert isinstance(pt, DenseProcessTensor)
     probe_set = sample_probes(
         cut=2,
         num_interventions=2,
@@ -176,8 +176,8 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
     )
     _m_e_raw, memory_matrix_e = assemble_memory_matrix(pauli_e, weights_e)
     out_exact = compute_spectrum(memory_matrix_e)
-    out_comb = run_operational_memory(process=comb, cut=2, num_interventions=2, probe_set=probe_set)
-    assert out_comb["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
+    out_pt = run_operational_memory(process=pt, cut=2, num_interventions=2, probe_set=probe_set)
+    assert out_pt["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
 
 
 def test_mpo_process_tensor_entropy_matches_dense() -> None:
@@ -185,7 +185,7 @@ def test_mpo_process_tensor_entropy_matches_dense() -> None:
     rng = np.random.default_rng(1)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
-    mpo_comb = build_process_tensor(
+    mpo_pt = build_process_tensor(
         op,
         params,
         timesteps=[0.05],
@@ -194,10 +194,10 @@ def test_mpo_process_tensor_entropy_matches_dense() -> None:
         return_type="mpo",
         compress_every=1,
     )
-    assert isinstance(mpo_comb, MPOProcessTensor)
-    dense = mpo_comb.to_dense()
+    assert isinstance(mpo_pt, MPOProcessTensor)
+    dense = mpo_pt.to_dense()
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=4, n_futures=3, rng=rng)
-    out_mpo = run_operational_memory(process=mpo_comb, cut=1, num_interventions=1, probe_set=probe_set)
+    out_mpo = run_operational_memory(process=mpo_pt, cut=1, num_interventions=1, probe_set=probe_set)
     out_dense = run_operational_memory(process=dense, cut=1, num_interventions=1, probe_set=probe_set)
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
@@ -206,7 +206,7 @@ def test_evaluate_probes_weighted_for_process_tensor_uses_analytic_weights() -> 
     """Process-tensor backends without weighted evaluate use analytic branch weights."""
     rng = np.random.default_rng(2)
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    comb = build_process_tensor(
+    pt = build_process_tensor(
         op,
         _params(),
         timesteps=[0.05],
@@ -215,7 +215,7 @@ def test_evaluate_probes_weighted_for_process_tensor_uses_analytic_weights() -> 
         return_type="dense",
     )
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=3, n_futures=2, rng=rng)
-    pauli, weights = evaluate_probes_weighted_for(comb, probe_set)
+    pauli, weights = evaluate_probes_weighted_for(pt, probe_set)
     assert pauli.shape == (3, 2, 4)
     assert weights.shape == (3, 2)
     assert np.allclose(weights.std(axis=1), 0.0)
@@ -263,7 +263,7 @@ def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
     """return_raw=True exposes the uncentered memory matrix."""
     rng = np.random.default_rng(9)
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    comb = build_process_tensor(
+    pt = build_process_tensor(
         op,
         _params(),
         timesteps=[0.05],
@@ -272,7 +272,7 @@ def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
         return_type="dense",
     )
     out = run_operational_memory(
-        process=comb,
+        process=pt,
         cut=1,
         num_interventions=1,
         n_pasts=3,
@@ -375,7 +375,7 @@ def test_run_operational_memory_delay_rejects_process_tensor_backend() -> None:
     """Reset delay requires the exact sequence backend."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    comb = build_process_tensor(
+    pt = build_process_tensor(
         op,
         _params(),
         timesteps=[0.05],
@@ -385,7 +385,7 @@ def test_run_operational_memory_delay_rejects_process_tensor_backend() -> None:
     )
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
     with pytest.raises(ValueError, match="delay > 0 requires an exact Hamiltonian"):
-        run_operational_memory(process=comb, cut=1, num_interventions=2, probe_set=probe_set, delay=1)
+        run_operational_memory(process=pt, cut=1, num_interventions=2, probe_set=probe_set, delay=1)
 
 
 def test_run_operational_memory_delay_zero_matches_default() -> None:

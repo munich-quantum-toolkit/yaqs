@@ -270,15 +270,15 @@ def sample_intervention_sequence(
     num_interventions: int,
     rng: np.random.Generator,
 ) -> tuple[list[InterventionMap], np.ndarray]:
-    """Sample k fresh interventions and return maps + per-step Choi features.
+    """Sample fresh interventions and return maps + per-step Choi features.
 
     Args:
-        k: Number of intervention steps.
+        num_interventions: Number of intervention steps.
         rng: Random number generator.
 
     Returns:
-        maps: length-k list of callables ``rho -> Tr(E_t rho) * rho_prep_t``
-        choi_features: shape ``(k, 32)``, each row from
+        maps: length-``num_interventions`` list of callables ``rho -> Tr(E_t rho) * rho_prep_t``
+        choi_features: shape ``(num_interventions, 32)``, each row from
         :func:`~mqt.yaqs.characterization.memory.shared.encoding._flatten_choi4`
     """
     maps: list[InterventionMap] = []

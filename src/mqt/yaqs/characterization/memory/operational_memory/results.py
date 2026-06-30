@@ -17,12 +17,12 @@ import numpy as np
 
 @dataclass(slots=True)
 class _CutResult:
-    """Internal per-cut storage for :class:`CharacterizationResult`.
+    r"""Internal per-cut storage for :class:`CharacterizationResult`.
 
     Attributes:
         cut: Causal cut index.
         entropy: Cross-cut memory entropy :math:`S_V(c)`.
-        rank: Effective mode number :math:`R(c)`.
+        modes: Effective mode number :math:`R(c)=\exp(S_V(c))`.
         singular_values: Singular spectrum (possibly tail-truncated for entropy).
         memory_matrix: Past-row-centered weighted response matrix.
         probe_set: Optional :class:`~mqt.yaqs.characterization.memory.operational_memory.samples.ProbeSet`.
@@ -30,7 +30,7 @@ class _CutResult:
 
     cut: int
     entropy: float
-    rank: float
+    modes: float
     singular_values: np.ndarray
     memory_matrix: np.ndarray
     probe_set: Any | None = None
@@ -80,17 +80,17 @@ class CharacterizationResult:
         c = self._resolve_cut(cut)
         return float(self.by_cut[c].entropy)
 
-    def rank(self, cut: int | None = None) -> float:
+    def modes(self, cut: int | None = None) -> float:
         r"""Effective mode number :math:`R(c)=\exp(S_V(c))`.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
 
         Returns:
-            Effective rank :math:`R(c)`.
+            Effective mode number :math:`R(c)`.
         """
         c = self._resolve_cut(cut)
-        return float(self.by_cut[c].rank)
+        return float(self.by_cut[c].modes)
 
     def singular_values(self, cut: int | None = None) -> np.ndarray:
         """Singular spectrum of the memory matrix at ``cut``.
@@ -142,7 +142,7 @@ class CharacterizationResult:
         }
 
     def summary(self) -> str:
-        """Human-readable summary of entropy and rank per cut.
+        """Human-readable summary of entropy and modes per cut.
 
         Returns:
             One-line summary for a single cut, or a fixed-width table for several cuts.
@@ -150,11 +150,11 @@ class CharacterizationResult:
         if len(self.by_cut) == 1:
             c = next(iter(self.by_cut))
             d = self.by_cut[c]
-            return f"cut={c}: S_V={d.entropy:.4f}, R={d.rank:.3f}"
-        lines = ["cut  S_V    R"]
+            return f"cut={c}: S_V={d.entropy:.4f}, modes={d.modes:.3f}"
+        lines = ["cut  S_V    modes"]
         for c in sorted(self.by_cut):
             d = self.by_cut[c]
-            lines.append(f"{c:4d} {d.entropy:10.4f} {d.rank:8.3f}")
+            lines.append(f"{c:4d} {d.entropy:10.4f} {d.modes:8.3f}")
         return "\n".join(lines)
 
 
@@ -178,7 +178,7 @@ def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
     return _CutResult(
         cut=int(cut),
         entropy=float(out["entropy"]),
-        rank=float(out["rank"]),
+        modes=float(out["modes"]),
         singular_values=np.asarray(out["singular_values"]),
         memory_matrix=np.asarray(memory_matrix),
         probe_set=out.get("probe_set"),

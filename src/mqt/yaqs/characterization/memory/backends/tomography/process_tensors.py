@@ -249,18 +249,18 @@ class DenseProcessTensor:
         Returns:
             New `DenseProcessTensor` with canonicalized matrix.
         """
-        comb_mat = self.upsilon.copy()
+        upsilon_mat = self.upsilon.copy()
         if hermitize:
-            comb_mat = 0.5 * (comb_mat + comb_mat.conj().T)
+            upsilon_mat = 0.5 * (upsilon_mat + upsilon_mat.conj().T)
         if psd_project:
-            w, eig_vecs = np.linalg.eigh(comb_mat)
+            w, eig_vecs = np.linalg.eigh(upsilon_mat)
             w = np.clip(w, 0.0, None)
-            comb_mat = (eig_vecs * w) @ eig_vecs.conj().T
+            upsilon_mat = (eig_vecs * w) @ eig_vecs.conj().T
         if normalize_trace:
-            tr = np.trace(comb_mat)
+            tr = np.trace(upsilon_mat)
             if abs(tr) > 1e-15:
-                comb_mat /= tr
-        return DenseProcessTensor(comb_mat, self.timesteps)
+                upsilon_mat /= tr
+        return DenseProcessTensor(upsilon_mat, self.timesteps)
 
     def reduced(self, keep_last_m: int = 1) -> DenseProcessTensor:
         """Reduce the process tensor by tracing out early past legs.
@@ -284,12 +284,12 @@ class DenseProcessTensor:
         dim_m = 2 * (4**keep_last_m)
         dim_traced = 4 ** (k - keep_last_m)
         if dim_traced == 1:
-            comb_reduced = self.upsilon.reshape(dim_m, dim_m)
+            upsilon_reduced = self.upsilon.reshape(dim_m, dim_m)
         else:
-            comb_6d = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
-            comb_reduced = np.einsum("iabjac->ibjc", comb_6d).reshape(dim_m, dim_m)
+            upsilon_6d = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
+            upsilon_reduced = np.einsum("iabjac->ibjc", upsilon_6d).reshape(dim_m, dim_m)
         t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
-        return DenseProcessTensor(comb_reduced, t_red)
+        return DenseProcessTensor(upsilon_reduced, t_red)
 
     def _predict_raw(
         self,
@@ -311,9 +311,9 @@ class DenseProcessTensor:
         for p in past_list[1:]:
             past_total = np.kron(past_total, p)
         dim_p = 4**k_steps
-        comb_4d = self.upsilon.reshape(2, dim_p, 2, dim_p)
+        upsilon_4d = self.upsilon.reshape(2, dim_p, 2, dim_p)
         ins = past_total.T.reshape(dim_p, dim_p)
-        return np.einsum("s p q r, r p -> s q", comb_4d, ins)
+        return np.einsum("s p q r, r p -> s q", upsilon_4d, ins)
 
     def predict(
         self,
@@ -392,14 +392,14 @@ class DenseProcessTensor:
         if assume_canonical:
             rho = self.upsilon
         else:
-            comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
             if check_psd:
-                lam_min = float(np.linalg.eigvalsh(comb_mat).min().real)
+                lam_min = float(np.linalg.eigvalsh(upsilon_mat).min().real)
                 if lam_min < -1e-9:
                     msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
                     raise ValueError(msg)
-            tr = np.trace(comb_mat)
-            rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
+            tr = np.trace(upsilon_mat)
+            rho = upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
 
         k_steps = self._num_interventions()
         if k_steps == 0:
@@ -447,9 +447,9 @@ class DenseProcessTensor:
         if assume_canonical:
             rho = self.upsilon
         else:
-            comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
-            tr = np.trace(comb_mat)
-            rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
+            upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            tr = np.trace(upsilon_mat)
+            rho = upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
 
         k_steps = self._num_interventions()
         if k_steps < 2:
@@ -491,18 +491,18 @@ class DenseProcessTensor:
         Raises:
             ValueError: If a subsystem label is invalid.
         """
-        comb_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+        upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
         if check_psd:
-            w, eig_vecs = np.linalg.eigh(comb_mat)
+            w, eig_vecs = np.linalg.eigh(upsilon_mat)
             w = np.clip(w, 0.0, None)
-            comb_mat = (eig_vecs * w) @ eig_vecs.conj().T
+            upsilon_mat = (eig_vecs * w) @ eig_vecs.conj().T
         if normalize:
-            tr = np.trace(comb_mat)
+            tr = np.trace(upsilon_mat)
             if abs(tr) < 1e-15:
                 return 0.0
-            rho = comb_mat / tr
+            rho = upsilon_mat / tr
         else:
-            rho = comb_mat
+            rho = upsilon_mat
 
         k_steps = self._num_interventions()
         if k_steps < 2:

@@ -49,7 +49,7 @@ def test_four_component_memory_metric_matches_xyz_only() -> None:
     out4 = compute_spectrum(m4)
     out3 = compute_spectrum(m3)
     assert out4["entropy"] == pytest.approx(out3["entropy"])
-    assert out4["rank"] == pytest.approx(out3["rank"])
+    assert out4["modes"] == pytest.approx(out3["modes"])
 
 
 def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
@@ -104,12 +104,12 @@ def test_compute_spectrum_tail_truncation_keeps_significant_mode_near_threshold(
     assert out["entropy"] == pytest.approx(full["entropy"], rel=1e-12, abs=1e-12)
 
 
-def test_compute_spectrum_rank_equals_exp_entropy() -> None:
+def test_compute_spectrum_modes_equals_exp_entropy() -> None:
     """analyze_memory_matrix reports R(c)=exp(S_V(c))."""
     m = np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]], dtype=np.float64)
     memory_matrix = m - m.mean(axis=0, keepdims=True)
     out = compute_spectrum(memory_matrix)
-    assert out["rank"] == pytest.approx(math.exp(out["entropy"]), rel=1e-12, abs=1e-12)
+    assert out["modes"] == pytest.approx(math.exp(out["entropy"]), rel=1e-12, abs=1e-12)
 
 
 def test_compute_spectrum_singular_values_full_matches_svd() -> None:

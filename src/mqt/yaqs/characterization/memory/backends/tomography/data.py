@@ -191,7 +191,7 @@ def assemble_upsilon(
     if not check:
         return upsilon
 
-    comb_4d = upsilon.reshape(2, dim_past, 2, dim_past)
+    upsilon_4d = upsilon.reshape(2, dim_past, 2, dim_past)
     err_sum = 0.0
     n_used = 0
     max_checks = 64 if dim_past > 256 else 256
@@ -206,7 +206,7 @@ def assemble_upsilon(
         for a in alpha[1:]:
             past = np.kron(past, basis_ops[a])
         ins = past.T.reshape(dim_past, dim_past)
-        rho_pred = np.einsum("s p q r, r p -> s q", comb_4d, ins)
+        rho_pred = np.einsum("s p q r, r p -> s q", upsilon_4d, ins)
         err_sum += float(np.linalg.norm(rho_true - rho_pred))
         n_used += 1
 

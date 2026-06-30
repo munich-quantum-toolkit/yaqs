@@ -12,7 +12,7 @@ Subpackages:
 - :mod:`.sequences` — :func:`~mqt.yaqs.characterization.memory.backends.sequences.simulate_sequences` and pool workers
 - :mod:`.exact` — :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` and
   :func:`~mqt.yaqs.characterization.memory.backends.exact.simulate_exact`
-- :mod:`.tomography` — reference dense/MPO combs via exhaustive process-tensor tomography
+- :mod:`.tomography` — reference dense/MPO process tensors via exhaustive tomography
 - :mod:`.surrogates` — :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`
   and training-data workflow
 """
