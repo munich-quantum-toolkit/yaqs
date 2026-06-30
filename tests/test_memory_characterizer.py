@@ -298,8 +298,7 @@ def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogS
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
-    rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(pt, rho0, "haar", num_interventions=1)
+    rho_out = mc.predict(pt, pt.initial_rho, "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -318,19 +317,19 @@ def test_predict_process_tensor_rejects_return_sequence(ham_and_params: tuple[Ha
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
-    rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(ValueError, match="return_sequence=True"):
-        mc.predict(pt, rho0, "haar", num_interventions=1, return_sequence=True)
+        mc.predict(pt, pt.initial_rho, "haar", num_interventions=1, return_sequence=True)
 
 
-def test_predict_process_tensor_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Process-tensor predict does not validate rho0 because it is unused."""
+def test_predict_process_tensor_rejects_mismatched_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Process-tensor predict validates rho0 against the stored reference initial state."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
-    rho_out = mc.predict(pt, np.array([99.0]), "haar", num_interventions=1)
-    assert rho_out.shape == (2, 2)
-    assert np.all(np.isfinite(rho_out))
+    with pytest.raises(ValueError, match="rho0 must be shape"):
+        mc.predict(pt, np.array([99.0]), "haar", num_interventions=1)
+    with pytest.raises(ValueError, match="rho0 does not match"):
+        mc.predict(pt, np.eye(2, dtype=np.complex128) / 2.0, "haar", num_interventions=1)
 
 
 def test_build_process_tensor_forwards_parallel_override(

@@ -33,6 +33,7 @@ from mqt.yaqs.characterization.memory.operational_memory.results import (
 from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.encoding import (
+    coerce_rho_matrix,
     normalize_backend_rho,
     pack_rho8,
     unpack_rho8,
@@ -202,27 +203,6 @@ def _default_cut(num_interventions: int, cut: int | None) -> int:
     return c
 
 
-def coerce_rho_matrix(rho0: np.ndarray) -> np.ndarray:
-    """Normalize an initial state to a ``2 x 2`` density matrix.
-
-    Args:
-        rho0: Packed length-8 vector or ``2 x 2`` matrix.
-
-    Returns:
-        Complex density matrix.
-
-    Raises:
-        ValueError: If ``rho0`` has an unsupported shape.
-    """
-    arr = np.asarray(rho0, dtype=np.complex128)
-    if arr.shape == (8,):
-        return unpack_rho8(arr.astype(np.float64))
-    if arr.shape == (2, 2):
-        return arr
-    msg = f"rho0 must be shape (2, 2) or packed length-8, got {arr.shape}."
-    raise ValueError(msg)
-
-
 def matches_hamiltonian(target: Any) -> bool:
     """Return whether ``target`` is a Hamiltonian characterize/predict target."""
     return isinstance(target, Hamiltonian)
@@ -347,6 +327,8 @@ class MemoryCharacterizer:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
         parallel: bool | None = None,
+        initial_rho: np.ndarray | None = None,
+        initial_rho_atol: float = 1e-8,
     ) -> DenseProcessTensor | MPOProcessTensor:
         """Build an exhaustive reference process tensor (validation only; scales as ``16**num_interventions``).
 
@@ -367,6 +349,8 @@ class MemoryCharacterizer:
             max_bond_dim: Optional MPO bond-dimension cap.
             n_sweeps: MPO variational refinement sweeps.
             parallel: Override instance parallel setting.
+            initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
+            initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
 
         Returns:
             Dense or MPO reference process tensor for small-horizon validation.
@@ -390,6 +374,8 @@ class MemoryCharacterizer:
             n_sweeps=n_sweeps,
             solver=self._solver_for(hamiltonian),
             parallel=execution.parallel,
+            initial_rho=initial_rho,
+            initial_rho_atol=initial_rho_atol,
             _execution=execution,
         )
 
@@ -817,8 +803,8 @@ class MemoryCharacterizer:
         """Predict site-0 reduced-state dynamics under an intervention sequence.
 
         Supports trained surrogates and reference process tensors. For process tensors,
-        ``rho0`` is accepted for API symmetry but not used (the tensor contracts from the
-        tomographic reference state).
+        ``rho0`` must match the stored reference initial state (site-0 density matrix after
+        ``U_0`` from ``|0\\rangle^{\\otimes L}``).
 
         Args:
             target: Trained surrogate or reference process tensor.
@@ -843,6 +829,8 @@ class MemoryCharacterizer:
             if return_sequence:
                 msg = "return_sequence=True is not supported for process tensor targets."
                 raise ValueError(msg)
+            rho_mat = coerce_rho_matrix(rho0)
+            target.check_initial_rho(rho_mat)
             resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
             if isinstance(seq, str):
                 from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_interventions

@@ -42,13 +42,18 @@ from mqt.yaqs.core.parallel_utils import (
     run_indexed_jobs,
 )
 
+from ...shared.encoding import normalize_backend_rho
 from ...shared.utils import (
     StochasticSolver,
+    _evolve_backend_state,
     _initialize_backend_state,
+    extract_site0_rho,
     make_mcwf_static_context,
     resolve_stochastic_solver,
 )
 from ..sequences.workers import (
+    _get_times_cached,
+    _process_tensor_schedule_durations_ops_ctx,
     _seq_final_worker,
     _validate_process_tensor_schedule_inputs,
 )
@@ -58,6 +63,7 @@ from .basis import (
     compute_dual_choi_basis,
 )
 from .data import SequenceData
+from .process_tensors import validate_initial_rho
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -84,6 +90,72 @@ def _initial_psis_for_sequences(operator: MPO, solver: str, n_seq: int) -> list[
         template = np.asarray(psi0, dtype=np.complex128)
         return [template.copy() for _ in range(n_seq)]
     return [_initialize_backend_state(operator, solver) for _ in range(n_seq)]
+
+
+def _reference_initial_rho(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    timesteps: list[float],
+    *,
+    noise_model: NoiseModel | None,
+    solver: StochasticSolver,
+    num_trajectories: int,
+) -> np.ndarray:
+    """Return the site-0 reference state after ``U_0`` evolution from ``|0\\rangle^{\\otimes L}``.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Process-tensor schedule of length ``num_interventions + 1``.
+        noise_model: Optional open-system noise model.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        num_trajectories: MCWF trajectories to average when ``noise_model`` is set.
+
+    Returns:
+        Normalized ``2 x 2`` reference density matrix at the cut.
+    """
+    num_interventions = len(timesteps) - 1
+    local_params = copy.deepcopy(sim_params)
+    local_params.get_state = True
+    local_params.num_traj = 1
+
+    mcwf_static_ctx = None
+    if solver == "MCWF":
+        mcwf_static_ctx = make_mcwf_static_context(operator, local_params, noise_model=noise_model)
+
+    durs, ops, ctxs = _process_tensor_schedule_durations_ops_ctx(
+        sequence_idx=0,
+        num_interventions=num_interventions,
+        timesteps=timesteps,
+        timesteps_rows=None,
+        hamiltonian=operator,
+        operators_list=None,
+        mcwf_static_ctx=mcwf_static_ctx,
+        mcwf_static_ctx_list=None,
+    )
+
+    n_traj = 1 if noise_model is None else int(num_trajectories)
+    rho_acc = np.zeros((2, 2), dtype=np.complex128)
+    times_cache: dict[tuple[float, float], np.ndarray] = {}
+    duration = float(durs[0])
+
+    for traj_idx in range(n_traj):
+        state = _initialize_backend_state(operator, solver)
+        step_params = copy.copy(local_params)
+        step_params.elapsed_time = duration
+        step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
+        state = _evolve_backend_state(
+            state,
+            ops[0],
+            noise_model,
+            step_params,
+            solver,
+            traj_idx=traj_idx,
+            static_ctx=ctxs[0],
+        )
+        rho_acc += normalize_backend_rho(extract_site0_rho(state))
+
+    return rho_acc / float(n_traj)
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +210,15 @@ def run_all_sequences(
     if num_interventions <= 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
+
+    initial_rho = _reference_initial_rho(
+        operator,
+        local_params,
+        timesteps,
+        noise_model=noise_model,
+        solver=stochastic_solver,
+        num_trajectories=num_trajectories,
+    )
 
     def _enumerate_sequences(n_steps: int) -> list[tuple[int, ...]]:
         return list(itertools.product(range(16), repeat=n_steps))
@@ -214,6 +295,7 @@ def run_all_sequences(
         choi_indices=choi_indices,
         choi_duals=choi_duals,
         timesteps=timesteps,
+        initial_rho=initial_rho,
     )
 
 
@@ -300,6 +382,8 @@ def build_process_tensor(
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
     solver: StochasticSolver | None = None,
+    initial_rho: np.ndarray | None = None,
+    initial_rho_atol: float = 1e-8,
     _execution: ExecutionConfig | None = None,
 ) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor via exhaustive discrete-basis tomography.
@@ -328,6 +412,9 @@ def build_process_tensor(
         max_bond_dim: Optional MPO bond-dimension cap.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        initial_rho: Optional expected site-0 reference after ``U_0``; validated against the
+            computed tomography reference when provided.
+        initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
         _execution: Optional internal execution configuration.
 
     Returns:
@@ -348,6 +435,11 @@ def build_process_tensor(
         solver=solver,
         _execution=_execution,
     )
+
+    if initial_rho is not None:
+        from ...shared.encoding import coerce_rho_matrix
+
+        validate_initial_rho(coerce_rho_matrix(initial_rho), data.initial_rho, atol=initial_rho_atol)
 
     if return_type == "dense":
         return data.to_dense_process_tensor(check=check, atol=atol)

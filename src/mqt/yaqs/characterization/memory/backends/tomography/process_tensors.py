@@ -26,8 +26,32 @@ if TYPE_CHECKING:
 
     from ...operational_memory.samples import ProbeSet
 
-_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+_RHO0 = DEFAULT_INITIAL_RHO0
 _Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+
+
+def validate_initial_rho(
+    rho0: NDArray[np.complex128],
+    reference: NDArray[np.complex128],
+    *,
+    atol: float = 1e-8,
+) -> None:
+    """Raise if ``rho0`` does not match the process-tensor reference initial state.
+
+    Args:
+        rho0: User-supplied initial reduced state at the cut.
+        reference: Reference site-0 state stored on the process tensor.
+        atol: Absolute tolerance for element-wise comparison.
+
+    Raises:
+        ValueError: If the matrices differ beyond ``atol``.
+    """
+    got = np.asarray(rho0, dtype=np.complex128).reshape(2, 2)
+    ref = np.asarray(reference, dtype=np.complex128).reshape(2, 2)
+    if not np.allclose(got, ref, atol=atol):
+        msg = "rho0 does not match the process-tensor reference initial state."
+        raise ValueError(msg)
 
 AnyInput = dict[str, Any] | tuple[Any, Any]
 
@@ -198,15 +222,44 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
 class DenseProcessTensor:
     """Wrapper around a dense process-tensor Choi operator Upsilon."""
 
-    def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
+    def __init__(
+        self,
+        upsilon: NDArray[np.complex128],
+        timesteps: list[float],
+        *,
+        initial_rho: NDArray[np.complex128] | None = None,
+    ) -> None:
         """Create a dense process-tensor wrapper.
 
         Args:
             upsilon: Dense process-tensor matrix.
             timesteps: Per-step evolution durations.
+            initial_rho: Site-0 reference state after ``U_0`` (defaults to ``|0\\rangle\\langle 0|``).
         """
         self.upsilon = upsilon
         self.timesteps = timesteps
+        self.initial_rho = (
+            DEFAULT_INITIAL_RHO0.copy()
+            if initial_rho is None
+            else np.asarray(initial_rho, dtype=np.complex128).reshape(2, 2)
+        )
+
+    def check_initial_rho(
+        self,
+        rho0: NDArray[np.complex128],
+        *,
+        atol: float = 1e-8,
+    ) -> None:
+        """Validate ``rho0`` against :attr:`initial_rho`.
+
+        Args:
+            rho0: User-supplied initial reduced state at the cut.
+            atol: Absolute tolerance for element-wise comparison.
+
+        Raises:
+            ValueError: If ``rho0`` does not match the stored reference.
+        """
+        validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return the underlying dense process-tensor matrix.
@@ -260,7 +313,7 @@ class DenseProcessTensor:
             tr = np.trace(upsilon_mat)
             if abs(tr) > 1e-15:
                 upsilon_mat /= tr
-        return DenseProcessTensor(upsilon_mat, self.timesteps)
+        return DenseProcessTensor(upsilon_mat, self.timesteps, initial_rho=self.initial_rho.copy())
 
     def reduced(self, keep_last_m: int = 1) -> DenseProcessTensor:
         """Reduce the process tensor by tracing out early past legs.
@@ -289,7 +342,7 @@ class DenseProcessTensor:
             upsilon_6d = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
             upsilon_reduced = np.einsum("iabjac->ibjc", upsilon_6d).reshape(dim_m, dim_m)
         t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
-        return DenseProcessTensor(upsilon_reduced, t_red)
+        return DenseProcessTensor(upsilon_reduced, t_red, initial_rho=self.initial_rho.copy())
 
     def _predict_raw(
         self,
@@ -539,12 +592,19 @@ class DenseProcessTensor:
 class MPOProcessTensor(MPO):
     """Wrapper around an MPO representation of a process-tensor Choi operator Upsilon."""
 
-    def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
+    def __init__(
+        self,
+        upsilon_mpo: MPO,
+        timesteps: list[float],
+        *,
+        initial_rho: NDArray[np.complex128] | None = None,
+    ) -> None:
         """Create an MPO process-tensor wrapper.
 
         Args:
             upsilon_mpo: MPO representation of the process-tensor matrix.
             timesteps: Per-step evolution durations.
+            initial_rho: Site-0 reference state after ``U_0`` (defaults to ``|0\\rangle\\langle 0|``).
         """
         # Copy underlying MPO tensors/state into this subclass
         super().__init__()
@@ -552,6 +612,28 @@ class MPOProcessTensor(MPO):
         self.length = upsilon_mpo.length
         self.physical_dimension = upsilon_mpo.physical_dimension
         self.timesteps = timesteps
+        self.initial_rho = (
+            DEFAULT_INITIAL_RHO0.copy()
+            if initial_rho is None
+            else np.asarray(initial_rho, dtype=np.complex128).reshape(2, 2)
+        )
+
+    def check_initial_rho(
+        self,
+        rho0: NDArray[np.complex128],
+        *,
+        atol: float = 1e-8,
+    ) -> None:
+        """Validate ``rho0`` against :attr:`initial_rho`.
+
+        Args:
+            rho0: User-supplied initial reduced state at the cut.
+            atol: Absolute tolerance for element-wise comparison.
+
+        Raises:
+            ValueError: If ``rho0`` does not match the stored reference.
+        """
+        validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return the dense matrix representation.
@@ -567,7 +649,7 @@ class MPOProcessTensor(MPO):
         Returns:
             Dense process-tensor wrapper.
         """
-        return DenseProcessTensor(self.to_matrix(), self.timesteps)
+        return DenseProcessTensor(self.to_matrix(), self.timesteps, initial_rho=self.initial_rho.copy())
 
     def _num_interventions_for_probe(self) -> int:
         return int(self.length) - 1

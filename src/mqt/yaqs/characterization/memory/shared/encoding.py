@@ -127,6 +127,27 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
     return 0.5 * (rho + rho.conj().T)
 
 
+def coerce_rho_matrix(rho0: np.ndarray) -> np.ndarray:
+    """Normalize an initial state to a ``2 x 2`` density matrix.
+
+    Args:
+        rho0: Packed length-8 vector or ``2 x 2`` matrix.
+
+    Returns:
+        Complex density matrix.
+
+    Raises:
+        ValueError: If ``rho0`` has an unsupported shape.
+    """
+    arr = np.asarray(rho0, dtype=np.complex128)
+    if arr.shape == (8,):
+        return unpack_rho8(arr.astype(np.float64))
+    if arr.shape == (2, 2):
+        return arr
+    msg = f"rho0 must be shape (2, 2) or packed length-8, got {arr.shape}."
+    raise ValueError(msg)
+
+
 def encode_rho_pauli(rho: np.ndarray) -> np.ndarray:
     r"""Pauli tomography coefficients :math:`(\mathrm{Tr}(I\rho), \mathrm{Tr}(X\rho), \ldots)`.
 

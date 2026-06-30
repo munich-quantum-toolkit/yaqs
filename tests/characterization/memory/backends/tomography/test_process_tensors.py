@@ -32,6 +32,8 @@ from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceDa
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
 
+_REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
 
 def test_dense_process_tensor_predict_matches_helper() -> None:
     """DenseProcessTensor._predict_raw matches the Choi contraction; predict physicalizes."""
@@ -106,6 +108,7 @@ def test_mpo_process_tensor_predict_smoke_identity_map() -> None:
         choi_indices=[(0, 0)] * 16,
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_mpo_process_tensor(compress_every=1)
 
@@ -128,6 +131,7 @@ def test_mpo_process_tensor_predict_raises_on_empty_interventions() -> None:
         choi_indices=[(0, 0)] * 16,
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_mpo_process_tensor(compress_every=1)
     with pytest.raises(ValueError, match="interventions list must be non-empty"):
@@ -145,6 +149,7 @@ def test_mpo_process_tensor_predict_zero_steps() -> None:
         choi_indices=[],
         choi_duals=[],
         timesteps=[],
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_mpo_process_tensor(compress_every=1)
     rho_out = pt.predict([])
@@ -161,6 +166,7 @@ def test_mpo_process_tensor_predict_raises_on_length_mismatch() -> None:
         choi_indices=[(0, 0)] * 16,
         choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
         timesteps=[0.1],
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_mpo_process_tensor(compress_every=1)
 

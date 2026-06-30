@@ -60,3 +60,31 @@ def test_build_process_tensor_parallel_smoke() -> None:
         ham, params, timesteps=[0.0, 0.0], return_type="dense"
     )
     assert dense.to_matrix().shape == (8, 8)
+
+
+def test_build_process_tensor_stores_reference_initial_rho() -> None:
+    """Built process tensors store the site-0 reference after U_0 evolution."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    pt = MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+        ham, params, timesteps=[0.0, 0.0], return_type="dense"
+    )
+    np.testing.assert_allclose(pt.initial_rho, np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128), atol=1e-10)
+
+
+def test_build_process_tensor_validates_initial_rho_arg() -> None:
+    """Optional initial_rho at build time is checked against the computed reference."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    ref = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="dense", initial_rho=ref)
+    np.testing.assert_allclose(pt.initial_rho, ref, atol=1e-10)
+    with pytest.raises(ValueError, match="rho0 does not match"):
+        mc.build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.0, 0.0],
+            return_type="dense",
+            initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
+        )

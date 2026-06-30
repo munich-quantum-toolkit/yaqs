@@ -13,6 +13,8 @@ import numpy as np
 
 from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData, assemble_upsilon
 
+_REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
 
 def test_to_dense_sequence_data_minimal() -> None:
     """Smoke test SequenceData.to_dense_process_tensor on minimal data."""
@@ -33,6 +35,7 @@ def test_to_dense_sequence_data_minimal() -> None:
         choi_indices=choi_indices,
         choi_duals=choi_duals,
         timesteps=timesteps,
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_dense_process_tensor(check=False)
     mat = pt.to_matrix()
@@ -76,6 +79,7 @@ def test_to_mpo_sequence_data_minimal() -> None:
         choi_indices=choi_indices,
         choi_duals=choi_duals,
         timesteps=timesteps,
+        initial_rho=_REF_RHO0,
     )
     pt = data.to_mpo_process_tensor(compress_every=1)
     mat = pt.to_matrix()

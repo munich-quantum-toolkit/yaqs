@@ -234,6 +234,7 @@ class SequenceData:
     choi_indices: list[tuple[int, int]]
     choi_duals: list[np.ndarray]
     timesteps: list[float]
+    initial_rho: NDArray[np.complex128]
 
     def to_dense_process_tensor(self, *, check: bool = True, atol: float = 1e-8) -> DenseProcessTensor:
         """Reconstruct a dense process tensor from the discrete sequence dataset.
@@ -254,7 +255,7 @@ class SequenceData:
             check=check,
             atol=atol,
         )
-        return DenseProcessTensor(upsilon, list(self.timesteps))
+        return DenseProcessTensor(upsilon, list(self.timesteps), initial_rho=self.initial_rho.copy())
 
     def to_mpo_process_tensor(
         self,
@@ -285,4 +286,4 @@ class SequenceData:
             max_bond_dim=max_bond_dim,
             n_sweeps=n_sweeps,
         )
-        return MPOProcessTensor(mpo, self.timesteps)
+        return MPOProcessTensor(mpo, self.timesteps, initial_rho=self.initial_rho.copy())

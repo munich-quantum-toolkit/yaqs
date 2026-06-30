@@ -115,7 +115,7 @@ rho_ref = mc.predict(pt, rho0, "haar", num_interventions=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
-`rho0` is accepted for API symmetry but **not used** — the process tensor contracts from the tomographic reference state. In the noiseless path, `num_trajectories` is ignored (set `noise_model` to enable stochastic trajectories).
+`rho0` must match `pt.initial_rho` (site-0 reference after `U_0` from `|0⟩^⊗L`). In the noiseless path, `num_trajectories` is ignored (set `noise_model` to enable stochastic trajectories).
 
 ## Characterize with a Hamiltonian
 
