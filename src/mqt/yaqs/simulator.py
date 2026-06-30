@@ -132,6 +132,7 @@ from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 from .digital.utils.qasm_utils import load_circuit
+from .digital.utils.qudit_qasm_utils import is_ditqasm_source, load_qudit_circuit
 
 __all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
 
@@ -670,7 +671,11 @@ class Simulator:
                 selected simulation mode.
         """
         if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
-            operator = load_circuit(operator)
+            operator = (
+                cast("QuantumCircuit", load_qudit_circuit(operator))
+                if is_ditqasm_source(operator)
+                else load_circuit(operator)
+            )
 
         if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
             msg = "initial_state list must contain only State objects."

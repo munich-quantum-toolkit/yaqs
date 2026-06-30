@@ -1452,6 +1452,23 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
     assert result.runtime_cost is not None
 
 
+def test_simulator_run_dispatches_ditqasm_to_qudit_loader() -> None:
+    """Simulator.run detects DITQASM source and loads it as an mqt.qudits circuit.
+
+    This branch does not yet have a qudit simulation backend wired up (see
+    ``qudit_simulation_backend``), so the run is expected to fail downstream with
+    the generic "not a QuantumCircuit" error -- but only *after* successfully
+    loading the DITQASM source into a real qudit circuit object, proving the
+    DITQASM/OpenQASM dispatch in ``Simulator.run`` itself works correctly.
+    """
+    pytest.importorskip("mqt.qudits")
+    ditqasm_text = "DITQASM 2.0;\n\nqreg field [2][2,3];\n\nh field[0];\ncx field[0], field[1];\n"
+    state = State(2, physical_dimensions=[2, 3], initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit operator"):
+        Simulator(parallel=False, show_progress=False).run(state, ditqasm_text, sim_params)
+
+
 def test_simulator_run_accepts_qasm2_path_object(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 2 file passed as a Path object."""
     qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
