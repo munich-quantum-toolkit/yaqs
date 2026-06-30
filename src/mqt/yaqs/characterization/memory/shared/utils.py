@@ -79,6 +79,21 @@ def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
     return "MCWF" if rep == "vector" else "TJM"
 
 
+def make_zero_psi(length: int) -> NDArray[np.complex128]:
+    """Return ``|0...0>`` on ``length`` qubits as a state vector.
+
+    Args:
+        length: Chain length.
+
+    Returns:
+        Product computational-zero state vector.
+    """
+    dim = 2 ** int(length)
+    psi = np.zeros(dim, dtype=np.complex128)
+    psi[0] = 1.0
+    return psi
+
+
 def validate_stochastic_solver(solver: StochasticSolver | str | None) -> StochasticSolver:
     """Validate and normalize a stochastic solver name.
 

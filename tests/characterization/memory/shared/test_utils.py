@@ -26,6 +26,7 @@ from mqt.yaqs.characterization.memory.shared.utils import (
     assemble_state_from_expectations,
     extract_site0_rho,
     make_mcwf_static_context,
+    make_zero_psi,
     representation_to_solver,
     resolve_characterizer_representation,
     resolve_stochastic_solver,
@@ -33,6 +34,15 @@ from mqt.yaqs.characterization.memory.shared.utils import (
 from mqt.yaqs.core.data_structures.mpo import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+
+
+def test_make_zero_psi() -> None:
+    """Product |0...0> state vector has unit amplitude on the all-zero index."""
+    for length in (1, 3, 5):
+        psi = make_zero_psi(length)
+        assert psi.shape == (2**length,)
+        assert psi[0] == 1.0
+        assert np.count_nonzero(psi) == 1
 
 
 def test_initialize_backend_state_mcwf_and_tjm() -> None:

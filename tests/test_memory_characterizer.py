@@ -17,7 +17,7 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
-from mqt.yaqs.memory_characterizer import make_zero_psi
+from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 
 _PAPER_L = 6
 _PAPER_K = 20

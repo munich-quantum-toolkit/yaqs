@@ -41,6 +41,7 @@ from mqt.yaqs.characterization.memory.shared.encoding import (
 from mqt.yaqs.characterization.memory.shared.utils import (
     DEFAULT_VECTOR_MAX_QUBITS,
     CharacterizerRepresentation,
+    make_zero_psi,
     representation_to_solver,
     resolve_characterizer_representation,
 )
@@ -95,7 +96,7 @@ def _resolve_probe_grid(
     )
 
 
-def resolve_probe_bundle(probe_set: Any) -> ProbeSet | None:
+def _resolve_probe_bundle(probe_set: Any) -> ProbeSet | None:
     """Accept a prior :class:`CharacterizationResult` or internal probe bundle.
 
     Args:
@@ -138,21 +139,6 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
         raise TypeError(msg)
     hamiltonian.ensure_encoded("mpo")
     return hamiltonian.mpo
-
-
-def make_zero_psi(length: int) -> np.ndarray:
-    """Return ``|0...0>`` on ``length`` qubits as a state vector.
-
-    Args:
-        length: Chain length.
-
-    Returns:
-        Product computational-zero state vector.
-    """
-    dim = 2 ** int(length)
-    psi = np.zeros(dim, dtype=np.complex128)
-    psi[0] = 1.0
-    return psi
 
 
 def _resolve_num_interventions(target: Any, num_interventions: int | None) -> int:
@@ -203,12 +189,12 @@ def _default_cut(num_interventions: int, cut: int | None) -> int:
     return c
 
 
-def matches_hamiltonian(target: Any) -> bool:
+def _matches_hamiltonian(target: Any) -> bool:
     """Return whether ``target`` is a Hamiltonian characterize/predict target."""
     return isinstance(target, Hamiltonian)
 
 
-def matches_process_tensor(target: Any) -> bool:
+def _matches_process_tensor(target: Any) -> bool:
     """Return whether ``target`` is a reference process tensor predict target."""
     return isinstance(target, (DenseProcessTensor, MPOProcessTensor))
 
@@ -587,13 +573,13 @@ class MemoryCharacterizer:
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         probe_kw = {**map_probe_kwargs(intervention_style), **probe_kwargs}
-        resolved_probe_set = resolve_probe_bundle(probe_set)
+        resolved_probe_set = _resolve_probe_bundle(probe_set)
 
-        if delay > 0 and not matches_hamiltonian(target):
+        if delay > 0 and not _matches_hamiltonian(target):
             msg = "delay > 0 is supported for Hamiltonian characterize() only."
             raise ValueError(msg)
 
-        if matches_hamiltonian(target):
+        if _matches_hamiltonian(target):
             if sim_params is None:
                 msg = "characterize(hamiltonian, sim_params, num_interventions=...) requires AnalogSimParams."
                 raise TypeError(msg)
@@ -674,7 +660,7 @@ class MemoryCharacterizer:
         Raises:
             TypeError: If ``process_tensor`` is not a reference process tensor.
         """
-        if not matches_process_tensor(process_tensor):
+        if not _matches_process_tensor(process_tensor):
             msg = f"compute_qmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
         return process_tensor.qmi(
@@ -707,7 +693,7 @@ class MemoryCharacterizer:
         Raises:
             TypeError: If ``process_tensor`` is not a reference process tensor.
         """
-        if not matches_process_tensor(process_tensor):
+        if not _matches_process_tensor(process_tensor):
             msg = f"compute_cmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
         return process_tensor.cmi(
@@ -893,7 +879,7 @@ class MemoryCharacterizer:
         local_rng = rng if rng is not None else np.random.default_rng()
         seq = sequence
 
-        if matches_process_tensor(target):
+        if _matches_process_tensor(target):
             if return_sequence:
                 msg = "return_sequence=True is not supported for process tensor targets."
                 raise ValueError(msg)
