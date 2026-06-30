@@ -90,7 +90,19 @@ def _append_cut_steps(
     j: int,
     delay: int,
 ) -> None:
-    """Append causal-break steps, optionally with soft-reset delay slots."""
+    """Append causal-break steps to a probe sequence under construction.
+
+    Args:
+        full: Mutable sequence list; steps are appended in place.
+        probe_set: Sampled split-cut probes supplying cut measurement and preparation kets.
+        i: Past branch index for the cut measurement ket.
+        j: Future branch index for the cut preparation ket.
+        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert when ``delay > 0``.
+
+    Note:
+        When ``delay=0``, appends ``(meas, prep)``. When ``delay > 0``, appends
+        ``(meas, |0>)``, ``delay`` reset slots, then ``(|0>, prep)``.
+    """
     if delay == 0:
         full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
         return
@@ -112,8 +124,8 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int =
         Intervention sequence of length :func:`compute_delayed_length`.
 
     Raises:
-        ValueError: If ``delay`` is negative, branch lengths or cut-branch array sizes do not
-            match metadata, or the assembled length does not match the expected length.
+        ValueError: If branch lengths or cut-branch array sizes do not match metadata, or the
+            assembled length does not match the expected length.
 
     Note:
         When ``delay=0``, the cut step is ``(meas, prep)``. For ``delay > 0``, the cut becomes
@@ -149,7 +161,6 @@ def assemble_probe_grid(
         Tuple ``(all_pairs, n_pasts, n_futures)``.
 
     Raises:
-        ValueError: If ``delay`` is negative.
         RuntimeError: If an assembled sequence length does not match the expected length.
     """
     n_pasts = len(probe_set.past_pairs)

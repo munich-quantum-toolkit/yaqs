@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.characterization.memory.shared.encoding import DEFAULT_INITIAL_RHO0
 from mqt.yaqs.characterization.memory.shared.intervention_steps import (
     apply_intervention_to_rho,
     compute_intervention_probability,
 )
-from mqt.yaqs.characterization.memory.shared.encoding import DEFAULT_INITIAL_RHO0
+
 from .grid import assemble_probe_sequence
 
 if TYPE_CHECKING:
