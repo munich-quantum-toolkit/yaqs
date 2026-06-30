@@ -21,10 +21,11 @@ from mqt.yaqs.characterization.memory.backends.tomography.constructor import (
     build_process_tensor as _build_process_tensor,
 )
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import convert_probe_callable
-from mqt.yaqs.characterization.memory.operational_memory.interventions import (
+from mqt.yaqs.characterization.memory.shared.interventions import (
     DEFAULT_INTERVENTION_STYLE,
     InterventionSequence,
     encode_interventions,
+    expand_interventions,
     map_probe_kwargs,
 )
 from mqt.yaqs.characterization.memory.operational_memory.results import (
@@ -898,8 +899,6 @@ class MemoryCharacterizer:
             target.check_initial_rho(rho_mat)
             resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
             if isinstance(seq, str):
-                from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_interventions
-
                 slots = expand_interventions(seq, num_interventions=resolved_num_interventions, _rng=local_rng)
             else:
                 slots = list(seq)

@@ -24,7 +24,7 @@ class _CutResult:
         entropy: Cross-cut memory entropy :math:`S_V(c)`.
         modes: Effective mode number :math:`R(c)=\exp(S_V(c))`.
         singular_values: Singular spectrum (possibly tail-truncated for entropy).
-        memory_matrix: Past-row-centered weighted response matrix.
+        response_matrix: Past-row-centered weighted response matrix.
         probe_set: Optional :class:`~mqt.yaqs.characterization.memory.operational_memory.samples.ProbeSet`.
     """
 
@@ -32,7 +32,7 @@ class _CutResult:
     entropy: float
     modes: float
     singular_values: np.ndarray
-    memory_matrix: np.ndarray
+    response_matrix: np.ndarray
     probe_set: Any | None = None
 
 
@@ -93,7 +93,7 @@ class CharacterizationResult:
         return float(self.by_cut[c].modes)
 
     def singular_values(self, cut: int | None = None) -> np.ndarray:
-        """Singular spectrum of the memory matrix at ``cut``.
+        """Singular spectrum of the response matrix at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
@@ -104,8 +104,8 @@ class CharacterizationResult:
         c = self._resolve_cut(cut)
         return np.asarray(self.by_cut[c].singular_values)
 
-    def memory_matrix(self, cut: int | None = None) -> np.ndarray:
-        r"""Past-row-centered weighted memory matrix at ``cut``.
+    def response_matrix(self, cut: int | None = None) -> np.ndarray:
+        r"""Past-row-centered weighted response matrix at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
@@ -114,7 +114,7 @@ class CharacterizationResult:
             Centered response matrix :math:`\\widetilde{V}(c)`.
         """
         c = self._resolve_cut(cut)
-        return np.asarray(self.by_cut[c].memory_matrix)
+        return np.asarray(self.by_cut[c].response_matrix)
 
     def probes(self, cut: int | None = None) -> dict[str, Any]:
         """Export probe arrays used at ``cut`` for logging or cross-backend reuse.
@@ -169,18 +169,18 @@ def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
         Internal per-cut storage object.
 
     Raises:
-        ValueError: If ``memory_matrix`` is missing from ``out``.
+        ValueError: If ``response_matrix`` is missing from ``out``.
     """
-    memory_matrix = out.get("memory_matrix")
-    if memory_matrix is None:
-        msg = "probe output missing memory_matrix."
+    response_matrix = out.get("response_matrix")
+    if response_matrix is None:
+        msg = "probe output missing response_matrix."
         raise ValueError(msg)
     return _CutResult(
         cut=int(cut),
         entropy=float(out["entropy"]),
         modes=float(out["modes"]),
         singular_values=np.asarray(out["singular_values"]),
-        memory_matrix=np.asarray(memory_matrix),
+        response_matrix=np.asarray(response_matrix),
         probe_set=out.get("probe_set"),
     )
 

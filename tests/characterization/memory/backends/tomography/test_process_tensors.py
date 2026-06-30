@@ -17,14 +17,14 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.backends.surrogates.utils import InterventionMap
+from mqt.yaqs.characterization.memory.shared.interventions import InterventionMap
+from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
 from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
     compute_entropy_dense,
     convert_probe_callable,
-    convert_probe_step,
     encode_cptp_choi,
     evaluate_dense_probes,
     trace_partial_dense,
@@ -194,31 +194,31 @@ def _tiny_process_tensor(*, num_interventions: int) -> DenseProcessTensor:
     )
 
 
-def test_convert_probe_step_dict_variants() -> None:
+def test_build_intervention_operator_dict_variants() -> None:
     """Structured probe steps normalize to unitaries or intervention maps."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     x = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
     u = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
 
-    u_out = convert_probe_step({"type": "unitary", "U": u})
+    u_out = build_intervention_operator({"type": "unitary", "U": u})
     assert isinstance(u_out, np.ndarray)
     np.testing.assert_allclose(cast("np.ndarray", u_out), u)
 
-    mo = convert_probe_step({"type": "cut_measurement", "psi_meas": x})
+    mo = build_intervention_operator({"type": "cut_measurement", "psi_meas": x})
     assert isinstance(mo, InterventionMap)
     assert mo.effect.shape == (2, 2)
 
-    po = convert_probe_step({"type": "cut_preparation", "psi_prep": x})
+    po = build_intervention_operator({"type": "cut_preparation", "psi_prep": x})
     assert isinstance(po, InterventionMap)
     assert po.rho_prep.shape == (2, 2)
     np.testing.assert_allclose(po.effect, np.eye(2), atol=1e-12)
 
-    mp = convert_probe_step((x, z))
+    mp = build_intervention_operator((x, z))
     assert isinstance(mp, InterventionMap)
     assert mp.effect.shape == (2, 2)
 
     with pytest.raises(ValueError, match="Unsupported probe step"):
-        convert_probe_step({"type": "nope"})
+        build_intervention_operator({"type": "nope"})
 
 
 def test_cut_preparation_map_independent_of_input_state() -> None:

@@ -23,8 +23,8 @@ from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
     compute_branch_weight,
     compute_branch_weights,
 )
-from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
-    assemble_memory_matrix,
+from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
+    assemble_response_matrix,
     compute_spectrum,
 )
 from mqt.yaqs.characterization.memory.operational_memory.run import (
@@ -174,8 +174,8 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
         initial_psi=exact.initial_psi,
         parallel=exact.parallel,
     )
-    _m_e_raw, memory_matrix_e = assemble_memory_matrix(pauli_e, weights_e)
-    out_exact = compute_spectrum(memory_matrix_e)
+    _m_e_raw, response_matrix_e = assemble_response_matrix(pauli_e, weights_e)
+    out_exact = compute_spectrum(response_matrix_e)
     out_pt = run_operational_memory(process=pt, cut=2, num_interventions=2, probe_set=probe_set)
     assert out_pt["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
 
@@ -280,8 +280,8 @@ def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
         rng=rng,
         return_raw=True,
     )
-    assert "memory_matrix_raw" in out
-    assert out["memory_matrix_raw"].shape == out["memory_matrix"].shape
+    assert "response_matrix_raw" in out
+    assert out["response_matrix_raw"].shape == out["response_matrix"].shape
 
 
 def _entropy_from_cumulative_weights(
@@ -313,8 +313,8 @@ def _entropy_from_cumulative_weights(
     for ii in range(n_p):
         for jj in range(n_f):
             weights[ii, jj] = _trace_final_weight(traces[ii * n_f + jj])
-    _raw, memory_matrix = assemble_memory_matrix(pauli, weights, log_weight_warnings=False)
-    return float(compute_spectrum(memory_matrix)["entropy"])
+    _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    return float(compute_spectrum(response_matrix)["entropy"])
 
 
 def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:

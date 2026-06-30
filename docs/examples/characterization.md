@@ -207,7 +207,7 @@ print(ref.summary())
 | `result.entropy(c)`         | Cross-cut memory entropy `S_V(c)` (natural log of mode weights)  |
 | `result.modes(c)`            | Effective mode number `R(c) = exp(S_V(c))`                       |
 | `result.singular_values(c)` | Singular spectrum of the centered response matrix at cut `c`     |
-| `result.memory_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`                |
+| `result.response_matrix(c)`   | Centered response matrix :math:`\widetilde{V}(c)`                |
 | `result.probes(c)`          | Probe feature arrays used at cut `c` (for logging or inspection) |
 | `result.summary()`          | Human-readable entropy/modes table                                |
 
@@ -298,7 +298,7 @@ User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer
 | Path                   | Role                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
 | `operational_memory/`  | Split-cut protocol: `sample_probes`, `assemble_probe_grid`, `run_operational_memory`                |
-| `shared/`              | Choi/rho encoding, intervention-step helpers, site-0 MCWF/TJM utilities                             |
+| `shared/`              | Choi/rho encoding, `interventions`, intervention-step helpers, site-0 MCWF/TJM utilities            |
 | `backends/exact.py`    | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
 | `backends/tomography/` | Reference dense/MPO process tensors                                                                 |
 | `backends/sequences/`  | `simulate_sequences`, pool workers for the unified process-tensor schedule                          |

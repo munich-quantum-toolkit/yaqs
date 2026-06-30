@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
-from ...operational_memory.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_interventions
+from ...shared.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_interventions
 from ...shared.utils import StochasticSolver, make_mcwf_static_context, resolve_stochastic_solver
 from ..sequences.workflow import simulate_sequences
 from .data import SeqTrace, stack_traces

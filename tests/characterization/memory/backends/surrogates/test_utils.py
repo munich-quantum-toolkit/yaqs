@@ -17,8 +17,8 @@ import pytest
 from mqt.yaqs.characterization.memory.backends.surrogates.utils import (
     _initial_mcwf_state_from_rho0,
     sample_density_matrix,
-    sample_intervention_sequence,
 )
+from mqt.yaqs.characterization.memory.shared.interventions import sample_intervention_sequence
 
 
 def test_sample_density_matrix_is_physical() -> None:

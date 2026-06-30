@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for memory-matrix construction and spectrum analysis."""
+"""Tests for response-matrix construction and spectrum analysis."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
-from mqt.yaqs.characterization.memory.operational_memory.memory_matrix import (
-    assemble_memory_matrix,
+from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
+    assemble_response_matrix,
     center_rows,
     compute_spectrum,
     extract_xyz_channels,
@@ -27,8 +27,8 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def test_four_component_memory_metric_matches_xyz_only() -> None:
-    """S_V is unchanged when storing (I,X,Y,Z) but using X,Y,Z for the memory matrix."""
+def test_four_component_response_metric_matches_xyz_only() -> None:
+    """S_V is unchanged when storing (I,X,Y,Z) but using X,Y,Z for the response matrix."""
     rng = np.random.default_rng(11)
     op = MPO.ising(length=1, J=0.5, g=0.3)
     params = AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
@@ -42,8 +42,8 @@ def test_four_component_memory_metric_matches_xyz_only() -> None:
         parallel=False,
     )
     pauli3 = extract_xyz_channels(pauli4)
-    m4_raw, m4 = assemble_memory_matrix(pauli4, weights)
-    m3_raw, m3 = assemble_memory_matrix(pauli3, weights)
+    m4_raw, m4 = assemble_response_matrix(pauli4, weights)
+    m3_raw, m3 = assemble_response_matrix(pauli3, weights)
     np.testing.assert_allclose(m4_raw, m3_raw, atol=1e-12)
     np.testing.assert_allclose(m4, m3, atol=1e-12)
     out4 = compute_spectrum(m4)
@@ -68,14 +68,13 @@ def test_center_rows_removes_past_mean() -> None:
     np.testing.assert_allclose(centered.mean(axis=0), [0.0, 0.0], atol=1e-14)
 
 
-def test_assemble_memory_matrix_beta_scales_rows() -> None:
+def test_assemble_response_matrix_beta_scales_rows() -> None:
     """Beta exponent scales branch weights before centering."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
     pauli[..., 0] = 1.0
     weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)
-    _raw1, m1 = assemble_memory_matrix(pauli, weights, beta=1.0, center=False)
-    _raw2, m2 = assemble_memory_matrix(pauli, weights, beta=2.0, center=False)
-    # beta=2 squares branch weights: entries with w=2 scale by 4/2=2 relative to beta=1.
+    _raw1, m1 = assemble_response_matrix(pauli, weights, beta=1.0, center=False)
+    _raw2, m2 = assemble_response_matrix(pauli, weights, beta=2.0, center=False)
     assert m2[0, 3] == pytest.approx(2.0 * m1[0, 3], rel=1e-6)
 
 
@@ -105,10 +104,10 @@ def test_compute_spectrum_tail_truncation_keeps_significant_mode_near_threshold(
 
 
 def test_compute_spectrum_modes_equals_exp_entropy() -> None:
-    """analyze_memory_matrix reports R(c)=exp(S_V(c))."""
+    """compute_spectrum reports R(c)=exp(S_V(c))."""
     m = np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]], dtype=np.float64)
-    memory_matrix = m - m.mean(axis=0, keepdims=True)
-    out = compute_spectrum(memory_matrix)
+    response_matrix = m - m.mean(axis=0, keepdims=True)
+    out = compute_spectrum(response_matrix)
     assert out["modes"] == pytest.approx(math.exp(out["entropy"]), rel=1e-12, abs=1e-12)
 
 
@@ -127,9 +126,9 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
         initial_psi=psi0,
         parallel=False,
     )
-    _raw, memory_matrix = assemble_memory_matrix(pauli, weights, log_weight_warnings=False)
-    s_direct = np.linalg.svd(memory_matrix, compute_uv=False)
-    ana = compute_spectrum(memory_matrix)
+    _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    s_direct = np.linalg.svd(response_matrix, compute_uv=False)
+    ana = compute_spectrum(response_matrix)
     np.testing.assert_allclose(
         np.sort(s_direct)[::-1],
         np.sort(ana["singular_values_full"])[::-1],
@@ -169,12 +168,12 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
         p_sub = np.asarray(pauli[:m, :m, ...])
         w = np.asarray(weights)
         w_sub = w[:m, :m, ...] if w.ndim >= 2 else w[:m, ...]
-        _raw, memory_matrix = assemble_memory_matrix(
+        _raw, response_matrix = assemble_response_matrix(
             p_sub,
             w_sub,
             center=True,
             log_weight_warnings=False,
         )
-        entropies.append(float(compute_spectrum(memory_matrix, discarded_weight_threshold=None)["entropy"]))
+        entropies.append(float(compute_spectrum(response_matrix, discarded_weight_threshold=None)["entropy"]))
     assert entropies[-1] > entropies[0] * 1.05
     assert entropies[-1] > 0.015

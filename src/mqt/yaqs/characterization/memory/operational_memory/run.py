@@ -16,7 +16,7 @@ import numpy as np
 
 from .branch_weights import compute_branch_weights
 from .grid import assemble_delayed_probe_grid, compute_delayed_length
-from .memory_matrix import assemble_memory_matrix, compute_spectrum
+from .response_matrix import assemble_response_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
 
 if TYPE_CHECKING:
@@ -105,7 +105,7 @@ def run_operational_memory(
     parallel: bool | None = None,
     delay: int = 0,
 ) -> dict[str, Any]:
-    """Run split-cut probing and assemble memory-matrix diagnostics.
+    """Run split-cut probing and assemble response-matrix diagnostics.
 
     Args:
         process: Operational-memory backend (exact, process tensor, or surrogate).
@@ -115,7 +115,7 @@ def run_operational_memory(
         n_futures: Future probe count when sampling internally.
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
-        return_raw: If True, include uncentered ``memory_matrix_raw``.
+        return_raw: If True, include uncentered ``response_matrix_raw``.
         intervention_mode: Passed to internal
             :func:`~mqt.yaqs.characterization.memory.operational_memory.samples.sample_probes`.
         unitary_ensemble: Passed to internal sampling.
@@ -123,7 +123,7 @@ def run_operational_memory(
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
 
     Returns:
-        Dict with ``entropy``, ``modes``, ``singular_values``, ``memory_matrix``,
+        Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
         ``probe_set``, and optional ``weights_ij``.
 
     Raises:
@@ -189,15 +189,15 @@ def run_operational_memory(
         pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
     else:
         pauli_xyz_ij, weights_ij = evaluate_probes_weighted_for(process, sim_probe_set)
-    m_raw, memory_matrix = assemble_memory_matrix(pauli_xyz_ij, weights_ij)
-    ana = compute_spectrum(memory_matrix)
+    m_raw, response_matrix = assemble_response_matrix(pauli_xyz_ij, weights_ij)
+    ana = compute_spectrum(response_matrix)
     out: dict[str, Any] = {
         "pauli_xyz_ij": pauli_xyz_ij,
         **ana,
         "probe_set": probe_set,
-        "memory_matrix": memory_matrix,
+        "response_matrix": response_matrix,
         "weights_ij": weights_ij,
     }
     if return_raw:
-        out["memory_matrix_raw"] = m_raw
+        out["response_matrix_raw"] = m_raw
     return out

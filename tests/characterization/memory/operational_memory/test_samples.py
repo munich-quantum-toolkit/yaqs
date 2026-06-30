@@ -12,11 +12,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.operational_memory.samples import (
+from mqt.yaqs.characterization.memory.shared.interventions import (
     enumerate_clifford_unitaries,
     resolve_unitary_sampler,
-    sample_probes,
 )
+from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 
 
 def test_enumerate_clifford_unitaries_returns_24_unique() -> None:

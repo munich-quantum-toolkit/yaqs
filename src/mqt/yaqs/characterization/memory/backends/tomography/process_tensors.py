@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
-    from ..surrogates.utils import InterventionMap
+    from ...shared.interventions import InterventionMap
 
 DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _RHO0 = DEFAULT_INITIAL_RHO0
@@ -58,21 +58,6 @@ def validate_initial_rho(
 AnyInput = dict[str, Any] | tuple[Any, Any]
 
 
-def convert_probe_step(step: AnyInput) -> InterventionMap | np.ndarray:
-    """Build an intervention map or unitary matrix for a probe-grid step.
-
-    Args:
-        step: Structured dict step or measure/prepare ket pair.
-
-    Returns:
-        :class:`InterventionMap` or ``2 x 2`` unitary array.
-
-    Raises:
-        ValueError: If the step type is unsupported.
-    """
-    return build_intervention_operator(step)
-
-
 def convert_probe_callable(
     step: AnyInput,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
@@ -84,7 +69,7 @@ def convert_probe_callable(
     Returns:
         Callable implementing the single-qubit map for ``step``.
     """
-    inter = convert_probe_step(step)
+    inter = build_intervention_operator(step)
     if isinstance(inter, np.ndarray):
         u_mat = cast("NDArray[np.complex128]", np.asarray(inter, dtype=np.complex128).reshape(2, 2))
 

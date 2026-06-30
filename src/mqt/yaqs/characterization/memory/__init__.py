@@ -9,8 +9,8 @@
 
 Package layout (internal; user entry point is :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`):
 
-- :mod:`.operational_memory` — split-cut probes, branch weights, memory matrix, orchestration
-- :mod:`.shared` — encoding, metrics, and MCWF/TJM site-0 helpers shared by backends
+- :mod:`.operational_memory` — split-cut probes, branch weights, response matrix, orchestration
+- :mod:`.shared` — encoding, interventions, metrics, and MCWF/TJM site-0 helpers shared by backends
 - :mod:`.backends` — exact Hamiltonian simulation, process-tensor schedule sequences, tomography, neural surrogates
 
 Public helpers use compact verb-first names (``sample_probes``, ``assemble_probe_grid``,

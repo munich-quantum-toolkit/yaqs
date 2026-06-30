@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.operational_memory.interventions import (
+from mqt.yaqs.characterization.memory.shared.interventions import (
     DEFAULT_INTERVENTION_STYLE,
     encode_intervention,
     encode_interventions,

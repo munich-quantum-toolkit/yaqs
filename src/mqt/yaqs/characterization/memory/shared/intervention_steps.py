@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.backends.surrogates.utils import InterventionMap
+from .interventions import InterventionMap
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
     _apply_cut_preparation_step,

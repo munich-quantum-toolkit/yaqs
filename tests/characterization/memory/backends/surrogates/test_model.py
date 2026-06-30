@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.surrogates.utils import (
-    _sample_random_intervention,
+from mqt.yaqs.characterization.memory.shared.interventions import (
+    _sample_random_intervention,  # noqa: PLC2701
     encode_choi_features,
     sample_intervention_parts,
 )

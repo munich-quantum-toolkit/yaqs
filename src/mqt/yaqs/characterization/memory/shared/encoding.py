@@ -241,3 +241,21 @@ def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
         return rho_h
 
     return _normalize_density_like_process_tensor(rho_h)
+
+
+def extract_ket(projector: np.ndarray) -> np.ndarray:
+    """Extract a normalized ket from a rank-one projector.
+
+    Args:
+        projector: ``2 x 2`` Hermitian rank-one projector or density matrix.
+
+    Returns:
+        Normalized state vector of length 2; falls back to ``|0>`` if degenerate.
+    """
+    eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
+    idx = int(np.argmax(eigvals.real))
+    psi = eigvecs[:, idx]
+    norm = float(np.linalg.norm(psi))
+    if norm < 1e-15:
+        return np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    return (psi / norm).astype(np.complex128)

@@ -99,7 +99,7 @@ def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, Analo
     )
     assert out.entropy(1) >= 0.0
     assert out.modes(1) >= 1
-    assert out.memory_matrix(1).ndim == 2
+    assert out.response_matrix(1).ndim == 2
 
 
 def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
