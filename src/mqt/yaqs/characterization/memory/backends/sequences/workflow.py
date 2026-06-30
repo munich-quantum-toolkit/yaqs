@@ -43,7 +43,7 @@ def simulate_sequences(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float],
-    psi_pairs_list: list[list[Any]],
+    intervention_steps_list: list[list[Any]],
     initial_psis: list[np.ndarray],
     static_ctx: MCWFContext | None,
     parallel: bool = True,
@@ -65,7 +65,7 @@ def simulate_sequences(
         sim_params: Analog simulation parameters.
         timesteps: Comb schedule: ``k+1`` evolution durations per sequence when
             ``timesteps_rows`` is omitted.
-        psi_pairs_list: One list of ``k`` intervention steps per sequence.
+        intervention_steps_list: One list of ``k`` intervention steps per sequence.
         initial_psis: One initial state vector per sequence.
         static_ctx: Optional static backend context (MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
@@ -96,8 +96,8 @@ def simulate_sequences(
         raise ValueError(msg)
 
     num_sequences = len(initial_psis)
-    if len(psi_pairs_list) != num_sequences:
-        msg = "psi_pairs_list and initial_psis must have equal length."
+    if len(intervention_steps_list) != num_sequences:
+        msg = "intervention_steps_list and initial_psis must have equal length."
         raise ValueError(msg)
 
     if record_step_states:
@@ -116,7 +116,7 @@ def simulate_sequences(
         raise ValueError(msg)
 
     _validate_comb_sequence_inputs(
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
         timesteps=timesteps,
         timesteps_rows=timesteps_rows,
         operators_list=operators_list,
@@ -132,7 +132,7 @@ def simulate_sequences(
 
     # Pickle-stable payload — schema documented in :mod:`.workers`.
     job_payload: dict[str, Any] = {
-        "psi_pairs": psi_pairs_list,
+        "intervention_steps": intervention_steps_list,
         "initial_psi": initial_psis,
         "num_trajectories": 1,
         "operator": operator,

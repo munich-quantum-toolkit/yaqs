@@ -15,7 +15,7 @@ from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceDa
 
 
 def test_to_dense_sequence_data_minimal() -> None:
-    """Smoke test SequenceData.to_dense_comb on minimal data."""
+    """Smoke test SequenceData.to_dense_process_tensor on minimal data."""
     rho = np.eye(2, dtype=np.complex128)
     seqs: list[tuple[int, ...]] = [(0,)]
     outputs = [rho]
@@ -34,14 +34,14 @@ def test_to_dense_sequence_data_minimal() -> None:
         choi_duals=choi_duals,
         timesteps=timesteps,
     )
-    comb = data.to_dense_comb(check=False)
+    comb = data.to_dense_process_tensor(check=False)
     mat = comb.to_matrix()
     assert mat.shape == (2 * 4, 2 * 4)
     assert comb.timesteps == timesteps
 
 
 def test_to_dense_sequence_data_zero_step_weighted() -> None:
-    """k=0 reconstruction applies the scalar sequence weight before returning rho."""
+    """num_interventions=0 reconstruction applies the scalar sequence weight before returning rho."""
     rho = np.eye(2, dtype=np.complex128)
     choi = [np.eye(4, dtype=np.complex128)] * 16
     out_vecs = rho.reshape(-1)
@@ -58,7 +58,7 @@ def test_to_dense_sequence_data_zero_step_weighted() -> None:
 
 
 def test_to_mpo_sequence_data_minimal() -> None:
-    """Smoke test SequenceData.to_mpo_comb on minimal data."""
+    """Smoke test SequenceData.to_mpo_process_tensor on minimal data."""
     rho = np.eye(2, dtype=np.complex128)
     seqs: list[tuple[int, ...]] = [(0,)]
     outputs = [rho]
@@ -77,6 +77,6 @@ def test_to_mpo_sequence_data_minimal() -> None:
         choi_duals=choi_duals,
         timesteps=timesteps,
     )
-    comb = data.to_mpo_comb(compress_every=1)
+    comb = data.to_mpo_process_tensor(compress_every=1)
     mat = comb.to_matrix()
     assert mat.shape == (2 * 4, 2 * 4)

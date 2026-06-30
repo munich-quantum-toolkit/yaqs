@@ -17,16 +17,16 @@ from mqt.yaqs.characterization.memory.operational_memory.grid import (
     assemble_delayed_probe_sequence,
     assemble_probe_grid,
     assemble_probe_sequence,
-    delayed_sequence_length,
+    compute_delayed_length,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 
 
-def test_assemble_probe_sequence_length_and_cut_step() -> None:
+def test_assemble_probe_num_interventions_and_cut_step() -> None:
     """Each grid entry has length k with the causal break at index cut-1."""
     rng = np.random.default_rng(7)
     cut, k = 3, 5
-    probe_set = sample_probes(cut=cut, k=k, n_pasts=4, n_futures=3, rng=rng)
+    probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=4, n_futures=3, rng=rng)
     seq = assemble_probe_sequence(probe_set, i=1, j=2)
     assert len(seq) == k
     assert seq[cut - 1] == (probe_set.past_cut_meas[1], probe_set.future_prep_cut[2])
@@ -36,7 +36,7 @@ def test_assemble_probe_grid_size() -> None:
     """Flat grid has n_pasts * n_futures sequences, each of length k."""
     rng = np.random.default_rng(8)
     n_pasts, n_futures, cut, k = 5, 4, 2, 4
-    probe_set = sample_probes(cut=cut, k=k, n_pasts=n_pasts, n_futures=n_futures, rng=rng)
+    probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=n_pasts, n_futures=n_futures, rng=rng)
     all_pairs, n_p, n_f = assemble_probe_grid(probe_set)
     assert n_p == n_pasts
     assert n_f == n_futures
@@ -49,7 +49,7 @@ def test_assemble_probe_sequence_rejects_inconsistent_probe_set() -> None:
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     probe_set = ProbeSet(
         cut=1,
-        k=3,
+        num_interventions=3,
         past_features=np.zeros((1, 1, 32), dtype=np.float32),
         future_features=np.zeros((1, 3, 32), dtype=np.float32),
         past_pairs=[[]],
@@ -66,7 +66,7 @@ def test_assemble_probe_sequence_rejects_short_past_branch() -> None:
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     probe_set = ProbeSet(
         cut=3,
-        k=3,
+        num_interventions=3,
         past_features=np.zeros((1, 3, 32), dtype=np.float32),
         future_features=np.zeros((1, 1, 32), dtype=np.float32),
         past_pairs=[[{"type": "unitary", "U": np.eye(2, dtype=np.complex128)}]],
@@ -84,7 +84,7 @@ def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
     u = np.eye(2, dtype=np.complex128)
     probe_set = ProbeSet(
         cut=2,
-        k=2,
+        num_interventions=2,
         past_features=np.zeros((1, 1, 32), dtype=np.float32),
         future_features=np.zeros((1, 1, 32), dtype=np.float32),
         past_pairs=[[{"type": "unitary", "U": u}]],
@@ -96,16 +96,16 @@ def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
         assemble_probe_sequence(probe_set, i=0, j=0)
 
 
-def test_delayed_sequence_length_rejects_negative() -> None:
+def test_compute_delayed_length_rejects_negative() -> None:
     """Negative reset delay is rejected at assembly time."""
     with pytest.raises(ValueError, match="delay must be >= 0"):
-        delayed_sequence_length(k=5, delay=-1)
+        compute_delayed_length(num_interventions=5, delay=-1)
 
 
 def test_assemble_delayed_probe_sequence_delay_zero_matches_standard() -> None:
     """delay=0 delegates to the standard split-cut assembler."""
     rng = np.random.default_rng(1)
-    probe_set = sample_probes(cut=2, k=4, n_pasts=3, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
     assert assemble_delayed_probe_sequence(probe_set, 0, 1, delay=0) == assemble_probe_sequence(
         probe_set,
         0,
@@ -117,9 +117,9 @@ def test_assemble_delayed_probe_grid_inserts_reset_slots() -> None:
     """delay>0 lengthens sequences by delay+1 and adds (|0>,|0>) bridge slots."""
     rng = np.random.default_rng(9)
     cut, k, delay = 3, 5, 2
-    probe_set = sample_probes(cut=cut, k=k, n_pasts=2, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=2, n_futures=2, rng=rng)
     delayed_pairs, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
-    expected_len = delayed_sequence_length(k=k, delay=delay)
+    expected_len = compute_delayed_length(num_interventions=k, delay=delay)
     assert expected_len == k + delay + 1
     assert all(len(seq) == expected_len for seq in delayed_pairs)
     z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
@@ -136,7 +136,7 @@ def test_assemble_delayed_probe_sequence_rejects_mismatched_cut_arrays() -> None
     u = np.eye(2, dtype=np.complex128)
     probe_set = ProbeSet(
         cut=2,
-        k=4,
+        num_interventions=4,
         past_features=np.zeros((1, 1, 32), dtype=np.float32),
         future_features=np.zeros((1, 3, 32), dtype=np.float32),
         past_pairs=[[{"type": "unitary", "U": u}]],

@@ -28,16 +28,16 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
         j: Future index.
 
     Returns:
-        Intervention sequence of length ``probe_set.k``.
+        Intervention sequence of length ``probe_set.num_interventions``.
 
     Raises:
         ValueError: If past/future branch lengths, cut-branch array sizes, or the assembled
             sequence length do not match ``probe_set`` metadata.
     """
     cut = probe_set.cut
-    sequence_length = probe_set.k
+    num_interventions = probe_set.num_interventions
     past_len = cut - 1
-    future_len = sequence_length - cut
+    future_len = num_interventions - cut
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
     past_pairs = probe_set.past_pairs[i]
@@ -57,8 +57,8 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int) -> list[Any]:
     full: list[Any] = list(past_pairs)
     full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
     full.extend(future_pairs)
-    if len(full) != sequence_length:
-        msg = f"assembled probe sequence length {len(full)} != k={sequence_length}"
+    if len(full) != num_interventions:
+        msg = f"assembled probe sequence length {len(full)} != k={num_interventions}"
         raise ValueError(msg)
     return full
 
@@ -77,23 +77,23 @@ def assemble_probe_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]
     """
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
-    sequence_length = probe_set.k
+    num_interventions = probe_set.num_interventions
     all_pairs: list[list[Any]] = []
     for i in range(n_pasts):
         for j in range(n_futures):
             full = assemble_probe_sequence(probe_set, i, j)
-            if len(full) != sequence_length:
+            if len(full) != num_interventions:
                 msg = "internal: full sequence length mismatch"
                 raise RuntimeError(msg)
             all_pairs.append(full)
     return all_pairs, n_pasts, n_futures
 
 
-def delayed_sequence_length(*, k: int, delay: int) -> int:
+def compute_delayed_length(*, num_interventions: int, delay: int) -> int:
     """Compute the physical sequence length with reset delay at the causal break.
 
     Args:
-        k: Base split-cut sequence length when ``delay=0``.
+        num_interventions: Base split-cut sequence length when ``delay=0``.
         delay: Number of ``(|0>, |0>)`` soft-reset slots inserted at the break.
 
     Returns:
@@ -105,7 +105,7 @@ def delayed_sequence_length(*, k: int, delay: int) -> int:
     if delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
-    return k + delay + 1 if delay > 0 else k
+    return num_interventions + delay + 1 if delay > 0 else num_interventions
 
 
 def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int = 0) -> list[Any]:
@@ -118,7 +118,7 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
         delay: Number of ``(|0>, |0>)`` slots to insert at the break.
 
     Returns:
-        Intervention sequence of length :func:`delayed_sequence_length`.
+        Intervention sequence of length :func:`compute_delayed_length`.
 
     Raises:
         ValueError: If past/future branch lengths, cut-branch array sizes, or the assembled
@@ -132,9 +132,9 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     if delay == 0:
         return assemble_probe_sequence(probe_set, i, j)
     cut = probe_set.cut
-    sequence_length = probe_set.k
+    num_interventions = probe_set.num_interventions
     past_len = cut - 1
-    future_len = sequence_length - cut
+    future_len = num_interventions - cut
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
     past_pairs = probe_set.past_pairs[i]
@@ -156,7 +156,7 @@ def assemble_delayed_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, dela
     full.extend((_Z0, _Z0) for _ in range(delay))
     full.append((_Z0, probe_set.future_prep_cut[j]))
     full.extend(future_pairs)
-    expected = delayed_sequence_length(k=sequence_length, delay=delay)
+    expected = compute_delayed_length(num_interventions=num_interventions, delay=delay)
     if len(full) != expected:
         msg = f"assembled delayed sequence length {len(full)} != k+delay+1={expected}"
         raise ValueError(msg)
@@ -184,7 +184,7 @@ def assemble_delayed_probe_grid(
         return assemble_probe_grid(probe_set)
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
-    expected = delayed_sequence_length(k=probe_set.k, delay=delay)
+    expected = compute_delayed_length(num_interventions=probe_set.num_interventions, delay=delay)
     all_pairs: list[list[Any]] = []
     for i in range(n_pasts):
         for j in range(n_futures):

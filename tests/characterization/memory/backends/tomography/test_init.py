@@ -14,7 +14,7 @@ from mqt.yaqs.characterization.memory.backends import tomography
 
 def test_tomography_package_reexports() -> None:
     """Public symbols resolve through the package import path."""
-    assert tomography.DenseComb is not None
-    assert tomography.MPOComb is not None
+    assert tomography.DenseProcessTensor is not None
+    assert tomography.MPOProcessTensor is not None
     assert tomography.build_process_tensor is not None
     assert tomography.TomographyBasis is not None

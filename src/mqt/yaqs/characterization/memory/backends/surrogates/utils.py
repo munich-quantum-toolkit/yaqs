@@ -267,7 +267,7 @@ def sample_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.
 
 
 def sample_intervention_sequence(
-    k: int,
+    num_interventions: int,
     rng: np.random.Generator,
 ) -> tuple[list[InterventionMap], np.ndarray]:
     """Sample k fresh interventions and return maps + per-step Choi features.
@@ -283,7 +283,7 @@ def sample_intervention_sequence(
     """
     maps: list[InterventionMap] = []
     rows: list[np.ndarray] = []
-    for _ in range(int(k)):
+    for _ in range(int(num_interventions)):
         emap, _rho_prep, _effect, choi_mat = _sample_random_intervention(rng)
         maps.append(emap)
         rows.append(_flatten_choi4(choi_mat))

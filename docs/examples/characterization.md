@@ -19,26 +19,26 @@ YAQS estimates the cross-cut memory entropy `S_V(c)`, an effective mode number, 
 
 ## Typical workflow
 
-1. **Train** a surrogate for fast dynamics: `model = mc.train(ham, params, k=...)`.
-2. **Predict** site-0 reduced states with the surrogate (production) or a reference comb (small `k` validation).
-3. **Characterize** operational memory with the Hamiltonian (primary metric) or the same quantity via surrogate/comb backends.
+1. **Train** a surrogate for fast dynamics: `model = mc.train(ham, params, num_interventions=...)`.
+2. **Predict** site-0 reduced states with the surrogate (production) or a reference process tensor (small `num_interventions` validation).
+3. **Characterize** operational memory with the Hamiltonian (primary metric) or the same quantity via surrogate/process-tensor backends.
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 mc = MemoryCharacterizer(representation="auto", parallel=True)
 
-k = 4
-cut = 2  # causal break after step cut-1; future probes use steps cut+1 … k
+num_interventions = 4
+cut = 2  # causal break after step cut-1; future probes use steps cut+1 … num_interventions
 
-model = mc.train(ham, params, k=k, n=500)
-rho = mc.predict(model, rho0, sequence, k=k)
+model = mc.train(ham, params, num_interventions=num_interventions, n=500)
+rho = mc.predict(model, rho0, sequence, num_interventions=num_interventions)
 
-memory = mc.characterize(ham, params, cut=cut, k=k)  # primary metric
-surrogate_memory = mc.characterize(model, cut=cut, k=k)  # same quantity, surrogate backend
+memory = mc.characterize(ham, params, cut=cut, num_interventions=num_interventions)  # primary metric
+surrogate_memory = mc.characterize(model, cut=cut, num_interventions=num_interventions)
 
-comb = mc.build_comb(ham, params, timesteps=[0.1] * k, return_type="dense")
-rho_ref = mc.predict(comb, rho0, sequence, k=k)  # reference dynamics (small k)
+pt = mc.build_process_tensor(ham, params, timesteps=[0.1] * (num_interventions + 1), return_type="dense")
+rho_ref = mc.predict(pt, rho0, sequence, num_interventions=num_interventions)
 ```
 
 ## Verb × backend
@@ -47,7 +47,7 @@ rho_ref = mc.predict(comb, rho0, sequence, k=k)  # reference dynamics (small k)
 | ------------------ | -------------------------------------- | ----------------------------------- |
 | **Surrogate**      | Primary production dynamics            | Same `S_V(c)` via surrogate process |
 | **Hamiltonian**    | —                                      | Primary memory metric               |
-| **Reference comb** | Primary reference dynamics (small `k`) | Optional reference metric           |
+| **Reference PT**   | Primary reference dynamics (small `num_interventions`) | Optional reference metric |
 
 ## Setup
 
@@ -77,45 +77,45 @@ if torch is not None:
     model = mc.train(
         ham,
         params,
-        k=1,
+        num_interventions=1,
         n=12,
         train_kwargs={"epochs": 2, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    rho_out = mc.predict(model, rho0, "haar", k=1)
+    rho_out = mc.predict(model, rho0, "haar", num_interventions=1)
     print(f"trace(rho) = {np.trace(rho_out).real:.4f}")
 else:
     print("torch not installed; skip surrogate path in doc build")
 ```
 
-Training fixes the number of intervention steps `k` on the model. At inference, `mc.predict(model, rho0, sequence, k=k_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `k_prime` up to the trained `k`; accuracy generally decreases when `k_prime` exceeds the training horizon. See {doc}`process_tensor_surrogates` for architecture details.
+Training fixes `num_interventions` on the model. At inference, `mc.predict(model, rho0, sequence, num_interventions=n_prime)` may use a shorter or longer sequence because the Transformer encoder is length-agnostic. Predictions are most accurate for `n_prime` up to the trained horizon; accuracy generally decreases when `n_prime` exceeds it. See {doc}`process_tensor_surrogates` for architecture details.
 
 ### Intervention styles
 
-`train`, `sample`, and `characterize` accept `style=` (default `"haar"`):
+`train`, `sample`, and `characterize` accept `intervention_style=` (default `"haar"`):
 
 - **`"haar"`** (default): Haar-random unitaries on sequence legs; measure/prepare at the causal cut only (paper V-matrix / `experiments/` standard).
-- **`"measure_prepare"`**: rank-1 measure–prepare CP maps on every leg — opt-in for tomography/comb-aligned studies.
+- **`"measure_prepare"`**: rank-1 measure–prepare CP maps on every leg — opt-in for tomography-aligned studies.
 - **`"clifford"`**: uniformly random single-qubit Clifford gates on legs.
 
-For `predict`, pass the same style string as the third argument, or an explicit per-step slot list.
+For `predict`, pass the same style string as the third argument, or an explicit per-leg intervention list.
 
-## Predict with a reference comb
+## Predict with a reference process tensor
 
 ```{warning}
-`build_comb` scales as `16^k`. Use only for reference dynamics at very small `k`.
+`build_process_tensor` scales as `16**num_interventions`. Use only for reference dynamics at very small horizons.
 ```
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-comb = mc.build_comb(ham, params, timesteps=[0.1], return_type="dense")
-rho_ref = mc.predict(comb, rho0, "haar", k=1)
+pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+rho_ref = mc.predict(pt, rho0, "haar", num_interventions=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
-`rho0` is accepted for API symmetry but **not used** — the comb contracts from the tomographic reference state. In the noiseless path, `num_trajectories` is ignored (set `noise_model` to enable stochastic trajectories).
+`rho0` is accepted for API symmetry but **not used** — the process tensor contracts from the tomographic reference state. In the noiseless path, `num_trajectories` is ignored (set `noise_model` to enable stochastic trajectories).
 
 ## Characterize with a Hamiltonian
 
@@ -123,7 +123,7 @@ print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ---
 tags: [remove-output]
 ---
-memory = mc.characterize(ham, params, cut=1, k=2, n_pasts=6, n_futures=6)
+memory = mc.characterize(ham, params, cut=1, num_interventions=2, n_pasts=6, n_futures=6)
 print(memory.summary())
 print(f"S_V = {memory.entropy(1):.4f}, R = {memory.rank(1):.3f}")
 ```
@@ -137,8 +137,8 @@ Each slot projects the probe site onto `|0>` and reprepares `|0>` while the rest
 the chain (the environment) continues evolving — useful for studying how long a reset
 bridge must be before future probes lose sensitivity to the past.
 
-`k` and `cut` are unchanged from the standard split-cut geometry; the physical sequence
-length becomes `k + delay + 1`. Reuse the same `probe_set` when sweeping `delay`.
+`num_interventions` and `cut` are unchanged from the standard split-cut geometry; the physical sequence
+length becomes `num_interventions + delay + 1`. Reuse the same `probe_set` when sweeping `delay`.
 
 ```{code-cell} ipython3
 ---
@@ -150,7 +150,7 @@ mc_delay = MemoryCharacterizer(parallel=False, show_progress=False)
 anchor = mc_delay.characterize(
     ham_delay,
     params_delay,
-    k=6,
+    num_interventions=6,
     cut=4,
     delay=0,
     n_pasts=6,
@@ -161,7 +161,7 @@ for delay in (0, 1, 2):
     result = mc_delay.characterize(
         ham_delay,
         params_delay,
-        k=6,
+        num_interventions=6,
         cut=4,
         delay=delay,
         probe_set=anchor,
@@ -180,19 +180,19 @@ for delay in (0, 1, 2):
 tags: [remove-output]
 ---
 if torch is not None:
-    surrogate_memory = mc.characterize(model, cut=1, k=1, n_pasts=4, n_futures=4)
+    surrogate_memory = mc.characterize(model, cut=1, num_interventions=1, n_pasts=4, n_futures=4)
     print(surrogate_memory.summary())
 else:
     print("torch not installed; skip surrogate characterize in doc build")
 ```
 
-## Reference comb characterize (optional)
+## Reference process-tensor characterize (optional)
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-ref = mc.characterize(comb, cut=1, k=1, n_pasts=4, n_futures=4)
+ref = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=4, n_futures=4)
 print(ref.summary())
 ```
 
@@ -220,5 +220,5 @@ Lower-level split-cut helpers live under `mqt.yaqs.characterization.memory` (`op
 ## Related topics
 
 - {doc}`process_tensor_surrogates` — surrogate training and Transformer structure
-- {doc}`reference_exact_combs` — reference comb predict and validation
+- {doc}`reference_exact_combs` — reference process-tensor predict and validation
 - {doc}`operational_memory` — construction details and theory (advanced)

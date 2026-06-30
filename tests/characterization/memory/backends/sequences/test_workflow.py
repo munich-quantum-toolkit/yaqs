@@ -24,12 +24,12 @@ def test_simulate_sequences_input_validation_errors() -> None:
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
 
-    with pytest.raises(ValueError, match="psi_pairs_list and initial_psis must have equal length"):
+    with pytest.raises(ValueError, match="intervention_steps_list and initial_psis must have equal length"):
         simulate_sequences(
             operator=op,
             sim_params=params,
             timesteps=[0.1],
-            psi_pairs_list=[],
+            intervention_steps_list=[],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
             parallel=False,
@@ -40,7 +40,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
             operator=op,
             sim_params=params,
             timesteps=[0.1, 0.1],
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+            intervention_steps_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
             parallel=False,
@@ -53,7 +53,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
             operator=op,
             sim_params=params,
             timesteps=[0.1, 0.1],
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+            intervention_steps_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
             parallel=False,
@@ -66,7 +66,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
             operator=op,
             sim_params=params,
             timesteps=[0.1, 0.1],
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+            intervention_steps_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
             parallel=False,
@@ -82,7 +82,7 @@ def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
 
     psi0 = np.array([1.0, 0.0], dtype=np.complex128)
-    psi_pairs_list = [[(psi0, psi0)]]
+    intervention_steps_list = [[(psi0, psi0)]]
     initial_psis = [psi0.copy()]
     timesteps = [0.0, 0.0]
 
@@ -90,7 +90,7 @@ def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
         operator=op,
         sim_params=params,
         timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
         initial_psis=initial_psis,
         static_ctx=static_ctx,
         parallel=False,
@@ -104,7 +104,7 @@ def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
         operator=op,
         sim_params=params,
         timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
         initial_psis=initial_psis,
         static_ctx=static_ctx,
         parallel=False,
@@ -131,7 +131,7 @@ def test_simulate_sequences_traced_incompatible_with_record_step_states() -> Non
             operator=op,
             sim_params=params,
             timesteps=[0.0, 0.0],
-            psi_pairs_list=[[(psi0, psi0)]],
+            intervention_steps_list=[[(psi0, psi0)]],
             initial_psis=[psi0.copy()],
             static_ctx=static_ctx,
             parallel=False,
@@ -152,7 +152,7 @@ def test_simulate_sequences_e_features_rows_length_mismatch() -> None:
             operator=op,
             sim_params=params,
             timesteps=[0.0, 0.0],
-            psi_pairs_list=[[(psi0, psi0)], [(psi0, psi0)]],
+            intervention_steps_list=[[(psi0, psi0)], [(psi0, psi0)]],
             initial_psis=[psi0.copy(), psi0.copy()],
             static_ctx=static_ctx,
             parallel=False,
@@ -167,7 +167,7 @@ def test_simulate_sequences_parallel_smoke() -> None:
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
     psi0 = np.array([1.0, 0.0], dtype=np.complex128)
-    psi_pairs_list = [[(psi0, psi0)], [(psi0, psi0)]]
+    intervention_steps_list = [[(psi0, psi0)], [(psi0, psi0)]]
     initial_psis = [psi0.copy(), psi0.copy()]
     cfg = ExecutionConfig(parallel=True, max_workers=2, show_progress=False)
 
@@ -175,7 +175,7 @@ def test_simulate_sequences_parallel_smoke() -> None:
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
         initial_psis=initial_psis,
         static_ctx=static_ctx,
         record_step_states=False,
@@ -194,7 +194,7 @@ def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
         operator=op,
         sim_params=params,
         timesteps=[0.1],
-        psi_pairs_list=[],
+        intervention_steps_list=[],
         initial_psis=[],
         static_ctx=None,
         parallel=False,
@@ -207,7 +207,7 @@ def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
         operator=op,
         sim_params=params,
         timesteps=[0.1],
-        psi_pairs_list=[],
+        intervention_steps_list=[],
         initial_psis=[],
         static_ctx=None,
         parallel=False,
@@ -229,7 +229,7 @@ def test_simulate_sequences_empty_workload_rejects_invalid_mode_options() -> Non
             operator=op,
             sim_params=params,
             timesteps=[0.1],
-            psi_pairs_list=[],
+            intervention_steps_list=[],
             initial_psis=[],
             static_ctx=None,
             parallel=False,
@@ -242,7 +242,7 @@ def test_simulate_sequences_empty_workload_rejects_invalid_mode_options() -> Non
             operator=op,
             sim_params=params,
             timesteps=[0.1],
-            psi_pairs_list=[],
+            intervention_steps_list=[],
             initial_psis=[],
             static_ctx=None,
             parallel=False,

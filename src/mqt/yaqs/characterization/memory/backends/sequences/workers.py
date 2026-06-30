@@ -23,7 +23,7 @@ from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.utils import (
     _apply_backend_unitary_site_zero,
-    _apply_prepare_only_step,
+    _apply_cut_preparation_step,
     _evolve_backend_state,
     _reprepare_backend_state_forced,
     extract_site0_rho,
@@ -79,7 +79,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 # serial path. Workers use :func:`~mqt.yaqs.core.parallel_utils.resolve_worker_ctx`
 # and :func:`~mqt.yaqs.core.parallel_utils.unpack_flat_job`.
 #
-#   psi_pairs               list[list[step]] per sequence — MP tuple or unitary dict
+#   intervention_steps               list[list[step]] per sequence — MP tuple or unitary dict
 #   initial_psi             list of initial states (one per sequence)
 #   num_trajectories        flat-index stride (1 when noise_model is None)
 #   operator, sim_params    Hamiltonian MPO and analog parameters
@@ -97,7 +97,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 # ---------------------------------------------------------------------------
 def _validate_comb_sequence_inputs(
     *,
-    psi_pairs_list: list[list[Any]],
+    intervention_steps_list: list[list[Any]],
     timesteps: list[float],
     timesteps_rows: list[list[float]] | None,
     operators_list: list[list[MPO]] | None,
@@ -108,11 +108,11 @@ def _validate_comb_sequence_inputs(
     Raises:
         ValueError: If sequence lengths or optional per-sequence schedules are inconsistent.
     """
-    num_sequences = len(psi_pairs_list)
+    num_sequences = len(intervention_steps_list)
     if num_sequences == 0:
         return
     if timesteps_rows is None:
-        ks = [len(p) for p in psi_pairs_list]
+        ks = [len(p) for p in intervention_steps_list]
         if len(set(ks)) != 1:
             msg = "All sequences must share the same k when `timesteps_rows` is omitted."
             raise ValueError(msg)
@@ -127,7 +127,7 @@ def _validate_comb_sequence_inputs(
         if len(timesteps_rows) != num_sequences:
             msg = "`timesteps_rows` length must match number of sequences."
             raise ValueError(msg)
-        for i, pairs in enumerate(psi_pairs_list):
+        for i, pairs in enumerate(intervention_steps_list):
             k = len(pairs)
             if len(timesteps_rows[i]) != k + 1:
                 msg = f"Sequence {i}: `timesteps_rows[{i}]` must have length k+1={k + 1}, got {len(timesteps_rows[i])}."
@@ -136,7 +136,7 @@ def _validate_comb_sequence_inputs(
         if len(operators_list) != num_sequences:
             msg = "`operators_list` length must match number of sequences."
             raise ValueError(msg)
-        for i, pairs in enumerate(psi_pairs_list):
+        for i, pairs in enumerate(intervention_steps_list):
             k = len(pairs)
             if len(operators_list[i]) != k + 1:
                 msg = f"Sequence {i}: `operators_list[{i}]` must have length k+1={k + 1}, got {len(operators_list[i])}."
@@ -145,7 +145,7 @@ def _validate_comb_sequence_inputs(
         if len(static_ctx_list) != num_sequences:
             msg = "`static_ctx_list` length must match number of sequences."
             raise ValueError(msg)
-        for i, pairs in enumerate(psi_pairs_list):
+        for i, pairs in enumerate(intervention_steps_list):
             k = len(pairs)
             if len(static_ctx_list[i]) != k + 1:
                 msg = (
@@ -157,7 +157,7 @@ def _validate_comb_sequence_inputs(
 def _comb_durations_ops_ctx(
     *,
     sequence_idx: int,
-    k: int,
+    num_interventions: int,
     timesteps: list[float],
     timesteps_rows: list[list[float]] | None,
     hamiltonian: MPO,
@@ -181,12 +181,12 @@ def _comb_durations_ops_ctx(
         Tuple ``(durations, operators, mcwf_contexts)`` with one entry per comb slot.
     """
     if timesteps_rows is not None:
-        durs = [float(timesteps_rows[sequence_idx][i]) for i in range(k + 1)]
+        durs = [float(timesteps_rows[sequence_idx][i]) for i in range(num_interventions + 1)]
     else:
-        durs = [float(timesteps[i]) for i in range(k + 1)]
+        durs = [float(timesteps[i]) for i in range(num_interventions + 1)]
     ops: list[MPO] = []
     ctxs: list[MCWFContext | None] = []
-    for i in range(k + 1):
+    for i in range(num_interventions + 1):
         op = hamiltonian if operators_list is None else operators_list[sequence_idx][i]
         ctx = mcwf_static_ctx if mcwf_static_ctx_list is None else mcwf_static_ctx_list[sequence_idx][i]
         ops.append(op)
@@ -244,7 +244,7 @@ def _simulate_seq_core(
     Raises:
         ValueError: If an intervention step has an unsupported type.
     """
-    psi_pairs = worker_ctx["psi_pairs"][sequence_idx]
+    intervention_steps = worker_ctx["intervention_steps"][sequence_idx]
     hamiltonian = worker_ctx["operator"]
     sim_params = worker_ctx["sim_params"]
     timesteps: list[float] = worker_ctx["timesteps"]
@@ -264,10 +264,10 @@ def _simulate_seq_core(
     step_params.num_traj = 1
     step_params.get_state = True
 
-    k = len(psi_pairs)
+    num_interventions = len(intervention_steps)
     durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
         sequence_idx=sequence_idx,
-        k=k,
+        num_interventions=num_interventions,
         timesteps=timesteps,
         timesteps_rows=timesteps_rows,
         hamiltonian=hamiltonian,
@@ -296,14 +296,14 @@ def _simulate_seq_core(
     break_step: int | None = None
     num_evolutions_in_loop = 0
 
-    for step_idx, step in enumerate(psi_pairs):
+    for step_idx, step in enumerate(intervention_steps):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
             if step_type == "unitary":
                 u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
                 state = _apply_backend_unitary_site_zero(state, u, solver)
                 sp = 1.0
-            elif step_type == "measure_only":
+            elif step_type == "cut_measurement":
                 psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
                 if "psi_reset" in step:
                     psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
@@ -311,9 +311,9 @@ def _simulate_seq_core(
                     psi_reset = psi_meas
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
                 sp = float(step_prob)
-            elif step_type == "prepare_only":
+            elif step_type == "cut_preparation":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, sp = _apply_prepare_only_step(
+                state, sp = _apply_cut_preparation_step(
                     state,
                     psi_prep,
                     solver,
@@ -352,7 +352,7 @@ def _simulate_seq_core(
 
     trace: dict[str, Any] | None = None
     if collect_trace:
-        terminated_early = break_step is not None or num_evolutions_in_loop < k
+        terminated_early = break_step is not None or num_evolutions_in_loop < num_interventions
         mins = min(step_probs) if step_probs else 0.0
         maxs = max(step_probs) if step_probs else 0.0
         means = float(np.mean(step_probs)) if step_probs else 0.0
@@ -457,7 +457,7 @@ def _seq_trace_worker(
     worker_ctx = resolve_worker_ctx(job_payload)
     sequence_idx, trajectory_idx = unpack_flat_job(job_idx, int(worker_ctx["num_trajectories"]))
 
-    psi_pairs = worker_ctx["psi_pairs"][sequence_idx]
+    intervention_steps = worker_ctx["intervention_steps"][sequence_idx]
     per_sequence_choi_rows: list[np.ndarray] | None = worker_ctx.get("e_features_rows")
     hamiltonian = worker_ctx["operator"]
     sim_params = worker_ctx["sim_params"]
@@ -471,7 +471,7 @@ def _seq_trace_worker(
     if noise_model is None:
         assert int(worker_ctx["num_trajectories"]) == 1, "num_trajectories must be 1 when noise_model is None."
 
-    num_steps = len(psi_pairs)
+    num_steps = len(intervention_steps)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
@@ -489,7 +489,7 @@ def _seq_trace_worker(
 
     durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
         sequence_idx=sequence_idx,
-        k=num_steps,
+        num_interventions=num_steps,
         timesteps=timesteps,
         timesteps_rows=timesteps_per_sequence,
         hamiltonian=hamiltonian,
@@ -520,23 +520,23 @@ def _seq_trace_worker(
     rho_sequence_packed = np.empty((num_steps, 8), dtype=np.float32)
     out_i = 0
 
-    for step_idx, step in enumerate(psi_pairs):
+    for step_idx, step in enumerate(intervention_steps):
         if isinstance(step, dict):
             step_type = str(step.get("type", "")).lower()
             if step_type == "unitary":
                 u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
                 state = _apply_backend_unitary_site_zero(state, u, solver)
                 step_prob = 1.0
-            elif step_type == "measure_only":
+            elif step_type == "cut_measurement":
                 psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
                 if "psi_reset" in step:
                     psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
                 else:
                     psi_reset = psi_meas
                 state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
-            elif step_type == "prepare_only":
+            elif step_type == "cut_preparation":
                 psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
-                state, step_prob = _apply_prepare_only_step(
+                state, step_prob = _apply_cut_preparation_step(
                     state,
                     psi_prep,
                     solver,

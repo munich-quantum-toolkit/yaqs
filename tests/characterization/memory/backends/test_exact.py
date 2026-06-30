@@ -22,9 +22,9 @@ from mqt.yaqs.characterization.memory.backends.exact import (
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
     ProbeSet,
-    _sample_cut_measurement_only,  # noqa: PLC2701
-    _sample_cut_preparation_only,  # noqa: PLC2701
-    _sample_probe_step,  # noqa: PLC2701
+    sample_cut_measurement,  # noqa: PLC2701
+    sample_cut_preparation,  # noqa: PLC2701
+    sample_probe,  # noqa: PLC2701
     resolve_unitary_sampler,
     sample_probes,
 )
@@ -51,7 +51,7 @@ def _sample_split_delayed_break_probes(
     *,
     left_cut: int,
     tau: int,
-    k: int,
+    num_interventions: int,
     n_pasts: int,
     n_futures: int,
     rng: np.random.Generator,
@@ -63,27 +63,27 @@ def _sample_split_delayed_break_probes(
     """
     past_len = left_cut - 1
     bridge_len = tau
-    future_tail = k - (left_cut + bridge_len + 1)
+    future_tail = num_interventions - (left_cut + bridge_len + 1)
     unitary_sampler = resolve_unitary_sampler("haar")
 
     past_pairs: list[list[Any]] = []
     past_cut_meas: list[np.ndarray] = []
     for _ in range(n_pasts):
         pairs_i = [
-            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
+            sample_probe(rng, intervention_mode="split_cut_unitary", unitary_sampler=unitary_sampler)[1]
             for _ in range(past_len)
         ]
-        _feat_m, psi_m = _sample_cut_measurement_only(rng)
+        _feat_m, psi_m = sample_cut_measurement(rng)
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
 
     future_prep_cut: list[np.ndarray] = []
     future_pairs: list[list[Any]] = []
     for _ in range(n_futures):
-        _feat_p, psi_p = _sample_cut_preparation_only(rng)
+        _feat_p, psi_p = sample_cut_preparation(rng)
         future_prep_cut.append(psi_p)
         future_pairs.append([
-            _sample_probe_step(rng, intervention_mode="unitary_break_mp", unitary_sampler=unitary_sampler)[1]
+            sample_probe(rng, intervention_mode="split_cut_unitary", unitary_sampler=unitary_sampler)[1]
             for _ in range(future_tail)
         ])
 
@@ -102,7 +102,7 @@ def _sample_split_delayed_break_probes(
 
     probe_set = ProbeSet(
         cut=left_cut,
-        k=k,
+        num_interventions=num_interventions,
         past_features=np.zeros((n_pasts, max(1, past_len + 1), 32), dtype=np.float32),
         future_features=np.zeros((n_futures, max(1, 1 + bridge_len + future_tail), 32), dtype=np.float32),
         past_pairs=past_pairs,
@@ -113,12 +113,12 @@ def _sample_split_delayed_break_probes(
     return probe_set, all_pairs
 
 
-def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
+def _make_minimal_probe_set(*, cut: int = 1, num_interventions: int = 1, n_p: int = 2, n_f: int = 3) -> ProbeSet:
     """Build a tiny ProbeSet with empty unitary legs and |0> cut kets.
 
     Args:
         cut: Causal cut index.
-        k: Intervention sequence length.
+        num_interventions: Intervention sequence length.
         n_p: Number of past probe rows.
         n_f: Number of future probe rows.
 
@@ -128,9 +128,9 @@ def _make_minimal_probe_set(*, cut: int = 1, k: int = 1, n_p: int = 2, n_f: int 
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     return ProbeSet(
         cut=cut,
-        k=k,
+        num_interventions=num_interventions,
         past_features=np.zeros((n_p, cut, 32), dtype=np.float32),
-        future_features=np.zeros((n_f, k - cut + 1, 32), dtype=np.float32),
+        future_features=np.zeros((n_f, num_interventions - cut + 1, 32), dtype=np.float32),
         past_pairs=[[] for _ in range(n_p)],
         past_cut_meas=[z.copy() for _ in range(n_p)],
         future_prep_cut=[z.copy() for _ in range(n_f)],
@@ -155,7 +155,7 @@ def test_exact_run_operational_memory_builds_static_ctx_internally(monkeypatch: 
 
     def _fake_simulate_sequences(**kwargs) -> np.ndarray | tuple[np.ndarray, list[dict[str, object]]]:  # noqa: ANN003
         calls["simulate_kwargs"] = kwargs
-        n_tot = len(kwargs["psi_pairs_list"])
+        n_tot = len(kwargs["intervention_steps_list"])
         packed = np.zeros((n_tot, 8), dtype=np.float32)
         if kwargs.get("traced"):
             traces = cast(
@@ -172,7 +172,7 @@ def test_exact_run_operational_memory_builds_static_ctx_internally(monkeypatch: 
     sim = AnalogSimParams(dt=0.1)
     psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     process = ExactBackend(operator=op, sim_params=sim, initial_psi=psi0, parallel=False)
-    probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=3)
+    probe_set = _make_minimal_probe_set(cut=1, num_interventions=1, n_p=2, n_f=3)
     out = process.evaluate_probes(probe_set)
 
     assert out.shape == (2, 3, 4)
@@ -184,7 +184,7 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
     """simulate_exact weights prod(step_probs[:cut])."""
 
     def _fake_simulate(**kwargs) -> tuple[np.ndarray, list[dict[str, object]]]:  # noqa: ANN003
-        n_tot = len(kwargs["psi_pairs_list"])
+        n_tot = len(kwargs["intervention_steps_list"])
         traces = cast(
             "list[dict[str, object]]",
             [{"step_probs": [0.5, 0.8, 1.0], "cumulative_weight_final": 0.99} for _ in range(n_tot)],
@@ -196,7 +196,7 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     probe_set = ProbeSet(
         cut=2,
-        k=2,
+        num_interventions=2,
         past_features=np.zeros((1, 2, 32), dtype=np.float32),
         future_features=np.zeros((1, 1, 32), dtype=np.float32),
         past_pairs=[[(z, z)]],
@@ -230,28 +230,28 @@ def test_exact_run_operational_memory_parallel_smoke() -> None:
     sim = AnalogSimParams(dt=0.1)
     psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     process = ExactBackend(operator=op, sim_params=sim, initial_psi=psi0, parallel=True, show_progress=False)
-    probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=2)
+    probe_set = _make_minimal_probe_set(cut=1, num_interventions=1, n_p=2, n_f=2)
     out = process.evaluate_probes(probe_set)
     assert out.shape == (2, 2, 4)
 
 
-def test_delayed_break_custom_psi_pairs_list_geometry() -> None:
+def test_delayed_break_custom_intervention_steps_list_geometry() -> None:
     """Gap geometry builds k-length sequences with an identity bridge of length tau."""
     rng = np.random.default_rng(1)
     left_cut, tau, k = 4, 2, 10
-    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+    probe_set, intervention_steps_list = _sample_split_delayed_break_probes(
         left_cut=left_cut,
         tau=tau,
-        k=k,
+        num_interventions=k,
         n_pasts=3,
         n_futures=2,
         rng=rng,
     )
     assert probe_set.cut == left_cut
-    assert probe_set.k == k
-    assert len(psi_pairs_list) == 6
+    assert probe_set.num_interventions == k
+    assert len(intervention_steps_list) == 6
     u_id = np.eye(2, dtype=np.complex128)
-    for seq in psi_pairs_list:
+    for seq in intervention_steps_list:
         assert len(seq) == k
         bridge = seq[left_cut : left_cut + tau]
         assert all(step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in bridge)
@@ -261,10 +261,10 @@ def test_delayed_break_custom_psi_pairs_list_geometry() -> None:
 def test_delayed_break_soft_future_prepare_retains_past_response() -> None:
     """Right-cut preparation uses (|0>, sigma_p) so past rows differ in final tomography."""
     rng = np.random.default_rng(4)
-    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+    probe_set, intervention_steps_list = _sample_split_delayed_break_probes(
         left_cut=4,
         tau=0,
-        k=10,
+        num_interventions=10,
         n_pasts=8,
         n_futures=4,
         rng=rng,
@@ -277,7 +277,7 @@ def test_delayed_break_soft_future_prepare_retains_past_response() -> None:
         sim_params=params,
         initial_psi=_product_initial_state(2),
         parallel=False,
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
     )
     past_std = float(np.std(pauli[:, 0, 1:4], axis=0).mean())
     future_std = float(np.std(pauli[0, :, 1:4], axis=0).mean())
@@ -285,13 +285,13 @@ def test_delayed_break_soft_future_prepare_retains_past_response() -> None:
     assert future_std > 1e-4
 
 
-def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:
-    """simulate_exact rolls out delayed-break probe grids when psi_pairs_list is supplied."""
+def test_simulate_exact_accepts_custom_intervention_steps_list() -> None:
+    """simulate_exact rolls out delayed-break probe grids when intervention_steps_list is supplied."""
     rng = np.random.default_rng(2)
-    probe_set, psi_pairs_list = _sample_split_delayed_break_probes(
+    probe_set, intervention_steps_list = _sample_split_delayed_break_probes(
         left_cut=3,
         tau=1,
-        k=8,
+        num_interventions=8,
         n_pasts=3,
         n_futures=2,
         rng=rng,
@@ -304,7 +304,7 @@ def test_simulate_exact_accepts_custom_psi_pairs_list() -> None:
         sim_params=params,
         initial_psi=_product_initial_state(2),
         parallel=False,
-        psi_pairs_list=psi_pairs_list,
+        intervention_steps_list=intervention_steps_list,
     )
     assert pauli.shape[:2] == (3, 2)
     assert weights.shape == (3, 2)
@@ -326,27 +326,27 @@ def test_exact_backend_execution_config_override() -> None:
     assert backend.execution_config(parallel=False).parallel is False
 
 
-def test_simulate_exact_rejects_mismatched_psi_pairs_list() -> None:
-    """Custom psi_pairs_list length must match the probe grid."""
+def test_simulate_exact_rejects_mismatched_intervention_steps_list() -> None:
+    """Custom intervention_steps_list length must match the probe grid."""
     rng = np.random.default_rng(0)
-    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=rng)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
-    with pytest.raises(ValueError, match="psi_pairs_list length"):
+    with pytest.raises(ValueError, match="intervention_steps_list length"):
         simulate_exact(
             probe_set=probe_set,
             operator=op,
             sim_params=params,
             initial_psi=np.array([1.0, 0.0], dtype=np.complex128),
             parallel=False,
-            psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
+            intervention_steps_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
         )
 
 
 def test_simulate_exact_preserves_float64_probe_coefficients() -> None:
     """Exact probe decoding keeps float64 precision through to the memory matrix."""
     rng = np.random.default_rng(0)
-    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=rng)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     pauli, _weights, _traces = simulate_exact(

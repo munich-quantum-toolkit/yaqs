@@ -31,7 +31,7 @@ Following the black-box construction in the cross-cut memory framework:
 Use {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` for all memory metrics:
 
 ```python
-result = mc.characterize(target, cut=c, k=k, preset="balanced")
+result = mc.characterize(target, cut=c, num_interventions=k, preset="balanced")
 result.entropy(c)  # S_V(c)
 result.singular_values(c)  # spectrum of Ṽ(c)
 result.rank(c)  # R(c) = exp(S_V(c))
@@ -42,7 +42,7 @@ result.rank(c)  # R(c) = exp(S_V(c))
 | Backend              | How `weights_ij` are obtained                                                                                                       |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Hamiltonian**      | Product of simulated intervention probabilities along each probe sequence through cut `c` (from traced full-state simulation).      |
-| **Comb / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (internal branch-weight path). |
+| **Process tensor / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (internal branch-weight path). |
 
 In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).
 
@@ -65,14 +65,14 @@ rng = np.random.default_rng(0)
 ---
 tags: [remove-output]
 ---
-comb_dense = mc.build_comb(
+comb_dense = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
     return_type="dense",
 )
 
-comb_mpo = mc.build_comb(
+comb_mpo = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1, 0.1],
@@ -90,10 +90,10 @@ print("MPO:", type(comb_mpo).__name__)
 ---
 tags: [remove-output]
 ---
-cut, k = 2, 2
+cut, num_interventions = 2, 2
 n_p, n_f = 8, 8
 
-result = mc.characterize(comb_dense, cut=cut, k=k, n_pasts=n_p, n_futures=n_f, rng=rng)
+result = mc.characterize(comb_dense, cut=cut, num_interventions=k, n_pasts=n_p, n_futures=n_f, rng=rng)
 ent = result.entropy(cut)
 sv = result.singular_values(cut)
 rk = result.rank(cut)
@@ -104,7 +104,7 @@ print(f"spectrum length = {sv.size}")
 print(f"centered response matrix shape {v_c.shape}")
 ```
 
-When `cut` is omitted on `characterize()`, the default interior cut `(k + 1) // 2` is used.
+When `cut` is omitted on `characterize()`, the default interior cut `(num_interventions + 1) // 2` is used.
 
 ## 4. Reproducible probes across backends
 
@@ -114,10 +114,10 @@ Run one backend first, then pass that result to `characterize(..., probe_set=...
 ---
 tags: [remove-output]
 ---
-cut, k = 2, 2
+cut, num_interventions = 2, 2
 
-ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, k=k, n_pasts=6, n_futures=5, rng=rng)
-comb_result = mc.characterize(comb_dense, cut=cut, k=k, probe_set=ham_result)
+ham_result = mc.characterize(hamiltonian, sim_params, cut=cut, num_interventions=k, n_pasts=6, n_futures=5, rng=rng)
+comb_result = mc.characterize(comb_dense, cut=cut, num_interventions=k, probe_set=ham_result)
 print(f"Hamiltonian S_V = {ham_result.entropy(cut):.4f}")
 print(f"Comb S_V       = {comb_result.entropy(cut):.4f}")
 print("past feature shape:", ham_result.probes(cut)["past_features"].shape)
@@ -134,7 +134,7 @@ import matplotlib.pyplot as plt
 sv = mc.characterize(
     comb_dense,
     cut=2,
-    k=2,
+    num_interventions=2,
     n_pasts=8,
     n_futures=8,
     rng=np.random.default_rng(1),
@@ -151,14 +151,14 @@ fig.tight_layout()
 ---
 tags: [remove-output]
 ---
-k = 2
-cuts = range(1, k + 1)
+num_interventions = 2
+cuts = range(1, num_interventions + 1)
 ents = [
-    mc.characterize(comb_dense, cut=c, k=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).entropy(c)
+    mc.characterize(comb_dense, cut=c, num_interventions=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).entropy(c)
     for c in cuts
 ]
 ranks = [
-    mc.characterize(comb_dense, cut=c, k=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).rank(c)
+    mc.characterize(comb_dense, cut=c, num_interventions=k, n_pasts=8, n_futures=8, rng=np.random.default_rng(c)).rank(c)
     for c in cuts
 ]
 
@@ -188,7 +188,7 @@ cuts = [1, 2]
 rows = []
 for jv in js:
     ham_j = Hamiltonian.ising(length=1, J=jv, g=0.0)
-    comb_j = mc.build_comb(
+    comb_j = mc.build_process_tensor(
         ham_j,
         AnalogSimParams(dt=0.1, max_bond_dim=8, order=1),
         timesteps=[0.1, 0.1],
@@ -198,7 +198,7 @@ for jv in js:
         ent_j = mc.characterize(
             comb_j,
             cut=cut,
-            k=2,
+            num_interventions=2,
             n_pasts=8,
             n_futures=8,
             rng=np.random.default_rng(int(jv * 10 + cut)),
@@ -218,9 +218,9 @@ User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer
 | `operational_memory/`  | Split-cut protocol: `sample_probes`, `assemble_probe_grid`, `run_operational_memory`                |
 | `shared/`              | Choi/rho encoding and site-0 MCWF/TJM helpers (not `mqt.yaqs.core`)                                 |
 | `backends/exact.py`    | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
-| `backends/tomography/` | Reference dense/MPO combs                                                                           |
+| `backends/tomography/` | Reference dense/MPO process tensors                                                                           |
 | `backends/sequences/`  | `simulate_sequences`, pool workers for comb-schedule simulation                                     |
-| `backends/surrogates/` | `TransformerComb`, `SeqTrace` training traces, `sample_train_dataset`                               |
+| `backends/surrogates/` | `ProcessTensorSurrogate`, `SeqTrace` training traces, `sample_train_dataset`                               |
 
 Verb-first naming is used throughout (`compute_*`, `assemble_*`, `simulate_*`, `encode_*`).
 

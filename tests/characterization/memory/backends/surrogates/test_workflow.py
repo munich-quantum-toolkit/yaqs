@@ -59,7 +59,7 @@ def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
     ds = sample_train_dataset(
         op,
         params,
-        k=1,
+        num_interventions=1,
         n=2,
         seed=0,
         parallel=False,
@@ -71,7 +71,7 @@ def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
     model = train_surrogate_model(
         op,
         params,
-        k=1,
+        num_interventions=1,
         n=2,
         seed=0,
         parallel=False,
@@ -91,8 +91,8 @@ def test_sample_train_dataset_timesteps_length_mismatch_raises() -> None:
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
-    with pytest.raises(ValueError, match="Comb schedule: timesteps length must be k\\+1"):
-        sample_train_dataset(op, params, k=2, n=1, timesteps=[0.1])
+    with pytest.raises(ValueError, match="Comb schedule: timesteps length must be num_interventions\\+1"):
+        sample_train_dataset(op, params, num_interventions=2, n=1, timesteps=[0.1])
 
 
 def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
@@ -101,7 +101,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
     torch.manual_seed(0)
 
@@ -109,17 +109,17 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1)
 
-    # Small but non-trivial dataset: k=2 sequences, enough samples to evaluate generalization.
+    # Small but non-trivial dataset: num_interventions=2 sequences, enough samples to evaluate generalization.
     k = 2
     n = 60
     # Fixed rank-1 leg instrument for a stable accuracy benchmark (independent of train default).
     ds = sample_train_dataset(
         op,
         params,
-        k=k,
+        num_interventions=k,
         n=n,
         seed=123,
-        style="measure_prepare",
+        intervention_style="measure_prepare",
         parallel=False,
         show_progress=False,
         timesteps=[0.0, 0.0, 0.0],
@@ -130,7 +130,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     train = TensorDataset(e_features[:45], rho0[:45], tgt[:45])
     e_test, rho0_test, tgt_test = e_features[45:], rho0[45:], tgt[45:]
 
-    model = TransformerComb(
+    model = ProcessTensorSurrogate(
         d_e=int(e_features.shape[-1]),
         d_rho=8,
         d_model=32,
@@ -174,4 +174,4 @@ def test_sample_train_dataset_requires_torch_before_simulation(
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     with pytest.raises(ImportError):
-        sample_train_dataset(op, params, k=1, n=1, parallel=False, show_progress=False)
+        sample_train_dataset(op, params, num_interventions=1, n=1, parallel=False, show_progress=False)

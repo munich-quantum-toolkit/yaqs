@@ -12,10 +12,10 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Reference Exact Combs (small `k`)
+# Reference Exact Process Tensors (small `num_interventions`)
 
 ```{warning}
-Exhaustive tomography scales as ``16^k``. For production dynamics use a trained surrogate; for small-``k`` reference dynamics and metrics, use the reference comb paths below.
+Exhaustive tomography scales as ``16**num_interventions``. For production dynamics use a trained surrogate; for small-horizon reference dynamics and metrics, use the reference process-tensor paths below.
 ```
 
 ```{note}
@@ -44,7 +44,7 @@ rho0 = np.eye(2, dtype=np.complex128) / 2.0
 ---
 tags: [remove-output]
 ---
-comb_single = mc.build_comb(
+comb_single = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
@@ -59,7 +59,7 @@ print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
 ---
 tags: [remove-output]
 ---
-comb_mpo = mc.build_comb(
+comb_mpo = mc.build_process_tensor(
     hamiltonian,
     sim_params,
     timesteps=[0.1],
@@ -71,14 +71,14 @@ print(type(comb_mpo).__name__, comb_mpo.to_dense().to_matrix().shape)
 
 ## 4. Predict with the reference comb
 
-`mc.predict(comb, rho0, sequence, k=...)` returns site-0 reduced-state dynamics from the tomographic comb.
+`mc.predict(comb, rho0, sequence, num_interventions=...)` returns site-0 reduced-state dynamics from the tomographic comb.
 `rho0` is accepted for API symmetry but **not used** (fixed product reference state).
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-rho_ref = mc.predict(comb_single, rho0, "haar", k=1)
+rho_ref = mc.predict(comb_single, rho0, "haar", num_interventions=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
@@ -88,7 +88,7 @@ print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ---
 tags: [remove-output]
 ---
-result = mc.characterize(comb_single, cut=1, k=1, n_pasts=6, n_futures=6)
+result = mc.characterize(comb_single, cut=1, num_interventions=1, n_pasts=6, n_futures=6)
 print(result.summary())
 ```
 
@@ -97,9 +97,9 @@ print(result.summary())
 At small `k`, compare surrogate predictions against the reference comb:
 
 ```python
-model = mc.train(hamiltonian, sim_params, k=1, n=40)
-rho_sure = mc.predict(model, rho0, "haar", k=1)
-rho_comb = mc.predict(comb_single, rho0, "haar", k=1)
+model = mc.train(hamiltonian, sim_params, num_interventions=1, n=40)
+rho_sure = mc.predict(model, rho0, "haar", num_interventions=1)
+rho_comb = mc.predict(comb_single, rho0, "haar", num_interventions=1)
 # Compare rho_sure vs rho_comb (e.g. trace distance or fidelity)
 ```
 

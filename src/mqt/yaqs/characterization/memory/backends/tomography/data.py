@@ -9,7 +9,7 @@
 
 The main product of :func:`~mqt.yaqs.characterization.memory.backends.tomography.constructor.build_process_tensor`
 is :class:`SequenceData`. It can be converted to dense or MPO comb representations via
-:meth:`SequenceData.to_dense_comb` and :meth:`SequenceData.to_mpo_comb`.
+:meth:`SequenceData.to_dense_process_tensor` and :meth:`SequenceData.to_mpo_process_tensor`.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from .combs import DenseComb, MPOComb
+from .process_tensors import DenseProcessTensor, MPOProcessTensor
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -230,7 +230,7 @@ class SequenceData:
     choi_duals: list[np.ndarray]
     timesteps: list[float]
 
-    def to_dense_comb(self, *, check: bool = True, atol: float = 1e-8) -> DenseComb:
+    def to_dense_process_tensor(self, *, check: bool = True, atol: float = 1e-8) -> DenseProcessTensor:
         """Reconstruct a dense comb from the discrete sequence dataset.
 
         Args:
@@ -249,16 +249,16 @@ class SequenceData:
             check=check,
             atol=atol,
         )
-        return DenseComb(upsilon, list(self.timesteps))
+        return DenseProcessTensor(upsilon, list(self.timesteps))
 
-    def to_mpo_comb(
+    def to_mpo_process_tensor(
         self,
         *,
         compress_every: int = 100,
         tol: float = 1e-12,
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
-    ) -> MPOComb:
+    ) -> MPOProcessTensor:
         """Build an MPO comb via rank-1 accumulation.
 
         Args:
@@ -280,4 +280,4 @@ class SequenceData:
             max_bond_dim=max_bond_dim,
             n_sweeps=n_sweeps,
         )
-        return MPOComb(mpo, self.timesteps)
+        return MPOProcessTensor(mpo, self.timesteps)

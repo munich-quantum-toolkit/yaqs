@@ -27,16 +27,16 @@ def test_build_process_tensor_invalid_return_type_raises() -> None:
         build_process_tensor(op, params, timesteps=[0.0], return_type=cast("Any", "nope"))
 
 
-def test_build_comb_returns_dense_and_mpo_smoke() -> None:
-    """build_comb returns dense and MPO comb wrappers."""
+def test_build_process_tensor_returns_dense_and_mpo_smoke() -> None:
+    """build_process_tensor returns dense and MPO comb wrappers."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
 
-    dense = mc.build_comb(ham, params, timesteps=[0.0], return_type="dense")
+    dense = mc.build_process_tensor(ham, params, timesteps=[0.0], return_type="dense")
     assert dense.to_matrix().shape == (8, 8)
 
-    mpo = mc.build_comb(ham, params, timesteps=[0.0], return_type="mpo", compress_every=1)
+    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0], return_type="mpo", compress_every=1)
     mat = mpo.to_matrix()
     assert mat.shape == (8, 8)
     np.testing.assert_allclose(mat, dense.to_matrix(), atol=1e-8)
@@ -46,15 +46,15 @@ def test_build_process_tensor_rejects_k_zero() -> None:
     """Zero-step tomography is rejected before sequence enumeration."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-    with pytest.raises(ValueError, match="No sequences for k=0"):
+    with pytest.raises(ValueError, match="No sequences for num_interventions=0"):
         build_process_tensor(op, params, timesteps=[])
 
 
-def test_build_comb_parallel_smoke() -> None:
-    """build_comb runs with parallel execution enabled."""
+def test_build_process_tensor_parallel_smoke() -> None:
+    """build_process_tensor runs with parallel execution enabled."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-    dense = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False).build_comb(
+    dense = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False).build_process_tensor(
         ham, params, timesteps=[0.0], return_type="dense"
     )
     assert dense.to_matrix().shape == (8, 8)

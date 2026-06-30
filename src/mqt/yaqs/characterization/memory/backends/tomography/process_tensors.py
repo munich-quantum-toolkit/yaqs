@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Dense and MPO comb (process-tensor) wrappers."""
+"""Dense and MPO process-tensor wrappers."""
 
 from __future__ import annotations
 
@@ -29,10 +29,10 @@ if TYPE_CHECKING:
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _Z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
-ProbeStepInput = dict[str, Any] | tuple[Any, Any]
+AnyInput = dict[str, Any] | tuple[Any, Any]
 
 
-def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
+def convert_probe_step(step: AnyInput) -> InterventionMap | np.ndarray:
     """Normalize a probe-grid step to an intervention map or unitary matrix.
 
     Args:
@@ -48,7 +48,7 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
         step_type = str(step.get("type", "")).lower()
         if step_type == "unitary":
             return np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-        if step_type == "measure_only":
+        if step_type == "cut_measurement":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
             if "psi_reset" in step:
                 psi_reset = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
@@ -58,7 +58,7 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
                 rho_prep=np.outer(psi_reset, psi_reset.conj()),
                 effect=np.outer(psi_meas, psi_meas.conj()),
             )
-        if step_type == "prepare_only":
+        if step_type == "cut_preparation":
             psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
             return InterventionMap(
                 rho_prep=np.outer(psi_prep, psi_prep.conj()),
@@ -76,9 +76,9 @@ def convert_probe_step(step: ProbeStepInput) -> InterventionMap | np.ndarray:
 
 
 def convert_probe_callable(
-    step: ProbeStepInput,
+    step: AnyInput,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
-    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseComb.predict`.
+    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseProcessTensor.predict`.
 
     Args:
         step: Structured dict step or measure/prepare ket pair.
@@ -97,7 +97,7 @@ def convert_probe_callable(
     return inter
 
 
-def evaluate_dense_probes(comb: DenseComb, probe_set: ProbeSet) -> np.ndarray:
+def evaluate_dense_probes(comb: DenseProcessTensor, probe_set: ProbeSet) -> np.ndarray:
     """Evaluate split-cut probe Pauli responses on a dense comb.
 
     Args:
@@ -195,7 +195,7 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
-class DenseComb:
+class DenseProcessTensor:
     """Wrapper around a dense comb Choi operator Upsilon."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
@@ -216,11 +216,11 @@ class DenseComb:
         """
         return self.upsilon
 
-    # NOTE: previously there was a `DenseComb.fit(...)` entry point here.
+    # NOTE: previously there was a `DenseProcessTensor.fit(...)` entry point here.
     # The library now exposes only the exhaustive
     # `build_process_tensor(...) -> SequenceData -> to_*_comb()` path.
 
-    def _k_steps(self) -> int:
+    def _num_interventions(self) -> int:
         """Infer number of intervention steps from the comb matrix shape.
 
         Returns:
@@ -236,7 +236,7 @@ class DenseComb:
         psd_project: bool = False,
         normalize_trace: bool = True,
         _psd_tol: float = 1e-12,
-    ) -> DenseComb:
+    ) -> DenseProcessTensor:
         """Return a canonicalized comb matrix.
 
         Args:
@@ -246,7 +246,7 @@ class DenseComb:
             _psd_tol: PSD tolerance (currently unused; kept for compatibility).
 
         Returns:
-            New `DenseComb` with canonicalized matrix.
+            New `DenseProcessTensor` with canonicalized matrix.
         """
         comb_mat = self.upsilon.copy()
         if hermitize:
@@ -259,21 +259,21 @@ class DenseComb:
             tr = np.trace(comb_mat)
             if abs(tr) > 1e-15:
                 comb_mat /= tr
-        return DenseComb(comb_mat, self.timesteps)
+        return DenseProcessTensor(comb_mat, self.timesteps)
 
-    def reduced(self, keep_last_m: int = 1) -> DenseComb:
+    def reduced(self, keep_last_m: int = 1) -> DenseProcessTensor:
         """Reduce the comb by tracing out early past legs.
 
         Args:
             keep_last_m: Number of most-recent past legs to keep.
 
         Returns:
-            Reduced comb as a new `DenseComb`.
+            Reduced comb as a new `DenseProcessTensor`.
 
         Raises:
             ValueError: If ``keep_last_m`` is out of range.
         """
-        k = self._k_steps()
+        k = self._num_interventions()
         if keep_last_m > k:
             msg = f"keep_last_m={keep_last_m} > k={k}"
             raise ValueError(msg)
@@ -288,7 +288,7 @@ class DenseComb:
             comb_6d = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
             comb_reduced = np.einsum("iabjac->ibjc", comb_6d).reshape(dim_m, dim_m)
         t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
-        return DenseComb(comb_reduced, t_red)
+        return DenseProcessTensor(comb_reduced, t_red)
 
     def _predict_raw(
         self,
@@ -329,9 +329,12 @@ class DenseComb:
         Raises:
             ValueError: If the number of interventions does not match the comb length.
         """
-        k_steps = self._k_steps()
-        if len(interventions) != k_steps:
-            msg = f"DenseComb expects {k_steps} interventions for k={k_steps}, got {len(interventions)}."
+        num_steps = self._num_interventions()
+        if len(interventions) != num_steps:
+            msg = (
+                f"DenseProcessTensor expects {num_steps} interventions for "
+                f"num_interventions={num_steps}, got {len(interventions)}."
+            )
             raise ValueError(msg)
         rho = self._predict_raw(interventions)
 
@@ -352,8 +355,8 @@ class DenseComb:
             rho /= tr2
         return rho
 
-    def _k_for_probe(self) -> int:
-        return self._k_steps()
+    def _num_interventions_for_probe(self) -> int:
+        return self._num_interventions()
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses.
@@ -397,7 +400,7 @@ class DenseComb:
             tr = np.trace(comb_mat)
             rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
 
-        k_steps = self._k_steps()
+        k_steps = self._num_interventions()
         if k_steps == 0:
             if past not in {"all", "first", "last"}:
                 msg = f"Unknown past='{past}'."
@@ -447,7 +450,7 @@ class DenseComb:
             tr = np.trace(comb_mat)
             rho = comb_mat / tr if abs(tr) > 1e-15 else comb_mat
 
-        k_steps = self._k_steps()
+        k_steps = self._num_interventions()
         if k_steps < 2:
             return 0.0
         dims = [2] + [4] * k_steps
@@ -500,7 +503,7 @@ class DenseComb:
         else:
             rho = comb_mat
 
-        k_steps = self._k_steps()
+        k_steps = self._num_interventions()
         if k_steps < 2:
             return 0.0
         dims = [2] + [4] * k_steps
@@ -532,7 +535,7 @@ class DenseComb:
         )
 
 
-class MPOComb(MPO):
+class MPOProcessTensor(MPO):
     """Wrapper around an MPO representation of a comb Choi operator Upsilon."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
@@ -557,15 +560,15 @@ class MPOComb(MPO):
         """
         return super().to_matrix()
 
-    def to_dense(self) -> DenseComb:
+    def to_dense(self) -> DenseProcessTensor:
         """Convert this MPO comb to a dense comb.
 
         Returns:
             Dense comb wrapper.
         """
-        return DenseComb(self.to_matrix(), self.timesteps)
+        return DenseProcessTensor(self.to_matrix(), self.timesteps)
 
-    def _k_for_probe(self) -> int:
+    def _num_interventions_for_probe(self) -> int:
         return int(self.length) - 1
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
@@ -615,18 +618,18 @@ class MPOComb(MPO):
         k_steps = len(interventions)
         if self.length != k_steps + 1:
             msg = (
-                f"MPOComb length {self.length} inconsistent with number of "
+                f"MPOProcessTensor length {self.length} inconsistent with number of "
                 f"interventions {k_steps} (expected length = k + 1)."
             )
             raise ValueError(msg)
 
-        # Work on a copy so the original MPOComb remains unchanged.
+        # Work on a copy so the original MPOProcessTensor remains unchanged.
         work = MPO()
         work.length = self.length
         work.physical_dimension = self.physical_dimension
         work.tensors = [t.copy() for t in self.tensors]
 
-        # Apply local Choi operators (with transpose as in DenseComb.predict) on past sites.
+        # Apply local Choi operators (with transpose as in DenseProcessTensor.predict) on past sites.
         for t, emap in enumerate(interventions):
             j_choi = encode_cptp_choi(emap)  # 4x4
             work.apply_local_operator(site=t + 1, op=j_choi.T, left_action=True)
@@ -637,7 +640,7 @@ class MPOComb(MPO):
         # The remaining MPO encodes a single 2x2 matrix on the final leg.
         rho = reduced.to_matrix()
 
-        # Match DenseComb.predict: Hermitian, PSD, trace-1.
+        # Match DenseProcessTensor.predict: Hermitian, PSD, trace-1.
         rho = 0.5 * (rho + rho.conj().T)
         tr = np.trace(rho)
         if abs(tr) > 1e-12:

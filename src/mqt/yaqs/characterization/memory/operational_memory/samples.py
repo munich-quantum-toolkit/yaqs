@@ -21,8 +21,6 @@ from ..shared.encoding import _flatten_choi4
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-ProbeStep = dict[str, Any] | tuple[np.ndarray, np.ndarray]
-
 
 @dataclass(slots=True)
 class ProbeSet:
@@ -30,7 +28,7 @@ class ProbeSet:
 
     Attributes:
         cut: Causal cut index ``c`` (1-based).
-        k: Total intervention steps per probe sequence.
+        num_interventions: Total intervention steps per probe sequence.
         past_features: Choi features for past branches, shape ``(n_pasts, c, 32)``.
         future_features: Choi features for future branches, shape ``(n_futures, k - c + 1, 32)``.
         past_pairs: Intervention steps before the cut (per past index).
@@ -40,7 +38,7 @@ class ProbeSet:
     """
 
     cut: int
-    k: int
+    num_interventions: int
     past_features: np.ndarray
     future_features: np.ndarray
     past_pairs: list[list[Any]]
@@ -67,7 +65,7 @@ def extract_ket(projector: np.ndarray) -> np.ndarray:
     return (psi / norm).astype(np.complex128)
 
 
-def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+def sample_mp(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Sample one measure-prepare intervention and its Choi features.
 
     Args:
@@ -160,7 +158,7 @@ def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
     return _flatten_choi4(choi).astype(np.float32)
 
 
-def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def sample_cut_measurement(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
     """Sample the cut measurement branch (effect only).
 
     Args:
@@ -175,7 +173,7 @@ def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     return feat.astype(np.float32), psi_meas
 
 
-def _sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def sample_cut_preparation(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
     """Sample the cut preparation branch (state only).
 
     Args:
@@ -190,12 +188,12 @@ def _sample_cut_preparation_only(rng: np.random.Generator) -> tuple[np.ndarray, 
     return feat.astype(np.float32), psi_prep
 
 
-def _sample_probe_step(
+def sample_probe(
     rng: np.random.Generator,
     *,
     intervention_mode: str,
     unitary_sampler: Callable[[np.random.Generator], np.ndarray] | None,
-) -> tuple[np.ndarray, ProbeStep]:
+) -> tuple[np.ndarray, Any]:
     """Sample one within-sequence intervention step.
 
     Args:
@@ -210,7 +208,7 @@ def _sample_probe_step(
         ValueError: If ``unitary_sampler`` is missing for unitary-break modes.
     """
     if intervention_mode == "measure_prepare":
-        feat, pair = _sample_step(rng)
+        feat, pair = sample_mp(rng)
         return feat, pair
     if unitary_sampler is None:
         msg = "unitary_sampler is required for unitary-break intervention modes."
@@ -241,22 +239,22 @@ def resolve_unitary_sampler(unitary_ensemble: str) -> Callable[[np.random.Genera
 def sample_probes(
     *,
     cut: int,
-    k: int,
+    num_interventions: int,
     n_pasts: int,
     n_futures: int,
     rng: np.random.Generator,
-    intervention_mode: str = "unitary_break_mp",
+    intervention_mode: str = "split_cut_unitary",
     unitary_ensemble: str = "haar",
 ) -> ProbeSet:
     """Sample random split-cut past/future probe ensembles.
 
     Args:
         cut: Causal cut index ``c``.
-        k: Total sequence length.
+        num_interventions: Total sequence length.
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
         rng: NumPy random generator.
-        intervention_mode: ``"unitary_break_mp"`` or ``"measure_prepare"``.
+        intervention_mode: ``"split_cut_unitary"`` or ``"measure_prepare"``.
         unitary_ensemble: ``"haar"`` or ``"clifford"`` (unitary-break modes only).
 
     Returns:
@@ -265,16 +263,19 @@ def sample_probes(
     Raises:
         ValueError: If ``cut`` or ``intervention_mode`` is invalid.
     """
-    if not (1 <= cut <= k):
-        msg = f"cut must satisfy 1 <= cut <= k, got cut={cut}, k={k}"
+    if not (1 <= cut <= num_interventions):
+        msg = (
+            f"cut must satisfy 1 <= cut <= num_interventions, got cut={cut}, "
+            f"num_interventions={num_interventions}"
+        )
         raise ValueError(msg)
     mode = str(intervention_mode).strip().lower()
-    if mode not in {"unitary_break_mp", "measure_prepare"}:
-        msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
+    if mode not in {"split_cut_unitary", "measure_prepare"}:
+        msg = f"intervention_mode must be 'split_cut_unitary' or 'measure_prepare', got {intervention_mode!r}"
         raise ValueError(msg)
-    unitary_sampler = resolve_unitary_sampler(unitary_ensemble) if mode == "unitary_break_mp" else None
+    unitary_sampler = resolve_unitary_sampler(unitary_ensemble) if mode == "split_cut_unitary" else None
     past_full = cut - 1
-    future_full = k - cut
+    future_full = num_interventions - cut
 
     past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
     past_pairs: list[list[Any]] = []
@@ -282,10 +283,10 @@ def sample_probes(
     for i in range(n_pasts):
         pairs_i: list[Any] = []
         for t in range(past_full):
-            feat, step = _sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            feat, step = sample_probe(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
             past_features[i, t] = feat
             pairs_i.append(step)
-        feat_m, psi_m = _sample_cut_measurement_only(rng)
+        feat_m, psi_m = sample_cut_measurement(rng)
         past_features[i, past_full] = feat_m
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
@@ -294,19 +295,19 @@ def sample_probes(
     future_prep_cut: list[np.ndarray] = []
     future_pairs: list[list[Any]] = []
     for j in range(n_futures):
-        feat_p, psi_p = _sample_cut_preparation_only(rng)
+        feat_p, psi_p = sample_cut_preparation(rng)
         future_features[j, 0] = feat_p
         future_prep_cut.append(psi_p)
         pairs_j: list[Any] = []
         for t in range(future_full):
-            feat, step = _sample_probe_step(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
+            feat, step = sample_probe(rng, intervention_mode=mode, unitary_sampler=unitary_sampler)
             future_features[j, 1 + t] = feat
             pairs_j.append(step)
         future_pairs.append(pairs_j)
 
     return ProbeSet(
         cut=cut,
-        k=k,
+        num_interventions=num_interventions,
         past_features=past_features,
         future_features=future_features,
         past_pairs=past_pairs,

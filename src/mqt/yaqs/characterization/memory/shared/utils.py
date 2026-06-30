@@ -295,14 +295,14 @@ def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> 
 _SITE0_KET = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
 
-def _apply_prepare_only_step(
+def _apply_cut_preparation_step(
     state: MPS | NDArray[np.complex128],
     psi_prep: NDArray[np.complex128],
     solver: str,
     *,
     chain_length: int,
 ) -> tuple[MPS | NDArray[np.complex128], float]:
-    """Apply a ``prepare_only`` intervention on site 0.
+    """Apply a ``cut_preparation`` intervention on site 0.
 
     * ``chain_length == 1``: unconditional assignment to ``|ψ⟩`` (comb reference).
     * ``chain_length > 1``: project site 0 onto ``|0⟩``, reprepare to ``|ψ⟩``; other

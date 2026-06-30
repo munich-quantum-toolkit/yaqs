@@ -32,7 +32,7 @@ def test_four_component_memory_metric_matches_xyz_only() -> None:
     rng = np.random.default_rng(11)
     op = MPO.ising(length=1, J=0.5, g=0.3)
     params = AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
-    probe_set = sample_probes(cut=1, k=1, n_pasts=5, n_futures=4, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=5, n_futures=4, rng=rng)
     psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     pauli4, weights, _ = simulate_exact(
         probe_set=probe_set,
@@ -117,7 +117,7 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
     rng = np.random.default_rng(5)
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1)
-    probe_set = sample_probes(cut=2, k=4, n_pasts=4, n_futures=3, rng=rng)
+    probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=4, n_futures=3, rng=rng)
     psi0 = np.zeros(4, dtype=np.complex128)
     psi0[0] = 1.0 + 0.0j
     pauli, weights, _ = simulate_exact(
@@ -150,11 +150,11 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
     draw_seed = 100_000 * cut + 10 * round(100 * 2.0)
     probe_set = sample_probes(
         cut=cut,
-        k=20,
+        num_interventions=20,
         n_pasts=m_max,
         n_futures=m_max,
         rng=np.random.default_rng(draw_seed),
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
         unitary_ensemble="haar",
     )
     pauli, weights, _ = simulate_exact(

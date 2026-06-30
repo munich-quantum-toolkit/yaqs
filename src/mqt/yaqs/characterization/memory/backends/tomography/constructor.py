@@ -12,8 +12,8 @@
 :mod:`mqt.yaqs.characterization.memory.backends.tomography.constructor`).
 
 :func:`build_process_tensor` is the high-level user entry point returning a comb directly
-(:class:`~mqt.yaqs.characterization.memory.backends.tomography.combs.DenseComb` or
-:class:`~mqt.yaqs.characterization.memory.backends.tomography.combs.MPOComb`).
+(:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor` or
+:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`).
 The lower-level :func:`run_all_sequences` returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData` covering all ``16^k``
 Choi index sequences for ``k`` steps.
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
     from .basis import TomographyBasis
-    from .combs import DenseComb, MPOComb
+    from .process_tensors import DenseProcessTensor, MPOProcessTensor
 
 # Re-export for worker docstrings referencing WORKER_CTX default.
 
@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 # serial path. Workers use :func:`~mqt.yaqs.core.parallel_utils.resolve_worker_ctx`
 # and :func:`~mqt.yaqs.core.parallel_utils.unpack_flat_job`.
 #
-#   psi_pairs           list[list[(meas, prep)]] — one inner list per sequence (length k)
+#   intervention_steps           list[list[(meas, prep)]] — one inner list per sequence (length k)
 #   num_trajectories    flat-index stride (1 when ``noise_model`` is None)
 #   operator            Hamiltonian MPO
 #   sim_params          :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
@@ -108,7 +108,7 @@ def _sequence_worker(
     ctx = resolve_worker_ctx(payload)
     s_idx, traj_idx = unpack_flat_job(job_idx, int(ctx["num_trajectories"]))
 
-    psi_pairs = ctx["psi_pairs"][s_idx]
+    intervention_steps = ctx["intervention_steps"][s_idx]
     operator = ctx["operator"]
     sim_params = ctx["sim_params"]
     timesteps: list[float] = ctx["timesteps"]
@@ -121,7 +121,7 @@ def _sequence_worker(
     current_state = _initialize_backend_state(operator, solver)
 
     weight = 1.0
-    for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
+    for step_i, (psi_meas, psi_prep) in enumerate(intervention_steps):
         current_state, step_prob = _reprepare_backend_state_forced(current_state, psi_meas, psi_prep, solver)
         weight *= float(step_prob)
         if weight < 1e-15:
@@ -199,7 +199,7 @@ def run_all_sequences(
 
     k = len(timesteps)
     if k == 0:
-        msg = "No sequences for k=0."
+        msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
 
     def _enumerate_sequences(k_in: int) -> list[tuple[int, ...]]:
@@ -208,7 +208,7 @@ def run_all_sequences(
     all_seqs = _enumerate_sequences(k)
 
     n_seq = len(all_seqs)
-    samples_psi_pairs = [
+    samples_intervention_steps = [
         [(basis_set[choi_indices[a][1]][1], basis_set[choi_indices[a][0]][1]) for a in seq] for seq in all_seqs
     ]
 
@@ -225,7 +225,7 @@ def run_all_sequences(
     total_jobs = n_seq * num_trajectories
     # Pickle-stable payload — schema documented above.
     payload = {
-        "psi_pairs": samples_psi_pairs,
+        "intervention_steps": samples_intervention_steps,
         "num_trajectories": num_trajectories,
         "operator": operator,
         "sim_params": local_params,
@@ -350,13 +350,13 @@ def build_process_tensor(
     n_sweeps: int = 2,
     solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
-) -> DenseComb | MPOComb:
+) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor via exhaustive discrete-basis tomography.
 
     This simulates **every** ``16^k`` discrete basis sequence and returns a comb directly:
 
-    - ``return_type="dense"``: reconstruct and return a :class:`DenseComb`.
-    - ``return_type="mpo"``: build and return an :class:`MPOComb`.
+    - ``return_type="dense"``: reconstruct and return a :class:`DenseProcessTensor`.
+    - ``return_type="mpo"``: build and return an :class:`MPOProcessTensor`.
 
     Args:
         operator: Hamiltonian MPO.
@@ -397,9 +397,9 @@ def build_process_tensor(
     )
 
     if return_type == "dense":
-        return data.to_dense_comb(check=check, atol=atol)
+        return data.to_dense_process_tensor(check=check, atol=atol)
     if return_type == "mpo":
-        return data.to_mpo_comb(
+        return data.to_mpo_process_tensor(
             compress_every=compress_every,
             tol=tol,
             max_bond_dim=max_bond_dim,

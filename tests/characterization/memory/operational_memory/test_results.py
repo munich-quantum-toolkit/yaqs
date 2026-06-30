@@ -31,7 +31,7 @@ def test_rank_equals_exp_entropy() -> None:
         ham,
         params,
         cut=1,
-        k=1,
+        num_interventions=1,
         n_pasts=6,
         n_futures=6,
     )
@@ -48,14 +48,14 @@ def test_probes_export_arrays() -> None:
         ham,
         params,
         cut=1,
-        k=1,
+        num_interventions=1,
         n_pasts=4,
         n_futures=3,
         rng=np.random.default_rng(0),
     )
     probes = result.probes()
     assert probes["cut"] == 1
-    assert probes["k"] == 1
+    assert probes["num_interventions"] == 1
     assert probes["past_features"].shape[0] == 4
     assert probes["future_features"].shape[0] == 3
 
@@ -140,7 +140,7 @@ def test_characterize_multiple_cuts_smoke() -> None:
     result = MemoryCharacterizer(parallel=False, show_progress=False).characterize(
         ham,
         params,
-        k=3,
+        num_interventions=3,
         cuts=[1, 2, 3],
         n_pasts=4,
         n_futures=4,

@@ -16,7 +16,7 @@ import pytest
 
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
-    _apply_prepare_only_step,
+    _apply_cut_preparation_step,
     _evolve_backend_state,
     _initialize_backend_state,
     _reprepare_backend_state_forced,
@@ -167,7 +167,7 @@ def test_prepare_only_soft_preserves_entanglement_on_two_qubits() -> None:
     vec = _evolve_backend_state(vec, op, None, params, "MCWF", static_ctx=static_ctx)
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
 
-    soft, _ = _apply_prepare_only_step(vec, plus, "MCWF", chain_length=2)
+    soft, _ = _apply_cut_preparation_step(vec, plus, "MCWF", chain_length=2)
     assert isinstance(vec, np.ndarray)
     assert isinstance(soft, np.ndarray)
     assert not np.allclose(soft, vec, atol=1e-8)

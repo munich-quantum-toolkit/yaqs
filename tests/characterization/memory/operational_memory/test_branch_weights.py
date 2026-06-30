@@ -78,8 +78,8 @@ def test_compute_born_prob_identity_state() -> None:
 def test_dict_step_branch_weight_measure_only() -> None:
     """Structured measure_only steps contribute Born probabilities."""
     steps = [
-        {"type": "measure_only", "psi_meas": _Z},
-        {"type": "prepare_only", "psi_prep": _Z},
+        {"type": "cut_measurement", "psi_meas": _Z},
+        {"type": "cut_preparation", "psi_prep": _Z},
     ]
     assert compute_branch_weight(steps, cut=2) == pytest.approx(1.0)
 
@@ -88,8 +88,8 @@ def test_measure_only_without_reset_projects_onto_measurement() -> None:
     """Two pre-cut measure_only steps use the measured state, not |0>, by default."""
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
     steps = [
-        {"type": "measure_only", "psi_meas": plus},
-        {"type": "measure_only", "psi_meas": _Z},
+        {"type": "cut_measurement", "psi_meas": plus},
+        {"type": "cut_measurement", "psi_meas": _Z},
     ]
     assert compute_branch_weight(steps, cut=2) == pytest.approx(0.25)
 
@@ -98,18 +98,18 @@ _PSI0_L2 = np.zeros(4, dtype=np.complex128)
 _PSI0_L2[0] = 1.0 + 0.0j
 
 
-def test_trace_weights_match_cumulative_final_unitary_break_mp() -> None:
+def test_trace_weights_match_cumulative_final_split_cut_unitary() -> None:
     """Paper metric path: cumulative_weight_final agrees with cut-truncated step_probs."""
     rng = np.random.default_rng(21)
     op = MPO.ising(length=2, J=0.5, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
     probe_set = sample_probes(
         cut=3,
-        k=5,
+        num_interventions=5,
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
         unitary_ensemble="haar",
     )
     _, weights_cut, traces = simulate_exact(
@@ -141,11 +141,11 @@ def test_exact_weights_positive_l2_quick_geometry() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
     probe_set = sample_probes(
         cut=4,
-        k=8,
+        num_interventions=8,
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
         unitary_ensemble="haar",
     )
     _, weights, traces = simulate_exact(

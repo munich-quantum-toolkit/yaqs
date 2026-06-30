@@ -10,7 +10,7 @@
 **Public API** (see ``__all__``): :func:`sample_train_dataset`, :func:`train_surrogate_model`.
 
 :func:`sample_train_dataset` returns a :class:`~torch.utils.data.TensorDataset` for
-:meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb.fit`.
+:meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate.fit`.
 
 Sequence simulation is delegated to
 :mod:`~mqt.yaqs.characterization.memory.backends.sequences`.
@@ -28,12 +28,12 @@ if TYPE_CHECKING:
     from torch.utils.data import TensorDataset
 
     from mqt.yaqs.analog.mcwf import MCWFContext
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
-from ...operational_memory.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_sequence
+from ...operational_memory.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_interventions
 from ...shared.utils import StochasticSolver, make_mcwf_static_context, resolve_stochastic_solver
 from ..sequences.workflow import simulate_sequences
 from .data import SeqTrace, stack_traces
@@ -86,7 +86,7 @@ def sample_train_dataset(
     operator: MPO,
     sim_params: AnalogSimParams,
     *,
-    k: int,
+    num_interventions: int,
     n: int,
     rng: np.random.Generator | None = None,
     seed: int | None = None,
@@ -95,7 +95,7 @@ def sample_train_dataset(
     timesteps: list[float] | None = None,
     init_mode: str = "eigenstate",
     solver: StochasticSolver | None = None,
-    style: str = DEFAULT_INTERVENTION_STYLE,
+    intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     _execution: ExecutionConfig | None = None,
 ) -> TensorDataset:
     """Sample intervention sequences and pack a surrogate training dataset.
@@ -122,9 +122,12 @@ def sample_train_dataset(
     """
     chain_length = int(operator.length)
     if timesteps is None:
-        timesteps = [float(sim_params.dt)] * (int(k) + 1)
-    if len(timesteps) != int(k) + 1:
-        msg = f"Comb schedule: timesteps length must be k+1={int(k) + 1}, got {len(timesteps)}."
+        timesteps = [float(sim_params.dt)] * (int(num_interventions) + 1)
+    if len(timesteps) != int(num_interventions) + 1:
+        msg = (
+            f"Comb schedule: timesteps length must be num_interventions+1="
+            f"{int(num_interventions) + 1}, got {len(timesteps)}."
+        )
         raise ValueError(msg)
 
     _require_torch()
@@ -137,18 +140,18 @@ def sample_train_dataset(
     if rng is None:
         rng = np.random.default_rng(0 if seed is None else int(seed))
 
-    psi_pairs_list: list[list[Any]] = []
+    intervention_steps_list: list[list[Any]] = []
     initial_psis: list[np.ndarray] = []
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
     for _ in range(int(n)):
         rho_in = sample_density_matrix(rng)
-        step_pairs, choi_rows = sample_train_sequence(
-            int(k),
-            normalize_style(str(style)),
+        step_pairs, choi_rows = sample_train_interventions(
+            int(num_interventions),
+            normalize_style(str(intervention_style)),
             rng,
         )
-        psi_pairs_list.append(step_pairs)
+        intervention_steps_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
         initial_psi = sample_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
         if isinstance(initial_psi, tuple):
@@ -161,7 +164,7 @@ def sample_train_dataset(
             operator=operator,
             sim_params=sim_params,
             timesteps=timesteps,
-            psi_pairs_list=psi_pairs_list,
+            intervention_steps_list=intervention_steps_list,
             initial_psis=initial_psis,
             e_features_rows=choi_feature_rows_per_sequence,
             parallel=bool(parallel),
@@ -181,7 +184,7 @@ def train_surrogate_model(
     operator: MPO,
     sim_params: AnalogSimParams,
     *,
-    k: int,
+    num_interventions: int,
     n: int,
     seed: int | None = None,
     parallel: bool = True,
@@ -191,9 +194,9 @@ def train_surrogate_model(
     model_kwargs: dict[str, Any] | None = None,
     train_kwargs: dict[str, Any] | None = None,
     solver: StochasticSolver | None = None,
-    style: str = DEFAULT_INTERVENTION_STYLE,
+    intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     _execution: ExecutionConfig | None = None,
-) -> TransformerComb:
+) -> ProcessTensorSurrogate:
     """Train a surrogate model end-to-end on simulated sequence traces.
 
     Args:
@@ -208,21 +211,21 @@ def train_surrogate_model(
         init_mode: Initial-state sampling mode passed to :func:`sample_train_dataset`.
         solver: Optional stochastic solver override passed to :func:`sample_train_dataset`.
         style: Training intervention style passed to :func:`sample_train_dataset`.
-        model_kwargs: Optional keyword arguments forwarded to :class:`TransformerComb`.
-        train_kwargs: Optional keyword arguments forwarded to :meth:`TransformerComb.fit`.
+        model_kwargs: Optional keyword arguments forwarded to :class:`ProcessTensorSurrogate`.
+        train_kwargs: Optional keyword arguments forwarded to :meth:`ProcessTensorSurrogate.fit`.
 
     Returns:
-        Trained :class:`TransformerComb`.
+        Trained :class:`ProcessTensorSurrogate`.
     """
     import torch  # noqa: PLC0415
 
-    from .model import TransformerComb  # noqa: PLC0415
+    from .model import ProcessTensorSurrogate  # noqa: PLC0415
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
     train_data = sample_train_dataset(
         operator,
         sim_params,
-        k=int(k),
+        num_interventions=int(num_interventions),
         n=int(n),
         rng=rng,
         parallel=bool(parallel),
@@ -230,7 +233,7 @@ def train_surrogate_model(
         timesteps=timesteps,
         init_mode=init_mode,
         solver=solver,
-        style=style,
+        intervention_style=intervention_style,
         _execution=_execution,
     )
 
@@ -242,7 +245,7 @@ def train_surrogate_model(
     else:
         device = torch.device(device_arg) if isinstance(device_arg, str) else device_arg
     d_e = int(train_data.tensors[0].shape[-1])
-    model = TransformerComb(d_e=d_e, d_rho=8, **resolved_model_kwargs).to(device)
+    model = ProcessTensorSurrogate(d_e=d_e, d_rho=8, **resolved_model_kwargs).to(device)
 
     model.fit(train_data, device=device, **resolved_train_kwargs)
     return model

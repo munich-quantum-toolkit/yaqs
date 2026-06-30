@@ -33,15 +33,15 @@ def _paper_mc() -> MemoryCharacterizer:
     return MemoryCharacterizer(parallel=False, show_progress=False)
 
 
-def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, k: int = _PAPER_K) -> ProbeSet:
+def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, num_interventions: int = _PAPER_K) -> ProbeSet:
     rng = np.random.default_rng(_PAPER_SEED + 10_000 * int(cut))
     return sample_probes(
         cut=int(cut),
-        k=int(k),
+        num_interventions=int(num_interventions),
         n_pasts=int(n_pasts),
         n_futures=int(n_futures),
         rng=rng,
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
         unitary_ensemble="haar",
     )
 
@@ -55,13 +55,13 @@ def _entropy_at_j(
     n_futures: int,
     probe_set: ProbeSet,
     length: int = _PAPER_L,
-    k: int = _PAPER_K,
+    num_interventions: int = _PAPER_K,
 ) -> float:
     ham = Hamiltonian.ising(length=length, J=float(j), g=_PAPER_G)
     result = mc.characterize(
         ham,
         _paper_params(),
-        k=int(k),
+        num_interventions=int(num_interventions),
         cut=int(cut),
         n_pasts=int(n_pasts),
         n_futures=int(n_futures),
@@ -90,7 +90,7 @@ def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, Analo
     out = mc.characterize(
         ham,
         params,
-        k=1,
+        num_interventions=1,
         cut=1,
         n_pasts=3,
         n_futures=3,
@@ -108,13 +108,13 @@ def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, Analog
     first = mc.characterize(
         ham,
         params,
-        k=1,
+        num_interventions=1,
         cut=1,
         n_pasts=3,
         n_futures=3,
         rng=np.random.default_rng(0),
     )
-    second = mc.characterize(ham, params, k=1, cut=1, probe_set=first)
+    second = mc.characterize(ham, params, num_interventions=1, cut=1, probe_set=first)
     assert second.entropy(1) == pytest.approx(first.entropy(1))
     assert second.rank(1) == first.rank(1)
 
@@ -124,7 +124,7 @@ def test_characterize_rejects_cut_and_cuts_together(ham_and_params: tuple[Hamilt
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     with pytest.raises(ValueError, match="Specify only one of cut="):
-        mc.characterize(ham, params, k=2, cut=1, cuts=[1, 2])
+        mc.characterize(ham, params, num_interventions=2, cut=1, cuts=[1, 2])
 
 
 def test_characterize_rejects_empty_cuts(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -132,7 +132,7 @@ def test_characterize_rejects_empty_cuts(ham_and_params: tuple[Hamiltonian, Anal
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     with pytest.raises(ValueError, match="cuts must be 'all' or a non-empty list"):
-        mc.characterize(ham, params, k=2, cuts=[])
+        mc.characterize(ham, params, num_interventions=2, cuts=[])
 
 
 def test_characterize_rejects_probe_set_for_multi_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -142,14 +142,14 @@ def test_characterize_rejects_probe_set_for_multi_cut(ham_and_params: tuple[Hami
     first = mc.characterize(
         ham,
         params,
-        k=2,
+        num_interventions=2,
         cut=1,
         n_pasts=3,
         n_futures=3,
         rng=np.random.default_rng(0),
     )
     with pytest.raises(ValueError, match="probe_set cannot be reused across multiple cuts"):
-        mc.characterize(ham, params, k=2, cuts="all", probe_set=first)
+        mc.characterize(ham, params, num_interventions=2, cuts="all", probe_set=first)
 
 
 @pytest.mark.skipif(
@@ -160,21 +160,21 @@ def test_train_default_style_is_haar(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """train() defaults to style='haar' when style is omitted."""
+    """train() defaults to intervention_style='haar' when style is omitted."""
     ham, params = ham_and_params
     captured: dict[str, str] = {}
 
     def _fake_train(*_args: object, **kwargs: object) -> object:
         captured["style"] = str(kwargs["style"])
-        from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
+        from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
-        return TransformerComb(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
+        return ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
 
     import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
 
     monkeypatch.setattr(wf, "train_surrogate_model", _fake_train)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    mc.train(ham, params, k=1, n=4, train_kwargs={"epochs": 0})
+    mc.train(ham, params, num_interventions=1, n=4, train_kwargs={"epochs": 0})
     assert captured["style"] == "haar"
 
 
@@ -189,12 +189,12 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
     model = mc.train(
         ham,
         params,
-        k=1,
+        num_interventions=1,
         n=8,
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    out = mc.characterize(model, cut=1, k=1, n_pasts=4, n_futures=4)
+    out = mc.characterize(model, cut=1, num_interventions=1, n_pasts=4, n_futures=4)
     assert out.entropy(1) >= 0.0
 
 
@@ -209,23 +209,23 @@ def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimPar
     model = mc.train(
         ham,
         params,
-        k=1,
+        num_interventions=1,
         n=8,
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(model, rho0, "haar", k=1)
+    rho_out = mc.predict(model, rho0, "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
 
-def test_build_comb_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """build_comb returns a comb; characterize returns CharacterizationResult diagnostics."""
+def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """build_process_tensor returns a comb; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
-    out = mc.characterize(comb, cut=1, k=1, n_pasts=3, n_futures=3)
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    out = mc.characterize(comb, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
     assert out.entropy(1) >= 0.0
 
 
@@ -233,14 +233,14 @@ def test_characterize_comb_default_cut(ham_and_params: tuple[Hamiltonian, Analog
     """characterize() uses interior default cut when cut is omitted."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=30, return_type="dense")
     rng = np.random.default_rng(0)
     default_cut = (2 + 1) // 2
-    ent_default = mc.characterize(comb, k=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
+    ent_default = mc.characterize(comb, num_interventions=2, n_pasts=4, n_futures=4, rng=rng).entropy(default_cut)
     ent_explicit = mc.characterize(
         comb,
         cut=default_cut,
-        k=2,
+        num_interventions=2,
         n_pasts=4,
         n_futures=4,
         rng=np.random.default_rng(0),
@@ -249,7 +249,7 @@ def test_characterize_comb_default_cut(ham_and_params: tuple[Hamiltonian, Analog
     result = mc.characterize(
         comb,
         cut=2,
-        k=2,
+        num_interventions=2,
         n_pasts=4,
         n_futures=4,
         rng=np.random.default_rng(0),
@@ -268,10 +268,10 @@ def test_transformercomb_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
     _ham, _params = ham_and_params
-    model = TransformerComb(
+    model = ProcessTensorSurrogate(
         d_e=32,
         d_rho=8,
         d_model=32,
@@ -279,7 +279,7 @@ def test_transformercomb_characterize_singular_values_shape(
         num_layers=1,
         dim_ff=64,
         dropout=0.0,
-        sequence_length=3,
+        num_interventions=3,
     )
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     sv = mc.characterize(
@@ -294,12 +294,12 @@ def test_transformercomb_characterize_singular_values_shape(
 
 
 def test_predict_comb_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """predict(comb, rho0, sequence, k=...) returns a valid density matrix."""
+    """predict(comb, rho0, sequence, num_interventions=...) returns a valid density matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
-    rho_out = mc.predict(comb, rho0, "haar", k=1)
+    rho_out = mc.predict(comb, rho0, "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
@@ -310,34 +310,34 @@ def test_predict_hamiltonian_removed(ham_and_params: tuple[Hamiltonian, AnalogSi
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(TypeError, match="Unsupported predict target"):
-        mc.predict(ham, rho0, "haar", k=1)
+        mc.predict(ham, rho0, "haar", num_interventions=1)
 
 
 def test_predict_comb_rejects_return_sequence(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """predict(comb, ..., return_sequence=True) is not supported."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     with pytest.raises(ValueError, match="return_sequence=True"):
-        mc.predict(comb, rho0, "haar", k=1, return_sequence=True)
+        mc.predict(comb, rho0, "haar", num_interventions=1, return_sequence=True)
 
 
 def test_predict_comb_ignores_invalid_rho0(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Comb predict does not validate rho0 because it is unused."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
-    rho_out = mc.predict(comb, np.array([99.0]), "haar", k=1)
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1], num_trajectories=12, return_type="dense")
+    rho_out = mc.predict(comb, np.array([99.0]), "haar", num_interventions=1)
     assert rho_out.shape == (2, 2)
     assert np.all(np.isfinite(rho_out))
 
 
-def test_build_comb_forwards_parallel_override(
+def test_build_process_tensor_forwards_parallel_override(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """build_comb passes the resolved parallel flag into build_process_tensor."""
+    """build_process_tensor passes the resolved parallel flag into build_process_tensor."""
     ham, params = ham_and_params
     seen: list[bool] = []
 
@@ -347,12 +347,12 @@ def test_build_comb_forwards_parallel_override(
         raise RuntimeError(msg)
 
     monkeypatch.setattr(
-        "mqt.yaqs.memory_characterizer.build_process_tensor",
+        "mqt.yaqs.memory_characterizer._build_process_tensor",
         _capture,
     )
     mc = MemoryCharacterizer(parallel=True, show_progress=False)
     with pytest.raises(RuntimeError, match="stop"):
-        mc.build_comb(ham, params, timesteps=[0.1], parallel=False)
+        mc.build_process_tensor(ham, params, timesteps=[0.1], parallel=False)
     assert seen == [False]
 
 
@@ -361,20 +361,20 @@ def test_build_comb_forwards_parallel_override(
     reason="torch not installed",
 )
 def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Train at k=2; predict at k=1 and k=3 returns finite density matrices."""
+    """Train at num_interventions=2; predict at num_interventions=1 and num_interventions=3 returns finite density matrices."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     model = mc.train(
         ham,
         params,
-        k=2,
+        num_interventions=2,
         n=8,
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     for k_prime in (1, 3):
-        rho_out = mc.predict(model, rho0, "haar", k=k_prime)
+        rho_out = mc.predict(model, rho0, "haar", num_interventions=k_prime)
         assert rho_out.shape == (2, 2)
         assert np.all(np.isfinite(rho_out))
 
@@ -390,13 +390,13 @@ def paper_params() -> AnalogSimParams:
 
 
 def test_characterize_paper_geometry_finite_entropy(paper_params: AnalogSimParams) -> None:
-    """L=2, k=8 characterize path yields finite S_V and R (quick benchmark geometry)."""
+    """L=2, num_interventions=8 characterize path yields finite S_V and R (quick benchmark geometry)."""
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
     result = mc.characterize(
         ham,
         paper_params,
-        k=8,
+        num_interventions=8,
         cut=4,
         n_pasts=8,
         n_futures=8,
@@ -413,7 +413,7 @@ def test_characterize_markovian_at_zero_coupling(paper_params: AnalogSimParams) 
     result = mc.characterize(
         ham,
         paper_params,
-        k=8,
+        num_interventions=8,
         cut=4,
         n_pasts=12,
         n_futures=12,
@@ -430,7 +430,7 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
     anchor = mc.characterize(
         Hamiltonian.ising(length=2, J=0.0, g=1.0),
         paper_params,
-        k=8,
+        num_interventions=8,
         cut=4,
         n_pasts=12,
         n_futures=12,
@@ -441,7 +441,7 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
         result = mc.characterize(
             Hamiltonian.ising(length=2, J=jv, g=1.0),
             paper_params,
-            k=8,
+            num_interventions=8,
             cut=4,
             probe_set=anchor,
         )
@@ -470,7 +470,7 @@ def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
     k = 4
     n_pasts = n_futures = 6
     cuts = list(range(1, k + 1))
-    probe_sets = {c: _sample_cut_probes(cut=c, k=k, n_pasts=n_pasts, n_futures=n_futures) for c in cuts}
+    probe_sets = {c: _sample_cut_probes(cut=c, num_interventions=k, n_pasts=n_pasts, n_futures=n_futures) for c in cuts}
     jv = 1.0
 
     def integrated_entropy(length: int) -> float:
@@ -483,7 +483,7 @@ def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
                 n_futures=n_futures,
                 probe_set=probe_sets[c],
                 length=length,
-                k=k,
+                num_interventions=k,
             )
             for c in cuts
         }
@@ -503,17 +503,17 @@ def test_paper_modes_rank_rises_with_coupling() -> None:
         probe_seed = _PAPER_SEED + 900_000 + 100_000 * cut + 100 * round(100 * j)
         probe_set = sample_probes(
             cut=cut,
-            k=_PAPER_K,
+            num_interventions=_PAPER_K,
             n_pasts=m_spectrum,
             n_futures=m_spectrum,
             rng=np.random.default_rng(probe_seed),
-            intervention_mode="unitary_break_mp",
+            intervention_mode="split_cut_unitary",
             unitary_ensemble="haar",
         )
         result = mc.characterize(
             Hamiltonian.ising(length=_PAPER_L, J=float(j), g=_PAPER_G),
             _paper_params(),
-            k=_PAPER_K,
+            num_interventions=_PAPER_K,
             cut=cut,
             n_pasts=m_spectrum,
             n_futures=m_spectrum,
@@ -535,11 +535,11 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
     n_pasts = n_futures = 6
     probe_set = sample_probes(
         cut=cut,
-        k=k,
+        num_interventions=k,
         n_pasts=n_pasts,
         n_futures=n_futures,
         rng=np.random.default_rng(999_991),
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
         unitary_ensemble="haar",
     )
     ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
@@ -548,7 +548,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
         result = mc.characterize(
             ham,
             _paper_params(),
-            k=k,
+            num_interventions=k,
             cut=cut,
             delay=delay,
             n_pasts=n_pasts,
@@ -566,16 +566,16 @@ def test_characterize_delay_rejects_negative() -> None:
     mc = _paper_mc()
     ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
     with pytest.raises(ValueError, match="delay must be >= 0"):
-        mc.characterize(ham, _paper_params(), k=6, cut=4, delay=-1)
+        mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=-1)
 
 
 def test_characterize_delay_rejects_comb(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    comb = mc.build_comb(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+    comb = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
     with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
-        mc.characterize(comb, cut=1, k=2, delay=1)
+        mc.characterize(comb, cut=1, num_interventions=2, delay=1)
 
 
 def test_characterize_delay_reuses_prior_result_probes() -> None:
@@ -585,12 +585,12 @@ def test_characterize_delay_reuses_prior_result_probes() -> None:
     anchor = mc.characterize(
         ham,
         _paper_params(),
-        k=6,
+        num_interventions=6,
         cut=4,
         delay=0,
         n_pasts=4,
         n_futures=4,
         rng=np.random.default_rng(999_991),
     )
-    delayed = mc.characterize(ham, _paper_params(), k=6, cut=4, delay=1, probe_set=anchor)
+    delayed = mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=1, probe_set=anchor)
     assert np.isfinite(delayed.entropy(4))

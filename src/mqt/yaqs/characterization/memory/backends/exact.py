@@ -31,28 +31,28 @@ if TYPE_CHECKING:
 
 def _resolve_sequence_grid(
     probe_set: ProbeSet,
-    psi_pairs_list: list[list[Any]] | None,
+    intervention_steps_list: list[list[Any]] | None,
 ) -> tuple[list[list[Any]], int, int]:
     """Resolve the flat intervention-sequence grid for simulation.
 
     Args:
         probe_set: Sampled split-cut probes.
-        psi_pairs_list: Optional pre-built sequence list (experiment geometries).
+        intervention_steps_list: Optional pre-built sequence list (experiment geometries).
 
     Returns:
         Tuple ``(all_pairs, n_pasts, n_futures)``.
 
     Raises:
-        ValueError: If ``psi_pairs_list`` length does not match the probe grid.
+        ValueError: If ``intervention_steps_list`` length does not match the probe grid.
     """
-    if psi_pairs_list is None:
+    if intervention_steps_list is None:
         return assemble_probe_grid(probe_set)
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
-    if len(psi_pairs_list) != n_p * n_f:
-        msg = f"psi_pairs_list length {len(psi_pairs_list)} != n_pasts * n_futures ({n_p * n_f})"
+    if len(intervention_steps_list) != n_p * n_f:
+        msg = f"intervention_steps_list length {len(intervention_steps_list)} != n_pasts * n_futures ({n_p * n_f})"
         raise ValueError(msg)
-    return psi_pairs_list, n_p, n_f
+    return intervention_steps_list, n_p, n_f
 
 
 class ExactBackend:
@@ -115,14 +115,14 @@ class ExactBackend:
         self,
         probe_set: ProbeSet,
         *,
-        psi_pairs_list: list[list[Any]] | None = None,
+        intervention_steps_list: list[list[Any]] | None = None,
         _execution: ExecutionConfig | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate weighted probe responses via traced simulation.
 
         Args:
             probe_set: Sampled split-cut probes.
-            psi_pairs_list: Optional pre-built sequence grid (experiment geometries).
+            intervention_steps_list: Optional pre-built sequence grid (experiment geometries).
             _execution: Optional one-shot execution override for this evaluation.
 
         Returns:
@@ -137,7 +137,7 @@ class ExactBackend:
             show_progress=exec_cfg.show_progress,
             solver=self._solver,
             _execution=exec_cfg,
-            psi_pairs_list=psi_pairs_list,
+            intervention_steps_list=intervention_steps_list,
             static_ctx=self._static_ctx,
         )
         return pauli_xyz, weights_ij
@@ -165,7 +165,7 @@ def simulate_exact(
     show_progress: bool = False,
     solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
-    psi_pairs_list: list[list[Any]] | None = None,
+    intervention_steps_list: list[list[Any]] | None = None,
     static_ctx: MCWFContext | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
     r"""Exact simulation with per-sequence diagnostics (branch weights, early termination).
@@ -178,7 +178,7 @@ def simulate_exact(
         parallel: Whether to parallelize sequence simulation.
         show_progress: Whether to show a progress bar.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
-        psi_pairs_list: Optional pre-built sequence grid (experiment geometries).
+        intervention_steps_list: Optional pre-built sequence grid (experiment geometries).
         static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
     Returns:
@@ -189,7 +189,7 @@ def simulate_exact(
     Raises:
         TypeError: If the backend output is not an ndarray.
     """
-    all_pairs, n_p, n_f = _resolve_sequence_grid(probe_set, psi_pairs_list)
+    all_pairs, n_p, n_f = _resolve_sequence_grid(probe_set, intervention_steps_list)
     n_tot = n_p * n_f
     initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
@@ -199,8 +199,8 @@ def simulate_exact(
     result = simulate_sequences(
         operator=operator,
         sim_params=sim_params,
-        timesteps=[float(sim_params.dt)] * (int(probe_set.k) + 1),
-        psi_pairs_list=all_pairs,
+        timesteps=[float(sim_params.dt)] * (int(probe_set.num_interventions) + 1),
+        intervention_steps_list=all_pairs,
         initial_psis=initial_psis,
         static_ctx=static_ctx,
         parallel=exec_cfg.parallel,

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Neural surrogate module: :class:`TransformerComb` only.
+"""Neural surrogate module: :class:`ProcessTensorSurrogate` only.
 
 Training data containers (:class:`~mqt.yaqs.characterization.memory.backends.surrogates.data.SeqTrace`,
 :func:`~mqt.yaqs.characterization.memory.backends.surrogates.data.stack_traces`) live in
@@ -94,7 +94,7 @@ def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     return m
 
 
-class TransformerComb(nn.Module):
+class ProcessTensorSurrogate(nn.Module):
     """Causal transformer over per-step features ``(E_t, rho_0)``."""
 
     def __init__(
@@ -108,7 +108,7 @@ class TransformerComb(nn.Module):
         dim_ff: int = 256,
         dropout: float = 0.0,
         layernorm_in: bool = False,
-        sequence_length: int | None = None,
+        num_interventions: int | None = None,
     ) -> None:
         """Initialize the transformer surrogate.
 
@@ -121,7 +121,7 @@ class TransformerComb(nn.Module):
             dim_ff: Feed-forward dimension inside encoder layers.
             dropout: Dropout rate.
             layernorm_in: Whether to apply a LayerNorm after the input projection.
-            sequence_length: Total sequence length ``k`` for :meth:`entropy`. Set automatically by
+            num_interventions: Total sequence length ``k`` for :meth:`entropy`. Set automatically by
                 :meth:`fit` from training targets; may be set here before training.
 
         Raises:
@@ -153,7 +153,7 @@ class TransformerComb(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(layer, num_layers=num_layers)
         self.head = nn.Linear(d_model, d_rho)
-        self.sequence_length: int | None = int(sequence_length) if sequence_length is not None else None
+        self.num_interventions: int | None = int(num_interventions) if num_interventions is not None else None
 
     @property
     def d_e(self) -> int:
@@ -246,19 +246,19 @@ class TransformerComb(nn.Module):
             self.train()
         return out[:, -1, :]
 
-    def _k_for_probe(self) -> int:
+    def _num_interventions_for_probe(self) -> int:
         """Return the trained sequence length ``k`` used for probe evaluation.
 
         Returns:
             Total intervention steps ``k`` inferred from training data or ``__init__``.
 
         Raises:
-            ValueError: If ``sequence_length`` was never set.
+            ValueError: If ``num_interventions`` was never set.
         """
-        if self.sequence_length is None:
-            msg = "sequence_length is unset: call fit() or pass sequence_length=... to __init__."
+        if self.num_interventions is None:
+            msg = "num_interventions is unset: call fit() or pass num_interventions=... to __init__."
             raise ValueError(msg)
-        return int(self.sequence_length)
+        return int(self.num_interventions)
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe responses for :func:`run_operational_memory`.
@@ -267,16 +267,16 @@ class TransformerComb(nn.Module):
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
 
         Raises:
-            ValueError: If ``probe_set.k`` differs from the model training horizon.
+            ValueError: If ``probe_set.num_interventions`` differs from the model training horizon.
         """
-        expected_k = self._k_for_probe()
-        if int(probe_set.k) != expected_k:
-            msg = f"ProbeSet k={probe_set.k} does not match model sequence_length={expected_k}."
+        expected_num_interventions = self._num_interventions_for_probe()
+        if int(probe_set.num_interventions) != expected_num_interventions:
+            msg = f"ProbeSet k={probe_set.num_interventions} does not match model num_interventions={expected_num_interventions}."
             raise ValueError(msg)
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1
-        suffix_len = int(probe_set.k) - int(probe_set.cut)
+        suffix_len = int(probe_set.num_interventions) - int(probe_set.cut)
         v_rows = np.empty((n_p, n_f, 4), dtype=np.float32)
         dev = next(self.parameters()).device
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
@@ -384,7 +384,7 @@ class TransformerComb(nn.Module):
         grad_clip: float = 1.0,
         prefix_loss: str = "full",
         device: torch.device | None = None,
-    ) -> TransformerComb:
+    ) -> ProcessTensorSurrogate:
         """Fit the model on sequence-trace data using MSE loss.
 
         Args:
@@ -408,7 +408,7 @@ class TransformerComb(nn.Module):
         self.to(device)
 
         e_train, rho0_train, target_train = train_dataset.tensors
-        self.sequence_length = int(target_train.shape[1])
+        self.num_interventions = int(target_train.shape[1])
         train_ds = TensorDataset(e_train, rho0_train, target_train)
 
         has_val = val_dataset is not None

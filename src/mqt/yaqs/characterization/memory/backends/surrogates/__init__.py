@@ -10,8 +10,8 @@
 Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.sample_train_dataset`
 (returns :class:`~torch.utils.data.TensorDataset`) and
 :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.train_surrogate_model`.
-:class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb` holds the network and
-:meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb.fit` training loop.
+:class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate` holds the network and
+:meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate.fit` training loop.
 Sequence traces: :mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
 Comb-schedule simulation: :mod:`mqt.yaqs.characterization.memory.backends.sequences`.
 

@@ -18,8 +18,6 @@ from .grid import assemble_probe_sequence
 if TYPE_CHECKING:
     from .samples import ProbeSet
 
-ProbeStep = dict[str, Any] | tuple[np.ndarray, np.ndarray]
-
 _RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
@@ -38,7 +36,7 @@ def compute_born_prob(rho: np.ndarray, psi: np.ndarray) -> float:
     return float(np.real(np.vdot(ket, r @ ket)))
 
 
-def _step_probability(rho: np.ndarray, step: ProbeStep) -> float:
+def compute_step_prob(rho: np.ndarray, step: Any) -> float:
     """Compute the measurement probability for one intervention step.
 
     Args:
@@ -53,9 +51,9 @@ def _step_probability(rho: np.ndarray, step: ProbeStep) -> float:
     """
     if isinstance(step, dict):
         step_type = str(step.get("type", "")).lower()
-        if step_type in {"unitary", "prepare_only"}:
+        if step_type in {"unitary", "cut_preparation"}:
             return 1.0
-        if step_type == "measure_only":
+        if step_type == "cut_measurement":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
             return compute_born_prob(rho, psi_meas)
         msg = f"Unsupported probe step type: {step_type!r}"
@@ -64,7 +62,7 @@ def _step_probability(rho: np.ndarray, step: ProbeStep) -> float:
     return compute_born_prob(rho, psi_meas)
 
 
-def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
+def apply_intervention(rho: np.ndarray, step: Any) -> np.ndarray:
     """Apply one intervention step to a single-qubit state.
 
     Args:
@@ -83,7 +81,7 @@ def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
         if step_type == "unitary":
             u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
             out = u @ r @ u.conj().T
-        elif step_type == "measure_only":
+        elif step_type == "cut_measurement":
             psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
             prob = compute_born_prob(r, psi_meas)
             if prob > 1e-15:
@@ -95,7 +93,7 @@ def _apply_step(rho: np.ndarray, step: ProbeStep) -> np.ndarray:
                 out = np.outer(ket, ket.conj())
             else:
                 out = np.zeros((2, 2), dtype=np.complex128)
-        elif step_type == "prepare_only":
+        elif step_type == "cut_preparation":
             psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
             ket = psi_prep / max(float(np.linalg.norm(psi_prep)), 1e-15)
             out = np.outer(ket, ket.conj())
@@ -127,11 +125,11 @@ def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
     rho = _RHO0.copy()
     weight = 1.0
     for t in range(min(int(cut), len(steps))):
-        sp = _step_probability(rho, steps[t])
+        sp = compute_step_prob(rho, steps[t])
         weight *= sp
         if weight < 1e-15:
             return float(weight)
-        rho = _apply_step(rho, steps[t])
+        rho = apply_intervention(rho, steps[t])
     return float(weight)
 
 

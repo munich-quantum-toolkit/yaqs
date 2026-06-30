@@ -136,7 +136,7 @@ class CharacterizationResult:
         ps = entry.probe_set
         return {
             "cut": int(ps.cut),
-            "k": int(ps.k),
+            "num_interventions": int(ps.num_interventions),
             "past_features": np.asarray(ps.past_features),
             "future_features": np.asarray(ps.future_features),
         }

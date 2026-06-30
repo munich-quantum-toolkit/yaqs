@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 
 from .branch_weights import compute_analytic_weights
-from .grid import assemble_delayed_probe_grid, delayed_sequence_length
+from .grid import assemble_delayed_probe_grid, compute_delayed_length
 from .memory_matrix import assemble_memory_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
 
@@ -42,7 +42,7 @@ class OperationalMemoryBackend(Protocol):
         """
 
 
-class CombProbeBackend(Protocol):
+class ProcessTensorProbeBackend(Protocol):
     """Protocol for comb/surrogate backends exposing :meth:`evaluate_probes`.
 
     Weighted evaluation is supplied by :func:`evaluate_probes_weighted_for`.
@@ -59,7 +59,7 @@ class CombProbeBackend(Protocol):
         """
 
 
-MemoryProcessBackend = OperationalMemoryBackend | CombProbeBackend
+MemoryProcessBackend = OperationalMemoryBackend | ProcessTensorProbeBackend
 
 
 # Back-compat alias until call sites migrate.
@@ -98,13 +98,13 @@ def run_operational_memory(
     *,
     process: MemoryProcessBackend,
     cut: int,
-    k: int,
+    num_interventions: int,
     n_pasts: int = 32,
     n_futures: int = 32,
     rng: np.random.Generator | None = None,
     probe_set: ProbeSet | None = None,
     return_raw: bool = False,
-    intervention_mode: str = "unitary_break_mp",
+    intervention_mode: str = "split_cut_unitary",
     unitary_ensemble: str = "haar",
     parallel: bool | None = None,
     delay: int = 0,
@@ -114,7 +114,7 @@ def run_operational_memory(
     Args:
         process: Operational-memory backend (exact, comb, or surrogate).
         cut: Causal cut index.
-        k: Base sequence length (past + cut + future legs; excludes ``delay`` slots).
+        num_interventions: Base sequence length (past + cut + future legs; excludes ``delay`` slots).
         n_pasts: Past probe count when sampling internally.
         n_futures: Future probe count when sampling internally.
         rng: RNG for internal probe sampling.
@@ -148,29 +148,35 @@ def run_operational_memory(
     execution_override: ExecutionConfig | None = None
     if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
         execution_override = process.execution_config(parallel=parallel)
-    if probe_set is not None and (int(probe_set.cut) != int(cut) or int(probe_set.k) != int(k)):
-        msg = f"probe_set was built for cut={probe_set.cut}, k={probe_set.k}, but cut={cut}, k={k} were requested."
+    if probe_set is not None and (
+        int(probe_set.cut) != int(cut) or int(probe_set.num_interventions) != int(num_interventions)
+    ):
+        msg = (
+            f"probe_set was built for cut={probe_set.cut}, "
+            f"num_interventions={probe_set.num_interventions}, but cut={cut}, "
+            f"num_interventions={num_interventions} were requested."
+        )
         raise ValueError(msg)
     if probe_set is None:
         if rng is None:
             rng = np.random.default_rng()
         probe_set = sample_probes(
             cut=cut,
-            k=k,
+            num_interventions=num_interventions,
             n_pasts=n_pasts,
             n_futures=n_futures,
             rng=rng,
             intervention_mode=intervention_mode,
             unitary_ensemble=unitary_ensemble,
         )
-    psi_pairs_list = None
+    intervention_steps_list = None
     sim_probe_set = probe_set
     if delay > 0:
         if exact_backend_cls is None or not isinstance(process, exact_backend_cls):
             msg = "delay > 0 requires an exact Hamiltonian characterize backend."
             raise ValueError(msg)
-        psi_pairs_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
-        sim_probe_set = replace(probe_set, k=delayed_sequence_length(k=k, delay=delay))
+        intervention_steps_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
+        sim_probe_set = replace(probe_set, num_interventions=compute_delayed_length(num_interventions=num_interventions, delay=delay))
 
     if (
         exact_backend_cls is not None
@@ -178,8 +184,8 @@ def run_operational_memory(
         and (delay > 0 or execution_override is not None)
     ):
         eval_kwargs: dict[str, Any] = {}
-        if psi_pairs_list is not None:
-            eval_kwargs["psi_pairs_list"] = psi_pairs_list
+        if intervention_steps_list is not None:
+            eval_kwargs["intervention_steps_list"] = intervention_steps_list
         if execution_override is not None:
             eval_kwargs["_execution"] = execution_override
         pauli_xyz_ij, weights_ij = process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)

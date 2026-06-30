@@ -28,7 +28,7 @@ class SeqTrace:
 
     ``E_features`` rows have length ``d_e`` (32 for the default single-qubit Choi flattening).
     This is not the same as a single stochastic **trajectory** when ``num_trajectories > 1``
-    under a noise model (see :meth:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_comb`),
+    under a noise model (see :meth:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_process_tensor`),
     which returns :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Attributes:

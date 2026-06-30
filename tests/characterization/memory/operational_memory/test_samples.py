@@ -50,7 +50,7 @@ def test_sample_probes_measure_prepare_mode() -> None:
     rng = np.random.default_rng(1)
     probe_set = sample_probes(
         cut=2,
-        k=3,
+        num_interventions=3,
         n_pasts=3,
         n_futures=2,
         rng=rng,
@@ -64,7 +64,7 @@ def test_sample_probes_cut_validation() -> None:
     """Invalid cut indices are rejected."""
     rng = np.random.default_rng(2)
     with pytest.raises(ValueError, match="cut must satisfy"):
-        sample_probes(cut=0, k=2, n_pasts=2, n_futures=2, rng=rng)
+        sample_probes(cut=0, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
 
 
 def test_sample_random_clifford_unitary_returns_copy() -> None:
@@ -83,11 +83,11 @@ def test_sample_probes_measure_prepare_ignores_unitary_ensemble() -> None:
     rng = np.random.default_rng(3)
     probe_set = sample_probes(
         cut=1,
-        k=2,
+        num_interventions=2,
         n_pasts=2,
         n_futures=2,
         rng=rng,
         intervention_mode="measure_prepare",
         unitary_ensemble="not-a-real-ensemble",
     )
-    assert probe_set.k == 2
+    assert probe_set.num_interventions == 2

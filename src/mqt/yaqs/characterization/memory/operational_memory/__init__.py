@@ -28,7 +28,7 @@ from .branch_weights import (
 from .grid import assemble_probe_grid, assemble_probe_sequence
 from .results import CharacterizationResult, merge_cut_results, pack_result
 from .run import (
-    CombProbeBackend,
+    ProcessTensorProbeBackend,
     MemoryProcessBackend,
     OperationalMemoryBackend,
     evaluate_probes_weighted_for,
@@ -38,7 +38,7 @@ from .samples import ProbeSet, extract_ket, resolve_unitary_sampler, sample_prob
 
 __all__ = [
     "CharacterizationResult",
-    "CombProbeBackend",
+    "ProcessTensorProbeBackend",
     "MemoryProcessBackend",
     "OperationalMemoryBackend",
     "ProbeSet",

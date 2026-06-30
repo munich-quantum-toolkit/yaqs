@@ -18,7 +18,7 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
-from mqt.yaqs.characterization.memory.backends.tomography.combs import DenseComb, MPOComb
+from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
     compute_branch_weight,
     compute_branch_weights,
@@ -74,7 +74,7 @@ def test_run_operational_memory_uses_object_backend() -> None:
             return np.zeros((n_p, n_f, 4), dtype=np.float32)
 
     out = run_operational_memory(
-        process=DummyProcess(), cut=1, k=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7)
+        process=DummyProcess(), cut=1, num_interventions=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7)
     )
     assert out["pauli_xyz_ij"].shape == (2, 3, 4)
     assert "entropy" in out
@@ -83,7 +83,7 @@ def test_run_operational_memory_uses_object_backend() -> None:
 def test_branch_weights_constant_across_future_columns() -> None:
     """Branch weights are constant across future columns for a fixed past."""
     rng = np.random.default_rng(3)
-    probe_set = sample_probes(cut=2, k=3, n_pasts=5, n_futures=4, rng=rng)
+    probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=5, n_futures=4, rng=rng)
     w = compute_branch_weights(probe_set)
     assert np.allclose(w.std(axis=1), 0.0, atol=1e-14)
 
@@ -110,7 +110,7 @@ def test_comb_run_operational_memory_returns_cut_weights() -> None:
         parallel=False,
         return_type="dense",
     )
-    out = run_operational_memory(process=comb, cut=1, k=1, n_pasts=4, n_futures=3, rng=rng)
+    out = run_operational_memory(process=comb, cut=1, num_interventions=1, n_pasts=4, n_futures=3, rng=rng)
     assert "weights_ij" in out
     assert out["weights_ij"].shape == (4, 3)
     assert np.all(out["weights_ij"] > 0.0)
@@ -122,11 +122,11 @@ def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
     op = MPO.ising(length=1, J=0.0, g=0.0)
     probe_set = sample_probes(
         cut=2,
-        k=3,
+        num_interventions=3,
         n_pasts=4,
         n_futures=3,
         rng=rng,
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
     )
     w_analytic = compute_branch_weights(probe_set)
     _, w_exact, _ = simulate_exact(
@@ -140,7 +140,7 @@ def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
 
 
 def test_dense_comb_vs_exact_probe_entropy() -> None:
-    """DenseComb weighted entropy agrees with exact rollout on small k."""
+    """DenseProcessTensor weighted entropy agrees with exact rollout on small k."""
     rng = np.random.default_rng(42)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
@@ -152,14 +152,14 @@ def test_dense_comb_vs_exact_probe_entropy() -> None:
         parallel=False,
         return_type="dense",
     )
-    assert isinstance(comb, DenseComb)
+    assert isinstance(comb, DenseProcessTensor)
     probe_set = sample_probes(
         cut=2,
-        k=2,
+        num_interventions=2,
         n_pasts=5,
         n_futures=4,
         rng=rng,
-        intervention_mode="unitary_break_mp",
+        intervention_mode="split_cut_unitary",
     )
     exact = ExactBackend(
         operator=op,
@@ -176,7 +176,7 @@ def test_dense_comb_vs_exact_probe_entropy() -> None:
     )
     _m_e_raw, memory_matrix_e = assemble_memory_matrix(pauli_e, weights_e)
     out_exact = compute_spectrum(memory_matrix_e)
-    out_comb = run_operational_memory(process=comb, cut=2, k=2, probe_set=probe_set)
+    out_comb = run_operational_memory(process=comb, cut=2, num_interventions=2, probe_set=probe_set)
     assert out_comb["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
 
 
@@ -194,11 +194,11 @@ def test_mpo_comb_entropy_matches_dense() -> None:
         return_type="mpo",
         compress_every=1,
     )
-    assert isinstance(mpo_comb, MPOComb)
+    assert isinstance(mpo_comb, MPOProcessTensor)
     dense = mpo_comb.to_dense()
-    probe_set = sample_probes(cut=1, k=1, n_pasts=4, n_futures=3, rng=rng)
-    out_mpo = run_operational_memory(process=mpo_comb, cut=1, k=1, probe_set=probe_set)
-    out_dense = run_operational_memory(process=dense, cut=1, k=1, probe_set=probe_set)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=4, n_futures=3, rng=rng)
+    out_mpo = run_operational_memory(process=mpo_comb, cut=1, num_interventions=1, probe_set=probe_set)
+    out_dense = run_operational_memory(process=dense, cut=1, num_interventions=1, probe_set=probe_set)
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
 
@@ -214,7 +214,7 @@ def test_evaluate_probes_weighted_for_comb_uses_analytic_weights() -> None:
         parallel=False,
         return_type="dense",
     )
-    probe_set = sample_probes(cut=1, k=1, n_pasts=3, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=3, n_futures=2, rng=rng)
     pauli, weights = evaluate_probes_weighted_for(comb, probe_set)
     assert pauli.shape == (3, 2, 4)
     assert weights.shape == (3, 2)
@@ -227,7 +227,7 @@ def test_evaluate_probes_weighted_for_missing_method_raises() -> None:
     class NoProbes:
         pass
 
-    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
     with pytest.raises(TypeError, match="evaluate_probes"):
         evaluate_probes_weighted_for(cast("MemoryProcessBackend", NoProbes()), probe_set)
 
@@ -244,7 +244,7 @@ def test_evaluate_probes_weighted_for_inherited_method() -> None:
     class ChildBackend(BaseBackend):
         pass
 
-    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
     pauli, weights = evaluate_probes_weighted_for(cast("MemoryProcessBackend", ChildBackend()), probe_set)
     assert pauli.shape == (2, 2, 4)
     assert weights.shape == (2, 2)
@@ -254,8 +254,8 @@ def test_run_operational_memory_parallel_override_does_not_mutate_backend() -> N
     """A one-shot parallel=False override must not change ExactBackend defaults."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     backend = ExactBackend(operator=op, sim_params=_params(), initial_psi=_PSI0, parallel=True)
-    probe_set = sample_probes(cut=1, k=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    run_operational_memory(process=backend, cut=1, k=1, probe_set=probe_set, parallel=False)
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    run_operational_memory(process=backend, cut=1, num_interventions=1, probe_set=probe_set, parallel=False)
     assert backend.parallel is True
 
 
@@ -274,7 +274,7 @@ def test_run_operational_memory_return_raw_includes_uncentered_matrix() -> None:
     out = run_operational_memory(
         process=comb,
         cut=1,
-        k=1,
+        num_interventions=1,
         n_pasts=3,
         n_futures=2,
         rng=rng,
@@ -322,11 +322,11 @@ def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:
     rng = np.random.default_rng(4)
     op = MPO.ising(length=2, J=0.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
-    probe_set = sample_probes(cut=2, k=4, n_pasts=4, n_futures=3, rng=rng)
+    probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=4, n_futures=3, rng=rng)
     psi0 = np.zeros(4, dtype=np.complex128)
     psi0[0] = 1.0 + 0.0j
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
-    out = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
+    out = run_operational_memory(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
     exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
     assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
 
@@ -334,7 +334,7 @@ def test_run_operational_memory_matches_cumulative_weight_entropy() -> None:
 def test_run_operational_memory_rejects_mismatched_probe_set() -> None:
     """Supplied probe_set must match the requested cut and k."""
     rng = np.random.default_rng(0)
-    probe_set = sample_probes(cut=1, k=2, n_pasts=2, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
 
     class DummyProcess:
         def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
@@ -343,7 +343,7 @@ def test_run_operational_memory_rejects_mismatched_probe_set() -> None:
             return np.zeros((n_p, n_f, 4), dtype=np.float64)
 
     with pytest.raises(ValueError, match="probe_set was built for"):
-        run_operational_memory(process=DummyProcess(), cut=2, k=2, probe_set=probe_set)
+        run_operational_memory(process=DummyProcess(), cut=2, num_interventions=2, probe_set=probe_set)
 
 
 def test_evaluate_probes_weighted_for_preserves_float64() -> None:
@@ -357,7 +357,7 @@ def test_evaluate_probes_weighted_for_preserves_float64() -> None:
             out[..., 1] = 1e-7
             return out
 
-    probe_set = sample_probes(cut=1, k=1, n_pasts=1, n_futures=1, rng=np.random.default_rng(0))
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=1, n_futures=1, rng=np.random.default_rng(0))
     pauli, _weights = evaluate_probes_weighted_for(HighPrecisionBackend(), probe_set)
     assert pauli.dtype == np.float64
     assert pauli[0, 0, 1] == pytest.approx(1e-7)
@@ -368,7 +368,7 @@ def test_run_operational_memory_delay_rejects_negative() -> None:
     op = MPO.ising(length=1, J=0.0, g=0.0)
     backend = ExactBackend(operator=op, sim_params=_params(), initial_psi=_PSI0, parallel=False)
     with pytest.raises(ValueError, match="delay must be >= 0"):
-        run_operational_memory(process=backend, cut=1, k=2, delay=-1)
+        run_operational_memory(process=backend, cut=1, num_interventions=2, delay=-1)
 
 
 def test_run_operational_memory_delay_rejects_comb_backend() -> None:
@@ -383,9 +383,9 @@ def test_run_operational_memory_delay_rejects_comb_backend() -> None:
         parallel=False,
         return_type="dense",
     )
-    probe_set = sample_probes(cut=1, k=2, n_pasts=2, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
     with pytest.raises(ValueError, match="delay > 0 requires an exact Hamiltonian"):
-        run_operational_memory(process=comb, cut=1, k=2, probe_set=probe_set, delay=1)
+        run_operational_memory(process=comb, cut=1, num_interventions=2, probe_set=probe_set, delay=1)
 
 
 def test_run_operational_memory_delay_zero_matches_default() -> None:
@@ -395,10 +395,10 @@ def test_run_operational_memory_delay_zero_matches_default() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     psi0 = np.zeros(4, dtype=np.complex128)
     psi0[0] = 1.0 + 0.0j
-    probe_set = sample_probes(cut=2, k=4, n_pasts=3, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
-    out_default = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set)
-    out_zero = run_operational_memory(process=backend, cut=2, k=4, probe_set=probe_set, delay=0)
+    out_default = run_operational_memory(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
+    out_zero = run_operational_memory(process=backend, cut=2, num_interventions=4, probe_set=probe_set, delay=0)
     assert out_zero["entropy"] == pytest.approx(out_default["entropy"], rel=1e-10, abs=1e-10)
 
 
@@ -409,8 +409,8 @@ def test_run_operational_memory_delay_exact_returns_finite_entropy() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     psi0 = np.zeros(4, dtype=np.complex128)
     psi0[0] = 1.0 + 0.0j
-    probe_set = sample_probes(cut=3, k=5, n_pasts=3, n_futures=2, rng=rng)
+    probe_set = sample_probes(cut=3, num_interventions=5, n_pasts=3, n_futures=2, rng=rng)
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
-    out = run_operational_memory(process=backend, cut=3, k=5, probe_set=probe_set, delay=2)
+    out = run_operational_memory(process=backend, cut=3, num_interventions=5, probe_set=probe_set, delay=2)
     assert np.isfinite(out["entropy"])
     assert out["pauli_xyz_ij"].shape == (3, 2, 4)

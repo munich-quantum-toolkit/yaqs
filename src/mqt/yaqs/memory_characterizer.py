@@ -16,12 +16,13 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.backends.tomography import DenseComb, MPOComb, build_process_tensor
-from mqt.yaqs.characterization.memory.backends.tomography.combs import convert_probe_callable
+from mqt.yaqs.characterization.memory.backends.tomography import DenseProcessTensor, MPOProcessTensor
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor as _build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import convert_probe_callable
 from mqt.yaqs.characterization.memory.operational_memory.interventions import (
     DEFAULT_INTERVENTION_STYLE,
     InterventionSequence,
-    encode_sequence,
+    encode_interventions,
     map_probe_kwargs,
 )
 from mqt.yaqs.characterization.memory.operational_memory.results import (
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
     from numpy.random import Generator
     from torch.utils.data import TensorDataset
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import TransformerComb
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate
     from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis
     from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
     from mqt.yaqs.core.data_structures.mpo import MPO
@@ -153,7 +154,7 @@ def make_zero_psi(length: int) -> np.ndarray:
     return psi
 
 
-def _resolve_k(target: Any, k: int | None) -> int:
+def _resolve_num_interventions(target: Any, num_interventions: int | None) -> int:
     """Infer sequence length ``k`` from an explicit value or comb/surrogate target.
 
     Args:
@@ -166,16 +167,19 @@ def _resolve_k(target: Any, k: int | None) -> int:
     Raises:
         ValueError: If ``k`` cannot be inferred from ``target``.
     """
-    if k is not None:
-        return int(k)
-    k_attr = getattr(target, "_k_for_probe", None)
+    if num_interventions is not None:
+        return int(num_interventions)
+    k_attr = getattr(target, "_num_interventions_for_probe", None)
     if callable(k_attr):
         return int(k_attr())
-    msg = "k must be provided when the target does not define _k_for_probe()."
+    msg = (
+        "num_interventions must be provided when the target does not define "
+        "_num_interventions_for_probe()."
+    )
     raise ValueError(msg)
 
 
-def _default_cut(k: int, cut: int | None) -> int:
+def _default_cut(num_interventions: int, cut: int | None) -> int:
     """Resolve causal cut, defaulting to the interior cut ``(k + 1) // 2``.
 
     Args:
@@ -188,10 +192,10 @@ def _default_cut(k: int, cut: int | None) -> int:
     Raises:
         ValueError: If the resolved cut is out of range.
     """
-    resolved_k = int(k)
-    c = (resolved_k + 1) // 2 if cut is None else int(cut)
-    if not (1 <= c <= resolved_k):
-        msg = f"cut must satisfy 1 <= cut <= k ({resolved_k}), got {c}."
+    resolved_num_interventions = int(num_interventions)
+    c = (resolved_num_interventions + 1) // 2 if cut is None else int(cut)
+    if not (1 <= c <= resolved_num_interventions):
+        msg = f"cut must satisfy 1 <= cut <= k ({resolved_num_interventions}), got {c}."
         raise ValueError(msg)
     return c
 
@@ -222,15 +226,15 @@ def matches_hamiltonian(target: Any) -> bool:
     return isinstance(target, Hamiltonian)
 
 
-def matches_comb(target: Any) -> bool:
+def matches_process_tensor(target: Any) -> bool:
     """Return whether ``target`` is a reference comb predict target."""
-    return isinstance(target, (DenseComb, MPOComb))
+    return isinstance(target, (DenseProcessTensor, MPOProcessTensor))
 
 
 class MemoryCharacterizer:
     """Entry point for operational memory workflows.
 
-    **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_comb`
+    **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_process_tensor`
 
     **Use:** :meth:`predict` (surrogate or reference-comb dynamics), :meth:`characterize` (memory metrics)
 
@@ -323,7 +327,7 @@ class MemoryCharacterizer:
         )
         return representation_to_solver(rep)
 
-    def build_comb(
+    def build_process_tensor(
         self,
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
@@ -341,7 +345,7 @@ class MemoryCharacterizer:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
         parallel: bool | None = None,
-    ) -> DenseComb | MPOComb:
+    ) -> DenseProcessTensor | MPOProcessTensor:
         """Build an exhaustive reference comb (validation only; scales as ``16^k``).
 
         Args:
@@ -366,7 +370,7 @@ class MemoryCharacterizer:
         """
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
-        return build_process_tensor(
+        return _build_process_tensor(
             operator,
             sim_params,
             timesteps,
@@ -391,13 +395,13 @@ class MemoryCharacterizer:
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
         *,
-        k: int,
+        num_interventions: int,
         n: int,
         rng: Generator | None = None,
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        style: str = DEFAULT_INTERVENTION_STYLE,
+        intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         parallel: bool | None = None,
         show_progress: bool | None = None,
     ) -> TensorDataset:
@@ -427,14 +431,14 @@ class MemoryCharacterizer:
         return _sample_train_dataset(
             operator,
             sim_params,
-            k=k,
+            num_interventions=num_interventions,
             n=n,
             rng=rng,
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
             solver=self._solver_for(hamiltonian),
-            style=style,
+            intervention_style=intervention_style,
             parallel=self._execution.parallel if parallel is None else parallel,
             show_progress=self._execution.show_progress if show_progress is None else show_progress,
             _execution=self._execution,
@@ -445,17 +449,17 @@ class MemoryCharacterizer:
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
         *,
-        k: int,
+        num_interventions: int,
         n: int,
         seed: int | None = None,
         timesteps: list[float] | None = None,
         init_mode: str = "eigenstate",
-        style: str = DEFAULT_INTERVENTION_STYLE,
+        intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         model_kwargs: dict | None = None,
         train_kwargs: dict | None = None,
         parallel: bool | None = None,
         show_progress: bool | None = None,
-    ) -> TransformerComb:
+    ) -> ProcessTensorSurrogate:
         """Train a Transformer surrogate on simulated intervention sequences.
 
         Args:
@@ -467,13 +471,13 @@ class MemoryCharacterizer:
             timesteps: Optional comb schedule of length ``k + 1``.
             init_mode: Initial-state sampling mode for training sequences.
             style: Training intervention style.
-            model_kwargs: Optional overrides for :class:`TransformerComb` construction.
+            model_kwargs: Optional overrides for :class:`ProcessTensorSurrogate` construction.
             train_kwargs: Optional overrides for the training loop.
             parallel: Override instance parallel setting.
             show_progress: Override instance progress-bar setting.
 
         Returns:
-            Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.TransformerComb`.
+            Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`.
         """
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
@@ -483,12 +487,12 @@ class MemoryCharacterizer:
         return _train_surrogate_model(
             operator,
             sim_params,
-            k=k,
+            num_interventions=num_interventions,
             n=n,
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
-            style=style,
+            intervention_style=intervention_style,
             solver=self._solver_for(hamiltonian),
             model_kwargs=model_kwargs,
             train_kwargs=train_kwargs,
@@ -504,13 +508,13 @@ class MemoryCharacterizer:
         sim_params: AnalogSimParams,
         /,
         *,
-        k: int,
+        num_interventions: int,
         cut: int | None = None,
         cuts: Literal["all"] | list[int] | None = None,
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        style: str = DEFAULT_INTERVENTION_STYLE,
+        intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
@@ -526,11 +530,11 @@ class MemoryCharacterizer:
         *,
         cut: int | None = None,
         cuts: Literal["all"] | list[int] | None = None,
-        k: int | None = None,
+        num_interventions: int | None = None,
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        style: str = DEFAULT_INTERVENTION_STYLE,
+        intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         parallel: bool | None = None,
@@ -544,13 +548,13 @@ class MemoryCharacterizer:
         sim_params: AnalogSimParams | None = None,
         /,
         *,
-        k: int | None = None,
+        num_interventions: int | None = None,
         cut: int | None = None,
         cuts: Literal["all"] | list[int] | None = None,
         preset: str = _DEFAULT_CHARACTERIZATION_PRESET,
         n_pasts: int | None = None,
         n_futures: int | None = None,
-        style: str = DEFAULT_INTERVENTION_STYLE,
+        intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
@@ -591,7 +595,7 @@ class MemoryCharacterizer:
                 ``delay > 0`` on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
-        probe_kw = {**map_probe_kwargs(style), **probe_kwargs}
+        probe_kw = {**map_probe_kwargs(intervention_style), **probe_kwargs}
         resolved_probe_set = resolve_probe_bundle(probe_set)
 
         if delay > 0 and not matches_hamiltonian(target):
@@ -600,15 +604,15 @@ class MemoryCharacterizer:
 
         if matches_hamiltonian(target):
             if sim_params is None:
-                msg = "characterize(hamiltonian, sim_params, k=...) requires AnalogSimParams."
+                msg = "characterize(hamiltonian, sim_params, num_interventions=...) requires AnalogSimParams."
                 raise TypeError(msg)
-            if k is None:
-                msg = "characterize(hamiltonian, sim_params, ...) requires k=."
+            if num_interventions is None:
+                msg = "characterize(hamiltonian, sim_params, ...) requires num_interventions=."
                 raise ValueError(msg)
             return self._characterize_hamiltonian(
                 target,
                 sim_params,
-                k=int(k),
+                num_interventions=int(num_interventions),
                 cut=cut,
                 cuts=cuts,
                 n_pasts=n_p,
@@ -620,8 +624,8 @@ class MemoryCharacterizer:
                 delay=delay,
             )
 
-        resolved_k = _resolve_k(target, k)
-        cut_list = self._resolve_cut_list(resolved_k, cut=cut, cuts=cuts)
+        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
+        cut_list = self._resolve_cut_list(resolved_num_interventions, cut=cut, cuts=cuts)
         if resolved_probe_set is not None and len(cut_list) > 1:
             msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
             raise ValueError(msg)
@@ -629,7 +633,7 @@ class MemoryCharacterizer:
             return self._characterize_target(
                 target,
                 cut=cut_list[0],
-                k=resolved_k,
+                num_interventions=resolved_num_interventions,
                 n_pasts=n_p,
                 n_futures=n_f,
                 rng=rng,
@@ -643,7 +647,7 @@ class MemoryCharacterizer:
             parts[int(c)] = self._characterize_target(
                 target,
                 cut=int(c),
-                k=resolved_k,
+                num_interventions=resolved_num_interventions,
                 n_pasts=n_p,
                 n_futures=n_f,
                 rng=rng,
@@ -656,7 +660,7 @@ class MemoryCharacterizer:
 
     @staticmethod
     def _resolve_cut_list(
-        k: int,
+        num_interventions: int,
         *,
         cut: int | None,
         cuts: Literal["all"] | list[int] | None,
@@ -682,17 +686,17 @@ class MemoryCharacterizer:
             if cuts != "all" and len(cuts) == 0:
                 msg = "cuts must be 'all' or a non-empty list of cut indices."
                 raise ValueError(msg)
-            return list(range(1, int(k) + 1)) if cuts == "all" else [int(c) for c in cuts]
+            return list(range(1, int(num_interventions) + 1)) if cuts == "all" else [int(c) for c in cuts]
         if cut is not None:
             return [int(cut)]
-        return [_default_cut(int(k), None)]
+        return [_default_cut(int(num_interventions), None)]
 
     def _characterize_target(
         self,
         target: Any,
         *,
         cut: int,
-        k: int,
+        num_interventions: int,
         n_pasts: int,
         n_futures: int,
         rng: Generator | None,
@@ -708,11 +712,11 @@ class MemoryCharacterizer:
         Returns:
             Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
         """
-        resolved_cut = _default_cut(int(k), cut)
+        resolved_cut = _default_cut(int(num_interventions), cut)
         out = run_operational_memory(
             process=target,
             cut=resolved_cut,
-            k=int(k),
+            num_interventions=int(num_interventions),
             n_pasts=n_pasts,
             n_futures=n_futures,
             rng=rng,
@@ -729,7 +733,7 @@ class MemoryCharacterizer:
         hamiltonian: Hamiltonian,
         sim_params: AnalogSimParams,
         *,
-        k: int,
+        num_interventions: int,
         cut: int | None,
         cuts: Literal["all"] | list[int] | None,
         n_pasts: int,
@@ -752,7 +756,7 @@ class MemoryCharacterizer:
         from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
 
         operator = _require_hamiltonian(hamiltonian)
-        cut_list = MemoryCharacterizer._resolve_cut_list(int(k), cut=cut, cuts=cuts)
+        cut_list = MemoryCharacterizer._resolve_cut_list(int(num_interventions), cut=cut, cuts=cuts)
         if probe_set is not None and len(cut_list) > 1:
             msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
             raise ValueError(msg)
@@ -772,13 +776,13 @@ class MemoryCharacterizer:
         )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
-            resolved_cut = _default_cut(int(k), int(c))
+            resolved_cut = _default_cut(int(num_interventions), int(c))
             local_probe_set = probe_set
             if local_probe_set is None:
                 local_rng = rng if rng is not None else np.random.default_rng()
                 local_probe_set = sample_probes(
                     cut=resolved_cut,
-                    k=int(k),
+                    num_interventions=int(num_interventions),
                     n_pasts=n_pasts,
                     n_futures=n_futures,
                     rng=local_rng,
@@ -787,7 +791,7 @@ class MemoryCharacterizer:
             out = run_operational_memory(
                 process=backend,
                 cut=resolved_cut,
-                k=int(k),
+                num_interventions=int(num_interventions),
                 probe_set=local_probe_set,
                 return_raw=True,
                 delay=delay,
@@ -802,7 +806,7 @@ class MemoryCharacterizer:
         sequence: InterventionSequence,
         /,
         *,
-        k: int | None = None,
+        num_interventions: int | None = None,
         return_sequence: bool = False,
         rng: Generator | None = None,
     ) -> np.ndarray:
@@ -830,29 +834,29 @@ class MemoryCharacterizer:
         local_rng = rng if rng is not None else np.random.default_rng()
         seq = sequence
 
-        if matches_comb(target):
+        if matches_process_tensor(target):
             if return_sequence:
                 msg = "return_sequence=True is not supported for comb targets."
                 raise ValueError(msg)
-            resolved_k = _resolve_k(target, k)
+            resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
             if isinstance(seq, str):
-                from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_sequence
+                from mqt.yaqs.characterization.memory.operational_memory.interventions import expand_interventions
 
-                slots = expand_sequence(seq, k=resolved_k, _rng=local_rng)
+                slots = expand_interventions(seq, num_interventions=resolved_num_interventions, _rng=local_rng)
             else:
                 slots = list(seq)
-            steps, _ = encode_sequence(slots, k=resolved_k, rng=local_rng)
+            steps, _ = encode_interventions(slots, num_interventions=resolved_num_interventions, rng=local_rng)
             callables = [convert_probe_callable(s) for s in steps]
             rho_out = target.predict(callables)
             return np.asarray(rho_out, dtype=np.complex128)
 
         rho_mat = coerce_rho_matrix(rho0)
-        resolved_k = _resolve_k(target, k)
+        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
         predict_fn = getattr(target, "predict", None)
         if not callable(predict_fn):
             msg = f"Unsupported predict target type: {type(target).__name__}"
             raise TypeError(msg)
-        _steps, e_features = encode_sequence(seq, k=resolved_k, rng=local_rng)
+        _steps, e_features = encode_interventions(seq, num_interventions=resolved_num_interventions, rng=local_rng)
         packed0 = pack_rho8(normalize_backend_rho(rho_mat)).astype(np.float32)
         pred = predict_fn(
             e_features[np.newaxis, ...],
