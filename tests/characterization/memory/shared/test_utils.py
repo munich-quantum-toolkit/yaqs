@@ -41,7 +41,7 @@ def test_make_zero_psi() -> None:
     for length in (1, 3, 5):
         psi = make_zero_psi(length)
         assert psi.shape == (2**length,)
-        assert psi[0] == 1.0
+        assert psi[0] == pytest.approx(1.0 + 0.0j)
         assert np.count_nonzero(psi) == 1
 
 

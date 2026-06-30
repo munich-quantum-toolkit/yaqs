@@ -184,7 +184,4 @@ def compute_dual_choi_basis(
     frame_matrix = np.column_stack([m.reshape(-1) for m in basis_matrices])
     dual_frame = np.linalg.pinv(frame_matrix).conj().T
     dim = basis_matrices[0].shape[0]
-    return [
-        np.asarray(dual_frame[:, k].reshape(dim, dim), dtype=np.complex128)
-        for k in range(dual_frame.shape[1])
-    ]
+    return [np.asarray(dual_frame[:, k].reshape(dim, dim), dtype=np.complex128) for k in range(dual_frame.shape[1])]

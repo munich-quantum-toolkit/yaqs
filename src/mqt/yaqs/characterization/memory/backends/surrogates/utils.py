@@ -20,7 +20,23 @@ def _initial_mcwf_state_from_rho0(
     init_mode: str = "eigenstate",
     return_eig_sample: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, int, float]:
-    """Construct a pure MCWF state consistent with a given reduced density matrix."""
+    """Construct a pure MCWF state consistent with a given reduced density matrix.
+
+    Args:
+        rho: Reduced ``2 x 2`` density matrix for site 0.
+        length: Total number of qubits in the state vector.
+        rng: Random number generator used when ``init_mode="eigenstate"``.
+        init_mode: ``"eigenstate"`` samples an eigenvector of ``rho``; ``"purified"`` uses a
+            purification-based state.
+        return_eig_sample: If ``True``, also return the sampled eigen-index and probability.
+
+    Returns:
+        If ``return_eig_sample=False``: complex state vector of shape ``(2**length,)`` (or ``(2,)``
+        when ``length <= 1``). If ``return_eig_sample=True``: ``(psi, idx, p)``.
+
+    Raises:
+        ValueError: If ``rho`` is not ``2 x 2`` or ``init_mode`` is invalid.
+    """
     if rho.size != 4:
         msg = "rho must be a 2x2 reduced density matrix."
         raise ValueError(msg)
@@ -101,7 +117,18 @@ def sample_initial_psi(
     init_mode: str,
     return_eig_sample: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, int, float]:
-    """Build an initial MCWF pure state for simulation."""
+    """Build an initial MCWF pure state for simulation.
+
+    Args:
+        rho_in: Reduced ``2 x 2`` density matrix on site 0.
+        length: Total number of qubits in the simulated chain.
+        rng: Random number generator used for sampling.
+        init_mode: Initialization mode (see :func:`_initial_mcwf_state_from_rho0`).
+        return_eig_sample: Whether to return extra eigen-sampling info.
+
+    Returns:
+        State vector, or ``(psi, idx, p)`` when ``return_eig_sample=True``.
+    """
     return _initial_mcwf_state_from_rho0(
         rho_in,
         length,
@@ -112,7 +139,14 @@ def sample_initial_psi(
 
 
 def sample_density_matrix(rng: np.random.Generator) -> np.ndarray:
-    """Sample a random physical 2x2 density matrix."""
+    """Sample a random physical ``2 x 2`` density matrix.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        Hermitian, trace-1 ``2 x 2`` density matrix sampled via a Ginibre construction.
+    """
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = a @ a.conj().T
     tr = float(np.trace(rho).real)

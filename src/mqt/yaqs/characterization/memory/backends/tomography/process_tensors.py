@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
-    from ...shared.interventions import InterventionMap
 
 DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _RHO0 = DEFAULT_INITIAL_RHO0
@@ -214,9 +213,6 @@ class DenseProcessTensor:
         Args:
             rho0: User-supplied initial reduced state at the cut.
             atol: Absolute tolerance for element-wise comparison.
-
-        Raises:
-            ValueError: If ``rho0`` does not match the stored reference.
         """
         validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
@@ -465,9 +461,6 @@ class MPOProcessTensor(MPO):
         Args:
             rho0: User-supplied initial reduced state at the cut.
             atol: Absolute tolerance for element-wise comparison.
-
-        Raises:
-            ValueError: If ``rho0`` does not match the stored reference.
         """
         validate_initial_rho(rho0, self.initial_rho, atol=atol)
 

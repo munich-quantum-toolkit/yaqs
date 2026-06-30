@@ -28,7 +28,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from ...shared.encoding import decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
-from .utils import encode_choi_features
+from ...shared.interventions import encode_choi_features
 
 if TYPE_CHECKING:
     from ...operational_memory.samples import ProbeSet

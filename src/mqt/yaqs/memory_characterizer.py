@@ -21,13 +21,6 @@ from mqt.yaqs.characterization.memory.backends.tomography.constructor import (
     build_process_tensor as _build_process_tensor,
 )
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import convert_probe_callable
-from mqt.yaqs.characterization.memory.shared.interventions import (
-    DEFAULT_INTERVENTION_STYLE,
-    InterventionSequence,
-    encode_interventions,
-    expand_interventions,
-    map_probe_kwargs,
-)
 from mqt.yaqs.characterization.memory.operational_memory.results import (
     CharacterizationResult,
     merge_cut_results,
@@ -40,6 +33,13 @@ from mqt.yaqs.characterization.memory.shared.encoding import (
     normalize_backend_rho,
     pack_rho8,
     unpack_rho8,
+)
+from mqt.yaqs.characterization.memory.shared.interventions import (
+    DEFAULT_INTERVENTION_STYLE,
+    InterventionSequence,
+    encode_interventions,
+    expand_interventions,
+    map_probe_kwargs,
 )
 from mqt.yaqs.characterization.memory.shared.utils import (
     DEFAULT_VECTOR_MAX_QUBITS,

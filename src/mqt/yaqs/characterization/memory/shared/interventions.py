@@ -34,6 +34,9 @@ class InterventionMap:
     def __call__(self, rho: np.ndarray) -> np.ndarray:
         """Apply the rank-1 intervention map to a single-qubit density matrix.
 
+        Args:
+            rho: ``2 x 2`` density matrix before the map.
+
         Returns:
             Updated single-qubit density matrix after the rank-1 map.
         """
@@ -44,8 +47,12 @@ class InterventionMap:
 def assemble_choi(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
     r"""Build the 4x4 Choi matrix for one rank-1 intervention.
 
-    For the continuous surrogate encoding, one timestep intervention is represented by the Choi matrix
-    ``J = kron(rho_prep, effect.T)``.
+    For the continuous surrogate encoding, one timestep intervention is represented by the Choi
+    matrix ``J = kron(rho_prep, effect.T)``.
+
+    Args:
+        rho_prep: ``2 x 2`` preparation density matrix.
+        effect: ``2 x 2`` measurement effect matrix.
 
     Returns:
         Complex :math:`4\times 4` Choi matrix.
@@ -57,6 +64,10 @@ def assemble_choi(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
 
 def encode_choi_features(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
     """Encode an intervention's Choi matrix into the standard 32-float feature row.
+
+    Args:
+        rho_prep: ``2 x 2`` preparation density matrix.
+        effect: ``2 x 2`` measurement effect matrix.
 
     Returns:
         Float32 feature vector of shape ``(32,)``.
@@ -87,7 +98,7 @@ def sample_rank1_projector(rng: np.random.Generator) -> np.ndarray:
         rng: Random number generator.
 
     Returns:
-        A 2x2 rank-1 density matrix for a random pure state.
+        A ``2 x 2`` rank-1 density matrix for a random pure state.
     """
     psi = sample_pure_state(rng)
     return np.outer(psi, psi.conj()).astype(np.complex128)
@@ -96,10 +107,11 @@ def sample_rank1_projector(rng: np.random.Generator) -> np.ndarray:
 def sample_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Sample one continuous intervention as (prep, effect) plus its fused Choi features.
 
+    Args:
+        rng: Random number generator.
+
     Returns:
-        rho_prep: 2x2 rank-1 preparation density matrix.
-        effect: 2x2 rank-1 measurement effect (projector).
-        choi_features: float32 feature row of shape (32,) for ``kron(rho_prep, effect.T)``.
+        Tuple ``(rho_prep, effect, choi_features)`` where ``choi_features`` has shape ``(32,)``.
     """
     rho_prep = sample_rank1_projector(rng)
     effect = sample_rank1_projector(rng)
@@ -110,7 +122,14 @@ def sample_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.
 def _sample_random_intervention(
     rng: np.random.Generator,
 ) -> tuple[InterventionMap, np.ndarray, np.ndarray, np.ndarray]:
-    """Sample one continuous CP intervention map and its Choi matrix."""
+    """Sample one continuous CP intervention map and its Choi matrix.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        Tuple ``(emap, rho_prep, effect, choi_mat)``.
+    """
     rho_prep, effect_mat, _feat = sample_intervention_parts(rng)
     emap = InterventionMap(rho_prep=rho_prep, effect=effect_mat)
     choi_mat = assemble_choi(rho_prep, effect_mat)
@@ -128,8 +147,8 @@ def sample_intervention_sequence(
         rng: Random number generator.
 
     Returns:
-        maps: length-``num_interventions`` list of rank-1 intervention maps.
-        choi_features: shape ``(num_interventions, 32)``.
+        Tuple ``(maps, choi_features)`` where ``maps`` has length ``num_interventions`` and
+        ``choi_features`` has shape ``(num_interventions, 32)``.
     """
     maps: list[InterventionMap] = []
     rows: list[np.ndarray] = []
@@ -141,7 +160,14 @@ def sample_intervention_sequence(
 
 
 def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
-    """Sample a Haar-random ``2 x 2`` unitary."""
+    """Sample a Haar-random ``2 x 2`` unitary.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        Complex unitary matrix of shape ``(2, 2)``.
+    """
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     q, r = np.linalg.qr(a)
     d = np.diag(r)
@@ -154,7 +180,11 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
 
 @lru_cache(maxsize=1)
 def enumerate_clifford_unitaries() -> tuple[np.ndarray, ...]:
-    """Enumerate the 24 single-qubit Clifford unitaries (cached)."""
+    """Enumerate the 24 single-qubit Clifford unitaries (cached).
+
+    Returns:
+        Tuple of ``2 x 2`` unitary matrices.
+    """
     h = (1.0 / np.sqrt(2.0)) * np.asarray([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128)
     s = np.asarray([[1.0, 0.0], [0.0, 1.0j]], dtype=np.complex128)
     gens = (h, s)
@@ -179,14 +209,28 @@ def enumerate_clifford_unitaries() -> tuple[np.ndarray, ...]:
 
 
 def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
-    """Sample a uniformly random single-qubit Clifford gate."""
+    """Sample a uniformly random single-qubit Clifford gate.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        Complex unitary matrix of shape ``(2, 2)``.
+    """
     cliffords = enumerate_clifford_unitaries()
     idx = int(rng.integers(0, len(cliffords)))
     return np.asarray(cliffords[idx], dtype=np.complex128).copy()
 
 
 def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
-    """Encode a unitary as a 32-dimensional Choi feature row."""
+    """Encode a unitary as a 32-dimensional Choi feature row.
+
+    Args:
+        u: ``2 x 2`` unitary matrix.
+
+    Returns:
+        Float32 feature vector of shape ``(32,)``.
+    """
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
     vec_u = uu.reshape(4, order="F")
     choi = np.outer(vec_u, vec_u.conj()).astype(np.complex128)
@@ -194,7 +238,17 @@ def encode_unitary_choi(u: np.ndarray) -> np.ndarray:
 
 
 def resolve_unitary_sampler(unitary_ensemble: str) -> Callable[[np.random.Generator], np.ndarray]:
-    """Map ensemble name to a unitary sampling callable."""
+    """Map ensemble name to a unitary sampling callable.
+
+    Args:
+        unitary_ensemble: ``"haar"`` or ``"clifford"``.
+
+    Returns:
+        Callable ``rng -> U`` that draws a single-qubit unitary.
+
+    Raises:
+        ValueError: If ``unitary_ensemble`` is unsupported.
+    """
     ensemble = str(unitary_ensemble).strip().lower()
     if ensemble not in {"haar", "clifford"}:
         msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
@@ -205,14 +259,28 @@ def resolve_unitary_sampler(unitary_ensemble: str) -> Callable[[np.random.Genera
 def _unitary_sampler_for_style(
     intervention_style: InterventionStyle,
 ) -> Callable[[np.random.Generator], np.ndarray]:
-    """Return the unitary sampler callable for an intervention style."""
+    """Return the unitary sampler callable for an intervention style.
+
+    Args:
+        intervention_style: ``"haar"`` or ``"clifford"``.
+
+    Returns:
+        Callable ``rng -> U`` that draws a single-qubit unitary.
+    """
     if intervention_style == "clifford":
         return _sample_random_clifford_unitary
     return _sample_random_unitary
 
 
 def _sample_mp(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
-    """Sample one measure-prepare intervention and its Choi features."""
+    """Sample one measure-prepare intervention and its Choi features.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        Tuple ``(choi_features, (psi_meas, psi_prep))``.
+    """
     rho_prep, effect, feat = sample_intervention_parts(rng)
     psi_meas = extract_ket(effect)
     psi_prep = extract_ket(rho_prep)
@@ -220,7 +288,17 @@ def _sample_mp(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, 
 
 
 def normalize_style(style: str) -> InterventionStyle:
-    """Validate a user intervention style string."""
+    """Validate a user intervention style string.
+
+    Args:
+        style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+
+    Returns:
+        Normalized intervention style.
+
+    Raises:
+        ValueError: If ``style`` is unsupported.
+    """
     key = str(style).strip().lower()
     if key in {"haar", "clifford", "measure_prepare"}:
         return cast("InterventionStyle", key)
@@ -229,7 +307,14 @@ def normalize_style(style: str) -> InterventionStyle:
 
 
 def map_probe_kwargs(style: str) -> dict[str, str]:
-    """Map user intervention style to internal split-cut probe keyword arguments."""
+    """Map user intervention style to internal split-cut probe keyword arguments.
+
+    Args:
+        style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
+
+    Returns:
+        Dict with ``intervention_mode`` and ``unitary_ensemble`` keys for probing.
+    """
     resolved = normalize_style(style)
     if resolved == "measure_prepare":
         return {"intervention_mode": "measure_prepare", "unitary_ensemble": "haar"}
@@ -238,7 +323,18 @@ def map_probe_kwargs(style: str) -> dict[str, str]:
 
 
 def encode_intervention(slot: Intervention, rng: np.random.Generator) -> tuple[Any, np.ndarray]:
-    """Encode one intervention slot to a simulator step and Choi feature row."""
+    """Encode one intervention slot to a simulator step and Choi feature row.
+
+    Args:
+        slot: Intervention style string, ``{"unitary": U}`` dict, or expanded slot.
+        rng: NumPy random generator for stochastic slots.
+
+    Returns:
+        Tuple ``(step, choi_features)`` where ``step`` is an MP pair or unitary dict.
+
+    Raises:
+        ValueError: If a dict slot lacks ``unitary`` or the style is unsupported.
+    """
     if isinstance(slot, dict):
         if "unitary" not in slot:
             msg = "dict intervention slots must contain key 'unitary'."
@@ -264,7 +360,19 @@ def expand_interventions(
     num_interventions: int,
     _rng: np.random.Generator,
 ) -> list[Intervention]:
-    """Expand a scalar spec or per-slot list to length ``num_interventions``."""
+    """Expand a scalar spec or per-slot list to length ``num_interventions``.
+
+    Args:
+        spec: Per-slot list or scalar intervention style.
+        num_interventions: Required sequence length.
+        _rng: Unused for string specs; reserved for future stochastic expansion.
+
+    Returns:
+        List of ``num_interventions`` intervention slots.
+
+    Raises:
+        ValueError: If an explicit list length does not match ``num_interventions``.
+    """
     if isinstance(spec, str):
         resolved = normalize_style(spec)
         return [resolved] * num_interventions
@@ -272,10 +380,7 @@ def expand_interventions(
     if len(slots) == 1 and num_interventions > 1:
         return [slots[0]] * num_interventions
     if len(slots) != num_interventions:
-        msg = (
-            f"intervention sequence length must be num_interventions={num_interventions}, "
-            f"got {len(slots)}."
-        )
+        msg = f"intervention sequence length must be num_interventions={num_interventions}, got {len(slots)}."
         raise ValueError(msg)
     return slots
 
@@ -286,7 +391,16 @@ def encode_interventions(
     num_interventions: int,
     rng: np.random.Generator,
 ) -> tuple[list[Any], np.ndarray]:
-    """Encode a user intervention sequence for simulation or surrogate inference."""
+    """Encode a user intervention sequence for simulation or surrogate inference.
+
+    Args:
+        spec: Intervention sequence or scalar style.
+        num_interventions: Sequence length.
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(steps, choi_features)`` with ``choi_features`` shaped ``(num_interventions, 32)``.
+    """
     slots = expand_interventions(spec, num_interventions=num_interventions, _rng=rng)
     steps: list[Any] = []
     rows: list[np.ndarray] = []
@@ -302,7 +416,16 @@ def sample_train_interventions(
     intervention_style: InterventionStyle,
     rng: np.random.Generator,
 ) -> tuple[list[Any], np.ndarray]:
-    """Sample one training intervention sequence of length ``num_interventions``."""
+    """Sample one training intervention sequence of length ``num_interventions``.
+
+    Args:
+        num_interventions: Sequence length.
+        intervention_style: Intervention style for all slots.
+        rng: NumPy random generator.
+
+    Returns:
+        Tuple ``(steps, choi_features)`` suitable for surrogate training sequences.
+    """
     if intervention_style == "measure_prepare":
         maps, choi = sample_intervention_sequence(int(num_interventions), rng)
         steps: list[Any] = []

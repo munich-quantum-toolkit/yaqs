@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- shared intervention steps reuse private backend helpers
+
 """Shared parsing and application of intervention probe steps."""
 
 from __future__ import annotations
@@ -13,15 +15,16 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
-from .interventions import InterventionMap
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
     _apply_cut_preparation_step,
     _reprepare_backend_state_forced,
 )
 
+from .interventions import InterventionMap
+
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
     from mqt.yaqs.core.data_structures.mps import MPS
 
@@ -38,7 +41,7 @@ class _ParsedStep(NamedTuple):
     psi_prep: NDArray[np.complex128] | None = None
 
 
-def _reshape_ket(psi: Any) -> NDArray[np.complex128]:
+def _reshape_ket(psi: ArrayLike) -> NDArray[np.complex128]:
     """Reshape an input ket to length 2.
 
     Args:

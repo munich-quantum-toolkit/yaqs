@@ -246,9 +246,6 @@ def _simulate_seq_core(
     Returns:
         Tuple ``(rho_final, cumulative_weight, trace)`` where ``trace`` is ``None`` when
         ``collect_trace`` is ``False``.
-
-    Raises:
-        ValueError: If an intervention step has an unsupported type.
     """
     intervention_steps = worker_ctx["intervention_steps"][sequence_idx]
     hamiltonian = worker_ctx["operator"]

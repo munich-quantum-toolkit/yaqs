@@ -41,7 +41,7 @@ from mqt.yaqs.core.parallel_utils import (
     run_indexed_jobs,
 )
 
-from ...shared.encoding import normalize_backend_rho
+from ...shared.encoding import coerce_rho_matrix, normalize_backend_rho
 from ...shared.utils import (
     StochasticSolver,
     _evolve_backend_state,
@@ -437,8 +437,6 @@ def build_process_tensor(
     )
 
     if initial_rho is not None:
-        from ...shared.encoding import coerce_rho_matrix
-
         validate_initial_rho(coerce_rho_matrix(initial_rho), data.initial_rho, atol=initial_rho_atol)
 
     if return_type == "dense":

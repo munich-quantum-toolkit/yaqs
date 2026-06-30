@@ -17,8 +17,7 @@ from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
     sample_train_dataset,
     train_surrogate_model,
 )
-from mqt.yaqs.characterization.memory.shared.encoding import extract_ket
-from mqt.yaqs.characterization.memory.shared.encoding import unpack_rho8
+from mqt.yaqs.characterization.memory.shared.encoding import extract_ket, unpack_rho8
 from mqt.yaqs.characterization.memory.shared.metrics import (
     compute_trace_distance,
     mean_frobenius_mse_rho8,

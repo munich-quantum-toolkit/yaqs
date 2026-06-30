@@ -17,8 +17,6 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.shared.interventions import InterventionMap
-from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
 from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
@@ -30,6 +28,8 @@ from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import
     trace_partial_dense,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
+from mqt.yaqs.characterization.memory.shared.interventions import InterventionMap
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 _REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)

@@ -17,12 +17,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.characterization.memory.shared.interventions import (
-    _sample_random_intervention,  # noqa: PLC2701
+    _sample_random_intervention,
     encode_choi_features,
     sample_intervention_parts,
 )
-from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate
