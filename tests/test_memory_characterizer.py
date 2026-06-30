@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -346,9 +347,9 @@ def test_compute_qmi_rejects_non_process_tensor(ham_and_params: tuple[Hamiltonia
     ham, _params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     with pytest.raises(TypeError, match="compute_qmi requires"):
-        mc.compute_qmi(ham)
+        mc.compute_qmi(cast("Any", ham))
     with pytest.raises(TypeError, match="compute_cmi requires"):
-        mc.compute_cmi(ham)
+        mc.compute_cmi(cast("Any", ham))
 
 
 def test_build_process_tensor_forwards_parallel_override(
@@ -379,7 +380,7 @@ def test_build_process_tensor_forwards_parallel_override(
     reason="torch not installed",
 )
 def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Train at num_interventions=2; predict at num_interventions=1 and num_interventions=3 returns finite density matrices."""
+    """Train at k=2; predict at k=1 and k=3 returns finite density matrices."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     model = mc.train(

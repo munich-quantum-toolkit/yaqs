@@ -174,13 +174,15 @@ def test_cut_preparation_soft_preserves_entanglement_on_two_qubits() -> None:
     params.elapsed_time = 0.1
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
     vec = _initialize_backend_state(op, solver="MCWF")
-    vec = _evolve_backend_state(vec, op, None, params, "MCWF", static_ctx=static_ctx)
+    assert isinstance(vec, np.ndarray)
+    evolved = _evolve_backend_state(vec, op, None, params, "MCWF", static_ctx=static_ctx)
+    assert isinstance(evolved, np.ndarray)
+    evolved_vec = np.asarray(evolved, dtype=np.complex128)
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
 
-    soft, _ = _apply_cut_preparation_step(vec, plus, "MCWF", chain_length=2)
-    assert isinstance(vec, np.ndarray)
-    assert isinstance(soft, np.ndarray)
-    assert not np.allclose(soft, vec, atol=1e-8)
+    soft, _ = _apply_cut_preparation_step(evolved_vec, plus, "MCWF", chain_length=2)
+    soft_arr = np.asarray(soft, dtype=np.complex128)
+    assert not np.allclose(soft_arr, evolved_vec, atol=1e-8)
 
 
 def test_evolve_backend_state_mcwf_path() -> None:

@@ -22,10 +22,10 @@ from mqt.yaqs.characterization.memory.backends.exact import (
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
     ProbeSet,
-    sample_cut_measurement,  # noqa: PLC2701
-    sample_cut_preparation,  # noqa: PLC2701
-    sample_probe,  # noqa: PLC2701
     resolve_unitary_sampler,
+    sample_cut_measurement,
+    sample_cut_preparation,
+    sample_probe,
     sample_probes,
 )
 from mqt.yaqs.characterization.memory.shared.utils import validate_stochastic_solver

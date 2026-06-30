@@ -264,10 +264,7 @@ def sample_probes(
         ValueError: If ``cut`` or ``intervention_mode`` is invalid.
     """
     if not (1 <= cut <= num_interventions):
-        msg = (
-            f"cut must satisfy 1 <= cut <= num_interventions, got cut={cut}, "
-            f"num_interventions={num_interventions}"
-        )
+        msg = f"cut must satisfy 1 <= cut <= num_interventions, got cut={cut}, num_interventions={num_interventions}"
         raise ValueError(msg)
     mode = str(intervention_mode).strip().lower()
     if mode not in {"split_cut_unitary", "measure_prepare"}:

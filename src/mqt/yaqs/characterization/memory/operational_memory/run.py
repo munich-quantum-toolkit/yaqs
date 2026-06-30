@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
 
@@ -23,14 +23,22 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
-class OperationalMemoryBackend(Protocol):
-    """Protocol for split-cut probing backends used in operational memory.
+class SupportsEvaluateProbes(Protocol):
+    """Protocol for backends that implement :meth:`evaluate_probes`."""
 
-    Implement **either** :meth:`evaluate_probes_weighted` (simulation trace weights, e.g.
-    :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
-    :meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
-    :func:`evaluate_probes_weighted_for` dispatches to the implemented method.
-    """
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate unweighted probe responses.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Pauli tomography array of shape ``(n_pasts, n_futures, 4)``.
+        """
+
+
+class SupportsEvaluateProbesWeighted(Protocol):
+    """Protocol for backends that implement :meth:`evaluate_probes_weighted`."""
 
     def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate weighted probe responses.
@@ -43,15 +51,15 @@ class OperationalMemoryBackend(Protocol):
             ``(n_pasts, n_futures)``.
         """
 
-    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate unweighted probe responses.
 
-        Args:
-            probe_set: Sampled split-cut probes.
+OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbes | SupportsEvaluateProbesWeighted
+"""Union of split-cut probing backends.
 
-        Returns:
-            Pauli tomography array of shape ``(n_pasts, n_futures, 4)``.
-        """
+Implement **either** :meth:`evaluate_probes_weighted` (simulation trace weights, e.g.
+:class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
+:meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
+:func:`evaluate_probes_weighted_for` dispatches to the implemented method.
+"""
 
 
 def evaluate_probes_weighted_for(
@@ -164,7 +172,9 @@ def run_operational_memory(
             msg = "delay > 0 requires an exact Hamiltonian characterize backend."
             raise ValueError(msg)
         intervention_steps_list, _, _ = assemble_delayed_probe_grid(probe_set, delay=delay)
-        sim_probe_set = replace(probe_set, num_interventions=compute_delayed_length(num_interventions=num_interventions, delay=delay))
+        sim_probe_set = replace(
+            probe_set, num_interventions=compute_delayed_length(num_interventions=num_interventions, delay=delay)
+        )
 
     if (
         exact_backend_cls is not None

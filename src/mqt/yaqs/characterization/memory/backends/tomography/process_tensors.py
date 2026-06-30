@@ -18,7 +18,6 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import encode_rho_pauli
 from ...shared.intervention_steps import build_intervention_operator
-from ..surrogates.utils import InterventionMap
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
+    from ..surrogates.utils import InterventionMap
 
 DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 _RHO0 = DEFAULT_INITIAL_RHO0
@@ -53,6 +53,7 @@ def validate_initial_rho(
     if not np.allclose(got, ref, atol=atol):
         msg = "rho0 does not match the process-tensor reference initial state."
         raise ValueError(msg)
+
 
 AnyInput = dict[str, Any] | tuple[Any, Any]
 
@@ -202,7 +203,7 @@ class DenseProcessTensor:
         *,
         initial_rho: NDArray[np.complex128] | None = None,
     ) -> None:
-        """Create a dense process-tensor wrapper.
+        r"""Create a dense process-tensor wrapper.
 
         Args:
             upsilon: Dense process-tensor matrix.
@@ -396,23 +397,31 @@ class DenseProcessTensor:
         self,
         base: int = 2,
         *,
-        _check_psd: bool = False,
+        check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
 
         Args:
             base: Log base for entropy.
-            _check_psd: If ``True``, validate PSD before normalizing (currently ignored).
+            check_psd: If ``True``, validate PSD before normalizing.
             assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
 
         Returns:
             Conditional mutual information. Returns 0.0 for ``k<2``.
+
+        Raises:
+            ValueError: If PSD check fails.
         """
         if assume_canonical:
             rho = self.upsilon
         else:
             upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            if check_psd:
+                lam_min = float(np.linalg.eigvalsh(upsilon_mat).min().real)
+                if lam_min < -1e-9:
+                    msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
+                    raise ValueError(msg)
             tr = np.trace(upsilon_mat)
             rho = upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
 
@@ -441,7 +450,7 @@ class MPOProcessTensor(MPO):
         *,
         initial_rho: NDArray[np.complex128] | None = None,
     ) -> None:
-        """Create an MPO process-tensor wrapper.
+        r"""Create an MPO process-tensor wrapper.
 
         Args:
             upsilon_mpo: MPO representation of the process-tensor matrix.
@@ -623,6 +632,6 @@ class MPOProcessTensor(MPO):
         """
         return self.to_dense().cmi(
             base=base,
-            _check_psd=check_psd,
+            check_psd=check_psd,
             assume_canonical=assume_canonical,
         )

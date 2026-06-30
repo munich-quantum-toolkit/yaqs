@@ -201,7 +201,7 @@ def _reprepare_site_zero_vector_forced(
     prob = float(np.linalg.norm(env_vec) ** 2)
     if prob > 1e-15:
         env_vec /= np.sqrt(prob)
-    return np.outer(new_state, env_vec).flatten(), prob
+    return np.asarray(np.outer(new_state, env_vec).flatten(), dtype=np.complex128), prob
 
 
 def assemble_state_from_expectations(expectations: dict[str, float]) -> NDArray[np.complex128]:
@@ -229,8 +229,8 @@ def extract_site0_rho(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex
         2x2 complex reduced density matrix on site 0.
     """
     if isinstance(state, np.ndarray):
-        rho = np.reshape(state, (2, -1))
-        return rho @ rho.conj().T
+        vec = np.asarray(state, dtype=np.complex128).reshape(2, -1)
+        return vec @ vec.conj().T
     assert isinstance(state, MPS)
     trace = float(state.norm() ** 2)
     if trace < 1e-15:

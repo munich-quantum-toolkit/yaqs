@@ -72,11 +72,11 @@ def _unitary_sampler(
     """Return the unitary sampler callable for an intervention style.
 
     Args:
-        style: ``"haar"`` or ``"clifford"``.
+        intervention_style: ``"haar"`` or ``"clifford"``.
         _rng: Unused; present for call-site symmetry.
 
     Returns:
-        Callable ``rng -> U``.
+        Callable ``rng -> U`` that draws a single-qubit unitary.
     """
     if intervention_style == "clifford":
         return _sample_random_clifford_unitary
@@ -141,10 +141,7 @@ def expand_interventions(
     if len(slots) == 1 and num_interventions > 1:
         return [slots[0]] * num_interventions
     if len(slots) != num_interventions:
-        msg = (
-            f"intervention sequence length must be num_interventions={num_interventions}, "
-            f"got {len(slots)}."
-        )
+        msg = f"intervention sequence length must be num_interventions={num_interventions}, got {len(slots)}."
         raise ValueError(msg)
     return slots
 

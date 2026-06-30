@@ -17,8 +17,8 @@ from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
     compute_branch_weight,
     compute_trace_weights,
 )
-from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

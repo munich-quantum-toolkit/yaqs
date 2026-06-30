@@ -74,7 +74,7 @@ def get_basis_states(
             z = rng.standard_normal(2) + 1j * rng.standard_normal(2)
             psi = (z / np.linalg.norm(z)).astype(np.complex128)
             states.append((f"rand{i}", psi))
-        return [(name, psi, np.outer(psi, psi.conj())) for name, psi in states]
+        return [(name, psi, np.asarray(np.outer(psi, psi.conj()), dtype=np.complex128)) for name, psi in states]
 
     if basis == "standard":
         psi_0 = np.array([1, 0], dtype=np.complex128)
@@ -82,7 +82,7 @@ def get_basis_states(
         psi_plus = np.array([1, 1], dtype=np.complex128) / np.sqrt(2)
         psi_i_plus = np.array([1, 1j], dtype=np.complex128) / np.sqrt(2)
         states = [("zeros", psi_0), ("ones", psi_1), ("x+", psi_plus), ("y+", psi_i_plus)]
-        return [(name, psi, np.outer(psi, psi.conj())) for name, psi in states]
+        return [(name, psi, np.asarray(np.outer(psi, psi.conj()), dtype=np.complex128)) for name, psi in states]
 
     if basis == "tetrahedral":
         rs = np.array(
@@ -107,7 +107,7 @@ def get_basis_states(
             psi = evecs[:, int(np.argmax(evals.real))].astype(np.complex128)
             psi /= np.linalg.norm(psi)
             states.append((f"tet{i}", psi))
-        return [(name, psi, np.outer(psi, psi.conj())) for name, psi in states]
+        return [(name, psi, np.asarray(np.outer(psi, psi.conj()), dtype=np.complex128)) for name, psi in states]
 
     msg = f"Unknown basis {basis!r}"
     raise TypeError(msg)
@@ -184,4 +184,7 @@ def compute_dual_choi_basis(
     frame_matrix = np.column_stack([m.reshape(-1) for m in basis_matrices])
     dual_frame = np.linalg.pinv(frame_matrix).conj().T
     dim = basis_matrices[0].shape[0]
-    return [dual_frame[:, k].reshape(dim, dim) for k in range(dual_frame.shape[1])]
+    return [
+        np.asarray(dual_frame[:, k].reshape(dim, dim), dtype=np.complex128)
+        for k in range(dual_frame.shape[1])
+    ]

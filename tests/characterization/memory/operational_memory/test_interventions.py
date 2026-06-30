@@ -14,8 +14,8 @@ import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.interventions import (
     DEFAULT_INTERVENTION_STYLE,
-    encode_interventions,
     encode_intervention,
+    encode_interventions,
     expand_interventions,
     map_probe_kwargs,
     normalize_style,

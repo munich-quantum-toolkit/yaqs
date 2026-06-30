@@ -16,8 +16,8 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
-    _process_tensor_schedule_durations_ops_ctx,
     _get_times_cached,
+    _process_tensor_schedule_durations_ops_ctx,
     _reshape_choi_feature_rows,
     _validate_process_tensor_schedule_inputs,
 )

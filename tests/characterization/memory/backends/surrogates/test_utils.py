@@ -67,7 +67,8 @@ def test_initial_mcwf_state_from_rho0_eigenstate_return_eig_sample() -> None:
     assert psi.shape == (2,)
     assert idx in {0, 1}
     assert 0.0 <= p <= 1.0
-    np.testing.assert_allclose(np.linalg.norm(psi), 1.0, atol=1e-12)
+    psi_arr = np.asarray(psi, dtype=np.complex128)
+    np.testing.assert_allclose(float(np.linalg.norm(psi_arr)), 1.0, atol=1e-12)
 
 
 def test_initial_mcwf_state_from_rho0_purified_length1_requires_pure_state() -> None:
@@ -78,9 +79,9 @@ def test_initial_mcwf_state_from_rho0_purified_length1_requires_pure_state() -> 
     rho_pure = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
     psi_out = _initial_mcwf_state_from_rho0(rho_pure, length=1, init_mode="purified")
     assert isinstance(psi_out, np.ndarray)
-    psi = psi_out
+    psi = np.asarray(psi_out, dtype=np.complex128)
     assert psi.shape == (2,)
-    np.testing.assert_allclose(np.linalg.norm(psi), 1.0, atol=1e-12)
+    np.testing.assert_allclose(float(np.linalg.norm(psi)), 1.0, atol=1e-12)
 
 
 def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
@@ -90,17 +91,17 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
 
     psi_eig_out = _initial_mcwf_state_from_rho0(rho, length=3, rng=rng, init_mode="eigenstate")
     assert isinstance(psi_eig_out, np.ndarray)
-    psi_eig = psi_eig_out
+    psi_eig = np.asarray(psi_eig_out, dtype=np.complex128)
     assert psi_eig.shape == (2**3,)
-    np.testing.assert_allclose(np.linalg.norm(psi_eig), 1.0, atol=1e-12)
+    np.testing.assert_allclose(float(np.linalg.norm(psi_eig)), 1.0, atol=1e-12)
 
     psi_pur_out = _initial_mcwf_state_from_rho0(rho, length=3, init_mode="purified")
     assert isinstance(psi_pur_out, np.ndarray)
-    psi_pur = psi_pur_out
+    psi_pur = np.asarray(psi_pur_out, dtype=np.complex128)
     assert psi_pur.shape == (2**3,)
-    np.testing.assert_allclose(np.linalg.norm(psi_pur), 1.0, atol=1e-12)
+    np.testing.assert_allclose(float(np.linalg.norm(psi_pur)), 1.0, atol=1e-12)
 
-    psi_tensor = np.reshape(psi_pur, (2, 2, 2))
+    psi_tensor = psi_pur.reshape((2, 2, 2))
     rho_reduced = np.einsum("abc,dbc->ad", psi_tensor, psi_tensor.conj())
     np.testing.assert_allclose(rho_reduced, rho, atol=1e-10)
 
@@ -119,4 +120,5 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
     w /= float(w.sum())
     assert idx_p in {0, 1}
     assert p_p == pytest.approx(float(w[idx_p]))
-    np.testing.assert_allclose(np.linalg.norm(psi_pur_sample), 1.0, atol=1e-12)
+    psi_pur_sample_arr = np.asarray(psi_pur_sample, dtype=np.complex128)
+    np.testing.assert_allclose(float(np.linalg.norm(psi_pur_sample_arr)), 1.0, atol=1e-12)

@@ -29,6 +29,8 @@ AnyInterventionStep = dict[str, Any] | tuple[Any, Any]
 
 
 class _ParsedStep(NamedTuple):
+    """Parsed fields for one intervention probe step."""
+
     kind: str
     unitary: NDArray[np.complex128] | None = None
     psi_meas: NDArray[np.complex128] | None = None
@@ -115,7 +117,8 @@ def build_intervention_operator(step: AnyInterventionStep) -> InterventionMap | 
         assert parsed.unitary is not None
         return parsed.unitary
     if parsed.kind == "cut_measurement":
-        assert parsed.psi_meas is not None and parsed.psi_reset is not None
+        assert parsed.psi_meas is not None
+        assert parsed.psi_reset is not None
         return InterventionMap(
             rho_prep=np.outer(parsed.psi_reset, parsed.psi_reset.conj()),
             effect=np.outer(parsed.psi_meas, parsed.psi_meas.conj()),
@@ -126,7 +129,8 @@ def build_intervention_operator(step: AnyInterventionStep) -> InterventionMap | 
             rho_prep=np.outer(parsed.psi_prep, parsed.psi_prep.conj()),
             effect=np.eye(2, dtype=np.complex128),
         )
-    assert parsed.psi_meas is not None and parsed.psi_prep is not None
+    assert parsed.psi_meas is not None
+    assert parsed.psi_prep is not None
     return InterventionMap(
         rho_prep=np.outer(parsed.psi_prep, parsed.psi_prep.conj()),
         effect=np.outer(parsed.psi_meas, parsed.psi_meas.conj()),
@@ -192,7 +196,8 @@ def apply_intervention_to_backend(
         assert parsed.unitary is not None
         return _apply_backend_unitary_site_zero(state, parsed.unitary, solver), 1.0
     if parsed.kind == "cut_measurement":
-        assert parsed.psi_meas is not None and parsed.psi_reset is not None
+        assert parsed.psi_meas is not None
+        assert parsed.psi_reset is not None
         state_out, prob = _reprepare_backend_state_forced(state, parsed.psi_meas, parsed.psi_reset, solver)
         return state_out, float(prob)
     if parsed.kind == "cut_preparation":
@@ -204,6 +209,7 @@ def apply_intervention_to_backend(
             chain_length=chain_length,
         )
         return state_out, float(prob)
-    assert parsed.psi_meas is not None and parsed.psi_prep is not None
+    assert parsed.psi_meas is not None
+    assert parsed.psi_prep is not None
     state_out, prob = _reprepare_backend_state_forced(state, parsed.psi_meas, parsed.psi_prep, solver)
     return state_out, float(prob)

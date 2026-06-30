@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 import numpy as np
 
 from mqt.yaqs.characterization.memory.backends.tomography import DenseProcessTensor, MPOProcessTensor
-from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor as _build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import (
+    build_process_tensor as _build_process_tensor,
+)
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import convert_probe_callable
 from mqt.yaqs.characterization.memory.operational_memory.interventions import (
     DEFAULT_INTERVENTION_STYLE,
@@ -159,10 +161,7 @@ def _resolve_num_interventions(target: Any, num_interventions: int | None) -> in
     k_attr = getattr(target, "_num_interventions_for_probe", None)
     if callable(k_attr):
         return int(k_attr())
-    msg = (
-        "num_interventions must be provided when the target does not define "
-        "_num_interventions_for_probe()."
-    )
+    msg = "num_interventions must be provided when the target does not define _num_interventions_for_probe()."
     raise ValueError(msg)
 
 
@@ -182,20 +181,32 @@ def _default_cut(num_interventions: int, cut: int | None) -> int:
     resolved_num_interventions = int(num_interventions)
     c = (resolved_num_interventions + 1) // 2 if cut is None else int(cut)
     if not (1 <= c <= resolved_num_interventions):
-        msg = (
-            f"cut must satisfy 1 <= cut <= num_interventions ({resolved_num_interventions}), got {c}."
-        )
+        msg = f"cut must satisfy 1 <= cut <= num_interventions ({resolved_num_interventions}), got {c}."
         raise ValueError(msg)
     return c
 
 
 def _matches_hamiltonian(target: Any) -> bool:
-    """Return whether ``target`` is a Hamiltonian characterize/predict target."""
+    """Return whether ``target`` is a Hamiltonian characterize/predict target.
+
+    Args:
+        target: Object passed to :meth:`MemoryCharacterizer.characterize` or :meth:`MemoryCharacterizer.predict`.
+
+    Returns:
+        ``True`` if ``target`` is a :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`.
+    """
     return isinstance(target, Hamiltonian)
 
 
 def _matches_process_tensor(target: Any) -> bool:
-    """Return whether ``target`` is a reference process tensor predict target."""
+    """Return whether ``target`` is a reference process tensor predict target.
+
+    Args:
+        target: Object passed to :meth:`MemoryCharacterizer.predict` or info-theory helpers.
+
+    Returns:
+        ``True`` if ``target`` is a :class:`DenseProcessTensor` or :class:`MPOProcessTensor`.
+    """
     return isinstance(target, (DenseProcessTensor, MPOProcessTensor))
 
 
@@ -635,8 +646,8 @@ class MemoryCharacterizer:
             )
         return merge_cut_results(parts)
 
+    @staticmethod
     def compute_qmi(
-        self,
         process_tensor: DenseProcessTensor | MPOProcessTensor,
         /,
         *,
@@ -670,8 +681,8 @@ class MemoryCharacterizer:
             assume_canonical=assume_canonical,
         )
 
+    @staticmethod
     def compute_cmi(
-        self,
         process_tensor: DenseProcessTensor | MPOProcessTensor,
         /,
         *,
@@ -679,7 +690,7 @@ class MemoryCharacterizer:
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
-        """Compute conditional mutual information from a reference process tensor.
+        r"""Compute conditional mutual information from a reference process tensor.
 
         Args:
             process_tensor: Dense or MPO reference process tensor.
@@ -698,7 +709,7 @@ class MemoryCharacterizer:
             raise TypeError(msg)
         return process_tensor.cmi(
             base=base,
-            _check_psd=check_psd,
+            check_psd=check_psd,
             assume_canonical=assume_canonical,
         )
 
@@ -854,7 +865,7 @@ class MemoryCharacterizer:
         return_sequence: bool = False,
         rng: Generator | None = None,
     ) -> np.ndarray:
-        """Predict site-0 reduced-state dynamics under an intervention sequence.
+        r"""Predict site-0 reduced-state dynamics under an intervention sequence.
 
         Supports trained surrogates and reference process tensors. For process tensors,
         ``rho0`` must match the stored reference initial state (site-0 density matrix after

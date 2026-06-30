@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.parallel_utils import (
     ExecutionConfig,
     merge_execution_config,
@@ -67,6 +66,7 @@ from .process_tensors import validate_initial_rho
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -101,7 +101,7 @@ def _reference_initial_rho(
     solver: StochasticSolver,
     num_trajectories: int,
 ) -> np.ndarray:
-    """Return the site-0 reference state after ``U_0`` evolution from ``|0\\rangle^{\\otimes L}``.
+    r"""Return the site-0 reference state after ``U_0`` evolution from ``|0\\rangle^{\\otimes L}``.
 
     Args:
         operator: Hamiltonian MPO.
