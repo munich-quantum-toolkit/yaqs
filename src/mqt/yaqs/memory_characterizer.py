@@ -218,7 +218,8 @@ class MemoryCharacterizer:
 
     **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_process_tensor`
 
-    **Use:** :meth:`predict` (surrogate or reference process-tensor dynamics), :meth:`characterize` (memory metrics)
+    **Use:** :meth:`predict` (surrogate or reference process-tensor dynamics), :meth:`characterize` (memory metrics),
+    :meth:`compute_qmi`, :meth:`compute_cmi` (reference process-tensor information metrics)
 
     Attributes:
         parallel: Whether sequence simulations run in parallel via a process pool.
@@ -575,7 +576,7 @@ class MemoryCharacterizer:
             **probe_kwargs: Advanced overrides forwarded to internal probe sampling.
 
         Returns:
-            Diagnostics with per-cut entropy, rank, spectrum, and stored probes.
+            Diagnostics with per-cut entropy, modes, spectrum, and stored probes.
 
         Raises:
             TypeError: If a Hamiltonian is given without ``sim_params``.
@@ -647,6 +648,73 @@ class MemoryCharacterizer:
                 delay=delay,
             )
         return merge_cut_results(parts)
+
+    def compute_qmi(
+        self,
+        process_tensor: DenseProcessTensor | MPOProcessTensor,
+        /,
+        *,
+        past: str = "all",
+        base: int = 2,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute quantum mutual information from a reference process tensor.
+
+        Args:
+            process_tensor: Dense or MPO reference process tensor.
+            past: Past legs to include: ``"all"``, ``"first"``, or ``"last"``.
+            base: Log base for entropy.
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
+
+        Returns:
+            Quantum mutual information between the final site and the selected past legs.
+
+        Raises:
+            TypeError: If ``process_tensor`` is not a reference process tensor.
+        """
+        if not matches_process_tensor(process_tensor):
+            msg = f"compute_qmi requires a reference process tensor, got {type(process_tensor).__name__}."
+            raise TypeError(msg)
+        return process_tensor.qmi(
+            base=base,
+            past=past,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
+
+    def compute_cmi(
+        self,
+        process_tensor: DenseProcessTensor | MPOProcessTensor,
+        /,
+        *,
+        base: int = 2,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute conditional mutual information from a reference process tensor.
+
+        Args:
+            process_tensor: Dense or MPO reference process tensor.
+            base: Log base for entropy.
+            check_psd: Passed through to the process-tensor implementation.
+            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
+
+        Returns:
+            Conditional mutual information :math:`I(F : P_{<k} \\mid P_k)`.
+
+        Raises:
+            TypeError: If ``process_tensor`` is not a reference process tensor.
+        """
+        if not matches_process_tensor(process_tensor):
+            msg = f"compute_cmi requires a reference process tensor, got {type(process_tensor).__name__}."
+            raise TypeError(msg)
+        return process_tensor.cmi(
+            base=base,
+            _check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
 
     @staticmethod
     def _resolve_cut_list(

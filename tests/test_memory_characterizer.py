@@ -332,6 +332,25 @@ def test_predict_process_tensor_rejects_mismatched_rho0(ham_and_params: tuple[Ha
         mc.predict(pt, np.eye(2, dtype=np.complex128) / 2.0, "haar", num_interventions=1)
 
 
+def test_compute_qmi_and_cmi_process_tensor(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """compute_qmi and compute_cmi delegate to reference process tensors."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
+    assert mc.compute_qmi(pt, past="all") == pt.qmi(past="all")
+    assert mc.compute_cmi(pt) == pt.cmi()
+
+
+def test_compute_qmi_rejects_non_process_tensor(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """compute_qmi and compute_cmi require reference process tensor targets."""
+    ham, _params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(TypeError, match="compute_qmi requires"):
+        mc.compute_qmi(ham)
+    with pytest.raises(TypeError, match="compute_cmi requires"):
+        mc.compute_cmi(ham)
+
+
 def test_build_process_tensor_forwards_parallel_override(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
     monkeypatch: pytest.MonkeyPatch,

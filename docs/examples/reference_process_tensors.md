@@ -90,6 +90,8 @@ tags: [remove-output]
 ---
 result = mc.characterize(pt_single, cut=1, num_interventions=1, n_pasts=6, n_futures=6)
 print(result.summary())
+print(f"QMI = {mc.compute_qmi(pt_single, past='last'):.4f}")
+print(f"CMI = {mc.compute_cmi(pt_single):.4f}")
 ```
 
 ## 6. Validation sketch

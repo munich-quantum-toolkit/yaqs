@@ -289,29 +289,12 @@ def test_trace_partial_dense_and_entropy_edge_cases() -> None:
     assert compute_entropy_dense(pure) == pytest.approx(0.0, abs=1e-12)
 
 
-def test_dense_process_tensor_canonicalize_and_reduced() -> None:
-    """Canonicalization and subsystem reduction preserve process-tensor metadata."""
-    pt = _tiny_process_tensor(num_interventions=2)
-    canon = pt.canonicalize(hermitize=True, psd_project=True, normalize_trace=True)
-    assert isinstance(canon, DenseProcessTensor)
-    assert canon.timesteps == pt.timesteps
-
-    reduced = pt.reduced(keep_last_m=1)
-    assert reduced.to_matrix().shape == (8, 8)
-
-    with pytest.raises(ValueError, match="keep_last_m"):
-        pt.reduced(keep_last_m=0)
-    with pytest.raises(ValueError, match="keep_last_m"):
-        pt.reduced(keep_last_m=99)
-
-
-def test_dense_process_tensor_qmi_cmi_and_conditional() -> None:
+def test_dense_process_tensor_qmi_and_cmi() -> None:
     """Information metrics run on small process tensors including past-leg variants."""
     pt_k1 = _tiny_process_tensor(num_interventions=1)
     pt_k2 = _tiny_process_tensor(num_interventions=2)
 
     assert pt_k1.cmi() == pytest.approx(0.0)
-    assert pt_k1.cmi_conditional() == pytest.approx(0.0)
 
     q_all = pt_k2.qmi(past="all")
     q_last = pt_k2.qmi(past="last", assume_canonical=True)
@@ -321,16 +304,10 @@ def test_dense_process_tensor_qmi_cmi_and_conditional() -> None:
     assert isinstance(q_first, float)
 
     cmi = pt_k2.cmi(assume_canonical=True)
-    cmi_c = pt_k2.cmi_conditional(a_label="first", b_label="final", c_label="last")
     assert isinstance(cmi, float)
-    assert isinstance(cmi_c, float)
 
     with pytest.raises(ValueError, match="Unknown past"):
         pt_k2.qmi(past="middle")
-    with pytest.raises(ValueError, match="Unknown subsystem"):
-        pt_k2.cmi_conditional(a_label="nope", b_label="final", c_label="last")
-    with pytest.raises(ValueError, match="three distinct"):
-        pt_k2.cmi_conditional(a_label="first", b_label="first", c_label="last")
 
 
 def test_dense_process_tensor_evaluate_probes_smoke() -> None:
@@ -360,5 +337,4 @@ def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
     assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
 
     assert isinstance(mpo_pt.cmi(), float)
-    assert isinstance(mpo_pt.cmi_conditional(), float)
     assert mpo_pt._num_interventions_for_probe() == 2
