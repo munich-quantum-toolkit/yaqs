@@ -197,7 +197,9 @@ def run_all_sequences(
         Exhaustive :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Raises:
-        ValueError: If ``num_interventions=0`` or the solver is unsupported.
+        ValueError: If ``num_interventions=0``, the solver is unsupported,
+            ``num_trajectories`` is not an integer, ``num_trajectories`` is negative,
+            or ``num_trajectories`` is zero while ``noise_model`` is set.
     """
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True

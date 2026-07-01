@@ -574,7 +574,7 @@ class MemoryCharacterizer:
             initial_psi: Optional initial state for Hamiltonian exact simulation.
             parallel: Override parallelism for process-tensor/surrogate probing.
             delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
-            **probe_kwargs: Advanced overrides; only ``intervention_style`` is supported.
+            **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
 
         Returns:
             Diagnostics with per-cut entropy, modes, spectrum, and stored probes.
@@ -590,13 +590,11 @@ class MemoryCharacterizer:
         if "intervention_mode" in probe_kwargs or "unitary_ensemble" in probe_kwargs:
             msg = "Use intervention_style= instead of intervention_mode= / unitary_ensemble=."
             raise ValueError(msg)
-        allowed_probe_kwargs = {"intervention_style"}
-        unknown_probe_kwargs = set(probe_kwargs) - allowed_probe_kwargs
-        if unknown_probe_kwargs:
-            unknown = ", ".join(sorted(unknown_probe_kwargs))
-            msg = f"Unsupported probe_kwargs: {unknown}. Only intervention_style= is allowed."
+        if probe_kwargs:
+            unknown = ", ".join(sorted(probe_kwargs))
+            msg = f"Unsupported probe_kwargs: {unknown}."
             raise ValueError(msg)
-        resolved_style = normalize_style(probe_kwargs.get("intervention_style", intervention_style))
+        resolved_style = normalize_style(intervention_style)
         resolved_probe_set = _coerce_probe_set(probe_set)
 
         if delay > 0 and not _matches_hamiltonian(target):

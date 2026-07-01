@@ -183,3 +183,11 @@ def test_build_training_dataset_rejects_non_positive_n(n: int) -> None:
     params = AnalogSimParams(dt=0.1)
     with pytest.raises(ValueError, match=r"n must be positive"):
         build_training_dataset(op, params, num_interventions=1, n=n, parallel=False, show_progress=False)
+
+
+def test_build_training_dataset_rejects_non_integer_n() -> None:
+    """build_training_dataset rejects non-integral batch sizes before simulation."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    with pytest.raises(ValueError, match=r"n must be an integer"):
+        build_training_dataset(op, params, num_interventions=1, n=1.5, parallel=False, show_progress=False)  # ty: ignore[invalid-argument-type]

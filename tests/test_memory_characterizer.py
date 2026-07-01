@@ -620,10 +620,10 @@ def test_characterize_rejects_unknown_probe_kwargs(ham_and_params: tuple[Hamilto
         mc.characterize(ham, params, num_interventions=2, cut=1, typo_style="haar")
 
 
-def test_characterize_accepts_probe_kwargs_intervention_style(
+def test_characterize_accepts_intervention_style_keyword(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
-    """intervention_style may be passed via probe_kwargs."""
+    """intervention_style is set via the explicit keyword argument."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     result = mc.characterize(

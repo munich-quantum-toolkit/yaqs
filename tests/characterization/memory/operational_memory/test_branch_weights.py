@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    _compute_branch_weight_for_sequence,  # noqa: PLC2701
+    _compute_branch_weight_for_sequence,  # noqa: PLC2701 -- white-box parity test for analytic branch weights; no public equivalent
 )
 
 _PSI0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)

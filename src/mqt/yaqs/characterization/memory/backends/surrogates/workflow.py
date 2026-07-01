@@ -121,7 +121,7 @@ def build_training_dataset(
 
     Raises:
         ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``),
-            or ``n`` is not positive.
+            ``n`` is not an integer, or ``n`` is not positive.
     """
     if int(n) != n:
         msg = f"n must be an integer, got {n!r}."

@@ -113,15 +113,23 @@ def test_cut_measurement_without_reset_uses_measured_state() -> None:
     """cut_measurement without psi_reset defaults reset ket to the measurement ket."""
     op = build_intervention_operator({"type": "cut_measurement", "psi_meas": _PLUS})
     assert isinstance(op, InterventionMap)
+    np.testing.assert_allclose(op.rho_prep, np.outer(_PLUS, _PLUS.conj()), atol=1e-12)
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    rho_out = apply_intervention_to_rho(rho, {"type": "cut_measurement", "psi_meas": _PLUS})
+    np.testing.assert_allclose(rho_out, np.outer(_PLUS, _PLUS.conj()), atol=1e-12)
     prob = compute_intervention_probability(rho, {"type": "cut_measurement", "psi_meas": _PLUS})
     assert prob == pytest.approx(0.5)
 
 
 def test_intervention_step_types_cover_dict_and_pair_forms() -> None:
-    """Structured dict steps and measure/prepare pairs are both accepted."""
-    steps = [
-        {"type": "unitary", "U": np.eye(2, dtype=np.complex128)},
-        (_PSI0, _PSI1),
-    ]
-    assert len(steps) == 2
+    """Dict steps and measure/prepare pairs parse through the production helpers."""
+    rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    u = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+
+    dict_op = build_intervention_operator({"type": "unitary", "U": u})
+    assert isinstance(dict_op, np.ndarray)
+    assert compute_intervention_probability(rho, {"type": "unitary", "U": u}) == pytest.approx(1.0)
+
+    pair_op = build_intervention_operator((_PSI1, _PSI0))
+    assert isinstance(pair_op, InterventionMap)
+    assert compute_intervention_probability(rho, (_PSI1, _PSI0)) == pytest.approx(0.0)

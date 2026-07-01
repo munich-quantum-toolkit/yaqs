@@ -316,6 +316,12 @@ def _simulate_seq_core(
 
     Optionally collect per-sequence simulation diagnostics when ``collect_diagnostics`` is set.
 
+    Args:
+        sequence_idx: Index into ``worker_ctx["intervention_steps"]`` and ``initial_psi``.
+        trajectory_idx: MCWF trajectory index when ``noise_model`` is set.
+        worker_ctx: Shared pool payload (intervention steps, Hamiltonian, schedule, solver, …).
+        collect_diagnostics: Whether to build the per-sequence diagnostics dict.
+
     Returns:
         Tuple ``(rho_final, cumulative_weight, diagnostics)`` where ``diagnostics`` is ``None``
         when ``collect_diagnostics`` is ``False``.
@@ -464,6 +470,10 @@ def _seq_final_worker_diagnostics(
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, float, dict[str, Any]]:
     """Same as :func:`_seq_final_worker` but includes per-sequence simulation diagnostics.
+
+    Args:
+        job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
+        job_payload: Per-pool shared context; defaults to :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`.
 
     Returns:
         Tuple ``(sequence_index, trajectory_index, rho_final, cumulative_weight, diagnostics)``.

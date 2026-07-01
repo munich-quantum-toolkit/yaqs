@@ -279,8 +279,15 @@ def test_delayed_break_soft_future_prepare_retains_past_response() -> None:
     assert future_std > 1e-4
 
 
-def test_simulate_exact_accepts_custom_intervention_steps_list() -> None:
-    """simulate_exact rolls out delayed-break probe grids when intervention_steps_list is supplied."""
+def test_simulate_exact_accepts_custom_intervention_steps_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """simulate_exact uses a supplied intervention_steps_list instead of assemble_probe_grid."""
+
+    def _fail_assemble(*_args: object, **_kwargs: object) -> None:
+        msg = "assemble_probe_grid must not be called when intervention_steps_list is provided"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(exact_mod, "assemble_probe_grid", _fail_assemble)
+
     rng = np.random.default_rng(2)
     probe_set, intervention_steps_list = _sample_split_delayed_break_probes(
         left_cut=3,
@@ -304,6 +311,11 @@ def test_simulate_exact_accepts_custom_intervention_steps_list() -> None:
     assert weights.shape == (3, 2)
     assert len(simulation_diagnostics) == 6
     assert all("cumulative_weight_final" in d for d in simulation_diagnostics)
+    u_id = np.eye(2, dtype=np.complex128)
+    for seq in intervention_steps_list:
+        assert any(
+            isinstance(step, dict) and step.get("type") == "unitary" and np.array_equal(step["U"], u_id) for step in seq
+        )
 
 
 def test_exact_backend_execution_config_override() -> None:
