@@ -37,9 +37,6 @@ The sections below run the **same** noisy benchmark on all three paths so you ca
 ## 1. Noisy open-system benchmark
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -111,9 +108,6 @@ With `noise_model=None`, all three representations should agree on unitary obser
 We use a product state here so the MPS path is exact at modest bond dimension.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 obs_z = Observable("z", sites=[0])
 params_mps_u = AnalogSimParams(observables=[obs_z], elapsed_time=0.5, dt=0.1, max_bond_dim=16)
 params_rho_u = AnalogSimParams(observables=[obs_z], elapsed_time=0.5, dt=0.1)

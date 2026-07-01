@@ -65,24 +65,18 @@ flowchart LR
 | Model realistic noise (log-normal and other distributions)    | {doc}`examples/realistic_noise_models`     |
 | Define custom single-site jump operators                      | {doc}`examples/realistic_noise_models` § 6 |
 | Compare scalable MPS, MCWF, and Lindblad analog paths         | {doc}`examples/representation_comparison`  |
-| Simulate a noisy circuit and read observables                 | {doc}`examples/circuit_simulation`         |
-| Get hardware-like shot histograms                             | {doc}`examples/weak_circuit_simulation`    |
-| Verify two circuits are equivalent                            | {doc}`examples/equivalence_checking`       |
 | Two-time correlations and typicality ensembles                | {doc}`examples/ensemble_evolution`         |
 | Scheduled jumps at fixed times                                | {doc}`examples/scheduled_jumps`            |
 | Transmon–resonator SWAP (noiseless vs noisy)                  | {doc}`examples/transmon_emulation`         |
 | Trapped-ion position-grid dynamics                            | {doc}`examples/trapped_ion`                |
+| Characterize environmental memory effects via probing the process | {doc}`examples/characterization`           |
+| Study how long environmental memory persists in a system       | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
+| Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`   |
+| Validate predictions at short temporal horizons with exact references | {doc}`examples/memory_surrogate`           |
+| Simulate a noisy circuit and read observables                 | {doc}`examples/circuit_simulation`         |
+| Get hardware-like shot histograms                             | {doc}`examples/weak_circuit_simulation`    |
+| Verify two circuits are equivalent                            | {doc}`examples/equivalence_checking`       |
 | Custom gate translation                                       | {doc}`examples/custom_gates`               |
-
-### Characterization
-
-| I want to…                                             | Read                                                                       |
-| ------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Characterize operational memory (start here)           | {doc}`examples/characterization`                                           |
-| Study reset delay at the causal cut                    | {ref}`Reset delay <reset-delay>` in {doc}`examples/characterization`       |
-| Predict dynamics with a trained surrogate              | {doc}`examples/characterization`                                           |
-| Tune surrogate training or read response-matrix theory | {ref}`Theory <response-matrix-theory>` in {doc}`examples/characterization` |
-| Reference dynamics at small `num_interventions`        | {doc}`examples/reference_process_tensors`                                  |
 
 ```{toctree}
 :caption: Getting started
@@ -113,25 +107,18 @@ examples/transmon_emulation
 examples/trapped_ion
 ```
 
-## Characterization
-
-Characterize **non-Markovian memory** in open quantum processes via split-cut operational memory
-(`S_V`, modes, spectrum). Start with {doc}`examples/characterization` for
-`MemoryCharacterizer` workflows: predict with surrogates (or reference process tensors at small `num_interventions`),
-characterize with the Hamiltonian as the primary metric.
-
 ```{toctree}
-:caption: Characterization
+:caption: Environmental Memory Characterization
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
 examples/characterization
-examples/reference_process_tensors
+examples/memory_surrogate
 ```
 
 ```{toctree}
-:caption: Digital circuits
+:caption: Digital Circuit Simulation
 :hidden:
 :maxdepth: 1
 :titlesonly:

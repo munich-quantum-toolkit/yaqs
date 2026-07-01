@@ -97,9 +97,6 @@ sim_params = AnalogSimParams(
 We run two simulations: one with the jump and a baseline without it.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import Simulator
 import copy
 

@@ -97,9 +97,6 @@ are not supported for unitary equivalence on either backend. See
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import EquivalenceChecker
 
 # Recommended: MPO for the circuits you care about
@@ -149,9 +146,6 @@ depth = num_qubits
 Create a TwoLocal circuit and decompose it.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit.circuit.library.n_local import TwoLocal
 
 import numpy as np
@@ -167,9 +161,6 @@ circuit.measure_all()
 Transpile the circuit to a new basis.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit import transpile
 
 basis_gates = ["cz", "rz", "sx", "x", "id"]
@@ -179,9 +170,6 @@ transpiled_circuit = transpile(circuit, basis_gates=basis_gates, optimization_le
 Run equivalence checking with the MPO backend.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import EquivalenceChecker
 
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6, fidelity=1 - 1e-13)
@@ -192,9 +180,6 @@ The same pair with `representation="auto"` on this five-qubit example selects th
 backend because $5 \leq 7$. For a consistent pipeline, keep `representation="mpo"` as above.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 auto_result = EquivalenceChecker(representation="auto").check(circuit, transpiled_circuit)
 ```
 

@@ -107,9 +107,6 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
 Pick a preset — no other truncation arguments required:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 # Default: balanced preset fills in all truncation settings
 analog_params = AnalogSimParams()
 
@@ -120,9 +117,6 @@ for name in ("fast", "balanced", "accurate", "exact"):
 Override **one** field; the rest stay from `"balanced"`:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 balanced = AnalogSimParams(preset="balanced")
 tighter_krylov = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
 ```
@@ -230,9 +224,6 @@ Used for noisy weak simulation. **`shots` is always required** and is not part o
 YAQS stores weak-simulation measurement histograms in `Result.counts` as a `dict[int, int]`. The integer key encodes the measured bitstring with **site 0 as the least-significant bit** (little-endian). This matches Qiskit’s default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via `int(bitstring, 2)`.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 weak_balanced = WeakSimParams(shots=1000)
 weak_exact = WeakSimParams(shots=1000, preset="exact")
 ```

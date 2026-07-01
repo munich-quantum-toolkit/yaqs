@@ -220,6 +220,10 @@ docs = [
     "sphinxext-opengraph>=0.13.0",
     "sphinx-reredirects>=0.1.5",
     "qiskit[visualization]>=1.0.0",
+    "torch>=2.0; python_version < '3.12'",
+    "torch>=2.2; python_version == '3.12'",
+    "torch>=2.4; python_version == '3.13'",
+    "torch>=2.9; python_version >= '3.14'",
 ]
 dev = [
     {include-group = "test"},

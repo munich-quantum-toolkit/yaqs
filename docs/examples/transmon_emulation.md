@@ -93,9 +93,6 @@ def leakage_at_t(result, t_idx: int) -> float:
 ## 3. Noiseless SWAP
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import copy
 
 from mqt.yaqs import Simulator
@@ -105,9 +102,6 @@ result_clean = sim.run(copy.deepcopy(state), H_0, copy.deepcopy(sim_params))
 ```
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 p100_clean = pvm_curve(result_clean, "100")
 p001_clean = pvm_curve(result_clean, "001")
 times = sim_params.times
@@ -118,9 +112,6 @@ times = sim_params.times
 Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For log-normal and other distributed noise strengths, see {doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Destroy
 
@@ -145,9 +136,6 @@ result_noisy = sim.run(copy.deepcopy(state), H_0, noisy_params, noise_model)
 ```
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 p100_noisy = pvm_curve(result_noisy, "100")
 p001_noisy = pvm_curve(result_noisy, "001")
 ```

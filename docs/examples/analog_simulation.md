@@ -73,9 +73,6 @@ Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per p
 With `num_traj > 1`, each {meth}`~mqt.yaqs.Simulator.run` call averages independent quantum-jump trajectories. Set {attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed` to fix the pseudorandom stream across trajectories (and for distribution-valued noise strengths):
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import copy
 
 import numpy as np
@@ -113,9 +110,6 @@ The same `random_seed` field exists on {class}`~mqt.yaqs.core.data_structures.si
 ## 5. Run and visualize
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 result = sim.run(state, H_0, sim_params, noise_model)
 ```
 
