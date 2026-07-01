@@ -82,14 +82,14 @@ Use `preset="quick"`, `"balanced"`, or `"accurate"` for default probe-grid sizes
 
 ### Reading `CharacterizationResult`
 
-| Access                      | Meaning                                                          |
-| --------------------------- | ---------------------------------------------------------------- |
-| `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                            |
-| `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                       |
+| Access                      | Meaning                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
+| `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
 | `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Cross-cut memory matrix $\widetilde{V}(c)$ (see theory below)    |
-| `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)           |
-| `result.summary()`          | Human-readable table of entropies and modes                      |
+| `result.response_matrix(c)` | Cross-cut memory matrix $\widetilde{V}(c)$ (see theory below)                |
+| `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
+| `result.summary()`          | Human-readable table of entropies and modes                                  |
 
 (memory-theory)=
 

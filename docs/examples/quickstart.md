@@ -143,10 +143,10 @@ Surrogate training requires PyTorch (`pip install mqt.yaqs[torch]`).
 
 ```{code-cell} ipython3
 rho0 = np.eye(2, dtype=np.complex128) / 2.0
-ham_sur = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+ham_sure = Hamiltonian.ising(length=2, J=1.0, g=1.0)
 
 model = mc.train(
-    ham_sur,
+    ham_sure,
     params,
     num_interventions=1,
     n=32,
@@ -192,15 +192,15 @@ fig.tight_layout()
 
 ## 6. Where to go next
 
-| Goal                                                | Start here                    |
-| --------------------------------------------------- | ----------------------------- |
-| Environmental memory probing                        | {doc}`characterization`       |
-| Surrogate training, prediction, and exact validation | {doc}`memory_surrogate`      |
-| Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
-| Bell-curve (log-normal) noise strengths             | {doc}`realistic_noise_models` |
-| Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |
-| Accuracy presets and truncation knobs               | {doc}`simulation_parameters`  |
-| Check two circuits for equivalence                  | {doc}`equivalence_checking`   |
+| Goal                                                 | Start here                    |
+| ---------------------------------------------------- | ----------------------------- |
+| Environmental memory probing                         | {doc}`characterization`       |
+| Surrogate training, prediction, and exact validation | {doc}`memory_surrogate`       |
+| Open-system dynamics, noise, time grids              | {doc}`analog_simulation`      |
+| Bell-curve (log-normal) noise strengths              | {doc}`realistic_noise_models` |
+| Circuit observables, mid-circuit sampling, OpenQASM  | {doc}`circuit_simulation`     |
+| Accuracy presets and truncation knobs                | {doc}`simulation_parameters`  |
+| Check two circuits for equivalence                   | {doc}`equivalence_checking`   |
 
 ## Related topics
 
