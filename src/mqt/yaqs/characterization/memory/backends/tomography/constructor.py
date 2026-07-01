@@ -210,12 +210,18 @@ def run_all_sequences(
     if num_interventions <= 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
-    if int(num_trajectories) < 0:
+    if int(num_trajectories) != num_trajectories:
+        msg = f"num_trajectories must be an integer, got {num_trajectories!r}."
+        raise ValueError(msg)
+    num_trajectories = int(num_trajectories)
+    if num_trajectories < 0:
         msg = f"num_trajectories must be non-negative, got {num_trajectories}."
         raise ValueError(msg)
-    if noise_model is not None and int(num_trajectories) == 0:
+    if noise_model is not None and num_trajectories == 0:
         msg = "num_trajectories must be positive when noise_model is set."
         raise ValueError(msg)
+    if noise_model is None:
+        num_trajectories = 1
 
     initial_rho = _reference_initial_rho(
         operator,
@@ -243,9 +249,6 @@ def run_all_sequences(
         operators_list=None,
         static_ctx_list=None,
     )
-
-    if noise_model is None:
-        num_trajectories = 1
 
     mcwf_static_ctx = None
     if stochastic_solver == "MCWF":

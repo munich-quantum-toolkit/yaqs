@@ -174,3 +174,12 @@ def test_build_training_dataset_requires_torch_before_simulation(
     params = AnalogSimParams(dt=0.1)
     with pytest.raises(ImportError):
         build_training_dataset(op, params, num_interventions=1, n=1, parallel=False, show_progress=False)
+
+
+@pytest.mark.parametrize("n", [0, -2])
+def test_build_training_dataset_rejects_non_positive_n(n: int) -> None:
+    """build_training_dataset rejects non-positive batch sizes before simulation."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    with pytest.raises(ValueError, match=r"n must be positive"):
+        build_training_dataset(op, params, num_interventions=1, n=n, parallel=False, show_progress=False)

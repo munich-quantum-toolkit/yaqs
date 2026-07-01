@@ -527,6 +527,9 @@ def _seq_trace_worker(
         assert int(worker_ctx["num_trajectories"]) == 1, "num_trajectories must be 1 when noise_model is None."
 
     num_steps = len(intervention_steps)
+    if num_steps == 0:
+        msg = "Trace worker requires at least one intervention step."
+        raise ValueError(msg)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})

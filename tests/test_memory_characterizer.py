@@ -610,3 +610,46 @@ def test_characterize_delay_reuses_prior_result_probes() -> None:
     )
     delayed = mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=1, probe_set=anchor)
     assert np.isfinite(delayed.entropy(4))
+
+
+def test_characterize_rejects_unknown_probe_kwargs(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """Stale probe_kwargs keys fail fast instead of being ignored."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match="Unsupported probe_kwargs"):
+        mc.characterize(ham, params, num_interventions=2, cut=1, typo_style="haar")
+
+
+def test_characterize_accepts_probe_kwargs_intervention_style(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+) -> None:
+    """intervention_style may be passed via probe_kwargs."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    result = mc.characterize(
+        ham,
+        params,
+        num_interventions=2,
+        cut=1,
+        n_pasts=4,
+        n_futures=4,
+        intervention_style="clifford",
+    )
+    assert np.isfinite(result.entropy(1))
+
+
+def test_characterize_rejects_invalid_probe_set(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """probe_set must be None, CharacterizationResult, or ProbeSet."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(TypeError, match="probe_set must be None, CharacterizationResult, or ProbeSet"):
+        mc.characterize(ham, params, num_interventions=2, cut=1, probe_set={"bad": 1})
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="torch not installed")
+def test_train_rejects_non_positive_n(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+    """MemoryCharacterizer.train rejects non-positive training batch sizes."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match=r"n must be positive"):
+        mc.train(ham, params, num_interventions=1, n=0)

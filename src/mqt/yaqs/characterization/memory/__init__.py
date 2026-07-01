@@ -14,5 +14,5 @@ Package layout (internal; user entry point is :class:`~mqt.yaqs.memory_character
 - :mod:`.backends` — exact Hamiltonian simulation, process-tensor schedule sequences, tomography, neural surrogates
 
 Public helpers use compact verb-first names (``sample_probes``, ``assemble_probe_grid``,
-``compute_branch_weights_from_simulation``, ``simulate_sequences`` in :mod:`.backends.sequences`, …).
+``compute_branch_weights``, ``simulate_sequences`` in :mod:`.backends.sequences`, …).
 """

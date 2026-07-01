@@ -27,7 +27,7 @@ from mqt.yaqs.characterization.memory.operational_memory.results import (
     pack_result,
 )
 from mqt.yaqs.characterization.memory.operational_memory.run import run_memory_characterization
-from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.encoding import (
     coerce_rho_matrix,
     normalize_backend_rho,
@@ -57,7 +57,6 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate
     from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis
-    from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -110,6 +109,7 @@ def _coerce_probe_set(probe_set: Any) -> ProbeSet | None:
 
     Raises:
         ValueError: If a prior result has no reusable probes or multiple cuts.
+        TypeError: If ``probe_set`` is not ``None``, :class:`CharacterizationResult`, or :class:`ProbeSet`.
     """
     if probe_set is None:
         return None
@@ -122,7 +122,10 @@ def _coerce_probe_set(probe_set: Any) -> ProbeSet | None:
             msg = "Prior characterize() result has no stored probes to reuse."
             raise ValueError(msg)
         return entry.probe_set
-    return probe_set
+    if isinstance(probe_set, ProbeSet):
+        return probe_set
+    msg = f"probe_set must be None, CharacterizationResult, or ProbeSet, got {type(probe_set).__name__}."
+    raise TypeError(msg)
 
 
 def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
@@ -586,6 +589,12 @@ class MemoryCharacterizer:
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         if "intervention_mode" in probe_kwargs or "unitary_ensemble" in probe_kwargs:
             msg = "Use intervention_style= instead of intervention_mode= / unitary_ensemble=."
+            raise ValueError(msg)
+        allowed_probe_kwargs = {"intervention_style"}
+        unknown_probe_kwargs = set(probe_kwargs) - allowed_probe_kwargs
+        if unknown_probe_kwargs:
+            unknown = ", ".join(sorted(unknown_probe_kwargs))
+            msg = f"Unsupported probe_kwargs: {unknown}. Only intervention_style= is allowed."
             raise ValueError(msg)
         resolved_style = normalize_style(probe_kwargs.get("intervention_style", intervention_style))
         resolved_probe_set = _coerce_probe_set(probe_set)

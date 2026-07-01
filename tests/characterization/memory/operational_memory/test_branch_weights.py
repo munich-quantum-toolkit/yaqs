@@ -5,8 +5,6 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box tests import private branch-weight helpers
-
 """Tests for branch-weight parity (paper benchmark weighting)."""
 
 from __future__ import annotations
@@ -14,10 +12,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
+from mqt.yaqs.characterization.memory.backends.exact import (
+    _branch_weights_from_simulation,  # noqa: PLC2701
+    simulate_exact,
+)
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    _compute_branch_weight_for_sequence,
-    compute_branch_weights_from_simulation,
+    _compute_branch_weight_for_sequence,  # noqa: PLC2701
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
@@ -125,7 +125,7 @@ def test_trace_weights_match_cumulative_final_split_cut_unitary() -> None:
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),
     )
-    w_sim = compute_branch_weights_from_simulation(
+    w_sim = _branch_weights_from_simulation(
         traces,
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),

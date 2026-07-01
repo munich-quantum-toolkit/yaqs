@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Analytic and simulation-based branch weights for operational memory."""
+"""Analytic branch weights for operational memory."""
 
 from __future__ import annotations
 
@@ -62,31 +62,4 @@ def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
     for i in range(n_pasts):
         w_i = _compute_branch_weight_for_sequence(assemble_probe_sequence(probe_set, i, 0), cut=cut)
         w[i, :] = w_i
-    return w
-
-
-def compute_branch_weights_from_simulation(
-    simulation_diagnostics: list[dict[str, Any]],
-    *,
-    n_pasts: int,
-    n_futures: int,
-    cut: int,
-) -> np.ndarray:
-    """Compute branch weights from simulated step probabilities through ``cut``.
-
-    Args:
-        simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
-        n_pasts: Number of past probe branches.
-        n_futures: Number of future probe branches.
-        cut: Causal cut index.
-
-    Returns:
-        Branch-weight array of shape ``(n_pasts, n_futures)``.
-    """
-    w = np.zeros((n_pasts, n_futures), dtype=np.float64)
-    for past_idx in range(n_pasts):
-        for future_idx in range(n_futures):
-            probs = simulation_diagnostics[past_idx * n_futures + future_idx]["step_probs"]
-            n = min(cut, len(probs))
-            w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
     return w

@@ -120,8 +120,17 @@ def build_training_dataset(
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
 
     Raises:
-        ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``).
+        ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``),
+            or ``n`` is not positive.
     """
+    if int(n) != n:
+        msg = f"n must be an integer, got {n!r}."
+        raise ValueError(msg)
+    n_sequences = int(n)
+    if n_sequences <= 0:
+        msg = f"n must be positive, got {n_sequences}."
+        raise ValueError(msg)
+
     chain_length = int(operator.length)
     if timesteps is None:
         timesteps = [float(sim_params.dt)] * (int(num_interventions) + 1)
@@ -146,7 +155,7 @@ def build_training_dataset(
     initial_psis: list[np.ndarray] = []
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
-    for _ in range(int(n)):
+    for _ in range(n_sequences):
         rho_in = sample_density_matrix(rng)
         step_pairs, choi_rows = sample_train_interventions(
             int(num_interventions),

@@ -350,6 +350,26 @@ def test_simulate_sequences_trace_worker_early_termination_fill() -> None:
     assert samples[0].rho_seq.shape == (1, 8)
 
 
+def test_simulate_sequences_trace_worker_rejects_zero_interventions() -> None:
+    """record_step_states=True rejects empty intervention sequences before Choi reshape."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    with pytest.raises(ValueError, match="at least one intervention step"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.0],
+            intervention_steps_list=[[]],
+            initial_psis=[np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)],
+            static_ctx=static_ctx,
+            parallel=False,
+            show_progress=False,
+            record_step_states=True,
+            e_features_rows=[np.zeros(0, dtype=np.float32)],
+        )
+
+
 def test_reshape_choi_feature_rows_rejects_high_dim() -> None:
     """Choi feature rows must be 1D or 2D."""
     with pytest.raises(ValueError, match="1D or 2D"):

@@ -15,7 +15,6 @@ import numpy as np
 
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
-from ..operational_memory.branch_weights import compute_branch_weights_from_simulation
 from ..operational_memory.grid import assemble_probe_grid
 from ..shared.encoding import decode_packed_pauli_batch
 from ..shared.utils import StochasticSolver, make_mcwf_static_context, validate_stochastic_solver
@@ -53,6 +52,33 @@ def _resolve_sequence_grid(
         msg = f"intervention_steps_list length {len(intervention_steps_list)} != n_pasts * n_futures ({n_p * n_f})"
         raise ValueError(msg)
     return intervention_steps_list, n_p, n_f
+
+
+def _branch_weights_from_simulation(
+    simulation_diagnostics: list[dict[str, Any]],
+    *,
+    n_pasts: int,
+    n_futures: int,
+    cut: int,
+) -> np.ndarray:
+    """Compute branch weights from simulated step probabilities through ``cut``.
+
+    Args:
+        simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
+        n_pasts: Number of past probe branches.
+        n_futures: Number of future probe branches.
+        cut: Causal cut index.
+
+    Returns:
+        Branch-weight array of shape ``(n_pasts, n_futures)``.
+    """
+    w = np.zeros((n_pasts, n_futures), dtype=np.float64)
+    for past_idx in range(n_pasts):
+        for future_idx in range(n_futures):
+            probs = simulation_diagnostics[past_idx * n_futures + future_idx]["step_probs"]
+            n = min(cut, len(probs))
+            w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
+    return w
 
 
 class ExactBackend:
@@ -178,6 +204,7 @@ def simulate_exact(
         parallel: Whether to parallelize sequence simulation.
         show_progress: Whether to show a progress bar.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        _execution: Optional internal execution configuration.
         intervention_steps_list: Optional pre-built sequence grid (experiment geometries).
         static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
@@ -218,5 +245,5 @@ def simulate_exact(
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
     pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
-    w = compute_branch_weights_from_simulation(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
+    w = _branch_weights_from_simulation(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
     return pauli_xyz, w, traces
