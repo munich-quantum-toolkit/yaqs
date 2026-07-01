@@ -14,9 +14,9 @@
   </a>
 </p>
 
-# MQT YAQS - A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
 
-MQT YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation and characterization of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS uses state-of-the-art techniques in these areas such as parallelized trajectories, tensor network compression, and problem-size-appropriate backends wherever possible (see [Cite This](#cite-this)).
 It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 <p align="center">
@@ -27,16 +27,19 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 ## Key Features
 
-- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [1]
-- **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits [3]
-- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [2]
-- **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
+- **Analog simulation**: Large-scale open-system and unitary time evolution using parallelized quantum trajectories when a noise model is attached [1] (trajectory guidance [4]).
+- **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit observables, shot-based readout, and OpenQASM 2 inputs [3] (`pip install mqt-yaqs[qasm3]` for OpenQASM 3).
+- **Equivalence checking**: Scalable comparison of quantum circuits [2].
+- **Process characterization**: Quantify non-Markovian memory in multi-time quantum processes, how much temporal history a process retains, with exact reference checks where needed ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
+- **Process tensor surrogates**: Train a causal Transformer surrogate for fast prediction of non-Markovian response to local interventions and measurement over time ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
+- **Hardware-oriented modeling**: Realistic noise models including Gaussian and other strength distributions, plus hardware dynamics such as transmon–resonator systems, and heterogeneous site dimensions ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
+- **Multiple backends**: Monte Carlo wavefunction and master equation evolution are available for analog simulation on smaller systems, alongside the scalable MPS trajectory path.
 
 If you have any questions, feel free to create a [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an [issue](https://github.com/munich-quantum-toolkit/yaqs/issues) on [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
 
 ## Contributors and Supporters
 
-The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de/) and supported by the [Munich Quantum Software Company (MQSC)](https://munichquantum.software).
+The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de/) and supported by [MQSC](https://mq.sc).
 Among others, it is part of the [Munich Quantum Software Stack (MQSS)](https://www.munich-quantum-valley.de/research/research-areas/mqss) ecosystem, which is being developed as part of the [Munich Quantum Valley (MQV)](https://www.munich-quantum-valley.de) initiative.
 
 <p align="center">
@@ -80,7 +83,35 @@ To support this endeavor, please consider:
 (.venv) $ pip install mqt.yaqs
 ```
 
-**Detailed documentation and examples are available at [ReadTheDocs](https://mqt.readthedocs.io/projects/yaqs).**
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+
+sim = Simulator()
+state = State(3, initial="zeros")
+H = Hamiltonian.ising(length=3, J=1.0, g=0.5)
+params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
+print(sim.run(state, H, params).expectation_values[0])
+```
+
+Operational memory characterization:
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+
+ham = Hamiltonian.ising(length=3, J=1.0, g=0.5)
+params = AnalogSimParams(dt=0.1)
+result = MemoryCharacterizer().characterize(
+    ham,
+    params,
+    num_interventions=4,
+    cut=2,
+    n_pasts=4,
+    n_futures=4,
+)
+print(result.summary())
+```
+
+**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [Characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
 
 ## System Requirements
 
@@ -121,12 +152,17 @@ _Nature Communications_ _16_, 11074 (2025).
 [[2]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf)
 A. Sander, L. Burgholzer, and R. Wille.
 Equivalence checking of quantum circuits via intermediary matrix product operator.
-_Phys. Rev. Research_ _7_, 023261, (2025).
+_Phys. Rev. Research_ _7_, 023261 (2025).
 
 [[3]](https://arxiv.org/abs/2508.10096)
-A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille
+A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille.
 Quantum circuit simulation with a local time-dependent variational principle.
-arXiv:2508.10096 (2025)
+_arXiv:2508.10096 (2025)._
+
+[[4]](https://arxiv.org/abs/2606.13779)
+A. Sander, S. Cichy, M. Eigel, J. Eisert, M. Fröhlich, T. Peham, R. Wille.
+Computational regimes in matrix-product-state-based quantum trajectory simulations.
+_arXiv:2606.13779 (2026)._
 
 ---
 
@@ -140,4 +176,3 @@ The Munich Quantum Toolkit has been supported by the European Research Council (
     <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-funding-footer-light.svg" width="90%" alt="MQT Funding Footer">
   </picture>
 </p>
-```

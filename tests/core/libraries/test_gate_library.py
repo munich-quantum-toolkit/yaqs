@@ -29,43 +29,21 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import (
-    P0,
-    P1,
-    PVM,
-    XX,
-    YY,
-    ZZ,
     BaseGate,
-    Crosstalk,
-    CrosstalkCreateCreate,
-    CrosstalkCreateDestroy,
-    CrosstalkDestroyCreate,
-    CrosstalkDestroyDestroy,
-    CrosstalkXX,
-    CrosstalkXY,
-    CrosstalkXZ,
-    CrosstalkYX,
-    CrosstalkYY,
-    CrosstalkYZ,
-    CrosstalkZX,
-    CrosstalkZY,
-    CrosstalkZZ,
+    Create,
     Destroy,
     GateLibrary,
     X,
     Y,
     Z,
-    Zero,
     extend_gate,
     split_tensor,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from numpy.typing import NDArray
 
 
@@ -214,20 +192,6 @@ def test_gate_id() -> None:
     assert_array_equal(gate.tensor, gate.matrix)
 
     base_gate = BaseGate.id()
-    assert_array_equal(gate.matrix, base_gate.matrix)
-
-
-def test_gate_zero() -> None:
-    """Test the zero gate from GateLibrary.
-
-    This test creates the zero gate, sets its site, and verifies that its tensor matches its matrix.
-    """
-    gate = GateLibrary.zero()
-    gate.set_sites(0)
-    assert gate.sites == [0]
-    assert_array_equal(gate.tensor, gate.matrix)
-
-    base_gate = BaseGate.zero()
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
@@ -675,46 +639,6 @@ def _assert_identity_gate_like(g: BaseGate) -> None:
     assert g.interaction == 1  # because matrix is 2x2
 
 
-def test_diagnostic_runtime_cost() -> None:
-    """Test the runtime_cost diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be assigned to a site, and that its BaseGate factory produces
-    the same matrix.
-    """
-    g = GateLibrary.runtime_cost()
-    _assert_identity_gate_like(g)
-    g.set_sites(0)
-    assert g.sites == [0]
-    assert_array_equal(BaseGate.runtime_cost().matrix, g.matrix)
-
-
-def test_diagnostic_max_bond() -> None:
-    """Test the max_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.max_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(1)
-    assert g.sites == [1]
-    assert_array_equal(BaseGate.max_bond().matrix, g.matrix)
-
-
-def test_diagnostic_total_bond() -> None:
-    """Test the total_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.total_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(3)
-    assert g.sites == [3]
-    assert_array_equal(BaseGate.total_bond().matrix, g.matrix)
-
-
 def test_meta_entropy_sites_len_flexible() -> None:
     """Test the entropy meta-observable operator.
 
@@ -741,253 +665,83 @@ def test_meta_schmidt_spectrum_sites_len_flexible() -> None:
     assert_array_equal(BaseGate.schmidt_spectrum().matrix, g.matrix)
 
 
-# ---------------------------------------------------------------------------
-# BaseGate edge-cases
-# ---------------------------------------------------------------------------
+def test_base_gate_one_qubit_matrix_infers_interaction() -> None:
+    """A valid 1-qubit matrix should infer ``interaction == 1``."""
+    gate = BaseGate(np.array([[1, 0], [0, 1]], dtype=np.float64))
+    assert gate.interaction == 1
+    assert gate.matrix.dtype == np.complex128
 
 
-def test_basegate_matrix_not_power_of_local_dim() -> None:
-    """BaseGate raises ValueError when matrix size is not a power of local_dim."""
-    with pytest.raises(ValueError, match="Matrix size 3 is not a power of 2"):
+def test_base_gate_two_qubit_matrix_infers_interaction() -> None:
+    """A valid 2-qubit matrix should infer ``interaction == 2``."""
+    gate = BaseGate(np.eye(4, dtype=np.complex128))
+    assert gate.interaction == 2
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_non_square_matrix_raises() -> None:
+    """A non-square matrix should be rejected."""
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(np.array([[1, 2, 3], [4, 5, 6]]))
+
+
+def test_base_gate_three_by_three_matrix_raises() -> None:
+    """A 3x3 matrix should be rejected because 3 is not a power of two."""
+    with pytest.raises(ValueError, match="Matrix dimension 3 must be a power of 2"):
         BaseGate(np.eye(3, dtype=np.complex128))
 
 
-def test_basegate_set_sites_list_input() -> None:
-    """set_sites accepts a list of site indices instead of unpacked ints."""
-    gate = BaseGate(np.eye(4, dtype=np.complex128))
-    gate.set_sites([0, 1])
-    assert gate.sites == [0, 1]
+def test_destroy_d_level_arithmetic() -> None:
+    """Destroy/Create arithmetic on non-qubit dimensions should not re-validate matrix size."""
+    d = 3
+    destroy = Destroy(d)
+    create = Create(d)
+    combined = destroy.dag() @ destroy + create @ create.dag()
+    assert combined.matrix.shape == (d, d)
 
 
-def test_basegate_matmul_operator() -> None:
-    """@ operator delegates to matrix multiplication."""
-    x = X()
-    result = x @ x
-    assert_array_equal(result.matrix, x.matrix @ x.matrix)
+@pytest.mark.parametrize(
+    ("factory", "sites", "expected_mpo_len"),
+    [
+        (GateLibrary.xx, [0, 1], 2),
+        (GateLibrary.yy, [1, 2], 2),
+        (GateLibrary.zz, [0, 2], 3),
+    ],
+)
+def test_two_qubit_correlator_set_sites_builds_mpo(
+    factory: type,
+    sites: list[int],
+    expected_mpo_len: int,
+) -> None:
+    """XX/YY/ZZ correlators should still build tensor/MPO data via ``BaseGate.set_sites``."""
+    gate = factory()
+    gate.set_sites(*sites)
+    assert gate.sites == sites
+    assert gate.tensor.shape == (2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == expected_mpo_len
 
 
-def test_basegate_factory_destroy_and_zero() -> None:
-    """BaseGate.destroy() and BaseGate.zero() factory methods return correct instances."""
-    d = BaseGate.destroy()
-    assert_array_equal(d.matrix, Destroy().matrix)
-
-    z = BaseGate.zero()
-    assert_array_equal(z.matrix, Zero().matrix)
-    assert_array_equal(z.matrix, np.zeros((2, 2)))
-
-
-def test_basegate_factory_crosstalk() -> None:
-    """BaseGate.crosstalk() factory method returns a Crosstalk instance."""
-    ct = BaseGate.crosstalk(X(), Z())
-    assert_array_equal(ct.matrix, np.kron(X().matrix, Z().matrix).astype(np.complex128))
-
-
-def test_basegate_factory_p0_p1_pvm() -> None:
-    """BaseGate.p0(), BaseGate.p1(), and BaseGate.pvm() factory methods."""
-    assert_array_equal(BaseGate.p0().matrix, np.array([[1, 0], [0, 0]], dtype=complex))
-    assert_array_equal(BaseGate.p1().matrix, np.array([[0, 0], [0, 1]], dtype=complex))
-    pvm = BaseGate.pvm("01")
-    assert pvm.bitstring == "01"
+@pytest.mark.parametrize(
+    ("factory", "site"),
+    [
+        (GateLibrary.p0, 2),
+        (GateLibrary.p1, 3),
+    ],
+)
+def test_projector_set_sites_preserves_tensor(factory: type, site: int) -> None:
+    """Single-qubit projectors should keep their matrix/tensor after ``set_sites``."""
+    gate = factory()
+    matrix_before = gate.matrix.copy()
+    gate.set_sites(site)
+    assert gate.sites == [site]
+    assert_array_equal(gate.matrix, matrix_before)
+    assert gate.tensor.shape == (2, 2)
 
 
-def test_mpo_tensors_property_raises_before_set_sites() -> None:
-    """Accessing mpo_tensors before set_sites raises AttributeError."""
-    gate = GateLibrary.cx()
-    with pytest.raises(AttributeError, match="does not have MPO tensors defined"):
-        _ = gate.mpo_tensors
-
-
-# ---------------------------------------------------------------------------
-# Zero gate
-# ---------------------------------------------------------------------------
-
-
-def test_gate_zero() -> None:
-    """Zero gate has a 2x2 zero matrix."""
-    gate = GateLibrary.zero()
-    assert_array_equal(gate.matrix, np.zeros((2, 2)))
-    gate.set_sites(0)
-    assert gate.sites == [0]
-
-
-# ---------------------------------------------------------------------------
-# XX / YY / ZZ correlator gates
-# ---------------------------------------------------------------------------
-
-
-def test_gate_xx() -> None:
-    """XX gate matrix equals X ⊗ X."""
-    gate = XX()
-    expected = np.kron(X().matrix, X().matrix).astype(np.complex128)
-    assert_array_equal(gate.matrix, expected)
-    assert gate.interaction == 2
-
-
-def test_gate_yy() -> None:
-    """YY gate matrix equals Y ⊗ Y."""
-    gate = YY()
-    expected = np.kron(Y().matrix, Y().matrix).astype(np.complex128)
-    assert_allclose(gate.matrix, expected)
-    assert gate.interaction == 2
-
-
-def test_gate_zz() -> None:
-    """ZZ gate matrix equals Z ⊗ Z."""
-    gate = ZZ()
-    expected = np.kron(Z().matrix, Z().matrix).astype(np.complex128)
-    assert_array_equal(gate.matrix, expected)
-    assert gate.interaction == 2
-
-
-# ---------------------------------------------------------------------------
-# P0, P1, PVM gates
-# ---------------------------------------------------------------------------
-
-
-def test_gate_p0() -> None:
-    """P0 gate is the |0><0| projector."""
-    gate = P0()
-    assert_array_equal(gate.matrix, np.array([[1, 0], [0, 0]], dtype=complex))
-    gate.set_sites(2)
-    assert gate.sites == [2]
-
-
-def test_gate_p1() -> None:
-    """P1 gate is the |1><1| projector."""
-    gate = P1()
-    assert_array_equal(gate.matrix, np.array([[0, 0], [0, 1]], dtype=complex))
-    gate.set_sites(3)
-    assert gate.sites == [3]
-
-
-def test_gate_pvm() -> None:
-    """PVM gate stores the bitstring and uses identity as a placeholder matrix."""
-    gate = PVM("101")
-    assert gate.bitstring == "101"
+def test_pvm_set_sites_preserves_placeholder_matrix() -> None:
+    """PVM should remain a 1-qubit placeholder after ``set_sites``."""
+    gate = GateLibrary.pvm("01")
+    gate.set_sites(4)
+    assert gate.sites == [4]
+    assert gate.interaction == 1
     assert_array_equal(gate.matrix, np.eye(2))
-
-
-# ---------------------------------------------------------------------------
-# Crosstalk gates
-# ---------------------------------------------------------------------------
-
-
-def test_crosstalk_matrix_and_swapped() -> None:
-    """Crosstalk matrix is gate1 ⊗ gate2; swapped_matrix is gate2 ⊗ gate1."""
-    ct = Crosstalk(X(), Z())
-    assert_array_equal(ct.matrix, np.kron(X().matrix, Z().matrix).astype(np.complex128))
-    assert_array_equal(ct.swapped_matrix, np.kron(Z().matrix, X().matrix).astype(np.complex128))
-    assert_array_equal(ct.matrix1, X().matrix)
-    assert_array_equal(ct.matrix2, Z().matrix)
-    assert ct.interaction == 2
-
-
-def test_crosstalk_mismatched_local_dim_raises() -> None:
-    """Crosstalk raises ValueError when gate1 and gate2 have different local_dim."""
-    qubit_gate = X()
-    qutrit_gate = Destroy(3)
-    with pytest.raises(ValueError, match="must have the same local dimension"):
-        Crosstalk(qubit_gate, qutrit_gate)
-
-
-def test_crosstalk_named_subclasses() -> None:
-    """All named Crosstalk subclasses construct without error and have interaction == 2."""
-    subclasses = [
-        CrosstalkXX,
-        CrosstalkYY,
-        CrosstalkZZ,
-        CrosstalkXY,
-        CrosstalkYX,
-        CrosstalkXZ,
-        CrosstalkZX,
-        CrosstalkYZ,
-        CrosstalkZY,
-        CrosstalkDestroyDestroy,
-        CrosstalkCreateCreate,
-        CrosstalkDestroyCreate,
-        CrosstalkCreateDestroy,
-    ]
-    for cls in subclasses:
-        gate = cls()
-        assert gate.interaction == 2, f"{cls.__name__} interaction should be 2"
-
-
-# ---------------------------------------------------------------------------
-# set_sites list-input and ValueError branches for two-qubit gates
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("gate_factory", "kwargs"),
-    [
-        (GateLibrary.cx, {}),
-        (GateLibrary.cz, {}),
-        (GateLibrary.swap, {}),
-        (GateLibrary.rxx, {"params": [np.pi / 4]}),
-        (GateLibrary.ryy, {"params": [np.pi / 4]}),
-        (GateLibrary.rzz, {"params": [np.pi / 4]}),
-        (GateLibrary.cp, {"params": [np.pi / 4]}),
-    ],
-)
-def test_two_qubit_set_sites_list_input(
-    gate_factory: Callable[..., BaseGate],
-    kwargs: dict[str, list[float]],
-) -> None:
-    """All two-qubit gates accept a list argument in set_sites."""
-    params = kwargs.get("params")
-    gate = gate_factory(params) if params is not None else gate_factory()
-    gate.set_sites([0, 1])
-    assert gate.sites == [0, 1]
-
-
-@pytest.mark.parametrize(
-    ("gate_factory", "kwargs"),
-    [
-        (GateLibrary.cx, {}),
-        (GateLibrary.cz, {}),
-        (GateLibrary.swap, {}),
-        (GateLibrary.rxx, {"params": [np.pi / 4]}),
-        (GateLibrary.ryy, {"params": [np.pi / 4]}),
-        (GateLibrary.rzz, {"params": [np.pi / 4]}),
-        (GateLibrary.cp, {"params": [np.pi / 4]}),
-    ],
-)
-def test_two_qubit_set_sites_wrong_count_raises(
-    gate_factory: Callable[..., BaseGate],
-    kwargs: dict[str, list[float]],
-) -> None:
-    """All two-qubit gates raise ValueError when given the wrong number of sites."""
-    params = kwargs.get("params")
-    gate = gate_factory(params) if params is not None else gate_factory()
-    with pytest.raises(ValueError, match="Number of sites"):
-        gate.set_sites(0, 1, 2)
-
-
-def test_cx_set_sites_reversed_order() -> None:
-    """CX with reversed sites transposes the tensor on axes (1,0,3,2)."""
-    gate_fwd = GateLibrary.cx()
-    gate_fwd.set_sites(0, 1)
-    tensor_fwd = gate_fwd.tensor.copy()
-
-    gate_rev = GateLibrary.cx()
-    gate_rev.set_sites(1, 0)
-    assert_allclose(gate_rev.tensor, np.transpose(tensor_fwd, (1, 0, 3, 2)))
-
-
-# ---------------------------------------------------------------------------
-# Entropy / SchmidtSpectrum set_sites list-input branch
-# ---------------------------------------------------------------------------
-
-
-def test_entropy_set_sites_list_input() -> None:
-    """Entropy.set_sites accepts a list of site indices."""
-    g = GateLibrary.entropy()
-    g.set_sites([2, 3])
-    assert g.sites == [2, 3]
-
-
-def test_schmidt_spectrum_set_sites_list_input() -> None:
-    """SchmidtSpectrum.set_sites accepts a list of site indices."""
-    g = GateLibrary.schmidt_spectrum()
-    g.set_sites([5, 6])
-    assert g.sites == [5, 6]

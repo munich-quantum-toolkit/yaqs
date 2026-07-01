@@ -1,0 +1,265 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Encoding utilities shared by process-tensor tomography and surrogates.
+
+This includes:
+- fixed-basis Choi feature encodings (used by tomography basis code and surrogate utilities)
+- single-qubit density matrix encodings (rho8) and Pauli ``(x,y,z)`` features for probing
+- normalization helpers
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
+
+# Single-qubit Pauli basis for tomography: I, X, Y, Z with rho = (1/2) sum_mu Tr(P_mu rho) P_mu.
+PAULI_I = np.eye(2, dtype=np.complex128)
+PAULI_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+PAULI_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+PAULI_BASIS = (PAULI_I, PAULI_X, PAULI_Y, PAULI_Z)
+
+# Site-0 reference state after U_0 from |0⟩^⊗L (process-tensor / branch-weight convention).
+SITE0_KET = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+DEFAULT_INITIAL_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
+
+def _flatten_choi4(j: np.ndarray) -> np.ndarray:
+    """Flatten a 4x4 Choi matrix into 32 real features.
+
+    Args:
+        j: Complex 4x4 Choi matrix.
+
+    Returns:
+        A float32 vector of shape ``(32,)`` with interleaved real/imag parts (row-major).
+    """
+    m = np.asarray(j, dtype=np.complex128).reshape(4, 4)
+    flat = m.reshape(-1)
+    interleaved = np.stack([flat.real, flat.imag], axis=-1).astype(np.float32)
+    return interleaved.reshape(-1)
+
+
+def stack_choi_features(choi_matrices: list[np.ndarray]) -> np.ndarray:
+    """Build a feature table for a fixed 16-letter Choi basis.
+
+    Args:
+        choi_matrices: List of 16 complex 4x4 Choi matrices.
+
+    Returns:
+        Float32 array of shape ``(16, 32)`` with one feature row per basis index.
+    """
+    rows = [_flatten_choi4(c) for c in choi_matrices]
+    return np.stack(rows, axis=0)
+
+
+def _normalize_density_like_process_tensor(rho: np.ndarray) -> np.ndarray:
+    """Project a 2x2 matrix onto a physical density matrix.
+
+    Args:
+        rho: Complex 2x2 matrix (not necessarily physical).
+
+    Returns:
+        A Hermitian, PSD, trace-1 2x2 density matrix.
+    """
+    rho = 0.5 * (rho + rho.conj().T)
+    tr = np.trace(rho)
+    if abs(tr) > 1e-12:
+        rho /= tr
+
+    w, eig_vecs = np.linalg.eigh(rho)
+    w = np.clip(w, 0.0, None)
+    rho = (eig_vecs * w) @ eig_vecs.conj().T
+
+    tr2 = np.trace(rho)
+    if abs(tr2) > 1e-15:
+        rho /= tr2
+    return rho
+
+
+def pack_rho8(rho: np.ndarray) -> np.ndarray:
+    """Pack a 2x2 density matrix into 8 floats (rho8 encoding).
+
+    Args:
+        rho: Complex 2x2 matrix.
+
+    Returns:
+        Float32 vector of shape ``(8,)`` with interleaved real/imag parts (row-major).
+    """
+    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    return np.array(
+        [
+            r[0, 0].real,
+            r[0, 0].imag,
+            r[0, 1].real,
+            r[0, 1].imag,
+            r[1, 0].real,
+            r[1, 0].imag,
+            r[1, 1].real,
+            r[1, 1].imag,
+        ],
+        dtype=np.float32,
+    )
+
+
+def unpack_rho8(y: np.ndarray) -> np.ndarray:
+    """Unpack a rho8 vector back into a Hermitian 2x2 matrix.
+
+    Args:
+        y: Float vector of shape ``(8,)``.
+
+    Returns:
+        Hermitian complex 2x2 matrix (not normalized / projected).
+    """
+    t = np.asarray(y, dtype=np.float64).reshape(8)
+    rho = np.array(
+        [
+            [t[0] + 1j * t[1], t[2] + 1j * t[3]],
+            [t[4] + 1j * t[5], t[6] + 1j * t[7]],
+        ],
+        dtype=np.complex128,
+    )
+    return 0.5 * (rho + rho.conj().T)
+
+
+def coerce_rho_matrix(rho0: np.ndarray) -> np.ndarray:
+    """Normalize an initial state to a ``2 x 2`` density matrix.
+
+    Args:
+        rho0: Packed length-8 vector or ``2 x 2`` matrix.
+
+    Returns:
+        Complex density matrix.
+
+    Raises:
+        ValueError: If ``rho0`` has an unsupported shape.
+    """
+    arr = np.asarray(rho0, dtype=np.complex128)
+    if arr.shape == (8,):
+        return unpack_rho8(arr.astype(np.float64))
+    if arr.shape == (2, 2):
+        return arr
+    msg = f"rho0 must be shape (2, 2) or packed length-8, got {arr.shape}."
+    raise ValueError(msg)
+
+
+def encode_rho_pauli(rho: np.ndarray) -> np.ndarray:
+    r"""Pauli tomography coefficients :math:`(\mathrm{Tr}(I\rho), \mathrm{Tr}(X\rho), \ldots)`.
+
+    Args:
+        rho: Single-qubit density matrix.
+
+    Returns:
+        Float64 vector ``(i, x, y, z)`` with ``i=\mathrm{Tr}(\rho)=1`` for physical states.
+    """
+    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    return np.array(
+        [float(np.trace(r @ p).real) for p in PAULI_BASIS],
+        dtype=np.float64,
+    )
+
+
+def decode_pauli_rho(pauli: np.ndarray) -> np.ndarray:
+    r"""Reconstruct :math:`\rho=\frac12\sum_\mu c_\mu P_\mu` from ``(c_I, c_X, c_Y, c_Z)``.
+
+    Args:
+        pauli: Coefficients ``(i, x, y, z)``.
+
+    Returns:
+        Complex :math:`2\\times 2` Hermitian matrix (not necessarily physical).
+    """
+    t = np.asarray(pauli, dtype=np.float64).reshape(4)
+    out = np.zeros((2, 2), dtype=np.complex128)
+    for coeff, basis in zip(t, PAULI_BASIS, strict=True):
+        out += float(coeff) * basis
+    return 0.5 * out
+
+
+def decode_packed_pauli_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
+    """Map backend ``rho8`` rows ``(..., 8)`` to Pauli tomography ``(..., 4)``.
+
+    Args:
+        packed: Last dimension 8 (``pack_rho8`` layout).
+        normalize: If ``True``, project each unpacked matrix to a physical density matrix
+            before taking expectations.
+
+    Returns:
+        Float64 array with shape ``packed.shape[:-1] + (4,)``.
+
+    Raises:
+        ValueError: If the last dimension of ``packed`` is not 8.
+    """
+    p = np.asarray(packed, dtype=np.float32)
+    if p.ndim == 0:
+        msg = f"decode_packed_pauli_batch: expected last dim 8, got shape {p.shape}."
+        raise ValueError(msg)
+    if p.shape[-1] != 8:
+        msg = f"decode_packed_pauli_batch: expected last dim 8, got shape {p.shape}."
+        raise ValueError(msg)
+    flat = p.reshape(-1, 8)
+    out = np.empty((flat.shape[0], 4), dtype=np.float64)
+    for i in range(flat.shape[0]):
+        rho_u = unpack_rho8(flat[i])
+        rho = normalize_backend_rho(rho_u) if normalize else rho_u
+        out[i] = encode_rho_pauli(rho)
+    return out.reshape(*p.shape[:-1], 4)
+
+
+def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
+    """Normalize a backend 2x2 output into a physical density matrix.
+
+    This applies hermitization and trace normalization, then uses a conservative fast-path check
+    to skip PSD projection for already-near-physical outputs; otherwise it projects onto the PSD cone.
+
+    Args:
+        rho_final: Backend output convertible to a 2x2 complex array.
+
+    Returns:
+        Hermitian, PSD, trace-1 2x2 density matrix.
+    """
+    rho_h = np.asarray(rho_final, dtype=np.complex128).reshape(2, 2)
+    rho_h = 0.5 * (rho_h + rho_h.conj().T)
+    tr = np.trace(rho_h)
+    if abs(tr) > 1e-12:
+        rho_h /= tr
+    else:
+        return np.eye(2, dtype=np.complex128) * 0.5
+
+    # Fast path: for near-physical outputs, avoid full PSD projection (eigh) and only do a cheap check.
+    # This is conservative: any small negativity falls back to the projection path.
+    eps = 1e-12
+    w = np.linalg.eigvalsh(rho_h).real
+    if float(w.min()) >= -eps:
+        tr2 = np.trace(rho_h)
+        if abs(tr2) > 1e-15:
+            rho_h /= tr2
+        return rho_h
+
+    return _normalize_density_like_process_tensor(rho_h)
+
+
+def extract_ket(projector: np.ndarray) -> np.ndarray:
+    """Extract a normalized ket from a rank-one projector.
+
+    Args:
+        projector: ``2 x 2`` Hermitian rank-one projector or density matrix.
+
+    Returns:
+        Normalized state vector of length 2; falls back to ``|0>`` if degenerate.
+    """
+    eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
+    idx = int(np.argmax(eigvals.real))
+    psi = eigvecs[:, idx]
+    norm = float(np.linalg.norm(psi))
+    if norm < 1e-15:
+        return np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    return (psi / norm).astype(np.complex128)

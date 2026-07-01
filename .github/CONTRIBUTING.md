@@ -4,4 +4,5 @@
 # Contributing
 
 Thank you for your interest in contributing to MQT YAQS!
-An extensive contribution guide is available in our [documentation](https://mqt.readthedocs.io/projects/yaqs/en/latest/contributing.html).
+An extensive contribution guide is available in our
+[documentation](https://mqt.readthedocs.io/projects/yaqs/en/latest/contributing.html).

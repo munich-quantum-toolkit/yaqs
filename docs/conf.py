@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
     from pybtex.richtext import HRef
 
 ROOT = Path(__file__).parent.parent.resolve()
+
+# Keep matplotlib/font cache writable and local during docs builds.
+os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
 
 
 try:
@@ -44,18 +48,27 @@ templates_path = ["_templates"]
 html_css_files = ["custom.css"]
 
 extensions = [
-    "myst_nb",
     "autoapi.extension",
+    "myst_nb",
+    "sphinx_copybutton",
+    "sphinx_design",
+    "sphinx_reredirects",
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
-    "sphinx_copybutton",
-    "sphinx_design",
-    "sphinxext.opengraph",
     "sphinx.ext.viewcode",
     "sphinxcontrib.inkscapeconverter",
     "sphinxcontrib.bibtex",
+    "sphinxext.opengraph",
 ]
+
+redirects = {
+    "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
+    "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
+    "examples/solver_comparison": "examples/representation_comparison.html",
+    "examples/fermi_hubbard_mpo": "examples/hamiltonians.html#fermi-hubbard-1d",
+    "examples/reference_process_tensors": "examples/memory_surrogate.html#short-horizon-validation",
+}
 
 source_suffix = [".rst", ".md"]
 
@@ -105,6 +118,18 @@ nb_mime_priority_overrides = [
     ("latex", "image/svg+xml", 15),
 ]
 nb_execution_raise_on_error = True
+# Suppress noisy but harmless warnings during notebook execution (complex casts, etc.).
+nb_prolog = """
+import warnings
+
+warnings.filterwarnings("ignore", message=".*cast.*complex.*")
+warnings.filterwarnings("ignore", message=".*Casting complex values to real.*")
+try:
+    from numpy.exceptions import ComplexWarning
+except ImportError:
+    from numpy import ComplexWarning
+warnings.filterwarnings("ignore", category=ComplexWarning)
+"""
 
 
 class CDAStyle(UnsrtStyle):
@@ -153,6 +178,7 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 
 # -- Options for HTML output -------------------------------------------------
+
 html_theme = "furo"
 html_static_path = ["_static"]
 html_theme_options = {
@@ -177,8 +203,8 @@ latex_documents = [
         master_doc,
         "mqt_yaqs.tex",
         (
-            r"MQT YAQS\\{\large A Tool for Simulating"
-            r"Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}"
+            r"MQT YAQS\\{\large Scalable simulation and characterization for open systems,"
+            r" noisy circuits, and realistic hardware}"
         ),
         r"Chair for Design Automation\\Technical University of Munich",
         "howto",

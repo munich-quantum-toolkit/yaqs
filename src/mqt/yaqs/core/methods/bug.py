@@ -20,12 +20,13 @@ import numpy as np
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import left_qr, right_qr
-from .tdvp import update_left_environment, update_right_environment, update_site
+from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPO, MPS
+    from ..data_structures.mpo import MPO
+    from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -48,7 +49,9 @@ def prepare_canonical_site_tensors(
     # This will merely do a shallow copy of the MPS.
     canon_tensors = copy(state.tensors)
     left_end_dimension = state.tensors[0].shape[1]
-    left_blocks = [np.eye(left_end_dimension, dtype=np.complex128).reshape(left_end_dimension, 1, left_end_dimension)]
+    left_blocks: list[NDArray[np.complex128]] = [
+        np.eye(left_end_dimension, dtype=np.complex128).reshape(left_end_dimension, 1, left_end_dimension)
+    ]
     for i, old_local_tensor in enumerate(canon_tensors[1:], start=1):
         left_tensor = canon_tensors[i - 1]
         left_q, left_r = right_qr(left_tensor)
@@ -57,7 +60,7 @@ def prepare_canonical_site_tensors(
         # Leg order of local_tensor: (left, phys, right)
         local_tensor = local_tensor.transpose(1, 0, 2)
         # Correct leg order: (phys, left, right) and orth center
-        canon_tensors[i] = local_tensor
+        canon_tensors[i] = np.asarray(local_tensor, dtype=np.complex128)
         new_env = update_left_environment(left_q, left_q, mpo.tensors[i - 1], left_blocks[i - 1])
         left_blocks.append(new_env)
     return canon_tensors, left_blocks
@@ -125,7 +128,7 @@ def build_basis_change_tensor(
 
     """
     new_m = np.tensordot(old_q, old_m, axes=(2, 0))
-    return np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2]))
+    return np.asarray(np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2])), dtype=np.complex128)
 
 
 def local_update(
@@ -157,13 +160,23 @@ def local_update(
         new_right_block: The right environment of this site.
     """
     old_tensor = canon_center_tensors[site]
-    updated_tensor = update_site(left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt)
+    updated_tensor = update_site(
+        left_blocks[site],
+        right_block,
+        mpo.tensors[site],
+        old_tensor,
+        sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
     old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
     new_q = find_new_q(old_stack_tensor, updated_tensor)
     old_q = state.tensors[site]
     basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
     state.tensors[site] = new_q
-    canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
+    canon_center_tensors[site - 1] = np.asarray(
+        np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0)),
+        dtype=np.complex128,
+    )
     new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
     return basis_change_m, new_right_block
 
@@ -186,8 +199,11 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     """
     num_sites = mpo.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same number of sites"
+        msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
+
+    if state.orthogonality_center is not None:
+        state.assert_center(0, context="bug")
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
@@ -202,7 +218,15 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
             state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params
         )
     # Update the first site.
-    updated_tensor = update_site(left_envs[0], right_block, mpo.tensors[0], canon_center_tensors[0], sim_params.dt)
+    updated_tensor = update_site(
+        left_envs[0],
+        right_block,
+        mpo.tensors[0],
+        canon_center_tensors[0],
+        sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
     state.tensors[0] = updated_tensor
     # Truncation
-    state.truncate(sim_params.threshold, sim_params.max_bond_dim)
+    state.compress(sim_params.svd_threshold, max_bond_dim=sim_params.max_bond_dim)
+    state.set_center(0)

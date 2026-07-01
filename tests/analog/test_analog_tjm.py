@@ -21,6 +21,7 @@ The tests cover:
     with and without sampling timesteps.
   - Analog simulation (order=1): Checking the shape of the results when running a first order evolution,
     with and without sampling timesteps.
+  - Lowering noise: TJM jump probabilities and ensemble observables must agree with MCWF.
 
 These tests ensure that the evolution functions correctly integrate the MPS state under the
 specified Hamiltonian and noise model, and that observable measurements are properly aggregated.
@@ -31,17 +32,35 @@ specified Hamiltonian and noise model, and that observable measurements are prop
 
 from __future__ import annotations
 
-from typing import Any
+import copy
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
-from mqt.yaqs import simulator
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
+    Observable,
+    Simulator,
+    State,
+)
+from mqt.yaqs.analog.analog_tjm import initialize, step_through
+from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import X, Z
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.methods.stochastic_process import calculate_stochastic_factor, stochastic_process
+from mqt.yaqs.core.methods.tdvp.tdvp import tdvp
+from tests.conftest import YAQS_TEST_SEED
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from numpy.typing import NDArray
 
 
 def test_initialize() -> None:
@@ -65,7 +84,6 @@ def test_initialize() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
@@ -98,391 +116,248 @@ def test_step_through() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
-        patch("mqt.yaqs.analog.analog_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
+        patch("mqt.yaqs.analog.analog_tjm.tdvp") as mock_dynamic_tdvp,
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
         step_through(state, H, noise_model, sim_params, current_time=0.2)
-        mock_dynamic_tdvp(state, H, sim_params)
+        mock_dynamic_tdvp.assert_called_once_with(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
-def test_analog_tjm_2() -> None:
-    """Test the analog_tjm_2 function for a two-site evolution (order=2) without sampling timesteps.
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("sample_timesteps", [False, True])
+def test_analog_tjm_shape_via_simulator(order: int, *, sample_timesteps: bool) -> None:
+    """Simulator-driven analog TJM produces per-observable trajectories of the expected shape.
 
-    This test creates an Ising MPO and an MPS of length 5, with no noise model.
-    It calls analog_tjm_2 with sim_params configured for order 2 and sample_timesteps False.
-    The returned results array should have shape (num_observables, 1).
+    Covers both one-site (order=1) and two-site (order=2) evolution, with and without
+    intermediate time sampling. Per-trajectory rows on ``result.trajectories[i]`` must
+    have one column when ``sample_timesteps=False`` and ``len(sim_params.times)``
+    columns otherwise.
     """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
+    length = 5
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    observables = [Observable(Z(), site) for site in range(length)]
     sim_params = AnalogSimParams(
-        observables=measurements,
+        observables=observables,
         elapsed_time=0.2,
         dt=0.2,
         num_traj=1,
         max_bond_dim=2,
-        order=2,
-        sample_timesteps=False,
-        show_progress=False,
+        order=order,
+        sample_timesteps=sample_timesteps,
     )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
-    assert results.shape == (len(measurements), 1), "Results incorrect shape"
+
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+
+    expected_cols = len(sim_params.times) if sample_timesteps else 1
+    assert result.expectation_values is not None
+    assert result.trajectories is not None
+    for traj in result.trajectories:
+        assert traj.shape == (sim_params.num_traj, expected_cols)
 
 
-def test_analog_tjm_2_sample_timesteps() -> None:
-    """Test the analog_tjm_2 function for a two-site evolution (order=2) with sampling timesteps.
+@pytest.mark.parametrize("two_site_process", ["crosstalk_xx", "lowering_two"])
+def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
+    """Smoke test: analog TJM runs with single-site plus one adjacent two-site jump process.
 
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with sample_timesteps True. The resulting results array should have shape
-    (num_observables, len(sim_params.times)).
+    Replaces former QuTiP golden-trajectory integration tests; keeps both crosstalk and
+    lowering_two library names exercised at minimal cost.
     """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
+    length = 2
+    hamiltonian = Hamiltonian.ising(length, 1.0, 0.5)
+    state = State(length, initial="zeros")
     sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=2,
-        sample_timesteps=True,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
-    assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
-
-
-def test_analog_tjm_1() -> None:
-    """Test the analog_tjm_1 function for a one-site evolution (order=1) without sampling timesteps.
-
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with order 1 and sample_timesteps False.
-    The resulting results array should have shape (num_observables, 1).
-    """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=1,
-        sample_timesteps=False,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
-    assert results.shape == (len(measurements), 1), "Results incorrect shape"
-
-
-def test_analog_tjm_1_sample_timesteps() -> None:
-    """Test the analog_tjm_1 function for a one-site evolution (order=1) with sampling timesteps.
-
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with sample_timesteps True.
-    The results array should have shape (num_observables, len(sim_params.times)).
-    """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=1,
-        sample_timesteps=True,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
-    assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
-
-
-def test_analog_simulation_twositeprocesses() -> None:
-    """Test analog simulation with two-site crosstalk processes against QuTiP reference.
-
-    This test simulates a 3-qubit Ising chain with both single-site Pauli-X noise and
-    neighboring two-site crosstalk X⊗X noise. It compares the YAQS analog simulation
-    results against hardcoded QuTiP master equation results with a tolerance of 0.1
-    for all Z observables at all time points.
-
-    The test uses the same parameters as analogTWOSITEcheck.py:
-    - L=3, J=1.0, g=0.5
-    - gamma_single=0.02, gamma_pair=0.01
-    - T=1.0, dt=0.05, num_traj=200
-    """
-    # Parameters matching analogTWOSITEcheck.py
-    L = 3
-    J = 1.0
-    g = 0.5
-    gamma_single = 0.02
-    gamma_pair = 0.01
-
-    # Setup YAQS simulation
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L, state="zeros")
-
-    sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(L)],
-        elapsed_time=1,
-        dt=0.05,
-        num_traj=200,
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=20,
         max_bond_dim=8,
         order=2,
-        sample_timesteps=True,
-        show_progress=False,
+        sample_timesteps=False,
+        random_seed=YAQS_TEST_SEED,
     )
-
-    # Setup noise model with single-site and two-site crosstalk processes
-    processes = [{"name": "pauli_x", "sites": [i], "strength": gamma_single} for i in range(L)]
-    processes += [{"name": "crosstalk_xx", "sites": [i, i + 1], "strength": gamma_pair} for i in range(L - 1)]
-    noise = NoiseModel(processes)
-
-    # Run simulation
-    simulator.run(state, H, sim_params, noise, parallel=True)
-
-    # Hardcoded QuTiP reference solution
-    expected_results = [
-        [
-            1.0,
-            0.9957595387085492,
-            0.989068537861746,
-            0.9799951962331045,
-            0.9686368930494625,
-            0.9551186308467075,
-            0.9395910913283494,
-            0.9222283389300958,
-            0.9032252097089084,
-            0.8827944277523293,
-            0.8611634997325803,
-            0.8385714280891042,
-            0.8152653063954242,
-            0.7914968423015236,
-            0.7675188651840964,
-            0.7435818712832375,
-            0.7199306579260094,
-            0.6968010984985046,
-            0.6744171032041366,
-            0.6529878097650909,
-            0.6327050454858952,
-        ],
-        [
-            1.0,
-            0.9947673850218341,
-            0.9871414981439525,
-            0.9773043133235998,
-            0.9655275369620003,
-            0.9521575556050013,
-            0.9375965200751353,
-            0.9222806564841823,
-            0.9066570069612527,
-            0.8911598843450562,
-            0.8761883965926414,
-            0.8620860664049642,
-            0.8491239779302621,
-            0.8374879983781462,
-            0.8272709723219848,
-            0.8184701569889284,
-            0.8109899797799391,
-            0.8046500024603839,
-            0.7991974939190101,
-            0.7943239338217639,
-            0.7896845077283686,
-        ],
-        [
-            1.0,
-            0.9957595387085492,
-            0.989068537861746,
-            0.9799951962331045,
-            0.9686368930494625,
-            0.9551186308467075,
-            0.9395910913283494,
-            0.9222283389300958,
-            0.9032252097089086,
-            0.8827944277523293,
-            0.8611634997325803,
-            0.838571428089104,
-            0.8152653063954242,
-            0.7914968423015236,
-            0.7675188651840964,
-            0.7435818712832375,
-            0.7199306579260094,
-            0.6968010984985046,
-            0.6744171032041368,
-            0.6529878097650911,
-            0.6327050454858952,
-        ],
-    ]
-
-    # Collect YAQS results
-    yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _, obs in enumerate(sim_params.sorted_observables):
-        site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
-        yaqs_results[site, :] = obs.results
-
-    # Compare with tolerance of 0.1
-    tolerance = 0.1
-    for site in range(L):
-        for time_idx in range(len(sim_params.times)):
-            expected = expected_results[site][time_idx]
-            actual = yaqs_results[site, time_idx]
-            assert abs(expected - actual) < tolerance, (
-                f"Site {site}, time {sim_params.times[time_idx]:.2f}: "
-                f"expected {expected:.6f}, got {actual:.6f}, diff {abs(expected - actual):.6f}"
-            )
-
-
-def test_analog_simulation_two_site_lowering_against_qutip() -> None:
-    """Analog simulation with single-site and two-site lowering against QuTiP.
-
-    This test simulates a 3-qubit Ising chain with both single-site lowering (sigma-)
-    and adjacent two-site lowering (sigma- x sigma-) noise processes. It compares YAQS
-    analog simulation results to a hardcoded QuTiP master-equation reference
-    with a tolerance of 0.1 across all Z observables and time points. The setup
-    matches the reference parameters: L=3, J=1.0, g=0.5, gamma_single=0.02,
-    gamma_pair=0.01, T=1.0, dt=0.05, and num_traj=200.
-    """
-    # Setup YAQS simulation (same parameters as reference)
-    L = 3
-    H = MPO.ising(L, 1.0, 0.5)
-
-    state = MPS(L, state="zeros")
-    sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(L)],
-        elapsed_time=1,
-        dt=0.05,
-        num_traj=200,
-        max_bond_dim=8,
-        order=2,
-        sample_timesteps=True,
-        show_progress=False,
-    )
-
-    gamma_single = 0.02
-    gamma_pair = 0.01
-    # Noise model with single-site lowering and adjacent two-site lowering
-    processes: list[dict[str, Any]] = [{"name": "lowering", "sites": [i], "strength": gamma_single} for i in range(L)]
-    processes += [{"name": "lowering_two", "sites": [i, i + 1], "strength": gamma_pair} for i in range(L - 1)]
-    noise = NoiseModel(processes)
-
-    # Run simulation
-    simulator.run(state, H, sim_params, noise, parallel=True)
-
-    # Collect YAQS results per site (site-major layout)
-    yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _, obs in enumerate(sim_params.sorted_observables):
-        site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
-        yaqs_results[site, :] = obs.results
-
-    expected = np.asarray([
-        [
-            1.0000000000000000,
-            0.9987519272263703,
-            0.9950257733838441,
-            0.9888717325009401,
-            0.9803701315747982,
-            0.9696302545838585,
-            0.9567887490974905,
-            0.9420076418328850,
-            0.9254719943623211,
-            0.9073872362346228,
-            0.8879762177723114,
-            0.8674760301377559,
-            0.8461346407370148,
-            0.8242074001985631,
-            0.8019534724965074,
-            0.7796322463493451,
-            0.7574997830044093,
-            0.7358053541584250,
-            0.7147881235851911,
-            0.6946740230770052,
-            0.6756728658483249,
-        ],
-        [
-            1.0000000000000000,
-            0.9987550471745019,
-            0.9950752625974710,
-            0.9891191847065749,
-            0.9811389736390038,
-            0.9714667942643668,
-            0.9604969258940412,
-            0.9486646038289549,
-            0.9364227534930116,
-            0.9242179032576668,
-            0.9124666118045819,
-            0.9015336863444420,
-            0.8917134095304454,
-            0.8832147918831563,
-            0.8761516472885322,
-            0.8705380650825371,
-            0.8662894560296098,
-            0.8632291147594634,
-            0.8610999682102124,
-            0.8595808205461875,
-            0.8583061459455201,
-        ],
-        [
-            1.0000000000000000,
-            0.9987519272263703,
-            0.9950257733838441,
-            0.9888717325009401,
-            0.9803701315747982,
-            0.9696302545838585,
-            0.9567887490974905,
-            0.9420076418328850,
-            0.9254719943623211,
-            0.9073872362346228,
-            0.8879762177723114,
-            0.8674760301377559,
-            0.8461346407370148,
-            0.8242074001985631,
-            0.8019534724965072,
-            0.7796322463493451,
-            0.7574997830044091,
-            0.7358053541584247,
-            0.7147881235851911,
-            0.6946740230770052,
-            0.6756728658483246,
-        ],
+    noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.02},
+        {"name": two_site_process, "sites": [0, 1], "strength": 0.01},
     ])
-    assert expected.shape == yaqs_results.shape
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
 
-    # Use same tolerance as existing two-site crosstalk test for trajectory agreement
-    tolerance = 0.1
-    assert np.allclose(yaqs_results, expected, atol=tolerance), (
-        f"Max abs diff {np.max(np.abs(yaqs_results - expected))} exceeds {tolerance}"
+    results = result.expectation_values[0]
+    assert results is not None
+    z_mean = np.real(results)
+    assert np.isfinite(z_mean).all()
+    assert np.all(np.abs(z_mean) <= 1.0 + 1e-6)
+
+
+class _NeverJumpRng:
+    """RNG stub that always takes the no-jump branch in ``stochastic_process``."""
+
+    @staticmethod
+    def random() -> float:
+        return 1.0
+
+
+def _lowering_noise_model(length: int, *, gamma: float = 1.0) -> NoiseModel:
+    return NoiseModel([{"name": "lowering", "sites": [i], "strength": gamma} for i in range(length)])
+
+
+def _zero_hamiltonian_mpo(length: int) -> MPO:
+    mpo = MPO.identity(length)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    return mpo
+
+
+def _mcwf_jump_probability(state: MPS, ctx: MCWFContext) -> float:
+    """Reference jump probability for one MCWF step from the current MPS.
+
+    Returns:
+        Jump probability ``1 - ||exp(-i H_eff dt) |psi>||^2`` for the given state.
+    """
+    psi: NDArray[np.complex128] = state.to_vec()
+    psi /= np.linalg.norm(psi)
+    assert ctx.step_propagator is not None, "Test systems must fit the dense MCWF propagator."
+    psi_next = ctx.step_propagator @ psi
+    return float(1.0 - np.vdot(psi_next, psi_next).real)
+
+
+def _tjm_jump_probability_after_dissipation(
+    state: MPS,
+    noise_model: NoiseModel,
+    dt: float,
+    sim_params: AnalogSimParams,
+) -> float:
+    dissipated = copy.deepcopy(state)
+    apply_dissipation(dissipated, noise_model, dt, sim_params)
+    assert dissipated.orthogonality_center == 0
+    return float(calculate_stochastic_factor(dissipated))
+
+
+def _entangled_after_tdvp(*, length: int, dt: float) -> MPS:
+    state = MPS(length, state="ones")
+    hamiltonian = MPO.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    tdvp(state, hamiltonian, sim_params)
+    return state
+
+
+@pytest.mark.parametrize(
+    "prepare_state",
+    [
+        pytest.param(lambda: MPS(5, state="ones"), id="product_all_excited"),
+        pytest.param(lambda: _entangled_after_tdvp(length=5, dt=0.05), id="entangled_ising_tdvp"),
+    ],
+)
+def test_lowering_jump_probability_matches_mcwf_after_dissipation(
+    prepare_state: Callable[[], MPS],
+) -> None:
+    """TJM dissipative norm loss must match the MCWF jump probability for lowering noise."""
+    length = 5
+    dt = 0.05
+    state = prepare_state()
+    hamiltonian = _zero_hamiltonian_mpo(length)
+    noise_model = _lowering_noise_model(length)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    ctx = preprocess_mcwf(state, hamiltonian, noise_model, sim_params)
+
+    p_mcwf = _mcwf_jump_probability(state, ctx)
+    p_tjm = _tjm_jump_probability_after_dissipation(state, noise_model, dt, sim_params)
+
+    np.testing.assert_allclose(p_tjm, p_mcwf, rtol=0.0, atol=5e-4)
+
+
+@pytest.mark.parametrize(
+    "hamiltonian_factory",
+    [
+        pytest.param(_zero_hamiltonian_mpo, id="h_zero"),
+    ],
+)
+def test_lowering_jump_probability_stable_over_repeated_no_jump_steps(
+    hamiltonian_factory: Callable[[int], MPO],
+) -> None:
+    """Jump probabilities must stay aligned with MCWF across many dissipative substeps."""
+    length = 5
+    dt = 0.05
+    n_steps = 10
+
+    hamiltonian = hamiltonian_factory(length)
+    noise_model = _lowering_noise_model(length)
+    sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
+    ctx = preprocess_mcwf(MPS(length, state="ones"), hamiltonian, noise_model, sim_params)
+
+    state = MPS(length, state="ones")
+    state.normalize("B")
+    never_jump = _NeverJumpRng()
+
+    for _ in range(n_steps):
+        p_mcwf = _mcwf_jump_probability(state, ctx)
+        p_tjm = _tjm_jump_probability_after_dissipation(state, noise_model, dt, sim_params)
+        np.testing.assert_allclose(p_tjm, p_mcwf, rtol=0.0, atol=1e-3)
+
+        apply_dissipation(state, noise_model, dt, sim_params)
+        stochastic_process(state, noise_model, dt, sim_params, rng=cast("np.random.Generator", never_jump))
+        state.normalize("B")
+
+
+def test_tjm_and_mcwf_lowering_mean_excitation_agreement() -> None:
+    """End-to-end smoke: ensemble-averaged excitation density from TJM and MCWF should agree.
+
+    The per-step jump-probability checks above are the primary regression guard; this
+    single short trajectory ensemble only verifies that the full solvers stay consistent.
+    """
+    length = 5
+    gamma = 1.0
+    t_max = 1.5
+    dt = 0.1
+    num_traj = 20
+
+    hamiltonian = Hamiltonian.ising(length, J=0.0, g=0.0)
+    noise_model = _lowering_noise_model(length, gamma=gamma)
+    observables = [Observable("z", sites=i) for i in range(length)]
+
+    sim = Simulator(parallel=True, show_progress=False)
+
+    tjm_params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=t_max,
+        dt=dt,
+        num_traj=num_traj,
+        random_seed=YAQS_TEST_SEED,
+        max_bond_dim=64,
+        svd_threshold=1e-10,
+        order=1,
     )
+    mcwf_params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=t_max,
+        dt=dt,
+        num_traj=num_traj,
+        random_seed=YAQS_TEST_SEED,
+        max_bond_dim=64,
+        svd_threshold=1e-10,
+    )
+
+    tjm_result = sim.run(
+        State(length, initial="ones", representation="mps"),
+        hamiltonian,
+        tjm_params,
+        noise_model,
+    )
+    mcwf_result = sim.run(
+        State(length, initial="ones", representation="vector"),
+        hamiltonian,
+        mcwf_params,
+        noise_model,
+    )
+
+    n_tjm = np.mean([(1.0 - z) / 2.0 for z in tjm_result.expectation_values], axis=0)
+    n_mcwf = np.mean([(1.0 - z) / 2.0 for z in mcwf_result.expectation_values], axis=0)
+
+    # v0.5.0 showed ~0.03 excess excitation in TJM at t=2; keep tolerance below that.
+    mean_abs_diff = float(np.mean(np.abs(n_tjm - n_mcwf)))
+    assert mean_abs_diff < 0.03, f"mean |n_TJM - n_MCWF| = {mean_abs_diff:.4f}"

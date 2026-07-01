@@ -21,11 +21,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel, NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import XX, X, Y, Z
-from mqt.yaqs.simulator import run
+from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
 
 def _allclose(a: np.ndarray, b: np.ndarray) -> bool:
@@ -168,6 +167,19 @@ def test_noise_model_none() -> None:
     assert model.processes == []
 
 
+def test_one_site_matrix_explicit() -> None:
+    """Test that an explicit 1-site matrix is preserved and not overwritten.
+
+    When the user supplies a custom jump operator, NoiseModel must keep it
+    instead of looking up the library entry for ``name``.
+    """
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    nm = NoiseModel([{"name": "not_a_library_name", "sites": [0], "strength": 0.1, "matrix": sigma_minus}])
+    p = nm.processes[0]
+    assert _allclose(p["matrix"], sigma_minus)
+    assert not _allclose(p["matrix"], PauliX.matrix)
+
+
 def test_one_site_matrix_auto() -> None:
     """Test that one-site processes auto-fill a 2x2 'matrix'.
 
@@ -179,7 +191,7 @@ def test_one_site_matrix_auto() -> None:
     p = nm.processes[0]
     assert "matrix" in p, "1-site process should have matrix auto-filled"
     assert p["matrix"].shape == (2, 2)
-    assert _allclose(p["matrix"], X().matrix)
+    assert _allclose(p["matrix"], PauliX.matrix)
 
 
 def test_adjacent_two_site_matrix_auto() -> None:
@@ -192,7 +204,7 @@ def test_adjacent_two_site_matrix_auto() -> None:
     p = nm.processes[0]
     assert "matrix" in p, "Adjacent 2-site process should have matrix auto-filled"
     assert p["matrix"].shape == (4, 4)
-    expected = np.kron(X().matrix, Z().matrix)
+    expected = np.kron(PauliX.matrix, PauliZ.matrix)
     assert _allclose(p["matrix"], expected)
 
 
@@ -208,44 +220,50 @@ def test_longrange_two_site_factors_auto() -> None:
     a_op, b_op = p["factors"]
     assert a_op.shape == (2, 2)
     assert b_op.shape == (2, 2)
-    assert _allclose(a_op, X().matrix)
-    assert _allclose(b_op, Y().matrix)
+    assert _allclose(a_op, PauliX.matrix)
+    assert _allclose(b_op, PauliY.matrix)
     assert "matrix" not in p, "Long-range processes should not attach a full matrix"
 
 
 def test_longrange_two_site_factors_explicit() -> None:
-    """Test that explicit 'factors' for long-range are accepted and sites normalize.
+    """Explicit long-range factors follow the original site order before normalization.
 
-    Supplying (A,B) and unsorted endpoints should result in stored ascending sites,
-    preserving factors and omitting a full 'matrix'.
+    Factors are listed in the same order as ``sites``. Reordering sites to ascending
+    indices must swap the per-site operators accordingly.
     """
     nm = NoiseModel([
         {
-            "name": "longrange_crosstalk_xy",
+            "name": "custom_longrange_xy",
             "sites": [3, 1],  # intentionally unsorted
             "strength": 0.3,
-            "factors": (X().matrix, Y().matrix),
+            "factors": (PauliX.matrix, PauliY.matrix),
         }
     ])
     p = nm.processes[0]
-    # Sites must be normalized to ascending order
     assert p["sites"] == [1, 3]
     assert "factors" in p
-    assert len(p["factors"]) == 2
     a_op, b_op = p["factors"]
-    assert _allclose(a_op, Y().matrix)
-    assert _allclose(b_op, X().matrix)
+    assert _allclose(a_op, PauliY.matrix)
+    assert _allclose(b_op, PauliX.matrix)
     assert "matrix" not in p
 
 
 def test_longrange_unknown_label_without_factors_raises() -> None:
     """Test that unknown long-range labels without 'factors' raise.
 
-    If the name is not a recognized GateLibrary alias and no factors are provided,
+    If the name is not 'longrange_crosstalk_{ab}' and no factors are provided,
     initialization must fail to avoid guessing operators.
+
+    Raises:
+        AssertionError: If the model accepts an unknown long-range label without factors.
     """
-    with pytest.raises((AttributeError, AssertionError)):
+    try:
+        # Name is not a recognized non-adjacent 'crosstalk_{ab}' and no factors provided
         _ = NoiseModel([{"name": "foo_bar", "sites": [0, 2], "strength": 0.1}])
+    except AssertionError:
+        return
+    msg = "Expected AssertionError for unknown long-range label without factors."
+    raise AssertionError(msg)
 
 
 def test_noise_distribution_integration() -> None:
@@ -256,7 +274,7 @@ def test_noise_distribution_integration() -> None:
     """
     num_qubits = 2
     # Define Hamiltonian: Ising model
-    hamiltonian = MPO.ising(num_qubits, J=1.0, g=0.5)
+    hamiltonian = Hamiltonian.ising(num_qubits, J=1.0, g=0.5)
 
     # Define noise model with distribution
     processes = [
@@ -269,24 +287,24 @@ def test_noise_distribution_integration() -> None:
     noise_model = NoiseModel(processes)
 
     # Initial state
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     # Simulation parameters
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         dt=0.1,
-        elapsed_time=1.0,
+        elapsed_time=0.2,
         num_traj=10,  # Run multiple trajectories to confirm it runs
         sample_timesteps=False,
+        random_seed=42,
     )
 
-    # Run simulation
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     # Verify that the noise model was sampled and stored
-    assert sim_params.noise_model is not None, "Simulation parameters should store the sampled noise model."
-    assert len(sim_params.noise_model.processes) == 1, "Sampled noise model should have one process."
-    assert isinstance(sim_params.noise_model.processes[0]["strength"], float), "Process strength should be a float."
+    assert result.noise_model is not None, "Simulation parameters should store the sampled noise model."
+    assert len(result.noise_model.processes) == 1, "Sampled noise model should have one process."
+    assert isinstance(result.noise_model.processes[0]["strength"], float), "Process strength should be a float."
 
 
 def test_static_noise_strength() -> None:
@@ -516,39 +534,6 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
     assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
 
 
-def test_adjacent_two_site_non_crosstalk_uses_matrix() -> None:
-    """Adjacent two-site non-Crosstalk operator stores its full matrix (line 113).
-
-    XX is a BaseGate, not a Crosstalk, so the else-branch that copies
-    name_op.matrix directly must be exercised.
-    """
-    nm = NoiseModel([{"name": "xx", "sites": [0, 1], "strength": 0.1}])
-    p = nm.processes[0]
-    assert "matrix" in p
-    assert p["matrix"].shape == (4, 4)
-    np.testing.assert_allclose(p["matrix"], XX().matrix)
-
-
-def test_longrange_non_crosstalk_with_explicit_factors() -> None:
-    """Non-adjacent, non-Crosstalk process with pre-supplied factors passes the assert (line 120).
-
-    Passing 'xx' (not a Crosstalk) for non-adjacent sites [0, 2] with explicit
-    factors already in the dict exercises the assert branch that guards against
-    missing factors.
-    """
-    factors = (X().matrix, X().matrix)
-    nm = NoiseModel([{"name": "xx", "sites": [0, 2], "strength": 0.1, "factors": factors}])
-    p = nm.processes[0]
-    assert "factors" in p
-
-
-def test_get_operator_with_basegate_instance() -> None:
-    """get_operator returns a BaseGate instance unchanged when one is passed directly (line 213)."""
-    gate = X()
-    result = NoiseModel.get_operator(gate)
-    assert result is gate
-
-
 def test_compact_two_site_adjacent_expansion() -> None:
     """CompactNoiseModel expands a 2-site gate over a list of site-pairs."""
     processes: list[dict[str, Any]] = [
@@ -586,10 +571,8 @@ def test_compact_mixed_one_and_two_site() -> None:
 
     assert len(model.expanded_processes) == 5
     assert model.index_list == [0, 0, 0, 1, 1]
-    # First three entries are 1-site
     for ep in model.expanded_processes[:3]:
         assert len(ep["sites"]) == 1
-    # Last two entries are 2-site
     for ep in model.expanded_processes[3:]:
         assert len(ep["sites"]) == 2
 

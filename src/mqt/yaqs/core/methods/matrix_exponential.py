@@ -18,7 +18,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import scipy.linalg
+
+from .. import linalg
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -143,20 +144,7 @@ def expm_krylov(
             beta_ = beta[: k - 1]  # beta has length k-1
 
             # Diagonalize T_k
-            try:
-                w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-                    alpha_,
-                    beta_,
-                    lapack_driver="stemr",
-                    check_finite=False,
-                )
-            except scipy.linalg.LinAlgError:
-                w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-                    alpha_,
-                    beta_,
-                    lapack_driver="stebz",
-                    check_finite=False,
-                )
+            w_hess, u_hess = linalg.eigh_tridiagonal(alpha_, beta_)
 
             # Cache this eigendecomposition
             cached_eigvals = w_hess
@@ -208,20 +196,7 @@ def _compute_krylov_result(
     Returns:
         NDArray[np.complex128]: The approximate result of the matrix exponential applied to the initial vector.
     """
-    try:
-        w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-            alpha,
-            beta,
-            lapack_driver="stemr",
-            check_finite=False,
-        )
-    except scipy.linalg.LinAlgError:
-        w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-            alpha,
-            beta,
-            lapack_driver="stebz",
-            check_finite=False,
-        )
+    w_hess, u_hess = linalg.eigh_tridiagonal(alpha, beta)
     coeffs = nrm * np.exp(-1j * dt * w_hess) * u_hess[0]
     return np.asarray(lanczos_mat @ (u_hess @ coeffs), dtype=np.complex128)
 
@@ -291,8 +266,8 @@ def expm_arnoldi(
             h_small = h[:k, :k]
 
             # Compute exponential of -i * dt * H applied to basis vector e_0
-            # We use scipy.linalg.expm which handles non-Hermitian matrices robustly
-            u_small = scipy.linalg.expm(-1j * dt * h_small)
+            # Dense exponential of small Hessenberg H (non-Hermitian); BLAS-capped.
+            u_small = linalg.expm(-1j * dt * h_small)
 
             phi_last = u_small[k - 1, 0]
             err = h[k, k - 1].real * abs(phi_last)  # h is complex but norm is real
@@ -322,5 +297,5 @@ def _compute_arnoldi_result(
     Returns:
         Approximated vector.
     """
-    u_small = scipy.linalg.expm(-1j * dt * h_mat)
+    u_small = linalg.expm(-1j * dt * h_mat)
     return np.asarray(v_mat @ (u_small[:, 0] * nrm), dtype=np.complex128)

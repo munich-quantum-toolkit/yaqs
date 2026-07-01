@@ -13,26 +13,46 @@ quantum simulation. It verifies that:
     raise an appropriate error.
   - AnalogSimParams instances are created with the correct attributes (such as elapsed_time, dt, times,
     sample_timesteps, and num_traj) both with explicit and default values.
-  - The Observable.initialize method properly sets up the results and trajectories arrays
+  - allocate_observable_buffers properly sets up expectation_values and trajectories arrays
     depending on whether sample_timesteps is True or False.
 """
 
 # ignore non-lowercase variable names for physics notation
+# ruff: noqa: PLC2701, SLF001 -- white-box tests of parameter validation and TDVP internals
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    SIMULATION_PRESETS,
+    AnalogSimParams,
+    Observable,
+    StrongSimParams,
+    WeakSimParams,
+    _validate_tdvp_sweeps,
+)
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
+from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+    from mqt.yaqs.core.data_structures.simulation_parameters import (
+        GateMode,
+        SimulationPreset,
+        TDVPMode,
+    )
 
 
 def test_observable_creation_valid() -> None:
     """Test that an Observable is created correctly with valid parameters.
 
-    This test constructs an Observable with the name "x" on site 0 and verifies that its attributes
-    (name, site, results, and trajectories) are correctly initialized.
+    This test constructs an Observable with the name "x" on site 0 and verifies gate and site.
     """
     gate = X()
     site = 0
@@ -40,8 +60,6 @@ def test_observable_creation_valid() -> None:
 
     assert np.array_equal(obs.gate.matrix, np.array([[0, 1], [1, 0]]))
     assert obs.sites == site
-    assert obs.results is None
-    assert obs.trajectories is None
 
 
 def test_analog_simparams_basic() -> None:
@@ -70,7 +88,7 @@ def test_analog_simparams_defaults() -> None:
 
     This test constructs a AnalogSimParams instance with an empty observable list and total time elapsed_time,
     and verifies that default values for dt, sample_timesteps, number of trajectories (num_traj), max_bond_dim,
-    threshold, and order are correctly assigned.
+    svd_threshold, and order are correctly assigned.
     """
     obs_list = [Observable(X(), 0)]
     params = AnalogSimParams(observables=obs_list)
@@ -80,71 +98,270 @@ def test_analog_simparams_defaults() -> None:
     assert params.sample_timesteps is True
     # times should be np.arange(0, elapsed_time+dt, dt)
     assert np.isclose(params.times[-1], 0.1)
-    assert params.num_traj == 1000
-    assert params.max_bond_dim == 4096
-    assert params.threshold == pytest.approx(1e-9)
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.num_traj == balanced["num_traj"]
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
     assert params.order == 1
 
 
-def test_observable_initialize_with_sample_timesteps() -> None:
-    """Test that Observable.initialize sets up results and trajectories correctly when sample_timesteps is True.
+@pytest.mark.parametrize(
+    ("preset", "expected"),
+    [
+        ("fast", SIMULATION_PRESETS["fast"]),
+        ("balanced", SIMULATION_PRESETS["balanced"]),
+        ("accurate", SIMULATION_PRESETS["accurate"]),
+        ("exact", SIMULATION_PRESETS["exact"]),
+    ],
+)
+def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
+    """AnalogSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
+    params = AnalogSimParams(preset=preset)
+    assert params.preset == preset
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.num_traj == expected["num_traj"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
 
-    This test creates an Observable on site 1 and a AnalogSimParams instance with sample_timesteps=True.
-    It verifies that the results array has shape equal to the length of the times array and that the
-    trajectories array has shape (num_traj, len(times)).
-    """
-    obs = Observable(X(), 1)
-    sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=1.0, dt=0.5, num_traj=10, sample_timesteps=True, show_progress=False
+
+@pytest.mark.parametrize(
+    ("preset", "expected"),
+    [
+        ("fast", SIMULATION_PRESETS["fast"]),
+        ("balanced", SIMULATION_PRESETS["balanced"]),
+        ("accurate", SIMULATION_PRESETS["accurate"]),
+        ("exact", SIMULATION_PRESETS["exact"]),
+    ],
+)
+def test_strong_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
+    """StrongSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
+    params = StrongSimParams(preset=preset)
+    assert params.preset == preset
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.num_traj == expected["num_traj"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
+
+
+def test_analog_simparams_default_constructor_uses_balanced() -> None:
+    """AnalogSimParams() uses the balanced preset by default."""
+    params = AnalogSimParams()
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.num_traj == balanced["num_traj"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
+
+
+def test_weak_simparams_default_constructor_uses_balanced() -> None:
+    """WeakSimParams(shots=...) uses the balanced preset by default."""
+    params = WeakSimParams(shots=100)
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
+    assert params.gate_mode == "mpo"
+
+
+def test_gate_mode_defaults_and_validation() -> None:
+    """Strong and weak digital params default to mpo and validate gate_mode names."""
+    assert StrongSimParams().gate_mode == "mpo"
+    assert WeakSimParams(shots=1).gate_mode == "mpo"
+    assert StrongSimParams(gate_mode="full-tdvp").gate_mode == "full-tdvp"
+    assert StrongSimParams(gate_mode="mpo").gate_mode == "mpo"
+    with pytest.raises(ValueError, match="gate_mode"):
+        StrongSimParams(gate_mode=cast("GateMode", "invalid"))
+
+
+def test_tdvp_mode_defaults_and_validation() -> None:
+    """All simulation params default to 2site TDVP."""
+    assert AnalogSimParams().tdvp_mode == "2site"
+    assert StrongSimParams().tdvp_mode == "2site"
+    assert WeakSimParams(shots=1).tdvp_mode == "2site"
+    assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"
+    assert StrongSimParams(tdvp_mode="2site").tdvp_mode == "2site"
+    with pytest.raises(ValueError, match="tdvp_mode"):
+        StrongSimParams(tdvp_mode=cast("TDVPMode", "invalid"))
+
+
+def test_tdvp_sweeps_defaults_and_validation() -> None:
+    """Analog, strong, and weak params default tdvp_sweeps to 1 and validate inputs."""
+    assert AnalogSimParams().tdvp_sweeps == 1
+    assert StrongSimParams().tdvp_sweeps == 1
+    assert WeakSimParams(shots=1).tdvp_sweeps == 1
+    assert StrongSimParams(tdvp_sweeps=3).tdvp_sweeps == 3
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=0)
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=-1)
+
+
+@pytest.mark.parametrize("invalid", [1.5, True])
+def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
+    """tdvp_sweeps must be a true int, not bool or float."""
+    with pytest.raises(TypeError, match="tdvp_sweeps"):
+        _validate_tdvp_sweeps(cast("Any", invalid))
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected"),
+    [
+        ("fast", SIMULATION_PRESETS["fast"]),
+        ("balanced", SIMULATION_PRESETS["balanced"]),
+        ("accurate", SIMULATION_PRESETS["accurate"]),
+        ("exact", SIMULATION_PRESETS["exact"]),
+    ],
+)
+def test_weak_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
+    """WeakSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
+    params = WeakSimParams(shots=100, preset=preset)
+    assert params.preset == preset
+    assert params.shots == 100
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
+
+
+def test_analog_simparams_preset_explicit_overrides() -> None:
+    """Explicit numerical arguments override presets."""
+    params = AnalogSimParams(preset="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
+    assert params.svd_threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.num_traj == 10
+    assert params.krylov_tol == pytest.approx(1e-12)
+
+
+def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
+    """Explicit ``krylov_tol`` overrides the preset without affecting other preset fields."""
+    params = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.num_traj == balanced["num_traj"]
+    assert params.krylov_tol == pytest.approx(1e-8)
+
+
+def test_analog_simparams_max_bond_dim_none_overrides_preset() -> None:
+    """Explicit ``max_bond_dim=None`` removes the bond cap without changing other preset fields."""
+    params = AnalogSimParams(preset="balanced", max_bond_dim=None)
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.max_bond_dim is None
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.num_traj == balanced["num_traj"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
+
+
+def test_strong_simparams_preset_explicit_overrides() -> None:
+    """Explicit numerical arguments override presets."""
+    params = StrongSimParams(preset="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
+    assert params.svd_threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.num_traj == 10
+    assert params.krylov_tol == pytest.approx(1e-12)
+
+
+def test_weak_simparams_preset_explicit_overrides() -> None:
+    """Explicit numerical arguments override presets."""
+    params = WeakSimParams(shots=100, preset="fast", svd_threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
+    assert params.shots == 100
+    assert params.svd_threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.krylov_tol == pytest.approx(1e-12)
+
+
+def test_strong_simparams_rejects_invalid_preset() -> None:
+    """Invalid preset names raise ValueError."""
+    with pytest.raises(ValueError, match="preset must be one of"):
+        StrongSimParams(preset="invalid")  # ty: ignore[invalid-argument-type]
+
+
+def test_strong_simparams_rejects_none_preset() -> None:
+    """preset=None is not supported."""
+    with pytest.raises(ValueError, match="preset must be one of"):
+        StrongSimParams(preset=None)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("bad_tol", [0.0, -1.0, float("inf"), float("nan")])
+def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
+    """krylov_tol must be finite and strictly positive."""
+    with pytest.raises(ValueError, match="krylov_tol must be a finite positive float"):
+        _ = AnalogSimParams(krylov_tol=bad_tol)
+
+
+@pytest.mark.parametrize("bad_threshold", [0.0, -1.0, float("inf"), float("nan")])
+def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
+    """svd_threshold must be finite and strictly positive."""
+    with pytest.raises(ValueError, match="svd_threshold must be a finite positive float"):
+        _ = AnalogSimParams(svd_threshold=bad_threshold)
+
+
+def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TDVP Krylov helper must pass krylov_tol down to expm_krylov(tol=...)."""
+    seen: dict[str, float] = {}
+
+    def fake_expm_krylov(
+        _matrix_free_operator: object,
+        vec: np.ndarray,
+        _dt: float,
+        max_lanczos_iterations: int = 25,
+        tol: float = 1e-12,
+    ) -> np.ndarray:
+        _ = max_lanczos_iterations
+        seen["tol"] = float(tol)
+        return vec
+
+    monkeypatch.setattr(tdvp_primitives, "expm_krylov", fake_expm_krylov)
+
+    tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+
+    _ = tdvp_primitives._evolve_local_tensor_krylov(
+        projector=lambda x: x,
+        tensor=tensor,
+        dt=0.1,
+        proj_args=(),
+        krylov_tol=1e-7,
     )
-    # sim_params.times => [0.0, 0.5, 1.0]
 
-    obs.initialize(sim_params)
-    assert obs.results is not None
-    assert obs.trajectories is not None
-    assert obs.results.shape == (3,), "results should match len(sim_params.times)."
-    assert obs.trajectories.shape == (sim_params.num_traj, 3), "trajectories should have shape (num_traj, len(times))."
+    assert seen["tol"] == pytest.approx(1e-7)
 
 
-def test_observable_initialize_without_sample_timesteps() -> None:
-    """Test that Observable.initialize sets up results and trajectories correctly when sample_timesteps is False.
-
-    This test creates an Observable on site 0 and a AnalogSimParams instance with sample_timesteps=False.
-    It verifies that the results array has shape equal to the length of the times array, the trajectories array
-    has shape (num_traj, 1), and that the observable's times attribute is set to elapsed_time.
-    """
-    obs = Observable(X(), 0)
+def test_allocate_observable_buffers_with_sample_timesteps() -> None:
+    """allocate_observable_buffers shapes buffers when sample_timesteps is True."""
     sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=1.0, dt=0.25, num_traj=5, sample_timesteps=False, show_progress=False
+        observables=[Observable(X(), 1)],
+        elapsed_time=1.0,
+        dt=0.5,
+        num_traj=10,
+        sample_timesteps=True,
     )
-    # times => [0.0, 0.25, 0.5, 0.75, 1.0]
+    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=10)
 
-    obs.initialize(sim_params)
-    assert obs.results is not None
-    assert obs.trajectories is not None
-    assert obs.results.shape == (len(sim_params.times),)
-    assert obs.trajectories.shape == (sim_params.num_traj, 1)
-    assert obs.times == pytest.approx(1.0), "If sample_timesteps=False, obs.times should be equal to elapsed_time."
+    assert times is sim_params.times
+    assert expectation_values[0].shape == (3,)
+    assert trajectories[0].shape == (10, 3)
 
 
-def test_observable_from_string_runtime_cost() -> None:
-    """Constructor maps 'runtime_cost' string to the runtime_cost diagnostic gate."""
-    obs = Observable("runtime_cost", sites=0)
-    assert obs.gate.name == "runtime_cost"
-    # placeholder identity backing for diagnostics
-    assert obs.gate.matrix.shape == (2, 2)
-    assert np.allclose(obs.gate.matrix, np.eye(2))
+def test_allocate_observable_buffers_without_sample_timesteps() -> None:
+    """allocate_observable_buffers uses a single time column when sample_timesteps is False."""
+    sim_params = AnalogSimParams(
+        observables=[Observable(X(), 0)],
+        elapsed_time=1.0,
+        dt=0.25,
+        num_traj=5,
+        sample_timesteps=False,
+    )
+    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=5)
 
-
-def test_observable_from_string_max_total_bond() -> None:
-    """Constructor maps 'max_bond' and 'total_bond' to their diagnostic gates."""
-    obs_max = Observable("max_bond", sites=1)
-    obs_tot = Observable("total_bond", sites=2)
-
-    assert obs_max.gate.name == "max_bond"
-    assert obs_tot.gate.name == "total_bond"
-    assert np.allclose(obs_max.gate.matrix, np.eye(2))
-    assert np.allclose(obs_tot.gate.matrix, np.eye(2))
+    assert times is not None
+    assert times.shape == (1,)
+    assert expectation_values[0].shape == (1,)
+    assert trajectories[0].shape == (5, 1)
 
 
 def test_observable_from_string_entropy_and_spectrum_with_list_sites() -> None:
@@ -206,16 +423,13 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
         [[1.0, 2.0, 3.0], [3.0, 4.0, 5.0]],
         dtype=np.float64,
     )
-    z_obs.trajectories = traj
+    sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2)
+    run_result = Result(sim_params=sim, observables=[z_obs], trajectories=[traj], expectation_values=[np.empty(1)])
 
-    # Params (no PVM mixing, so just this observable)
-    sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2, show_progress=False)
-
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
     expected = traj.mean(axis=0)
-    assert isinstance(z_obs.results, np.ndarray)
-    np.testing.assert_allclose(z_obs.results, expected)
+    np.testing.assert_allclose(run_result.expectation_values[0], expected)
 
 
 def test_aggregate_trajectories_schmidt_concatenation() -> None:
@@ -230,94 +444,92 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
     a = np.array([0.8, 0.6], dtype=np.float64)
     b = np.array([0.4, 0.3], dtype=np.float64)  # will ravel to [0.4, 0.3]
     c = np.array([0.2, 0.1], dtype=np.float64)  # will ravel to [0.2, 0.1]
-    ss_obs.trajectories = np.array([a, b, c])
+    traj_arr = np.array([a, b, c])
 
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3, show_progress=False)
+    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3)
+    run_result = Result(sim_params=sim, observables=[ss_obs], trajectories=[traj_arr], expectation_values=[np.empty(1)])
 
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
-    assert isinstance(ss_obs.results, np.ndarray)
-    np.testing.assert_allclose(ss_obs.results, np.array([0.8, 0.6, 0.4, 0.3, 0.2, 0.1], dtype=np.float64))
+    np.testing.assert_allclose(
+        run_result.expectation_values[0], np.array([0.8, 0.6, 0.4, 0.3, 0.2, 0.1], dtype=np.float64)
+    )
 
 
 def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
     """Combination: both regular and Schmidt observables are updated correctly."""
     # Regular observable with 3 trajectories x 2 time steps
     x_obs = Observable(GateLibrary.x(), sites=2)
-    x_obs.trajectories = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]], dtype=np.float64)
+    x_traj = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]], dtype=np.float64)
 
-    # Schmidt spectrum list
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ss_obs.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
+    ss_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
-    sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3, show_progress=False)
+    sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
+    run_result = Result(
+        sim_params=sim,
+        observables=[x_obs, ss_obs],
+        trajectories=[x_traj, ss_traj],
+        expectation_values=[np.empty(2), np.empty(4)],
+    )
 
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
-    # Regular → column-wise mean over axis=0
-    assert x_obs.results is not None
-    np.testing.assert_allclose(x_obs.results, np.array([1.0, 1.0], dtype=np.float64))
-
-    # Schmidt → concatenation
-    assert ss_obs.results is not None
-    np.testing.assert_allclose(ss_obs.results, np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
+    np.testing.assert_allclose(run_result.expectation_values[0], np.array([1.0, 1.0], dtype=np.float64))
+    np.testing.assert_allclose(run_result.expectation_values[1], np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
 
 
 def test_aggregate_trajectories_schmidt_requires_array() -> None:
     """For Schmidt spectrum, trajectories must be a *array*; list should raise AssertionError."""
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[2, 3])
-    ss_obs.trajectories = [0.9, 0.1]  # ty: ignore[invalid-assignment]
+    bad_traj = [0.9, 0.1]
 
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1)
+
+    run_result = Result(
+        sim_params=sim,
+        observables=[ss_obs],
+        trajectories=cast("list[NDArray]", [bad_traj]),
+        expectation_values=[np.empty(1)],
+    )
 
     with pytest.raises(AssertionError):
-        sim.aggregate_trajectories()
+        aggregate_trajectories(run_result)
 
 
 def test_strong_params_sorting_and_fields() -> None:
-    """Constructor sorts non-diagnostic observables by site, diagnostics appended.
-
-    Sortable: gates NOT in {pvm, runtime_cost, max_bond, total_bond, schmidt_spectrum}
-    Unsorted tail: the listed diagnostics/meta that keep their relative order.
-    """
-    # Sortable by site:
+    """Constructor sorts non-PVM observables by site; PVM observables are appended."""
     obs_z3 = Observable(GateLibrary.z(), sites=3)
     obs_x2 = Observable(GateLibrary.x(), sites=2)
     obs_y1 = Observable(GateLibrary.y(), sites=1)
-    # Unsorted block (diagnostics/meta) — keep insertion order:
-    obs_cost = Observable(GateLibrary.runtime_cost(), sites=0)
-    obs_tot = Observable(GateLibrary.total_bond(), sites=0)
     obs_ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
 
     params = StrongSimParams(
-        observables=[obs_z3, obs_x2, obs_y1, obs_cost, obs_tot, obs_ssp],
+        observables=[obs_z3, obs_x2, obs_y1, obs_ssp],
         num_traj=7,
         max_bond_dim=128,
         get_state=True,
         sample_layers=True,
         num_mid_measurements=2,
-        show_progress=False,
     )
 
-    # Expect sortable by site: y@1, x@2, z@3 then diagnostics/meta in given order
-    for j, o in enumerate(params.sorted_observables):
-        if j == 0:
-            assert o is obs_y1
-        elif j == 1:
-            assert o is obs_ssp
-        elif j == 2:
-            assert o is obs_x2
-        elif j == 3:
-            assert o is obs_z3
-        elif j == 4:
-            assert o is obs_cost
-        elif j == 5:
-            assert o is obs_tot
+    assert params.sorted_observables[0] is obs_y1
+    assert params.sorted_observables[1] is obs_ssp
+    assert params.sorted_observables[2] is obs_x2
+    assert params.sorted_observables[3] is obs_z3
+
+    # Mapping from user order -> sorted worker row indices
+    assert params.observable_sorted_indices == (3, 2, 0, 1)
+
+    # Ordering is derived from the current observables list, not cached at construction.
+    params.observables.append(Observable(GateLibrary.z(), sites=0))
+    assert len(params.sorted_observables) == 5
+    assert params.observable_sorted_indices == (4, 3, 1, 2, 0)
 
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
-    assert np.isclose(params.threshold, 1e-10)
+    assert params.svd_threshold == pytest.approx(SIMULATION_PRESETS["balanced"]["svd_threshold"])
     assert params.get_state is True
     assert params.sample_layers is True
     assert params.num_mid_measurements == 2
@@ -351,55 +563,99 @@ def test_strong_aggregate_regular_mean() -> None:
         [[0.0, 1.0, 2.0], [2.0, 1.0, 0.0], [1.0, 1.0, 1.0]],
         dtype=np.float64,
     )
-    x.trajectories = traj
+    params = StrongSimParams(observables=[x], num_traj=3)
+    run_result = Result(sim_params=params, observables=[x], trajectories=[traj], expectation_values=[np.empty(3)])
+    aggregate_trajectories(run_result)
 
-    params = StrongSimParams(observables=[x], num_traj=3, show_progress=False)
-    params.aggregate_trajectories()
-
-    assert isinstance(x.results, np.ndarray)
-    np.testing.assert_allclose(x.results, traj.mean(axis=0))
+    np.testing.assert_allclose(run_result.expectation_values[0], traj.mean(axis=0))
 
 
 def test_strong_aggregate_schmidt_concat() -> None:
     """Schmidt spectrum: concatenation of raveled list entries."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ssp.trajectories = np.array([
+    ssp_traj = np.array([
         np.array([0.9, 0.8], dtype=np.float64),
-        np.array([0.6, 0.4], dtype=np.float64),  # ravel -> [0.6, 0.4]
-        np.array([0.2, 0.1], dtype=np.float64),  # ravel -> [0.2, 0.1]
+        np.array([0.6, 0.4], dtype=np.float64),
+        np.array([0.2, 0.1], dtype=np.float64),
     ])
 
     params = StrongSimParams(observables=[ssp], num_traj=3)
-    params.aggregate_trajectories()
+    run_result = Result(sim_params=params, observables=[ssp], trajectories=[ssp_traj], expectation_values=[np.empty(6)])
+    aggregate_trajectories(run_result)
 
-    assert isinstance(ssp.results, np.ndarray)
-    np.testing.assert_allclose(ssp.results, np.array([0.9, 0.8, 0.6, 0.4, 0.2, 0.1], dtype=np.float64))
+    np.testing.assert_allclose(
+        run_result.expectation_values[0], np.array([0.9, 0.8, 0.6, 0.4, 0.2, 0.1], dtype=np.float64)
+    )
 
 
 def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
     """Combination case: regular and Schmidt updated correctly in one call."""
     z = Observable(GateLibrary.z(), sites=0)
-    z.trajectories = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)  # mean -> [2.0, 3.0]
+    z_traj = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
 
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
-    ssp.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
+    ssp_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     params = StrongSimParams(observables=[z, ssp], num_traj=2)
-    params.aggregate_trajectories()
+    run_result = Result(
+        sim_params=params,
+        observables=[z, ssp],
+        trajectories=[z_traj, ssp_traj],
+        expectation_values=[np.empty(2), np.empty(4)],
+    )
+    aggregate_trajectories(run_result)
 
-    assert z.results is not None
-    np.testing.assert_allclose(z.results, np.array([2.0, 3.0], dtype=np.float64))
-
-    assert ssp.results is not None
-    np.testing.assert_allclose(ssp.results, np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
+    np.testing.assert_allclose(run_result.expectation_values[0], np.array([2.0, 3.0], dtype=np.float64))
+    np.testing.assert_allclose(run_result.expectation_values[1], np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
 
 
 def test_strong_aggregate_schmidt_requires_array() -> None:
     """Schmidt branch must assert if trajectories is not an array."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ssp.trajectories = [0.9, 0.1]  # ty: ignore[invalid-assignment]
+    bad_traj = [0.9, 0.1]
 
     params = StrongSimParams(observables=[ssp], num_traj=1)
 
+    run_result = Result(
+        sim_params=params,
+        observables=[ssp],
+        trajectories=cast("list[NDArray]", [bad_traj]),
+        expectation_values=[np.empty(1)],
+    )
+
     with pytest.raises(AssertionError):
-        params.aggregate_trajectories()
+        aggregate_trajectories(run_result)
+
+
+@pytest.mark.parametrize(
+    ("param_cls", "kwargs"),
+    [
+        (AnalogSimParams, {}),
+        (WeakSimParams, {"shots": 1}),
+        (StrongSimParams, {}),
+    ],
+)
+def test_random_seed_rejects_invalid_type(
+    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    kwargs: dict[str, object],
+) -> None:
+    """random_seed must be None or int."""
+    with pytest.raises(TypeError, match="random_seed must be int or None"):
+        param_cls(random_seed="not-a-seed", **kwargs)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize(
+    ("param_cls", "kwargs"),
+    [
+        (AnalogSimParams, {}),
+        (WeakSimParams, {"shots": 1}),
+        (StrongSimParams, {}),
+    ],
+)
+def test_random_seed_rejects_negative(
+    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    kwargs: dict[str, object],
+) -> None:
+    """random_seed must be non-negative when set."""
+    with pytest.raises(ValueError, match="random_seed must be non-negative"):
+        param_cls(random_seed=-1, **kwargs)  # ty: ignore[invalid-argument-type]

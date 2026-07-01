@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: SLF001 -- white-box tests of internal Krylov/Arnoldi helpers
+
 """Tests for Krylov subspace methods used for matrix exponential calculations.
 
 This module provides unit tests for the internal functions `lanczos_iteration` and `expm_krylov`,
@@ -181,7 +183,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)  # noqa: SLF001
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
 
         assert mock_eigh.call_count == 2
         # First call should be stemr
@@ -291,7 +293,7 @@ def test_compute_arnoldi_result() -> None:
     nrm = 2.0
     dt = 0.1
 
-    res = matrix_exponential._compute_arnoldi_result(h_mat, v_mat, nrm, dt)  # noqa: SLF001
+    res = matrix_exponential._compute_arnoldi_result(h_mat, v_mat, nrm, dt)
     direct = scipy.linalg.expm(-1j * dt * h_mat) @ np.array([nrm, 0.0], dtype=complex)
 
     np.testing.assert_allclose(res, direct, atol=1e-12)

@@ -13,9 +13,11 @@ from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 from scipy.linalg import expm
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.bug import (
     bug,
@@ -26,7 +28,7 @@ from mqt.yaqs.core.methods.bug import (
     prepare_canonical_site_tensors,
 )
 from mqt.yaqs.core.methods.decompositions import right_qr
-from mqt.yaqs.core.methods.tdvp import update_left_environment
+from mqt.yaqs.core.methods.tdvp.primitives import update_left_environment
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -138,7 +140,7 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     assert np.allclose(correct_env, left_envs[1])
     assert np.allclose(correct_canon, canon_sites[1])
     # Site 2
-    q_last, r_matrix = right_qr(correct_canon)
+    q_last, r_matrix = right_qr(np.asarray(correct_canon, dtype=np.complex128))
     correct_canon = np.tensordot(r_matrix, mps_tensors[2], axes=(1, 1)).transpose(1, 0, 2)
     correct_env = update_left_environment(q_last, q_last, mpo_tensors[1], left_envs[1])
     assert np.allclose(correct_env, left_envs[2])
@@ -230,7 +232,7 @@ def test_local_update() -> None:
     right_block = np.eye(5, dtype=np.complex128).reshape(5, 1, 5)
     site = 2
     right_m_block = np.eye(5, dtype=np.complex128)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, show_progress=False)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=1)
     # Perform the local update
     result = local_update(mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params)
     # General Change Check
@@ -252,7 +254,8 @@ def test_bug_single_site() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution
@@ -269,7 +272,8 @@ def test_bug_three_sites() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution
@@ -279,4 +283,25 @@ def test_bug_three_sites() -> None:
     new_state_vec = time_evo_op @ state_vec
     # Check the result
     assert mps.check_canonical_form() == [0]
-    assert np.allclose(mps.to_vec(), new_state_vec)
+    assert mps.orthogonality_center == 0
+    np.testing.assert_allclose(mps.to_vec(), new_state_vec, rtol=1e-10, atol=1e-12)
+
+
+def test_bug_requires_center_at_zero() -> None:
+    """BUG rejects an MPS whose tracked center is not at site 0."""
+    mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
+    mps.set_center(1)
+    mpo = MPO.ising(3, 1, 0.5)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+    with pytest.raises(ValueError, match="bug"):
+        bug(mps, mpo, sim_params)
+
+
+def test_bug_length_mismatch_raises() -> None:
+    """BUG rejects Hamiltonians whose site count differs from the MPS."""
+    mps = MPS(2, state="zeros")
+    mpo = MPO.ising(3, 1, 0.5)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
+    with pytest.raises(ValueError, match="same number of sites"):
+        bug(mps, mpo, sim_params)
