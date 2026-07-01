@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Exact Hamiltonian probing via traced sequence simulation."""
+"""Exact Hamiltonian probing via sequence simulation with diagnostics."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ class ExactBackend:
 
     Builds a reusable static MCWF context internally and dispatches sequence
     simulation via :func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
-    with ``traced=True``.
+    with ``record_diagnostics=True``.
     """
 
     def __init__(
@@ -144,7 +144,7 @@ class ExactBackend:
         intervention_steps_list: list[list[Any]] | None = None,
         _execution: ExecutionConfig | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate weighted probe responses via traced simulation.
+        """Evaluate weighted probe responses via exact simulation.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -154,7 +154,7 @@ class ExactBackend:
         Returns:
             Tuple ``(pauli_xyz_ij, weights_ij)``.
         """
-        pauli_xyz, weights_ij, _traces = simulate_exact(
+        pauli_xyz, weights_ij, _simulation_diagnostics = simulate_exact(
             probe_set=probe_set,
             operator=self.operator,
             sim_params=self.sim_params,
@@ -209,9 +209,9 @@ def simulate_exact(
         static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).
 
     Returns:
-        ``(pauli_ij, weights_ij, traces_flat)`` where ``pauli_ij`` has shape
+        ``(pauli_ij, weights_ij, simulation_diagnostics)`` where ``pauli_ij`` has shape
         ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds break weights through cut ``c``,
-        and ``traces_flat[i * n_f + j]`` matches the sequence order of the grid.
+        and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
 
     Raises:
         TypeError: If the backend output is not an ndarray.
@@ -233,17 +233,17 @@ def simulate_exact(
         parallel=exec_cfg.parallel,
         show_progress=exec_cfg.show_progress,
         record_step_states=False,
-        traced=True,
+        record_diagnostics=True,
         solver=resolved_solver,
         _execution=exec_cfg,
     )
     if not isinstance(result, tuple):
-        msg = "Expected traced simulation output."
+        msg = "Expected simulation diagnostics output."
         raise TypeError(msg)
-    final_packed, traces = result
+    final_packed, simulation_diagnostics = result
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
     pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
-    w = _branch_weights_from_simulation(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
-    return pauli_xyz, w, traces
+    w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
+    return pauli_xyz, w, simulation_diagnostics

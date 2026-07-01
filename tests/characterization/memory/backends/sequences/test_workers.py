@@ -7,7 +7,7 @@
 
 # ruff: noqa: PLC2701 -- white-box validation of process-tensor schedule worker internals
 
-"""Tests for process-tensor schedule worker validation and traced simulation."""
+"""Tests for process-tensor schedule worker validation and diagnostic simulation."""
 
 from __future__ import annotations
 
@@ -120,8 +120,8 @@ def test_validate_process_tensor_schedule_inputs_mismatched_num_interventions_wi
         )
 
 
-def test_simulate_sequences_traced_returns_diagnostics() -> None:
-    """traced=True returns finals and per-sequence trace dicts (exact backend path)."""
+def test_simulate_sequences_record_diagnostics_returns_diagnostics() -> None:
+    """record_diagnostics=True returns finals and per-sequence simulation diagnostics."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -139,19 +139,19 @@ def test_simulate_sequences_traced_returns_diagnostics() -> None:
         parallel=False,
         show_progress=False,
         record_step_states=False,
-        traced=True,
+        record_diagnostics=True,
     )
     assert isinstance(result, tuple)
-    finals, traces = result
+    finals, simulation_diagnostics = result
     assert isinstance(finals, np.ndarray)
-    assert isinstance(traces, list)
+    assert isinstance(simulation_diagnostics, list)
     assert finals.shape == (2, 8)
-    assert len(traces) == 2
-    for trace in traces:
-        assert isinstance(trace, dict)
-        assert "step_probs" in trace
-        assert "cumulative_weight_final" in trace
-        assert "terminated_early" in trace
+    assert len(simulation_diagnostics) == 2
+    for diagnostics in simulation_diagnostics:
+        assert isinstance(diagnostics, dict)
+        assert "step_probs" in diagnostics
+        assert "cumulative_weight_final" in diagnostics
+        assert "terminated_early" in diagnostics
 
 
 def test_validate_process_tensor_schedule_inputs_per_sequence_schedules() -> None:
@@ -325,8 +325,8 @@ def test_cut_preparation_retains_past_sensitivity_on_open_chain() -> None:
     assert float(np.linalg.norm(soft_a - soft_b)) > 1e-4
 
 
-def test_simulate_sequences_trace_worker_early_termination_fill() -> None:
-    """Trace worker pads remaining steps when branch weight vanishes."""
+def test_simulate_sequences_record_worker_early_termination_fill() -> None:
+    """Record worker pads remaining steps when branch weight vanishes."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -350,7 +350,7 @@ def test_simulate_sequences_trace_worker_early_termination_fill() -> None:
     assert samples[0].rho_seq.shape == (1, 8)
 
 
-def test_simulate_sequences_trace_worker_rejects_zero_interventions() -> None:
+def test_simulate_sequences_record_worker_rejects_zero_interventions() -> None:
     """record_step_states=True rejects empty intervention sequences before Choi reshape."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)

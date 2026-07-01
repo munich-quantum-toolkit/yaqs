@@ -17,8 +17,28 @@ import pytest
 from mqt.yaqs.characterization.memory.backends.surrogates.utils import (
     _initial_mcwf_state_from_rho0,
     sample_density_matrix,
+    sample_initial_psi,
 )
 from mqt.yaqs.characterization.memory.shared.interventions import sample_intervention_sequence
+
+
+def test_initial_mcwf_state_from_rho0_eigenstate_without_rng() -> None:
+    """Eigenstate mode creates a default RNG when none is supplied."""
+    rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    psi_out = _initial_mcwf_state_from_rho0(rho, length=1, init_mode="eigenstate")
+    assert isinstance(psi_out, np.ndarray)
+    psi = np.asarray(psi_out, dtype=np.complex128)
+    assert psi.shape == (2,)
+    np.testing.assert_allclose(float(np.linalg.norm(psi)), 1.0, atol=1e-12)
+
+
+def test_sample_initial_psi_delegates_to_helper() -> None:
+    """sample_initial_psi forwards to the internal MCWF state builder."""
+    rng = np.random.default_rng(0)
+    rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    psi = sample_initial_psi(rho, length=1, rng=rng, init_mode="eigenstate")
+    assert isinstance(psi, np.ndarray)
+    assert psi.shape == (2,)
 
 
 def test_sample_density_matrix_is_physical() -> None:

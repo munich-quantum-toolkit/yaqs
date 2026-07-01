@@ -94,6 +94,41 @@ def test_assemble_probe_sequence_rejects_mismatched_cut_arrays() -> None:
         assemble_probe_sequence(probe_set, i=0, j=0)
 
 
+def test_assemble_probe_sequence_rejects_mismatched_past_cut_meas() -> None:
+    """Malformed past_cut_meas arrays raise ValueError instead of IndexError."""
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    u = np.eye(2, dtype=np.complex128)
+    probe_set = ProbeSet(
+        cut=2,
+        num_interventions=2,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=np.zeros((1, 1, 32), dtype=np.float32),
+        past_pairs=[[{"type": "unitary", "U": u}]],
+        past_cut_meas=[z, z],
+        future_prep_cut=[z],
+        future_pairs=[[]],
+    )
+    with pytest.raises(ValueError, match="past_cut_meas length 2 != n_pasts=1"):
+        assemble_probe_sequence(probe_set, i=0, j=0)
+
+
+def test_assemble_probe_grid_internal_length_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Internal length guard in assemble_probe_grid surfaces as RuntimeError."""
+    rng = np.random.default_rng(11)
+    probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=2, n_futures=2, rng=rng)
+
+    def _short_sequence(probe: ProbeSet, i: int, j: int, *, delay: int = 0) -> list:
+        del probe, i, j, delay
+        return []
+
+    monkeypatch.setattr(
+        "mqt.yaqs.characterization.memory.operational_memory.grid.assemble_probe_sequence",
+        _short_sequence,
+    )
+    with pytest.raises(RuntimeError, match="internal: sequence length mismatch"):
+        assemble_probe_grid(probe_set)
+
+
 def test_compute_delayed_length_rejects_negative() -> None:
     """Negative reset delay is rejected at assembly time."""
     with pytest.raises(ValueError, match="delay must be >= 0"):

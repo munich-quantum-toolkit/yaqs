@@ -25,7 +25,7 @@ from ..surrogates.data import SequenceRecord
 from .workers import (
     _seq_final_worker,
     _seq_final_worker_diagnostics,
-    _seq_trace_worker,
+    _seq_record_worker,
     _validate_process_tensor_schedule_inputs,
 )
 
@@ -52,7 +52,7 @@ def simulate_sequences(
     parallel: bool = True,
     show_progress: bool = True,
     record_step_states: bool = True,
-    traced: bool = False,
+    record_diagnostics: bool = False,
     e_features_rows: list[np.ndarray] | None = None,
     timesteps_rows: list[list[float]] | None = None,
     operators_list: list[list[MPO]] | None = None,
@@ -74,28 +74,29 @@ def simulate_sequences(
         parallel: Whether to use process-based parallelism over sequences.
         show_progress: Whether to show a progress bar.
         record_step_states: If ``True``, return per-step :class:`SequenceRecord` records.
-        traced: If ``True``, return final packed states and per-sequence diagnostics
-            (incompatible with ``record_step_states=True``).
+        record_diagnostics: If ``True``, return final packed states and per-sequence simulation
+            diagnostics (incompatible with ``record_step_states=True``).
         e_features_rows: Per-sequence Choi feature rows (required when ``record_step_states=True``).
         timesteps_rows: Optional per-sequence durations, each of length ``num_interventions+1``.
         operators_list: Optional per-sequence Hamiltonians, length ``num_interventions+1`` per sequence.
         static_ctx_list: Optional per-sequence MCWF contexts, length ``num_interventions+1`` per sequence.
-        context_vec: Optional static context vector attached to each trace when
+        context_vec: Optional static context vector attached to each sequence record when
             ``record_step_states=True``. Raises :class:`ValueError` when set while
             ``record_step_states=False``.
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
         - ``record_step_states=True``: list of :class:`SequenceRecord`
-        - ``traced=True``: ``(final_packed, traces)`` with ``final_packed`` of shape ``(N, 8)``
+        - ``record_diagnostics=True``: ``(final_packed, simulation_diagnostics)`` with
+          ``final_packed`` of shape ``(N, 8)``
         - otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states
 
     Raises:
         ValueError: If input lengths are inconsistent or modes are incompatible.
         RuntimeError: If parallel execution returns incomplete results.
     """
-    if traced and record_step_states:
-        msg = "traced=True is incompatible with record_step_states=True."
+    if record_diagnostics and record_step_states:
+        msg = "record_diagnostics=True is incompatible with record_step_states=True."
         raise ValueError(msg)
 
     num_sequences = len(initial_psis)
@@ -127,7 +128,7 @@ def simulate_sequences(
     )
 
     if num_sequences == 0:
-        if traced:
+        if record_diagnostics:
             return np.zeros((0, 8), dtype=np.float32), []
         if record_step_states:
             return []
@@ -154,7 +155,7 @@ def simulate_sequences(
 
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
 
-    if traced:
+    if record_diagnostics:
         job_results = run_indexed_jobs(
             _seq_final_worker_diagnostics,
             payload=job_payload,
@@ -163,17 +164,17 @@ def simulate_sequences(
             desc="Simulating sequences (final states + diagnostics)",
         )
         final_packed_by_index: list[np.ndarray | None] = [None] * num_sequences
-        traces_ordered: list[dict[str, Any] | None] = [None] * num_sequences
+        diagnostics_ordered: list[dict[str, Any] | None] = [None] * num_sequences
         for worker_out in job_results.values():
-            sequence_idx, _traj_idx, rho_final, _weight, trace = worker_out
+            sequence_idx, _traj_idx, rho_final, _weight, diagnostics = worker_out
             rho_norm = normalize_backend_rho(rho_final)
             final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
-            traces_ordered[sequence_idx] = trace
-        if any(x is None for x in final_packed_by_index) or any(t is None for t in traces_ordered):
+            diagnostics_ordered[sequence_idx] = diagnostics
+        if any(x is None for x in final_packed_by_index) or any(d is None for d in diagnostics_ordered):
             msg = "Parallel sequence simulation incomplete."
             raise RuntimeError(msg)
         stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
-        return np.stack(stacked_final, axis=0).astype(np.float32), cast("list[dict[str, Any]]", traces_ordered)
+        return np.stack(stacked_final, axis=0).astype(np.float32), cast("list[dict[str, Any]]", diagnostics_ordered)
 
     if not record_step_states:
         job_results = run_indexed_jobs(
@@ -197,11 +198,11 @@ def simulate_sequences(
     optional_context_vec = None if context_vec is None else np.asarray(context_vec, dtype=np.float32).reshape(-1)
 
     job_results = run_indexed_jobs(
-        _seq_trace_worker,
+        _seq_record_worker,
         payload=job_payload,
         n_jobs=num_sequences,
         config=exec_cfg,
-        desc="Simulating sequences (traces)",
+        desc="Simulating sequences (step records)",
     )
     samples_by_index: list[SequenceRecord | None] = [None] * num_sequences
     for worker_out in job_results.values():
@@ -214,6 +215,6 @@ def simulate_sequences(
             weight=float(weight),
         )
     if any(s is None for s in samples_by_index):
-        msg = "Parallel sequence trace simulation incomplete."
+        msg = "Parallel sequence record simulation incomplete."
         raise RuntimeError(msg)
     return [cast("SequenceRecord", s) for s in samples_by_index]

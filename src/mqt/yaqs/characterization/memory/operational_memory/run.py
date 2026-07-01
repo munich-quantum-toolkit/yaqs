@@ -56,7 +56,7 @@ class SupportsEvaluateProbesWeighted(Protocol):
 OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbes | SupportsEvaluateProbesWeighted
 """Union of split-cut probing backends.
 
-Implement **either** :meth:`evaluate_probes_weighted` (simulation trace weights, e.g.
+Implement **either** :meth:`evaluate_probes_weighted` (simulation branch weights, e.g.
 :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
 :meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
 :func:`evaluate_probes_with_weights` dispatches to the implemented method.

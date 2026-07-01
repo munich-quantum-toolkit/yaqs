@@ -12,7 +12,7 @@ Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogate
 :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.train_surrogate_model`.
 :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate` holds the network and
 :meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate.fit` training loop.
-Sequence traces: :mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
+Sequence records: :mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
 Comb-schedule simulation: :mod:`mqt.yaqs.characterization.memory.backends.sequences`.
 
 **Terminology** — See :mod:`mqt.yaqs.characterization.memory.backends.tomography.data` (**sequence** vs

@@ -88,7 +88,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 #   noise_model             None for deterministic surrogate sequences
 #   mcwf_static_ctx         static MCWF context for the whole sequence
 #   mcwf_static_ctx_list    optional per-evolution-slot context (length ``num_interventions+1``)
-#   e_features_rows         per-sequence Choi rows ``(num_interventions, d_e)`` — required for trace workers
+#   e_features_rows         per-sequence Choi rows ``(num_interventions, d_e)`` — required for record workers
 
 
 # ---------------------------------------------------------------------------
@@ -310,15 +310,15 @@ def _simulate_seq_core(
     sequence_idx: int,
     trajectory_idx: int,
     worker_ctx: dict[str, Any],
-    collect_trace: bool,
+    collect_diagnostics: bool,
 ) -> tuple[np.ndarray, float, dict[str, Any] | None]:
     """Shared process-tensor schedule: ``U_1`` then ``num_interventions`` times (reprepare → ``U``).
 
-    Optionally collect a per-sequence trace dict when ``collect_trace`` is set.
+    Optionally collect per-sequence simulation diagnostics when ``collect_diagnostics`` is set.
 
     Returns:
-        Tuple ``(rho_final, cumulative_weight, trace)`` where ``trace`` is ``None`` when
-        ``collect_trace`` is ``False``.
+        Tuple ``(rho_final, cumulative_weight, diagnostics)`` where ``diagnostics`` is ``None``
+        when ``collect_diagnostics`` is ``False``.
     """
     intervention_steps = worker_ctx["intervention_steps"][sequence_idx]
     hamiltonian = worker_ctx["operator"]
@@ -403,13 +403,13 @@ def _simulate_seq_core(
     rho_final = extract_site0_rho(state)
     wfin = float(cumulative_weight)
 
-    trace: dict[str, Any] | None = None
-    if collect_trace:
+    diagnostics: dict[str, Any] | None = None
+    if collect_diagnostics:
         terminated_early = break_step is not None or num_evolutions_in_loop < num_interventions
         mins = min(step_probs) if step_probs else 0.0
         maxs = max(step_probs) if step_probs else 0.0
         means = float(np.mean(step_probs)) if step_probs else 0.0
-        trace = {
+        diagnostics = {
             "terminated_early": bool(terminated_early),
             "break_step": break_step,
             "cumulative_weight_final": wfin,
@@ -423,7 +423,7 @@ def _simulate_seq_core(
             "any_prob_skipped_renormalize": bool(any(prob_skipped_renormalize)),
         }
 
-    return rho_final, wfin, trace
+    return rho_final, wfin, diagnostics
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +435,7 @@ def _seq_final_worker(
 ) -> tuple[int, int, np.ndarray, float]:
     """Simulate one intervention sequence and return the final reduced state.
 
-    Does not record per-step states (cheaper than :func:`_seq_trace_worker`).
+    Does not record per-step states (cheaper than :func:`_seq_record_worker`).
 
     Args:
         job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
@@ -450,11 +450,11 @@ def _seq_final_worker(
     worker_ctx = resolve_worker_ctx(job_payload)
     sequence_idx, trajectory_idx = unpack_flat_job(job_idx, int(worker_ctx["num_trajectories"]))
 
-    rho_final, cum_w, _trace = _simulate_seq_core(
+    rho_final, cum_w, _diagnostics = _simulate_seq_core(
         sequence_idx=sequence_idx,
         trajectory_idx=trajectory_idx,
         worker_ctx=worker_ctx,
-        collect_trace=False,
+        collect_diagnostics=False,
     )
     return (sequence_idx, trajectory_idx, rho_final, float(cum_w))
 
@@ -463,30 +463,30 @@ def _seq_final_worker_diagnostics(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, float, dict[str, Any]]:
-    """Same as :func:`_seq_final_worker` but includes per-sequence trace diagnostics.
+    """Same as :func:`_seq_final_worker` but includes per-sequence simulation diagnostics.
 
     Returns:
-        Tuple ``(sequence_index, trajectory_index, rho_final, cumulative_weight, trace)``.
+        Tuple ``(sequence_index, trajectory_index, rho_final, cumulative_weight, diagnostics)``.
 
     Raises:
-        RuntimeError: If the diagnostics trace is missing.
+        RuntimeError: If simulation diagnostics are missing.
     """
     worker_ctx = resolve_worker_ctx(job_payload)
     sequence_idx, trajectory_idx = unpack_flat_job(job_idx, int(worker_ctx["num_trajectories"]))
 
-    rho_final, cum_w, trace = _simulate_seq_core(
+    rho_final, cum_w, diagnostics = _simulate_seq_core(
         sequence_idx=sequence_idx,
         trajectory_idx=trajectory_idx,
         worker_ctx=worker_ctx,
-        collect_trace=True,
+        collect_diagnostics=True,
     )
-    if trace is None:
-        msg = "internal: diagnostics trace missing"
+    if diagnostics is None:
+        msg = "internal: simulation diagnostics missing"
         raise RuntimeError(msg)
-    return (sequence_idx, trajectory_idx, rho_final, float(cum_w), trace)
+    return (sequence_idx, trajectory_idx, rho_final, float(cum_w), diagnostics)
 
 
-def _seq_trace_worker(
+def _seq_record_worker(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, np.ndarray, np.ndarray, float]:
@@ -528,7 +528,7 @@ def _seq_trace_worker(
 
     num_steps = len(intervention_steps)
     if num_steps == 0:
-        msg = "Trace worker requires at least one intervention step."
+        msg = "Record worker requires at least one intervention step."
         raise ValueError(msg)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
@@ -538,7 +538,7 @@ def _seq_trace_worker(
     step_params.get_state = True
 
     if per_sequence_choi_rows is None:
-        msg = "Trace worker requires `e_features_rows`: per-sequence Choi feature rows."
+        msg = "Record worker requires `e_features_rows`: per-sequence Choi feature rows."
         raise ValueError(msg)
     choi_features_matrix = _reshape_choi_feature_rows(
         per_sequence_choi_rows[sequence_idx],

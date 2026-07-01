@@ -235,7 +235,7 @@ Following the black-box split-cut construction:
 
 | Backend                        | How `weights_ij` are obtained                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| **Hamiltonian**                | Product of simulated intervention probabilities along each probe sequence through cut `c` (traced full-state simulation).  |
+| **Hamiltonian**                | Product of simulated intervention probabilities along each probe sequence through cut `c` (exact full-state simulation).   |
 | **Process tensor / surrogate** | Analytic product through cut `c` from the site-0 :math:`\vert 0\rangle\langle 0\vert` reference path (branch-weight path). |
 
 In all cases the weight depends only on the conditioned past row `i` (constant across future columns `j` for a fixed probe grid).

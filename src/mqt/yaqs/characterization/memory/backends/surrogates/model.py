@@ -385,7 +385,7 @@ class ProcessTensorSurrogate(nn.Module):
         prefix_loss: str = "full",
         device: torch.device | None = None,
     ) -> ProcessTensorSurrogate:
-        """Fit the model on sequence-trace data using MSE loss.
+        """Fit the model on sequence-record training data using MSE loss.
 
         Args:
             train_dataset: TensorDataset containing tensors ``(E, rho0, target)``.

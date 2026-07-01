@@ -48,8 +48,8 @@ def _params() -> AnalogSimParams:
     return AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
 
 
-def _trace_final_weight(trace: dict[str, object]) -> float:
-    """Extract the final cumulative weight from a traced rollout dict.
+def _diagnostics_final_weight(diagnostics: dict[str, object]) -> float:
+    """Extract the final cumulative weight from simulation diagnostics.
 
     Returns:
         Final cumulative intervention weight.
@@ -57,7 +57,7 @@ def _trace_final_weight(trace: dict[str, object]) -> float:
     Raises:
         TypeError: If ``cumulative_weight_final`` is not numeric.
     """
-    val = trace["cumulative_weight_final"]
+    val = diagnostics["cumulative_weight_final"]
     if not isinstance(val, (int, float)):
         msg = "cumulative_weight_final must be numeric"
         raise TypeError(msg)
@@ -290,7 +290,7 @@ def _entropy_from_cumulative_weights(
     params: AnalogSimParams,
     psi0: np.ndarray,
 ) -> float:
-    """Entropy using cumulative_weight_final from traced exact rollouts.
+    """Entropy using cumulative_weight_final from exact simulation diagnostics.
 
     Args:
         probe_set: Split-cut probe bundle to simulate.
@@ -301,7 +301,7 @@ def _entropy_from_cumulative_weights(
     Returns:
         Von Neumann entropy of the assembled memory matrix.
     """
-    pauli, _, traces = simulate_exact(
+    pauli, _, simulation_diagnostics = simulate_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=params,
@@ -312,7 +312,7 @@ def _entropy_from_cumulative_weights(
     weights = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
-            weights[ii, jj] = _trace_final_weight(traces[ii * n_f + jj])
+            weights[ii, jj] = _diagnostics_final_weight(simulation_diagnostics[ii * n_f + jj])
     _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
     return float(compute_spectrum(response_matrix)["entropy"])
 

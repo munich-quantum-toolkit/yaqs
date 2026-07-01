@@ -20,7 +20,7 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def test_simulate_sequences_input_validation_errors() -> None:
-    """simulate_sequences validates process-tensor schedule and trace feature inputs."""
+    """simulate_sequences validates process-tensor schedule and step-record feature inputs."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
 
@@ -75,8 +75,8 @@ def test_simulate_sequences_input_validation_errors() -> None:
         )
 
 
-def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
-    """MCWF simulation returns final packed states or sequence traces."""
+def test_simulate_sequences_mcwf_final_states_and_records_smoke() -> None:
+    """MCWF simulation returns final packed states or per-step sequence records."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -120,8 +120,8 @@ def test_simulate_sequences_mcwf_final_states_and_traces_smoke() -> None:
     assert s0.rho_seq.shape == (1, 8)
 
 
-def test_simulate_sequences_traced_incompatible_with_record_step_states() -> None:
-    """Traced mode cannot be combined with per-step trace recording."""
+def test_simulate_sequences_record_diagnostics_incompatible_with_record_step_states() -> None:
+    """Diagnostic recording cannot be combined with per-step sequence records."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -135,7 +135,7 @@ def test_simulate_sequences_traced_incompatible_with_record_step_states() -> Non
             initial_psis=[psi0.copy()],
             static_ctx=static_ctx,
             parallel=False,
-            traced=True,
+            record_diagnostics=True,
             record_step_states=True,
             e_features_rows=[np.zeros((1, 32), dtype=np.float32)],
         )
@@ -186,7 +186,7 @@ def test_simulate_sequences_parallel_smoke() -> None:
 
 
 def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
-    """Empty sequence batches return empty arrays or trace lists instead of failing."""
+    """Empty sequence batches return empty arrays or diagnostic lists instead of failing."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
@@ -203,7 +203,7 @@ def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
     assert isinstance(finals, np.ndarray)
     assert finals.shape == (0, 8)
 
-    packed, traces = simulate_sequences(
+    packed, simulation_diagnostics = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=[0.1],
@@ -212,11 +212,11 @@ def test_simulate_sequences_empty_workload_returns_defined_results() -> None:
         static_ctx=None,
         parallel=False,
         record_step_states=False,
-        traced=True,
+        record_diagnostics=True,
     )
     assert isinstance(packed, np.ndarray)
     assert packed.shape == (0, 8)
-    assert traces == []
+    assert simulation_diagnostics == []
 
 
 def test_simulate_sequences_empty_workload_rejects_invalid_mode_options() -> None:
