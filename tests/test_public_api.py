@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from mqt import yaqs
-from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer, Observable, Simulator, State
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
 EXPECTED_PUBLIC_API = frozenset({
@@ -20,6 +20,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "AnalogSimParams",
     "EquivalenceChecker",
     "Hamiltonian",
+    "MemoryCharacterizer",
     "NoiseModel",
     "Observable",
     "Result",
@@ -28,6 +29,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "StrongSimParams",
     "WeakSimParams",
     "__version__",
+    "simulator",
     "version_info",
 })
 
@@ -35,6 +37,12 @@ EXPECTED_PUBLIC_API = frozenset({
 def test_public_api_all_matches_documented_surface() -> None:
     """``__all__`` matches the documented top-level export list."""
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
+
+
+def test_characterization_result_not_top_level() -> None:
+    """CharacterizationResult is returned by MemoryCharacterizer, not a top-level import."""
+    assert "CharacterizationResult" not in yaqs.__all__
+    assert "ProbeResult" not in yaqs.__all__
 
 
 def test_top_level_import_smoke() -> None:
@@ -55,3 +63,5 @@ def test_top_level_import_smoke() -> None:
     assert len(result.expectation_values) == 1
     assert result.observables[0].gate.name == "z"
     assert result.sim_params is params
+
+    assert MemoryCharacterizer is not None

@@ -5,9 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tomography module for YAQS."""
-
-from .process_tensor import ProcessTensor
-from .tomography import run
-
-__all__ = ["ProcessTensor", "run"]
+"""Tests for operational memory characterization."""

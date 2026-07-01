@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Characterization module for YAQS."""
+"""Characterization module for YAQS (memory and future noise-model inference)."""

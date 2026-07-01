@@ -23,7 +23,7 @@ from qiskit.converters import dag_to_circuit
 
 from ...core.data_structures.mpo import MPO
 from ...core.data_structures.mpo_utils import contract_mpo_site_with_mpo_site, decompose_theta
-from ...parallel_utils import MPContext, available_cpus, limit_worker_threads
+from ...core.parallel_utils import MPContext, available_cpus, limit_worker_threads
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 # Below this width, thread-pool overhead usually beats the cost of one SVD pair update.

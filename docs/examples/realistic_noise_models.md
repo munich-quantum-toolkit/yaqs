@@ -30,9 +30,6 @@ This page shows:
 Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in the operator `matrix` (or per-site `factors` for long-range crosstalk) from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import NoiseModel
 
 L = 4
@@ -125,9 +122,6 @@ We evolve a short Ising chain from a Néel product state and compare:
 - **Ensemble band:** several independent disorder draws (different `random_seed`) to show typical spread.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 # Wider log-normal spread for a visible disorder effect in dynamics
@@ -215,9 +209,6 @@ Re-running with the same `random_seed` reproduces the same sampled strengths and
 The same distribution syntax works in digital simulation. Below, bit-flip rates on each qubit follow independent log-normal draws; one sample is drawn per `Simulator.run` call.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
@@ -248,9 +239,6 @@ circuit_result = sim.run(State(num_qubits, initial="zeros"), circuit, circuit_pa
 Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS attaches per-site Pauli factors automatically:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 lr_model = NoiseModel([
     {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.05},
 ])
@@ -275,9 +263,6 @@ YAQS does not check complete positivity; supply physically meaningful jump opera
 The built-in `lowering` operator is $\sigma_- = |0\rangle\langle 1|$. You can pass the same matrix explicitly and mix custom and library processes in one model:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import numpy as np
 
 sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -291,9 +276,6 @@ custom_model = NoiseModel([
 Run a short analog simulation—the custom operator is used wherever `NoiseModel.processes` is consumed:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 L2 = 2

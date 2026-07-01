@@ -90,14 +90,13 @@ are not supported for unitary equivalence on either backend. See
   `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
   **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
-- **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
-  the machine CPU count via {func}`~mqt.yaqs.parallel_utils.available_cpus`).
+- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`. When unset, the pool size is
+  `min(available_cpus(), number_of_work_items)`, where {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
+  `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU limits when set, and falls back to CPU
+  affinity or `os.cpu_count()` on the host.
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import EquivalenceChecker
 
 # Recommended: MPO for the circuits you care about
@@ -147,9 +146,6 @@ depth = num_qubits
 Create a TwoLocal circuit and decompose it.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit.circuit.library.n_local import TwoLocal
 
 import numpy as np
@@ -165,9 +161,6 @@ circuit.measure_all()
 Transpile the circuit to a new basis.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit import transpile
 
 basis_gates = ["cz", "rz", "sx", "x", "id"]
@@ -177,9 +170,6 @@ transpiled_circuit = transpile(circuit, basis_gates=basis_gates, optimization_le
 Run equivalence checking with the MPO backend.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import EquivalenceChecker
 
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6, fidelity=1 - 1e-13)
@@ -190,9 +180,6 @@ The same pair with `representation="auto"` on this five-qubit example selects th
 backend because $5 \leq 7$. For a consistent pipeline, keep `representation="mpo"` as above.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 auto_result = EquivalenceChecker(representation="auto").check(circuit, transpiled_circuit)
 ```
 

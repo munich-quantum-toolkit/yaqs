@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Integration tests for tomography module."""
+"""Tests for shared characterization encoding and utilities."""

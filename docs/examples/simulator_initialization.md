@@ -56,9 +56,6 @@ state = State(L, initial="zeros")
 Calling `Simulator()` with no arguments gives you parallel execution across most of your CPU cores, a `tqdm` progress bar, an `"auto"` multiprocessing context, and a generous retry policy.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 sim = Simulator()
 ```
 
@@ -73,9 +70,6 @@ quiet_sim = Simulator(show_progress=False)
 A `Simulator` instance is **stateless** with respect to the physics; the same instance can drive arbitrarily many {meth}`~mqt.yaqs.Simulator.run` calls. This is the recommended pattern in scripts and notebooks because it keeps execution configuration in one place.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 sim = Simulator(show_progress=False)
 
 for noise_strength in (0.0, 0.05, 0.1):
@@ -96,9 +90,6 @@ Each call constructs a short-lived `ProcessPoolExecutor` when `parallel=True`; p
 Both modes produce identical results for a fixed `random_seed`:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import numpy as np
 
 params_serial = make_params()
@@ -119,16 +110,13 @@ For runs with `num_traj == 1` (e.g. noise-free analog/circuit dynamics, Lindblad
 When `max_workers` is left as `None`, the simulator picks `max(1, available_cpus() - 1)` to leave one core free for the parent process and the OS:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs.simulator import available_cpus
 
 cpus = available_cpus()
 default_workers = Simulator().max_workers
 ```
 
-{func}`~mqt.yaqs.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
+{func}`~mqt.yaqs.core.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
 
 1. `YAQS_MAX_WORKERS` (explicit user override; positive integer).
 2. `PYTEST_XDIST_WORKER` (returns `1` to avoid nested parallelism in tests).
@@ -145,9 +133,6 @@ Override the resolution either by setting the environment variable…
 …or by passing `max_workers` explicitly:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 sim_four = Simulator(max_workers=4, show_progress=False)
 ```
 
@@ -173,10 +158,7 @@ The bar is suppressed regardless of `parallel`, so the same flag also silences s
 | `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
-from mqt.yaqs.parallel_utils import get_parallel_context
+from mqt.yaqs.core.parallel_utils import get_parallel_context
 
 for choice in ("auto", "fork", "spawn"):
     try:
@@ -196,9 +178,6 @@ Long parallel runs occasionally encounter transient worker failures: a worker is
 - `OSError`
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 default_retries = Simulator().max_retries
 retry_types = Simulator().retry_exceptions
 ```
@@ -228,9 +207,6 @@ Permanent errors (e.g. `ValueError` from your physics setup, `AssertionError` fr
 {meth}`~mqt.yaqs.Simulator.run` returns a {class}`~mqt.yaqs.Result` that holds every simulation output through a small, stable surface. The {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` you passed in is referenced unchanged at `result.sim_params`:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 sim = Simulator(show_progress=False)
 params = make_params()
 result = sim.run(state, H, params)
@@ -255,9 +231,6 @@ The properties that don't apply to your simulation kind return `None` (or an emp
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and resume analysis from disk:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import pickle
 
 blob = pickle.dumps(result)

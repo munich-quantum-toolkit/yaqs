@@ -45,7 +45,6 @@ references it unchanged.
 
 from __future__ import annotations
 
-import contextlib
 import copy
 
 # ruff: noqa: E402
@@ -54,14 +53,10 @@ import copy
 # Thread caps are NOT set at module level to allow single-trajectory
 # simulations to use multi-threading via threadpoolctl.
 # Thread limits are enforced in worker processes via limit_worker_threads()
-# and in backend calls via _call_backend() with threadpoolctl.
+# and in backend calls via call_serial_capped() with threadpoolctl.
 # ---------------------------------------------------------------------------
-from concurrent.futures import (
-    FIRST_COMPLETED,
-    CancelledError,
-    ProcessPoolExecutor,
-    wait,
-)
+from concurrent.futures import CancelledError
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -72,7 +67,7 @@ if TYPE_CHECKING:
     from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.mpo import MPO
     from .core.data_structures.mps import MPS
-    from .parallel_utils import MPContext
+    from .core.parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -88,17 +83,23 @@ else:
     threadpool_limits = _threadpool_limits
     threadpool_info = _threadpool_info
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-# ---------------------------------------------------------------------------
-# 2) THIRD-PARTY IMPORTS
-# ---------------------------------------------------------------------------
+    from numpy.typing import NDArray
+
+    from .core.data_structures.noise_model import NoiseModel
+
+from pathlib import Path
+
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
-# ---------------------------------------------------------------------------
-# 3) LOCAL IMPORTS
-# ---------------------------------------------------------------------------
+from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.ensemble import ensemble_member_worker
+from .analog.lindblad import lindblad_evolve, preprocess_lindblad
+from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.result import (
     Result,
@@ -115,32 +116,20 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
-from .parallel_utils import (
+from .core.parallel_utils import (
+    WORKER_CTX,
+    ExecutionConfig,
     MPContext,
     available_cpus,
+    call_serial_capped,
     get_parallel_context,
-    limit_worker_threads,
-    safe_set_numba_threads,
+    merge_execution_config,
+    run_backend_parallel,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from concurrent.futures import Future
-
-    from numpy.typing import NDArray
-
-    from .core.data_structures.noise_model import NoiseModel
-
-from pathlib import Path
-
-from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
-from .analog.ensemble import ensemble_member_worker
-from .analog.lindblad import lindblad_evolve, preprocess_lindblad
-from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 
-__all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
+__all__ = ["Simulator", "available_cpus"]
 
 
 # ---------------------------------------------------------------------------
@@ -154,45 +143,7 @@ _get_parallel_context = get_parallel_context
 
 
 # ---------------------------------------------------------------------------
-# 5) WORKER INITIALIZER — cap threads inside each worker process
-# When a worker starts, we:
-#   - Set environment caps (no-ops if already set)
-#   - Try to cap numexpr and MKL explicitly if present
-#   - Optionally use threadpoolctl to cap vendored OpenMP pools (OpenBLAS, MKL)
-#   - Initialize the worker-global context with large objects (e.g. State, NoiseModel)
-# ---------------------------------------------------------------------------
-# Global worker state (initialized once per process)
-WORKER_CTX: dict[str, Any] = {}
-
-
-def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
-    """Initialize the worker process state.
-
-    This function is called once per worker process upon startup. It enforces
-    thread limits for numerical libraries (BLAS, OpenMP, etc.) and populates
-    the global `WORKER_CTX` dictionary with shared simulation objects. This
-    strategy avoids repeated pickling of large objects for every task.
-
-    Args:
-        payload: A dictionary containing large, read-only objects (e.g., State,
-            MPO, NoiseModel, SimParams) to be stored in the global worker context.
-        n_threads: The maximum number of threads allowed for this worker process.
-            Defaults to 1 to prevent thread oversubscription.
-    """
-    # 1. Thread Capping
-    limit_worker_threads(n_threads)
-
-    # 2. Context Initialization
-    WORKER_CTX.clear()
-    WORKER_CTX.update(payload)
-
-    # 3. Numba Threading (Runtime)
-    # Some Numba versions ignore env vars if imported before.
-    safe_set_numba_threads(n_threads)
-
-
-# ---------------------------------------------------------------------------
-# 6) WORKER WRAPPERS
+# 5) WORKER WRAPPERS
 # These functions are pickled and sent to workers. They retrieve large objects
 # from the global _WORKER_CTX instead of receiving them as arguments. Analog
 # workers come first (primary simulation mode), followed by the digital
@@ -485,136 +436,12 @@ def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[i
     return cast("dict[int, int]", payload)
 
 
-# ---------------------------------------------------------------------------
-# 8) SAFETY WRAPPER FOR SERIAL BACKEND CALLS
-# Wrap a single backend call in a context that (again) caps threadpools.
-# This protects against libraries that spawn pools lazily during the call.
-# ---------------------------------------------------------------------------
-def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) -> TRes:  # noqa: ANN401
-    """Invoke a backend function under a strict temporary thread cap.
-
-    Wraps a single backend call in a context that forces threadpool limits
-    (if ``threadpoolctl`` is available). This ensures that even if a library
-    lazily initializes its thread pool inside the backend call, it will still
-    run single-threaded (or with the specified number of threads).
-
-    Args:
-        backend : The backend function to execute.
-        arg : The argument to pass to the backend function.
-        n_threads: The maximum number of threads to allow. Defaults to 1.
-
-    Returns:
-        TRes: The result returned by the backend function.
-
-    Notes:
-        - If ``threadpoolctl`` is not available, falls back to direct call.
-        - If enforcing thread limits fails, falls back silently to direct call.
-    """
-    # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
-    safe_set_numba_threads(n_threads)
-
-    if threadpool_limits is not None:
-        # Caps any pools entered/created within the context
-        with contextlib.suppress(Exception), threadpool_limits(limits=n_threads):
-            return backend(arg)
-
-    # If threadpoolctl fails or is missing, fallback to direct call
-    return backend(arg)
-
-
-def run_backend_parallel(
-    worker_fn: Callable[[int], TRes],
-    *,
-    payload: dict[str, Any] | None,
-    n_jobs: int,
-    max_workers: int,
-    show_progress: bool = True,
-    desc: str,
-    max_retries: int = 10,
-    retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
-    mp_context: MPContext = "auto",
-) -> Iterator[tuple[int, TRes]]:
-    """Execute backend calls in parallel with bounded submission and retry logic.
-
-    This function manages the parallel execution of tasks using a
-    ``ProcessPoolExecutor``, refactored to prevent task flooding and memory
-    exhaustion:
-
-    1. **Worker-Global State**: Uses ``_worker_init`` to initialize large objects
-       once per worker, avoiding per-task pickling overhead.
-    2. **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping only
-       a limited number of futures active (``2 * max_workers``) at any time.
-
-    Args:
-        worker_fn: The worker function to execute. It must accept a single
-            integer argument (the job index) and return a result of type `TRes`.
-        payload: A dictionary of large objects (e.g., State, NoiseModel) to be
-            initialized in the global worker context. passed to `_worker_init`.
-        n_jobs: The total number of jobs to execute (indices 0 to n_jobs-1).
-        max_workers: The maximum number of worker processes to use.
-        show_progress: If True, displays a tqdm progress bar. Defaults to True.
-        desc: The description string for the progress bar.
-        max_retries: The maximum number of retry attempts for transient errors
-            (e.g., TimeoutError). Defaults to 10.
-        retry_exceptions: A tuple of exception types that trigger a retry.
-            Defaults to (CancelledError, TimeoutError, OSError).
-        mp_context: Multiprocessing context selector; see :func:`~mqt.yaqs.parallel_utils.get_parallel_context`.
-
-    Yields:
-        tuple[int, TRes]: A tuple containing the job index and its result,
-        yielded in the order of completion.
-    """
-    ctx = get_parallel_context(mp_context)
-
-    # Bounded in-flight factor (keep 2-4x workers busy to hide latency)
-    inflight_factor = 2
-    max_inflight = max_workers * inflight_factor
-
-    with (
-        ProcessPoolExecutor(
-            max_workers=max_workers,
-            mp_context=ctx,
-            initializer=worker_init,
-            initargs=(payload or {}, 1),
-        ) as ex,
-        tqdm(total=n_jobs, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
-    ):
-        retries = dict.fromkeys(range(n_jobs), 0)
-
-        futures: dict[Future[TRes], int] = {}
-        next_job_idx = 0
-
-        def submit_job(idx: int) -> None:
-            """Submit a job for the given index."""
-            futures[ex.submit(worker_fn, idx)] = idx
-
-        while next_job_idx < n_jobs and len(futures) < max_inflight:
-            submit_job(next_job_idx)
-            next_job_idx += 1
-
-        while futures:
-            done, _ = wait(futures, return_when=FIRST_COMPLETED)
-            for fut in done:
-                i = futures.pop(fut)
-                try:
-                    res = fut.result()
-                except retry_exceptions:
-                    if retries[i] < max_retries:
-                        retries[i] += 1
-                        submit_job(i)
-                        continue
-                    raise
-
-                yield i, res
-                pbar.update(1)
-
-                if next_job_idx < n_jobs:
-                    submit_job(next_job_idx)
-                    next_job_idx += 1
+# Backward-compatible alias for in-module serial backend calls.
+_call_backend = call_serial_capped
 
 
 # ---------------------------------------------------------------------------
-# 10) SIMULATOR — public entry point
+# 8) SIMULATOR — public entry point
 # Owns the execution-side configuration (parallel/serial, workers, progress,
 # multiprocessing context, retry policy) and dispatches to circuit or analog
 # engines based on the sim_params type.
@@ -664,12 +491,71 @@ class Simulator:
             max_retries: Maximum retries for transient worker errors.
             retry_exceptions: Exception types that trigger a retry.
         """
-        self.parallel = parallel
-        self.max_workers = max_workers if max_workers is not None else max(1, available_cpus() - 1)
-        self.show_progress = show_progress
-        self.mp_context: MPContext = mp_context
-        self.max_retries = max_retries
-        self.retry_exceptions = retry_exceptions
+        self._execution = ExecutionConfig(
+            parallel=parallel,
+            max_workers=max_workers,
+            show_progress=show_progress,
+            mp_context=mp_context,
+            max_retries=max_retries,
+            retry_exceptions=retry_exceptions,
+        )
+
+    @property
+    def parallel(self) -> bool:
+        """Whether parallel execution is enabled."""
+        return self._execution.parallel
+
+    @parallel.setter
+    def parallel(self, value: bool) -> None:
+        self._execution = merge_execution_config(self._execution, parallel=bool(value))
+
+    @property
+    def max_workers(self) -> int:
+        """Effective worker count for parallel execution."""
+        return self._execution.resolved_max_workers()
+
+    @max_workers.setter
+    def max_workers(self, value: int | None) -> None:
+        self._execution = merge_execution_config(
+            self._execution,
+            max_workers=None if value is None else int(value),
+        )
+
+    @property
+    def show_progress(self) -> bool:
+        """Whether progress bars are shown during execution."""
+        return self._execution.show_progress
+
+    @show_progress.setter
+    def show_progress(self, value: bool) -> None:
+        self._execution = merge_execution_config(self._execution, show_progress=bool(value))
+
+    @property
+    def mp_context(self) -> MPContext:
+        """Multiprocessing start-method context for worker processes."""
+        return self._execution.mp_context
+
+    @mp_context.setter
+    def mp_context(self, value: MPContext) -> None:
+        self._execution = merge_execution_config(self._execution, mp_context=value)
+
+    @property
+    def max_retries(self) -> int:
+        """Maximum retries per job in parallel execution."""
+        return self._execution.max_retries
+
+    @max_retries.setter
+    def max_retries(self, value: int) -> None:
+        self._execution = merge_execution_config(self._execution, max_retries=int(value))
+
+    @property
+    def retry_exceptions(self) -> tuple[type[BaseException], ...]:
+        """Exception types that trigger a parallel job retry."""
+        return self._execution.retry_exceptions
+
+    @retry_exceptions.setter
+    def retry_exceptions(self, value: tuple[type[BaseException], ...]) -> None:
+        self._execution = replace(self._execution, retry_exceptions=value)
 
     # -----------------------------------------------------------------------
     # Public API
@@ -928,7 +814,7 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                traj_data, traj_diag, traj_final = call_serial_capped(backend, arg, n_threads=n_threads)
                 _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None and diag_per_traj is not None:
                     diag_per_traj[:, i, :] = traj_diag
@@ -1064,7 +950,7 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                traj_data, traj_diag, traj_final = call_serial_capped(backend, arg, n_threads=n_threads)
                 traj_data = cast("NDArray[np.float64] | NDArray[np.complex128]", traj_data)
                 _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None:
@@ -1164,7 +1050,7 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                shot_counts, _traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                shot_counts, _traj_diag, traj_final = call_serial_capped(backend, arg, n_threads=n_threads)
                 counts_dict = _expect_shot_counts(shot_counts)
                 if noisy:
                     result.measurements[i] = counts_dict
@@ -1313,7 +1199,7 @@ class Simulator:
             args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
-                obs_result, traj_diag, multi_time_result = _call_backend(
+                obs_result, traj_diag, multi_time_result = call_serial_capped(
                     ensemble_member_worker, arg, n_threads=n_threads
                 )
                 _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=obs_result)

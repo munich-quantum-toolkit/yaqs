@@ -37,9 +37,6 @@ We build an Ising-style circuit, prepare $\ket{0}^{\otimes n}$, and sweep a glob
 ### 1.1 Circuit and initial state
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
@@ -66,9 +63,6 @@ sim_params = StrongSimParams(
 ### 1.3 Noise sweep and plot
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import numpy as np
 
 from mqt.yaqs import NoiseModel
@@ -123,9 +117,6 @@ Other barriers and `measure` operations are ignored for this sampling schedule.
 ### 2.1 Circuit with sampling barriers
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit.circuit import QuantumCircuit
 
 layer_qubits = 5
@@ -162,9 +153,6 @@ Higher `num_traj` reduces Monte Carlo variance; `100` trajectories are often eno
 ### 2.3 Run and plot
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 layer_result = sim.run(layer_state, qc, layer_params, layer_noise)
 
 yaqs = np.vstack([np.real(v) for v in layer_result.expectation_values])
@@ -205,9 +193,6 @@ plt.show()
 Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import State, WeakSimParams
 
 qasm = """
@@ -240,9 +225,6 @@ OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.Equivalence
 Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both modes:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from qiskit.circuit import QuantumCircuit
 
 lr_qc = QuantumCircuit(3)

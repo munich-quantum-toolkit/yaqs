@@ -24,9 +24,6 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 **Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`Simulator.run`](mqt.yaqs.Simulator) — including in parameter loops.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import State
 
 preset = State(4, initial="x+")
@@ -50,9 +47,6 @@ Use `State` in [`Simulator.run`](mqt.yaqs.Simulator). Use [`MPS`](mqt.yaqs.core.
 | `density_matrix=`                     | Inferred `"density_matrix"`                                                    |
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 import numpy as np
 
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
@@ -68,9 +62,6 @@ Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`, `"Neel"`
 For **MCWF** or **Lindblad**, set `representation` on the `State` and call `Simulator.run` — no extra steps:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 neel_mcwf = State(4, initial="Neel", representation="vector")
 ```
 
@@ -91,9 +82,6 @@ Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
 ### MPS cores (`tensors=`)
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import MPS
 
 mps_ref = MPS(3, state="zeros")
@@ -105,9 +93,6 @@ spec = State(tensors=list(mps_ref.tensors))
 `length` is inferred when the Hilbert-space dimension is a power of two.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)  # |00>
 spec = State(vector=vec)
 ```
@@ -115,9 +100,6 @@ spec = State(vector=vec)
 ### Density matrix (`density_matrix=`)
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 rho = np.diag([1.0, 0.0, 0.0, 0.0]).astype(np.complex128)
 spec = State(density_matrix=rho)
 ```
@@ -137,9 +119,6 @@ Set **`representation` on `State`**, not on `AnalogSimParams`. [`Simulator.run`]
 ### Default: MPS / TJM
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import Hamiltonian, MPS, Simulator, AnalogSimParams, Observable
 
 sim = Simulator(show_progress=False)
@@ -162,9 +141,6 @@ result = sim.run(state_mps, H, params, noise_model=None)
 For guidance on choosing a representation, see {doc}`representation_comparison`.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 state_vec = State(L, initial="zeros", representation="vector")
 obs_vec = Observable("z", sites=[0])
 params_vec = AnalogSimParams(
@@ -180,9 +156,6 @@ result = sim.run(state_vec, H, params_vec, None)
 For guidance on choosing a representation, see {doc}`representation_comparison`.
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 state_dm = State(L, initial="zeros", representation="density_matrix")
 obs_dm = Observable("z", sites=[0])
 params_dm = AnalogSimParams(
@@ -200,9 +173,6 @@ See {doc}`representation_comparison` for a side-by-side comparison of the three 
 If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=` — representation is inferred:
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 psi = np.zeros(2**L, dtype=np.complex128)
 psi[0] = 1.0
 state_from_vec = State(vector=psi)

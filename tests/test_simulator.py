@@ -18,14 +18,8 @@ qubit counts.
 
 from __future__ import annotations
 
-import contextlib
-import importlib
-import multiprocessing
-import os
-import sys
 from typing import TYPE_CHECKING, Any, cast
 
-import numba
 import numpy as np
 import pytest
 import scipy.sparse
@@ -48,7 +42,7 @@ from mqt.yaqs import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
+from mqt.yaqs.simulator import _expect_shot_counts
 from tests.conftest import (
     LARGE_QASM2_STRING,
     SAMPLE_QASM3_STRING,
@@ -74,9 +68,18 @@ def test_simulator_defaults() -> None:
 
 
 def test_simulator_max_workers_resolution() -> None:
-    """An explicit ``max_workers`` is preserved as-is."""
+    """An explicit ``max_workers`` is preserved as-is and can be cleared."""
     sim = Simulator(max_workers=3)
     assert sim.max_workers == 3
+    sim.max_workers = None
+    assert sim.max_workers == Simulator().max_workers
+
+
+def test_simulator_retry_exceptions_setter() -> None:
+    """retry_exceptions can be reconfigured after construction."""
+    sim = Simulator()
+    sim.retry_exceptions = (ValueError,)
+    assert sim.retry_exceptions == (ValueError,)
 
 
 def test_simulator_parallel_serial_equivalence() -> None:
@@ -149,107 +152,6 @@ def test_simulator_run_returns_result() -> None:
 def test_simulator_module_does_not_export_run() -> None:
     """The free ``simulator.run`` function has been removed in favour of :class:`Simulator`."""
     assert not hasattr(simulator, "run"), "simulator.run should be removed; use Simulator.run instead."
-
-
-def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Path 1: SLURM_CPUS_ON_NODE *not* set.
-
-    Should return multiprocessing.cpu_count().
-    """
-    # Ensure the env vars are absent
-    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
-
-    assert simulator.available_cpus() == multiprocessing.cpu_count()
-
-
-def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Path 2: SLURM_CPUS_ON_NODE is set.
-
-    Should return that exact value.
-    """
-    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
-    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
-
-    # Reload the module only if available_cpus caches anything at import;
-    # here it's not necessary, but harmless:
-    importlib.reload(simulator)
-
-    assert simulator.available_cpus() == 8
-
-
-def test_available_cpus_yaqs_max_workers_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The ``YAQS_MAX_WORKERS`` env var takes priority over xdist/SLURM/affinity."""
-    monkeypatch.setenv("YAQS_MAX_WORKERS", "4")
-    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
-    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "1")
-    assert simulator.available_cpus() == 4
-
-
-def test_available_cpus_yaqs_max_workers_malformed_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A malformed ``YAQS_MAX_WORKERS`` is ignored; later detection logic runs."""
-    monkeypatch.setenv("YAQS_MAX_WORKERS", "not-a-number")
-    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
-    assert simulator.available_cpus() == 1
-
-
-def test_available_cpus_xdist_worker_returns_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Running inside an xdist worker pins ``available_cpus`` to 1."""
-    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
-    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
-    assert simulator.available_cpus() == 1
-
-
-def test_available_cpus_slurm_malformed_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Malformed SLURM_* values are ignored; the function falls back to affinity/cpu_count."""
-    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
-    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "not-a-number")
-    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "0")
-    assert simulator.available_cpus() >= 1
-
-
-def test_threading_config() -> None:
-    """Verify correct multiprocessing context and Numba threading configuration."""
-    # 1. Context Selection
-    ctx = _get_parallel_context()
-    if sys.platform == "linux":
-        # On Linux, we expect fork
-        assert ctx.get_start_method() == "fork"
-    else:
-        # On Windows (win32) and macOS (darwin), we expect spawn
-        assert ctx.get_start_method() == "spawn"
-
-    # 2. Worker Initialization Logic
-    # Verify _worker_init caps Numba threads
-
-    # Save current state
-    original_numba_threads = numba.get_num_threads()
-    # Save environment variables that _limit_worker_threads modified
-    env_snapshot = os.environ.copy()
-
-    try:
-        # Simulate worker init with strict thread cap
-        worker_init({}, n_threads=1)
-
-        # Check if Numba threads are set to 1
-        assert numba.get_num_threads() == 1
-        # Check if env var is set (best effort)
-        assert os.environ.get("NUMBA_NUM_THREADS") == "1"
-
-    finally:
-        # Restore environment variables before touching the Numba runtime pool.
-        for key in list(os.environ):
-            if key not in env_snapshot:
-                del os.environ[key]
-
-        for key, value in env_snapshot.items():
-            if os.environ.get(key) != value:
-                os.environ[key] = value
-
-        with contextlib.suppress(Exception):
-            numba.set_num_threads(original_numba_threads)
 
 
 def test_analog_simulation() -> None:
@@ -1542,26 +1444,6 @@ def test_circuit_simulation_rejects_non_state_initial_state() -> None:
     bad_state = cast("Any", MPS(2, state="zeros"))
     with pytest.raises(TypeError, match="Circuit simulation requires a State initial_state"):
         Simulator(show_progress=False).run(bad_state, circuit, params, None)
-
-
-def test_get_parallel_context_explicit_fork_and_spawn() -> None:
-    """Explicit ``mp_context`` overrides platform auto-detection.
-
-    ``spawn`` is available on all supported platforms. ``fork`` is only
-    registered where the interpreter exposes it (e.g. Linux); on Windows
-    :func:`multiprocessing.get_context` raises ``ValueError``.
-    """
-    spawn_ctx = _get_parallel_context("spawn")
-    assert spawn_ctx.get_start_method() == "spawn"
-
-    try:
-        multiprocessing.get_context("fork")
-    except ValueError:
-        with pytest.raises(ValueError, match="cannot find context"):
-            _get_parallel_context("fork")
-    else:
-        fork_ctx = _get_parallel_context("fork")
-        assert fork_ctx.get_start_method() == "fork"
 
 
 def test_expect_shot_counts_rejects_non_dict() -> None:

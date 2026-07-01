@@ -48,9 +48,6 @@ state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim
 ## 2. Noiseless evolution to $T/2$
 
 ```{code-cell} ipython3
----
-tags: [remove-output]
----
 from mqt.yaqs import AnalogSimParams, Simulator
 
 params = AnalogSimParams(
@@ -65,7 +62,7 @@ params = AnalogSimParams(
     sample_timesteps=False,
 )
 
-result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, params)
+result = Simulator(show_progress=False).run(state, hamiltonian, params)
 final_state = result.output_state.vector
 final_x = float(np.sum(positions * np.abs(final_state) ** 2))
 ```

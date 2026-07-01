@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mqt-yaqs"
-description = "Scalable simulation for open systems, noisy circuits, and realistic hardware"
+description = "Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -55,6 +55,12 @@ dependencies = [
 
 [project.optional-dependencies]
 qasm3 = ["qiskit-qasm3-import>=0.4.1"]
+torch = [
+    "torch>=2.0; python_version < '3.12'",
+    "torch>=2.2; python_version == '3.12'",
+    "torch>=2.4; python_version == '3.13'",
+    "torch>=2.9; python_version >= '3.14'",
+]
 
 [project.urls]
 Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
@@ -109,9 +115,14 @@ run.disable_warnings = [
 # Error if ty emits any warning-level diagnostics.
 error-on-warning = true
 
+[tool.ty.analysis]
+# torch is an optional extra; ty runs with --isolated in pre-commit.
+allowed-unresolved-imports = ["torch.**"]
+
 [tool.ty.src]
 exclude = [
     "docs/**",
+    "experiments/**",
 ]
 
 
@@ -144,6 +155,7 @@ preview = true
 fix = true
 unsafe-fixes = true
 show-fixes = true
+extend-exclude = ["experiments"]
 
 [tool.ruff.format]
 preview = true
@@ -208,6 +220,10 @@ docs = [
     "sphinxext-opengraph>=0.13.0",
     "sphinx-reredirects>=0.1.5",
     "qiskit[visualization]>=1.0.0",
+    "torch>=2.0; python_version < '3.12'",
+    "torch>=2.2; python_version == '3.12'",
+    "torch>=2.4; python_version == '3.13'",
+    "torch>=2.9; python_version >= '3.14'",
 ]
 dev = [
     {include-group = "test"},
