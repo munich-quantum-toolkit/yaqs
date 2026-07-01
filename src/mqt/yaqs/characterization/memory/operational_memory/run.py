@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
 
 import numpy as np
 
@@ -59,11 +59,11 @@ OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbes | SupportsEvaluateP
 Implement **either** :meth:`evaluate_probes_weighted` (simulation trace weights, e.g.
 :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
 :meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
-:func:`evaluate_probes_weighted_for` dispatches to the implemented method.
+:func:`evaluate_probes_with_weights` dispatches to the implemented method.
 """
 
 
-def evaluate_probes_weighted_for(
+def evaluate_probes_with_weights(
     process: OperationalMemoryBackend,
     probe_set: ProbeSet,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -232,16 +232,17 @@ def _evaluate_operational_memory_probes(
         and (intervention_steps_list is not None or execution_override is not None)
     )
     if not use_exact_weighted:
-        return evaluate_probes_weighted_for(process, sim_probe_set)
+        return evaluate_probes_with_weights(process, sim_probe_set)
     eval_kwargs: dict[str, Any] = {}
     if intervention_steps_list is not None:
         eval_kwargs["intervention_steps_list"] = intervention_steps_list
     if execution_override is not None:
         eval_kwargs["_execution"] = execution_override
-    return process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
+    weighted_process = cast("SupportsEvaluateProbesWeighted", process)
+    return weighted_process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
 
 
-def run_operational_memory(
+def run_memory_characterization(
     *,
     process: OperationalMemoryBackend,
     cut: int,
@@ -286,6 +287,9 @@ def run_operational_memory(
     exact_backend_cls = _exact_backend_cls_if_needed(delay=delay, parallel=parallel)
     execution_override: ExecutionConfig | None = None
     if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
+        from ..backends.exact import ExactBackend  # noqa: PLC0415
+
+        assert isinstance(process, ExactBackend)
         execution_override = process.execution_config(parallel=parallel)
     if probe_set is not None:
         _validate_probe_set_geometry(probe_set, cut=cut, num_interventions=num_interventions)

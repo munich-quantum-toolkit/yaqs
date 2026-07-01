@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Surrogate training traces: one simulated sequence and batch stacking.
+"""Surrogate training records: one simulated sequence and batch stacking.
 
 Used by :mod:`mqt.yaqs.characterization.memory.backends.surrogates.workflow` and benchmarks that
 simulate intervention sequences.
@@ -20,7 +20,7 @@ import numpy as np
 
 
 @dataclass(frozen=True)
-class SeqTrace:
+class SequenceRecord:
     """One simulated intervention **sequence** with per-step reduced states.
 
     ``rho_seq[t]`` is the reduced state on site 0 **after** intervention ``t`` and the
@@ -46,15 +46,15 @@ class SeqTrace:
     weight: float
 
 
-def stack_traces(
-    samples: list[SeqTrace],
+def stack_sequence_records(
+    samples: list[SequenceRecord],
     *,
     append_context_to_features: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
-    """Stack sequence traces into dense batch arrays.
+    """Stack sequence records into dense batch arrays.
 
     Args:
-        samples: List of :class:`SeqTrace` records.
+        samples: List of :class:`SequenceRecord` objects.
         append_context_to_features: If ``True`` and context is present, append it to every step
             feature row in ``E_features`` and return ``context=None``.
 
@@ -70,7 +70,7 @@ def stack_traces(
         ValueError: If ``samples`` is empty or context fields are mixed.
     """
     if not samples:
-        msg = "stack_traces requires at least one SeqTrace."
+        msg = "stack_sequence_records requires at least one SequenceRecord."
         raise ValueError(msg)
     rho_0 = np.stack([s.rho_0 for s in samples], axis=0).astype(np.float32)
     e_features = np.stack([s.E_features for s in samples], axis=0).astype(np.float32)
@@ -78,7 +78,7 @@ def stack_traces(
     ctx = None
     has_context = [s.context is not None for s in samples]
     if any(has_context) and not all(has_context):
-        msg = "SeqTrace.context must be present for all samples or for none."
+        msg = "SequenceRecord.context must be present for all samples or for none."
         raise ValueError(msg)
     if all(has_context):
         ctx = np.stack([cast("np.ndarray", s.context) for s in samples], axis=0).astype(np.float32)

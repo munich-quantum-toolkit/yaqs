@@ -11,9 +11,9 @@ Submodules:
 
 - :mod:`.samples` — :class:`ProbeSet`, :func:`sample_probes`
 - :mod:`.grid` — :func:`assemble_probe_sequence`, :func:`assemble_probe_grid`
-- :mod:`.branch_weights` — :func:`compute_branch_weights`, :func:`compute_trace_weights`
+- :mod:`.branch_weights` — :func:`compute_branch_weights`, :func:`compute_branch_weights_from_simulation`
 - :mod:`.response_matrix` — weighted assembly and :func:`compute_spectrum`
-- :mod:`.run` — :func:`run_operational_memory`, :class:`OperationalMemoryBackend`
+- :mod:`.run` — :func:`run_memory_characterization`, :class:`OperationalMemoryBackend`
 - :mod:`.results` — :class:`CharacterizationResult`
 
 User code should use :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer` only.

@@ -162,7 +162,7 @@ def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
     """Build one per-cut result entry from a probe-process output dict.
 
     Args:
-        out: Output of :func:`~mqt.yaqs.characterization.memory.operational_memory.run.run_operational_memory`.
+        out: Output of :func:`~mqt.yaqs.characterization.memory.operational_memory.run.run_memory_characterization`.
         cut: Causal cut index.
 
     Returns:

@@ -76,13 +76,13 @@ flowchart LR
 
 ### Characterization
 
-| I want to…                                             | Read                                           |
-| ------------------------------------------------------ | ---------------------------------------------- |
-| Characterize operational memory (start here)           | {doc}`examples/characterization`               |
-| Study reset delay at the causal cut                    | {ref}`Reset delay <reset-delay>` in {doc}`examples/characterization` |
-| Predict dynamics with a trained surrogate              | {doc}`examples/characterization`                                     |
+| I want to…                                             | Read                                                                       |
+| ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Characterize operational memory (start here)           | {doc}`examples/characterization`                                           |
+| Study reset delay at the causal cut                    | {ref}`Reset delay <reset-delay>` in {doc}`examples/characterization`       |
+| Predict dynamics with a trained surrogate              | {doc}`examples/characterization`                                           |
 | Tune surrogate training or read response-matrix theory | {ref}`Theory <response-matrix-theory>` in {doc}`examples/characterization` |
-| Reference dynamics at small `num_interventions`        | {doc}`examples/reference_process_tensors`      |
+| Reference dynamics at small `num_interventions`        | {doc}`examples/reference_process_tensors`                                  |
 
 ```{toctree}
 :caption: Getting started

@@ -7,8 +7,8 @@
 
 """Neural surrogate module: :class:`ProcessTensorSurrogate` only.
 
-Training data containers (:class:`~mqt.yaqs.characterization.memory.backends.surrogates.data.SeqTrace`,
-:func:`~mqt.yaqs.characterization.memory.backends.surrogates.data.stack_traces`) live in
+Training data containers (:class:`~mqt.yaqs.characterization.memory.backends.surrogates.data.SequenceRecord`,
+:func:`~mqt.yaqs.characterization.memory.backends.surrogates.data.stack_sequence_records`) live in
 :mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
 
 Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.memory.shared.metrics`.
@@ -258,7 +258,7 @@ class ProcessTensorSurrogate(nn.Module):
         return int(self.num_interventions)
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe responses for :func:`run_operational_memory`.
+        """Evaluate split-cut probe responses for :func:`run_memory_characterization`.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.

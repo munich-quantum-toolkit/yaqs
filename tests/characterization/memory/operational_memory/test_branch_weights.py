@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box tests import private branch-weight helpers
+
 """Tests for branch-weight parity (paper benchmark weighting)."""
 
 from __future__ import annotations
@@ -14,8 +16,8 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    compute_branch_weight,
-    compute_trace_weights,
+    _compute_branch_weight_for_sequence,
+    compute_branch_weights_from_simulation,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.intervention_steps import compute_born_probability
@@ -81,7 +83,7 @@ def test_dict_step_branch_weight_cut_measurement() -> None:
         {"type": "cut_measurement", "psi_meas": _Z},
         {"type": "cut_preparation", "psi_prep": _Z},
     ]
-    assert compute_branch_weight(steps, cut=2) == pytest.approx(1.0)
+    assert _compute_branch_weight_for_sequence(steps, cut=2) == pytest.approx(1.0)
 
 
 def test_cut_measurement_without_reset_projects_onto_measurement() -> None:
@@ -91,7 +93,7 @@ def test_cut_measurement_without_reset_projects_onto_measurement() -> None:
         {"type": "cut_measurement", "psi_meas": plus},
         {"type": "cut_measurement", "psi_meas": _Z},
     ]
-    assert compute_branch_weight(steps, cut=2) == pytest.approx(0.25)
+    assert _compute_branch_weight_for_sequence(steps, cut=2) == pytest.approx(0.25)
 
 
 _PSI0_L2 = np.zeros(4, dtype=np.complex128)
@@ -123,13 +125,13 @@ def test_trace_weights_match_cumulative_final_split_cut_unitary() -> None:
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),
     )
-    w_trace = compute_trace_weights(
+    w_sim = compute_branch_weights_from_simulation(
         traces,
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),
         cut=probe_set.cut,
     )
-    np.testing.assert_allclose(w_trace, weights_cut, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(w_sim, weights_cut, rtol=1e-10, atol=1e-12)
     np.testing.assert_allclose(w_cumulative, weights_cut, rtol=1e-10, atol=1e-12)
 
 

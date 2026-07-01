@@ -131,14 +131,14 @@ def _make_minimal_probe_set(*, cut: int = 1, num_interventions: int = 1, n_p: in
     )
 
 
-def test_exact_run_operational_memory_hides_static_ctx_parameter() -> None:
+def test_exact_run_memory_characterization_hides_static_ctx_parameter() -> None:
     """ExactBackend builds static context internally instead of exposing it."""
     sig = inspect.signature(ExactBackend.__init__)
     assert "static_ctx" not in sig.parameters
     assert "initial_psi" in sig.parameters
 
 
-def test_exact_run_operational_memory_builds_static_ctx_internally(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exact_run_memory_characterization_builds_static_ctx_internally(monkeypatch: pytest.MonkeyPatch) -> None:
     """ExactBackend wires make_mcwf_static_context and simulate_sequences internally."""
     calls: dict[str, Any] = {}
 
@@ -217,7 +217,7 @@ def test_exact_backend_rejects_invalid_solver() -> None:
         validate_stochastic_solver("typo")
 
 
-def test_exact_run_operational_memory_parallel_smoke() -> None:
+def test_exact_run_memory_characterization_parallel_smoke() -> None:
     """ExactBackend completes a tiny parallel rollout batch."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     sim = AnalogSimParams(dt=0.1)

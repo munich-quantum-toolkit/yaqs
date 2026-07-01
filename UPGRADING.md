@@ -133,34 +133,6 @@ norm loss to MCWF jump probabilities under lowering noise.
   local matrix written for that pair order. If you pass reversed sites `[i+1, i]`, the matrix is
   transposed automatically to match the `(i, i+1)` leg order.
 
-### Characterization API
-
-The legacy `Characterizer` workflow is replaced by :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`:
-
-```python
-import numpy as np
-
-from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-
-mc = MemoryCharacterizer()
-ham = Hamiltonian.ising(length=2, J=1.0, g=0.5)
-params = AnalogSimParams(dt=0.1)
-rho0 = np.eye(2, dtype=np.complex128) / 2.0
-sequence = "haar"
-
-model = mc.train(ham, params, num_interventions=4)  # surrogate training
-rho = mc.predict(model, rho0, sequence, num_interventions=4)  # fast dynamics
-pt = mc.build_process_tensor(ham, params, timesteps=[0.1])  # small-k reference
-result = mc.characterize(ham, params, cut=2, num_interventions=4)  # operational memory S_V(c)
-```
-
-| Legacy intent                  | Replacement                                               |
-| ------------------------------ | --------------------------------------------------------- |
-| Train surrogate                | `mc.train(...)`                                           |
-| Predict dynamics               | `mc.predict(model, ...)` or `mc.predict(pt, ...)`         |
-| Build reference process tensor | `mc.build_process_tensor(...)`                            |
-| Memory metrics                 | `mc.characterize(target, cut=..., num_interventions=...)` |
-
 ### Top-level public API
 
 ```python

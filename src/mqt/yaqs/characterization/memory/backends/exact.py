@@ -15,7 +15,7 @@ import numpy as np
 
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
-from ..operational_memory.branch_weights import compute_trace_weights
+from ..operational_memory.branch_weights import compute_branch_weights_from_simulation
 from ..operational_memory.grid import assemble_probe_grid
 from ..shared.encoding import decode_packed_pauli_batch
 from ..shared.utils import StochasticSolver, make_mcwf_static_context, validate_stochastic_solver
@@ -218,5 +218,5 @@ def simulate_exact(
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
     pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
-    w = compute_trace_weights(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
+    w = compute_branch_weights_from_simulation(traces, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
     return pauli_xyz, w, traces

@@ -26,7 +26,7 @@ from mqt.yaqs.characterization.memory.operational_memory.results import (
     merge_cut_results,
     pack_result,
 )
-from mqt.yaqs.characterization.memory.operational_memory.run import run_operational_memory
+from mqt.yaqs.characterization.memory.operational_memory.run import run_memory_characterization
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.encoding import (
     coerce_rho_matrix,
@@ -99,14 +99,14 @@ def _resolve_probe_grid(
     )
 
 
-def _resolve_probe_bundle(probe_set: Any) -> ProbeSet | None:
-    """Accept a prior :class:`CharacterizationResult` or internal probe bundle.
+def _coerce_probe_set(probe_set: Any) -> ProbeSet | None:
+    """Normalize ``probe_set=`` input for :meth:`MemoryCharacterizer.characterize`.
 
     Args:
-        probe_set: ``None``, a :class:`CharacterizationResult`, or an internal probe set.
+        probe_set: ``None``, a :class:`CharacterizationResult`, or a :class:`ProbeSet`.
 
     Returns:
-        Internal probe bundle, or ``None``.
+        :class:`ProbeSet` to reuse, or ``None`` to sample fresh probes.
 
     Raises:
         ValueError: If a prior result has no reusable probes or multiple cuts.
@@ -413,10 +413,10 @@ class MemoryCharacterizer:
         """
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
-            sample_train_dataset as _sample_train_dataset,
+            build_training_dataset as _build_training_dataset,
         )
 
-        return _sample_train_dataset(
+        return _build_training_dataset(
             operator,
             sim_params,
             num_interventions=num_interventions,
@@ -567,7 +567,7 @@ class MemoryCharacterizer:
             n_futures: Override number of future probes.
             intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
-            probe_set: Prior :class:`CharacterizationResult` or internal probe bundle to reuse.
+            probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
             parallel: Override parallelism for process-tensor/surrogate probing.
             delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
@@ -588,7 +588,7 @@ class MemoryCharacterizer:
             msg = "Use intervention_style= instead of intervention_mode= / unitary_ensemble=."
             raise ValueError(msg)
         resolved_style = normalize_style(probe_kwargs.get("intervention_style", intervention_style))
-        resolved_probe_set = _resolve_probe_bundle(probe_set)
+        resolved_probe_set = _coerce_probe_set(probe_set)
 
         if delay > 0 and not _matches_hamiltonian(target):
             msg = "delay > 0 is supported for Hamiltonian characterize() only."
@@ -772,7 +772,7 @@ class MemoryCharacterizer:
             Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
         """
         resolved_cut = _default_cut(int(num_interventions), cut)
-        out = run_operational_memory(
+        out = run_memory_characterization(
             process=target,
             cut=resolved_cut,
             num_interventions=int(num_interventions),
@@ -847,7 +847,7 @@ class MemoryCharacterizer:
                     rng=local_rng,
                     intervention_style=intervention_style,
                 )
-            out = run_operational_memory(
+            out = run_memory_characterization(
                 process=backend,
                 cut=resolved_cut,
                 num_interventions=int(num_interventions),

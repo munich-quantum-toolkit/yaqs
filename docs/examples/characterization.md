@@ -135,6 +135,7 @@ print(f"S_V = {memory.entropy(1):.4f}, R = {memory.modes(1):.3f}")
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
 
 (reset-delay)=
+
 ### Reset delay at the causal break
 
 Pass `delay=N` to insert `N` soft-reset slots `(|0>, |0>)` at the causal cut.
@@ -218,6 +219,7 @@ print(ref.summary())
 With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (default 10).
 
 (response-matrix-theory)=
+
 ## Theory: response matrix construction
 
 Operational memory quantifies how many independent ways the conditioned past remains visible in accessible future responses across a temporal cut `c`.
@@ -299,14 +301,16 @@ User code should call :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer
 
 | Path                   | Role                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `operational_memory/`  | Split-cut protocol: `sample_probes`, `assemble_probe_grid`, `run_operational_memory`                |
+| `operational_memory/`  | Split-cut protocol: `sample_probes`, `assemble_probe_grid`, `run_memory_characterization`           |
 | `shared/`              | Choi/rho encoding, `interventions`, intervention-step helpers, site-0 MCWF/TJM utilities            |
 | `backends/exact.py`    | :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` for Hamiltonian characterize |
 | `backends/tomography/` | Reference dense/MPO process tensors                                                                 |
 | `backends/sequences/`  | `simulate_sequences`, pool workers for the unified process-tensor schedule                          |
-| `backends/surrogates/` | `ProcessTensorSurrogate`, `SeqTrace` training traces, `sample_train_dataset`                        |
+| `backends/surrogates/` | `ProcessTensorSurrogate`, `SequenceRecord` training records, `build_training_dataset`               |
 
 Verb-first naming is used throughout (`compute_*`, `assemble_*`, `simulate_*`, `encode_*`).
+
+A **sequence record** is one simulated intervention sequence with per-step reduced states. It is not a partial trace (reduced density matrix) nor a single stochastic **trajectory** under a noise model.
 
 ## Related topics
 

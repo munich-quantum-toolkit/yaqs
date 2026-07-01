@@ -233,7 +233,7 @@ def _copy_initial_backend_state(state: np.ndarray | MPS) -> np.ndarray | MPS:
     return copy.deepcopy(state)
 
 
-def _process_tensor_schedule_durations_ops_ctx(
+def _schedule_slots_for_sequence(
     *,
     sequence_idx: int,
     num_interventions: int,
@@ -341,7 +341,7 @@ def _simulate_seq_core(
     step_params.get_state = True
 
     num_interventions = len(intervention_steps)
-    durs, ops, mcwf_ctxs = _process_tensor_schedule_durations_ops_ctx(
+    durs, ops, mcwf_ctxs = _schedule_slots_for_sequence(
         sequence_idx=sequence_idx,
         num_interventions=num_interventions,
         timesteps=timesteps,
@@ -542,7 +542,7 @@ def _seq_trace_worker(
         num_steps=num_steps,
     )
 
-    durs, ops, mcwf_ctxs = _process_tensor_schedule_durations_ops_ctx(
+    durs, ops, mcwf_ctxs = _schedule_slots_for_sequence(
         sequence_idx=sequence_idx,
         num_interventions=num_steps,
         timesteps=timesteps,

@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
+    build_training_dataset,
     pack_dataset,
-    sample_train_dataset,
     train_surrogate_model,
 )
 from mqt.yaqs.characterization.memory.shared.encoding import extract_ket, unpack_rho8
@@ -48,14 +48,14 @@ def test_pack_dataset_shapes() -> None:
     assert ds.tensors[0].dtype == torch.float32
 
 
-def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
-    """End-to-end sample_train_dataset and train_surrogate_model run on a tiny Ising chain."""
+def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
+    """End-to-end build_training_dataset and train_surrogate_model run on a tiny Ising chain."""
     torch = pytest.importorskip("torch")
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
-    ds = sample_train_dataset(
+    ds = build_training_dataset(
         op,
         params,
         num_interventions=1,
@@ -85,13 +85,13 @@ def test_sample_train_dataset_and_train_surrogate_model_tiny_smoke() -> None:
     assert tuple(out.shape) == tuple(tgt.shape)
 
 
-def test_sample_train_dataset_timesteps_length_mismatch_raises() -> None:
-    """sample_train_dataset enforces process-tensor schedule length num_interventions+1."""
+def test_build_training_dataset_timesteps_length_mismatch_raises() -> None:
+    """build_training_dataset enforces process-tensor schedule length num_interventions+1."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
 
     with pytest.raises(ValueError, match="Process-tensor schedule: timesteps length must be num_interventions\\+1"):
-        sample_train_dataset(op, params, num_interventions=2, n=1, timesteps=[0.1])
+        build_training_dataset(op, params, num_interventions=2, n=1, timesteps=[0.1])
 
 
 def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
@@ -112,7 +112,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     k = 2
     n = 60
     # Fixed rank-1 leg intervention for a stable accuracy benchmark (independent of train default).
-    ds = sample_train_dataset(
+    ds = build_training_dataset(
         op,
         params,
         num_interventions=k,
@@ -159,10 +159,10 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     assert compute_trace_distance(rho_pred, rho_true) < 0.5
 
 
-def test_sample_train_dataset_requires_torch_before_simulation(
+def test_build_training_dataset_requires_torch_before_simulation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """sample_train_dataset fails fast when torch is unavailable."""
+    """build_training_dataset fails fast when torch is unavailable."""
     import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
 
     def _raise_import() -> None:
@@ -173,4 +173,4 @@ def test_sample_train_dataset_requires_torch_before_simulation(
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
     with pytest.raises(ImportError):
-        sample_train_dataset(op, params, num_interventions=1, n=1, parallel=False, show_progress=False)
+        build_training_dataset(op, params, num_interventions=1, n=1, parallel=False, show_progress=False)

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Analytic and trace-based branch weights for operational memory."""
+"""Analytic and simulation-based branch weights for operational memory."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .samples import ProbeSet
 
 
-def compute_branch_weight(steps: list[Any], *, cut: int) -> float:
+def _compute_branch_weight_for_sequence(steps: list[Any], *, cut: int) -> float:
     """Compute analytic branch weight from step probabilities up to ``cut``.
 
     Args:
@@ -60,13 +60,13 @@ def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
     cut = probe_set.cut
     w = np.empty((n_pasts, n_futures), dtype=np.float64)
     for i in range(n_pasts):
-        w_i = compute_branch_weight(assemble_probe_sequence(probe_set, i, 0), cut=cut)
+        w_i = _compute_branch_weight_for_sequence(assemble_probe_sequence(probe_set, i, 0), cut=cut)
         w[i, :] = w_i
     return w
 
 
-def compute_trace_weights(
-    traces: list[dict[str, Any]],
+def compute_branch_weights_from_simulation(
+    simulation_diagnostics: list[dict[str, Any]],
     *,
     n_pasts: int,
     n_futures: int,
@@ -75,7 +75,7 @@ def compute_trace_weights(
     """Compute branch weights from simulated step probabilities through ``cut``.
 
     Args:
-        traces: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
+        simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
         cut: Causal cut index.
@@ -86,7 +86,7 @@ def compute_trace_weights(
     w = np.zeros((n_pasts, n_futures), dtype=np.float64)
     for past_idx in range(n_pasts):
         for future_idx in range(n_futures):
-            probs = traces[past_idx * n_futures + future_idx]["step_probs"]
+            probs = simulation_diagnostics[past_idx * n_futures + future_idx]["step_probs"]
             n = min(cut, len(probs))
             w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
     return w

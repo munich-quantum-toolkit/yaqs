@@ -7,7 +7,7 @@
 
 """Neural surrogates for operational-memory dynamics.
 
-Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.sample_train_dataset`
+Public workflow API: :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.build_training_dataset`
 (returns :class:`~torch.utils.data.TensorDataset`) and
 :func:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow.train_surrogate_model`.
 :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate` holds the network and

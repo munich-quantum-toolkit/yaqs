@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added memory characterization module for analyzing non-Markovian processes ([#482]) ([**@aaronleesander**])
 - added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
 - added orthogonality center tracking ([#477]) ([**@aaronleesander**])
 - extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
@@ -145,6 +146,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
 [#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
 [#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
 [#479]: https://github.com/munich-quantum-toolkit/yaqs/pull/479

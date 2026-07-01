@@ -52,7 +52,7 @@ from ...shared.utils import (
 )
 from ..sequences.workers import (
     _get_times_cached,
-    _process_tensor_schedule_durations_ops_ctx,
+    _schedule_slots_for_sequence,
     _seq_final_worker,
     _validate_process_tensor_schedule_inputs,
 )
@@ -123,7 +123,7 @@ def _reference_initial_rho(
     if solver == "MCWF":
         mcwf_static_ctx = make_mcwf_static_context(operator, local_params, noise_model=noise_model)
 
-    durs, ops, ctxs = _process_tensor_schedule_durations_ops_ctx(
+    durs, ops, ctxs = _schedule_slots_for_sequence(
         sequence_idx=0,
         num_interventions=num_interventions,
         timesteps=timesteps,

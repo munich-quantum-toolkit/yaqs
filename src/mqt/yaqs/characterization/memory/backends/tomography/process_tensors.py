@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -17,7 +17,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import DEFAULT_INITIAL_RHO0, encode_rho_pauli
-from ...shared.intervention_steps import build_intervention_operator
+from ...shared.intervention_steps import AnyInterventionStep, build_intervention_operator
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,11 +50,8 @@ def validate_initial_rho(
         raise ValueError(msg)
 
 
-AnyInput = dict[str, Any] | tuple[Any, Any]
-
-
 def convert_probe_callable(
-    step: AnyInput,
+    step: AnyInterventionStep,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
     """Convert a probe-grid step to a CPTP map callable for :meth:`DenseProcessTensor.predict`.
 

@@ -18,8 +18,8 @@ from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
     _copy_initial_backend_state,
     _get_times_cached,
-    _process_tensor_schedule_durations_ops_ctx,
     _reshape_choi_feature_rows,
+    _schedule_slots_for_sequence,
     _validate_process_tensor_schedule_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
@@ -210,10 +210,10 @@ def test_validate_process_tensor_schedule_inputs_per_sequence_schedules() -> Non
         )
 
 
-def test_process_tensor_schedule_durations_ops_ctx_uses_per_sequence_rows() -> None:
+def test_schedule_slots_for_sequence_uses_per_sequence_rows() -> None:
     """Per-sequence duration rows override the shared process-tensor schedule."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
-    durs, ops, ctxs = _process_tensor_schedule_durations_ops_ctx(
+    durs, ops, ctxs = _schedule_slots_for_sequence(
         sequence_idx=0,
         num_interventions=1,
         timesteps=[0.1, 0.2],

@@ -5,11 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Surrogate workflow: sample training data and train models.
+"""Surrogate workflow: build training data and train models.
 
-**Public API** (see ``__all__``): :func:`sample_train_dataset`, :func:`train_surrogate_model`.
+**Public API** (see ``__all__``): :func:`build_training_dataset`, :func:`train_surrogate_model`.
 
-:func:`sample_train_dataset` returns a :class:`~torch.utils.data.TensorDataset` for
+:func:`build_training_dataset` returns a :class:`~torch.utils.data.TensorDataset` for
 :meth:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate.fit`.
 
 Sequence simulation is delegated to
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 from ...shared.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_interventions
 from ...shared.utils import StochasticSolver, make_mcwf_static_context, resolve_stochastic_solver
 from ..sequences.workflow import simulate_sequences
-from .data import SeqTrace, stack_traces
+from .data import SequenceRecord, stack_sequence_records
 from .utils import sample_density_matrix, sample_initial_psi
 
 
@@ -62,7 +62,7 @@ def pack_dataset(
     e_features: np.ndarray,
     rho_seq: np.ndarray,
 ) -> TensorDataset:
-    """Pack sequence trace arrays into a PyTorch :class:`~torch.utils.data.TensorDataset`.
+    """Pack sequence records into a PyTorch :class:`~torch.utils.data.TensorDataset`.
 
     Args:
         rho0: Array of shape ``(N, 8)``.
@@ -82,7 +82,7 @@ def pack_dataset(
     )
 
 
-def sample_train_dataset(
+def build_training_dataset(
     operator: MPO,
     sim_params: AnalogSimParams,
     *,
@@ -98,13 +98,13 @@ def sample_train_dataset(
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     _execution: ExecutionConfig | None = None,
 ) -> TensorDataset:
-    """Sample intervention sequences and pack a surrogate training dataset.
+    """Simulate intervention sequences and pack a surrogate training dataset.
 
     Args:
         operator: Hamiltonian MPO. The chain length is inferred from ``operator.length``.
         sim_params: Analog simulation parameters.
         num_interventions: Number of intervention steps.
-        n: Number of sampled sequences.
+        n: Number of sequences to simulate.
         rng: Optional RNG (overrides ``seed`` if provided).
         seed: Optional seed used to create a default RNG.
         parallel: Whether to parallelize over sequences.
@@ -161,7 +161,7 @@ def sample_train_dataset(
         initial_psis.append(initial_psi)
 
     samples = cast(
-        "list[SeqTrace]",
+        "list[SequenceRecord]",
         simulate_sequences(
             operator=operator,
             sim_params=sim_params,
@@ -178,7 +178,7 @@ def sample_train_dataset(
             _execution=_execution,
         ),
     )
-    rho0_batch, features_batch, rho_seq_batch, _ctx = stack_traces(samples)
+    rho0_batch, features_batch, rho_seq_batch, _ctx = stack_sequence_records(samples)
     return pack_dataset(rho0_batch, features_batch, rho_seq_batch)
 
 
@@ -199,20 +199,20 @@ def train_surrogate_model(
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     _execution: ExecutionConfig | None = None,
 ) -> ProcessTensorSurrogate:
-    """Train a surrogate model end-to-end on simulated sequence traces.
+    """Train a surrogate model end-to-end on simulated sequence records.
 
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
         num_interventions: Number of intervention steps.
-        n: Number of sampled sequences.
+        n: Number of sequences to simulate for training.
         seed: Seed used for data generation RNG.
         parallel: Whether to parallelize data generation.
         show_progress: Whether to show progress bars.
-        timesteps: Optional per-step durations passed to :func:`sample_train_dataset`.
-        init_mode: Initial-state sampling mode passed to :func:`sample_train_dataset`.
-        solver: Optional stochastic solver override passed to :func:`sample_train_dataset`.
-        intervention_style: Training intervention style passed to :func:`sample_train_dataset`.
+        timesteps: Optional per-step durations passed to :func:`build_training_dataset`.
+        init_mode: Initial-state sampling mode passed to :func:`build_training_dataset`.
+        solver: Optional stochastic solver override passed to :func:`build_training_dataset`.
+        intervention_style: Training intervention style passed to :func:`build_training_dataset`.
         model_kwargs: Optional keyword arguments forwarded to :class:`ProcessTensorSurrogate`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`ProcessTensorSurrogate.fit`.
 
@@ -224,7 +224,7 @@ def train_surrogate_model(
     from .model import ProcessTensorSurrogate  # noqa: PLC0415
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
-    train_data = sample_train_dataset(
+    train_data = build_training_dataset(
         operator,
         sim_params,
         num_interventions=int(num_interventions),
@@ -253,4 +253,4 @@ def train_surrogate_model(
     return model
 
 
-__all__ = ["sample_train_dataset", "train_surrogate_model"]
+__all__ = ["build_training_dataset", "train_surrogate_model"]

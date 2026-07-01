@@ -21,7 +21,7 @@ from mqt.yaqs.core.parallel_utils import (
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.utils import StochasticSolver, resolve_stochastic_solver
-from ..surrogates.data import SeqTrace
+from ..surrogates.data import SequenceRecord
 from .workers import (
     _seq_final_worker,
     _seq_final_worker_diagnostics,
@@ -30,6 +30,8 @@ from .workers import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.mps import MPS
@@ -45,7 +47,7 @@ def simulate_sequences(
     sim_params: AnalogSimParams,
     timesteps: list[float],
     intervention_steps_list: list[list[Any]],
-    initial_psis: list[np.ndarray | MPS],
+    initial_psis: Sequence[np.ndarray | MPS],
     static_ctx: MCWFContext | None,
     parallel: bool = True,
     show_progress: bool = True,
@@ -58,7 +60,7 @@ def simulate_sequences(
     context_vec: np.ndarray | None = None,
     solver: StochasticSolver | None = None,
     _execution: ExecutionConfig | None = None,
-) -> list[SeqTrace] | np.ndarray | tuple[np.ndarray, list[dict[str, Any]]]:
+) -> list[SequenceRecord] | np.ndarray | tuple[np.ndarray, list[dict[str, Any]]]:
     """Simulate many intervention sequences in parallel.
 
     Args:
@@ -71,7 +73,7 @@ def simulate_sequences(
         static_ctx: Optional static backend context (MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
         show_progress: Whether to show a progress bar.
-        record_step_states: If ``True``, return per-step :class:`SeqTrace` records.
+        record_step_states: If ``True``, return per-step :class:`SequenceRecord` records.
         traced: If ``True``, return final packed states and per-sequence diagnostics
             (incompatible with ``record_step_states=True``).
         e_features_rows: Per-sequence Choi feature rows (required when ``record_step_states=True``).
@@ -84,7 +86,7 @@ def simulate_sequences(
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
-        - ``record_step_states=True``: list of :class:`SeqTrace`
+        - ``record_step_states=True``: list of :class:`SequenceRecord`
         - ``traced=True``: ``(final_packed, traces)`` with ``final_packed`` of shape ``(N, 8)``
         - otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states
 
@@ -201,10 +203,10 @@ def simulate_sequences(
         config=exec_cfg,
         desc="Simulating sequences (traces)",
     )
-    samples_by_index: list[SeqTrace | None] = [None] * num_sequences
+    samples_by_index: list[SequenceRecord | None] = [None] * num_sequences
     for worker_out in job_results.values():
         sequence_idx, _t, rho0, choi_mat, rho_seq, weight = worker_out
-        samples_by_index[sequence_idx] = SeqTrace(
+        samples_by_index[sequence_idx] = SequenceRecord(
             rho_0=rho0,
             E_features=choi_mat,
             rho_seq=rho_seq,
@@ -214,4 +216,4 @@ def simulate_sequences(
     if any(s is None for s in samples_by_index):
         msg = "Parallel sequence trace simulation incomplete."
         raise RuntimeError(msg)
-    return [cast("SeqTrace", s) for s in samples_by_index]
+    return [cast("SequenceRecord", s) for s in samples_by_index]
