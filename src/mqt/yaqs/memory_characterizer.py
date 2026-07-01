@@ -510,7 +510,6 @@ class MemoryCharacterizer:
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
         delay: int = 0,
-        **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
 
     @overload
@@ -530,7 +529,6 @@ class MemoryCharacterizer:
         probe_set: Any | None = None,
         parallel: bool | None = None,
         delay: int = 0,
-        **probe_kwargs: Any,
     ) -> CharacterizationResult: ...
 
     def characterize(

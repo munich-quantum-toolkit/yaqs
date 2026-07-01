@@ -617,7 +617,7 @@ def test_characterize_rejects_unknown_probe_kwargs(ham_and_params: tuple[Hamilto
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     with pytest.raises(ValueError, match="Unsupported probe_kwargs"):
-        mc.characterize(ham, params, num_interventions=2, cut=1, typo_style="haar")
+        mc.characterize(ham, params, num_interventions=2, cut=1, typo_style="haar")  # ty: ignore[no-matching-overload]
 
 
 def test_characterize_accepts_intervention_style_keyword(
