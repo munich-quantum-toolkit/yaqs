@@ -220,10 +220,6 @@ class DenseProcessTensor:
         """
         return self.upsilon
 
-    # NOTE: previously there was a `DenseProcessTensor.fit(...)` entry point here.
-    # The library now exposes only the exhaustive
-    # `build_process_tensor(...) -> SequenceData -> to_*_process_tensor()` path.
-
     def _num_interventions(self) -> int:
         """Infer number of intervention steps from the process-tensor matrix shape.
 
