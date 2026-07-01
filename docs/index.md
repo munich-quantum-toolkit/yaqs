@@ -56,27 +56,27 @@ flowchart LR
 
 ### Learning paths
 
-| I want to…                                                    | Read                                       |
-| ------------------------------------------------------------- | ------------------------------------------ |
-| Run my first simulation in under a minute                     | {doc}`examples/quickstart`                 |
-| Configure truncation, presets, and trajectories               | {doc}`examples/simulation_parameters`      |
-| Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …) | {doc}`examples/hamiltonians`               |
-| Simulate open-system (analog) dynamics with noise             | {doc}`examples/analog_simulation`          |
-| Model realistic noise (log-normal and other distributions)    | {doc}`examples/realistic_noise_models`     |
-| Define custom single-site jump operators                      | {doc}`examples/realistic_noise_models` § 6 |
-| Compare scalable MPS, MCWF, and Lindblad analog paths         | {doc}`examples/representation_comparison`  |
-| Two-time correlations and typicality ensembles                | {doc}`examples/ensemble_evolution`         |
-| Scheduled jumps at fixed times                                | {doc}`examples/scheduled_jumps`            |
-| Transmon–resonator SWAP (noiseless vs noisy)                  | {doc}`examples/transmon_emulation`         |
-| Trapped-ion position-grid dynamics                            | {doc}`examples/trapped_ion`                |
-| Characterize environmental memory effects via probing the process | {doc}`examples/characterization`           |
-| Study how long environmental memory persists in a system       | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
-| Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`   |
-| Validate predictions at short temporal horizons with exact references | {doc}`examples/memory_surrogate`           |
-| Simulate a noisy circuit and read observables                 | {doc}`examples/circuit_simulation`         |
-| Get hardware-like shot histograms                             | {doc}`examples/weak_circuit_simulation`    |
-| Verify two circuits are equivalent                            | {doc}`examples/equivalence_checking`       |
-| Custom gate translation                                       | {doc}`examples/custom_gates`               |
+| I want to…                                                                 | Read                                                                        |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Run my first simulation in under a minute                                  | {doc}`examples/quickstart`                                                  |
+| Configure truncation, presets, and trajectories                            | {doc}`examples/simulation_parameters`                                       |
+| Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
+| Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
+| Model realistic noise (log-normal and other distributions)                 | {doc}`examples/realistic_noise_models`                                      |
+| Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models` § 6                                  |
+| Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
+| Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
+| Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
+| Transmon–resonator SWAP (noiseless vs noisy)                               | {doc}`examples/transmon_emulation`                                          |
+| Trapped-ion position-grid dynamics                                         | {doc}`examples/trapped_ion`                                                 |
+| Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
+| Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
+| Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
+| Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
+| Simulate a noisy circuit and read observables                              | {doc}`examples/circuit_simulation`                                          |
+| Get hardware-like shot histograms                                          | {doc}`examples/weak_circuit_simulation`                                     |
+| Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
+| Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
 
 ```{toctree}
 :caption: Getting started
