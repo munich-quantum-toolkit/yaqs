@@ -193,7 +193,7 @@ To support this endeavor, please consider:
 
 - Starring and sharing our repositories: [https://github.com/munich-quantum-toolkit](https://github.com/munich-quantum-toolkit)
 - Contributing code, documentation, tests, or examples via issues and pull requests
-- Citing the MQT in your publications (see {doc}`References <references>`)
+- Citing the methods and software you use in your publications (see {doc}`References <references>`)
 - Using the MQT in research and teaching, and sharing feedback and use cases
 - Sponsoring us on GitHub: [https://github.com/sponsors/munich-quantum-toolkit](https://github.com/sponsors/munich-quantum-toolkit)
 
