@@ -16,7 +16,9 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import run_all_sequences
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def test_build_process_tensor_invalid_return_type_raises() -> None:
@@ -87,4 +89,31 @@ def test_build_process_tensor_validates_initial_rho_arg() -> None:
             timesteps=[0.0, 0.0],
             return_type="dense",
             initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
+        )
+
+
+def test_run_all_sequences_rejects_non_positive_num_trajectories_with_noise() -> None:
+    """Noisy tomography rejects zero or negative trajectory counts before reference-state work."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+    with pytest.raises(ValueError, match="num_trajectories must be positive"):
+        run_all_sequences(
+            op,
+            params,
+            [0.0, 0.0],
+            parallel=False,
+            num_trajectories=0,
+            noise_model=noise_model,
+            show_progress=False,
+        )
+    with pytest.raises(ValueError, match="num_trajectories must be non-negative"):
+        run_all_sequences(
+            op,
+            params,
+            [0.0, 0.0],
+            parallel=False,
+            num_trajectories=-3,
+            noise_model=noise_model,
+            show_progress=False,
         )

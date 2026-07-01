@@ -167,6 +167,18 @@ def test_reset_and_unitary_backend_helpers() -> None:
     assert u_default.shape == (2, 2)
 
 
+def test_cut_preparation_multi_qubit_reports_zero_projection_without_site0_support() -> None:
+    """Multi-qubit cut_preparation propagates vanishing |0> projection probability."""
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
+    vec = np.zeros(4, dtype=np.complex128)
+    vec[3] = 1.0
+
+    state_out, prob = _apply_cut_preparation_step(vec, plus, "MCWF", chain_length=2)
+
+    assert prob == pytest.approx(0.0)
+    assert isinstance(state_out, np.ndarray)
+
+
 def test_cut_preparation_soft_preserves_entanglement_on_two_qubits() -> None:
     """Multi-qubit cut_preparation reprepares site 0 without resetting other sites."""
     op = MPO.ising(length=2, J=1.0, g=1.0)

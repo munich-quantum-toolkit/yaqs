@@ -210,6 +210,12 @@ def run_all_sequences(
     if num_interventions <= 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
+    if int(num_trajectories) < 0:
+        msg = f"num_trajectories must be non-negative, got {num_trajectories}."
+        raise ValueError(msg)
+    if noise_model is not None and int(num_trajectories) == 0:
+        msg = "num_trajectories must be positive when noise_model is set."
+        raise ValueError(msg)
 
     initial_rho = _reference_initial_rho(
         operator,

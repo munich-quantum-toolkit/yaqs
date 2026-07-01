@@ -32,6 +32,7 @@ from .workers import (
 if TYPE_CHECKING:
     from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -44,7 +45,7 @@ def simulate_sequences(
     sim_params: AnalogSimParams,
     timesteps: list[float],
     intervention_steps_list: list[list[Any]],
-    initial_psis: list[np.ndarray],
+    initial_psis: list[np.ndarray | MPS],
     static_ctx: MCWFContext | None,
     parallel: bool = True,
     show_progress: bool = True,
@@ -66,7 +67,7 @@ def simulate_sequences(
         timesteps: Process-tensor schedule: ``num_interventions+1`` evolution durations per
             sequence when ``timesteps_rows`` is omitted.
         intervention_steps_list: One list of ``num_interventions`` intervention steps per sequence.
-        initial_psis: One initial state vector per sequence.
+        initial_psis: One initial backend state per sequence (dense vector or MPS).
         static_ctx: Optional static backend context (MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
         show_progress: Whether to show a progress bar.

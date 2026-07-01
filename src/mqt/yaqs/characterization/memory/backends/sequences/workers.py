@@ -31,6 +31,7 @@ from ...shared.utils import (
 if TYPE_CHECKING:
     from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.mps import MPS
 
 
 def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt: float, duration: float) -> np.ndarray:
@@ -78,7 +79,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 # and :func:`~mqt.yaqs.core.parallel_utils.unpack_flat_job`.
 #
 #   intervention_steps               list[list[step]] per sequence — MP tuple or unitary dict
-#   initial_psi             list of initial states (one per sequence)
+#   initial_psi             list of initial backend states (dense or MPS; one per sequence)
 #   num_trajectories        flat-index stride (1 when noise_model is None)
 #   operator, sim_params    Hamiltonian MPO and analog parameters
 #   timesteps               process-tensor schedule: ``num_interventions+1`` evolution segments
@@ -93,6 +94,87 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
 # ---------------------------------------------------------------------------
 # Process-tensor schedule — ``num_interventions`` interventions, ``num_interventions+1`` evolutions
 # ---------------------------------------------------------------------------
+def _validate_timesteps_rows_schedule(
+    intervention_steps_list: list[list[Any]],
+    timesteps_rows: list[list[float]],
+) -> None:
+    """Require per-sequence duration rows of length ``num_interventions + 1``.
+
+    Args:
+        intervention_steps_list: Per-sequence intervention step lists.
+        timesteps_rows: Per-sequence evolution durations.
+
+    Raises:
+        ValueError: If row counts do not match the number of sequences or intervention counts.
+    """
+    num_sequences = len(intervention_steps_list)
+    if len(timesteps_rows) != num_sequences:
+        msg = "`timesteps_rows` length must match number of sequences."
+        raise ValueError(msg)
+    for i, pairs in enumerate(intervention_steps_list):
+        n_interventions = len(pairs)
+        if len(timesteps_rows[i]) != n_interventions + 1:
+            msg = (
+                f"Sequence {i}: `timesteps_rows[{i}]` must have length "
+                f"num_interventions+1={n_interventions + 1}, got {len(timesteps_rows[i])}."
+            )
+            raise ValueError(msg)
+
+
+def _validate_operators_list_schedule(
+    intervention_steps_list: list[list[Any]],
+    operators_list: list[list[MPO]],
+) -> None:
+    """Require per-sequence operator lists of length ``num_interventions + 1``.
+
+    Args:
+        intervention_steps_list: Per-sequence intervention step lists.
+        operators_list: Per-sequence Hamiltonian MPO lists.
+
+    Raises:
+        ValueError: If operator list counts do not match the number of sequences or intervention counts.
+    """
+    num_sequences = len(intervention_steps_list)
+    if len(operators_list) != num_sequences:
+        msg = "`operators_list` length must match number of sequences."
+        raise ValueError(msg)
+    for i, pairs in enumerate(intervention_steps_list):
+        n_interventions = len(pairs)
+        if len(operators_list[i]) != n_interventions + 1:
+            msg = (
+                f"Sequence {i}: `operators_list[{i}]` must have length "
+                f"num_interventions+1={n_interventions + 1}, got {len(operators_list[i])}."
+            )
+            raise ValueError(msg)
+
+
+def _validate_static_ctx_list_schedule(
+    intervention_steps_list: list[list[Any]],
+    static_ctx_list: list[list[MCWFContext | None]],
+) -> None:
+    """Require per-sequence MCWF context lists of length ``num_interventions + 1``.
+
+    Args:
+        intervention_steps_list: Per-sequence intervention step lists.
+        static_ctx_list: Per-sequence MCWF context lists.
+
+    Raises:
+        ValueError: If context list counts do not match the number of sequences or intervention counts.
+    """
+    num_sequences = len(intervention_steps_list)
+    if len(static_ctx_list) != num_sequences:
+        msg = "`static_ctx_list` length must match number of sequences."
+        raise ValueError(msg)
+    for i, pairs in enumerate(intervention_steps_list):
+        n_interventions = len(pairs)
+        if len(static_ctx_list[i]) != n_interventions + 1:
+            msg = (
+                f"Sequence {i}: `static_ctx_list[{i}]` must have length "
+                f"num_interventions+1={n_interventions + 1}, got {len(static_ctx_list[i])}."
+            )
+            raise ValueError(msg)
+
+
 def _validate_process_tensor_schedule_inputs(
     *,
     intervention_steps_list: list[list[Any]],
@@ -102,6 +184,13 @@ def _validate_process_tensor_schedule_inputs(
     static_ctx_list: list[list[MCWFContext | None]] | None,
 ) -> None:
     """Require compatible lengths for the process-tensor schedule convention.
+
+    Args:
+        intervention_steps_list: Per-sequence intervention step lists.
+        timesteps: Shared evolution durations when ``timesteps_rows`` is omitted.
+        timesteps_rows: Optional per-sequence duration rows.
+        operators_list: Optional per-sequence Hamiltonian MPO lists.
+        static_ctx_list: Optional per-sequence MCWF context lists.
 
     Raises:
         ValueError: If sequence lengths or optional per-sequence schedules are inconsistent.
@@ -123,41 +212,25 @@ def _validate_process_tensor_schedule_inputs(
             )
             raise ValueError(msg)
     else:
-        if len(timesteps_rows) != num_sequences:
-            msg = "`timesteps_rows` length must match number of sequences."
-            raise ValueError(msg)
-        for i, pairs in enumerate(intervention_steps_list):
-            n_interventions = len(pairs)
-            if len(timesteps_rows[i]) != n_interventions + 1:
-                msg = (
-                    f"Sequence {i}: `timesteps_rows[{i}]` must have length "
-                    f"num_interventions+1={n_interventions + 1}, got {len(timesteps_rows[i])}."
-                )
-                raise ValueError(msg)
+        _validate_timesteps_rows_schedule(intervention_steps_list, timesteps_rows)
     if operators_list is not None:
-        if len(operators_list) != num_sequences:
-            msg = "`operators_list` length must match number of sequences."
-            raise ValueError(msg)
-        for i, pairs in enumerate(intervention_steps_list):
-            n_interventions = len(pairs)
-            if len(operators_list[i]) != n_interventions + 1:
-                msg = (
-                    f"Sequence {i}: `operators_list[{i}]` must have length "
-                    f"num_interventions+1={n_interventions + 1}, got {len(operators_list[i])}."
-                )
-                raise ValueError(msg)
+        _validate_operators_list_schedule(intervention_steps_list, operators_list)
     if static_ctx_list is not None:
-        if len(static_ctx_list) != num_sequences:
-            msg = "`static_ctx_list` length must match number of sequences."
-            raise ValueError(msg)
-        for i, pairs in enumerate(intervention_steps_list):
-            n_interventions = len(pairs)
-            if len(static_ctx_list[i]) != n_interventions + 1:
-                msg = (
-                    f"Sequence {i}: `static_ctx_list[{i}]` must have length "
-                    f"num_interventions+1={n_interventions + 1}, got {len(static_ctx_list[i])}."
-                )
-                raise ValueError(msg)
+        _validate_static_ctx_list_schedule(intervention_steps_list, static_ctx_list)
+
+
+def _copy_initial_backend_state(state: np.ndarray | MPS) -> np.ndarray | MPS:
+    """Return a backend-safe copy of an initial state (dense vector or MPS).
+
+    Args:
+        state: Initial MCWF state vector or TJM MPS.
+
+    Returns:
+        A copied dense array or deep-copied MPS suitable for in-place evolution.
+    """
+    if isinstance(state, np.ndarray):
+        return np.asarray(state, dtype=np.complex128).copy()
+    return copy.deepcopy(state)
 
 
 def _process_tensor_schedule_durations_ops_ctx(
@@ -255,13 +328,13 @@ def _simulate_seq_core(
     operators_list: list[list[MPO]] | None = worker_ctx.get("operators_list")
     mcwf_ctx_list: list[list[MCWFContext | None]] | None = worker_ctx.get("mcwf_static_ctx_list")
     noise_model = worker_ctx["noise_model"]
-    initial_states: list[np.ndarray] = worker_ctx["initial_psi"]
+    initial_states: list[np.ndarray | MPS] = worker_ctx["initial_psi"]
 
     if noise_model is None:
         assert int(worker_ctx["num_trajectories"]) == 1, "num_trajectories must be 1 when noise_model is None."
 
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
-    state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
+    state = _copy_initial_backend_state(initial_states[sequence_idx])
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
@@ -448,14 +521,14 @@ def _seq_trace_worker(
     hamiltonians_per_step = worker_ctx.get("operators_list")
     mcwf_ctx_per_step = worker_ctx.get("mcwf_static_ctx_list")
     noise_model = worker_ctx["noise_model"]
-    initial_states: list[np.ndarray] = worker_ctx["initial_psi"]
+    initial_states: list[np.ndarray | MPS] = worker_ctx["initial_psi"]
 
     if noise_model is None:
         assert int(worker_ctx["num_trajectories"]) == 1, "num_trajectories must be 1 when noise_model is None."
 
     num_steps = len(intervention_steps)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
-    state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
+    state = _copy_initial_backend_state(initial_states[sequence_idx])
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1

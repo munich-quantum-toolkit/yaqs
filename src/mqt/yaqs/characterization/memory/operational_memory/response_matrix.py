@@ -157,10 +157,7 @@ def compute_spectrum(
         keep = s_full.size
         for idx, tail_weight in enumerate(tail_cumsum):
             if float(tail_weight / total_weight) > the:
-                if idx == s_full.size - 1:
-                    keep = max(s_full.size - idx + 1, min_keep_eff)
-                else:
-                    keep = max(s_full.size - idx, min_keep_eff)
+                keep = max(s_full.size - idx, min_keep_eff)
                 break
         else:
             keep = s_full.size

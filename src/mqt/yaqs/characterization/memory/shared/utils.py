@@ -126,6 +126,13 @@ def resolve_stochastic_solver(
 ) -> StochasticSolver:
     """Return the stochastic unraveling backend for process-tensor schedule simulation.
 
+    Args:
+        sim_params: Analog simulation parameters (legacy ``solver`` attribute may apply).
+        solver: Explicit solver override, or ``None`` to infer from ``representation`` / ``sim_params``.
+        representation: Optional characterizer representation (``"vector"``, ``"mps"``, or ``"auto"``).
+        chain_length: Chain length required when ``representation`` is set.
+        vector_max_qubits: Maximum qubits for ``representation="auto"`` to select the vector backend.
+
     Returns:
         Resolved solver name ``"MCWF"`` or ``"TJM"``.
 
@@ -322,7 +329,8 @@ def _apply_cut_preparation_step(
     * ``chain_length > 1``: project site 0 onto ``|0⟩``, reprepare to ``|ψ⟩``; other
       sites are unchanged.
 
-    Branch weight is always ``1.0``.
+    Branch weight is ``1.0`` for ``chain_length == 1`` and the projection probability
+    for ``chain_length > 1``.
 
     Args:
         state: Current backend state.
@@ -331,7 +339,7 @@ def _apply_cut_preparation_step(
         chain_length: Number of qubits in the chain.
 
     Returns:
-        Tuple ``(state_out, 1.0)``.
+        Tuple ``(state_out, branch_weight)``.
 
     Raises:
         TypeError: If ``solver`` is ``"MCWF"``, ``chain_length == 1``, and ``state`` is not a
@@ -351,8 +359,8 @@ def _apply_cut_preparation_step(
         t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
         new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
         return new_mps, 1.0
-    state_out, _prob = _reprepare_backend_state_forced(state, SITE0_KET, p, solver)
-    return state_out, 1.0
+    state_out, prob = _reprepare_backend_state_forced(state, SITE0_KET, p, solver)
+    return state_out, float(prob)
 
 
 def _apply_backend_unitary_site_zero(

@@ -314,9 +314,7 @@ def encode_intervention(slot: Intervention, rng: np.random.Generator) -> tuple[A
         return {"type": "unitary", "U": u}, encode_unitary_choi(u)
     resolved = normalize_style(str(slot))
     if resolved == "measure_prepare":
-        rho_prep, effect, feat = sample_intervention_parts(rng)
-        psi_meas = extract_ket(effect)
-        psi_prep = extract_ket(rho_prep)
+        feat, (psi_meas, psi_prep) = _sample_mp(rng)
         return (psi_meas, psi_prep), feat
     u = resolve_unitary_sampler(resolved)(rng)
     return {"type": "unitary", "U": u}, encode_unitary_choi(u)

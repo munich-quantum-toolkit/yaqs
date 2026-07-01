@@ -118,7 +118,7 @@ class ProcessTensorSurrogate(nn.Module):
             dim_ff: Feed-forward dimension inside encoder layers.
             dropout: Dropout rate.
             layernorm_in: Whether to apply a LayerNorm after the input projection.
-            num_interventions: Total sequence length for :meth:`entropy`. Set automatically by
+            num_interventions: Total sequence length for :meth:`evaluate_probes`. Set automatically by
                 :meth:`fit` from training targets; may be set here before training.
 
         Raises:

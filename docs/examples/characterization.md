@@ -134,6 +134,7 @@ print(f"S_V = {memory.entropy(1):.4f}, R = {memory.modes(1):.3f}")
 
 Use `preset="quick"`, `"balanced"`, or `"accurate"` for built-in probe-grid sizes, or override with `n_pasts` / `n_futures`.
 
+(reset-delay)=
 ### Reset delay at the causal break
 
 Pass `delay=N` to insert `N` soft-reset slots `(|0>, |0>)` at the causal cut.
@@ -216,6 +217,7 @@ print(ref.summary())
 `MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` uses MCWF, `"mps"` uses TJM.
 With `"auto"`, vector is chosen when `hamiltonian.length <= vector_max_qubits` (default 10).
 
+(response-matrix-theory)=
 ## Theory: response matrix construction
 
 Operational memory quantifies how many independent ways the conditioned past remains visible in accessible future responses across a temporal cut `c`.

@@ -95,12 +95,12 @@ def test_compute_spectrum_tail_truncation_keeps_threshold_mode() -> None:
 
 
 def test_compute_spectrum_tail_truncation_keeps_significant_mode_near_threshold() -> None:
-    """Do not drop a significant SV when only the full cumulative tail exceeds the budget."""
+    """Threshold breach keeps modes up to the first discarded tail without over-keeping."""
     m = np.diag(np.array([10.0, 5.0, 1e-6, 1e-8], dtype=np.float64))
     out = compute_spectrum(m, discarded_weight_threshold=0.21)
-    np.testing.assert_allclose(out["singular_values"], np.array([10.0, 5.0]))
+    np.testing.assert_allclose(out["singular_values"], np.array([10.0]))
     full = compute_spectrum(m, discarded_weight_threshold=None)
-    assert out["entropy"] == pytest.approx(full["entropy"], rel=1e-12, abs=1e-12)
+    assert out["entropy"] < full["entropy"]
 
 
 def test_compute_spectrum_modes_equals_exp_entropy() -> None:

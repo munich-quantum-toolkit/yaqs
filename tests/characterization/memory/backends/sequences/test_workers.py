@@ -16,17 +16,51 @@ import pytest
 
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.sequences.workers import (
+    _copy_initial_backend_state,
     _get_times_cached,
     _process_tensor_schedule_durations_ops_ctx,
     _reshape_choi_feature_rows,
     _validate_process_tensor_schedule_inputs,
 )
 from mqt.yaqs.characterization.memory.backends.sequences.workflow import simulate_sequences
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import _initial_psis_for_sequences
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.characterization.memory.shared.encoding import unpack_rho8
 from mqt.yaqs.characterization.memory.shared.utils import make_mcwf_static_context
-from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+
+def test_copy_initial_backend_state_preserves_mps() -> None:
+    """TJM initial states remain MPS objects instead of being coerced to dense arrays."""
+    mps = MPS(length=2, state="zeros")
+    copied = _copy_initial_backend_state(mps)
+    assert isinstance(copied, MPS)
+    assert copied is not mps
+
+
+def test_simulate_sequences_accepts_mps_initial_states() -> None:
+    """Sequence workers preserve TJM MPS initial states end-to-end."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+    initial_psis = _initial_psis_for_sequences(op, "TJM", 1)
+    assert isinstance(initial_psis[0], MPS)
+
+    finals = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.0, 0.0],
+        intervention_steps_list=[[(psi0, psi0)]],
+        initial_psis=initial_psis,
+        static_ctx=None,
+        parallel=False,
+        show_progress=False,
+        record_step_states=False,
+        solver="TJM",
+    )
+    assert isinstance(finals, np.ndarray)
+    assert finals.shape == (1, 8)
 
 
 def test_get_times_cached_zero_and_distinct_durations() -> None:
