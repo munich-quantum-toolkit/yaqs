@@ -38,7 +38,7 @@ memory = mc.characterize(ham, params, cut=cut, num_interventions=num_interventio
 surrogate_memory = mc.characterize(model, cut=cut, num_interventions=num_interventions)
 
 pt = mc.build_process_tensor(ham, params, timesteps=[0.1] * (num_interventions + 1), return_type="dense")
-rho_ref = mc.predict(pt, rho0, sequence, num_interventions=num_interventions)
+rho_ref = mc.predict(pt, pt.initial_rho, sequence, num_interventions=num_interventions)
 ```
 
 ## Verb × backend
@@ -115,7 +115,7 @@ For `predict`, pass the same style string as the third argument, or an explicit 
 tags: [remove-output]
 ---
 pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], return_type="dense")
-rho_ref = mc.predict(pt, rho0, "haar", num_interventions=1)
+rho_ref = mc.predict(pt, pt.initial_rho, "haar", num_interventions=1)
 print(f"trace(rho_ref) = {np.trace(rho_ref).real:.4f}")
 ```
 
