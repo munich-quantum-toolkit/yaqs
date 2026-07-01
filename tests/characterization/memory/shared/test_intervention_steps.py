@@ -84,8 +84,8 @@ def test_apply_intervention_to_rho_unitary() -> None:
 def test_compute_intervention_probability_unitary_is_one() -> None:
     """Unitary and cut_preparation steps have unit branch probability."""
     rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-    assert compute_intervention_probability(rho, {"type": "unitary", "U": np.eye(2)}) == 1.0
-    assert compute_intervention_probability(rho, {"type": "cut_preparation", "psi_prep": _PSI0}) == 1.0
+    assert compute_intervention_probability(rho, {"type": "unitary", "U": np.eye(2)}) == pytest.approx(1.0)
+    assert compute_intervention_probability(rho, {"type": "cut_preparation", "psi_prep": _PSI0}) == pytest.approx(1.0)
 
 
 def test_compute_intervention_probability_measurement() -> None:
@@ -104,7 +104,7 @@ def test_apply_intervention_to_backend_mcwf_unitary() -> None:
         solver="MCWF",
         chain_length=1,
     )
-    assert prob == 1.0
+    assert prob == pytest.approx(1.0)
     state_out_arr = np.asarray(state_out, dtype=np.complex128)
     np.testing.assert_allclose(state_out_arr, u @ _PSI0, atol=1e-12)
 
