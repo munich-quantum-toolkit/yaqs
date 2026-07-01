@@ -165,7 +165,7 @@ def test_train_default_style_is_haar(
     captured: dict[str, str] = {}
 
     def _fake_train(*_args: object, **kwargs: object) -> object:
-        captured["style"] = str(kwargs["style"])
+        captured["intervention_style"] = str(kwargs["intervention_style"])
         from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
         return ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
@@ -175,7 +175,7 @@ def test_train_default_style_is_haar(
     monkeypatch.setattr(wf, "train_surrogate_model", _fake_train)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     mc.train(ham, params, num_interventions=1, n=4, train_kwargs={"epochs": 0})
-    assert captured["style"] == "haar"
+    assert captured["intervention_style"] == "haar"
 
 
 @pytest.mark.skipif(
