@@ -40,7 +40,7 @@ import numpy as np
 
 warnings.filterwarnings("ignore", message=".*special injected samples.*")
 
-from mqt.yaqs import AnalogSimParams, CompactNoiseModel, Hamiltonian, NoiseCharacterizer, Observable, Simulator, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, Simulator, State
 
 n_sites = 3
 j_coupling = 1.0
@@ -73,20 +73,20 @@ sim_params = AnalogSimParams(
     sample_timesteps=True,
 )
 
-reference_model = CompactNoiseModel([
-    {"name": "pauli_x", "sites": sites, "strength": gamma_true},
-    {"name": "pauli_y", "sites": sites, "strength": gamma_true},
-    {"name": "pauli_z", "sites": sites, "strength": gamma_true},
-])
+reference_model = NoiseModel(
+    [{"name": "pauli_x", "sites": [s], "strength": gamma_true} for s in sites]
+    + [{"name": "pauli_y", "sites": [s], "strength": gamma_true} for s in sites]
+    + [{"name": "pauli_z", "sites": [s], "strength": gamma_true} for s in sites]
+)
 
-init_guess = CompactNoiseModel([
-    {"name": "pauli_x", "sites": sites, "strength": gamma_init},
-    {"name": "pauli_y", "sites": sites, "strength": gamma_init},
-    {"name": "pauli_z", "sites": sites, "strength": gamma_init},
-])
+init_guess = NoiseModel(
+    [{"name": "pauli_x", "sites": [s], "strength": gamma_init} for s in sites]
+    + [{"name": "pauli_y", "sites": [s], "strength": gamma_init} for s in sites]
+    + [{"name": "pauli_z", "sites": [s], "strength": gamma_init} for s in sites]
+)
 
-rate_bounds_low = np.zeros(3)
-rate_bounds_high = np.full(3, 0.5)
+rate_bounds_low = np.zeros(len(init_guess.processes))
+rate_bounds_high = np.full(len(init_guess.processes), 0.5)
 pauli_labels = ["X", "Y", "Z"]
 
 nc = NoiseCharacterizer(show_progress=False)
@@ -105,7 +105,11 @@ result = nc.characterize(
     seed=cma_seed,
 )
 
-gamma_learned = result.best_parameters.copy()
+gamma_learned = np.array([
+    result.best_parameters[0:n_sites].mean(),
+    result.best_parameters[n_sites : 2 * n_sites].mean(),
+    result.best_parameters[2 * n_sites : 3 * n_sites].mean(),
+])
 times = result.times
 print(f"forward backend: {result.resolved_representation}")
 print(f"√J: {result.sqrt_loss_before():.3f} → {result.sqrt_loss_after():.2e}")
@@ -183,8 +187,8 @@ pred_params = AnalogSimParams(
 )
 simulator = Simulator(show_progress=False)
 
-twin_result = simulator.run(init_state, hamiltonian, pred_params, result.optimal_model.expanded_noise_model)
-truth_result = simulator.run(init_state, hamiltonian, pred_params, reference_model.expanded_noise_model)
+twin_result = simulator.run(init_state, hamiltonian, pred_params, result.optimal_model)
+truth_result = simulator.run(init_state, hamiltonian, pred_params, reference_model)
 twin_traj = np.asarray(twin_result.expectation_values, dtype=float)
 truth_traj = np.asarray(truth_result.expectation_values, dtype=float)
 

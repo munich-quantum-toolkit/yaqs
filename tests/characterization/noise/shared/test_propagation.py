@@ -16,7 +16,7 @@ import pytest
 
 from mqt.yaqs import Observable
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Z
 
 from ..fixtures import NoiseTestConfig, build_propagator
@@ -28,7 +28,7 @@ def test_propagator_rejects_empty_observable_list(noise_test_config: NoiseTestCo
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=init_state,
     )
     with pytest.raises(ValueError, match="Observable list must not be empty"):
@@ -50,20 +50,16 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
     """Propagator rejects invalid site indices and topology changes."""
     hamiltonian, init_state, observables, sim_params, noise_model, _ = build_propagator(noise_test_config)
 
-    exceed_noise = CompactNoiseModel([
-        {
-            "name": "pauli_x",
-            "sites": list(range(noise_test_config.sites + 1)),
-            "strength": noise_test_config.gamma_x,
-        },
-        {"name": "pauli_y", "sites": list(range(noise_test_config.sites)), "strength": noise_test_config.gamma_y},
-        {"name": "pauli_z", "sites": list(range(noise_test_config.sites)), "strength": noise_test_config.gamma_z},
+    exceed_noise = NoiseModel([
+        {"name": "pauli_x", "sites": [noise_test_config.sites], "strength": noise_test_config.gamma_x},
+        {"name": "pauli_y", "sites": [0], "strength": noise_test_config.gamma_y},
+        {"name": "pauli_z", "sites": [0], "strength": noise_test_config.gamma_z},
     ])
     with pytest.raises(ValueError, match=re.escape("Noise site index exceeds number of sites in the Hamiltonian.")):
         Propagator(
             sim_params=sim_params,
             hamiltonian=hamiltonian,
-            compact_noise_model=exceed_noise,
+            noise_model=exceed_noise,
             init_state=init_state,
         )
 
@@ -71,7 +67,7 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=init_state,
     )
     obs_err = "Observable site index exceeds number of sites in the Hamiltonian."
@@ -81,24 +77,24 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=init_state,
     )
     with pytest.raises(ValueError, match=re.escape("Observable list not set. Call set_observable_list first.")):
         propagator.run(noise_model)
 
-    wrong_noise = CompactNoiseModel([
-        {"name": "pauli_x", "sites": list(range(noise_test_config.sites)), "strength": noise_test_config.gamma_x},
-        {"name": "pauli_y", "sites": list(range(noise_test_config.sites)), "strength": noise_test_config.gamma_y},
-        {"name": "pauli_x", "sites": list(range(noise_test_config.sites)), "strength": noise_test_config.gamma_z},
+    wrong_noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": noise_test_config.gamma_x},
+        {"name": "pauli_y", "sites": [0], "strength": noise_test_config.gamma_y},
+        {"name": "pauli_x", "sites": [0], "strength": noise_test_config.gamma_z},
     ])
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=init_state,
     )
     propagator.set_observable_list(observables)
-    topo_err = "Noise model topology does not match the initialized compact model."
+    topo_err = "Noise model topology does not match the initialized model."
     with pytest.raises(ValueError, match=re.escape(topo_err)):
         propagator.run(wrong_noise)

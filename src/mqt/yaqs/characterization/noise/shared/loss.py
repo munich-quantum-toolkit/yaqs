@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.propagation import Propagator
@@ -39,24 +39,24 @@ class TrajectoryLoss:
         self.ref_traj_array = np.asarray(ref_expectations, dtype=float)
         self.propagator = copy.deepcopy(propagator)
 
-        self.d = len(self.propagator.compact_noise_model.compact_processes)
+        self.d = len(self.propagator.noise_model.processes)
         self.n_obs, self.n_t = self.ref_traj_array.shape
         self.loss_scale_factor = 1.0 / (self.n_obs * self.n_t)
         self.obs_array = np.empty_like(self.ref_traj_array)
 
-    def x_to_noise_model(self, x: np.ndarray) -> CompactNoiseModel:
-        """Map a flat strength vector back to a :class:`CompactNoiseModel`.
+    def x_to_noise_model(self, x: np.ndarray) -> NoiseModel:
+        """Map a flat strength vector back to a :class:`NoiseModel`.
 
         Args:
-            x: Compact strength vector with length ``self.d``.
+            x: Process strength vector with length ``self.d``.
 
         Returns:
-            Updated compact noise model.
+            Updated noise model.
         """
-        processes = copy.deepcopy(self.propagator.compact_noise_model.compact_processes)
+        processes = copy.deepcopy(self.propagator.noise_model.processes)
         for i in range(self.d):
             processes[i]["strength"] = float(x[i])
-        return CompactNoiseModel(processes)
+        return NoiseModel(processes)
 
     def __call__(self, x: np.ndarray) -> float:
         """Evaluate the scaled mean-squared trajectory error.

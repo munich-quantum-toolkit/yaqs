@@ -20,7 +20,7 @@ from mqt.yaqs.simulator import Simulator
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.core.data_structures.state import State
 
@@ -67,7 +67,7 @@ class Propagator:
         *,
         sim_params: AnalogSimParams,
         hamiltonian: Hamiltonian,
-        compact_noise_model: CompactNoiseModel,
+        noise_model: NoiseModel,
         init_state: State,
         simulator: Simulator | None = None,
     ) -> None:
@@ -76,7 +76,7 @@ class Propagator:
         Args:
             sim_params: Base analog simulation parameters (observables may be empty).
             hamiltonian: System Hamiltonian.
-            compact_noise_model: Compact noise model whose topology is fixed during fitting.
+            noise_model: Noise model whose topology is fixed during fitting.
             init_state: Initial state for propagation (already encoded for the target backend).
             simulator: Optional :class:`~mqt.yaqs.Simulator` instance.
 
@@ -85,12 +85,11 @@ class Propagator:
         """
         self.sim_params = copy.deepcopy(sim_params)
         self.hamiltonian = copy.deepcopy(hamiltonian)
-        self.compact_noise_model = copy.deepcopy(compact_noise_model)
+        self.noise_model = copy.deepcopy(noise_model)
         self.init_state = copy.deepcopy(init_state)
         self.representation: ResolvedNoiseRepresentation = init_state.representation
         self._simulator = simulator or Simulator(show_progress=False)
 
-        self.expanded_noise_model = copy.deepcopy(self.compact_noise_model.expanded_noise_model)
         self.sites = self.hamiltonian.length
         self.obs_list: list[Observable] = []
         self.n_obs = 0
@@ -98,8 +97,8 @@ class Propagator:
         self.times = np.asarray(self.sim_params.times, dtype=float)
         self.obs_array = np.empty((0, len(self.times)))
 
-        if self.expanded_noise_model.processes:
-            max_site = max(max(proc["sites"]) for proc in self.expanded_noise_model.processes)
+        if self.noise_model.processes:
+            max_site = max(max(proc["sites"]) for proc in self.noise_model.processes)
             if max_site >= self.sites:
                 msg = "Noise site index exceeds number of sites in the Hamiltonian."
                 raise ValueError(msg)
@@ -128,14 +127,14 @@ class Propagator:
         self.n_obs = len(self.obs_list)
         self.set_observables = True
 
-    def run(self, noise_model: CompactNoiseModel) -> None:
-        """Propagate under the supplied compact noise strengths.
+    def run(self, noise_model: NoiseModel) -> None:
+        """Propagate under the supplied noise strengths.
 
         For ``density_matrix`` states the Simulator uses deterministic Lindblad evolution and
         ignores ``num_traj``. Stochastic MCWF/TJM paths average over ``num_traj`` trajectories.
 
         Args:
-            noise_model: Candidate compact noise model with updated strengths.
+            noise_model: Candidate noise model with updated strengths.
 
         Raises:
             ValueError: If observables were not set or the topology changed.
@@ -144,10 +143,14 @@ class Propagator:
             msg = "Observable list not set. Call set_observable_list first."
             raise ValueError(msg)
 
-        for i, proc in enumerate(noise_model.compact_processes):
-            ref = self.compact_noise_model.compact_processes[i]
+        if len(noise_model.processes) != len(self.noise_model.processes):
+            msg = "Noise model topology does not match the initialized model."
+            raise ValueError(msg)
+
+        for i, proc in enumerate(noise_model.processes):
+            ref = self.noise_model.processes[i]
             if proc["name"] != ref["name"] or proc["sites"] != ref["sites"]:
-                msg = "Noise model topology does not match the initialized compact model."
+                msg = "Noise model topology does not match the initialized model."
                 raise ValueError(msg)
 
         run_params = _propagation_run_params(self.sim_params, self.obs_list)
@@ -155,7 +158,7 @@ class Propagator:
             self.init_state,
             self.hamiltonian,
             run_params,
-            noise_model.expanded_noise_model,
+            noise_model,
         )
         self.times = np.asarray(run_params.times, dtype=float)
         self.obs_array = np.asarray(result.expectation_values, dtype=float)

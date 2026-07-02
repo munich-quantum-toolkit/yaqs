@@ -178,7 +178,7 @@ fig.tight_layout()
 
 ## 5. Fit a Markovian noise digital twin
 
-Learn compact Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`. Install the optional CMA-ES backend with `pip install mqt.yaqs[noise]`.
+Learn Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`. Install the optional CMA-ES backend with `pip install mqt.yaqs[noise]`.
 
 ```{code-cell} ipython3
 import warnings
@@ -187,7 +187,7 @@ import numpy as np
 
 warnings.filterwarnings("ignore", message=".*special injected samples.*")
 
-from mqt.yaqs import AnalogSimParams, CompactNoiseModel, Hamiltonian, NoiseCharacterizer, Observable, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
 
 n_sites = 3
 sites = list(range(n_sites))
@@ -201,16 +201,16 @@ sim_params = AnalogSimParams(
     order=1,
     sample_timesteps=True,
 )
-reference_model = CompactNoiseModel([
-    {"name": "pauli_x", "sites": sites, "strength": 0.08},
-    {"name": "pauli_y", "sites": sites, "strength": 0.08},
-    {"name": "pauli_z", "sites": sites, "strength": 0.08},
-])
-init_guess = CompactNoiseModel([
-    {"name": "pauli_x", "sites": sites, "strength": 0.35},
-    {"name": "pauli_y", "sites": sites, "strength": 0.35},
-    {"name": "pauli_z", "sites": sites, "strength": 0.35},
-])
+reference_model = NoiseModel(
+    [{"name": "pauli_x", "sites": [s], "strength": 0.08} for s in sites]
+    + [{"name": "pauli_y", "sites": [s], "strength": 0.08} for s in sites]
+    + [{"name": "pauli_z", "sites": [s], "strength": 0.08} for s in sites]
+)
+init_guess = NoiseModel(
+    [{"name": "pauli_x", "sites": [s], "strength": 0.35} for s in sites]
+    + [{"name": "pauli_y", "sites": [s], "strength": 0.35} for s in sites]
+    + [{"name": "pauli_z", "sites": [s], "strength": 0.35} for s in sites]
+)
 
 result = NoiseCharacterizer(show_progress=False).characterize(
     hamiltonian,
@@ -219,8 +219,8 @@ result = NoiseCharacterizer(show_progress=False).characterize(
     init_guess=init_guess,
     observables=fitting_observables,
     reference_model=reference_model,
-    x_low=np.zeros(3),
-    x_up=np.full(3, 0.5),
+    x_low=np.zeros(len(init_guess.processes)),
+    x_up=np.full(len(init_guess.processes), 0.5),
     sigma0=0.05,
     popsize=8,
     max_iter=20,

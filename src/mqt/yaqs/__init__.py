@@ -20,7 +20,7 @@ from ._version import version_tuple as version_info
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mpo import MPO
 from .core.data_structures.mps import MPS
-from .core.data_structures.noise_model import CompactNoiseModel, NoiseModel
+from .core.data_structures.noise_model import NoiseModel
 from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
@@ -40,7 +40,6 @@ __all__ = [
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
-    "CompactNoiseModel",
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",

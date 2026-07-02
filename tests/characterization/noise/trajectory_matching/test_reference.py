@@ -20,7 +20,7 @@ from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
     resolve_reference_expectations,
     simulate_observable_trajectories,
 )
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
@@ -30,9 +30,10 @@ def _three_site_problem() -> tuple[
     State,
     list[Observable],
     AnalogSimParams,
-    CompactNoiseModel,
+    NoiseModel,
 ]:
     n_sites = 3
+    sites = list(range(n_sites))
     hamiltonian = Hamiltonian.ising(n_sites, J=1.0, g=2.0)
     init_state = State(n_sites, initial="zeros")
     observables = [Observable(g(), s) for s in range(n_sites) for g in (X, Y, Z)]
@@ -43,11 +44,11 @@ def _three_site_problem() -> tuple[
         order=1,
         sample_timesteps=True,
     )
-    reference_model = CompactNoiseModel([
-        {"name": "pauli_x", "sites": list(range(n_sites)), "strength": 0.08},
-        {"name": "pauli_y", "sites": list(range(n_sites)), "strength": 0.08},
-        {"name": "pauli_z", "sites": list(range(n_sites)), "strength": 0.08},
-    ])
+    reference_model = NoiseModel(
+        [{"name": "pauli_x", "sites": [s], "strength": 0.08} for s in sites]
+        + [{"name": "pauli_y", "sites": [s], "strength": 0.08} for s in sites]
+        + [{"name": "pauli_z", "sites": [s], "strength": 0.08} for s in sites]
+    )
     return hamiltonian, init_state, observables, sim_params, reference_model
 
 
@@ -210,11 +211,12 @@ def test_resolve_prepared_state_encodes_density_matrix() -> None:
 def test_build_trajectory_loss_wires_propagator() -> None:
     """Loss assembly returns a propagator sharing the fitting topology."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
-    init_guess = CompactNoiseModel([
-        {"name": "pauli_x", "sites": list(range(3)), "strength": 0.35},
-        {"name": "pauli_y", "sites": list(range(3)), "strength": 0.35},
-        {"name": "pauli_z", "sites": list(range(3)), "strength": 0.35},
-    ])
+    sites = list(range(3))
+    init_guess = NoiseModel(
+        [{"name": "pauli_x", "sites": [s], "strength": 0.35} for s in sites]
+        + [{"name": "pauli_y", "sites": [s], "strength": 0.35} for s in sites]
+        + [{"name": "pauli_z", "sites": [s], "strength": 0.35} for s in sites]
+    )
     ref, _, _ = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
@@ -238,5 +240,5 @@ def test_build_trajectory_loss_wires_propagator() -> None:
     )
     assert resolved == "density_matrix"
     np.testing.assert_allclose(loss.ref_traj_array, ref)
-    loss_value = loss(init_guess.strength_list)
+    loss_value = loss(np.array([proc["strength"] for proc in init_guess.processes], dtype=float))
     assert loss_value >= 0.0

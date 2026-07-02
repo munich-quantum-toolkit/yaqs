@@ -15,7 +15,7 @@ import numpy as np
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 
@@ -59,14 +59,14 @@ def build_propagator(
     State,
     list[Observable],
     AnalogSimParams,
-    CompactNoiseModel,
+    NoiseModel,
     Propagator,
 ]:
     """Construct a configured propagator for the shared test geometry.
 
     Returns:
         Tuple of Hamiltonian, initial state, observables, simulation parameters,
-        compact noise model, and propagator.
+        noise model, and propagator.
     """
     hamiltonian = Hamiltonian.ising(test.sites, J=test.j, g=test.g)
     init_state = State(test.sites, initial="zeros")
@@ -85,15 +85,16 @@ def build_propagator(
         order=test.order,
         sample_timesteps=True,
     )
-    noise_model = CompactNoiseModel([
-        {"name": "pauli_x", "sites": list(range(test.sites)), "strength": test.gamma_x},
-        {"name": "pauli_y", "sites": list(range(test.sites)), "strength": test.gamma_y},
-        {"name": "pauli_z", "sites": list(range(test.sites)), "strength": test.gamma_z},
-    ])
+    site_list = list(range(test.sites))
+    noise_model = NoiseModel(
+        [{"name": "pauli_x", "sites": [s], "strength": test.gamma_x} for s in site_list]
+        + [{"name": "pauli_y", "sites": [s], "strength": test.gamma_y} for s in site_list]
+        + [{"name": "pauli_z", "sites": [s], "strength": test.gamma_z} for s in site_list]
+    )
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=init_state,
     )
     propagator.set_observable_list(observables)

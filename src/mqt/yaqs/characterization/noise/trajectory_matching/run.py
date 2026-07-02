@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
     from mqt.yaqs.characterization.noise.shared.propagation import Propagator
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
     from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
@@ -89,11 +89,11 @@ def run_trajectory_characterization(
     hamiltonian: Hamiltonian,
     sim_params: AnalogSimParams,
     init_state: State,
-    init_guess: CompactNoiseModel,
+    init_guess: NoiseModel,
     observables: list[Observable],
     x_low: np.ndarray,
     x_up: np.ndarray,
-    reference_model: CompactNoiseModel | None = None,
+    reference_model: NoiseModel | None = None,
     ref_expectations: np.ndarray | None = None,
     execution: ExecutionConfig,
     representation: NoiseRepresentation = "auto",
@@ -101,13 +101,13 @@ def run_trajectory_characterization(
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
     **optimizer_kwargs: Any,
 ) -> NoiseCharacterizationResult:
-    """Fit compact noise strengths by matching observable trajectories.
+    """Fit noise strengths by matching observable trajectories.
 
     Args:
         hamiltonian: System Hamiltonian.
         sim_params: Analog simulation parameters.
         init_state: Initial state.
-        init_guess: Initial compact noise guess.
+        init_guess: Initial noise guess.
         observables: Fitting observables whose trajectories are matched.
         x_low: Lower parameter bounds.
         x_up: Upper parameter bounds.
@@ -150,7 +150,7 @@ def run_trajectory_characterization(
 
     x_best, best_loss, loss_history, parameter_history = cma_opt(
         loss,
-        init_guess.strength_list.copy(),
+        np.array([proc["strength"] for proc in init_guess.processes], dtype=float),
         x_low=x_low,
         x_up=x_up,
         **optimizer_kwargs,

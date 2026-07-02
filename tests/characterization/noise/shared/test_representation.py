@@ -22,7 +22,7 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     resolve_noise_representation,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_trajectory_loss
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 from mqt.yaqs.simulator import Simulator
@@ -80,7 +80,7 @@ def test_lindblad_loss_is_deterministic() -> None:
     hamiltonian, init_state, observables, sim_params, reference_model, propagator = build_propagator(test)
     propagator.run(reference_model)
     ref = np.asarray(propagator.obs_array, dtype=float)
-    init_guess = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    init_guess = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
     loss, _, _ = build_trajectory_loss(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
@@ -93,7 +93,7 @@ def test_lindblad_loss_is_deterministic() -> None:
         lindblad_max_qubits=DEFAULT_LINDBLAD_MAX_QUBITS,
         vector_max_qubits=DEFAULT_VECTOR_MAX_QUBITS,
     )
-    x = init_guess.strength_list.copy()
+    x = np.array([proc["strength"] for proc in init_guess.processes], dtype=float)
     loss_a = loss(x)
     loss_b = loss(x)
     assert loss_a == pytest.approx(loss_b)
@@ -104,7 +104,7 @@ def test_characterize_sets_resolved_representation() -> None:
     """Characterize records the resolved forward backend on the result."""
     test = NoiseTestConfig(sites=1)
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
-    init_guess = CompactNoiseModel([
+    init_guess = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 0.2},
         {"name": "pauli_y", "sites": [0], "strength": 0.1},
         {"name": "pauli_z", "sites": [0], "strength": 0.05},
@@ -131,7 +131,7 @@ def test_mcwf_and_tjm_smoke() -> None:
     """Explicit vector and mps representations still run through characterize."""
     test = NoiseTestConfig(sites=1, ntraj=2, max_bond_dim=4)
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
-    init_guess = CompactNoiseModel([
+    init_guess = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 0.2},
         {"name": "pauli_y", "sites": [0], "strength": 0.08},
         {"name": "pauli_z", "sites": [0], "strength": 0.05},

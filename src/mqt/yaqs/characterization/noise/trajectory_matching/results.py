@@ -17,14 +17,14 @@ import numpy as np
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 @dataclass(slots=True)
 class NoiseCharacterizationResult:
     """Outcome of a gradient-free noise-parameter fit."""
 
-    optimal_model: CompactNoiseModel
+    optimal_model: NoiseModel
     best_loss: float
     best_parameters: np.ndarray
     loss_history: list[float] = field(default_factory=list)

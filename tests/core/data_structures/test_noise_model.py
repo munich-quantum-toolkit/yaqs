@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel, NoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
@@ -57,76 +57,6 @@ def test_noise_model_creation() -> None:
     assert model.processes[1]["sites"] == [1]
     assert model.processes[0]["matrix"].shape == (2, 2)
     assert model.processes[1]["matrix"].shape == (2, 2)
-
-
-def test_compact_noise_model_creation() -> None:
-    """Test that CompactNoiseModel is created correctly with valid process dicts.
-
-    This test constructs a CompactNoiseModel with two single-site processes
-    ("lowering" and "pauli_z") and corresponding strengths.
-    It verifies that:
-      - Each process is stored as a dictionary with correct fields.
-      - The number of processes is correct.
-      - Each process contains a jump_operator with the expected shape (2x2).
-    """
-    processes: list[dict[str, Any]] = [
-        {"name": "lowering", "sites": [0, 1], "strength": 0.1},
-        {"name": "pauli_z", "sites": [2], "strength": 0.05},
-    ]
-
-    model = CompactNoiseModel(processes)
-
-    assert len(model.compact_processes) == 2
-    assert model.compact_processes[0]["name"] == "lowering"
-    assert model.compact_processes[1]["name"] == "pauli_z"
-    assert model.compact_processes[0]["strength"] == pytest.approx(0.1)
-    assert model.compact_processes[1]["strength"] == pytest.approx(0.05)
-
-    assert model.expanded_processes[0]["name"] == "lowering"
-    assert model.expanded_processes[1]["name"] == "lowering"
-    assert model.expanded_processes[2]["name"] == "pauli_z"
-
-    assert model.expanded_processes[0]["strength"] == pytest.approx(0.1)
-    assert model.expanded_processes[1]["strength"] == pytest.approx(0.1)
-    assert model.expanded_processes[2]["strength"] == pytest.approx(0.05)
-
-    assert model.expanded_processes[0]["sites"] == [0]
-    assert model.expanded_processes[1]["sites"] == [1]
-    assert model.expanded_processes[2]["sites"] == [2]
-
-    assert model.index_list == [0, 0, 1]
-
-
-def test_compact_noise_model_assertion() -> None:
-    """Test that CompactNoiseModel raises an AssertionError when a process dict is missing required fields.
-
-    This test constructs a process list where one entry is missing the 'strength' field,
-    which should cause the NoiseModel initialization to fail.
-    """
-    # Missing 'strength' in the second dict
-    miss_strength_processes: list[dict[str, Any]] = [
-        {"name": "lowering", "sites": [0, 1], "strength": 0.1},
-        {"name": "pauli_z", "sites": [2]},
-    ]
-
-    miss_sites_processes: list[dict[str, Any]] = [
-        {"name": "lowering", "sites": [0, 1], "strength": 0.1},
-        {"name": "pauli_z", "strength": 0.1},
-    ]
-
-    miss_name_processes: list[dict[str, Any]] = [
-        {"name": "lowering", "sites": [0, 1], "strength": 0.1},
-        {"sites": [2], "strength": 0.1},
-    ]
-
-    with pytest.raises(AssertionError):
-        _ = NoiseModel(miss_strength_processes)
-
-    with pytest.raises(AssertionError):
-        _ = NoiseModel(miss_sites_processes)
-
-    with pytest.raises(AssertionError):
-        _ = NoiseModel(miss_name_processes)
 
 
 def test_noise_model_assertion() -> None:
@@ -532,49 +462,6 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
     rng = np.random.default_rng(42)
     sampled_nm = nm.sample(rng=rng)
     assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
-
-
-def test_compact_two_site_adjacent_expansion() -> None:
-    """CompactNoiseModel expands a 2-site gate over a list of site-pairs."""
-    processes: list[dict[str, Any]] = [
-        {"name": "crosstalk_xz", "sites": [[0, 1], [2, 3]], "strength": 0.2},
-    ]
-    model = CompactNoiseModel(processes)
-
-    assert len(model.expanded_processes) == 2
-    assert model.expanded_processes[0]["sites"] == [0, 1]
-    assert model.expanded_processes[1]["sites"] == [2, 3]
-    assert model.expanded_processes[0]["strength"] == pytest.approx(0.2)
-    assert model.expanded_processes[1]["strength"] == pytest.approx(0.2)
-    assert "matrix" in model.expanded_noise_model.processes[0]
-    assert model.expanded_noise_model.processes[0]["matrix"].shape == (4, 4)
-
-
-def test_compact_two_site_index_list() -> None:
-    """index_list maps each expanded 2-site pair back to the correct compact process index."""
-    processes: list[dict[str, Any]] = [
-        {"name": "crosstalk_xx", "sites": [[0, 1], [2, 3], [4, 5]], "strength": 0.1},
-    ]
-    model = CompactNoiseModel(processes)
-
-    assert len(model.expanded_processes) == 3
-    assert model.index_list == [0, 0, 0]
-
-
-def test_compact_mixed_one_and_two_site() -> None:
-    """CompactNoiseModel handles a mix of 1-site and 2-site processes correctly."""
-    processes: list[dict[str, Any]] = [
-        {"name": "lowering", "sites": [0, 1, 2], "strength": 0.1},
-        {"name": "crosstalk_xz", "sites": [[0, 1], [2, 3]], "strength": 0.2},
-    ]
-    model = CompactNoiseModel(processes)
-
-    assert len(model.expanded_processes) == 5
-    assert model.index_list == [0, 0, 0, 1, 1]
-    for ep in model.expanded_processes[:3]:
-        assert len(ep["sites"]) == 1
-    for ep in model.expanded_processes[3:]:
-        assert len(ep["sites"]) == 2
 
 
 def test_missing_distribution_key() -> None:

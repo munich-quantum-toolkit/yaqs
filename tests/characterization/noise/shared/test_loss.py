@@ -13,9 +13,13 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 from ..fixtures import NoiseTestConfig, build_propagator
+
+
+def _strength_vector(noise_model: NoiseModel) -> np.ndarray:
+    return np.array([proc["strength"] for proc in noise_model.processes], dtype=float)
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
@@ -25,7 +29,7 @@ def test_trajectory_loss_call_evaluates_propagation(noise_test_config: NoiseTest
     propagator.run(noise_model)
     ref = np.asarray(propagator.obs_array, dtype=float)
     loss = TrajectoryLoss(ref_expectations=ref, propagator=propagator)
-    value = loss(noise_model.strength_list)
+    value = loss(_strength_vector(noise_model))
     assert value >= 0.0
 
 
@@ -36,7 +40,7 @@ def test_trajectory_loss_honors_num_traj(noise_test_config: NoiseTestConfig) -> 
     propagator.run(noise_model)
     ref = np.asarray(propagator.obs_array, dtype=float)
     loss = TrajectoryLoss(ref_expectations=ref, propagator=propagator)
-    loss(noise_model.strength_list)
+    loss(_strength_vector(noise_model))
     assert loss.propagator.sim_params.num_traj == sim_params.num_traj
 
 
@@ -53,11 +57,11 @@ def test_trajectory_loss_wrong_parameter_length(noise_test_config: NoiseTestConf
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_x_to_noise_model_updates_strengths(noise_test_config: NoiseTestConfig) -> None:
-    """Strength vector maps back to a compact noise model."""
+    """Strength vector maps back to a noise model."""
     _hamiltonian, _state, _observables, _sim_params, noise_model, propagator = build_propagator(noise_test_config)
     propagator.run(noise_model)
     ref = np.asarray(propagator.obs_array, dtype=float)
     loss = TrajectoryLoss(ref_expectations=ref, propagator=propagator)
     updated = loss.x_to_noise_model(np.array([0.11, 0.12, 0.13]))
-    assert isinstance(updated, CompactNoiseModel)
-    assert updated.strength_list == pytest.approx([0.11, 0.12, 0.13])
+    assert isinstance(updated, NoiseModel)
+    assert [proc["strength"] for proc in updated.processes] == pytest.approx([0.11, 0.12, 0.13])

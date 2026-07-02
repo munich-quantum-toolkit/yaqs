@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
     from mqt.yaqs.core.data_structures.state import State
 
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 class NoiseCharacterizer:
     """Entry point for Markovian noise digital-twin workflows.
 
-    **Use:** :meth:`characterize` (fit compact rates from experimental or simulated trajectories)
+    **Use:** :meth:`characterize` (fit noise rates from experimental or simulated trajectories)
 
     Attributes:
         parallel: Whether trajectory simulations run in parallel via a process pool.
@@ -142,15 +142,15 @@ class NoiseCharacterizer:
         /,
         *,
         init_state: State,
-        init_guess: CompactNoiseModel,
+        init_guess: NoiseModel,
         observables: list[Observable],
         x_low: np.ndarray,
         x_up: np.ndarray,
-        reference_model: CompactNoiseModel | None = None,
+        reference_model: NoiseModel | None = None,
         ref_expectations: np.ndarray | None = None,
         **optimizer_kwargs: Any,
     ) -> NoiseCharacterizationResult:
-        """Fit compact noise strengths by matching observable trajectories.
+        """Fit noise strengths by matching observable trajectories.
 
         Provide exactly one of ``reference_model`` (benchmark shortcut) or
         ``ref_expectations`` (experimental trajectories).
@@ -159,7 +159,7 @@ class NoiseCharacterizer:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
             init_state: Initial state.
-            init_guess: Initial compact noise guess.
+            init_guess: Initial noise guess.
             observables: Fitting observables whose trajectories are matched.
             x_low: Lower parameter bounds.
             x_up: Upper parameter bounds.

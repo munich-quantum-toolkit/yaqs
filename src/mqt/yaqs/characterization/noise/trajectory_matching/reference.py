@@ -25,7 +25,7 @@ from mqt.yaqs.simulator import Simulator
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.representation import NoiseRepresentation
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
     from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
@@ -85,20 +85,20 @@ def simulate_observable_trajectories(
     sim_params: AnalogSimParams,
     hamiltonian: Hamiltonian,
     init_state: State,
-    noise_model: CompactNoiseModel,
+    noise_model: NoiseModel,
     observables: list[Observable],
     simulator: Simulator | None = None,
     representation: NoiseRepresentation = "auto",
     lindblad_max_qubits: int = 8,
     vector_max_qubits: int = 10,
 ) -> tuple[np.ndarray, np.ndarray, ResolvedNoiseRepresentation]:
-    """Simulate observable expectation trajectories under a compact noise model.
+    """Simulate observable expectation trajectories under a noise model.
 
     Args:
         sim_params: Analog simulation parameters.
         hamiltonian: System Hamiltonian.
         init_state: Initial state.
-        noise_model: Compact noise model whose strengths are propagated.
+        noise_model: Noise model whose strengths are propagated.
         observables: Observables to track.
         simulator: Optional simulator instance.
         representation: Forward-model selection.
@@ -120,7 +120,7 @@ def simulate_observable_trajectories(
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=noise_model,
+        noise_model=noise_model,
         init_state=prepared_state,
         simulator=fit_simulator,
     )
@@ -139,7 +139,7 @@ def resolve_reference_expectations(
     hamiltonian: Hamiltonian,
     init_state: State,
     observables: list[Observable],
-    reference_model: CompactNoiseModel | None,
+    reference_model: NoiseModel | None,
     ref_expectations: np.ndarray | None,
     simulator: Simulator,
     representation: NoiseRepresentation,
@@ -214,7 +214,7 @@ def build_trajectory_loss(
     sim_params: AnalogSimParams,
     hamiltonian: Hamiltonian,
     init_state: State,
-    init_guess: CompactNoiseModel,
+    init_guess: NoiseModel,
     observables: list[Observable],
     ref_expectations: np.ndarray,
     simulator: Simulator,
@@ -228,7 +228,7 @@ def build_trajectory_loss(
         sim_params: Analog simulation parameters.
         hamiltonian: System Hamiltonian.
         init_state: Initial state.
-        init_guess: Initial compact noise guess defining the fit topology.
+        init_guess: Initial noise guess defining the fit topology.
         observables: Fitting observables.
         ref_expectations: Target trajectories with shape ``(n_obs, n_times)``.
         simulator: Simulator used for forward propagation.
@@ -249,7 +249,7 @@ def build_trajectory_loss(
     fit_propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
-        compact_noise_model=init_guess,
+        noise_model=init_guess,
         init_state=prepared_state,
         simulator=simulator,
     )

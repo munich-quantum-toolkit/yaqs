@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def _minimal_result(
@@ -24,7 +24,7 @@ def _minimal_result(
     ref_traj: np.ndarray | None = None,
     fit_traj: np.ndarray | None = None,
 ) -> NoiseCharacterizationResult:
-    model = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    model = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
     return NoiseCharacterizationResult(
         optimal_model=model,
         best_loss=best_loss,
@@ -58,7 +58,7 @@ def test_sqrt_loss_before_raises_on_empty_history() -> None:
 
 def test_trajectory_rmse_requires_arrays() -> None:
     """trajectory_rmse raises when trajectories were not stored."""
-    model = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    model = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
     result = NoiseCharacterizationResult(
         optimal_model=model,
         best_loss=0.01,

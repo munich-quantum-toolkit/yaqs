@@ -12,7 +12,6 @@ from __future__ import annotations
 from mqt import yaqs
 from mqt.yaqs import (
     AnalogSimParams,
-    CompactNoiseModel,
     Hamiltonian,
     MemoryCharacterizer,
     NoiseCharacterizer,
@@ -27,7 +26,6 @@ EXPECTED_PUBLIC_API = frozenset({
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
-    "CompactNoiseModel",
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",
@@ -77,4 +75,3 @@ def test_top_level_import_smoke() -> None:
 
     assert MemoryCharacterizer is not None
     assert NoiseCharacterizer is not None
-    assert CompactNoiseModel is not None
