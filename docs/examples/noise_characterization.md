@@ -255,8 +255,6 @@ fig.tight_layout()
 | 3    | Compare learned rates and fitted-observable dynamics to reference   |
 | 4    | `Simulator.run` with `result.optimal_model` on held-out observables |
 
-For benchmarks, pass `reference_model=` instead of `ref_expectations=`. Library authors wiring custom optimizers can use `build_trajectory_loss()` and `cma_opt()` from `mqt.yaqs.characterization.noise.trajectory_matching`.
-
 ## See also
 
 - {doc}`representation_comparison` — Lindblad vs MCWF vs TJM on the same benchmark
