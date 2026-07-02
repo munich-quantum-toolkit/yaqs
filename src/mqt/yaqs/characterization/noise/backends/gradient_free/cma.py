@@ -25,6 +25,7 @@ def cma_opt(
     sigma0: float = 0.01,
     popsize: int = 4,
     max_iter: int = 500,
+    seed: int | None = None,
 ) -> tuple[np.ndarray, float, list[float], list[np.ndarray]]:
     """Minimize a black-box loss with CMA-ES.
 
@@ -36,6 +37,7 @@ def cma_opt(
         sigma0: Initial step size.
         popsize: Population size.
         max_iter: Maximum optimizer iterations.
+        seed: Optional RNG seed forwarded to CMA-ES for reproducible runs.
 
     Returns:
         Best parameter vector, best loss, per-evaluation loss history, and
@@ -58,14 +60,18 @@ def cma_opt(
         x_history.append(np.asarray(x, dtype=float).copy())
         return loss_value, grad, elapsed
 
+    options: dict[str, object] = {
+        "popsize": popsize,
+        "verb_disp": 0,
+        "bounds": [np.asarray(x_low, dtype=float).tolist(), np.asarray(x_up, dtype=float).tolist()],
+    }
+    if seed is not None:
+        options["seed"] = seed
+
     es = cma.CMAEvolutionStrategy(  # type: ignore[possibly-missing-attribute]
         x0,
         sigma0,
-        {
-            "popsize": popsize,
-            "verb_disp": 0,
-            "bounds": [np.asarray(x_low, dtype=float).tolist(), np.asarray(x_up, dtype=float).tolist()],
-        },
+        options,
     )
 
     for _ in range(max_iter):

@@ -91,3 +91,21 @@ def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
     assert fbest == pytest.approx(1.25)
     assert len(loss_history) == 2
     assert len(param_history) == 2
+
+
+def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
+    created = _patch_strategy(monkeypatch, DummyStrategy)
+
+    class Objective:
+        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
+            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+
+    cma.cma_opt(
+        make_loss(Objective()),
+        np.array([0.0, 0.0]),
+        sigma0=0.1,
+        max_iter=1,
+        seed=42,
+    )
+
+    assert created[0].options["seed"] == 42

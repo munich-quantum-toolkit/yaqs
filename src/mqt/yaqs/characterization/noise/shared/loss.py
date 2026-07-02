@@ -48,7 +48,10 @@ class TrajectoryLoss:
         """
         self.ref_traj_array = np.asarray(ref_expectations, dtype=float)
         self.propagator = copy.deepcopy(propagator)
-        self.num_traj = num_traj
+        if num_traj is default_num_traj:
+            self.num_traj = lambda _evaluation: int(self.propagator.sim_params.num_traj)
+        else:
+            self.num_traj = num_traj
         self.n_eval = 0
 
         self.d = len(self.propagator.compact_noise_model.compact_processes)

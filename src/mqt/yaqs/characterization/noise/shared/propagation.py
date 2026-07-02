@@ -120,6 +120,7 @@ class Propagator:
             svd_threshold=self.sim_params.svd_threshold,
             order=self.sim_params.order,
             sample_timesteps=True,
+            random_seed=self.sim_params.random_seed,
         )
         result = self._simulator.run(
             self.init_state,

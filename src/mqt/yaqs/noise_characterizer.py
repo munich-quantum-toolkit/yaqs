@@ -100,7 +100,7 @@ class NoiseCharacterizer:
             ref_expectations=np.asarray(reference_propagator.obs_array, dtype=float),
             propagator=fit_propagator,
         )
-        return cls(propagator=fit_propagator, init_guess=init_guess, loss=loss)
+        return cls(propagator=loss.propagator, init_guess=init_guess, loss=loss)
 
     def optimize(
         self,

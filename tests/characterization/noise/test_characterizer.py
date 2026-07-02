@@ -43,3 +43,5 @@ def test_noise_characterizer_cma_smoke(noise_test_config: NoiseTestConfig) -> No
     assert result.best_loss >= 0.0
     assert len(result.parameter_history) >= 1
     assert isinstance(result.optimal_model, CompactNoiseModel)
+    assert characterizer.propagator is characterizer.loss.propagator
+    assert characterizer.loss.num_traj(0) == sim_params.num_traj
