@@ -16,7 +16,7 @@ mystnb:
 
 **Weak** digital simulation samples computational-basis **shots** after a noisy circuit evolution, mimicking hardware readout statistics. Use {class}`~mqt.yaqs.WeakSimParams` and read bitstring counts from {attr}`~mqt.yaqs.Result.counts`.
 
-For expectation-value simulation and mid-circuit observables, see {doc}`circuit_simulation`. For parameter presets and truncation settings, see {doc}`simulation_parameters`.
+For expectation-value simulation and mid-circuit observables, see {doc}`strong_simulation`. For parameter presets and truncation settings, see {doc}`simulation_parameters`.
 
 You can pass an OpenQASM file path or raw OpenQASM string to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python (OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`).
 
@@ -118,5 +118,5 @@ plt.show()
 
 ## Related topics
 
-- {doc}`circuit_simulation` — strong simulation with final and mid-circuit observables
+- {doc}`strong_simulation` — strong simulation with final and mid-circuit observables
 - {doc}`custom_gates` — custom unitaries and gate translation

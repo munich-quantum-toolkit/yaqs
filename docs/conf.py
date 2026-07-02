@@ -63,8 +63,9 @@ extensions = [
 ]
 
 redirects = {
-    "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
-    "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
+    "examples/circuit_simulation": "examples/strong_simulation.html",
+    "examples/strong_circuit_simulation": "examples/strong_simulation.html",
+    "examples/sample_observable_digital_tjm": "examples/strong_simulation.html#mid-circuit-observables",
     "examples/solver_comparison": "examples/representation_comparison.html",
     "examples/fermi_hubbard_mpo": "examples/hamiltonians.html#fermi-hubbard-1d",
     "examples/reference_process_tensors": "examples/memory_surrogate.html#short-horizon-validation",

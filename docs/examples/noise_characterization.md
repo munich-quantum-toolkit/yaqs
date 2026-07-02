@@ -41,7 +41,6 @@ import numpy as np
 warnings.filterwarnings("ignore", message=".*special injected samples.*")
 
 from mqt.yaqs import AnalogSimParams, CompactNoiseModel, Hamiltonian, NoiseCharacterizer, Observable, Simulator, State
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 n_sites = 3
 j_coupling = 1.0
@@ -55,15 +54,15 @@ hamiltonian = Hamiltonian.ising(n_sites, J=j_coupling, g=transverse_field)
 init_state = State(n_sites, initial="zeros")
 
 fitting_observables = [
-    Observable(Y(), 0),
-    Observable(Z(), 0),
-    Observable(Y(), 1),
+    Observable("y", 0),
+    Observable("z", 0),
+    Observable("y", 1),
 ]
 prediction_observables = [
-    Observable(X(), 0),
-    Observable(X(), 1),
-    Observable(X(), 2),
-    Observable(Z(), 2),
+    Observable("x", 0),
+    Observable("x", 1),
+    Observable("x", 2),
+    Observable("z", 2),
 ]
 
 sim_params = AnalogSimParams(

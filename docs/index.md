@@ -74,7 +74,7 @@ flowchart LR
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
 | Learn Markovian Lindblad jump rates from observable trajectories           | {doc}`examples/noise_characterization`                                      |
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
-| Simulate a noisy circuit and read observables                              | {doc}`examples/circuit_simulation`                                          |
+| Simulate a circuit and read observables (strong simulation)                | {doc}`examples/strong_simulation`                                           |
 | Get hardware-like shot histograms                                          | {doc}`examples/weak_circuit_simulation`                                     |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
@@ -133,7 +133,7 @@ examples/noise_characterization
 :maxdepth: 1
 :titlesonly:
 
-examples/circuit_simulation
+examples/strong_simulation
 examples/weak_circuit_simulation
 examples/custom_gates
 examples/equivalence_checking

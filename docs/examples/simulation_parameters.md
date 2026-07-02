@@ -30,7 +30,7 @@ This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` ex
 | `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
 | `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
 | `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
-| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`circuit_simulation`               |
+| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`strong_simulation`                |
 
 For custom unitaries and circuit gates, use {doc}`custom_gates` — those workflows still use `GateLibrary` or Qiskit circuits directly.
 
@@ -176,7 +176,7 @@ Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {cl
 
 ## `StrongSimParams`
 
-Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`circuit_simulation`).
+Used for strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`strong_simulation`).
 
 ### Two-qubit gate mode (`gate_mode`)
 
@@ -242,5 +242,5 @@ SIMULATION_PRESETS
 
 - {doc}`quickstart` — minimal first simulation
 - {doc}`analog_simulation` — analog parameters in context
-- {doc}`circuit_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
+- {doc}`strong_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
 - {doc}`weak_circuit_simulation` — `WeakSimParams` and shot readout
