@@ -14,7 +14,9 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
+    build_simulator,
     build_trajectory_loss,
+    resolve_prepared_state,
     resolve_reference_expectations,
     simulate_observable_trajectories,
 )
@@ -70,7 +72,6 @@ def test_ref_expectations_path_matches_simulation() -> None:
     """Precomputed expectations are accepted when shapes match the fitting set."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
     execution = ExecutionConfig(parallel=False, show_progress=False)
-    from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_simulator
 
     simulator = build_simulator(execution)
     simulated, times, _ = resolve_reference_expectations(
@@ -101,11 +102,31 @@ def test_ref_expectations_path_matches_simulation() -> None:
     np.testing.assert_allclose(accepted_times, times)
 
 
+def test_resolve_reference_requires_a_source() -> None:
+    """Reference resolution rejects when neither source is provided."""
+    hamiltonian, init_state, observables, sim_params, _reference_model = _three_site_problem()
+    execution = ExecutionConfig(parallel=False, show_progress=False)
+
+    simulator = build_simulator(execution)
+    with pytest.raises(ValueError, match="exactly one"):
+        resolve_reference_expectations(
+            sim_params=sim_params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            observables=observables,
+            reference_model=None,
+            ref_expectations=None,
+            simulator=simulator,
+            representation="density_matrix",
+            lindblad_max_qubits=8,
+            vector_max_qubits=10,
+        )
+
+
 def test_resolve_reference_requires_exactly_one_source() -> None:
     """Reference resolution rejects missing or duplicate sources."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
     execution = ExecutionConfig(parallel=False, show_progress=False)
-    from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_simulator
 
     simulator = build_simulator(execution)
     with pytest.raises(ValueError, match="exactly one"):
@@ -121,6 +142,68 @@ def test_resolve_reference_requires_exactly_one_source() -> None:
             lindblad_max_qubits=8,
             vector_max_qubits=10,
         )
+
+
+def test_ref_expectations_shape_validation() -> None:
+    """Precomputed expectations must match observable and time dimensions."""
+    hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
+    execution = ExecutionConfig(parallel=False, show_progress=False)
+
+    simulator = build_simulator(execution)
+    with pytest.raises(ValueError, match="2-D"):
+        resolve_reference_expectations(
+            sim_params=sim_params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            observables=observables,
+            reference_model=None,
+            ref_expectations=np.zeros(3),
+            simulator=simulator,
+            representation="density_matrix",
+            lindblad_max_qubits=8,
+            vector_max_qubits=10,
+        )
+    with pytest.raises(ValueError, match="rows"):
+        resolve_reference_expectations(
+            sim_params=sim_params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            observables=observables,
+            reference_model=None,
+            ref_expectations=np.zeros((1, len(sim_params.times))),
+            simulator=simulator,
+            representation="density_matrix",
+            lindblad_max_qubits=8,
+            vector_max_qubits=10,
+        )
+    with pytest.raises(ValueError, match="columns"):
+        resolve_reference_expectations(
+            sim_params=sim_params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            observables=observables,
+            reference_model=None,
+            ref_expectations=np.zeros((len(observables), 1)),
+            simulator=simulator,
+            representation="density_matrix",
+            lindblad_max_qubits=8,
+            vector_max_qubits=10,
+        )
+    _ = reference_model
+
+
+def test_resolve_prepared_state_encodes_density_matrix() -> None:
+    """resolve_prepared_state returns an encoded state for Lindblad."""
+    hamiltonian, init_state, _, _, _ = _three_site_problem()
+    resolved, prepared = resolve_prepared_state(
+        hamiltonian,
+        init_state,
+        "density_matrix",
+        lindblad_max_qubits=8,
+        vector_max_qubits=10,
+    )
+    assert resolved == "density_matrix"
+    assert prepared.representation == "density_matrix"
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
@@ -140,8 +223,6 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         observables=observables,
         representation="density_matrix",
     )
-    from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_simulator
-
     simulator = build_simulator(ExecutionConfig(parallel=False, show_progress=False))
     loss, _propagator, resolved = build_trajectory_loss(
         sim_params=sim_params,

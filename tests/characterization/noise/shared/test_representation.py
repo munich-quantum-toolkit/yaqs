@@ -9,12 +9,15 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
+    NoiseRepresentation,
     prepare_state_for_representation,
     resolve_noise_representation,
 )
@@ -23,6 +26,19 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 
 from ..fixtures import NoiseTestConfig, build_propagator
+
+
+def test_resolve_explicit_representations() -> None:
+    """Explicit representation strings pass through unchanged."""
+    assert resolve_noise_representation(4, "density_matrix") == "density_matrix"
+    assert resolve_noise_representation(4, "vector") == "vector"
+    assert resolve_noise_representation(4, "mps") == "mps"
+
+
+def test_resolve_invalid_representation_raises() -> None:
+    """Unknown representation strings raise ValueError."""
+    with pytest.raises(ValueError, match="representation must be"):
+        resolve_noise_representation(2, cast("NoiseRepresentation", "invalid"))
 
 
 def test_resolve_auto_lindblad_first() -> None:

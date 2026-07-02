@@ -31,6 +31,10 @@ def _propagation_run_params(
 ) -> AnalogSimParams:
     """Clone ``base`` simulation parameters with a new observable list.
 
+    Args:
+        base: Template simulation parameters.
+        observables: Observables to attach to the cloned parameters.
+
     Returns:
         Fresh :class:`AnalogSimParams` for a single propagation call.
     """

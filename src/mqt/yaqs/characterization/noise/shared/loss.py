@@ -24,7 +24,14 @@ if TYPE_CHECKING:
 
 
 def default_num_traj(_evaluation: int) -> int:
-    """Return a constant trajectory count for each loss evaluation."""
+    """Return a constant trajectory count for each loss evaluation.
+
+    Args:
+        _evaluation: Loss evaluation index (unused).
+
+    Returns:
+        ``1`` trajectory per evaluation.
+    """
     return 1
 
 
@@ -61,6 +68,9 @@ class TrajectoryLoss:
 
     def x_to_noise_model(self, x: np.ndarray) -> CompactNoiseModel:
         """Map a flat strength vector back to a :class:`CompactNoiseModel`.
+
+        Args:
+            x: Compact strength vector with length ``self.d``.
 
         Returns:
             Updated compact noise model.

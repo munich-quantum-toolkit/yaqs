@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.noise.backends.gradient_free import cma
+from mqt.yaqs.characterization.noise.backends.gradient_free import cma, cma_opt
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -87,6 +87,54 @@ def make_loss(obj: object) -> TrajectoryLoss:
         The input object typed as a trajectory loss callable.
     """
     return cast("TrajectoryLoss", obj)
+
+
+@pytest.mark.filterwarnings("ignore:Initial solution argument x0.*:UserWarning")
+def test_cma_opt_default_bounds() -> None:
+    """Unbounded optimization uses infinite lower and upper limits."""
+    pytest.importorskip("cma")
+
+    class Objective:
+        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
+            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+
+    xbest, fbest, _, _ = cma.cma_opt(
+        make_loss(Objective()),
+        np.array([0.5, 0.5]),
+        sigma0=0.1,
+        max_iter=2,
+        popsize=4,
+    )
+    assert xbest.shape == (2,)
+    assert fbest >= 0.0
+
+
+def test_gradient_free_backend_exports_cma_opt() -> None:
+    """Backend package re-exports the CMA-ES entry point."""
+    assert callable(cma_opt)
+
+
+def test_cma_opt_integration_smoke() -> None:
+    """Real CMA-ES backend minimizes a simple quadratic objective."""
+    pytest.importorskip("cma")
+
+    class Objective:
+        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
+            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+
+    xbest, fbest, loss_history, param_history = cma.cma_opt(
+        make_loss(Objective()),
+        np.array([1.0, 1.0]),
+        sigma0=0.2,
+        max_iter=3,
+        popsize=4,
+        seed=0,
+    )
+
+    assert fbest < 2.0
+    assert len(loss_history) >= 4
+    assert len(param_history) == len(loss_history)
+    assert xbest.shape == (2,)
 
 
 def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:

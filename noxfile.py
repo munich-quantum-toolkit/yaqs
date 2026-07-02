@@ -62,6 +62,7 @@ def _run_tests(
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
     extra_torch: bool = False,
+    extra_noise: bool = True,
 ) -> None:
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
@@ -81,6 +82,8 @@ def _run_tests(
     ]
     if extra_torch:
         uv_args.extend(["--extra", "torch"])
+    if extra_noise:
+        uv_args.extend(["--extra", "noise"])
 
     session.run(
         *uv_args,
@@ -106,6 +109,8 @@ def minimums(session: nox.Session) -> None:
             session,
             install_args=["--resolution=lowest-direct"],
             run_args=["-Wdefault"],
+            extra_noise=True,
+            extra_torch=True,
         )
         env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
         session.run("uv", "tree", "--frozen", env=env)

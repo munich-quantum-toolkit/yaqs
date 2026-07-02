@@ -55,3 +55,37 @@ def test_rate_table_with_reference() -> None:
     rows = result.rate_table(reference_strengths=[0.1])
     assert rows[0]["learned"] == pytest.approx(0.09)
     assert rows[0]["rel_error"] == pytest.approx(0.1)
+
+
+def test_rate_table_without_reference() -> None:
+    """Rate table omits reference fields when no reference is supplied."""
+    result = _minimal_result()
+    rows = result.rate_table()
+    assert "reference" not in rows[0]
+
+
+def test_rate_table_zero_reference_yields_nan_rel_error() -> None:
+    """Relative error is NaN when the reference strength is zero."""
+    result = _minimal_result(best_parameters=np.array([0.05]))
+    rows = result.rate_table(reference_strengths=[0.0])
+    assert np.isnan(rows[0]["rel_error"])
+
+
+def test_sqrt_loss_before_raises_on_empty_history() -> None:
+    """sqrt_loss_before requires a non-empty loss history."""
+    result = _minimal_result(loss_history=[])
+    with pytest.raises(ValueError, match="loss_history is empty"):
+        result.sqrt_loss_before()
+
+
+def test_trajectory_rmse_requires_arrays() -> None:
+    """trajectory_rmse raises when trajectories were not stored."""
+    model = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    result = NoiseCharacterizationResult(
+        optimal_model=model,
+        best_loss=0.01,
+        best_parameters=np.array([0.1]),
+        loss_history=[1.0, 0.01],
+    )
+    with pytest.raises(ValueError, match="ref_traj and fit_traj"):
+        result.trajectory_rmse()

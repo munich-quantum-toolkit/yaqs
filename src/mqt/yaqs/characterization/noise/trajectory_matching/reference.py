@@ -60,6 +60,13 @@ def resolve_prepared_state(
 ) -> tuple[ResolvedNoiseRepresentation, State]:
     """Resolve representation and encode the initial state.
 
+    Args:
+        hamiltonian: System Hamiltonian (used for chain length).
+        init_state: User-supplied initial state.
+        representation: Forward-model selection.
+        lindblad_max_qubits: Auto cutover to Lindblad evolution.
+        vector_max_qubits: Auto cutover from MCWF to TJM.
+
     Returns:
         Tuple of resolved representation and prepared state.
     """
@@ -170,16 +177,12 @@ def resolve_reference_expectations(
             raise ValueError(msg)
         if ref_array.shape[0] != len(observables):
             msg = (
-                f"ref_expectations has {ref_array.shape[0]} rows but "
-                f"{len(observables)} fitting observables were given."
+                f"ref_expectations has {ref_array.shape[0]} rows but {len(observables)} fitting observables were given."
             )
             raise ValueError(msg)
         times = np.asarray(sim_params.times, dtype=float)
         if ref_array.shape[1] != len(times):
-            msg = (
-                f"ref_expectations has {ref_array.shape[1]} columns but "
-                f"sim_params defines {len(times)} time samples."
-            )
+            msg = f"ref_expectations has {ref_array.shape[1]} columns but sim_params defines {len(times)} time samples."
             raise ValueError(msg)
         resolved = resolve_noise_representation(
             hamiltonian.length,
@@ -220,6 +223,18 @@ def build_trajectory_loss(
     vector_max_qubits: int,
 ) -> tuple[TrajectoryLoss, Propagator, ResolvedNoiseRepresentation]:
     """Wire a trajectory loss and fit propagator for optimization.
+
+    Args:
+        sim_params: Analog simulation parameters.
+        hamiltonian: System Hamiltonian.
+        init_state: Initial state.
+        init_guess: Initial compact noise guess defining the fit topology.
+        observables: Fitting observables.
+        ref_expectations: Target trajectories with shape ``(n_obs, n_times)``.
+        simulator: Simulator used for forward propagation.
+        representation: Forward-model selection.
+        lindblad_max_qubits: Auto cutover to Lindblad evolution.
+        vector_max_qubits: Auto cutover from MCWF to TJM.
 
     Returns:
         Tuple of loss, fit propagator, and resolved representation.

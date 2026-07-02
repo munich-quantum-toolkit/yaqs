@@ -16,6 +16,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 
 from mqt.yaqs.characterization.noise.backends.gradient_free.cma import cma_opt
+from mqt.yaqs.characterization.noise.shared.representation import (
+    DEFAULT_LINDBLAD_MAX_QUBITS,
+    DEFAULT_VECTOR_MAX_QUBITS,
+    NoiseRepresentation,
+)
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
     build_simulator,
     build_trajectory_loss,
@@ -23,11 +28,6 @@ from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
     simulate_observable_trajectories,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
-from mqt.yaqs.characterization.noise.shared.representation import (
-    DEFAULT_LINDBLAD_MAX_QUBITS,
-    DEFAULT_VECTOR_MAX_QUBITS,
-    NoiseRepresentation,
-)
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
@@ -149,8 +149,19 @@ def simulate_fit_trajectory(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Simulate trajectories for a candidate noise model (evaluation helper).
 
+    Args:
+        hamiltonian: System Hamiltonian.
+        sim_params: Analog simulation parameters.
+        init_state: Initial state.
+        noise_model: Compact noise model to propagate.
+        observables: Observables to track.
+        execution: Parallel execution configuration.
+        representation: Forward-model selection.
+        lindblad_max_qubits: Auto cutover to Lindblad evolution.
+        vector_max_qubits: Auto cutover from MCWF to TJM.
+
     Returns:
-        Tuple ``(expectations, times)``.
+        Tuple ``(expectations, times)`` with expectations shaped ``(n_obs, n_times)``.
     """
     simulator = build_simulator(execution)
     expectations, times, _ = simulate_observable_trajectories(

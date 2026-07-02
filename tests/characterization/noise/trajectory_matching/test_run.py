@@ -9,12 +9,17 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import simulate_observable_trajectories
-from mqt.yaqs.characterization.noise.trajectory_matching.run import run_trajectory_characterization
+from mqt.yaqs.characterization.noise.trajectory_matching.run import (
+    run_trajectory_characterization,
+    simulate_fit_trajectory,
+)
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.core.parallel_utils import ExecutionConfig
@@ -106,3 +111,42 @@ def test_run_trajectory_characterization_three_site_digital_twin() -> None:
     for learned in result.best_parameters:
         rel_err = abs(float(learned) - gamma_true) / gamma_true
         assert rel_err < 0.05
+
+
+def test_run_rejects_unsupported_optimizer() -> None:
+    """Only the CMA backend is wired in the orchestration layer."""
+    hamiltonian, init_state, fitting_observables, sim_params, reference_model, init_guess, experimental = (
+        _digital_twin_setup()
+    )
+    with pytest.raises(ValueError, match="optimizer must be 'cma'"):
+        run_trajectory_characterization(
+            hamiltonian=hamiltonian,
+            sim_params=sim_params,
+            init_state=init_state,
+            init_guess=init_guess,
+            observables=fitting_observables,
+            ref_expectations=experimental,
+            x_low=np.zeros(3),
+            x_up=np.full(3, 0.5),
+            execution=ExecutionConfig(parallel=False, show_progress=False),
+            representation="density_matrix",
+            optimizer=cast("Any", "adam"),
+        )
+    _ = reference_model
+
+
+@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
+def test_simulate_fit_trajectory_helper() -> None:
+    """simulate_fit_trajectory delegates to the reference simulator helper."""
+    hamiltonian, init_state, fitting_observables, sim_params, reference_model, init_guess, _ = _digital_twin_setup()
+    expectations, times = simulate_fit_trajectory(
+        hamiltonian=hamiltonian,
+        sim_params=sim_params,
+        init_state=init_state,
+        noise_model=reference_model,
+        observables=fitting_observables,
+        execution=ExecutionConfig(parallel=False, show_progress=False),
+        representation="density_matrix",
+    )
+    assert expectations.shape == (len(fitting_observables), len(times))
+    _ = init_guess

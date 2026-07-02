@@ -1793,6 +1793,7 @@ torch = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cma" },
     { name = "nox" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1820,6 +1821,7 @@ docs = [
     { name = "torch" },
 ]
 test = [
+    { name = "cma" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-sugar" },
@@ -1854,6 +1856,7 @@ provides-extras = ["noise", "qasm3", "torch"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "cma", specifier = ">=4.0.0" },
     { name = "nox", specifier = ">=2025.11.12" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
@@ -1881,6 +1884,7 @@ docs = [
     { name = "torch", marker = "python_full_version >= '3.14'", specifier = ">=2.9" },
 ]
 test = [
+    { name = "cma", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-sugar", specifier = ">=1.1.1" },
