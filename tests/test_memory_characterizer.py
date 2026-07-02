@@ -9,12 +9,12 @@
 
 from __future__ import annotations
 
-import importlib.util
 import math
 from typing import Any, cast
 
 import numpy as np
 import pytest
+from torch_support import requires_torch
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
@@ -152,10 +152,7 @@ def test_characterize_rejects_probe_set_for_multi_cut(ham_and_params: tuple[Hami
         mc.characterize(ham, params, num_interventions=2, cuts="all", probe_set=first)
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("torch") is None,
-    reason="torch not installed",
-)
+@requires_torch
 def test_train_default_style_is_haar(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
     monkeypatch: pytest.MonkeyPatch,
@@ -178,10 +175,7 @@ def test_train_default_style_is_haar(
     assert captured["intervention_style"] == "haar"
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("torch") is None,
-    reason="torch not installed",
-)
+@requires_torch
 def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Train returns a model; characterize returns CharacterizationResult diagnostics."""
     ham, params = ham_and_params
@@ -198,10 +192,7 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
     assert out.entropy(1) >= 0.0
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("torch") is None,
-    reason="torch not installed",
-)
+@requires_torch
 def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """predict(model, rho0, sequence) returns a valid density matrix."""
     ham, params = ham_and_params
@@ -260,10 +251,7 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
     assert math.isfinite(float(result.entropy(2)))
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("torch") is None,
-    reason="torch not installed",
-)
+@requires_torch
 def test_process_tensor_surrogate_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
@@ -374,10 +362,7 @@ def test_build_process_tensor_forwards_parallel_override(
     assert seen == [False]
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("torch") is None,
-    reason="torch not installed",
-)
+@requires_torch
 def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """Train at k=2; predict at k=1 and k=3 returns finite density matrices."""
     ham, params = ham_and_params
@@ -646,7 +631,7 @@ def test_characterize_rejects_invalid_probe_set(ham_and_params: tuple[Hamiltonia
         mc.characterize(ham, params, num_interventions=2, cut=1, probe_set={"bad": 1})
 
 
-@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="torch not installed")
+@requires_torch
 def test_train_rejects_non_positive_n(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
     """MemoryCharacterizer.train rejects non-positive training batch sizes."""
     ham, params = ham_and_params

@@ -10,7 +10,15 @@
 from __future__ import annotations
 
 from mqt import yaqs
-from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer, Observable, Simulator, State
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    MemoryCharacterizer,
+    NoiseCharacterizer,
+    Observable,
+    Simulator,
+    State,
+)
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
 EXPECTED_PUBLIC_API = frozenset({
@@ -21,6 +29,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",
+    "NoiseCharacterizer",
     "NoiseModel",
     "Observable",
     "Result",
@@ -65,3 +74,4 @@ def test_top_level_import_smoke() -> None:
     assert result.sim_params is params
 
     assert MemoryCharacterizer is not None
+    assert NoiseCharacterizer is not None

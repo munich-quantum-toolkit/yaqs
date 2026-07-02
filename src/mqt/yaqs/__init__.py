@@ -32,6 +32,7 @@ from .core.data_structures.simulation_parameters import (
 from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
 from .memory_characterizer import MemoryCharacterizer
+from .noise_characterizer import NoiseCharacterizer
 from .simulator import Simulator
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",
+    "NoiseCharacterizer",
     "NoiseModel",
     "Observable",
     "Result",
