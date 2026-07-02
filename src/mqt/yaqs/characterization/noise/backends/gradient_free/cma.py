@@ -48,6 +48,7 @@ def cma_opt(
         Best parameter vector, best loss, per-evaluation loss history, and
         parameter history.
     """
+    # Lazy import: ``cma`` is an optional extra; keep this module importable without it.
     import cma  # noqa: PLC0415
 
     x0 = np.asarray(x0, dtype=float)
@@ -73,7 +74,7 @@ def cma_opt(
     if seed is not None:
         options["seed"] = seed
 
-    es = cma.CMAEvolutionStrategy(  # type: ignore[possibly-missing-attribute]
+    es = cma.CMAEvolutionStrategy(
         x0,
         sigma0,
         options,

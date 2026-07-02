@@ -73,6 +73,9 @@ class TrajectoryLoss:
         noise_model = self.x_to_noise_model(x)
         self.propagator.run(noise_model)
         obs_array = np.asarray(self.propagator.obs_array, dtype=float)
+        if obs_array.shape != self.ref_traj_array.shape:
+            msg = f"Propagated observables have shape {obs_array.shape}, expected {self.ref_traj_array.shape}."
+            raise ValueError(msg)
 
         diff = obs_array - self.ref_traj_array
         return float(np.sum(diff**2) * self.loss_scale_factor)

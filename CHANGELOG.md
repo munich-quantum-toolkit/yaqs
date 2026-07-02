@@ -217,7 +217,6 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
 [**@linusschulte**]: https://github.com/linusschulte
-[**@aleramos119**]: https://github.com/aleramos119
 
 <!-- General links -->
 

@@ -67,3 +67,13 @@ def test_trajectory_rmse_requires_arrays() -> None:
     )
     with pytest.raises(ValueError, match="ref_traj and fit_traj"):
         result.trajectory_rmse()
+
+
+def test_trajectory_rmse_rejects_shape_mismatch() -> None:
+    """trajectory_rmse raises when stored trajectories have different shapes."""
+    result = _minimal_result(
+        ref_traj=np.zeros((1, 3)),
+        fit_traj=np.zeros((1, 2)),
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        result.trajectory_rmse()

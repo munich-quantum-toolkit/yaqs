@@ -48,6 +48,8 @@ class NoiseCharacterizer:
         mp_context: Multiprocessing context.
         max_retries: Maximum retry attempts for transient worker errors.
         retry_exceptions: Exception types that trigger a retry.
+        result: Most recent characterization result, or ``None`` before the first
+            :meth:`characterize` call.
     """
 
     def __init__(
@@ -153,7 +155,15 @@ class NoiseCharacterizer:
 
         Returns:
             Structured optimization result including fitted and reference trajectories.
+
+        Raises:
+            ValueError: If neither or both of ``reference_model`` and
+                ``ref_expectations`` are provided.
         """
+        if (reference_model is None) == (ref_expectations is None):
+            msg = "Specify exactly one of reference_model= or ref_expectations=."
+            raise ValueError(msg)
+
         self.result = run_trajectory_characterization(
             hamiltonian=hamiltonian,
             sim_params=sim_params,

@@ -128,6 +128,7 @@ def test_cma_opt_integration_smoke() -> None:
 
 def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
     """CMA-ES returns the lowest-loss candidate from the mocked population."""
+    pytest.importorskip("cma")
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
@@ -150,6 +151,7 @@ def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
 
 def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
     """Optional ``seed`` values are forwarded to the CMA-ES options dict."""
+    pytest.importorskip("cma")
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:

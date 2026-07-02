@@ -117,7 +117,7 @@ This section uses `num_traj=64` during the documentation build. Increase `num_tr
 
 Set `sample_layers=True` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you want measurements. YAQS records observables at the circuit start, after each labelled barrier, and after the final gate layer.
 
-The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$ entanglers, and tracks how amplitude damping gradually drives each $\langle Z_i \rangle$ toward $+1$. Other barriers and `measure` operations are ignored for this sampling schedule.
+The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$ entanglers, and tracks how amplitude damping gradually drives each $\langle Z_i \rangle$ toward $+1$. Only barriers labelled `SAMPLE_OBSERVABLES` trigger sampling; unlabelled barriers are ignored.
 
 ```{code-cell} ipython3
 from qiskit.circuit import QuantumCircuit

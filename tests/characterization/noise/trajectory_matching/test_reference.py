@@ -147,7 +147,7 @@ def test_resolve_reference_requires_exactly_one_source() -> None:
 
 def test_ref_expectations_shape_validation() -> None:
     """Precomputed expectations must match observable and time dimensions."""
-    hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
+    hamiltonian, init_state, observables, sim_params, _reference_model = _three_site_problem()
     execution = ExecutionConfig(parallel=False, show_progress=False)
 
     simulator = build_simulator(execution)
@@ -190,7 +190,6 @@ def test_ref_expectations_shape_validation() -> None:
             lindblad_max_qubits=8,
             vector_max_qubits=10,
         )
-    _ = reference_model
 
 
 def test_resolve_prepared_state_encodes_density_matrix() -> None:

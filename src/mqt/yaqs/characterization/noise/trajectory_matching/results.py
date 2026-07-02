@@ -60,10 +60,16 @@ class NoiseCharacterizationResult:
             RMSE over stored ``ref_traj`` and ``fit_traj``.
 
         Raises:
-            ValueError: If trajectory arrays were not stored on the result.
+            ValueError: If trajectory arrays were not stored on the result or shapes
+                do not match.
         """
         if self.ref_traj is None or self.fit_traj is None:
             msg = "ref_traj and fit_traj are required for trajectory_rmse()."
             raise ValueError(msg)
-        residual = np.asarray(self.fit_traj, dtype=float) - np.asarray(self.ref_traj, dtype=float)
+        ref = np.asarray(self.ref_traj, dtype=float)
+        fit = np.asarray(self.fit_traj, dtype=float)
+        if ref.shape != fit.shape:
+            msg = f"ref_traj shape {ref.shape} does not match fit_traj shape {fit.shape}."
+            raise ValueError(msg)
+        residual = fit - ref
         return float(np.sqrt(np.mean(residual**2)))

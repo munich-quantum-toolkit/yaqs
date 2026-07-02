@@ -21,6 +21,15 @@ from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def _homogeneous_pauli_noise_model(sites: list[int], strength: float) -> NoiseModel:
+    """Build a homogeneous Pauli noise model on the given sites.
+
+    Args:
+        sites: Qubit/site indices receiving independent Pauli channels.
+        strength: Shared jump rate for every channel.
+
+    Returns:
+        Noise model with ``pauli_x``, ``pauli_y``, and ``pauli_z`` on each site.
+    """
     return NoiseModel(
         [{"name": "pauli_x", "sites": [s], "strength": strength} for s in sites]
         + [{"name": "pauli_y", "sites": [s], "strength": strength} for s in sites]
@@ -37,6 +46,12 @@ def _digital_twin_setup() -> tuple[
     NoiseModel,
     np.ndarray,
 ]:
+    """Build a three-site digital-twin benchmark with simulated experimental data.
+
+    Returns:
+        Tuple of Hamiltonian, initial state, fitting observables, simulation
+        parameters, reference model, initial guess, and reference trajectories.
+    """
     n_sites = 3
     gamma_true = 0.08
     sites = list(range(n_sites))

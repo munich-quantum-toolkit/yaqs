@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
-from mqt.yaqs.characterization.noise.protocol import NoiseCharacterizationResult
-from mqt.yaqs.characterization.noise.protocol.results import NoiseCharacterizationResult as ResultAlias
+import importlib
+
+import pytest
+
 from mqt.yaqs.characterization.noise.trajectory_matching import run_trajectory_characterization
 from mqt.yaqs.characterization.noise.trajectory_matching.results import (
     NoiseCharacterizationResult as TrajectoryResult,
@@ -19,6 +21,14 @@ from mqt.yaqs.characterization.noise.trajectory_matching.results import (
 
 def test_protocol_package_reexports_result() -> None:
     """Deprecated protocol package re-exports trajectory-matching symbols."""
-    assert NoiseCharacterizationResult is ResultAlias
-    assert NoiseCharacterizationResult is TrajectoryResult
+    with pytest.warns(DeprecationWarning, match="protocol is deprecated"):
+        protocol = importlib.import_module("mqt.yaqs.characterization.noise.protocol")
+    shim_result = protocol.NoiseCharacterizationResult
+
+    with pytest.warns(DeprecationWarning, match="protocol.results is deprecated"):
+        results = importlib.import_module("mqt.yaqs.characterization.noise.protocol.results")
+    result_alias = results.NoiseCharacterizationResult
+
+    assert shim_result is result_alias
+    assert shim_result is TrajectoryResult
     assert run_trajectory_characterization.__name__ == "run_trajectory_characterization"

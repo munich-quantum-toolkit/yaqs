@@ -56,6 +56,18 @@ def test_trajectory_loss_wrong_parameter_length(noise_test_config: NoiseTestConf
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
+def test_trajectory_loss_rejects_shape_mismatch(noise_test_config: NoiseTestConfig) -> None:
+    """Loss rejects propagated trajectories with the wrong shape."""
+    _hamiltonian, _state, _observables, _sim_params, noise_model, propagator = build_propagator(noise_test_config)
+    propagator.run(noise_model)
+    ref = np.asarray(propagator.obs_array, dtype=float)
+    wrong_ref = ref[:, :-1]
+    loss = TrajectoryLoss(ref_expectations=wrong_ref, propagator=propagator)
+    with pytest.raises(ValueError, match="Propagated observables have shape"):
+        loss(_strength_vector(noise_model))
+
+
+@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_x_to_noise_model_updates_strengths(noise_test_config: NoiseTestConfig) -> None:
     """Strength vector maps back to a noise model."""
     _hamiltonian, _state, _observables, _sim_params, noise_model, propagator = build_propagator(noise_test_config)

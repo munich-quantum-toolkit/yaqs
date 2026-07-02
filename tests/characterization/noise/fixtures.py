@@ -64,6 +64,9 @@ def build_propagator(
 ]:
     """Construct a configured propagator for the shared test geometry.
 
+    Args:
+        test: Open-system geometry and simulation settings.
+
     Returns:
         Tuple of Hamiltonian, initial state, observables, simulation parameters,
         noise model, and propagator.

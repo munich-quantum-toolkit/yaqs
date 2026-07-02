@@ -16,6 +16,8 @@ import numpy as np
 from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.characterization.noise.shared.representation import (
+    DEFAULT_LINDBLAD_MAX_QUBITS,
+    DEFAULT_VECTOR_MAX_QUBITS,
     prepare_state_for_representation,
     resolve_noise_representation,
 )
@@ -87,8 +89,8 @@ def simulate_observable_trajectories(
     observables: list[Observable],
     simulator: Simulator | None = None,
     representation: NoiseRepresentation = "auto",
-    lindblad_max_qubits: int = 8,
-    vector_max_qubits: int = 10,
+    lindblad_max_qubits: int = DEFAULT_LINDBLAD_MAX_QUBITS,
+    vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
 ) -> tuple[np.ndarray, np.ndarray, State]:
     """Simulate observable expectation trajectories under a noise model.
 

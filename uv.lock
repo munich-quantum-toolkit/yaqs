@@ -1793,7 +1793,6 @@ torch = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "cma" },
     { name = "nox" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1802,7 +1801,6 @@ dev = [
     { name = "qiskit-qasm3-import" },
 ]
 docs = [
-    { name = "cma" },
     { name = "furo" },
     { name = "myst-nb" },
     { name = "qiskit", extra = ["visualization"] },
@@ -1821,7 +1819,6 @@ docs = [
     { name = "torch" },
 ]
 test = [
-    { name = "cma" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-sugar" },
@@ -1856,7 +1853,6 @@ provides-extras = ["noise", "qasm3", "torch"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "cma", specifier = ">=4.0.0" },
     { name = "nox", specifier = ">=2025.11.12" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
@@ -1865,7 +1861,6 @@ dev = [
     { name = "qiskit-qasm3-import", specifier = ">=0.4.1" },
 ]
 docs = [
-    { name = "cma", specifier = ">=4.0.0" },
     { name = "furo", specifier = ">=2025.9.25" },
     { name = "myst-nb", specifier = ">=1.3.0" },
     { name = "qiskit", extras = ["visualization"], specifier = ">=1.0.0" },
@@ -1884,7 +1879,6 @@ docs = [
     { name = "torch", marker = "python_full_version >= '3.14'", specifier = ">=2.9" },
 ]
 test = [
-    { name = "cma", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-sugar", specifier = ">=1.1.1" },
