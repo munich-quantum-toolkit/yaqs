@@ -56,7 +56,7 @@ def _three_site_problem() -> tuple[
 def test_simulate_observable_trajectories_shape() -> None:
     """Simulation helper returns trajectories with the expected shape."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
-    expectations, times, resolved = simulate_observable_trajectories(
+    expectations, times, resolved, _prepared = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -75,7 +75,7 @@ def test_ref_expectations_path_matches_simulation() -> None:
     execution = ExecutionConfig(parallel=False, show_progress=False)
 
     simulator = build_simulator(execution)
-    simulated, times, _ = resolve_reference_expectations(
+    simulated, times, _, _prepared = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -87,7 +87,7 @@ def test_ref_expectations_path_matches_simulation() -> None:
         lindblad_max_qubits=8,
         vector_max_qubits=10,
     )
-    accepted, accepted_times, _ = resolve_reference_expectations(
+    accepted, accepted_times, _, _ = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -217,7 +217,7 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         + [{"name": "pauli_y", "sites": [s], "strength": 0.35} for s in sites]
         + [{"name": "pauli_z", "sites": [s], "strength": 0.35} for s in sites]
     )
-    ref, _, _ = simulate_observable_trajectories(
+    ref, _, _, prepared = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -237,6 +237,7 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         representation="density_matrix",
         lindblad_max_qubits=8,
         vector_max_qubits=10,
+        prepared_state=prepared,
     )
     assert resolved == "density_matrix"
     np.testing.assert_allclose(loss.ref_traj_array, ref)

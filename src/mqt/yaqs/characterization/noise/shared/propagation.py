@@ -83,16 +83,15 @@ class Propagator:
         Raises:
             ValueError: If a noise site index exceeds the Hamiltonian length.
         """
-        self.sim_params = copy.deepcopy(sim_params)
-        self.hamiltonian = copy.deepcopy(hamiltonian)
+        self.sim_params = sim_params
+        self.hamiltonian = hamiltonian
         self.noise_model = copy.deepcopy(noise_model)
-        self.init_state = copy.deepcopy(init_state)
+        self.init_state = init_state
         self.representation: ResolvedNoiseRepresentation = init_state.representation
         self._simulator = simulator or Simulator(show_progress=False)
 
         self.sites = self.hamiltonian.length
         self.obs_list: list[Observable] = []
-        self.n_obs = 0
         self.set_observables = False
         self.times = np.asarray(self.sim_params.times, dtype=float)
         self.obs_array = np.empty((0, len(self.times)))
@@ -116,7 +115,7 @@ class Propagator:
             msg = "Observable list must not be empty."
             raise ValueError(msg)
 
-        self.obs_list = copy.deepcopy(obs_list)
+        self.obs_list = list(obs_list)
         all_obs_sites = [
             site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
         ]
@@ -124,7 +123,6 @@ class Propagator:
             msg = "Observable site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
 
-        self.n_obs = len(self.obs_list)
         self.set_observables = True
 
     def run(self, noise_model: NoiseModel) -> None:

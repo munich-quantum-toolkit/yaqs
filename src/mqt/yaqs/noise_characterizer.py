@@ -19,7 +19,6 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
     ResolvedNoiseRepresentation,
-    resolve_noise_representation,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.run import run_trajectory_characterization
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext
@@ -121,19 +120,6 @@ class NoiseCharacterizer:
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
         """Exception types that trigger a worker retry."""
         return self._execution.retry_exceptions
-
-    def _resolved_representation(self, chain_length: int) -> ResolvedNoiseRepresentation:
-        """Resolve the forward backend for a chain length under this characterizer's settings.
-
-        Returns:
-            Resolved ``"density_matrix"``, ``"vector"``, or ``"mps"``.
-        """
-        return resolve_noise_representation(
-            chain_length,
-            self.representation,
-            lindblad_max_qubits=self.lindblad_max_qubits,
-            vector_max_qubits=self.vector_max_qubits,
-        )
 
     def characterize(
         self,

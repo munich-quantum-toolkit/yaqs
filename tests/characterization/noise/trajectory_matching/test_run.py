@@ -52,7 +52,7 @@ def _digital_twin_setup() -> tuple[
     )
     reference_model = _homogeneous_pauli_noise_model(sites, gamma_true)
     init_guess = _homogeneous_pauli_noise_model(sites, 0.35)
-    experimental_data, _, _ = simulate_observable_trajectories(
+    experimental_data, _, _, _ = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,

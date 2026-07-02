@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -37,12 +36,11 @@ class TrajectoryLoss:
             propagator: Forward model used to simulate candidate noise parameters.
         """
         self.ref_traj_array = np.asarray(ref_expectations, dtype=float)
-        self.propagator = copy.deepcopy(propagator)
+        self.propagator = propagator
 
         self.d = len(self.propagator.noise_model.processes)
         self.n_obs, self.n_t = self.ref_traj_array.shape
         self.loss_scale_factor = 1.0 / (self.n_obs * self.n_t)
-        self.obs_array = np.empty_like(self.ref_traj_array)
 
     def x_to_noise_model(self, x: np.ndarray) -> NoiseModel:
         """Map a flat strength vector back to a :class:`NoiseModel`.
@@ -53,9 +51,7 @@ class TrajectoryLoss:
         Returns:
             Updated noise model.
         """
-        processes = copy.deepcopy(self.propagator.noise_model.processes)
-        for i in range(self.d):
-            processes[i]["strength"] = float(x[i])
+        processes = [{**proc, "strength": float(x[i])} for i, proc in enumerate(self.propagator.noise_model.processes)]
         return NoiseModel(processes)
 
     def __call__(self, x: np.ndarray) -> float:
@@ -76,7 +72,7 @@ class TrajectoryLoss:
 
         noise_model = self.x_to_noise_model(x)
         self.propagator.run(noise_model)
-        self.obs_array = np.asarray(self.propagator.obs_array, dtype=float)
+        obs_array = np.asarray(self.propagator.obs_array, dtype=float)
 
-        diff = self.obs_array - self.ref_traj_array
+        diff = obs_array - self.ref_traj_array
         return float(np.sum(diff**2) * self.loss_scale_factor)

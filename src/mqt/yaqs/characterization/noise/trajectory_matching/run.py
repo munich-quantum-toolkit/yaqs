@@ -123,7 +123,7 @@ def run_trajectory_characterization(
         Structured optimization result including optional trajectory arrays.
     """
     simulator = build_simulator(execution)
-    ref_array, times, resolved = resolve_reference_expectations(
+    ref_array, times, resolved, prepared_state = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -146,6 +146,7 @@ def run_trajectory_characterization(
         representation=representation,
         lindblad_max_qubits=lindblad_max_qubits,
         vector_max_qubits=vector_max_qubits,
+        prepared_state=prepared_state,
     )
 
     x_best, best_loss, loss_history, parameter_history = cma_opt(

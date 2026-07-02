@@ -91,7 +91,7 @@ def simulate_observable_trajectories(
     representation: NoiseRepresentation = "auto",
     lindblad_max_qubits: int = 8,
     vector_max_qubits: int = 10,
-) -> tuple[np.ndarray, np.ndarray, ResolvedNoiseRepresentation]:
+) -> tuple[np.ndarray, np.ndarray, ResolvedNoiseRepresentation, State]:
     """Simulate observable expectation trajectories under a noise model.
 
     Args:
@@ -106,8 +106,8 @@ def simulate_observable_trajectories(
         vector_max_qubits: Auto cutover from MCWF to TJM.
 
     Returns:
-        Tuple ``(expectations, times, resolved_representation)`` with expectations
-        shaped ``(n_obs, n_times)``.
+        Tuple ``(expectations, times, resolved_representation, prepared_state)`` with
+        expectations shaped ``(n_obs, n_times)``.
     """
     resolved, prepared_state = resolve_prepared_state(
         hamiltonian,
@@ -130,6 +130,7 @@ def simulate_observable_trajectories(
         np.asarray(propagator.obs_array, dtype=float),
         np.asarray(propagator.times, dtype=float),
         resolved,
+        prepared_state,
     )
 
 
@@ -145,7 +146,7 @@ def resolve_reference_expectations(
     representation: NoiseRepresentation,
     lindblad_max_qubits: int,
     vector_max_qubits: int,
-) -> tuple[np.ndarray, np.ndarray, ResolvedNoiseRepresentation]:
+) -> tuple[np.ndarray, np.ndarray, ResolvedNoiseRepresentation, State | None]:
     """Build or validate the reference trajectory used for fitting.
 
     Args:
@@ -161,7 +162,8 @@ def resolve_reference_expectations(
         vector_max_qubits: Auto cutover from MCWF to TJM.
 
     Returns:
-        Tuple ``(ref_expectations, times, resolved_representation)``.
+        Tuple ``(ref_expectations, times, resolved_representation, prepared_state)``.
+        ``prepared_state`` is set when ``reference_model`` was simulated internally.
 
     Raises:
         ValueError: If neither or both reference sources are supplied, or shapes mismatch.
@@ -190,12 +192,12 @@ def resolve_reference_expectations(
             lindblad_max_qubits=lindblad_max_qubits,
             vector_max_qubits=vector_max_qubits,
         )
-        return ref_array, times, resolved
+        return ref_array, times, resolved, None
 
     if reference_model is None:
         msg = "reference_model is required when ref_expectations is omitted."
         raise ValueError(msg)
-    ref_array, times, resolved = simulate_observable_trajectories(
+    ref_array, times, resolved, prepared_state = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -206,7 +208,7 @@ def resolve_reference_expectations(
         lindblad_max_qubits=lindblad_max_qubits,
         vector_max_qubits=vector_max_qubits,
     )
-    return ref_array, times, resolved
+    return ref_array, times, resolved, prepared_state
 
 
 def build_trajectory_loss(
@@ -221,6 +223,7 @@ def build_trajectory_loss(
     representation: NoiseRepresentation,
     lindblad_max_qubits: int,
     vector_max_qubits: int,
+    prepared_state: State | None = None,
 ) -> tuple[TrajectoryLoss, Propagator, ResolvedNoiseRepresentation]:
     """Wire a trajectory loss and fit propagator for optimization.
 
@@ -235,17 +238,21 @@ def build_trajectory_loss(
         representation: Forward-model selection.
         lindblad_max_qubits: Auto cutover to Lindblad evolution.
         vector_max_qubits: Auto cutover from MCWF to TJM.
+        prepared_state: Optional state already encoded for the forward backend.
 
     Returns:
         Tuple of loss, fit propagator, and resolved representation.
     """
-    resolved, prepared_state = resolve_prepared_state(
-        hamiltonian,
-        init_state,
-        representation,
-        lindblad_max_qubits=lindblad_max_qubits,
-        vector_max_qubits=vector_max_qubits,
-    )
+    if prepared_state is None:
+        resolved, prepared_state = resolve_prepared_state(
+            hamiltonian,
+            init_state,
+            representation,
+            lindblad_max_qubits=lindblad_max_qubits,
+            vector_max_qubits=vector_max_qubits,
+        )
+    else:
+        resolved = prepared_state.representation
     fit_propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
