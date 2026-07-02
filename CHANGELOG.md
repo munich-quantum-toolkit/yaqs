@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added analytical noise characterization module ([#288]) ([**@aleramos119**])
+- added analytical noise characterization module and digital twin pipeline ([#288]) ([**@aleramos119**], [**@aaronleesander**])
 - added memory characterization module for analyzing non-Markovian processes ([#482]) ([**@aaronleesander**])
 - added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
 - added orthogonality center tracking ([#477]) ([**@aaronleesander**])
