@@ -19,7 +19,7 @@ from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.libraries.gate_library import Z
 
-from .conftest import NoiseTestConfig, build_propagator
+from ..fixtures import NoiseTestConfig, build_propagator
 
 
 def test_propagator_runs(noise_test_config: NoiseTestConfig) -> None:

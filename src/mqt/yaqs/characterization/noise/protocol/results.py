@@ -5,25 +5,8 @@
 #
 # Licensed under the MIT License
 
-"""Typed results for noise-parameter characterization."""
+"""Deprecated import path; use :mod:`mqt.yaqs.characterization.noise.trajectory_matching.results`."""
 
-from __future__ import annotations
+from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import numpy as np
-
-    from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-
-
-@dataclass(slots=True)
-class NoiseCharacterizationResult:
-    """Outcome of a gradient-free noise-parameter fit."""
-
-    optimal_model: CompactNoiseModel
-    best_loss: float
-    best_parameters: np.ndarray
-    loss_history: list[float] = field(default_factory=list)
-    parameter_history: list[np.ndarray] = field(default_factory=list)
+__all__ = ["NoiseCharacterizationResult"]

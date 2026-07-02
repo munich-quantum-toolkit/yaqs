@@ -59,10 +59,7 @@ def resolve_noise_representation(
         if n_sites <= int(vector_max_qubits):
             return "vector"
         return "mps"
-    msg = (
-        "representation must be 'density_matrix', 'vector', 'mps', or 'auto', "
-        f"got {representation!r}."
-    )
+    msg = f"representation must be 'density_matrix', 'vector', 'mps', or 'auto', got {representation!r}."
     raise ValueError(msg)
 
 

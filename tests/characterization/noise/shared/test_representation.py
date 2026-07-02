@@ -22,7 +22,7 @@ from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 
-from .conftest import NoiseTestConfig, build_propagator
+from ..fixtures import NoiseTestConfig, build_propagator
 
 
 def test_resolve_auto_lindblad_first() -> None:
@@ -70,6 +70,8 @@ def test_lindblad_loss_is_deterministic() -> None:
         observables=observables,
         representation="density_matrix",
     )
+    assert characterizer.loss is not None
+    assert characterizer.init_x is not None
     x = characterizer.init_x.copy()
     loss_a, _, _ = characterizer.loss(x)
     loss_b, _, _ = characterizer.loss(x)
@@ -91,6 +93,7 @@ def test_from_reference_sets_resolved_representation() -> None:
         observables=observables,
     )
     assert characterizer.resolved_representation == "density_matrix"
+    assert characterizer.propagator is not None
     assert characterizer.propagator.representation == "density_matrix"
 
 

@@ -5,8 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Orchestration and typed results for noise characterization."""
+"""Deprecated import path; use :mod:`mqt.yaqs.characterization.noise.trajectory_matching`."""
 
-from .results import NoiseCharacterizationResult
+from mqt.yaqs.characterization.noise.trajectory_matching import (
+    NoiseCharacterizationResult,
+    run_trajectory_characterization,
+)
 
-__all__ = ["NoiseCharacterizationResult"]
+__all__ = ["NoiseCharacterizationResult", "run_trajectory_characterization"]
