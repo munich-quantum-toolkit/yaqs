@@ -18,7 +18,6 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
-    ResolvedNoiseRepresentation,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.run import run_trajectory_characterization
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext
@@ -88,7 +87,6 @@ class NoiseCharacterizer:
         self.representation = representation
         self.lindblad_max_qubits = int(lindblad_max_qubits)
         self.vector_max_qubits = int(vector_max_qubits)
-        self.resolved_representation: ResolvedNoiseRepresentation | None = None
         self.result: NoiseCharacterizationResult | None = None
 
     @property
@@ -172,7 +170,6 @@ class NoiseCharacterizer:
             vector_max_qubits=self.vector_max_qubits,
             **optimizer_kwargs,
         )
-        self.resolved_representation = self.result.resolved_representation
         return self.result
 
 

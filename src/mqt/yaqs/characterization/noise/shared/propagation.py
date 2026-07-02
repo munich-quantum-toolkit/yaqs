@@ -18,7 +18,6 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.simulator import Simulator
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -87,7 +86,7 @@ class Propagator:
         self.hamiltonian = hamiltonian
         self.noise_model = copy.deepcopy(noise_model)
         self.init_state = init_state
-        self.representation: ResolvedNoiseRepresentation = init_state.representation
+        self.representation = init_state.representation
         self._simulator = simulator or Simulator(show_progress=False)
 
         self.sites = self.hamiltonian.length

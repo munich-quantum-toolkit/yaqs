@@ -81,7 +81,7 @@ def test_lindblad_loss_is_deterministic() -> None:
     propagator.run(reference_model)
     ref = np.asarray(propagator.obs_array, dtype=float)
     init_guess = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
-    loss, _, _ = build_trajectory_loss(
+    loss, _ = build_trajectory_loss(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -97,33 +97,6 @@ def test_lindblad_loss_is_deterministic() -> None:
     loss_a = loss(x)
     loss_b = loss(x)
     assert loss_a == pytest.approx(loss_b)
-
-
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
-def test_characterize_sets_resolved_representation() -> None:
-    """Characterize records the resolved forward backend on the result."""
-    test = NoiseTestConfig(sites=1)
-    hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
-    init_guess = NoiseModel([
-        {"name": "pauli_x", "sites": [0], "strength": 0.2},
-        {"name": "pauli_y", "sites": [0], "strength": 0.1},
-        {"name": "pauli_z", "sites": [0], "strength": 0.05},
-    ])
-    result = NoiseCharacterizer(show_progress=False).characterize(
-        hamiltonian,
-        sim_params,
-        init_state=init_state,
-        init_guess=init_guess,
-        observables=observables,
-        reference_model=reference_model,
-        x_low=np.zeros(3),
-        x_up=np.full(3, 0.5),
-        max_iter=1,
-        popsize=4,
-        sigma0=0.05,
-        seed=1,
-    )
-    assert result.resolved_representation == "density_matrix"
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
@@ -153,7 +126,6 @@ def test_mcwf_and_tjm_smoke() -> None:
         sigma0=0.05,
         seed=1,
     )
-    assert mcwf_result.resolved_representation == "vector"
     assert mcwf_result.best_loss >= 0.0
 
     tjm_result = NoiseCharacterizer(show_progress=False, representation="mps").characterize(
@@ -170,5 +142,4 @@ def test_mcwf_and_tjm_smoke() -> None:
         sigma0=0.05,
         seed=2,
     )
-    assert tjm_result.resolved_representation == "mps"
     assert tjm_result.best_loss >= 0.0

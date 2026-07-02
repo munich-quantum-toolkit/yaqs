@@ -52,7 +52,7 @@ def _digital_twin_setup() -> tuple[
     )
     reference_model = _homogeneous_pauli_noise_model(sites, gamma_true)
     init_guess = _homogeneous_pauli_noise_model(sites, 0.35)
-    experimental_data, _, _, _ = simulate_observable_trajectories(
+    experimental_data, _, _ = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -102,7 +102,6 @@ def test_run_trajectory_characterization_three_site_digital_twin() -> None:
         seed=42,
     )
 
-    assert result.resolved_representation == "density_matrix"
     assert result.trajectory_rmse() < 1e-2
     gamma_true = 0.08
     n_sites = 3

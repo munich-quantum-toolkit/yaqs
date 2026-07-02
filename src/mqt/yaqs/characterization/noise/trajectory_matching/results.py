@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
@@ -28,11 +27,9 @@ class NoiseCharacterizationResult:
     best_loss: float
     best_parameters: np.ndarray
     loss_history: list[float] = field(default_factory=list)
-    parameter_history: list[np.ndarray] = field(default_factory=list)
     ref_traj: np.ndarray | None = None
     fit_traj: np.ndarray | None = None
     times: np.ndarray | None = None
-    resolved_representation: ResolvedNoiseRepresentation | None = None
 
     def sqrt_loss_before(self) -> float:
         """Return ``sqrt(J)`` before optimization.

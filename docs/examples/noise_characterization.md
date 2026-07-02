@@ -111,7 +111,6 @@ gamma_learned = np.array([
     result.best_parameters[2 * n_sites : 3 * n_sites].mean(),
 ])
 times = result.times
-print(f"forward backend: {result.resolved_representation}")
 print(f"√J: {result.sqrt_loss_before():.3f} → {result.sqrt_loss_after():.2e}")
 print(f"fitting trajectory RMSE: {result.trajectory_rmse():.2e}")
 ```

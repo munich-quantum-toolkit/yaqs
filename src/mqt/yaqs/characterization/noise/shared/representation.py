@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.state import State
+    from mqt.yaqs.core.data_structures.state_utils import Representation
 
 NoiseRepresentation = Literal["density_matrix", "vector", "mps", "auto"]
-ResolvedNoiseRepresentation = Literal["density_matrix", "vector", "mps"]
 
 DEFAULT_LINDBLAD_MAX_QUBITS = 8
 DEFAULT_VECTOR_MAX_QUBITS = 10
@@ -28,7 +28,7 @@ def resolve_noise_representation(
     *,
     lindblad_max_qubits: int = DEFAULT_LINDBLAD_MAX_QUBITS,
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
-) -> ResolvedNoiseRepresentation:
+) -> Representation:
     """Resolve the Simulator forward backend for noise characterization.
 
     ``auto`` prefers deterministic Lindblad on small chains, then MCWF, then TJM.
@@ -65,7 +65,7 @@ def resolve_noise_representation(
 
 def prepare_state_for_representation(
     init_state: State,
-    representation: ResolvedNoiseRepresentation,
+    representation: Representation,
 ) -> State:
     """Return a deep copy of ``init_state`` encoded for the requested representation.
 

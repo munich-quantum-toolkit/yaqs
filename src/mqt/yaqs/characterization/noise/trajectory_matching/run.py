@@ -20,7 +20,6 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
-    ResolvedNoiseRepresentation,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
     build_simulator,
@@ -46,10 +45,8 @@ def _finalize_result(
     x_best: np.ndarray,
     best_loss: float,
     loss_history: list[float],
-    parameter_history: list[np.ndarray],
     ref_traj: np.ndarray,
     times: np.ndarray,
-    resolved_representation: ResolvedNoiseRepresentation,
 ) -> NoiseCharacterizationResult:
     """Build the characterization result after CMA-ES completes.
 
@@ -59,10 +56,8 @@ def _finalize_result(
         x_best: Best parameter vector found by the optimizer.
         best_loss: Best scalar loss value.
         loss_history: Per-evaluation loss trace.
-        parameter_history: Per-evaluation parameter trace.
         ref_traj: Reference trajectories matched during fitting.
         times: Simulation time grid.
-        resolved_representation: Forward backend used for propagation.
 
     Returns:
         Structured optimization result including fitted trajectories.
@@ -76,11 +71,9 @@ def _finalize_result(
         best_loss=float(best_loss),
         best_parameters=np.asarray(x_best, dtype=float),
         loss_history=loss_history,
-        parameter_history=parameter_history,
         ref_traj=ref_traj,
         fit_traj=fit_traj,
         times=times,
-        resolved_representation=resolved_representation,
     )
 
 
@@ -123,7 +116,7 @@ def run_trajectory_characterization(
         Structured optimization result including optional trajectory arrays.
     """
     simulator = build_simulator(execution)
-    ref_array, times, resolved, prepared_state = resolve_reference_expectations(
+    ref_array, times, prepared_state = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -135,7 +128,7 @@ def run_trajectory_characterization(
         lindblad_max_qubits=lindblad_max_qubits,
         vector_max_qubits=vector_max_qubits,
     )
-    loss, propagator, resolved = build_trajectory_loss(
+    loss, propagator = build_trajectory_loss(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -149,7 +142,7 @@ def run_trajectory_characterization(
         prepared_state=prepared_state,
     )
 
-    x_best, best_loss, loss_history, parameter_history = cma_opt(
+    x_best, best_loss, loss_history, _parameter_history = cma_opt(
         loss,
         np.array([proc["strength"] for proc in init_guess.processes], dtype=float),
         x_low=x_low,
@@ -163,8 +156,6 @@ def run_trajectory_characterization(
         x_best=x_best,
         best_loss=best_loss,
         loss_history=loss_history,
-        parameter_history=parameter_history,
         ref_traj=ref_array,
         times=times,
-        resolved_representation=resolved,
     )

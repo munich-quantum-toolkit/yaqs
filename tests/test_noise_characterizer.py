@@ -60,7 +60,6 @@ def test_characterize_smoke(noise_test_config: NoiseTestConfig) -> None:
         seed=1,
     )
 
-    assert nc.resolved_representation == "density_matrix"
     assert result.best_loss >= 0.0
     assert result.ref_traj is not None
     assert result.fit_traj is not None

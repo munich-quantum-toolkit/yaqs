@@ -56,7 +56,7 @@ def _three_site_problem() -> tuple[
 def test_simulate_observable_trajectories_shape() -> None:
     """Simulation helper returns trajectories with the expected shape."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
-    expectations, times, resolved, _prepared = simulate_observable_trajectories(
+    expectations, times, prepared = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -64,7 +64,7 @@ def test_simulate_observable_trajectories_shape() -> None:
         observables=observables,
         representation="density_matrix",
     )
-    assert resolved == "density_matrix"
+    assert prepared.representation == "density_matrix"
     assert expectations.shape == (len(observables), len(times))
 
 
@@ -75,7 +75,7 @@ def test_ref_expectations_path_matches_simulation() -> None:
     execution = ExecutionConfig(parallel=False, show_progress=False)
 
     simulator = build_simulator(execution)
-    simulated, times, _, _prepared = resolve_reference_expectations(
+    simulated, times, _prepared = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -87,7 +87,7 @@ def test_ref_expectations_path_matches_simulation() -> None:
         lindblad_max_qubits=8,
         vector_max_qubits=10,
     )
-    accepted, accepted_times, _, _ = resolve_reference_expectations(
+    accepted, accepted_times, _ = resolve_reference_expectations(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -196,14 +196,13 @@ def test_ref_expectations_shape_validation() -> None:
 def test_resolve_prepared_state_encodes_density_matrix() -> None:
     """resolve_prepared_state returns an encoded state for Lindblad."""
     hamiltonian, init_state, _, _, _ = _three_site_problem()
-    resolved, prepared = resolve_prepared_state(
+    prepared = resolve_prepared_state(
         hamiltonian,
         init_state,
         "density_matrix",
         lindblad_max_qubits=8,
         vector_max_qubits=10,
     )
-    assert resolved == "density_matrix"
     assert prepared.representation == "density_matrix"
 
 
@@ -217,7 +216,7 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         + [{"name": "pauli_y", "sites": [s], "strength": 0.35} for s in sites]
         + [{"name": "pauli_z", "sites": [s], "strength": 0.35} for s in sites]
     )
-    ref, _, _, prepared = simulate_observable_trajectories(
+    ref, _, prepared = simulate_observable_trajectories(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -226,7 +225,7 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         representation="density_matrix",
     )
     simulator = build_simulator(ExecutionConfig(parallel=False, show_progress=False))
-    loss, _propagator, resolved = build_trajectory_loss(
+    loss, _propagator = build_trajectory_loss(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
@@ -239,7 +238,7 @@ def test_build_trajectory_loss_wires_propagator() -> None:
         vector_max_qubits=10,
         prepared_state=prepared,
     )
-    assert resolved == "density_matrix"
+    assert prepared.representation == "density_matrix"
     np.testing.assert_allclose(loss.ref_traj_array, ref)
     loss_value = loss(np.array([proc["strength"] for proc in init_guess.processes], dtype=float))
     assert loss_value >= 0.0
