@@ -299,7 +299,6 @@ class CompactNoiseModel:
 
         Raises:
             ValueError: If a process name is not found in :class:`NoiseLibrary`.
-            AssertionError: If required keys are missing from a process dict.
         """
         self.compact_processes: list[dict[str, Any]] = (
             copy.deepcopy(compact_processes) if compact_processes is not None else []

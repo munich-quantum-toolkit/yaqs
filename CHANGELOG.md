@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added gradient-free Markovian noise-parameter characterization via trajectory matching with CMA-ES ([#288])
+- added analytical noise characterization module ([#288]) ([**@aleramos119**])
 - added memory characterization module for analyzing non-Markovian processes ([#482]) ([**@aaronleesander**])
 - added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
 - added orthogonality center tracking ([#477]) ([**@aaronleesander**])
@@ -217,6 +217,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
 [**@linusschulte**]: https://github.com/linusschulte
+[**@aleramos119**]: https://github.com/aleramos119
 
 <!-- General links -->
 

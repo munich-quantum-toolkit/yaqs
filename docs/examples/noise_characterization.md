@@ -177,7 +177,7 @@ The rate bar chart may still deviate from the planted $\gamma$ values even when 
 | 2. Declare jump-operator topology and initial rate guess      | `CompactNoiseModel`                                     |
 | 3. Provide reference expectations (simulated or experimental) | `NoiseCharacterizer.from_reference`                     |
 | 4. Run derivative-free optimization                           | `NoiseCharacterizer.optimize`                           |
-| 5. Validate dynamics and rates                              | trajectory RMSE, overlays, and rate comparison          |
+| 5. Validate dynamics and rates                                | trajectory RMSE, overlays, and rate comparison          |
 
 Lower-level building blocks live under `mqt.yaqs.characterization.noise` (`Propagator`, `TrajectoryLoss`) if you need custom optimizers or training loops.
 

@@ -39,19 +39,27 @@ class NoiseTestConfig:
 
     @property
     def times(self) -> np.ndarray:
+        """Simulation time grid used by the test configuration."""
         return np.arange(0, self.sim_time + self.dt, self.dt)
 
     @property
     def n_obs(self) -> int:
+        """Number of tracked observables (three Pauli components per site)."""
         return self.sites * 3
 
     @property
     def n_t(self) -> int:
+        """Number of sampled time points."""
         return len(self.times)
 
 
 @pytest.fixture
 def noise_test_config() -> NoiseTestConfig:
+    """Default open-system geometry for noise characterization tests.
+
+    Returns:
+        Shared :class:`NoiseTestConfig` instance for parametrized smoke tests.
+    """
     return NoiseTestConfig()
 
 
@@ -65,7 +73,12 @@ def build_propagator(
     CompactNoiseModel,
     Propagator,
 ]:
-    """Construct a configured propagator for the shared test geometry."""
+    """Construct a configured propagator for the shared test geometry.
+
+    Returns:
+        Tuple of Hamiltonian, initial state, observables, simulation parameters,
+        compact noise model, and propagator.
+    """
     hamiltonian = Hamiltonian.ising(test.sites, J=test.j, g=test.g)
     init_state = State(test.sites, initial="zeros")
     observables = (

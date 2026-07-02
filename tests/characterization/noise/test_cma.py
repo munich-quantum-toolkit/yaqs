@@ -30,12 +30,13 @@ class DummyStrategy:
 
     def __init__(
         self,
-        x0: np.ndarray,
-        sigma0: float,
+        _x0: np.ndarray,
+        _sigma0: float,
         options: dict[str, Any],
         *,
         stop_after_first: bool = True,
     ) -> None:
+        """Record optimizer options and configure early-stop behavior."""
         self.options = options
         self.calls = 0
         self.tell_calls = 0
@@ -43,16 +44,27 @@ class DummyStrategy:
         self.result = types.SimpleNamespace(xbest=None, fbest=None)
 
     def ask(self) -> list[np.ndarray]:
+        """Return a fixed candidate population.
+
+        Returns:
+            Two candidate parameter vectors for the mocked optimizer.
+        """
         self.calls += 1
         return [np.array([1.0, 2.0]), np.array([-1.0, 0.5])]
 
     def tell(self, solutions: list[np.ndarray], values: list[float]) -> None:
+        """Track the best candidate from the latest population."""
         self.tell_calls += 1
         best_idx = int(np.argmin(values))
         self.result.xbest = np.array(solutions[best_idx])
         self.result.fbest = float(values[best_idx])
 
     def stop(self) -> bool:
+        """Stop after the first iteration when configured for smoke tests.
+
+        Returns:
+            ``True`` once the first ask/tell cycle completed.
+        """
         return self.stop_after_first and self.calls >= 1
 
 
@@ -69,10 +81,16 @@ def _patch_strategy(monkeypatch: MonkeyPatch, factory: Callable[..., DummyStrate
 
 
 def make_loss(obj: object) -> TrajectoryLoss:
+    """Cast a test double to :class:`~mqt.yaqs.characterization.noise.shared.loss.TrajectoryLoss`.
+
+    Returns:
+        The input object typed as a trajectory loss callable.
+    """
     return cast("TrajectoryLoss", obj)
 
 
 def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
+    """CMA-ES returns the lowest-loss candidate from the mocked population."""
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
@@ -94,6 +112,7 @@ def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
+    """Optional ``seed`` values are forwarded to the CMA-ES options dict."""
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:

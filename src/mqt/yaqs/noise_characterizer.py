@@ -114,7 +114,8 @@ class NoiseCharacterizer:
         Args:
             x_low: Lower parameter bounds.
             x_up: Upper parameter bounds.
-            **kwargs: Keyword arguments forwarded to :func:`~mqt.yaqs.characterization.noise.backends.gradient_free.cma.cma_opt`.
+            **kwargs: Keyword arguments forwarded to
+                :func:`~mqt.yaqs.characterization.noise.backends.gradient_free.cma.cma_opt`.
 
         Returns:
             Structured optimization result.
