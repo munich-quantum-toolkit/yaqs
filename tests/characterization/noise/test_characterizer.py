@@ -36,6 +36,9 @@ def test_noise_characterizer_cma_smoke(noise_test_config: NoiseTestConfig) -> No
         observables=observables,
     )
 
+    assert characterizer.resolved_representation == "density_matrix"
+    assert characterizer.propagator.representation == "density_matrix"
+
     x_low = np.array([0.0, 0.0, 0.0])
     x_up = np.array([0.5, 0.5, 0.5])
     result = characterizer.optimize(x_low=x_low, x_up=x_up, max_iter=3, popsize=4, sigma0=0.05)

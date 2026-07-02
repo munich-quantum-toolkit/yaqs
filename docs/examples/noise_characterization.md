@@ -15,7 +15,7 @@ mystnb:
 # Lindblad Noise-Rate Learning
 
 This tutorial fits unknown Lindblad jump rates by matching **simulated observable time series** to a reference trajectory.
-YAQS uses the tensor jump method (TJM) as the forward model and **CMA-ES** as the default optimizer.
+YAQS uses the {class}`~mqt.yaqs.Simulator` open-system backends (Lindblad, MCWF, or TJM) as the forward model and **CMA-ES** as the default optimizer.
 
 Install the optional dependency with `pip install mqt.yaqs[noise]` (pulls in `cma`).
 The entry point is {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`.
@@ -24,6 +24,20 @@ The entry point is {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`.
 Rates are not always uniquely identifiable from a fixed observable set.
 Judge a fit by **trajectory overlap** and the cost $J$, not only by comparing learned $\gamma$ to planted values.
 ```
+
+## Choosing a forward backend
+
+{meth}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer.from_reference` selects how reference and candidate trajectories are simulated.
+With `representation="auto"` (default), small chains use **deterministic Lindblad** evolution, which is best for trajectory fitting because the optimizer sees a smooth objective.
+
+| `representation`   | Simulator path                        | Stochastic?      | When to use                                       |
+| ------------------ | ------------------------------------- | ---------------- | ------------------------------------------------- |
+| `"auto"`           | Lindblad → MCWF → TJM by chain length | Lindblad: no     | Default for fitting dynamics                      |
+| `"density_matrix"` | Lindblad master equation              | No               | Small systems, reproducible optimization          |
+| `"vector"`         | MCWF trajectories                     | Yes (`num_traj`) | Compare against Lindblad or pure-state unraveling |
+| `"mps"`            | TJM tensor trajectories               | Yes (`num_traj`) | Larger chains beyond dense limits                 |
+
+See {doc}`representation_comparison` for validation plots across all three paths.
 
 ## 1. Problem setup
 
@@ -58,11 +72,9 @@ sim_params = AnalogSimParams(
     observables=observables,
     elapsed_time=0.8,
     dt=0.1,
-    num_traj=16,
     max_bond_dim=8,
     order=1,
     sample_timesteps=True,
-    random_seed=21,
 )
 
 reference_model = CompactNoiseModel([
@@ -84,11 +96,12 @@ gamma_reference = np.full(len(pauli_labels), gamma_ref)
 ```
 
 Each compact process fixes the **topology** (which sites and jump operators) while the characterizer optimizes one **strength** per process.
-Use a large enough `num_traj` in `AnalogSimParams` — the optimizer reuses that ensemble size on every loss evaluation.
+Under Lindblad evolution the loss is deterministic; for MCWF/TJM backends increase `num_traj` in `AnalogSimParams` until observables stabilize.
 
 ## 2. Reference trajectory and characterizer
 
 {meth}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer.from_reference` simulates the reference once and wires a {class}`~mqt.yaqs.characterization.noise.shared.loss.TrajectoryLoss` for subsequent optimizer evaluations.
+The default `representation="auto"` selects Lindblad on this one-site benchmark.
 
 ```{code-cell} ipython3
 characterizer = NoiseCharacterizer.from_reference(
@@ -99,6 +112,8 @@ characterizer = NoiseCharacterizer.from_reference(
     init_guess=init_guess,
     observables=observables,
 )
+
+print(f"forward backend: {characterizer.resolved_representation}")
 
 ref_traj = characterizer.loss.ref_traj_array.copy()
 times = characterizer.propagator.times
@@ -167,13 +182,14 @@ fig.suptitle("Optimized trajectories overlap the reference", y=1.05, fontsize=11
 fig.tight_layout()
 ```
 
+The dotted reference curves are drawn on top of the solid optimized lines so overlap is easy to see.
 The rate bar chart may still deviate from the planted $\gamma$ values even when the dynamics agree.
 
 ## Workflow summary
 
 | Step                                                          | API                                                     |
 | ------------------------------------------------------------- | ------------------------------------------------------- |
-| 1. Fix Hamiltonian, initial state, observables, TJM settings  | `Hamiltonian`, `State`, `AnalogSimParams`, `Observable` |
+| 1. Fix Hamiltonian, initial state, observables, sim settings  | `Hamiltonian`, `State`, `AnalogSimParams`, `Observable` |
 | 2. Declare jump-operator topology and initial rate guess      | `CompactNoiseModel`                                     |
 | 3. Provide reference expectations (simulated or experimental) | `NoiseCharacterizer.from_reference`                     |
 | 4. Run derivative-free optimization                           | `NoiseCharacterizer.optimize`                           |
@@ -183,6 +199,7 @@ Lower-level building blocks live under `mqt.yaqs.characterization.noise` (`Propa
 
 ## See also
 
-- {doc}`analog_simulation` — TJM open-system simulation
+- {doc}`representation_comparison` — Lindblad vs MCWF vs TJM on the same benchmark
+- {doc}`analog_simulation` — open-system simulation overview
 - {doc}`realistic_noise_models` — `NoiseModel` processes, crosstalk, and custom jump operators
 - {doc}`characterization` — non-Markovian **memory** characterization (orthogonal to rate learning here)

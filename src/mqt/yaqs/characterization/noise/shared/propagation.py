@@ -18,10 +18,41 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.simulator import Simulator
 
 if TYPE_CHECKING:
+    from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.core.data_structures.state import State
+
+
+def _propagation_run_params(
+    base: AnalogSimParams,
+    observables: list[Observable],
+) -> AnalogSimParams:
+    """Clone ``base`` simulation parameters with a new observable list.
+
+    Returns:
+        Fresh :class:`AnalogSimParams` for a single propagation call.
+    """
+    return AnalogSimParams(
+        observables=observables,
+        elapsed_time=base.elapsed_time,
+        dt=base.dt,
+        num_traj=base.num_traj,
+        max_bond_dim=base.max_bond_dim,
+        trunc_mode=base.trunc_mode,
+        svd_threshold=base.svd_threshold,
+        krylov_tol=base.krylov_tol,
+        order=base.order,
+        preset=base.preset,
+        sample_timesteps=base.sample_timesteps,
+        evolution_mode=base.evolution_mode,
+        get_state=base.get_state,
+        random_seed=base.random_seed,
+        multi_time_observables=base.multi_time_observables,
+        tdvp_sweeps=base.tdvp_sweeps,
+        tdvp_mode=base.tdvp_mode,
+    )
 
 
 class Propagator:
@@ -42,7 +73,7 @@ class Propagator:
             sim_params: Base analog simulation parameters (observables may be empty).
             hamiltonian: System Hamiltonian.
             compact_noise_model: Compact noise model whose topology is fixed during fitting.
-            init_state: Initial state for propagation.
+            init_state: Initial state for propagation (already encoded for the target backend).
             simulator: Optional :class:`~mqt.yaqs.Simulator` instance.
 
         Raises:
@@ -52,6 +83,7 @@ class Propagator:
         self.hamiltonian = copy.deepcopy(hamiltonian)
         self.compact_noise_model = copy.deepcopy(compact_noise_model)
         self.init_state = copy.deepcopy(init_state)
+        self.representation: ResolvedNoiseRepresentation = init_state.representation
         self._simulator = simulator or Simulator(show_progress=False)
 
         self.expanded_noise_model = copy.deepcopy(self.compact_noise_model.expanded_noise_model)
@@ -95,6 +127,9 @@ class Propagator:
     def run(self, noise_model: CompactNoiseModel) -> None:
         """Propagate under the supplied compact noise strengths.
 
+        For ``density_matrix`` states the Simulator uses deterministic Lindblad evolution and
+        ignores ``num_traj``. Stochastic MCWF/TJM paths average over ``num_traj`` trajectories.
+
         Args:
             noise_model: Candidate compact noise model with updated strengths.
 
@@ -111,17 +146,7 @@ class Propagator:
                 msg = "Noise model topology does not match the initialized compact model."
                 raise ValueError(msg)
 
-        run_params = AnalogSimParams(
-            observables=self.obs_list,
-            elapsed_time=self.sim_params.elapsed_time,
-            dt=self.sim_params.dt,
-            num_traj=self.sim_params.num_traj,
-            max_bond_dim=self.sim_params.max_bond_dim,
-            svd_threshold=self.sim_params.svd_threshold,
-            order=self.sim_params.order,
-            sample_timesteps=True,
-            random_seed=self.sim_params.random_seed,
-        )
+        run_params = _propagation_run_params(self.sim_params, self.obs_list)
         result = self._simulator.run(
             self.init_state,
             self.hamiltonian,
