@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.noise.backends.gradient_free import cma, cma_opt
+from mqt.yaqs.characterization.noise.backends import cma as cma_backend
+from mqt.yaqs.characterization.noise.backends import cma_opt
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -87,7 +88,7 @@ def test_cma_opt_default_bounds() -> None:
         def __call__(self, x: np.ndarray) -> float:
             return float(np.sum(x**2))
 
-    xbest, fbest, _, _ = cma.cma_opt(
+    xbest, fbest, _, _ = cma_backend.cma_opt(
         Objective(),
         np.array([0.5, 0.5]),
         sigma0=0.1,
@@ -98,7 +99,7 @@ def test_cma_opt_default_bounds() -> None:
     assert fbest >= 0.0
 
 
-def test_gradient_free_backend_exports_cma_opt() -> None:
+def test_backend_exports_cma_opt() -> None:
     """Backend package re-exports the CMA-ES entry point."""
     assert callable(cma_opt)
 
@@ -111,7 +112,7 @@ def test_cma_opt_integration_smoke() -> None:
         def __call__(self, x: np.ndarray) -> float:
             return float(np.sum(x**2))
 
-    xbest, fbest, loss_history, param_history = cma.cma_opt(
+    xbest, fbest, loss_history, param_history = cma_backend.cma_opt(
         Objective(),
         np.array([1.0, 1.0]),
         sigma0=0.2,
@@ -135,7 +136,7 @@ def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
         def __call__(self, x: np.ndarray) -> float:
             return float(np.sum(x**2))
 
-    xbest, fbest, loss_history, param_history = cma.cma_opt(
+    xbest, fbest, loss_history, param_history = cma_backend.cma_opt(
         Objective(),
         np.array([0.0, 0.0]),
         sigma0=0.1,
@@ -158,7 +159,7 @@ def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
         def __call__(self, x: np.ndarray) -> float:
             return float(np.sum(x**2))
 
-    cma.cma_opt(
+    cma_backend.cma_opt(
         Objective(),
         np.array([0.0, 0.0]),
         sigma0=0.1,

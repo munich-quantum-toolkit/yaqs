@@ -72,7 +72,7 @@ flowchart LR
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
 | Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
-| Learn Markovian Lindblad jump rates from observable trajectories           | {doc}`examples/noise_characterization`                                      |
+| Learn Markovian Lindblad jump rates via analytical optimization (CMA-ES)   | {doc}`examples/noise_characterization`                                      |
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
 | Simulate a circuit and read observables (strong simulation)                | {doc}`examples/strong_simulation`                                           |
 | Get hardware-like shot histograms                                          | {doc}`examples/weak_circuit_simulation`                                     |

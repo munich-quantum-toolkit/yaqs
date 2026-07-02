@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Reference trajectories and loss assembly for trajectory matching."""
+"""Reference trajectories and loss assembly for analytical noise optimization."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
+from mqt.yaqs.characterization.noise.optimization.loss import TrajectoryLoss
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,

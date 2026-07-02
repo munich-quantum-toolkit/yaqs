@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
+from mqt.yaqs.characterization.noise.optimization.loss import TrajectoryLoss
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 from ..fixtures import NoiseTestConfig, build_propagator

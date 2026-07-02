@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Shared helpers for noise characterization backends."""
+"""Shared forward-model helpers for Markovian noise characterization."""

@@ -11,14 +11,20 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import types
 
 
-def _load_docs_conf() -> Any:
+def _load_docs_conf() -> types.ModuleType:
     """Load ``docs/conf.py`` as a module.
 
     Returns:
         Loaded Sphinx configuration module.
+
+    Raises:
+        RuntimeError: If the configuration file cannot be loaded.
     """
     conf_path = Path(__file__).resolve().parents[2] / "docs" / "conf.py"
     spec = importlib.util.spec_from_file_location("docs_conf", conf_path)
@@ -38,6 +44,5 @@ def test_legacy_example_redirects() -> None:
     assert redirects["examples/circuit_simulation"] == "examples/strong_simulation.html"
     assert redirects["examples/strong_circuit_simulation"] == "examples/strong_simulation.html"
     assert (
-        redirects["examples/sample_observable_digital_tjm"]
-        == "examples/strong_simulation.html#mid-circuit-observables"
+        redirects["examples/sample_observable_digital_tjm"] == "examples/strong_simulation.html#mid-circuit-observables"
     )

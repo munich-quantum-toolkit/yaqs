@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Trajectory-matching orchestration for Markovian noise characterization."""
+"""Analytical optimization orchestration for Markovian noise characterization."""
 
 # ruff: noqa: ANN401 -- optimizer kwargs forwarded to CMA-ES
 
@@ -15,21 +15,21 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.noise.backends.gradient_free.cma import cma_opt
+from mqt.yaqs.characterization.noise.backends.cma import cma_opt
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
+from mqt.yaqs.characterization.noise.optimization.trajectories import (
+    build_simulator,
+    build_trajectory_loss,
+    resolve_reference_expectations,
+)
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
 )
-from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
-    build_simulator,
-    build_trajectory_loss,
-    resolve_reference_expectations,
-)
-from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
+    from mqt.yaqs.characterization.noise.optimization.loss import TrajectoryLoss
     from mqt.yaqs.characterization.noise.shared.propagation import Propagator
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -77,7 +77,7 @@ def _finalize_result(
     )
 
 
-def run_trajectory_characterization(
+def run_optimization_characterization(
     *,
     hamiltonian: Hamiltonian,
     sim_params: AnalogSimParams,
@@ -94,7 +94,7 @@ def run_trajectory_characterization(
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
     **optimizer_kwargs: Any,
 ) -> NoiseCharacterizationResult:
-    """Fit noise strengths by matching observable trajectories.
+    """Fit noise strengths by analytical trajectory matching and CMA-ES.
 
     Args:
         hamiltonian: System Hamiltonian.

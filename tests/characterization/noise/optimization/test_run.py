@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
-from mqt.yaqs.characterization.noise.trajectory_matching.reference import simulate_observable_trajectories
-from mqt.yaqs.characterization.noise.trajectory_matching.run import run_trajectory_characterization
+from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
+from mqt.yaqs.characterization.noise.optimization.trajectories import simulate_observable_trajectories
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.core.parallel_utils import ExecutionConfig
@@ -87,7 +87,7 @@ def _digital_twin_setup() -> tuple[
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
-def test_run_trajectory_characterization_three_site_digital_twin() -> None:
+def test_run_optimization_characterization_three_site_digital_twin() -> None:
     """3-site Lindblad fit from experimental trajectories recovers rates and dynamics."""
     (
         hamiltonian,
@@ -100,7 +100,7 @@ def test_run_trajectory_characterization_three_site_digital_twin() -> None:
     ) = _digital_twin_setup()
 
     n_params = len(init_guess.processes)
-    result = run_trajectory_characterization(
+    result = run_optimization_characterization(
         hamiltonian=hamiltonian,
         sim_params=sim_params,
         init_state=init_state,

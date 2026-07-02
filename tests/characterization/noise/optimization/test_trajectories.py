@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
-from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
+from mqt.yaqs.characterization.noise.optimization.trajectories import (
     build_simulator,
     build_trajectory_loss,
     resolve_prepared_state,

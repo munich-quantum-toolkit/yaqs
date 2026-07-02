@@ -14,18 +14,18 @@ from __future__ import annotations
 from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING, Any
 
+from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
 )
-from mqt.yaqs.characterization.noise.trajectory_matching.run import run_trajectory_characterization
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext
 
 if TYPE_CHECKING:
     import numpy as np
 
-    from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
+    from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -35,7 +35,8 @@ if TYPE_CHECKING:
 class NoiseCharacterizer:
     """Entry point for Markovian noise digital-twin workflows.
 
-    **Use:** :meth:`characterize` (fit noise rates from experimental or simulated trajectories)
+    **Use:** :meth:`characterize` (analytical optimization: fit noise rates from
+    experimental or simulated trajectories via CMA-ES trajectory matching)
 
     Attributes:
         parallel: Whether trajectory simulations run in parallel via a process pool.
@@ -136,7 +137,7 @@ class NoiseCharacterizer:
         ref_expectations: np.ndarray | None = None,
         **optimizer_kwargs: Any,
     ) -> NoiseCharacterizationResult:
-        """Fit noise strengths by matching observable trajectories.
+        """Fit noise strengths by analytical trajectory matching and CMA-ES.
 
         Provide exactly one of ``reference_model`` (benchmark shortcut) or
         ``ref_expectations`` (experimental trajectories).
@@ -164,7 +165,7 @@ class NoiseCharacterizer:
             msg = "Specify exactly one of reference_model= or ref_expectations=."
             raise ValueError(msg)
 
-        self.result = run_trajectory_characterization(
+        self.result = run_optimization_characterization(
             hamiltonian=hamiltonian,
             sim_params=sim_params,
             init_state=init_state,

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class NoiseCharacterizationResult:
-    """Outcome of a gradient-free noise-parameter fit."""
+    """Outcome of an analytical optimization noise-parameter fit."""
 
     optimal_model: NoiseModel
     best_loss: float

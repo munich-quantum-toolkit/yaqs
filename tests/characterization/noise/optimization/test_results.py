@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 

@@ -14,6 +14,7 @@ from typing import cast
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.noise.optimization.trajectories import build_trajectory_loss
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
@@ -21,7 +22,6 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     prepare_state_for_representation,
     resolve_noise_representation,
 )
-from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_trajectory_loss
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer

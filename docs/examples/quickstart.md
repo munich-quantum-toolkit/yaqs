@@ -176,9 +176,9 @@ fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 fig.tight_layout()
 ```
 
-## 5. Fit a Markovian noise digital twin
+## 5. Fit a Markovian noise digital twin (analytical optimization)
 
-Learn Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`. Install the optional CMA-ES backend with `pip install mqt.yaqs[noise]`.
+Learn Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer` using **analytical optimization** (simulator forward model + CMA-ES trajectory matching). Install the optional CMA-ES backend with `pip install mqt.yaqs[noise]`.
 
 ```{code-cell} ipython3
 import warnings
@@ -246,7 +246,7 @@ fig.colorbar(im, ax=axes, shrink=0.9, label="expectation")
 fig.suptitle(rf"Twin fit: RMSE={result.trajectory_rmse():.2e}", y=1.02)
 ```
 
-See {doc}`noise_characterization` for experimental-data workflows, held-out prediction, and MCWF fitting.
+See {doc}`noise_characterization` for the full analytical-optimization workflow, experimental-data fitting, held-out prediction, and MCWF fitting.
 
 ## 6. Train a surrogate and predict under controls
 
