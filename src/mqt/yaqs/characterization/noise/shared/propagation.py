@@ -146,7 +146,7 @@ class Propagator:
 
         for i, proc in enumerate(noise_model.processes):
             ref = self.noise_model.processes[i]
-            if proc["name"] != ref["name"] or proc["sites"] != ref["sites"]:
+            if proc["name"] != ref["name"] or list(proc["sites"]) != list(ref["sites"]):
                 msg = "Noise model topology does not match the initialized model."
                 raise ValueError(msg)
 

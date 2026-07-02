@@ -146,7 +146,8 @@ class NoiseCharacterizer:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
             init_state: Initial state.
-            init_guess: Initial noise guess.
+            init_guess: Initial noise guess defining jump-operator topology (one-site
+                and two-site processes supported via :class:`~mqt.yaqs.NoiseModel`).
             observables: Fitting observables whose trajectories are matched.
             x_low: Lower parameter bounds.
             x_up: Upper parameter bounds.

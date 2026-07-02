@@ -124,3 +124,57 @@ def test_run_optimization_characterization_three_site_digital_twin() -> None:
         learned_mean = float(result.best_parameters[channel * n_sites : (channel + 1) * n_sites].mean())
         rel_err = abs(learned_mean - gamma_true) / gamma_true
         assert rel_err < 0.05
+
+
+@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
+def test_run_optimization_characterization_two_site_crosstalk() -> None:
+    """Adjacent two-site crosstalk processes fit via the optimization pipeline."""
+    n_sites = 3
+    gamma_true = 0.08
+    hamiltonian = Hamiltonian.ising(n_sites, J=1.0, g=2.0)
+    init_state = State(n_sites, initial="zeros")
+    fitting_observables = [Observable("z", 0), Observable("z", 1)]
+    sim_params = AnalogSimParams(
+        observables=fitting_observables,
+        elapsed_time=0.6,
+        dt=0.1,
+        order=1,
+        sample_timesteps=True,
+    )
+    reference_model = NoiseModel([
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": gamma_true},
+        {"name": "crosstalk_xx", "sites": [1, 2], "strength": gamma_true},
+    ])
+    init_guess = NoiseModel([
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.25},
+        {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.25},
+    ])
+    experimental_data, _, _ = simulate_observable_trajectories(
+        sim_params=sim_params,
+        hamiltonian=hamiltonian,
+        init_state=init_state,
+        noise_model=reference_model,
+        observables=fitting_observables,
+        representation="density_matrix",
+    )
+
+    n_params = len(init_guess.processes)
+    result = run_optimization_characterization(
+        hamiltonian=hamiltonian,
+        sim_params=sim_params,
+        init_state=init_state,
+        init_guess=init_guess,
+        observables=fitting_observables,
+        ref_expectations=experimental_data,
+        x_low=np.zeros(n_params),
+        x_up=np.full(n_params, 0.5),
+        execution=ExecutionConfig(parallel=False, show_progress=False),
+        representation="density_matrix",
+        sigma0=0.05,
+        popsize=12,
+        max_iter=60,
+        seed=7,
+    )
+
+    assert result.trajectory_rmse() < 5e-2
+    np.testing.assert_allclose(result.best_parameters, gamma_true, rtol=0.15, atol=0.02)

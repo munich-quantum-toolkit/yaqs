@@ -79,6 +79,27 @@ def _patch_strategy(monkeypatch: MonkeyPatch, factory: Callable[..., DummyStrate
     return created
 
 
+def test_cma_opt_scalar_fallback() -> None:
+    """Single-parameter fits use bounded scalar search instead of CMA-ES."""
+
+    class Objective:
+        def __call__(self, x: np.ndarray) -> float:
+            return float((x[0] - 0.08) ** 2)
+
+    xbest, fbest, loss_history, param_history = cma_opt(
+        Objective(),
+        np.array([0.3]),
+        x_low=np.array([0.0]),
+        x_up=np.array([0.5]),
+    )
+
+    assert xbest.shape == (1,)
+    assert xbest[0] == pytest.approx(0.08, abs=1e-3)
+    assert fbest == pytest.approx(0.0, abs=1e-6)
+    assert len(loss_history) >= 1
+    assert len(param_history) == len(loss_history)
+
+
 @pytest.mark.filterwarnings("ignore:Initial solution argument x0.*:UserWarning")
 def test_cma_opt_default_bounds() -> None:
     """Unbounded optimization uses infinite lower and upper limits."""

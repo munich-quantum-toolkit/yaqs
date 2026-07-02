@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Protocol
 
 import numpy as np
+from scipy.optimize import minimize_scalar
 
 
 class ScalarLoss(Protocol):
@@ -20,6 +21,45 @@ class ScalarLoss(Protocol):
     def __call__(self, x: np.ndarray) -> float:
         """Evaluate the loss at ``x``."""
         ...
+
+
+def _optimize_scalar_bounded(
+    loss: ScalarLoss,
+    _x0: np.ndarray,
+    x_low: np.ndarray,
+    x_up: np.ndarray,
+) -> tuple[np.ndarray, float, list[float], list[np.ndarray]]:
+    """Minimize a one-dimensional bounded loss.
+
+    CMA-ES does not reliably support ``d=1``; use bounded scalar search instead.
+
+    Args:
+        loss: Callable loss object.
+        _x0: Initial parameter vector with length one (unused; search is global on bounds).
+        x_low: Lower bound vector with length one.
+        x_up: Upper bound vector with length one.
+
+    Returns:
+        Best parameter vector, best loss, per-evaluation loss history, and
+        parameter history.
+    """
+    f_history: list[float] = []
+    x_history: list[np.ndarray] = []
+
+    def evaluate(value: float) -> float:
+        loss_value = float(loss(np.array([value], dtype=float)))
+        f_history.append(loss_value)
+        x_history.append(np.array([value], dtype=float))
+        return loss_value
+
+    minimize_scalar(
+        evaluate,
+        bounds=(float(x_low[0]), float(x_up[0])),
+        method="bounded",
+        options={"xatol": 1e-8},
+    )
+    best_idx = int(np.argmin(f_history))
+    return x_history[best_idx], f_history[best_idx], f_history, x_history
 
 
 def cma_opt(
@@ -56,6 +96,11 @@ def cma_opt(
         x_low = -np.inf * np.ones_like(x0)
     if x_up is None:
         x_up = np.inf * np.ones_like(x0)
+    x_low = np.asarray(x_low, dtype=float)
+    x_up = np.asarray(x_up, dtype=float)
+
+    if x0.size == 1 and np.isfinite(x_low).all() and np.isfinite(x_up).all():
+        return _optimize_scalar_bounded(loss, x0, x_low, x_up)
 
     f_history: list[float] = []
     x_history: list[np.ndarray] = []
