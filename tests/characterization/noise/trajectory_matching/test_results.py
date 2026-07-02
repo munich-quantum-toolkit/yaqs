@@ -49,28 +49,6 @@ def test_trajectory_rmse_zero_for_identical_trajs() -> None:
     assert result.trajectory_rmse() == pytest.approx(0.0)
 
 
-def test_rate_table_with_reference() -> None:
-    """Rate table reports relative errors when reference strengths are given."""
-    result = _minimal_result(best_parameters=np.array([0.09]))
-    rows = result.rate_table(reference_strengths=[0.1])
-    assert rows[0]["learned"] == pytest.approx(0.09)
-    assert rows[0]["rel_error"] == pytest.approx(0.1)
-
-
-def test_rate_table_without_reference() -> None:
-    """Rate table omits reference fields when no reference is supplied."""
-    result = _minimal_result()
-    rows = result.rate_table()
-    assert "reference" not in rows[0]
-
-
-def test_rate_table_zero_reference_yields_nan_rel_error() -> None:
-    """Relative error is NaN when the reference strength is zero."""
-    result = _minimal_result(best_parameters=np.array([0.05]))
-    rows = result.rate_table(reference_strengths=[0.0])
-    assert np.isnan(rows[0]["rel_error"])
-
-
 def test_sqrt_loss_before_raises_on_empty_history() -> None:
     """sqrt_loss_before requires a non-empty loss history."""
     result = _minimal_result(loss_history=[])

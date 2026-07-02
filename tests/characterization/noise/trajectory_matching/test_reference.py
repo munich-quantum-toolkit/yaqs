@@ -238,5 +238,5 @@ def test_build_trajectory_loss_wires_propagator() -> None:
     )
     assert resolved == "density_matrix"
     np.testing.assert_allclose(loss.ref_traj_array, ref)
-    loss_value, _, _ = loss(init_guess.strength_list)
+    loss_value = loss(init_guess.strength_list)
     assert loss_value >= 0.0

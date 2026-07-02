@@ -9,16 +9,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
+
+class ScalarLoss(Protocol):
+    """Callable that maps a parameter vector to a scalar objective."""
+
+    def __call__(self, x: np.ndarray) -> float:
+        """Evaluate the loss at ``x``."""
+        ...
 
 
 def cma_opt(
-    loss: TrajectoryLoss,
+    loss: ScalarLoss,
     x0: np.ndarray,
     x_low: np.ndarray | None = None,
     x_up: np.ndarray | None = None,
@@ -54,11 +59,11 @@ def cma_opt(
     f_history: list[float] = []
     x_history: list[np.ndarray] = []
 
-    def evaluate(x: np.ndarray) -> tuple[float, np.ndarray, float]:
-        loss_value, grad, elapsed = loss(x)
+    def evaluate(x: np.ndarray) -> float:
+        loss_value = loss(x)
         f_history.append(loss_value)
         x_history.append(np.asarray(x, dtype=float).copy())
-        return loss_value, grad, elapsed
+        return loss_value
 
     options: dict[str, object] = {
         "popsize": popsize,
@@ -76,7 +81,7 @@ def cma_opt(
 
     for _ in range(max_iter):
         solutions = es.ask()
-        values = [evaluate(x)[0] for x in solutions]
+        values = [evaluate(x) for x in solutions]
         es.tell(solutions, values)
         if es.stop():
             break

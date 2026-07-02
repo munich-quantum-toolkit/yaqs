@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import types
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -21,8 +21,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from _pytest.monkeypatch import MonkeyPatch
-
-    from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
 
 
 class DummyStrategy:
@@ -80,26 +78,17 @@ def _patch_strategy(monkeypatch: MonkeyPatch, factory: Callable[..., DummyStrate
     return created
 
 
-def make_loss(obj: object) -> TrajectoryLoss:
-    """Cast a test double to :class:`~mqt.yaqs.characterization.noise.shared.loss.TrajectoryLoss`.
-
-    Returns:
-        The input object typed as a trajectory loss callable.
-    """
-    return cast("TrajectoryLoss", obj)
-
-
 @pytest.mark.filterwarnings("ignore:Initial solution argument x0.*:UserWarning")
 def test_cma_opt_default_bounds() -> None:
     """Unbounded optimization uses infinite lower and upper limits."""
     pytest.importorskip("cma")
 
     class Objective:
-        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
-            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+        def __call__(self, x: np.ndarray) -> float:
+            return float(np.sum(x**2))
 
     xbest, fbest, _, _ = cma.cma_opt(
-        make_loss(Objective()),
+        Objective(),
         np.array([0.5, 0.5]),
         sigma0=0.1,
         max_iter=2,
@@ -119,11 +108,11 @@ def test_cma_opt_integration_smoke() -> None:
     pytest.importorskip("cma")
 
     class Objective:
-        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
-            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+        def __call__(self, x: np.ndarray) -> float:
+            return float(np.sum(x**2))
 
     xbest, fbest, loss_history, param_history = cma.cma_opt(
-        make_loss(Objective()),
+        Objective(),
         np.array([1.0, 1.0]),
         sigma0=0.2,
         max_iter=3,
@@ -142,11 +131,11 @@ def test_cma_opt_returns_best_solution(monkeypatch: MonkeyPatch) -> None:
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
-        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
-            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+        def __call__(self, x: np.ndarray) -> float:
+            return float(np.sum(x**2))
 
     xbest, fbest, loss_history, param_history = cma.cma_opt(
-        make_loss(Objective()),
+        Objective(),
         np.array([0.0, 0.0]),
         sigma0=0.1,
         max_iter=2,
@@ -164,11 +153,11 @@ def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
     created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
-        def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
-            return float(np.sum(x**2)), np.zeros_like(x), 0.0
+        def __call__(self, x: np.ndarray) -> float:
+            return float(np.sum(x**2))
 
     cma.cma_opt(
-        make_loss(Objective()),
+        Objective(),
         np.array([0.0, 0.0]),
         sigma0=0.1,
         max_iter=1,

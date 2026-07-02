@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.shared.representation import ResolvedNoiseRepresentation
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-    from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 
 
 @dataclass(slots=True)
@@ -34,7 +33,6 @@ class NoiseCharacterizationResult:
     fit_traj: np.ndarray | None = None
     times: np.ndarray | None = None
     resolved_representation: ResolvedNoiseRepresentation | None = None
-    fitting_observables: list[Observable] | None = None
 
     def sqrt_loss_before(self) -> float:
         """Return ``sqrt(J)`` before optimization.
@@ -72,32 +70,3 @@ class NoiseCharacterizationResult:
             raise ValueError(msg)
         residual = np.asarray(self.fit_traj, dtype=float) - np.asarray(self.ref_traj, dtype=float)
         return float(np.sqrt(np.mean(residual**2)))
-
-    def rate_table(
-        self,
-        reference_strengths: np.ndarray | list[float] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Summarize learned compact strengths with optional reference comparison.
-
-        Args:
-            reference_strengths: Optional per-process reference values in compact order.
-
-        Returns:
-            One dict per compact process with ``name``, ``sites``, ``learned``, and
-            optional ``reference`` / ``rel_error``.
-        """
-        ref = None if reference_strengths is None else np.asarray(reference_strengths, dtype=float)
-        rows: list[dict[str, Any]] = []
-        for i, proc in enumerate(self.optimal_model.compact_processes):
-            learned = float(self.best_parameters[i])
-            row: dict[str, Any] = {
-                "name": proc["name"],
-                "sites": proc["sites"],
-                "learned": learned,
-            }
-            if ref is not None:
-                reference = float(ref[i])
-                row["reference"] = reference
-                row["rel_error"] = abs(learned - reference) / reference if reference else float("nan")
-            rows.append(row)
-        return rows

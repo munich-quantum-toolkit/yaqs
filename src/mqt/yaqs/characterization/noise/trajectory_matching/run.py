@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -20,21 +20,68 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
+    ResolvedNoiseRepresentation,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.reference import (
     build_simulator,
     build_trajectory_loss,
     resolve_reference_expectations,
-    simulate_observable_trajectories,
 )
 from mqt.yaqs.characterization.noise.trajectory_matching.results import NoiseCharacterizationResult
 
 if TYPE_CHECKING:
+    from mqt.yaqs.characterization.noise.shared.loss import TrajectoryLoss
+    from mqt.yaqs.characterization.noise.shared.propagation import Propagator
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
     from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
+
+
+def _finalize_result(
+    *,
+    loss: TrajectoryLoss,
+    propagator: Propagator,
+    x_best: np.ndarray,
+    best_loss: float,
+    loss_history: list[float],
+    parameter_history: list[np.ndarray],
+    ref_traj: np.ndarray,
+    times: np.ndarray,
+    resolved_representation: ResolvedNoiseRepresentation,
+) -> NoiseCharacterizationResult:
+    """Build the characterization result after CMA-ES completes.
+
+    Args:
+        loss: Wired trajectory loss used during optimization.
+        propagator: Forward model used for the final fit trajectory.
+        x_best: Best parameter vector found by the optimizer.
+        best_loss: Best scalar loss value.
+        loss_history: Per-evaluation loss trace.
+        parameter_history: Per-evaluation parameter trace.
+        ref_traj: Reference trajectories matched during fitting.
+        times: Simulation time grid.
+        resolved_representation: Forward backend used for propagation.
+
+    Returns:
+        Structured optimization result including fitted trajectories.
+    """
+    optimal_model = loss.x_to_noise_model(x_best)
+    propagator.run(optimal_model)
+    fit_traj = np.asarray(propagator.obs_array, dtype=float)
+
+    return NoiseCharacterizationResult(
+        optimal_model=optimal_model,
+        best_loss=float(best_loss),
+        best_parameters=np.asarray(x_best, dtype=float),
+        loss_history=loss_history,
+        parameter_history=parameter_history,
+        ref_traj=ref_traj,
+        fit_traj=fit_traj,
+        times=times,
+        resolved_representation=resolved_representation,
+    )
 
 
 def run_trajectory_characterization(
@@ -48,7 +95,6 @@ def run_trajectory_characterization(
     x_up: np.ndarray,
     reference_model: CompactNoiseModel | None = None,
     ref_expectations: np.ndarray | None = None,
-    optimizer: Literal["cma"] = "cma",
     execution: ExecutionConfig,
     representation: NoiseRepresentation = "auto",
     lindblad_max_qubits: int = DEFAULT_LINDBLAD_MAX_QUBITS,
@@ -67,23 +113,15 @@ def run_trajectory_characterization(
         x_up: Upper parameter bounds.
         reference_model: Optional reference model to simulate target trajectories.
         ref_expectations: Optional experimental trajectories with shape ``(n_obs, n_times)``.
-        optimizer: Optimizer backend (``"cma"`` only).
         execution: Parallel execution configuration.
         representation: Forward-model selection.
         lindblad_max_qubits: Auto cutover to Lindblad evolution.
         vector_max_qubits: Auto cutover from MCWF to TJM.
-        **optimizer_kwargs: Keyword arguments forwarded to the optimizer backend.
+        **optimizer_kwargs: Keyword arguments forwarded to the CMA-ES backend.
 
     Returns:
         Structured optimization result including optional trajectory arrays.
-
-    Raises:
-        ValueError: If reference inputs are invalid or an unsupported optimizer is requested.
     """
-    if optimizer != "cma":
-        msg = f"optimizer must be 'cma', got {optimizer!r}."
-        raise ValueError(msg)
-
     simulator = build_simulator(execution)
     ref_array, times, resolved = resolve_reference_expectations(
         sim_params=sim_params,
@@ -117,62 +155,15 @@ def run_trajectory_characterization(
         x_up=x_up,
         **optimizer_kwargs,
     )
-    optimal_model = loss.x_to_noise_model(x_best)
-    propagator.run(optimal_model)
-    fit_traj = np.asarray(propagator.obs_array, dtype=float)
 
-    return NoiseCharacterizationResult(
-        optimal_model=optimal_model,
-        best_loss=float(best_loss),
-        best_parameters=np.asarray(x_best, dtype=float),
+    return _finalize_result(
+        loss=loss,
+        propagator=propagator,
+        x_best=x_best,
+        best_loss=best_loss,
         loss_history=loss_history,
         parameter_history=parameter_history,
         ref_traj=ref_array,
-        fit_traj=fit_traj,
         times=times,
         resolved_representation=resolved,
-        fitting_observables=list(observables),
     )
-
-
-def simulate_fit_trajectory(
-    *,
-    hamiltonian: Hamiltonian,
-    sim_params: AnalogSimParams,
-    init_state: State,
-    noise_model: CompactNoiseModel,
-    observables: list[Observable],
-    execution: ExecutionConfig,
-    representation: NoiseRepresentation = "auto",
-    lindblad_max_qubits: int = DEFAULT_LINDBLAD_MAX_QUBITS,
-    vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Simulate trajectories for a candidate noise model (evaluation helper).
-
-    Args:
-        hamiltonian: System Hamiltonian.
-        sim_params: Analog simulation parameters.
-        init_state: Initial state.
-        noise_model: Compact noise model to propagate.
-        observables: Observables to track.
-        execution: Parallel execution configuration.
-        representation: Forward-model selection.
-        lindblad_max_qubits: Auto cutover to Lindblad evolution.
-        vector_max_qubits: Auto cutover from MCWF to TJM.
-
-    Returns:
-        Tuple ``(expectations, times)`` with expectations shaped ``(n_obs, n_times)``.
-    """
-    simulator = build_simulator(execution)
-    expectations, times, _ = simulate_observable_trajectories(
-        sim_params=sim_params,
-        hamiltonian=hamiltonian,
-        init_state=init_state,
-        noise_model=noise_model,
-        observables=observables,
-        simulator=simulator,
-        representation=representation,
-        lindblad_max_qubits=lindblad_max_qubits,
-        vector_max_qubits=vector_max_qubits,
-    )
-    return expectations, times

@@ -21,9 +21,11 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     prepare_state_for_representation,
     resolve_noise_representation,
 )
+from mqt.yaqs.characterization.noise.trajectory_matching.reference import build_trajectory_loss
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
+from mqt.yaqs.simulator import Simulator
 
 from ..fixtures import NoiseTestConfig, build_propagator
 
@@ -75,47 +77,58 @@ def test_prepare_state_for_representation_density_matrix() -> None:
 def test_lindblad_loss_is_deterministic() -> None:
     """Repeated loss evaluations at the same rates return identical values under Lindblad."""
     test = NoiseTestConfig(sites=1, ntraj=4)
-    hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
+    hamiltonian, init_state, observables, sim_params, reference_model, propagator = build_propagator(test)
+    propagator.run(reference_model)
+    ref = np.asarray(propagator.obs_array, dtype=float)
     init_guess = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
-    characterizer = NoiseCharacterizer.from_reference(
+    loss, _, _ = build_trajectory_loss(
         sim_params=sim_params,
         hamiltonian=hamiltonian,
         init_state=init_state,
-        reference_model=reference_model,
         init_guess=init_guess,
         observables=observables,
+        ref_expectations=ref,
+        simulator=Simulator(show_progress=False),
         representation="density_matrix",
+        lindblad_max_qubits=DEFAULT_LINDBLAD_MAX_QUBITS,
+        vector_max_qubits=DEFAULT_VECTOR_MAX_QUBITS,
     )
-    assert characterizer.loss is not None
-    assert characterizer.init_x is not None
-    x = characterizer.init_x.copy()
-    loss_a, _, _ = characterizer.loss(x)
-    loss_b, _, _ = characterizer.loss(x)
+    x = init_guess.strength_list.copy()
+    loss_a = loss(x)
+    loss_b = loss(x)
     assert loss_a == pytest.approx(loss_b)
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
-def test_from_reference_sets_resolved_representation() -> None:
-    """The characterizer records the resolved forward backend."""
+def test_characterize_sets_resolved_representation() -> None:
+    """Characterize records the resolved forward backend on the result."""
     test = NoiseTestConfig(sites=1)
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
-    init_guess = CompactNoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
-    characterizer = NoiseCharacterizer.from_reference(
-        sim_params=sim_params,
-        hamiltonian=hamiltonian,
+    init_guess = CompactNoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.2},
+        {"name": "pauli_y", "sites": [0], "strength": 0.1},
+        {"name": "pauli_z", "sites": [0], "strength": 0.05},
+    ])
+    result = NoiseCharacterizer(show_progress=False).characterize(
+        hamiltonian,
+        sim_params,
         init_state=init_state,
-        reference_model=reference_model,
         init_guess=init_guess,
         observables=observables,
+        reference_model=reference_model,
+        x_low=np.zeros(3),
+        x_up=np.full(3, 0.5),
+        max_iter=1,
+        popsize=4,
+        sigma0=0.05,
+        seed=1,
     )
-    assert characterizer.resolved_representation == "density_matrix"
-    assert characterizer.propagator is not None
-    assert characterizer.propagator.representation == "density_matrix"
+    assert result.resolved_representation == "density_matrix"
 
 
 @pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_mcwf_and_tjm_smoke() -> None:
-    """Explicit vector and mps representations still run through the characterizer."""
+    """Explicit vector and mps representations still run through characterize."""
     test = NoiseTestConfig(sites=1, ntraj=2, max_bond_dim=4)
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(test)
     init_guess = CompactNoiseModel([
@@ -126,16 +139,13 @@ def test_mcwf_and_tjm_smoke() -> None:
     x_low = np.zeros(3)
     x_up = np.full(3, 0.5)
 
-    mcwf_characterizer = NoiseCharacterizer.from_reference(
-        sim_params=sim_params,
-        hamiltonian=hamiltonian,
+    mcwf_result = NoiseCharacterizer(show_progress=False, representation="vector").characterize(
+        hamiltonian,
+        sim_params,
         init_state=init_state,
-        reference_model=reference_model,
         init_guess=init_guess,
         observables=observables,
-        representation="vector",
-    )
-    mcwf_result = mcwf_characterizer.optimize(
+        reference_model=reference_model,
         x_low=x_low,
         x_up=x_up,
         max_iter=1,
@@ -143,19 +153,16 @@ def test_mcwf_and_tjm_smoke() -> None:
         sigma0=0.05,
         seed=1,
     )
-    assert mcwf_characterizer.resolved_representation == "vector"
+    assert mcwf_result.resolved_representation == "vector"
     assert mcwf_result.best_loss >= 0.0
 
-    tjm_characterizer = NoiseCharacterizer.from_reference(
-        sim_params=sim_params,
-        hamiltonian=hamiltonian,
+    tjm_result = NoiseCharacterizer(show_progress=False, representation="mps").characterize(
+        hamiltonian,
+        sim_params,
         init_state=init_state,
-        reference_model=reference_model,
         init_guess=init_guess,
         observables=observables,
-        representation="mps",
-    )
-    tjm_result = tjm_characterizer.optimize(
+        reference_model=reference_model,
         x_low=x_low,
         x_up=x_up,
         max_iter=1,
@@ -163,5 +170,5 @@ def test_mcwf_and_tjm_smoke() -> None:
         sigma0=0.05,
         seed=2,
     )
-    assert tjm_characterizer.resolved_representation == "mps"
+    assert tjm_result.resolved_representation == "mps"
     assert tjm_result.best_loss >= 0.0

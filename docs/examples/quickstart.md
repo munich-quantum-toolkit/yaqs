@@ -14,9 +14,9 @@ mystnb:
 
 # Quickstart
 
-This page runs minimal workflows end-to-end: analog and digital simulation, equivalence checking, and environmental memory (characterize from the response matrix, then train a surrogate to predict probe density matrices under a control sequence). Install the package first ({doc}`installation`), then copy the cells below.
+This page runs minimal workflows end-to-end: analog and digital simulation, equivalence checking, environmental memory (characterize from the response matrix, then train a surrogate to predict probe density matrices under a control sequence), and Markovian noise digital-twin fitting. Install the package first ({doc}`installation`), then copy the cells below.
 
-Every example in this guide uses `show_progress=False` on `Simulator` and `MemoryCharacterizer` so tqdm progress bars do not clutter the documentation; figures below each cell show the main results.
+Every example in this guide uses `show_progress=False` on `Simulator`, `MemoryCharacterizer`, and `NoiseCharacterizer` so tqdm progress bars do not clutter the documentation; figures below each cell show the main results.
 
 ## 1. Analog simulation
 
@@ -135,7 +135,64 @@ ax.set_title(rf"$S_V(c={cut})={result.entropy(cut):.3f}$, $R(c)={result.modes(cu
 fig.tight_layout()
 ```
 
-## 5. Train a surrogate and predict under controls
+## 5. Fit a Markovian noise digital twin
+
+Learn compact Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`. Install the optional CMA-ES backend with `pip install mqt.yaqs[noise]`.
+
+```{code-cell} ipython3
+import warnings
+
+import numpy as np
+
+warnings.filterwarnings("ignore", message=".*special injected samples.*")
+
+from mqt.yaqs import AnalogSimParams, CompactNoiseModel, Hamiltonian, NoiseCharacterizer, Observable, State
+from mqt.yaqs.core.libraries.gate_library import Y, Z
+
+n_sites = 3
+sites = list(range(n_sites))
+hamiltonian = Hamiltonian.ising(n_sites, J=1.0, g=2.0)
+init_state = State(n_sites, initial="zeros")
+fitting_observables = [Observable(Y(), 0), Observable(Z(), 0), Observable(Y(), 1)]
+sim_params = AnalogSimParams(
+    observables=fitting_observables,
+    elapsed_time=0.8,
+    dt=0.1,
+    order=1,
+    sample_timesteps=True,
+)
+reference_model = CompactNoiseModel([
+    {"name": "pauli_x", "sites": sites, "strength": 0.08},
+    {"name": "pauli_y", "sites": sites, "strength": 0.08},
+    {"name": "pauli_z", "sites": sites, "strength": 0.08},
+])
+init_guess = CompactNoiseModel([
+    {"name": "pauli_x", "sites": sites, "strength": 0.35},
+    {"name": "pauli_y", "sites": sites, "strength": 0.35},
+    {"name": "pauli_z", "sites": sites, "strength": 0.35},
+])
+
+result = NoiseCharacterizer(show_progress=False).characterize(
+    hamiltonian,
+    sim_params,
+    init_state=init_state,
+    init_guess=init_guess,
+    observables=fitting_observables,
+    reference_model=reference_model,
+    x_low=np.zeros(3),
+    x_up=np.full(3, 0.5),
+    sigma0=0.05,
+    popsize=8,
+    max_iter=20,
+    seed=42,
+)
+print(f"√J after fit: {result.sqrt_loss_after():.2e}")
+print(f"trajectory RMSE: {result.trajectory_rmse():.2e}")
+```
+
+See {doc}`noise_characterization` for experimental-data workflows, held-out prediction, and MCWF fitting.
+
+## 6. Train a surrogate and predict under controls
 
 Train a causal surrogate with {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`, then predict the probe-qubit state after one or more control legs.
 Pass an explicit per-leg list to compare different sequences on the same trained model.
@@ -190,11 +247,12 @@ fig.tight_layout()
 
 `predict` also accepts a style string (for example `"haar"`) or a per-leg list mixing unitaries and measure–prepare slots. See {doc}`characterization` for environmental memory probing and {doc}`memory_surrogate` for held-out accuracy checks and exact-reference validation.
 
-## 6. Where to go next
+## 7. Where to go next
 
 | Goal                                                 | Start here                    |
 | ---------------------------------------------------- | ----------------------------- |
 | Environmental memory probing                         | {doc}`characterization`       |
+| Markovian noise digital-twin fitting                 | {doc}`noise_characterization` |
 | Surrogate training, prediction, and exact validation | {doc}`memory_surrogate`       |
 | Open-system dynamics, noise, time grids              | {doc}`analog_simulation`      |
 | Bell-curve (log-normal) noise strengths              | {doc}`realistic_noise_models` |
