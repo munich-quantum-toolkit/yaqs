@@ -92,7 +92,7 @@ def test_normalize_and_store() -> None:
     norm_w = np.linalg.norm(w)
 
     # Run function
-    normalize_and_store(v, w, j, norm_w)
+    normalize_and_store(v, w, j, float(norm_w))
 
     # Check stored vector
     expected_v_next = w / norm_w

@@ -36,7 +36,11 @@ def torch_importable() -> bool:
 
 
 def import_torch() -> ModuleType:
-    """Import ``torch`` or skip the current test when unavailable."""
+    """Import ``torch`` or skip the current test when unavailable.
+
+    Returns:
+        The imported :mod:`torch` module.
+    """
     if importlib.util.find_spec("torch") is None:
         pytest.skip("torch not installed")
     try:

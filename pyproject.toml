@@ -122,6 +122,9 @@ error-on-warning = true
 # torch is an optional extra; ty runs with --isolated in pre-commit.
 allowed-unresolved-imports = ["torch.**", "cma"]
 
+[tool.ty.environment]
+extra-paths = ["tests"]
+
 [tool.ty.src]
 exclude = [
     "docs/**",
