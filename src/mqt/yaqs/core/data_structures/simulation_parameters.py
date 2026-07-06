@@ -23,10 +23,10 @@ from typing import TYPE_CHECKING, Literal, TypedDict
 
 import numpy as np
 
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 
 if TYPE_CHECKING:
-    from mqt.yaqs.core.libraries.gate_library import BaseGate
+    from numpy.typing import ArrayLike
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
@@ -233,31 +233,35 @@ class Observable:
         sites: The site or site indices on which this observable is measured.
     """
 
-    def __init__(self, gate: BaseGate | str, sites: int | list[int] | None = None) -> None:
+    def __init__(self, gate: BaseGate | str | ArrayLike, sites: int | list[int] | None = None) -> None:
         """Initializes an Observable instance.
 
         Args:
-            gate: The gate that will act as the observable.
+            gate: The gate or one-site local matrix that will act as the observable.
             sites: The qubit or site indices on which this observable is measured.
         """
         if isinstance(gate, str):
             if gate == "entropy":
-                gate = GateLibrary.entropy()
+                resolved_gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
-                gate = GateLibrary.schmidt_spectrum()
+                resolved_gate = GateLibrary.schmidt_spectrum()
             elif gate == "pvm":
-                gate = GateLibrary.pvm(gate)
+                resolved_gate = GateLibrary.pvm(gate)
             elif hasattr(GateLibrary, gate):
                 attr = getattr(GateLibrary, gate)
                 try:
-                    gate = attr()
+                    resolved_gate = attr()
                 except TypeError:
-                    gate = GateLibrary.pvm(gate)
+                    resolved_gate = GateLibrary.pvm(gate)
             else:
-                gate = GateLibrary.pvm(gate)
-        assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
-        self.gate = copy.deepcopy(gate)
-        if gate.name != "pvm":
+                resolved_gate = GateLibrary.pvm(gate)
+        elif isinstance(gate, BaseGate):
+            resolved_gate = gate
+        else:
+            resolved_gate = GateLibrary.local(gate)
+        assert hasattr(GateLibrary, resolved_gate.name), f"Observable {resolved_gate.name} not found in GateLibrary."
+        self.gate: BaseGate = copy.deepcopy(resolved_gate)
+        if resolved_gate.name != "pvm":
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)

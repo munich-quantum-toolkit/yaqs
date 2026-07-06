@@ -441,6 +441,39 @@ def test_local_expect_x_on_plus_state() -> None:
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
 
+def test_non_qubit_local_expectation_from_matrix_observable() -> None:
+    """A matrix observable can be measured on a non-qubit local site."""
+    amplitudes = np.sqrt(np.array([0.2, 0.3, 0.5], dtype=np.float64)).astype(np.complex128)
+    tensor0 = amplitudes.reshape(3, 1, 1)
+    tensor1 = np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1)
+    psi_mps = MPS(length=2, tensors=[tensor0, tensor1], physical_dimensions=[3, 2])
+    position = np.diag(np.array([-1.0, 0.5, 2.0], dtype=np.float64))
+
+    val = psi_mps.expect(Observable(position, 0))
+
+    expected = 0.2 * -1.0 + 0.3 * 0.5 + 0.5 * 2.0
+    np.testing.assert_allclose(val, expected, atol=1e-12)
+
+
+def test_four_level_local_observable_is_not_treated_as_two_site() -> None:
+    """A ``4 x 4`` matrix observable acts on one four-level site when wrapped as local."""
+    amplitudes = np.array([0.5, 0.5j, -0.5, 0.5], dtype=np.complex128)
+    psi_mps = MPS(length=1, tensors=[amplitudes.reshape(4, 1, 1)], physical_dimensions=[4])
+    matrix = np.diag(np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float64))
+
+    val = psi_mps.expect(Observable(matrix, 0))
+
+    np.testing.assert_allclose(val, 1.5, atol=1e-12)
+
+
+def test_local_observable_dimension_mismatch_raises() -> None:
+    """One-site matrix observables must match the measured site's local dimension."""
+    psi_mps = MPS(length=1, physical_dimensions=[3], state="zeros")
+
+    with pytest.raises(ValueError, match="does not match site 0 dimension 3"):
+        psi_mps.expect(Observable(np.eye(2), 0))
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2

@@ -973,32 +973,34 @@ class MPS:
         Returns:
             np.complex128: The computed expectation value (typically, its real part is of interest).
 
+        Raises:
+            ValueError: If the observable is not supported or its matrix shape does not match the target site.
+
         Notes:
             A deep copy of the state is used to prevent modifications to the original MPS.
             Requires :meth:`check_covers_sites` to hold for ``sites``; prefer :meth:`expect` for
             gauge-safe evaluation.
         """
         temp_state = copy.deepcopy(self)
-        if operator.gate.matrix.shape[0] == 2:  # Local observable
-            i = None
-            if isinstance(sites, list):
-                i = sites[0]
-            elif isinstance(sites, int):
-                i = sites
+        sites_list = [sites] if isinstance(sites, int) else list(sites)
+        operator_sites = [operator.sites] if isinstance(operator.sites, int) else list(operator.sites)
 
-            if isinstance(operator.sites, list):
-                assert operator.sites[0] == i, f"Operator sites mismatch {operator.sites[0]}, {i}"
-            elif isinstance(operator.sites, int):
-                assert operator.sites == i, f"Operator sites mismatch {operator.sites}, {i}"
-
-            assert i is not None, f"Invalid type for 'sites': expected int or list[int], got {type(sites).__name__}"
+        if operator.gate.interaction == 1:
+            assert len(sites_list) == 1, f"One-site observable requires one site, got {sites_list}."
+            assert operator_sites == sites_list, f"Operator sites mismatch {operator_sites}, {sites_list}"
+            i = sites_list[0]
             a = temp_state.tensors[i]
-            temp_state.tensors[i] = oe.contract("ab, bcd->acd", operator.gate.matrix, a)
+            local_dim = a.shape[0]
+            matrix = np.asarray(operator.gate.matrix, dtype=np.complex128)
+            if matrix.shape != (local_dim, local_dim):
+                msg = f"Local observable matrix shape {matrix.shape} does not match site {i} dimension {local_dim}."
+                raise ValueError(msg)
+            temp_state.tensors[i] = oe.contract("ab, bcd->acd", matrix, a)
 
-        elif operator.gate.matrix.shape[0] == 4:  # Two-site correlator
+        elif operator.gate.interaction == 2:
             assert isinstance(sites, list)
             assert isinstance(operator.sites, list)
-            i, j = sites
+            i, j = sites_list
 
             assert operator.sites[0] == i, "Observable sites mismatch"
             assert operator.sites[1] == j, "Observable sites mismatch"
@@ -1010,6 +1012,10 @@ class MPS:
             b = temp_state.tensors[j]
             d_i, left, _ = a.shape
             d_j, _, right = b.shape
+            matrix = np.asarray(operator.gate.matrix, dtype=np.complex128)
+            if matrix.shape != (d_i * d_j, d_i * d_j):
+                msg = f"Two-site observable matrix shape {matrix.shape} does not match site dimensions {d_i} and {d_j}."
+                raise ValueError(msg)
 
             # 1) merge A,B into theta of shape (l, d_i*d_j, r)
             theta = np.tensordot(a, b, axes=(2, 1))  # (d_i, l, d_j, r)
@@ -1017,7 +1023,7 @@ class MPS:
             theta = theta.reshape(left, d_i * d_j, right)  # (l, d_i*d_j, r)
 
             # 2) apply operator on the combined phys index
-            theta = oe.contract("ab, cbd->cad", operator.gate.matrix, theta)  # (l, d_i*d_j, r)
+            theta = oe.contract("ab, cbd->cad", matrix, theta)  # (l, d_i*d_j, r)
             theta = theta.reshape(left, d_i, d_j, right)  # back to (l, d_i, d_j, r)
 
             # 3) split via SVD
@@ -1035,6 +1041,9 @@ class MPS:
 
             temp_state.tensors[i] = a_new
             temp_state.tensors[j] = b_new
+        else:
+            msg = "Local observable must be one-site or nearest-neighbor two-site."
+            raise ValueError(msg)
 
         return self.scalar_product(temp_state, sites)
 
@@ -1099,26 +1108,33 @@ class MPS:
             for i in reversed(range(state.length - 2)):
                 apply_two_site_nn_inplace(state, i, sw)
 
-        sites = [observable.sites] if isinstance(observable.sites, int) else observable.sites
+        sites = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
 
-        if observable.gate.matrix.shape[0] == 2:
+        if observable.gate.interaction == 1:
+            if len(sites) != 1:
+                msg = f"One-site local observable requires one site, got {sites}."
+                raise ValueError(msg)
             site = sites[0]
-            self.tensors[site] = oe.contract("ab, bcd->acd", observable.gate.matrix, self.tensors[site])
+            local_dim = self.tensors[site].shape[0]
+            matrix = np.asarray(observable.gate.matrix, dtype=np.complex128)
+            if matrix.shape != (local_dim, local_dim):
+                msg = f"Local observable matrix shape {matrix.shape} does not match site {site} dimension {local_dim}."
+                raise ValueError(msg)
+            self.tensors[site] = oe.contract("ab, bcd->acd", matrix, self.tensors[site])
             return
 
-        if observable.gate.matrix.shape[0] == 4:
+        if observable.gate.interaction == 2:
             i, j = int(sites[0]), int(sites[1])
             length = self.length
+            mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
 
             if length == 2:
                 if i == length - 1 and j == 0:
-                    mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
                     g_merged = permuted_periodic_wrap(mat)
                     apply_two_site_nn_inplace(self, 0, g_merged)
                     return
                 i, j = min(i, j), max(i, j)
             elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
-                mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
                 bubble_swaps_forward(self)
                 g_merged = permuted_periodic_wrap(mat)
                 apply_two_site_nn_inplace(self, length - 2, g_merged)
@@ -1129,7 +1145,7 @@ class MPS:
                 msg = "Only nearest-neighbor two-site observables are currently implemented."
                 raise ValueError(msg)
 
-            apply_two_site_nn_inplace(self, i, np.asarray(observable.gate.matrix, dtype=np.complex128))
+            apply_two_site_nn_inplace(self, i, mat)
             return
 
         msg = "Local observable must be one-site or nearest-neighbor two-site."

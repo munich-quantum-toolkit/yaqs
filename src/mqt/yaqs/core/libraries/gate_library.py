@@ -1650,6 +1650,37 @@ class PVM(BaseGate):
         super().__init__(mat)
 
 
+class LocalOperator(BaseGate):
+    """Custom one-site operator for arbitrary local Hilbert-space dimensions.
+
+    This gate is intended for observables such as position-grid operators on
+    qudits or oscillator truncations. Unlike :class:`BaseGate`, it does not
+    interpret the matrix dimension as a qubit interaction count.
+    """
+
+    name = "local"
+
+    def __init__(self, matrix: ArrayLike) -> None:
+        """Create a one-site local operator.
+
+        Args:
+            matrix: Square matrix acting on one local site.
+
+        Raises:
+            ValueError: If ``matrix`` is not a square two-dimensional array.
+        """
+        mat = np.asarray(matrix, dtype=np.complex128)
+        if mat.ndim != 2:
+            msg = "Local operator matrix must be a 2-D array."
+            raise ValueError(msg)
+        if mat.shape[0] != mat.shape[1]:
+            msg = "Local operator matrix must be square."
+            raise ValueError(msg)
+        self.matrix = mat
+        self.tensor = mat
+        self.interaction = 1
+
+
 class Entropy(BaseGate):
     """Meta-observable for bipartite entanglement entropy across a cut.
 
@@ -1761,6 +1792,7 @@ class GateLibrary:
         p0: Class for projector ``|0⟩⟨0|``.
         p1: Class for projector ``|1⟩⟨1|``.
         pvm: Class for projection-valued measurement onto a given bitstring.
+        local: Class for arbitrary one-site local operators.
 
         entropy:      Class representing a request for bipartite entanglement entropy across a cut.
         schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
@@ -1811,6 +1843,7 @@ class GateLibrary:
     p0 = P0
     p1 = P1
     pvm = PVM
+    local = LocalOperator
 
     entropy = Entropy
     schmidt_spectrum = SchmidtSpectrum

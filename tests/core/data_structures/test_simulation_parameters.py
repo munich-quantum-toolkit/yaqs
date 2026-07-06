@@ -62,6 +62,25 @@ def test_observable_creation_valid() -> None:
     assert obs.sites == site
 
 
+def test_observable_accepts_custom_local_matrix() -> None:
+    """Observable accepts square matrices as arbitrary one-site local operators."""
+    matrix = np.diag(np.array([-1.0, 0.25, 2.0]))
+
+    obs = Observable(matrix, 0)
+
+    assert obs.gate.name == "local"
+    assert obs.gate.interaction == 1
+    np.testing.assert_allclose(obs.gate.matrix, matrix)
+    assert obs.sites == 0
+
+
+@pytest.mark.parametrize("matrix", [np.ones(3), np.ones((2, 3))])
+def test_observable_rejects_invalid_custom_local_matrix(matrix: np.ndarray) -> None:
+    """Matrix observables must be two-dimensional and square."""
+    with pytest.raises(ValueError, match="Local operator matrix"):
+        Observable(matrix, 0)
+
+
 def test_analog_simparams_basic() -> None:
     """Test that AnalogSimParams is initialized with correct parameters.
 
