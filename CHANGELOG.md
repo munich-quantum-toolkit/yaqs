@@ -13,7 +13,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added custom one-site matrix observables for non-qubit local dimensions
+- added support for custom non-qubit local observables ([#497]) ([**@linusschulte**])
 - added analytical noise characterization module and digital twin pipeline ([#288]) ([**@aleramos119**], [**@aaronleesander**])
 - added memory characterization module for analyzing non-Markovian processes ([#482]) ([**@aaronleesander**])
 - added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
@@ -151,6 +151,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
 [#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
 [#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
