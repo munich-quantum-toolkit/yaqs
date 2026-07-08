@@ -9,6 +9,10 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Added
+
+- added custom one-site matrix observables for non-qubit local dimensions ([#497]) ([**@linusschulte**])
+
 ## [0.6.0] - 2026-07-06
 
 ### Added
