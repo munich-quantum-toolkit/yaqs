@@ -178,3 +178,37 @@ def compute_spectrum(
         "singular_values": s,
         "singular_values_full": s_full,
     }
+
+
+def response_matrix_entropy(
+    response_matrix: np.ndarray,
+    *,
+    frobenius_tol: float = 1e-15,
+    weight_tol: float = 1e-30,
+) -> float:
+    r"""Natural-log entropy of the centered response matrix singular values.
+
+    Computes :math:`S_V = -\sum_i q_i \log q_i` with :math:`q_i = s_i^2 / \sum_j s_j^2`
+    and returns ``0.0`` when ``||V||_F`` is below ``frobenius_tol``.
+
+    Args:
+        response_matrix: Past-row-centered response matrix ``V``.
+        frobenius_tol: Zero-matrix threshold on the Frobenius norm.
+        weight_tol: Discard weights below this absolute floor.
+
+    Returns:
+        Response entropy :math:`S_V` using natural logarithms.
+    """
+    v = np.asarray(response_matrix, dtype=np.float64)
+    if float(np.linalg.norm(v, ord="fro")) < frobenius_tol:
+        return 0.0
+    singular_values = np.linalg.svd(v, compute_uv=False).astype(np.float64)
+    total = float(np.sum(singular_values**2))
+    if total <= weight_tol:
+        return 0.0
+    weights = singular_values**2 / total
+    nz = weights > weight_tol
+    if not np.any(nz):
+        return 0.0
+    q = weights[nz]
+    return float(-np.sum(q * np.log(q)))

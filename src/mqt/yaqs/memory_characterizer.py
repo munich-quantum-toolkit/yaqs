@@ -317,6 +317,7 @@ class MemoryCharacterizer:
         sim_params: AnalogSimParams,
         timesteps: list[float] | None = None,
         *,
+        method: Literal["exhaustive", "direct"] = "exhaustive",
         noise_model: NoiseModel | None = None,
         num_trajectories: int = 100,
         basis: TomographyBasis = "tetrahedral",
@@ -343,6 +344,7 @@ class MemoryCharacterizer:
             num_trajectories: Monte Carlo trajectories per tomography sample.
             basis: Intervention basis for process-tensor tomography.
             basis_seed: Optional RNG seed for basis construction.
+            method: ``"exhaustive"`` tomography (default) or ``"direct"`` leg-by-leg construction.
             return_type: ``"dense"`` or ``"mpo"`` process-tensor storage.
             check: Whether to validate CPTP properties during construction.
             atol: CPTP check tolerance.
@@ -363,6 +365,7 @@ class MemoryCharacterizer:
             operator,
             sim_params,
             timesteps,
+            method=method,
             noise_model=noise_model,
             num_trajectories=num_trajectories,
             basis=basis,

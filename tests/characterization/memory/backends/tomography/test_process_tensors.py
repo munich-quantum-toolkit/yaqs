@@ -21,11 +21,15 @@ from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceDa
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
+    causal_block_axis_indices,
+    causal_block_operator_entropy,
     compute_entropy_dense,
     convert_probe_callable,
     encode_cptp_choi,
     evaluate_dense_probes,
+    refold_unfused_to_upsilon,
     trace_partial_dense,
+    upsilon_to_unfused_operator,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
@@ -338,3 +342,114 @@ def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
 
     assert isinstance(mpo_pt.cmi(), float)
     assert mpo_pt._num_interventions_for_probe() == 2
+
+
+def test_causal_block_axis_indices_match_unfuse_layout() -> None:
+    """Causal-block axis indices align with upsilon_to_unfused_operator layout."""
+    k = 3
+    blocks = causal_block_axis_indices(k)
+    op = upsilon_to_unfused_operator(np.eye(2 * 4**k, dtype=np.complex128), k)
+    assert len(blocks) == k + 1
+    assert blocks[0] == [3, 5]
+    assert blocks[1] == [2, 7, 4, 9]
+    assert blocks[2] == [6, 11, 8, 13]
+    assert blocks[3] == [10, 0, 12, 1]
+    assert op.ndim == 2 + 4 * k
+
+
+def test_causal_block_operator_entropy_markov_j0() -> None:
+    """Uncoupled Ising process has vanishing causal-block entropy at every cut."""
+    ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
+    pt = cast(
+        "DenseProcessTensor",
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.1] * 4,
+            return_type="dense",
+            method="exhaustive",
+            compress_every=1,
+        ),
+    )
+    for cut in (1, 2, 3):
+        result = pt.causal_block_operator_entropy(cut)
+        assert cast("int", result["schmidt_rank"]) == 1
+        assert float(cast("float", result["entropy"])) == pytest.approx(0.0, abs=1e-10)
+
+
+def test_causal_block_operator_entropy_correlated_j1() -> None:
+    """Correlated process has positive causal-block entropy at the center cut."""
+    ham = Hamiltonian.ising(length=6, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
+    pt = cast(
+        "DenseProcessTensor",
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.1] * 4,
+            return_type="dense",
+            method="exhaustive",
+            compress_every=1,
+        ),
+    )
+    result = pt.causal_block_operator_entropy(2)
+    assert cast("int", result["schmidt_rank"]) > 1
+    assert float(cast("float", result["entropy"])) > 0.0
+
+
+def test_causal_block_operator_entropy_scale_invariant() -> None:
+    """Overall scaling of upsilon does not change causal-block entropy."""
+    k = 2
+    ups = np.eye(2 * 4**k, dtype=np.complex128)
+    base = float(cast("float", causal_block_operator_entropy(ups, k, 1)["entropy"]))
+    scaled = float(cast("float", causal_block_operator_entropy(2.5 * ups, k, 1)["entropy"]))
+    assert base == pytest.approx(scaled, abs=1e-12)
+
+
+def test_causal_block_mutual_information_markov_j0() -> None:
+    """Uncoupled Ising process has vanishing past-future mutual information."""
+    ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
+    pt = cast(
+        "DenseProcessTensor",
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.1] * 4,
+            return_type="dense",
+            method="exhaustive",
+            compress_every=1,
+        ),
+    )
+    result = pt.causal_block_mutual_information(2)
+    assert float(cast("float", result["mutual_information"])) == pytest.approx(0.0, abs=1e-10)
+
+
+def test_causal_block_mutual_information_correlated_j1() -> None:
+    """Correlated process has positive past-future mutual information."""
+    ham = Hamiltonian.ising(length=6, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
+    pt = cast(
+        "DenseProcessTensor",
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.1] * 4,
+            return_type="dense",
+            method="exhaustive",
+            compress_every=1,
+        ),
+    )
+    result = pt.causal_block_mutual_information(2)
+    assert float(cast("float", result["mutual_information"])) > 0.0
+
+
+def test_refold_unfused_to_upsilon_roundtrip() -> None:
+    """Unfuse and refold recover the original upsilon matrix."""
+    k = 2
+    rng = np.random.default_rng(0)
+    ups = rng.standard_normal((2 * 4**k, 2 * 4**k)) + 1j * rng.standard_normal((2 * 4**k, 2 * 4**k))
+    op = upsilon_to_unfused_operator(ups, k)
+    back = refold_unfused_to_upsilon(op, k)
+    np.testing.assert_allclose(back, ups, atol=1e-12)

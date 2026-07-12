@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
@@ -170,6 +171,423 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
+def _canonicalize_upsilon(
+    upsilon: NDArray[np.complex128],
+    *,
+    check_psd: bool = False,
+    assume_canonical: bool = False,
+) -> NDArray[np.complex128]:
+    """Hermitize and trace-normalize a process-tensor Choi operator.
+
+    Returns:
+        Trace-normalized Hermitian Choi operator.
+
+    Raises:
+        ValueError: If ``check_psd`` is ``True`` and the operator is not PSD.
+    """
+    if assume_canonical:
+        return upsilon
+    upsilon_mat = 0.5 * (upsilon + upsilon.conj().T)
+    if check_psd:
+        lam_min = float(np.linalg.eigvalsh(upsilon_mat).min().real)
+        if lam_min < -1e-9:
+            msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
+            raise ValueError(msg)
+    tr = np.trace(upsilon_mat)
+    return upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
+
+
+def _validate_cut(cut: int, num_interventions: int) -> None:
+    if cut < 1 or cut > num_interventions:
+        msg = f"cut must satisfy 1 <= cut <= num_interventions ({num_interventions}), got {cut}."
+        raise ValueError(msg)
+
+
+def _unfuse_slot_index(fused: int, *, out_first: bool = True) -> tuple[int, int]:
+    """Split a fused 4-index Choi leg into ``(output, input)`` qubit indices.
+
+    ``encode_cptp_choi`` uses ``kron(output, input)`` so ``f = 2 * out + in`` by default.
+
+    Returns:
+        Tuple ``(output_index, input_index)`` each in ``{0, 1}``.
+    """
+    if out_first:
+        return fused // 2, fused % 2
+    return fused % 2, fused // 2
+
+
+def _fuse_slot_index(out: int, inp: int, *, out_first: bool = True) -> int:
+    if out_first:
+        return 2 * out + inp
+    return 2 * inp + out
+
+
+def upsilon_to_unfused_operator(
+    upsilon: NDArray[np.complex128],
+    num_interventions: int,
+    *,
+    out_first: bool = True,
+) -> NDArray[np.complex128]:
+    """Reshape a process-tensor Choi operator into explicit ket/bra qubit axes.
+
+    Subsystem order in ``upsilon`` is ``[final(2), slot_1(4), …, slot_k(4)]`` with
+    ``slot_t = output_t ⊗ input_t`` and ``f = 2 * output + input`` when ``out_first=True``.
+
+    Returns:
+        Tensor with axes, in order::
+
+            final_ket, final_bra,
+            slot1_out_ket, slot1_in_ket, slot1_out_bra, slot1_in_bra,
+            …,
+            slotk_out_ket, slotk_in_ket, slotk_out_bra, slotk_in_bra.
+
+    Raises:
+        ValueError: If ``upsilon`` shape is inconsistent with ``num_interventions``.
+    """
+    k = num_interventions
+    expected = 2 * (4**k)
+    ups = np.asarray(upsilon, dtype=np.complex128)
+    if ups.shape != (expected, expected):
+        msg = f"Expected upsilon shape ({expected}, {expected}) for k={k}, got {ups.shape}."
+        raise ValueError(msg)
+    dims = [2] + [4] * k
+    mat = ups.reshape(*dims, *dims)
+    out = np.zeros([2, 2] + [2, 2, 2, 2] * k, dtype=np.complex128)
+    for idx in np.ndindex(*dims, *dims):
+        sub_k = idx[: k + 1]
+        sub_b = idx[k + 1 :]
+        coords: list[int] = [sub_k[0], sub_b[0]]
+        for t in range(k):
+            ok, ik = _unfuse_slot_index(sub_k[t + 1], out_first=out_first)
+            ob, ib = _unfuse_slot_index(sub_b[t + 1], out_first=out_first)
+            coords.extend([ok, ik, ob, ib])
+        out[tuple(coords)] = mat[idx]
+    return out
+
+
+def refold_unfused_to_upsilon(
+    op: NDArray[np.complex128],
+    num_interventions: int,
+    *,
+    out_first: bool = True,
+) -> NDArray[np.complex128]:
+    """Inverse of :func:`upsilon_to_unfused_operator`.
+
+    Returns:
+        Dense process-tensor Choi matrix with fused intervention legs.
+    """
+    k = num_interventions
+    dims = [2] + [4] * k
+    mat = np.zeros((2 * 4**k, 2 * 4**k), dtype=np.complex128)
+    view = mat.reshape(*dims, *dims)
+    n = k + 1
+    for idx in np.ndindex(*dims, *dims):
+        sub_k, sub_b = idx[:n], idx[n:]
+        coords: list[int] = [sub_k[0], sub_b[0]]
+        for t in range(k):
+            ok, ik = _unfuse_slot_index(sub_k[t + 1], out_first=out_first)
+            ob, ib = _unfuse_slot_index(sub_b[t + 1], out_first=out_first)
+            coords.extend([ok, ik, ob, ib])
+        view[idx] = op[tuple(coords)]
+    return mat
+
+
+def causal_block_axis_labels(num_interventions: int) -> list[list[str]]:
+    """Return semantic labels for causal blocks ``B_0 … B_k``.
+
+    Args:
+        num_interventions: Number of intervention slots ``k``.
+
+    Returns:
+        List of ``k + 1`` blocks, each a list of axis-name strings.
+    """
+    k = num_interventions
+    blocks: list[list[str]] = [["slot1_in_ket", "slot1_in_bra"]]
+    blocks.extend(
+        [
+            f"slot{t + 1}_out_ket",
+            f"slot{t + 2}_in_ket",
+            f"slot{t + 1}_out_bra",
+            f"slot{t + 2}_in_bra",
+        ]
+        for t in range(k - 1)
+    )
+    blocks.append([
+        f"slot{k}_out_ket",
+        "final_ket",
+        f"slot{k}_out_bra",
+        "final_bra",
+    ])
+    return blocks
+
+
+def causal_block_axis_indices(num_interventions: int) -> list[list[int]]:
+    """Return unfused tensor axis indices for causal blocks ``B_0 … B_k``.
+
+    Axis numbering matches :func:`upsilon_to_unfused_operator`:
+
+    - ``final_ket=0``, ``final_bra=1``
+    - slot ``t`` (0-based): ``out_ket=2+4t``, ``in_ket=3+4t``, ``out_bra=4+4t``, ``in_bra=5+4t``
+
+    Args:
+        num_interventions: Number of intervention slots ``k``.
+
+    Returns:
+        List of ``k + 1`` blocks of axis indices.
+    """
+    k = num_interventions
+    blocks: list[list[int]] = [[3, 5]]
+    blocks.extend([2 + 4 * t, 3 + 4 * (t + 1), 4 + 4 * t, 5 + 4 * (t + 1)] for t in range(k - 1))
+    blocks.append([2 + 4 * (k - 1), 0, 4 + 4 * (k - 1), 1])
+    return blocks
+
+
+def causal_block_operator_entropy(
+    upsilon: NDArray[np.complex128],
+    num_interventions: int,
+    cut: int,
+    *,
+    rtol: float = 1e-12,
+    weight_tol: float = 1e-30,
+) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+    """Operator-space entropy across causally regrouped channel blocks.
+
+    Partitions causal blocks ``B_0, …, B_k`` at cut ``c`` as::
+
+        LEFT  = B_0, …, B_{c-1}
+        RIGHT = B_c, …, B_k
+
+    and computes the operator-Schmidt spectrum of the unfused Choi operator without
+    partial tracing or trace normalization.
+
+    Args:
+        upsilon: Dense process-tensor Choi matrix.
+        num_interventions: Intervention count ``k``.
+        cut: Causal cut index ``c`` matching the response protocol.
+        rtol: Relative threshold ``s_i > rtol * s_0`` for resolved Schmidt rank.
+        weight_tol: Absolute floor on ``sum(s**2)``; below this raises ``ValueError``.
+
+    Returns:
+        Dictionary with keys ``entropy`` (:math:`S_{PT}^{cb}`), ``effective_rank``,
+        ``schmidt_rank``, ``singular_values``, ``weights``, ``left_axes``, ``right_axes``,
+        ``blocks``, ``block_labels``.
+
+    Raises:
+        ValueError: If ``cut`` is invalid or the squared-Schmidt weight sum is below ``weight_tol``.
+    """
+    _validate_cut(cut, num_interventions)
+    op = upsilon_to_unfused_operator(upsilon, num_interventions)
+    blocks = causal_block_axis_indices(num_interventions)
+    labels = causal_block_axis_labels(num_interventions)
+    left_axes = [i for b in blocks[:cut] for i in b]
+    right_axes = [i for b in blocks[cut:] for i in b]
+    perm = left_axes + right_axes
+    tensor_perm = np.transpose(op, perm)
+    dim_left = int(np.prod([tensor_perm.shape[i] for i in range(len(left_axes))], dtype=np.int64))
+    dim_right = int(
+        np.prod([tensor_perm.shape[i] for i in range(len(left_axes), len(left_axes) + len(right_axes))], dtype=np.int64)
+    )
+    mat = tensor_perm.reshape(dim_left, dim_right)
+    singular_values = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
+    total_weight = float(np.sum(singular_values**2))
+    if total_weight < weight_tol:
+        msg = f"Operator-Schmidt weight sum {total_weight:.3e} below tolerance {weight_tol:.3e}."
+        raise ValueError(msg)
+    weights = singular_values**2 / total_weight
+    nz = weights > weight_tol
+    entropy = float(-np.sum(weights[nz] * np.log(weights[nz]))) if np.any(nz) else 0.0
+    if singular_values.size and singular_values[0] > 0.0:
+        resolved = singular_values > rtol * singular_values[0]
+    else:
+        resolved = singular_values > 0.0
+    schmidt_rank = int(np.sum(resolved))
+    effective_rank = float(np.exp(entropy)) if entropy > 0.0 else 1.0
+    return {
+        "entropy": entropy,
+        "effective_rank": effective_rank,
+        "schmidt_rank": schmidt_rank,
+        "singular_values": singular_values,
+        "weights": weights,
+        "left_axes": left_axes,
+        "right_axes": right_axes,
+        "blocks": blocks,
+        "block_labels": labels,
+    }
+
+
+def _is_ket_unfused_axis(axis: int) -> bool:
+    """Return whether an unfused process-tensor axis carries a ket index."""
+    if axis == 0:
+        return True
+    if axis == 1:
+        return False
+    return (axis - 2) % 4 < 2
+
+
+def _von_neumann_entropy_natural(rho: NDArray[np.complex128], *, eig_tol: float = 1e-15) -> float:
+    r"""Von Neumann entropy in natural units for a density matrix.
+
+    Returns:
+        Entropy :math:`S(\rho)` using natural logarithms.
+    """
+    herm = 0.5 * (rho + rho.conj().T)
+    tr = float(np.trace(herm).real)
+    if tr <= eig_tol:
+        return 0.0
+    herm /= tr
+    evals = np.linalg.eigvalsh(herm).real
+    evals = np.clip(evals, 0.0, None)
+    nz = evals[evals > eig_tol]
+    if nz.size == 0:
+        return 0.0
+    return float(-np.sum(nz * np.log(nz)))
+
+
+def causal_block_mutual_information(
+    upsilon: NDArray[np.complex128],
+    num_interventions: int,
+    cut: int,
+    *,
+    eig_tol: float = 1e-15,
+    psd_tol: float = 1e-10,
+) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+    r"""Past-future mutual information across causally regrouped channel blocks.
+
+    Forms the normalized Choi state :math:`\rho_{PF}` from the unfused operator with
+    causal blocks
+
+        P = B_0 \cdots B_{c-1}, \quad F = B_c \cdots B_k,
+
+    and returns
+
+        I_{PT}(c) = S(\rho_P) + S(\rho_F) - S(\rho_{PF}).
+
+    Args:
+        upsilon: Dense process-tensor Choi matrix.
+        num_interventions: Intervention count ``k``.
+        cut: Causal cut index ``c``.
+        eig_tol: Discard eigenvalues below this floor in entropy sums.
+        psd_tol: Allowed negative eigenvalue floor after Hermitization.
+
+    Returns:
+        Dictionary with ``mutual_information``, ``entropy_p``, ``entropy_f``,
+        ``entropy_pf``, ``trace``, ``min_eigenvalue``, ``hermiticity_error``,
+        ``blocks``, ``block_labels``, ``p_axes``, ``f_axes``.
+
+    Raises:
+        ValueError: If ``cut`` is invalid or the trace is non-positive.
+    """
+    _validate_cut(cut, num_interventions)
+    op = upsilon_to_unfused_operator(upsilon, num_interventions)
+    blocks = causal_block_axis_indices(num_interventions)
+    labels = causal_block_axis_labels(num_interventions)
+    p_axes = [i for b in blocks[:cut] for i in b]
+    f_axes = [i for b in blocks[cut:] for i in b]
+    p_ket = [a for a in p_axes if _is_ket_unfused_axis(a)]
+    p_bra = [a for a in p_axes if not _is_ket_unfused_axis(a)]
+    f_ket = [a for a in f_axes if _is_ket_unfused_axis(a)]
+    f_bra = [a for a in f_axes if not _is_ket_unfused_axis(a)]
+    perm = p_ket + f_ket + p_bra + f_bra
+    tensor = np.transpose(op, perm)
+    n_p = len(p_ket)
+    n_f = len(f_ket)
+    n_ket = n_p + n_f
+    dim = 1 << n_ket
+    dims = [2] * n_ket
+    rho_pf = tensor.reshape(dim, dim).astype(np.complex128)
+    herm_err = float(np.linalg.norm(rho_pf - rho_pf.conj().T, ord="fro"))
+    rho_pf = 0.5 * (rho_pf + rho_pf.conj().T)
+    trace = float(np.trace(rho_pf).real)
+    if trace <= eig_tol:
+        msg = f"Regrouped Choi state trace {trace:.3e} is not positive."
+        raise ValueError(msg)
+    min_eval = float(np.min(np.linalg.eigvalsh(rho_pf).real))
+    if min_eval < -psd_tol:
+        msg = f"Regrouped Choi state min eigenvalue {min_eval:.3e} below PSD tolerance {psd_tol:.3e}."
+        raise ValueError(msg)
+    rho_pf /= trace
+    keep_p = list(range(n_p))
+    keep_f = list(range(n_p, n_ket))
+    rho_p = trace_partial_dense(rho_pf, dims, keep=keep_p)
+    rho_f = trace_partial_dense(rho_pf, dims, keep=keep_f)
+    s_p = _von_neumann_entropy_natural(rho_p, eig_tol=eig_tol)
+    s_f = _von_neumann_entropy_natural(rho_f, eig_tol=eig_tol)
+    s_pf = _von_neumann_entropy_natural(rho_pf, eig_tol=eig_tol)
+    mutual = float(s_p + s_f - s_pf)
+    return {
+        "mutual_information": mutual,
+        "entropy_p": s_p,
+        "entropy_f": s_f,
+        "entropy_pf": s_pf,
+        "trace": trace,
+        "min_eigenvalue": min_eval,
+        "hermiticity_error": herm_err,
+        "blocks": blocks,
+        "block_labels": labels,
+        "p_axes": p_axes,
+        "f_axes": f_axes,
+    }
+
+
+def _temporal_bond_dimension_dense(
+    rho: NDArray[np.complex128],
+    num_interventions: int,
+    cut: int,
+    *,
+    tol: float = 1e-12,
+) -> int:
+    """Schmidt rank of the Choi state across MPO bond index ``cut``.
+
+    Returns:
+        Schmidt rank at the cut, at least 1.
+    """
+    if cut <= 1:
+        return 1
+    dims = [2] + [4] * num_interventions
+    dim_l = int(np.prod(dims[:cut], dtype=np.int64))
+    dim_r = int(np.prod(dims[cut:], dtype=np.int64))
+    mat = np.asarray(rho, dtype=np.complex128).reshape(dim_l, dim_r)
+    singular_values = np.linalg.svd(mat, compute_uv=False)
+    rank = int(np.sum(singular_values > tol))
+    return max(1, rank)
+
+
+def cut_entanglement_entropy_from_upsilon(
+    upsilon: NDArray[np.complex128],
+    cut: int,
+    num_interventions: int,
+    *,
+    base: float = math.e,
+    check_psd: bool = False,
+    assume_canonical: bool = False,
+) -> float:
+    """Von Neumann entropy of past intervention legs ``{1, ..., cut-1}`` in the Choi state.
+
+    Returns:
+        Cut entanglement entropy ``S_PT(c)``; ``0.0`` when ``cut <= 1``.
+    """
+    _validate_cut(cut, num_interventions)
+    if cut <= 1:
+        return 0.0
+    rho = _canonicalize_upsilon(upsilon, check_psd=check_psd, assume_canonical=assume_canonical)
+    dims = [2] + [4] * num_interventions
+    keep_past = list(range(1, cut))
+    rho_past = trace_partial_dense(rho, dims, keep=keep_past)
+    if math.isclose(float(base), math.e, rel_tol=0.0, abs_tol=0.0):
+        rho_herm = 0.5 * (rho_past + rho_past.conj().T)
+        tr = np.trace(rho_herm)
+        if abs(tr) < 1e-15:
+            return 0.0
+        rho_herm /= tr
+        evals = np.linalg.eigvalsh(rho_herm).real
+        evals = np.clip(evals, 0.0, 1.0)
+        nz = evals[evals > 1e-15]
+        if nz.size == 0:
+            return 0.0
+        return float(-np.sum(nz * np.log(nz)))
+    return compute_entropy_dense(rho_past, base=int(base) if base == int(base) else 2)
+
+
 class DenseProcessTensor:
     """Wrapper around a dense process-tensor Choi operator Upsilon."""
 
@@ -226,6 +644,99 @@ class DenseProcessTensor:
         """
         size = self.upsilon.shape[0]
         return int(np.round(np.log2(size / 2) / 2))
+
+    def temporal_bond_dimension(self, cut: int, *, tol: float = 1e-12) -> int:
+        """Return the PT-MPO bond dimension across temporal cut ``cut``.
+
+        Args:
+            cut: Causal cut index ``c`` (bond between MPO sites ``c-1`` and ``c``).
+            tol: Schmidt threshold for counting bond dimensions.
+
+        Returns:
+            Bond dimension ``chi(c)``, with ``chi(1)=1``.
+        """
+        k = self._num_interventions()
+        _validate_cut(cut, k)
+        rho = _canonicalize_upsilon(self.upsilon)
+        return _temporal_bond_dimension_dense(rho, k, cut, tol=tol)
+
+    def cut_entanglement_entropy(
+        self,
+        cut: int,
+        *,
+        base: float = math.e,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Von Neumann entropy of past intervention legs ``{1, ..., cut-1}``.
+
+        Args:
+            cut: Causal cut index ``c``.
+            base: Logarithm base (default natural log).
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
+
+        Returns:
+            Cut entanglement entropy ``S_PT(c)``.
+        """
+        return cut_entanglement_entropy_from_upsilon(
+            self.upsilon,
+            cut,
+            self._num_interventions(),
+            base=base,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
+
+    def causal_block_operator_entropy(
+        self,
+        cut: int,
+        *,
+        rtol: float = 1e-12,
+        weight_tol: float = 1e-30,
+    ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+        """Operator-space entropy across causally regrouped channel blocks.
+
+        Args:
+            cut: Causal cut index ``c`` matching the response protocol.
+            rtol: Relative Schmidt threshold for ``schmidt_rank``.
+            weight_tol: Absolute floor on ``sum(s**2)``.
+
+        Returns:
+            Result dictionary from :func:`causal_block_operator_entropy`.
+        """
+        return causal_block_operator_entropy(
+            self.upsilon,
+            self._num_interventions(),
+            cut,
+            rtol=rtol,
+            weight_tol=weight_tol,
+        )
+
+    def causal_block_mutual_information(
+        self,
+        cut: int,
+        *,
+        eig_tol: float = 1e-15,
+        psd_tol: float = 1e-10,
+    ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+        """Past-future mutual information across causally regrouped channel blocks.
+
+        Args:
+            cut: Causal cut index ``c``.
+            eig_tol: Eigenvalue floor for entropies.
+            psd_tol: Allowed negative eigenvalue floor after Hermitization.
+
+        Returns:
+            Result dictionary from :func:`causal_block_mutual_information`.
+        """
+        return causal_block_mutual_information(
+            self.upsilon,
+            self._num_interventions(),
+            cut,
+            eig_tol=eig_tol,
+            psd_tol=psd_tol,
+        )
 
     def _predict_raw(
         self,
@@ -471,6 +982,73 @@ class MPOProcessTensor(MPO):
 
     def _num_interventions_for_probe(self) -> int:
         return int(self.length) - 1
+
+    def temporal_bond_dimension(self, cut: int, *, tol: float = 1e-12) -> int:
+        """Return the PT-MPO bond dimension across temporal cut ``cut``.
+
+        Args:
+            cut: Causal cut index ``c`` (bond between MPO sites ``c-1`` and ``c``).
+            tol: Unused for MPO tensors; bond dimension is read directly.
+
+        Returns:
+            Bond dimension ``chi(c)``, with ``chi(1)=1``.
+        """
+        _ = tol
+        k = self._num_interventions_for_probe()
+        _validate_cut(cut, k)
+        if cut <= 1:
+            return 1
+        return int(self.tensors[cut - 1].shape[3])
+
+    def cut_entanglement_entropy(
+        self,
+        cut: int,
+        *,
+        base: float = math.e,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Von Neumann entropy of past intervention legs ``{1, ..., cut-1}``.
+
+        Args:
+            cut: Causal cut index ``c``.
+            base: Logarithm base (default natural log).
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat the reduced operator as already canonicalized.
+
+        Returns:
+            Cut entanglement entropy ``S_PT(c)``.
+
+        Raises:
+            ValueError: If ``cut`` is outside ``[1, k]``.
+        """
+        k = self._num_interventions_for_probe()
+        _validate_cut(cut, k)
+        if cut <= 1:
+            return 0.0
+        keep_past = list(range(1, cut))
+        rho_past = self.partial_trace_sites(keep_past).to_matrix()
+        if assume_canonical:
+            rho = rho_past
+        else:
+            rho = 0.5 * (rho_past + rho_past.conj().T)
+            if check_psd:
+                lam_min = float(np.linalg.eigvalsh(rho).min().real)
+                if lam_min < -1e-9:
+                    msg = f"Reduced past state not PSD (min eigenvalue {lam_min:.3e})."
+                    raise ValueError(msg)
+        if math.isclose(float(base), math.e, rel_tol=0.0, abs_tol=0.0):
+            tr = np.trace(rho)
+            if abs(tr) < 1e-15:
+                return 0.0
+            rho /= tr
+            evals = np.linalg.eigvalsh(rho).real
+            evals = np.clip(evals, 0.0, 1.0)
+            nz = evals[evals > 1e-15]
+            if nz.size == 0:
+                return 0.0
+            return float(-np.sum(nz * np.log(nz)))
+        return compute_entropy_dense(rho, base=int(base) if base == int(base) else 2)
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses.

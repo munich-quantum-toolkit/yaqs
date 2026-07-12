@@ -378,6 +378,7 @@ def build_process_tensor(
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
+    method: Literal["exhaustive", "direct"] = "exhaustive",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_trajectories: int = 100,
@@ -397,22 +398,20 @@ def build_process_tensor(
     initial_rho_atol: float = 1e-8,
     _execution: ExecutionConfig | None = None,
 ) -> DenseProcessTensor | MPOProcessTensor:
-    """Construct a process tensor via exhaustive discrete-basis tomography.
+    """Construct a process tensor via exhaustive tomography or direct leg-by-leg contraction.
 
-    This simulates **every** ``16**num_interventions`` discrete basis sequence and returns a
-    process tensor directly:
-
-    - ``return_type="dense"``: reconstruct and return a :class:`DenseProcessTensor`.
-    - ``return_type="mpo"``: build and return an :class:`MPOProcessTensor`.
+    - ``method="exhaustive"``: simulate every ``16**num_interventions`` discrete basis sequence.
+    - ``method="direct"``: grow the comb MPO one leg at a time (noiseless, site-0 interventions).
 
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
         timesteps: Optional process-tensor schedule evolution durations (length
             ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
-        noise_model: Optional open-system noise model.
-        parallel: Whether to parallelize over sequences.
-        num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
+        method: ``"exhaustive"`` (default) or ``"direct"`` leg-by-leg construction.
+        noise_model: Optional open-system noise model (exhaustive path only).
+        parallel: Whether to parallelize over sequences (exhaustive path only).
+        num_trajectories: MCWF trajectories per sequence (exhaustive path only).
         basis: Tomography basis name.
         basis_seed: Optional seed when ``basis="random"``.
         return_type: ``"dense"`` or ``"mpo"`` process-tensor representation.
@@ -423,8 +422,7 @@ def build_process_tensor(
         max_bond_dim: Optional MPO bond-dimension cap.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
-        initial_rho: Optional expected site-0 reference after ``U_0``; validated against the
-            computed tomography reference when provided.
+        initial_rho: Optional expected site-0 reference after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
         _execution: Optional internal execution configuration.
 
@@ -432,8 +430,35 @@ def build_process_tensor(
         Dense or MPO process-tensor wrapper depending on ``return_type``.
 
     Raises:
-        ValueError: If ``return_type`` is not ``"dense"`` or ``"mpo"``.
+        ValueError: If ``return_type`` or ``method`` is invalid.
     """
+    if method == "direct":
+        if return_type != "mpo":
+            msg = "method='direct' currently supports return_type='mpo' only."
+            raise ValueError(msg)
+        if noise_model is not None:
+            msg = "method='direct' does not support noise_model."
+            raise ValueError(msg)
+        from .direct import build_process_tensor_direct  # noqa: PLC0415
+
+        return build_process_tensor_direct(
+            operator,
+            sim_params,
+            timesteps,
+            basis=basis,
+            basis_seed=basis_seed,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+            compress_every=compress_every,
+            solver=solver,
+            initial_rho=initial_rho,
+            initial_rho_atol=initial_rho_atol,
+        )
+    if method != "exhaustive":
+        msg = f"Unknown method {method!r} (expected 'exhaustive' or 'direct')."
+        raise ValueError(msg)
+
     data = _construct_data(
         operator,
         sim_params,
