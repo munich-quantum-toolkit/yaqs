@@ -7,7 +7,7 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806, SLF001, PLR6301
+# ruff: noqa: N806, SLF001
 
 from __future__ import annotations
 

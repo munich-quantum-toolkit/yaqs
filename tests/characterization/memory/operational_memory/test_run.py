@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLR6301, PLC2701 -- protocol-style dummy backend; white-box rollout test
+# ruff: noqa: PLC2701 -- protocol-style dummy backend; white-box rollout test
 
 """Tests for operational-memory orchestration (:mod:`run`)."""
 
