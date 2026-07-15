@@ -24,6 +24,7 @@ Key classes and functions:
 
 from __future__ import annotations
 
+import itertools
 from typing import TYPE_CHECKING
 
 from mqt.qudits.quantum_circuit import QuantumCircuit
@@ -32,6 +33,11 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from mqt.qudits.quantum_circuit.gate import Gate
+
+SubspaceMap = dict[tuple[int, int], tuple[set[int], set[int]]]
+"""Maps an unordered qudit pair (q, q') to (Sq, Sq'): the smallest per-qudit
+level sets within which the joint history of q and q' is known to be
+confined so far (paper Section III-A)."""
 
 
 def _levels_for_gate(gate: Gate, _qudit_idx: int, dimension: int) -> list[int]:
@@ -117,6 +123,66 @@ def _wire_dependencies(node: QuditOpNode, candidates: list[QuditOpNode]) -> None
         if _blocked(prev, node):
             node.add_dependency(prev)
             _mark_used(prev, used)
+
+
+def _subspace_key(q: int, q_prime: int) -> tuple[int, int]:
+    """Return the canonical (sorted) key used to index a SubspaceMap for (q, q')."""
+    return (q, q_prime) if q < q_prime else (q_prime, q)
+
+
+def _get_subspace(subspace_map: SubspaceMap, q: int, q_prime: int) -> tuple[set[int], set[int]]:
+    """Return (Sq,Sq') as currently recorded for the qudit pair (q, q')."""
+    sq, sq_prime = subspace_map.get(_subspace_key(q, q_prime), (set(), set()))
+    return (sq, sq_prime) if q < q_prime else (sq_prime, sq)
+
+
+def _set_subspace(
+    subspace_map: SubspaceMap, q: int, q_prime: int, levels_q: set[int], levels_q_prime: set[int]
+) -> None:
+    """Store (levels_q, levels_q') as the SubspaceMap entry for (q, q')."""
+    key = _subspace_key(q, q_prime)
+    subspace_map[key] = (levels_q, levels_q_prime) if q < q_prime else (levels_q_prime, levels_q)
+
+
+def _propagate_subspace(
+    subspace_map: SubspaceMap,
+    num_qudits: int,
+    q: int,
+    q_prime: int,
+    levels_q: set[int],
+    levels_q_prime: set[int],
+) -> None:
+    """Propagate correlation between *q* and *q'* to every other qudit (Algorithm 5).
+
+    If an earlier gate already correlated q with some q'' on levels overlapping
+    what the current gate touches at q, that correlation now reaches q' too
+    (entanglement swapping) -- and symmetrically with q, q' exchanged.
+    """
+    for q2 in range(num_qudits):
+        if q2 in {q, q_prime}:
+            continue
+        a, b = _get_subspace(subspace_map, q, q2)
+        c, d = _get_subspace(subspace_map, q_prime, q2)
+        if a & levels_q:
+            _set_subspace(subspace_map, q_prime, q2, c | levels_q_prime, d | b)
+        if c & levels_q_prime:
+            _set_subspace(subspace_map, q, q2, a | levels_q, b | d)
+
+
+def _update_subspace_map(
+    subspace_map: SubspaceMap,
+    num_qudits: int,
+    targets: list[int],
+    levels: dict[int, list[int]],
+) -> None:
+    """Update *subspace_map* for a gate touching >=2 qudits (Algorithm 4, lines 12-19)."""
+    if len(targets) < 2:
+        return
+    for q, q_prime in itertools.combinations(targets, 2):
+        ell, ell_prime = set(levels[q]), set(levels[q_prime])
+        sq, sq_prime = _get_subspace(subspace_map, q, q_prime)
+        _set_subspace(subspace_map, q, q_prime, sq | ell, sq_prime | ell_prime)
+        _propagate_subspace(subspace_map, num_qudits, q, q_prime, ell, ell_prime)
 
 
 class QuditDAGNode:
@@ -247,6 +313,7 @@ class QuditDAG:
         self.circuit: QuantumCircuit | None = circuit
         self.num_qudits: int = len(self.dimensions)
         self.nodes: list[QuditOpNode] = []
+        self.subspace_map: SubspaceMap = {}
 
         if circuit is not None:
             self._build(circuit)
@@ -264,6 +331,7 @@ class QuditDAG:
             node = QuditOpNode(idx, instruction, targets, dims, levels)
 
             _wire_dependencies(node, self.nodes)
+            _update_subspace_map(self.subspace_map, self.num_qudits, targets, levels)
             self.nodes.append(node)
 
     def op_nodes(self) -> list[QuditOpNode]:
@@ -305,6 +373,7 @@ class QuditDAG:
         levels = {q: _levels_for_gate(gate, q, self.dimensions[q]) for q in qargs}
         node = QuditOpNode(new_idx, gate, qargs, dims, levels)
         _wire_dependencies(node, self.nodes)
+        _update_subspace_map(self.subspace_map, self.num_qudits, qargs, levels)
         self.nodes.append(node)
         return node
 
@@ -366,6 +435,10 @@ class QuditDAG:
     def get_edges(self) -> list[tuple[QuditDAGNode, QuditOpNode]]:
         """Return all (predecessor, successor) dependency pairs."""
         return [(dep, node) for node in self.nodes for dep in node.dependencies]
+
+    def get_subspace(self, q: int, q_prime: int) -> tuple[set[int], set[int]]:
+        """Return the recorded joint history level sets for qudits q and q'."""
+        return _get_subspace(self.subspace_map, q, q_prime)
 
     def display(self) -> None:
         """Print DAG structure (no-op placeholder)."""

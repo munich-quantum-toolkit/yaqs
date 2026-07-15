@@ -159,6 +159,45 @@ class TestDependencies:
         assert g0 not in g2.dependencies
 
 
+class TestSubspaceMap:
+    """Tests for SubspaceMap tracking (Algorithm 4/5)."""
+
+    def test_ghz_propagation(self) -> None:
+        """Indirect correlation propagates across a shared intermediary qudit."""
+        qc = QuantumCircuit(3, [2, 2, 2])
+        qc.h(0)
+        qc.cx([0, 1])
+        qc.cx([1, 2])
+        dag = circuit_to_dag(qc)
+        assert dag.get_subspace(0, 2) == ({0, 1}, {0, 1})
+
+    def test_isolated_qudit_has_empty_subspace(self) -> None:
+        """A qudit never touched by a multi-qudit gate stays unrecorded."""
+        qc = QuantumCircuit(3, [2, 2, 2])
+        qc.cx([0, 1])
+        dag = circuit_to_dag(qc)
+        assert dag.get_subspace(0, 2) == (set(), set())
+        assert dag.get_subspace(1, 2) == (set(), set())
+
+    def test_subspace_lookup_is_symmetric(self) -> None:
+        """get_subspace(q, q') mirrors get_subspace(q', q)."""
+        qc = QuantumCircuit(2, [2, 2])
+        qc.cx([0, 1])
+        dag = circuit_to_dag(qc)
+        sq, sq_prime = dag.get_subspace(0, 1)
+        sq_prime2, sq2 = dag.get_subspace(1, 0)
+        assert (sq, sq_prime) == (sq2, sq_prime2)
+
+    def test_apply_operation_back_updates_subspace(self) -> None:
+        """Appending a gate via apply_operation_back also updates the SubspaceMap."""
+        qc = QuantumCircuit(3, [2, 2, 2])
+        qc.h(0)
+        dag = circuit_to_dag(qc)
+        gate = qc.cx([1, 2])
+        dag.apply_operation_back(gate, [1, 2])
+        assert dag.get_subspace(1, 2) == ({0, 1}, {0, 1})
+
+
 class TestLevelTracking:
     """Tests for energy-level tracking per gate."""
 
