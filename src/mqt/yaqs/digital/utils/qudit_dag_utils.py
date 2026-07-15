@@ -59,6 +59,66 @@ def _levels_for_gate(gate: Gate, _qudit_idx: int, dimension: int) -> list[int]:
     return sorted({lev_a, lev_b})
 
 
+def _mark_used(node: QuditOpNode, used: set[QuditOpNode]) -> None:
+    """Recursively mark *node* and all of its ancestors as used.
+
+    Mirrors Algorithm 2 (``markUsed``) from the subspace-tracking DAG paper:
+    once a node has been chosen as the nearest blocker for the gate currently
+    being wired, it and everything it already depends on are skipped for the
+    remainder of that gate's backward scan, so only covering relations of the
+    blocking partial order end up as edges.
+
+    Args:
+        node: The node to mark, together with its ancestors.
+        used: Set of already-used nodes for the current scan (mutated in place).
+    """
+    if node in used:
+        return
+    used.add(node)
+    for dep in node.dependencies:
+        _mark_used(dep, used)
+
+
+def _blocked(node_i: QuditOpNode, node_g: QuditOpNode) -> bool:
+    """Return True if *node_i* blocks *node_g*.
+
+    Two gates block each other iff they share a qudit on which their touched
+    energy levels overlap. Gates on the same qudit but disjoint levels act on
+    different subspaces and therefore do not block each other.
+
+    Args:
+        node_i: The earlier candidate node.
+        node_g: The later node being wired.
+
+    Returns:
+        True iff node_i must precede node_g.
+    """
+    shared = set(node_i.target_qudits) & set(node_g.target_qudits)
+    return any(set(node_i.levels[q]) & set(node_g.levels[q]) for q in shared)
+
+
+def _wire_dependencies(node: QuditOpNode, candidates: list[QuditOpNode]) -> None:
+    """Wire *node*'s dependency edges against already-built *candidates*.
+
+    Implements the nearest-blocker scan of Algorithm 1/4: candidates are
+    visited in reverse (most recent first); the first blocking node found on
+    each chain gets a direct edge, and it together with all of its ancestors
+    is then marked used so the resulting graph stays Hasse-diagram minimal
+    (no redundant transitive edges).
+
+    Args:
+        node: The newly created node to wire (not yet appended anywhere).
+        candidates: Already-built nodes, in circuit/insertion order.
+    """
+    used: set[QuditOpNode] = set()
+    for prev in reversed(candidates):
+        if prev in used:
+            continue
+        if _blocked(prev, node):
+            node.add_dependency(prev)
+            _mark_used(prev, used)
+
+
 class QuditDAGNode:
     """Base node in a :class:`QuditDAG`.
 
@@ -193,8 +253,6 @@ class QuditDAG:
 
     def _build(self, circuit: QuantumCircuit) -> None:
         """Populate *nodes* and wire dependency edges."""
-        last_node_per_qudit: list[QuditOpNode | None] = [None] * self.num_qudits
-
         for idx, instruction in enumerate(circuit.instructions):
             targets: list[int] = getattr(instruction, "target_qudits", [])
             if isinstance(targets, int):
@@ -205,12 +263,7 @@ class QuditDAG:
 
             node = QuditOpNode(idx, instruction, targets, dims, levels)
 
-            for q in targets:
-                prev = last_node_per_qudit[q]
-                if prev is not None:
-                    node.add_dependency(prev)
-                last_node_per_qudit[q] = node
-
+            _wire_dependencies(node, self.nodes)
             self.nodes.append(node)
 
     def op_nodes(self) -> list[QuditOpNode]:
@@ -251,12 +304,7 @@ class QuditDAG:
         dims = [self.dimensions[q] for q in qargs]
         levels = {q: _levels_for_gate(gate, q, self.dimensions[q]) for q in qargs}
         node = QuditOpNode(new_idx, gate, qargs, dims, levels)
-
-        for q in qargs:
-            q_nodes = [n for n in self.nodes if q in n.target_qudits]
-            if q_nodes:
-                node.add_dependency(max(q_nodes, key=lambda n: n.index))
-
+        _wire_dependencies(node, self.nodes)
         self.nodes.append(node)
         return node
 

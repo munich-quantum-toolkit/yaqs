@@ -138,6 +138,26 @@ class TestDependencies:
         assert dag.nodes[1] in dag.nodes[2].dependencies
         assert dag.nodes[0] not in dag.nodes[2].dependencies
 
+    def test_disjoint_levels_on_same_qudit_have_no_dep(self) -> None:
+        """Two gates on the same qudit with disjoint levels are not blocked."""
+        qc = QuantumCircuit(1, [4])
+        qc.rz(0, [0, 1, np.pi / 4])
+        qc.rz(0, [2, 3, np.pi / 4])
+        dag = circuit_to_dag(qc)
+        assert dag.nodes[0] not in dag.nodes[1].dependencies
+        assert len(dag.nodes[1].dependencies) == 0
+
+    def test_no_redundant_transitive_edge(self) -> None:
+        """A gate depends only on its nearest blocker, not on transitively covered ancestors."""
+        qc = QuantumCircuit(2, [2, 2])
+        qc.cx([0, 1])
+        qc.rz(0, [0, 1, np.pi / 4])
+        qc.cx([0, 1])
+        dag = circuit_to_dag(qc)
+        g0, g1, g2 = dag.nodes
+        assert g1 in g2.dependencies
+        assert g0 not in g2.dependencies
+
 
 class TestLevelTracking:
     """Tests for energy-level tracking per gate."""
