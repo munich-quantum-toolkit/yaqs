@@ -598,7 +598,7 @@ class BaseGate:
 
     @property
     def mpo_tensors(self) -> list[NDArray[np.complex128]]:
-        """Returns a list of MPO tensors representing the gate.
+        """List of MPO tensors representing the gate.
 
         Raises:
             AttributeError: If the gate does not have MPO tensors defined.

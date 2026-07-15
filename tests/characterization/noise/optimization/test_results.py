@@ -1,0 +1,79 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tests for trajectory-matching result helpers."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+
+
+def _minimal_result(
+    *,
+    best_loss: float = 0.01,
+    best_parameters: np.ndarray | None = None,
+    loss_history: list[float] | None = None,
+    ref_traj: np.ndarray | None = None,
+    fit_traj: np.ndarray | None = None,
+) -> NoiseCharacterizationResult:
+    model = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    return NoiseCharacterizationResult(
+        optimal_model=model,
+        best_loss=best_loss,
+        best_parameters=np.array([0.1]) if best_parameters is None else best_parameters,
+        loss_history=[1.0, 0.01] if loss_history is None else loss_history,
+        ref_traj=np.zeros((1, 3)) if ref_traj is None else ref_traj,
+        fit_traj=np.zeros((1, 3)) if fit_traj is None else fit_traj,
+    )
+
+
+def test_sqrt_loss_helpers() -> None:
+    """Result exposes square-root loss before and after optimization."""
+    result = _minimal_result()
+    assert result.sqrt_loss_before() == pytest.approx(1.0)
+    assert result.sqrt_loss_after() == pytest.approx(0.1)
+
+
+def test_trajectory_rmse_zero_for_identical_trajs() -> None:
+    """RMSE vanishes when fitted and reference trajectories match."""
+    traj = np.linspace(0.0, 1.0, 4)[None, :]
+    result = _minimal_result(ref_traj=traj, fit_traj=traj.copy())
+    assert result.trajectory_rmse() == pytest.approx(0.0)
+
+
+def test_sqrt_loss_before_raises_on_empty_history() -> None:
+    """sqrt_loss_before requires a non-empty loss history."""
+    result = _minimal_result(loss_history=[])
+    with pytest.raises(ValueError, match="loss_history is empty"):
+        result.sqrt_loss_before()
+
+
+def test_trajectory_rmse_requires_arrays() -> None:
+    """trajectory_rmse raises when trajectories were not stored."""
+    model = NoiseModel([{"name": "pauli_y", "sites": [0], "strength": 0.1}])
+    result = NoiseCharacterizationResult(
+        optimal_model=model,
+        best_loss=0.01,
+        best_parameters=np.array([0.1]),
+        loss_history=[1.0, 0.01],
+    )
+    with pytest.raises(ValueError, match="ref_traj and fit_traj"):
+        result.trajectory_rmse()
+
+
+def test_trajectory_rmse_rejects_shape_mismatch() -> None:
+    """trajectory_rmse raises when stored trajectories have different shapes."""
+    result = _minimal_result(
+        ref_traj=np.zeros((1, 3)),
+        fit_traj=np.zeros((1, 2)),
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        result.trajectory_rmse()

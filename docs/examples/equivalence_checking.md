@@ -90,8 +90,10 @@ are not supported for unitary equivalence on either backend. See
   `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
   **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
-- **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
-  the machine CPU count via {func}`~mqt.yaqs.parallel_utils.available_cpus`).
+- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`. When unset, the pool size is
+  `min(available_cpus(), number_of_work_items)`, where {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
+  `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU limits when set, and falls back to CPU
+  affinity or `os.cpu_count()` on the host.
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
@@ -106,8 +108,6 @@ mpo_checker = EquivalenceChecker(
 
 # Auto: matrix if num_qubits <= 7, else MPO
 auto_checker = EquivalenceChecker(representation="auto")
-
-print("Auto matrix cutover: 7 qubits")
 ```
 
 ## Loading from OpenQASM
@@ -156,7 +156,6 @@ rng = np.random.default_rng()
 values = rng.uniform(-np.pi, np.pi, size=num_pars)
 circuit.assign_parameters(values, inplace=True)
 circuit.measure_all()
-circuit.draw(output="mpl")
 ```
 
 Transpile the circuit to a new basis.
@@ -166,7 +165,6 @@ from qiskit import transpile
 
 basis_gates = ["cz", "rz", "sx", "x", "id"]
 transpiled_circuit = transpile(circuit, basis_gates=basis_gates, optimization_level=1)
-transpiled_circuit.draw(output="mpl")
 ```
 
 Run equivalence checking with the MPO backend.
@@ -176,8 +174,6 @@ from mqt.yaqs import EquivalenceChecker
 
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6, fidelity=1 - 1e-13)
 result = checker.check(circuit, transpiled_circuit)
-print(f"Equivalent: {result['equivalent']}")
-print(f"Backend: {result['representation']}, time: {result['elapsed_time']:.3f} s")
 ```
 
 The same pair with `representation="auto"` on this five-qubit example selects the matrix
@@ -185,7 +181,6 @@ backend because $5 \leq 7$. For a consistent pipeline, keep `representation="mpo
 
 ```{code-cell} ipython3
 auto_result = EquivalenceChecker(representation="auto").check(circuit, transpiled_circuit)
-print(f"Auto backend: {auto_result['representation']}")
 ```
 
 ## Matrix backend (small circuits)

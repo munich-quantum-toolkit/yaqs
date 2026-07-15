@@ -97,6 +97,19 @@ def test_noise_model_none() -> None:
     assert model.processes == []
 
 
+def test_one_site_matrix_explicit() -> None:
+    """Test that an explicit 1-site matrix is preserved and not overwritten.
+
+    When the user supplies a custom jump operator, NoiseModel must keep it
+    instead of looking up the library entry for ``name``.
+    """
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    nm = NoiseModel([{"name": "not_a_library_name", "sites": [0], "strength": 0.1, "matrix": sigma_minus}])
+    p = nm.processes[0]
+    assert _allclose(p["matrix"], sigma_minus)
+    assert not _allclose(p["matrix"], PauliX.matrix)
+
+
 def test_one_site_matrix_auto() -> None:
     """Test that one-site processes auto-fill a 2x2 'matrix'.
 

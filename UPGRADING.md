@@ -4,6 +4,8 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+## [0.6.0]
+
 The unreleased API refresh replaces free functions and deep module paths with a small set of
 top-level types. The pieces fit together: construct physics objects and parameters, run through
 `Simulator`, read everything from `Result`.
@@ -54,7 +56,7 @@ params = AnalogSimParams(
     svd_threshold=1e-8,
 )
 
-sim = Simulator(show_progress=False)
+sim = Simulator()
 result = sim.run(psi, H, params, noise_model)
 print(result.expectation_values[0])
 print(result.max_bond)  # bond diagnostics; no longer an Observable
@@ -101,6 +103,37 @@ etc.) stays on `*SimParams`.
 For MPS-backed analog and strong-digital runs, `result.runtime_cost`, `result.max_bond`, and
 `result.total_bond` are filled automatically (aligned with `result.times` or the strong-sim layer
 grid). MCWF, Lindblad, and weak digital runs leave these as `None`.
+
+### MCWF / Lindblad operator ordering (dense backends)
+
+MCWF (`State(..., representation="vector")`) and Lindblad (`representation="density_matrix"`)
+embed jump operators and observables on the full Hilbert space using the same **site-0 LSB**
+convention as MPS `to_vec`, Qiskit little-endian circuits, and the TJM (MPO) dissipation path.
+Before this release, those dense embeddings used a different Kronecker-product order, so jump
+probabilities, observables, and cross-solver comparisons could disagree with TJM even when the
+`NoiseModel` definition looked identical.
+
+**What changed:** `_embed_operator_sparse` / `_embed_observable_sparse` (and their dense
+counterparts) now delegate to `state_utils.embed_*` helpers instead of building
+`left ⊗ op ⊗ right` with reversed tensor-leg order.
+
+**Why it matters:** MCWF, Lindblad, and TJM now agree on how a local operator on `sites=[i]` or
+adjacent `sites=[i, i+1]` is placed in the full space. Regression tests compare TJM dissipative
+norm loss to MCWF jump probabilities under lowering noise.
+
+**What you need to do:**
+
+- If you only pass standard `NoiseModel` processes (`sites`, built-in names, or matrices authored
+  for the listed site order), **no change is required**—results may shift slightly because the
+  previous ordering was incorrect.
+- If you hand-built full-space jump operators or compared MCWF/Lindblad outputs to TJM using
+  custom dense embeddings, rebuild those operators with
+  `mqt.yaqs.core.data_structures.state_utils.embed_one_site_operator`,
+  `embed_adjacent_two_site_operator`, or `embed_two_site_factors`, or pass the same local matrices
+  through `NoiseModel` and let the solvers embed them.
+- For adjacent two-site **matrix** processes, list sites in ascending order `[i, i+1]` with the
+  local matrix written for that pair order. If you pass reversed sites `[i+1, i]`, the matrix is
+  transposed automatically to match the `(i, i+1)` leg order.
 
 ### Top-level public API
 

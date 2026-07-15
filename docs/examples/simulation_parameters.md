@@ -30,7 +30,7 @@ This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` ex
 | `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
 | `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
 | `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
-| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`circuit_simulation`               |
+| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`strong_simulation`                |
 
 For custom unitaries and circuit gates, use {doc}`custom_gates` — those workflows still use `GateLibrary` or Qiskit circuits directly.
 
@@ -109,11 +109,9 @@ Pick a preset — no other truncation arguments required:
 ```{code-cell} ipython3
 # Default: balanced preset fills in all truncation settings
 analog_params = AnalogSimParams()
-print("default", _trunc_summary(analog_params))
 
 for name in ("fast", "balanced", "accurate", "exact"):
-    params = AnalogSimParams(preset=name)
-    print(name, _trunc_summary(params))
+    _trunc_summary(AnalogSimParams(preset=name))
 ```
 
 Override **one** field; the rest stay from `"balanced"`:
@@ -121,13 +119,6 @@ Override **one** field; the rest stay from `"balanced"`:
 ```{code-cell} ipython3
 balanced = AnalogSimParams(preset="balanced")
 tighter_krylov = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
-
-print("balanced preset only", _trunc_summary(balanced))
-print("override krylov_tol only", _trunc_summary(tighter_krylov))
-# svd_threshold, max_bond_dim, and num_traj still come from "balanced"
-assert tighter_krylov.svd_threshold == balanced.svd_threshold
-assert tighter_krylov.max_bond_dim == balanced.max_bond_dim
-assert tighter_krylov.num_traj == balanced.num_traj
 ```
 
 Override **several** fields when you know exactly what you want; the remaining preset fields still apply:
@@ -185,7 +176,7 @@ Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {cl
 
 ## `StrongSimParams`
 
-Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`circuit_simulation`).
+Used for strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`strong_simulation`).
 
 ### Two-qubit gate mode (`gate_mode`)
 
@@ -235,8 +226,6 @@ YAQS stores weak-simulation measurement histograms in `Result.counts` as a `dict
 ```{code-cell} ipython3
 weak_balanced = WeakSimParams(shots=1000)
 weak_exact = WeakSimParams(shots=1000, preset="exact")
-print("balanced", _trunc_summary(weak_balanced))
-print("exact", _trunc_summary(weak_exact))
 ```
 
 See {doc}`weak_circuit_simulation` for a full example with measurement histograms.
@@ -253,5 +242,5 @@ SIMULATION_PRESETS
 
 - {doc}`quickstart` — minimal first simulation
 - {doc}`analog_simulation` — analog parameters in context
-- {doc}`circuit_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
+- {doc}`strong_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
 - {doc}`weak_circuit_simulation` — `WeakSimParams` and shot readout

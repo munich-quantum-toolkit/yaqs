@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numba
 import numpy as np
 
 from mqt.yaqs.core.methods.tdvp.numba import (
@@ -71,15 +70,15 @@ def test_build_dense_heff_bond_numba() -> None:
 def test_heff_site_numba_threads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Wired build_dense_heff_site works when Numba thread pool is capped to one."""
+    """Wired ``build_dense_heff_site`` selects the Numba path when threads > 1."""
     monkeypatch.setattr("mqt.yaqs.core.methods.tdvp.primitives.NUMBA_DENSE_HEFF_MIN_DIM", 1)
+    monkeypatch.setattr("mqt.yaqs.core.methods.tdvp.primitives.numba.get_num_threads", lambda: 2)
     rng = np.random.default_rng(99)
     dim = 8
     mpo = 4
     left_env = np.asarray(rng.standard_normal((dim, mpo, dim)) + 1j * rng.standard_normal((dim, mpo, dim)))
     right_env = np.asarray(rng.standard_normal((dim, mpo, dim)) + 1j * rng.standard_normal((dim, mpo, dim)))
     op = np.asarray(rng.standard_normal((2, 2, mpo, mpo)) + 1j * rng.standard_normal((2, 2, mpo, mpo)))
-    numba.set_num_threads(max(2, numba.get_num_threads()))
     heff = build_dense_heff_site(left_env, right_env, op)
     ref = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env).reshape(
         2 * dim * dim,

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -60,6 +61,34 @@ def test_apply_scheduled_jumps_single_site() -> None:
 
     assert np.isclose(new_state.expect(z_obs0), -1.0)
     assert np.isclose(new_state.expect(z_obs1), 1.0)
+
+
+def test_apply_scheduled_jumps_custom_matrix() -> None:
+    """Tests applying a single-site scheduled jump with an explicit matrix."""
+    length = 2
+    state = MPS(length, state="zeros")  # |00>
+    state.normalize("B")
+
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    scheduled_jumps = [{"time": 1.0, "sites": [0], "name": "custom_lower", "matrix": sigma_minus}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    # |00> -> sigma_- |00> = 0; normalization leaves |00>
+    new_state = apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
+
+    z_obs0 = Observable(Z(), sites=0)
+    z_obs1 = Observable(Z(), sites=1)
+
+    assert np.isclose(new_state.expect(z_obs0), 1.0)
+    assert np.isclose(new_state.expect(z_obs1), 1.0)
+
+    # |10> relaxes to |00> under sigma_-
+    state_excited = MPS(length, state="basis", basis_string="10")
+    state_excited.normalize("B")
+    relaxed = apply_scheduled_jumps(state_excited, noise_model, 1.0, sim_params)
+    assert np.isclose(relaxed.expect(Observable(Z(), sites=0)), 1.0)
 
 
 def test_apply_scheduled_jumps_two_site() -> None:
@@ -120,3 +149,24 @@ def test_apply_scheduled_jumps_multiple() -> None:
     assert np.isclose(new_state.expect(z_obs1), 1.0)
     new_state.set_canonical_form(2)
     assert np.isclose(new_state.expect(z_obs2), -1.0)
+
+
+def test_apply_scheduled_jumps_no_op_when_missing() -> None:
+    """``apply_scheduled_jumps`` returns the input state when no jumps are scheduled."""
+    state = MPS(2, state="zeros")
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    unchanged = apply_scheduled_jumps(state, None, 1.0, sim_params)
+
+    assert unchanged is state
+
+
+def test_apply_scheduled_jumps_non_adjacent_raises() -> None:
+    """Scheduled two-site jumps must act on nearest neighbors."""
+    state = MPS(3, state="zeros")
+    scheduled_jumps = [{"time": 1.0, "sites": [0, 2], "name": "crosstalk_xx"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    with pytest.raises(ValueError, match="non-adjacent"):
+        apply_scheduled_jumps(state, noise_model, 1.0, sim_params)

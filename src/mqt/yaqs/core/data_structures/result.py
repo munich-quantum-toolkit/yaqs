@@ -59,7 +59,7 @@ def allocate_observable_buffers(
 
     if isinstance(sim_params, AnalogSimParams):
         if sim_params.sample_timesteps:
-            times = sim_params.times
+            times = np.asarray(sim_params.times, dtype=np.float64)
             for _ in range(num_observables):
                 trajectories.append(np.empty((num_traj, len(sim_params.times)), dtype=np.float64))
                 expectation_values.append(np.empty(len(sim_params.times), dtype=np.float64))

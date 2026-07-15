@@ -64,6 +64,8 @@ from tests.core.methods.tdvp.conftest import (
 from tests.digital.conftest import _physical_second_schmidt, _run_strong_noiseless
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
 
 
@@ -316,7 +318,10 @@ def test_apply_window() -> None:
     and asserts that the resulting window, as well as the shortened MPS and MPO, have the expected properties.
     """
     length = 5
-    tensors = [np.full((2, 1, 1), i, dtype=complex) for i in range(5)]
+    tensors = cast(
+        "list[NDArray[np.complex128]]",
+        [np.full((2, 1, 1), i, dtype=np.complex128) for i in range(5)],
+    )
     mps = MPS(length, tensors)
     mps.normalize()
 

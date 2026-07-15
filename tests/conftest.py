@@ -18,13 +18,14 @@ from qiskit.utils.optionals import HAS_QASM3_IMPORT
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Cap BLAS/OpenMP threads in pytest-xdist workers before numerical libraries spin
-# up pools (reduces intermittent OpenBLAS segfaults on some Linux aarch64 setups).
+# Cap BLAS/OpenMP/Numba threads in pytest workers before numerical libraries spin
+# up pools (reduces oversubscription and Numba config reload crashes under xdist).
 for _name, _val in (
     ("OPENBLAS_NUM_THREADS", "1"),
     ("MKL_NUM_THREADS", "1"),
     ("OMP_NUM_THREADS", "1"),
     ("NUMEXPR_NUM_THREADS", "1"),
+    ("NUMBA_NUM_THREADS", "1"),
 ):
     os.environ.setdefault(_name, _val)
 

@@ -1,0 +1,604 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Dense and MPO process-tensor wrappers."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
+import numpy as np
+
+from mqt.yaqs.core.data_structures.mpo import MPO
+
+from ...operational_memory.grid import assemble_probe_sequence
+from ...shared.encoding import DEFAULT_INITIAL_RHO0, encode_rho_pauli
+from ...shared.intervention_steps import AnyInterventionStep, build_intervention_operator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from numpy.typing import NDArray
+
+    from ...operational_memory.samples import ProbeSet
+
+
+def validate_initial_rho(
+    rho0: NDArray[np.complex128],
+    reference: NDArray[np.complex128],
+    *,
+    atol: float = 1e-8,
+) -> None:
+    """Raise if ``rho0`` does not match the process-tensor reference initial state.
+
+    Args:
+        rho0: User-supplied initial reduced state at the cut.
+        reference: Reference site-0 state stored on the process tensor.
+        atol: Absolute tolerance for element-wise comparison.
+
+    Raises:
+        ValueError: If the matrices differ beyond ``atol``.
+    """
+    got = np.asarray(rho0, dtype=np.complex128).reshape(2, 2)
+    ref = np.asarray(reference, dtype=np.complex128).reshape(2, 2)
+    if not np.allclose(got, ref, atol=atol):
+        msg = "rho0 does not match the process-tensor reference initial state."
+        raise ValueError(msg)
+
+
+def convert_probe_callable(
+    step: AnyInterventionStep,
+) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
+    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseProcessTensor.predict`.
+
+    Args:
+        step: Structured dict step or measure/prepare ket pair.
+
+    Returns:
+        Callable implementing the single-qubit map for ``step``.
+    """
+    inter = build_intervention_operator(step)
+    if isinstance(inter, np.ndarray):
+        u_mat = cast("NDArray[np.complex128]", np.asarray(inter, dtype=np.complex128).reshape(2, 2))
+
+        def unitary_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            return u_mat @ rho @ u_mat.conj().T
+
+        return unitary_map
+    return inter
+
+
+def evaluate_dense_probes(process_tensor: DenseProcessTensor, probe_set: ProbeSet) -> np.ndarray:
+    """Evaluate split-cut probe Pauli responses on a dense process tensor.
+
+    Args:
+        process_tensor: Dense reference process-tensor backend.
+        probe_set: Sampled split-cut probes.
+
+    Returns:
+        Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
+    """
+    n_p = len(probe_set.past_pairs)
+    n_f = len(probe_set.future_pairs)
+    pauli = np.empty((n_p, n_f, 4), dtype=np.float32)
+    for i in range(n_p):
+        for j in range(n_f):
+            steps = assemble_probe_sequence(probe_set, i, j)
+            interventions = [convert_probe_callable(s) for s in steps]
+            pauli[i, j] = encode_rho_pauli(process_tensor.predict(interventions))
+    return pauli
+
+
+def encode_cptp_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Convert a CPTP map callable into its Choi matrix.
+
+    Args:
+        emap: Callable implementing a single-qubit map ``rho -> emap(rho)``.
+
+    Returns:
+        4x4 Choi matrix for ``emap`` using the convention that matches the `predict` contraction.
+    """
+    j_choi = np.zeros((4, 4), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            e_in = np.zeros((2, 2), dtype=complex)
+            e_in[i, j] = 1.0
+            j_choi += np.kron(emap(e_in), e_in)
+    return j_choi
+
+
+def trace_partial_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
+    """Compute a partial trace of a dense operator.
+
+    Args:
+        r: Dense operator on the tensor product space.
+        dims: Dimensions of each subsystem.
+        keep: Indices of subsystems to keep.
+
+    Returns:
+        Reduced operator after tracing out subsystems not in ``keep``.
+
+    Raises:
+        ValueError: If ``keep`` contains out-of-range indices.
+    """
+    keep = sorted(keep)
+    n = len(dims)
+    if any(i < 0 or i >= n for i in keep):
+        msg = "keep indices out of range"
+        raise ValueError(msg)
+    reshaped = r.reshape(*(dims + dims))
+    trace_out = [i for i in range(n) if i not in keep]
+    perm = keep + trace_out
+    reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
+    dim_keep = int(np.prod([dims[i] for i in keep])) if keep else 1
+    dim_out = int(np.prod([dims[i] for i in trace_out])) if trace_out else 1
+    reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
+    return np.einsum("a b c b -> a c", reshaped)
+
+
+def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
+    """Compute von Neumann entropy of a (possibly unnormalized) density matrix.
+
+    Args:
+        r: Density matrix.
+        base: Logarithm base.
+
+    Returns:
+        Von Neumann entropy in the given base.
+
+    Raises:
+        ValueError: If ``base`` is not greater than 1.
+    """
+    if base <= 1:
+        msg = f"entropy base must be > 1, got {base!r}."
+        raise ValueError(msg)
+    log_base = np.log(base)
+    rho_herm = 0.5 * (r + r.conj().T)
+    tr = np.trace(rho_herm)
+    if abs(tr) < 1e-15:
+        return 0.0
+    rho_herm /= tr
+    evals = np.linalg.eigvalsh(rho_herm).real
+    evals = np.clip(evals, 0.0, 1.0)
+    nz = evals[evals > 1e-15]
+    if nz.size == 0:
+        return 0.0
+    return float(-(nz * (np.log(nz) / log_base)).sum())
+
+
+class DenseProcessTensor:
+    """Wrapper around a dense process-tensor Choi operator Upsilon."""
+
+    def __init__(
+        self,
+        upsilon: NDArray[np.complex128],
+        timesteps: list[float],
+        *,
+        initial_rho: NDArray[np.complex128] | None = None,
+    ) -> None:
+        r"""Create a dense process-tensor wrapper.
+
+        Args:
+            upsilon: Dense process-tensor matrix.
+            timesteps: Per-step evolution durations.
+            initial_rho: Site-0 reference state after ``U_0`` (defaults to ``|0\\rangle\\langle 0|``).
+        """
+        self.upsilon = upsilon
+        self.timesteps = timesteps
+        self.initial_rho = (
+            DEFAULT_INITIAL_RHO0.copy()
+            if initial_rho is None
+            else np.asarray(initial_rho, dtype=np.complex128).reshape(2, 2)
+        )
+
+    def check_initial_rho(
+        self,
+        rho0: NDArray[np.complex128],
+        *,
+        atol: float = 1e-8,
+    ) -> None:
+        """Validate ``rho0`` against :attr:`initial_rho`.
+
+        Args:
+            rho0: User-supplied initial reduced state at the cut.
+            atol: Absolute tolerance for element-wise comparison.
+        """
+        validate_initial_rho(rho0, self.initial_rho, atol=atol)
+
+    def to_matrix(self) -> NDArray[np.complex128]:
+        """Return the underlying dense process-tensor matrix.
+
+        Returns:
+            Dense process-tensor matrix.
+        """
+        return self.upsilon
+
+    def _num_interventions(self) -> int:
+        """Infer number of intervention steps from the process-tensor matrix shape.
+
+        Returns:
+            Number of steps ``num_interventions`` such that the shape is
+            ``(2*4**num_interventions, 2*4**num_interventions)``.
+        """
+        size = self.upsilon.shape[0]
+        return int(np.round(np.log2(size / 2) / 2))
+
+    def _predict_raw(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Contract the process tensor with interventions without physicalization.
+
+        Args:
+            interventions: List of CPTP maps, one per step.
+
+        Returns:
+            Raw 2x2 complex matrix from the process-tensor contraction (not guaranteed physical).
+        """
+        k_steps = len(interventions)
+        if k_steps == 0:
+            return np.asarray(self.upsilon, dtype=np.complex128).reshape(2, 2).copy()
+        past_list = [encode_cptp_choi(emap) for emap in interventions]
+        past_total = past_list[0]
+        for p in past_list[1:]:
+            past_total = np.kron(past_total, p)
+        dim_p = 4**k_steps
+        upsilon_4d = self.upsilon.reshape(2, dim_p, 2, dim_p)
+        ins = past_total.T.reshape(dim_p, dim_p)
+        return np.einsum("s p q r, r p -> s q", upsilon_4d, ins)
+
+    def predict(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Predict the final reduced state for a sequence of interventions.
+
+        Args:
+            interventions: List of CPTP maps, one per step.
+
+        Returns:
+            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+
+        Raises:
+            ValueError: If the number of interventions does not match the process-tensor length.
+        """
+        num_steps = self._num_interventions()
+        if len(interventions) != num_steps:
+            msg = (
+                f"DenseProcessTensor expects {num_steps} interventions for "
+                f"num_interventions={num_steps}, got {len(interventions)}."
+            )
+            raise ValueError(msg)
+        rho = self._predict_raw(interventions)
+
+        # Hermitize
+        rho = 0.5 * (rho + rho.conj().T)
+
+        # Normalize trace (if non-negligible)
+        tr = np.trace(rho)
+        if abs(tr) > 1e-12:
+            rho /= tr
+
+        # PSD projection
+        w, eig_vecs = np.linalg.eigh(rho)
+        w = np.clip(w, 0.0, None)
+        rho = (eig_vecs * w) @ eig_vecs.conj().T
+        tr2 = np.trace(rho)
+        if abs(tr2) > 1e-15:
+            rho /= tr2
+        return rho
+
+    def _num_interventions_for_probe(self) -> int:
+        return self._num_interventions()
+
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe Pauli responses.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 4)``.
+        """
+        return evaluate_dense_probes(self, probe_set)
+
+    def qmi(
+        self,
+        base: int = 2,
+        past: str = "all",
+        *,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute quantum mutual information between final and past subsystems.
+
+        Args:
+            base: Log base for entropy.
+            past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
+
+        Returns:
+            Quantum mutual information.
+
+        Raises:
+            ValueError: If ``past`` is invalid or PSD check fails.
+        """
+        if assume_canonical:
+            rho = self.upsilon
+        else:
+            upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            if check_psd:
+                lam_min = float(np.linalg.eigvalsh(upsilon_mat).min().real)
+                if lam_min < -1e-9:
+                    msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
+                    raise ValueError(msg)
+            tr = np.trace(upsilon_mat)
+            rho = upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
+
+        k_steps = self._num_interventions()
+        if k_steps == 0:
+            if past not in {"all", "first", "last"}:
+                msg = f"Unknown past='{past}'."
+                raise ValueError(msg)
+            return 0.0
+
+        dims = [2] + [4] * k_steps
+        if past == "all":
+            keep_past = list(range(1, k_steps + 1))
+        elif past == "last":
+            keep_past = [k_steps]
+        elif past == "first":
+            keep_past = [1]
+        else:
+            msg = f"Unknown past='{past}'."
+            raise ValueError(msg)
+
+        rho_final_sub = trace_partial_dense(rho, dims, keep=[0])
+        rho_past_sub = trace_partial_dense(rho, dims, keep=keep_past)
+        return (
+            compute_entropy_dense(rho_past_sub, base)
+            + compute_entropy_dense(rho_final_sub, base)
+            - compute_entropy_dense(rho, base)
+        )
+
+    def cmi(
+        self,
+        base: int = 2,
+        *,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute conditional mutual information I(F:P_{<k} | P_k).
+
+        Args:
+            base: Log base for entropy.
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
+
+        Returns:
+            Conditional mutual information. Returns 0.0 for ``k<2``.
+
+        Raises:
+            ValueError: If PSD check fails.
+        """
+        if assume_canonical:
+            rho = self.upsilon
+        else:
+            upsilon_mat = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            if check_psd:
+                lam_min = float(np.linalg.eigvalsh(upsilon_mat).min().real)
+                if lam_min < -1e-9:
+                    msg = f"Upsilon not PSD (min eigenvalue {lam_min:.3e})."
+                    raise ValueError(msg)
+            tr = np.trace(upsilon_mat)
+            rho = upsilon_mat / tr if abs(tr) > 1e-15 else upsilon_mat
+
+        k_steps = self._num_interventions()
+        if k_steps < 2:
+            return 0.0
+        dims = [2] + [4] * k_steps
+        rho_final_past_k = trace_partial_dense(rho, dims, keep=[0, k_steps])
+        rho_past_sub = trace_partial_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
+        rho_past_k = trace_partial_dense(rho, dims, keep=[k_steps])
+        return (
+            compute_entropy_dense(rho_final_past_k, base)
+            + compute_entropy_dense(rho_past_sub, base)
+            - compute_entropy_dense(rho_past_k, base)
+            - compute_entropy_dense(rho, base)
+        )
+
+
+class MPOProcessTensor(MPO):
+    """Wrapper around an MPO representation of a process-tensor Choi operator Upsilon."""
+
+    def __init__(
+        self,
+        upsilon_mpo: MPO,
+        timesteps: list[float],
+        *,
+        initial_rho: NDArray[np.complex128] | None = None,
+    ) -> None:
+        r"""Create an MPO process-tensor wrapper.
+
+        Args:
+            upsilon_mpo: MPO representation of the process-tensor matrix.
+            timesteps: Per-step evolution durations.
+            initial_rho: Site-0 reference state after ``U_0`` (defaults to ``|0\\rangle\\langle 0|``).
+        """
+        # Copy underlying MPO tensors/state into this subclass
+        super().__init__()
+        self.tensors = [t.copy() for t in upsilon_mpo.tensors]
+        self.length = upsilon_mpo.length
+        self.physical_dimension = upsilon_mpo.physical_dimension
+        self.timesteps = timesteps
+        self.initial_rho = (
+            DEFAULT_INITIAL_RHO0.copy()
+            if initial_rho is None
+            else np.asarray(initial_rho, dtype=np.complex128).reshape(2, 2)
+        )
+
+    def check_initial_rho(
+        self,
+        rho0: NDArray[np.complex128],
+        *,
+        atol: float = 1e-8,
+    ) -> None:
+        """Validate ``rho0`` against :attr:`initial_rho`.
+
+        Args:
+            rho0: User-supplied initial reduced state at the cut.
+            atol: Absolute tolerance for element-wise comparison.
+        """
+        validate_initial_rho(rho0, self.initial_rho, atol=atol)
+
+    def to_matrix(self) -> NDArray[np.complex128]:
+        """Return the dense matrix representation.
+
+        Returns:
+            Dense process-tensor matrix.
+        """
+        return super().to_matrix()
+
+    def to_dense(self) -> DenseProcessTensor:
+        """Convert this MPO process tensor to a dense process tensor.
+
+        Returns:
+            Dense process-tensor wrapper.
+        """
+        return DenseProcessTensor(self.to_matrix(), self.timesteps, initial_rho=self.initial_rho.copy())
+
+    def _num_interventions_for_probe(self) -> int:
+        return int(self.length) - 1
+
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe Pauli responses.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
+        """
+        return self.to_dense().evaluate_probes(probe_set)
+
+    def predict(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Predict the final reduced state for a sequence of interventions.
+
+        Args:
+            interventions: List of CPTP maps, one per past leg.
+
+        Returns:
+            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+
+        Raises:
+            ValueError: If the interventions list is empty or length mismatches the process tensor.
+        """
+        if not interventions:
+            if self.length == 1:
+                reduced = self.partial_trace_sites([0])
+                rho = reduced.to_matrix()
+                rho = 0.5 * (rho + rho.conj().T)
+                tr = np.trace(rho)
+                if abs(tr) > 1e-12:
+                    rho /= tr
+                else:
+                    rho = np.eye(2, dtype=np.complex128) / 2.0
+                w, eig_vecs = np.linalg.eigh(rho)
+                w = np.clip(w, 0.0, None)
+                rho = (eig_vecs * w) @ eig_vecs.conj().T
+                tr = np.trace(rho)
+                if abs(tr) > 1e-12:
+                    rho /= tr
+                return rho.astype(np.complex128, copy=False)
+
+            msg = "interventions list must be non-empty."
+            raise ValueError(msg)
+
+        k_steps = len(interventions)
+        if self.length != k_steps + 1:
+            msg = (
+                f"MPOProcessTensor length {self.length} inconsistent with number of "
+                f"interventions {k_steps} (expected length = k + 1)."
+            )
+            raise ValueError(msg)
+
+        # Work on a copy so the original MPOProcessTensor remains unchanged.
+        work = MPO()
+        work.length = self.length
+        work.physical_dimension = self.physical_dimension
+        work.tensors = [t.copy() for t in self.tensors]
+
+        # Apply local Choi operators (with transpose as in DenseProcessTensor.predict) on past sites.
+        for t, emap in enumerate(interventions):
+            j_choi = encode_cptp_choi(emap)  # 4x4
+            work.apply_local_operator(site=t + 1, op=j_choi.T, left_action=True)
+
+        # Trace out all past sites, keep only the final site (index 0).
+        reduced = work.partial_trace_sites([0])
+
+        # The remaining MPO encodes a single 2x2 matrix on the final leg.
+        rho = reduced.to_matrix()
+
+        # Match DenseProcessTensor.predict: Hermitian, PSD, trace-1.
+        rho = 0.5 * (rho + rho.conj().T)
+        tr = np.trace(rho)
+        if abs(tr) > 1e-12:
+            rho /= tr
+        w, eig_vecs = np.linalg.eigh(rho)
+        w = np.clip(w, 0.0, None)
+        rho = (eig_vecs * w) @ eig_vecs.conj().T
+        tr2 = np.trace(rho)
+        if abs(tr2) > 1e-15:
+            rho /= tr2
+        return rho
+
+    def qmi(
+        self,
+        base: int = 2,
+        past: str = "all",
+        *,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute quantum mutual information between final and past subsystems.
+
+        Args:
+            base: Log base for entropy.
+            past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
+            check_psd: Passed through to the dense implementation.
+            assume_canonical: Passed through to the dense implementation.
+
+        Returns:
+            Quantum mutual information.
+        """
+        return self.to_dense().qmi(
+            base=base,
+            past=past,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
+
+    def cmi(
+        self,
+        base: int = 2,
+        *,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Compute conditional mutual information I(F:P_{<k} | P_k).
+
+        Args:
+            base: Log base for entropy.
+            check_psd: Passed through to the dense implementation.
+            assume_canonical: Passed through to the dense implementation.
+
+        Returns:
+            Conditional mutual information.
+        """
+        return self.to_dense().cmi(
+            base=base,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )

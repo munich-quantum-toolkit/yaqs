@@ -27,10 +27,8 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 from mqt.yaqs import State
 
 preset = State(4, initial="x+")
-print("preset representation:", preset.representation)  # default "mps"
 
 mcwf_state = State(4, initial="zeros", representation="vector")
-print("MCWF representation:", mcwf_state.representation)
 ```
 
 ## `State` versus `MPS`
@@ -53,10 +51,8 @@ import numpy as np
 
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
 from_vector = State(vector=vec)
-print(from_vector.representation)
 
 lindblad_ready = State(2, initial="zeros", representation="density_matrix")
-print(lindblad_ready.representation)
 ```
 
 ## Preset product states
@@ -67,7 +63,6 @@ For **MCWF** or **Lindblad**, set `representation` on the `State` and call `Simu
 
 ```{code-cell} ipython3
 neel_mcwf = State(4, initial="Neel", representation="vector")
-print(neel_mcwf.representation)
 ```
 
 Product presets can evolve in dense form without ever building an MPS in memory. **Entangled** presets (e.g. `"haar-random"`) may still require an internal MPS when you choose a dense representation.
@@ -91,7 +86,6 @@ from mqt.yaqs import MPS
 
 mps_ref = MPS(3, state="zeros")
 spec = State(tensors=list(mps_ref.tensors))
-print(spec.representation)
 ```
 
 ### Dense state vector (`vector=`)
@@ -101,7 +95,6 @@ print(spec.representation)
 ```{code-cell} ipython3
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)  # |00>
 spec = State(vector=vec)
-print(spec.length, spec.representation)
 ```
 
 ### Density matrix (`density_matrix=`)
@@ -109,7 +102,6 @@ print(spec.length, spec.representation)
 ```{code-cell} ipython3
 rho = np.diag([1.0, 0.0, 0.0, 0.0]).astype(np.complex128)
 spec = State(density_matrix=rho)
-print(spec.representation)
 ```
 
 A `State` created only with `vector=` or `density_matrix=` cannot be used for circuit simulation; use `tensors=` or a preset with `representation="mps"` instead.
@@ -135,14 +127,13 @@ L = 3
 H = Hamiltonian.ising(L, J=1.0, g=0.5)
 obs = Observable("z", sites=[0])
 
-state_mps = State(L, initial="zeros")  # representation="mps" by default
+state_mps = State(L, initial="zeros")
 params = AnalogSimParams(
     observables=[obs],
     elapsed_time=0.2,
     dt=0.05,
 )
 result = sim.run(state_mps, H, params, noise_model=None)
-print("TJM Z_0:", result.expectation_values[0][-1])
 ```
 
 ### MCWF (`representation="vector"`)
@@ -158,7 +149,6 @@ params_vec = AnalogSimParams(
     dt=0.05,
 )
 result = sim.run(state_vec, H, params_vec, None)
-print("MCWF Z_0:", result.expectation_values[0][-1])
 ```
 
 ### Lindblad (`representation="density_matrix"`)
@@ -174,7 +164,6 @@ params_dm = AnalogSimParams(
     dt=0.05,
 )
 result = sim.run(state_dm, H, params_dm, None)
-print("Lindblad Z_0:", result.expectation_values[0][-1])
 ```
 
 See {doc}`representation_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
@@ -188,7 +177,6 @@ psi = np.zeros(2**L, dtype=np.complex128)
 psi[0] = 1.0
 state_from_vec = State(vector=psi)
 result = sim.run(state_from_vec, H, params_vec, None)
-print("From vector=, MCWF Z_0:", result.expectation_values[0][-1])
 ```
 
 ## Practical limits
@@ -197,7 +185,7 @@ print("From vector=, MCWF Z_0:", result.expectation_values[0][-1])
 - **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
 - **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
-- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
+- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State). Use `.mps` for MPS runs, `.vector` for MCWF, or `.density_matrix` for Lindblad. Not supported with stochastic noise on `mps` or `vector` representations (use `density_matrix` for the exact ensemble average).
 
 For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.
 

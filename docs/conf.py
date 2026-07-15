@@ -52,7 +52,6 @@ extensions = [
     "myst_nb",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinx_reredirects",
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
@@ -61,12 +60,6 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinxext.opengraph",
 ]
-
-redirects = {
-    "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
-    "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
-    "examples/solver_comparison": "examples/representation_comparison.html",
-}
 
 source_suffix = [".rst", ".md"]
 
@@ -116,6 +109,18 @@ nb_mime_priority_overrides = [
     ("latex", "image/svg+xml", 15),
 ]
 nb_execution_raise_on_error = True
+# Suppress noisy but harmless warnings during notebook execution (complex casts, etc.).
+nb_prolog = """
+import warnings
+
+warnings.filterwarnings("ignore", message=".*cast.*complex.*")
+warnings.filterwarnings("ignore", message=".*Casting complex values to real.*")
+try:
+    from numpy.exceptions import ComplexWarning
+except ImportError:
+    from numpy import ComplexWarning
+warnings.filterwarnings("ignore", category=ComplexWarning)
+"""
 
 
 class CDAStyle(UnsrtStyle):
@@ -189,7 +194,7 @@ latex_documents = [
         master_doc,
         "mqt_yaqs.tex",
         (
-            r"MQT YAQS\\{\large Scalable simulation for open systems,"
+            r"MQT YAQS\\{\large Scalable simulation and characterization for open systems,"
             r" noisy circuits, and realistic hardware}"
         ),
         r"Chair for Design Automation\\Technical University of Munich",

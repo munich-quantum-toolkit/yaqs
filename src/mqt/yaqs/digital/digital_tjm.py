@@ -182,7 +182,10 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
-    state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
+    site = gate.sites[0]
+    state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
+    if state.orthogonality_center is not None and state.orthogonality_center != site:
+        state.set_center(None)
 
 
 def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
@@ -248,14 +251,26 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
-    # Shift the orthogonality center for sites before the window.
-    for i in range(window[0]):
-        state.shift_orthogonality_center_right(i)
+    # Shift the orthogonality center to the start of the window.
+    if state.orthogonality_center is not None:
+        rel_center = state.orthogonality_center - window[0]
+        window_len = window[1] - window[0] + 1
+        if rel_center < 0 or rel_center >= window_len:
+            state.shift_center_to(window[0])
+            rel_center = 0
+    else:
+        for i in range(window[0]):
+            state.shift_orthogonality_center_right(i)
+        rel_center = None
 
     short_mpo = MPO()
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
     short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
+    if rel_center is not None:
+        short_state.set_center(rel_center)
+    else:
+        short_state.set_center(None)
 
     return short_state, short_mpo, window
 
@@ -290,6 +305,7 @@ def apply_two_qubit_gate_tdvp(
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1
+    gauge_known = state.orthogonality_center is not None
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
     evolve_window(short_state, short_mpo, sim_params)
@@ -297,6 +313,10 @@ def apply_two_qubit_gate_tdvp(
         state.tensors[i] = short_state.tensors[i - window[0]]
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
+    if gauge_known and short_state.orthogonality_center is not None:
+        state.set_center(window[0] + short_state.orthogonality_center)
+    else:
+        state.set_center(None)
 
     return first_site, last_site
 
@@ -366,6 +386,7 @@ def apply_two_qubit_gate_tebd(
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right
+    state.update_center_after_split(left_site, right_site, "right")
     return left_site, right_site
 
 
@@ -479,15 +500,12 @@ def digital_tjm(
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     col_idx = 0
-    canonical_form_lost = False
     while dag.op_nodes():
         single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
         for node in single_qubit_nodes:
             apply_single_qubit_gate(state, node)
             dag.remove_op_node(node)
-            if not dag.op_nodes():
-                canonical_form_lost = True
 
         # Process two-qubit gates in even/odd sweeps.
         for _, group in [("even", even_nodes), ("odd", odd_nodes)]:
@@ -521,7 +539,7 @@ def digital_tjm(
             return counts, None, final
         return state.measure_shots(shots=1), None, state if sim_params.get_state else None
 
-    if canonical_form_lost:
+    if state.orthogonality_center is None:
         state.normalize(form="B", decomposition="QR")
 
     assert isinstance(sim_params, StrongSimParams)

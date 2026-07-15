@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001 -- white-box tests exercise private MPO compression helpers
+# ruff: noqa: SLF001, N806 -- white-box tests exercise private MPO compression helpers
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
@@ -21,9 +21,12 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from numpy.typing import NDArray
 
 # ---- single-qubit ops ----
@@ -34,44 +37,38 @@ _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a single-site operator into a length-L qubit Hilbert space.
+    """Embed a single-site operator (MPS / Qiskit site-0 LSB convention).
 
     Args:
-        op: Local 2x2 operator acting on site i.
-        length: Total number of sites.
-        i: Site index at which to apply the operator.
+        op: Local operator matrix.
+        length: Number of sites in the chain.
+        i: Site index on which ``op`` acts.
 
     Returns:
-        Dense (2**length, 2**length) matrix representing I⊗…⊗op_i⊗…⊗I.
+        Dense embedded operator matrix.
     """
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(length):
-        out = np.kron(out, op if k == i else _I2)
-    return out
+    return embed_one_site_operator(np.asarray(op, dtype=np.complex128), length, i)
 
 
 def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
+    """Embed a nearest-neighbor two-site product operator.
 
     Args:
-        op1: Local operator acting on site i.
-        op2: Local operator acting on site i+1.
-        length: Total number of sites.
-        i: Left site index of the two-body term.
+        op1: Local operator on site ``i``.
+        op2: Local operator on site ``i + 1``.
+        length: Number of sites in the chain.
+        i: Left site index of the nearest-neighbor pair.
 
     Returns:
-        Dense (2**length, 2**length) matrix representing
-        I⊗…⊗op1_i⊗op2_{i+1}⊗…⊗I.
+        Dense embedded operator matrix.
     """
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(length):
-        if k == i:
-            out = np.kron(out, op1)
-        elif k == i + 1:
-            out = np.kron(out, op2)
-        else:
-            out = np.kron(out, _I2)
-    return out
+    return embed_two_site_factors(
+        np.asarray(op1, dtype=np.complex128),
+        np.asarray(op2, dtype=np.complex128),
+        length,
+        i,
+        i + 1,
+    )
 
 
 def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
@@ -89,12 +86,12 @@ def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
         Dense (2**length, 2**length) Hamiltonian matrix.
     """
     dim = 2**length
-    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
+    H = np.zeros((dim, dim), dtype=complex)
 
     for i in range(length - 1):
-        H += (-j_val) * _embed_two_body(_Z2, _Z2, length, i)  # noqa: N806
+        H += (-j_val) * _embed_two_body(_Z2, _Z2, length, i)
     for i in range(length):
-        H += (-g) * _embed_one_body(_X2, length, i)  # noqa: N806
+        H += (-g) * _embed_one_body(_X2, length, i)
 
     return H
 
@@ -116,14 +113,14 @@ def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) ->
         Dense (2**length, 2**length) Hamiltonian matrix.
     """
     dim = 2**length
-    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
+    H = np.zeros((dim, dim), dtype=complex)
 
     for i in range(length - 1):
-        H += (-jx) * _embed_two_body(_X2, _X2, length, i)  # noqa: N806
-        H += (-jy) * _embed_two_body(_Y2, _Y2, length, i)  # noqa: N806
-        H += (-jz) * _embed_two_body(_Z2, _Z2, length, i)  # noqa: N806
+        H += (-jx) * _embed_two_body(_X2, _X2, length, i)
+        H += (-jy) * _embed_two_body(_Y2, _Y2, length, i)
+        H += (-jz) * _embed_two_body(_Z2, _Z2, length, i)
     for i in range(length):
-        H += (-h) * _embed_one_body(_Z2, length, i)  # noqa: N806
+        H += (-h) * _embed_one_body(_Z2, length, i)
 
     return H
 
@@ -148,7 +145,7 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     id_op = np.eye(local_dim, dtype=complex)
 
     dim = local_dim**length
-    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
+    H = np.zeros((dim, dim), dtype=complex)
 
     # Build H term-by-term using Kronecker products
     def embed(op_list: list[np.ndarray]) -> np.ndarray:
@@ -161,7 +158,7 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     for i in range(length):
         op_list = [id_op] * length
         op_list[i] = omega * n + 0.5 * hubbard_u * (n @ (n - id_op))
-        H += embed(op_list)  # noqa: N806
+        H += embed(op_list)
 
     # Hopping terms
     for i in range(length - 1):
@@ -169,15 +166,42 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
         op_list1 = [id_op] * length
         op_list1[i] = adag
         op_list1[i + 1] = a
-        H += -hopping_j * embed(op_list1)  # noqa: N806
+        H += -hopping_j * embed(op_list1)
 
         # a_i * adag_{i+1}
         op_list2 = [id_op] * length
         op_list2[i] = a
         op_list2[i + 1] = adag
-        H += -hopping_j * embed(op_list2)  # noqa: N806
+        H += -hopping_j * embed(op_list2)
 
     return H
+
+
+def _position_grid_local_hamiltonian(
+    positions: np.ndarray,
+    mass: float,
+    omega: float,
+    trap_center: float,
+    hbar: float,
+) -> np.ndarray:
+    """Construct the dense one-ion finite-difference Hamiltonian used as a test reference.
+
+    Args:
+        positions: One-dimensional numpy array containing the uniform position grid.
+        mass: Ion mass used in the kinetic and harmonic potential terms.
+        omega: Harmonic trap angular frequency.
+        trap_center: Center position of the harmonic trap.
+        hbar: Reduced Planck constant used in the kinetic prefactor.
+
+    Returns:
+        Dense local Hamiltonian in the position-grid basis.
+    """
+    d = positions.size
+    dx = positions[1] - positions[0]
+    second_derivative = (np.diag(np.ones(d - 1), k=-1) - 2.0 * np.eye(d) + np.diag(np.ones(d - 1), k=1)) / dx**2
+    kinetic = -(hbar**2 / (2.0 * mass)) * second_derivative
+    potential = np.diag(0.5 * mass * omega**2 * (positions - trap_center) ** 2)
+    return kinetic + potential
 
 
 def _embed_local_ops(length: int, local_dim: int, site_ops: list[np.ndarray]) -> np.ndarray:
@@ -349,8 +373,8 @@ rng = np.random.default_rng()
 
 def test_ising_correct_operator() -> None:
     """Verify that the Ising MPO matches the exact dense Hamiltonian."""
-    L = 5  # noqa: N806 -- chain length matches physics notation
-    J = 1.0  # noqa: N806
+    L = 5
+    J = 1.0
     g = 0.5
 
     mpo = MPO.ising(L, J, g)
@@ -364,8 +388,8 @@ def test_ising_correct_operator() -> None:
 
 def test_heisenberg_correct_operator() -> None:
     """Verify that the Heisenberg MPO matches the exact dense Hamiltonian."""
-    L = 5  # noqa: N806 -- chain length matches physics notation
-    Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2  # noqa: N806
+    L = 5
+    Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
     mpo = MPO.heisenberg(L, Jx, Jy, Jz, h)
 
@@ -377,8 +401,8 @@ def test_bose_hubbard_correct_operator() -> None:
     length = 4
     local_dim = 3  # up to 2 bosons per site
     omega = 0.7
-    J = 0.2  # noqa: N806 -- hopping matches MPO.bose_hubbard parameter name
-    U = 1.3  # noqa: N806
+    J = 0.2
+    U = 1.3
 
     mpo = MPO.bose_hubbard(
         length=length,
@@ -395,9 +419,127 @@ def test_bose_hubbard_correct_operator() -> None:
     assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
 
     # Dense comparison
-    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)  # noqa: N806
-    H_mpo = mpo.to_matrix()  # noqa: N806
+    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
+    H_mpo = mpo.to_matrix()
     np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
+
+
+def test_trapped_ion_one_ion() -> None:
+    """Verify the one-ion position-grid MPO against a dense finite-difference reference."""
+    positions = np.linspace(-1.5, 1.5, 5, dtype=np.float64)
+    mass = 1.7
+    omega = 0.8
+    trap_center = 0.2
+    hbar = 0.9
+
+    mpo = MPO.trapped_ion(
+        positions,
+        [mass],
+        omega,
+        trap_center=trap_center,
+        hbar=hbar,
+        max_bond_dim=1,
+    )
+
+    expected = _position_grid_local_hamiltonian(positions, mass, omega, trap_center, hbar)
+    assert mpo.length == 1
+    assert mpo.physical_dimension == positions.size
+    assert mpo.tensors[0].shape == (positions.size, positions.size, 1, 1)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_trapped_ion_two_ions() -> None:
+    """Verify the exact two-ion MPO including its softened Coulomb interaction."""
+    positions = np.linspace(-1.0, 1.0, 4, dtype=np.float64)
+    masses = [1.2, 1.8]
+    omega = 0.7
+    trap_center = -0.1
+    hbar = 0.85
+    coulomb_strength = 0.6
+    softening_length = 0.3
+
+    mpo = MPO.trapped_ion(
+        positions,
+        masses,
+        omega,
+        trap_center=trap_center,
+        hbar=hbar,
+        coulomb_strength=coulomb_strength,
+        softening_length=softening_length,
+        coulomb_cutoff=0.0,
+    )
+
+    h1 = _position_grid_local_hamiltonian(positions, masses[0], omega, trap_center, hbar)
+    h2 = _position_grid_local_hamiltonian(positions, masses[1], omega, trap_center, hbar)
+    identity = np.eye(positions.size)
+    distance = positions[:, None] - positions[None, :]
+    coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+    expected = np.kron(h1, identity) + np.kron(identity, h2) + np.diag(coulomb.ravel())
+
+    assert mpo.length == 2
+    assert mpo.physical_dimension == positions.size
+    assert mpo.tensors[0].shape[3] == positions.size + 2
+    assert mpo.tensors[1].shape[2] == positions.size + 2
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-11)
+    np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
+
+
+def test_trapped_ion_coulomb_truncation() -> None:
+    """Verify that max_bond_dim retains the leading Coulomb SVD channels."""
+    positions = np.linspace(-2.0, 2.0, 6, dtype=np.float64)
+    omega = 0.5
+    coulomb_strength = 0.4
+    softening_length = positions[1] - positions[0]
+    mpo = MPO.trapped_ion(
+        positions,
+        [1.0, 1.0],
+        omega,
+        coulomb_strength=coulomb_strength,
+        max_bond_dim=4,
+    )
+
+    assert mpo.tensors[0].shape[3] == 4
+    assert mpo.tensors[1].shape[2] == 4
+
+    local_h = _position_grid_local_hamiltonian(positions, 1.0, omega, 0.0, 1.0)
+    identity = np.eye(positions.size)
+    dense_coulomb = mpo.to_matrix() - np.kron(local_h, identity) - np.kron(identity, local_h)
+    truncated_coulomb = np.diag(dense_coulomb).reshape(positions.size, positions.size)
+
+    distance = positions[:, None] - positions[None, :]
+    exact_coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+    u, singular_values, vh = np.linalg.svd(exact_coulomb, full_matrices=False)
+    expected_rank_2 = u[:, :2] @ np.diag(singular_values[:2]) @ vh[:2, :]
+    np.testing.assert_allclose(truncated_coulomb, expected_rank_2, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"positions": np.array([0.0, 1.0]), "masses": [1.0], "omega": 1.0}, "at least three"),
+        ({"positions": np.array([0.0, 1.0, 3.0]), "masses": [1.0], "omega": 1.0}, "uniformly spaced"),
+        ({"positions": np.arange(3.0), "masses": [], "omega": 1.0}, "exactly one or two"),
+        ({"positions": np.arange(3.0), "masses": [-1.0], "omega": 1.0}, "finite positive"),
+        ({"positions": np.arange(3.0), "masses": [1.0], "omega": -1.0}, "non-negative"),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0], "omega": 1.0, "coulomb_strength": 1.0},
+            "must be zero",
+        ),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "softening_length": 0.0},
+            "finite and positive",
+        ),
+        ({"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 1}, "at least 2"),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 4.0},
+            "must be an integer",
+        ),
+    ],
+)
+def test_trapped_ion_validation(kwargs: dict[str, Any], match: str) -> None:
+    """Reject malformed trapped-ion grids and physical parameters."""
+    with pytest.raises(ValueError, match=match):
+        MPO.trapped_ion(**kwargs)
 
 
 def test_fermi_hubbard_1d_correct_operator() -> None:
@@ -564,18 +706,18 @@ def test_from_matrix() -> None:
     """
     length = 5
     d = 3  # local dimension
-    H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)  # noqa: N806 -- dense Hamiltonian matrix
+    H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
 
-    Hmpo = MPO.from_matrix(H, d, 4)  # noqa: N806
+    Hmpo = MPO.from_matrix(H, d, 4)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))  # noqa: N806
-    Hmpo = MPO.from_matrix(H, d, 1_000_000)  # noqa: N806
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
+    Hmpo = MPO.from_matrix(H, d, 1_000_000)
     assert np.allclose(H, Hmpo.to_matrix())
 
     length = 6
-    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))  # noqa: N806
-    Hmpo = MPO.from_matrix(H, d, 728)  # noqa: N806
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
+    Hmpo = MPO.from_matrix(H, d, 728)
     assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
 
     mat = np.eye(1)
@@ -702,7 +844,7 @@ def test_to_mps() -> None:
     to the expected dimensions.
     """
     length = 3
-    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
+    J, g = 1.0, 0.5
 
     mpo = MPO.ising(length, J, g)
     mps = mpo.to_mps()
@@ -724,7 +866,7 @@ def test_check_if_valid_mpo() -> None:
     This test initializes an Ising MPO and calls check_if_valid_mpo, which should validate the MPO.
     """
     length = 4
-    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
+    J, g = 1.0, 0.5
 
     mpo = MPO.ising(length, J, g)
     assert mpo.check_if_valid_mpo() is True
@@ -745,7 +887,7 @@ def test_rotate() -> None:
     and that rotating back with conjugation returns tensors with the original physical dimensions.
     """
     length = 3
-    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
+    J, g = 1.0, 0.5
 
     mpo = MPO.ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
@@ -817,6 +959,30 @@ def test_multiply_mps_with_compression() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     state.check_if_valid_mps()
+    assert state.orthogonality_center is not None
+
+
+def test_multiply_mps_invalidates_then_restores_center() -> None:
+    """``multiply(MPS)`` clears gauge during apply and ``compress`` restores tracking."""
+    length = 3
+    state = MPS(length, state="haar-random", pad=4)
+    state.normalize("B")
+    assert state.orthogonality_center == 0
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    gate_mpo = MPO.from_gate(gate, length)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    gate_mpo.multiply(state, sim_params=sim_params, compress=True)
+    assert state.orthogonality_center is not None
+    obs = Observable(GateLibrary.z(), 1)
+    exp = state.expect(obs)
+    assert np.isfinite(exp)
+    assert abs(exp) <= 1.0
+
+    no_compress = MPS(length, state="haar-random", pad=4)
+    no_compress.normalize("B")
+    gate_mpo.multiply(no_compress, sim_params=sim_params, compress=False)
+    assert no_compress.orthogonality_center is None
 
 
 def test_multiply_mps_compress_requires_sim_params() -> None:
@@ -1068,3 +1234,132 @@ def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
 
     with pytest.raises(ValueError, match=r"Invalid token\(s\) in spec"):
         mpo.from_pauli_sum(terms=[(1.0, "X0 Y2 garbage")], length=4, n_sweeps=0)
+
+
+_CRANDN_RNG = np.random.default_rng(0)
+
+
+def _crandn(shape: tuple[int, ...]) -> NDArray[np.complex128]:
+    """Sample a complex Gaussian array with deterministic but distinct draws.
+
+    Args:
+        shape: Output array shape.
+
+    Returns:
+        Complex Gaussian samples with unit variance scaling.
+    """
+    return np.asarray(
+        (_CRANDN_RNG.standard_normal(shape) + 1j * _CRANDN_RNG.standard_normal(shape)) / np.sqrt(2),
+        dtype=np.complex128,
+    )
+
+
+def test_apply_local_operator_hilbert_vs_vectorized() -> None:
+    """apply_local_operator with 2x2 Hilbert op matches 4x4 vectorized op."""
+    T = _crandn((2, 2, 1, 1))
+
+    mpo_h = MPO()
+    mpo_h.tensors = [T.copy()]
+    mpo_h.length = 1
+    mpo_h.physical_dimension = 2
+
+    mpo_v = MPO()
+    mpo_v.tensors = [T.copy()]
+    mpo_v.length = 1
+    mpo_v.physical_dimension = 2
+
+    op2 = np.array([[0.7, 0.3], [0.1, -0.4]], dtype=np.complex128)
+    op_vec = np.kron(op2, np.eye(2, dtype=np.complex128))
+
+    mpo_h.apply_local_operator(site=0, op=op2, left_action=True)
+    mpo_v.apply_local_operator(site=0, op=op_vec, left_action=True)
+
+    np.testing.assert_allclose(mpo_h.tensors[0], mpo_v.tensors[0], atol=1e-12)
+
+
+def test_apply_local_operator_right_action_matches_dense() -> None:
+    """left_action=False applies the operator on the input leg without transposing."""
+    T = _crandn((2, 2, 1, 1))
+
+    mpo = MPO()
+    mpo.tensors = [T.copy()]
+    mpo.length = 1
+    mpo.physical_dimension = 2
+
+    op2 = np.array([[0.7, 0.3 + 0.2j], [0.1, -0.4]], dtype=np.complex128)
+    mpo.apply_local_operator(site=0, op=op2, left_action=False)
+
+    dense_before = T.reshape(2, 2, 1, 1)
+    ref = np.einsum("abk,bc->ack", dense_before.reshape(2, 2, 1), op2).reshape(2, 2, 1, 1)
+    np.testing.assert_allclose(mpo.tensors[0], ref, atol=1e-12)
+
+
+def test_partial_trace_site_matches_dense_trace() -> None:
+    """partial_trace_site produces the operator trace on a 1-site MPO."""
+    A = _crandn((2, 2))
+    T = A.reshape(2, 2, 1, 1)
+
+    mpo = MPO()
+    mpo.tensors = [T.copy()]
+    mpo.length = 1
+    mpo.physical_dimension = 2
+
+    dense_before = mpo.to_matrix()
+    mpo.partial_trace_site(0)
+    dense_after = mpo.to_matrix()
+
+    assert dense_before.shape == (2, 2)
+    assert dense_after.shape == (1, 1)
+    np.testing.assert_allclose(dense_after[0, 0], np.trace(A), atol=1e-12)
+
+
+def test_partial_trace_sites_two_site_operator() -> None:
+    """partial_trace_sites keeps the correct subsystem for a 2-site operator."""
+    A = _crandn((2, 2))
+    B = _crandn((2, 2))
+
+    mpo = MPO.from_local_ops([A, B])
+    dense_full = mpo.to_matrix()
+
+    traced = mpo.partial_trace_sites([0])
+    dense_traced = traced.to_matrix()
+
+    np.testing.assert_allclose(dense_full, np.kron(A, B), atol=1e-12)
+    np.testing.assert_allclose(dense_traced, np.trace(B) * A, atol=1e-12)
+
+
+def test_from_local_ops_tensor_product() -> None:
+    """from_local_ops builds an MPO whose matrix is the tensor product of the locals."""
+    A = _crandn((4, 4))
+    B = _crandn((4, 4))
+
+    mpo = MPO.from_local_ops([A, B])
+    dense = mpo.to_matrix()
+
+    np.testing.assert_allclose(dense, np.kron(A, B), atol=1e-12)
+
+
+def test_mpo_add_two_site_matches_dense_sum() -> None:
+    """Two-site __add__ produces the expected dense operator sum."""
+    mpo_a = MPO.identity(2)
+    mpo_b = MPO.identity(2)
+    summed = mpo_a + mpo_b
+    np.testing.assert_allclose(summed.to_matrix(), 2.0 * mpo_a.to_matrix(), atol=1e-12)
+    assert summed.length == 2
+    assert summed.physical_dimension == mpo_a.physical_dimension
+
+
+def test_mpo_add_single_site_bond_stacking() -> None:
+    """Single-site __add__ stacks bond dimensions on the only tensor."""
+    mpo_a = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    mpo_b = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    summed = mpo_a + mpo_b
+    assert summed.length == 1
+    assert summed.tensors[0].shape == (2, 2, 2, 2)
+
+
+def test_mpo_sum_matches_iterated_addition() -> None:
+    """mpo_sum agrees with repeated __add__ for two-site identity MPOs."""
+    mpos = [MPO.identity(2), MPO.identity(2), MPO.identity(2)]
+    ref = 3.0 * MPO.identity(2).to_matrix()
+    np.testing.assert_allclose(MPO.mpo_sum(mpos).to_matrix(), ref, atol=1e-12)

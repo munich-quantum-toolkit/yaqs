@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 from typing import TYPE_CHECKING, ClassVar, cast, overload
@@ -19,7 +20,7 @@ import scipy.sparse
 from numpy.typing import NDArray
 
 from .. import linalg
-from ..libraries.gate_library import BaseGate, Destroy
+from ..libraries.gate_library import Destroy
 from .mpo_utils import (
     contract_mpo_site_with_mpo_site,
     contract_mpo_site_with_mps_site,
@@ -29,6 +30,9 @@ from .mpo_utils import (
 from .mps import MPS
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from ..libraries.gate_library import BaseGate
     from ..methods.decompositions import TruncMode
     from .simulation_parameters import StrongSimParams, WeakSimParams
 
@@ -53,6 +57,7 @@ class MPO:
     - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
     - ``MPO.pauli(...)``: generic one-/two-body Pauli interactions.
     - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
+    - ``MPO.trapped_ion(...)``: one or two trapped ions on a position grid.
     - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
     - ``MPO.identity(...)``: identity operator.
@@ -95,6 +100,150 @@ class MPO:
     tensors: list[ComplexTensor]
     length: int
     physical_dimension: int
+
+    def apply_local_operator(
+        self,
+        site: int,
+        op: np.ndarray,
+        *,
+        left_action: bool = True,
+    ) -> None:
+        """Apply a local operator to the physical legs of one MPO site in place.
+
+        Args:
+            site: Site index.
+            op: Local operator as a ``(d, d)`` matrix or ``(d, d, d, d)`` tensor.
+            left_action: If True, apply ``op`` on the left (output) leg.
+
+        Raises:
+            ValueError: If ``op`` is incompatible with the site physical dimensions.
+        """
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
+        d2 = d_out * d_in
+
+        if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            tensor_new = (
+                np.einsum("ac,cbk->abk", op, tensor_view) if left_action else np.einsum("abk,bc->ack", tensor_view, op)
+            )
+            self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
+            return
+
+        if op.ndim == 2:
+            if op.shape != (d2, d2):
+                msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op
+        elif op.ndim == 4:
+            if op.shape != (d_out, d_in, d_out, d_in):
+                msg = f"op tensor shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op.reshape(d2, d2)
+        else:
+            msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
+            raise ValueError(msg)
+
+        tensor_phys = tensor.reshape(d2, dim_left * dim_right)
+        if left_action:
+            tensor_new = op_mat @ tensor_phys
+        else:
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            op4 = op_mat.reshape(d_out, d_in, d_out, d_in)
+            tensor_new = np.einsum("oiOI,oib->oOb", op4, tensor_view).reshape(d2, dim_left * dim_right)
+        self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
+
+    def partial_trace_site(self, site: int) -> None:
+        """Partial trace over the physical legs of a single MPO site in place.
+
+        Args:
+            site: Site index.
+
+        Raises:
+            ValueError: If the site physical dimensions are not square.
+        """
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
+        if d_out != d_in:
+            msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
+            raise ValueError(msg)
+
+        traced = np.zeros((1, 1, dim_left, dim_right), dtype=tensor.dtype)
+        for s in range(d_out):
+            traced[0, 0] += tensor[s, s]
+        self.tensors[site] = traced
+
+    def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
+        """Return a new MPO with all sites not in ``keep_sites`` traced out.
+
+        Args:
+            keep_sites: Site indices to retain.
+
+        Returns:
+            A new MPO with non-kept sites traced out.
+
+        Raises:
+            ValueError: If ``keep_sites`` is empty or contains out-of-range indices.
+        """
+        if not keep_sites:
+            msg = "keep_sites must be non-empty."
+            raise ValueError(msg)
+
+        keep = sorted(set(keep_sites))
+        if keep[0] < 0 or keep[-1] >= self.length:
+            msg = f"keep_sites indices {keep} out of range for MPO length {self.length}."
+            raise ValueError(msg)
+
+        new = MPO()
+        new.length = self.length
+        new.physical_dimension = self.physical_dimension
+        new.tensors = [t.copy() for t in self.tensors]
+
+        for i in range(new.length):
+            if i not in keep:
+                new.partial_trace_site(i)
+
+        return new
+
+    @classmethod
+    def from_local_ops(cls, local_ops: list[np.ndarray]) -> MPO:
+        """Build an MPO that is the tensor product of given local operators.
+
+        Args:
+            local_ops: Square local operator matrices, one per site.
+
+        Returns:
+            MPO representing the tensor product of ``local_ops``.
+
+        Raises:
+            ValueError: If ``local_ops`` is empty or contains incompatible shapes.
+        """
+        if not local_ops:
+            msg = "local_ops must contain at least one operator."
+            raise ValueError(msg)
+
+        tensors: list[np.ndarray] = []
+        d: int | None = None
+        for op in local_ops:
+            if op.ndim != 2 or op.shape[0] != op.shape[1]:
+                msg = f"Each local op must be a square matrix; got shape {op.shape}."
+                raise ValueError(msg)
+            local_d = int(op.shape[0])
+            if d is None:
+                d = local_d
+            elif d != local_d:
+                msg = f"Inconsistent local dimensions in local_ops: {d} vs {local_d}."
+                raise ValueError(msg)
+
+            site_tensor = op.reshape(local_d, local_d, 1, 1).astype(np.complex128)
+            tensors.append(site_tensor)
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = len(tensors)
+        mpo.physical_dimension = d if d is not None else 0
+        assert mpo.check_if_valid_mpo(), "Constructed MPO is invalid."
+        return mpo
 
     @classmethod
     def pauli(
@@ -598,6 +747,272 @@ class MPO:
         return mpo
 
     @classmethod
+    def trapped_ion(
+        cls,
+        positions: NDArray[np.float64],
+        masses: Sequence[float],
+        omega: float,
+        *,
+        trap_center: float = 0.0,
+        hbar: float = 1.0,
+        coulomb_strength: float = 0.0,
+        softening_length: float | None = None,
+        coulomb_cutoff: float = 1e-12,
+        max_bond_dim: int | None = None,
+    ) -> MPO:
+        r"""Construct a static one- or two-ion Hamiltonian on a uniform position grid.
+
+        Each ion is one MPO site whose local basis consists of the supplied position-grid
+        points. The Hamiltonian is:
+
+        H = sum_i[-hbar^2/(2*m_i) * d^2/dx_i^2 + (1/2)*m_i*omega^2*(x_i - q)^2]
+            + g / sqrt((x_1 - x_2)^2 + a^2)
+
+        The kinetic energy uses a centered second-order finite difference. For two ions,
+        an SVD of the diagonal Coulomb coefficient matrix produces the MPO interaction
+        channels. Discarding singular values according to ``coulomb_cutoff`` or
+        ``max_bond_dim`` approximates only the Coulomb term.
+
+        Args:
+            positions: Uniformly spaced one-dimensional position grid.
+            masses: One or two positive ion masses. Each ion becomes one MPO site.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center ``q`` of the static harmonic trap.
+            hbar: Positive reduced Planck constant.
+            coulomb_strength: Coulomb prefactor ``g``. Must be zero for one ion.
+            softening_length: Positive short-distance regularizer ``a`` to avoid Coulomb
+                singularity. Defaults to the grid spacing for two ions.
+            coulomb_cutoff: Relative SVD cutoff. Singular values no larger than this
+                fraction of the largest one are discarded. Set to zero for the exact
+                grid interaction.
+            max_bond_dim: Optional cap on the total MPO bond dimension. For two ions,
+                two channels are reserved for the local Hamiltonians.
+
+        Returns:
+            MPO for the static trapped-ion Hamiltonian in energy units.
+
+        Notes:
+            YAQS time evolution applies ``exp(-1j * dt * H)``. When using dimensional
+            quantities, rescale the returned MPO to represent ``H / hbar`` or measure
+            time and energy in compatible units.
+        """
+        grid, ion_masses, dx, resolved_softening_length = cls._validate_trapped_ions_position_grid_inputs(
+            positions,
+            masses,
+            omega,
+            trap_center,
+            hbar,
+            coulomb_strength,
+            softening_length,
+            coulomb_cutoff,
+            max_bond_dim,
+        )
+        local_terms = cls._trapped_ions_position_grid_local_terms(grid, ion_masses, omega, trap_center, hbar, dx)
+
+        mpo = cls()
+        mpo.length = int(ion_masses.size)
+        mpo.physical_dimension = int(grid.size)
+
+        if ion_masses.size == 1:
+            mpo.tensors = [local_terms[0][:, :, None, None]]
+            assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+            return mpo
+
+        coulomb_channels = cls._trapped_ions_position_grid_coulomb_channels(
+            grid,
+            coulomb_strength,
+            resolved_softening_length,
+            coulomb_cutoff,
+            max_bond_dim,
+        )
+        d = grid.size
+        bond_dimension = len(coulomb_channels) + 2
+        identity = np.eye(d, dtype=np.complex128)
+        left = np.zeros((d, d, 1, bond_dimension), dtype=np.complex128)
+        right = np.zeros((d, d, bond_dimension, 1), dtype=np.complex128)
+        left[:, :, 0, 0] = local_terms[0]
+        right[:, :, 0, 0] = identity
+        left[:, :, 0, 1] = identity
+        right[:, :, 1, 0] = local_terms[1]
+
+        for alpha, (left_channel, right_channel) in enumerate(coulomb_channels, start=2):
+            left[:, :, 0, alpha] = left_channel
+            right[:, :, alpha, 0] = right_channel
+
+        mpo.tensors = [left, right]
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
+    @staticmethod
+    def _validate_trapped_ions_position_grid_inputs(
+        positions: NDArray[np.float64],
+        masses: Sequence[float],
+        omega: float,
+        trap_center: float,
+        hbar: float,
+        coulomb_strength: float,
+        softening_length: float | None,
+        coulomb_cutoff: float,
+        max_bond_dim: int | None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], float, float]:
+        """Validate trapped-ion position-grid inputs and return normalized parameters.
+
+        Args:
+            positions: Uniformly spaced one-dimensional position grid.
+            masses: One or two positive ion masses.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center position of the harmonic trap.
+            hbar: Positive reduced Planck constant.
+            coulomb_strength: Softened Coulomb prefactor. Must be zero for one ion.
+            softening_length: Positive Coulomb softening length, or ``None`` to use the grid spacing.
+            coulomb_cutoff: Relative SVD cutoff for Coulomb channels.
+            max_bond_dim: Optional integer cap on the total MPO bond dimension.
+
+        Returns:
+            Tuple containing the validated grid, ion masses, grid spacing, and resolved
+            softening length.
+
+        Raises:
+            ValueError: If the grid or physical parameters are invalid, if the number of
+                masses is not one or two, or if ``max_bond_dim`` is too small.
+        """
+        grid = np.asarray(positions, dtype=np.float64)
+        if grid.ndim != 1 or grid.size < 3:
+            msg = "positions must be a one-dimensional grid with at least three points."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(grid)):
+            msg = "positions must contain only finite values."
+            raise ValueError(msg)
+        spacings = np.diff(grid)
+        if np.any(spacings <= 0.0) or not np.allclose(spacings, spacings[0], rtol=1e-12, atol=1e-15):
+            msg = "positions must be strictly increasing and uniformly spaced."
+            raise ValueError(msg)
+
+        ion_masses = np.asarray(masses, dtype=np.float64)
+        if ion_masses.ndim != 1 or ion_masses.size not in {1, 2}:
+            msg = "masses must contain exactly one or two ion masses."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(ion_masses)) or np.any(ion_masses <= 0.0):
+            msg = "masses must contain only finite positive values."
+            raise ValueError(msg)
+        if not np.isfinite(omega) or omega < 0.0:
+            msg = "omega must be finite and non-negative."
+            raise ValueError(msg)
+        if not np.isfinite(trap_center):
+            msg = "trap_center must be finite."
+            raise ValueError(msg)
+        if not np.isfinite(hbar) or hbar <= 0.0:
+            msg = "hbar must be finite and positive."
+            raise ValueError(msg)
+        if not np.isfinite(coulomb_strength):
+            msg = "coulomb_strength must be finite."
+            raise ValueError(msg)
+        if not np.isfinite(coulomb_cutoff) or not 0.0 <= coulomb_cutoff < 1.0:
+            msg = "coulomb_cutoff must be finite and satisfy 0 <= coulomb_cutoff < 1."
+            raise ValueError(msg)
+        if ion_masses.size == 1 and coulomb_strength:
+            msg = "coulomb_strength must be zero for a one-ion Hamiltonian."
+            raise ValueError(msg)
+        if ion_masses.size == 1:
+            if max_bond_dim is not None:
+                if not isinstance(max_bond_dim, int) or isinstance(max_bond_dim, bool):
+                    msg = "max_bond_dim must be an integer."
+                    raise ValueError(msg)
+                if max_bond_dim < 1:
+                    msg = "max_bond_dim must be at least 1 for a one-ion Hamiltonian."
+                    raise ValueError(msg)
+            resolved_softening = spacings[0] if softening_length is None else softening_length
+            return grid, ion_masses, float(spacings[0]), float(resolved_softening)
+
+        dx = float(spacings[0])
+        if max_bond_dim is not None:
+            if not isinstance(max_bond_dim, int) or isinstance(max_bond_dim, bool):
+                msg = "max_bond_dim must be an integer."
+                raise ValueError(msg)
+            if max_bond_dim < 2:
+                msg = "max_bond_dim must be at least 2 for a two-ion Hamiltonian."
+                raise ValueError(msg)
+        if softening_length is None:
+            softening_length = dx
+        if not np.isfinite(softening_length) or softening_length <= 0.0:
+            msg = "softening_length must be finite and positive."
+            raise ValueError(msg)
+        return grid, ion_masses, dx, float(softening_length)
+
+    @staticmethod
+    def _trapped_ions_position_grid_local_terms(
+        grid: NDArray[np.float64],
+        ion_masses: NDArray[np.float64],
+        omega: float,
+        trap_center: float,
+        hbar: float,
+        dx: float,
+    ) -> list[ComplexTensor]:
+        """Construct finite-difference kinetic plus harmonic-potential local terms.
+
+        Args:
+            grid: Uniform one-dimensional position grid.
+            ion_masses: Validated positive ion masses.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center position of the harmonic trap.
+            hbar: Positive reduced Planck constant.
+            dx: Uniform grid spacing.
+
+        Returns:
+            Local Hamiltonian matrix for each ion mass.
+        """
+        d = grid.size
+        local_terms: list[ComplexTensor] = []
+        for mass in ion_masses:
+            kinetic_diagonal = np.full(d, hbar**2 / (mass * dx**2), dtype=np.float64)
+            kinetic_off_diagonal = np.full(d - 1, -(hbar**2 / (2.0 * mass * dx**2)), dtype=np.float64)
+            kinetic = (
+                np.diag(kinetic_diagonal) + np.diag(kinetic_off_diagonal, k=-1) + np.diag(kinetic_off_diagonal, k=1)
+            )
+            potential = 0.5 * mass * omega**2 * (grid - trap_center) ** 2
+            local_terms.append(np.asarray(kinetic + np.diag(potential), dtype=np.complex128))
+        return local_terms
+
+    @staticmethod
+    def _trapped_ions_position_grid_coulomb_channels(
+        grid: NDArray[np.float64],
+        coulomb_strength: float,
+        softening_length: float,
+        coulomb_cutoff: float,
+        max_bond_dim: int | None,
+    ) -> list[tuple[ComplexTensor, ComplexTensor]]:
+        """Factorize the softened Coulomb grid into diagonal MPO interaction channels.
+
+        Args:
+            grid: Uniform one-dimensional position grid.
+            coulomb_strength: Softened Coulomb prefactor.
+            softening_length: Positive Coulomb softening length.
+            coulomb_cutoff: Relative SVD cutoff for Coulomb channels.
+            max_bond_dim: Optional integer cap on the total MPO bond dimension.
+
+        Returns:
+            Pairs of diagonal left/right MPO channel matrices for the retained SVD terms.
+        """
+        distance = grid[:, None] - grid[None, :]
+        coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+        u, singular_values, vh = linalg.svd(coulomb, full_matrices=False)
+        if not singular_values[0]:
+            rank = 0
+        else:
+            rank = int(np.count_nonzero(singular_values > coulomb_cutoff * singular_values[0]))
+        if max_bond_dim is not None:
+            rank = min(rank, max_bond_dim - 2)
+
+        channels: list[tuple[ComplexTensor, ComplexTensor]] = []
+        for alpha in range(rank):
+            scale = math.sqrt(float(singular_values[alpha]))
+            channels.append((
+                np.asarray(np.diag(scale * u[:, alpha]), dtype=np.complex128),
+                np.asarray(np.diag(scale * vh[alpha, :]), dtype=np.complex128),
+            ))
+        return channels
+
+    @classmethod
     def identity(cls, length: int, physical_dimension: int = 2) -> MPO:
         """Construct an identity MPO.
 
@@ -955,7 +1370,8 @@ class MPO:
             a = self.tensors[k]  # (d, d, Dl, Dm)
             b = self.tensors[k + 1]  # (d, d, Dm, Dr)
 
-            phys_dim = a.shape[0]
+            phys_dim_left = a.shape[0]
+            phys_dim_right = b.shape[0]
             bond_dim_left = a.shape[2]
             bond_dim_right = b.shape[3]
 
@@ -965,8 +1381,8 @@ class MPO:
             # Group left legs (l,s,t) and right legs (u,v,w)
             theta = np.transpose(theta, (4, 0, 1, 2, 3, 5))
             matrix = theta.reshape(
-                bond_dim_left * phys_dim * phys_dim,
-                phys_dim * phys_dim * bond_dim_right,
+                bond_dim_left * phys_dim_left * phys_dim_left,
+                phys_dim_right * phys_dim_right * bond_dim_right,
             )
 
             u, s, vh = linalg.svd(matrix, full_matrices=False)
@@ -976,11 +1392,11 @@ class MPO:
             s = s[:keep]
             vh = vh[:keep, :]
 
-            # Left tensor: (bond_dim_left, d, d, keep) -> (d, d, bond_dim_left, keep)
-            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(1, 2, 0, 3)
+            # Left tensor: (bond_dim_left, dL, dL, keep) -> (dL, dL, bond_dim_left, keep)
+            left = u.reshape(bond_dim_left, phys_dim_left, phys_dim_left, keep).transpose(1, 2, 0, 3)
 
-            # Right tensor: (keep, d, d, bond_dim_right) -> (d, d, keep, bond_dim_right)
-            svh = (s[:, None] * vh).reshape(keep, phys_dim, phys_dim, bond_dim_right)
+            # Right tensor: (keep, dR, dR, bond_dim_right) -> (dR, dR, keep, bond_dim_right)
+            svh = (s[:, None] * vh).reshape(keep, phys_dim_right, phys_dim_right, bond_dim_right)
             right = svh.transpose(1, 2, 0, 3)
 
             self.tensors[k] = left
@@ -1083,6 +1499,13 @@ class MPO:
 
         Raises:
             ValueError: On length mismatch or missing ``sim_params`` when compressing.
+
+        Notes:
+            Applies the MPO at every site and invalidates the tracked orthogonality
+            center (``set_center(None)``). With ``compress=False`` the center remains
+            ``None`` until canonicalization or compression is performed elsewhere.
+            Compression re-establishes a center via
+            :meth:`~mqt.yaqs.core.data_structures.mps.MPS.compress`.
         """
         if len(self.tensors) != state.length:
             msg = f"MPO length {len(self.tensors)} does not match MPS length {state.length}."
@@ -1090,6 +1513,8 @@ class MPO:
 
         for site, operator in enumerate(self.tensors):
             state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
+
+        state.set_center(None)
 
         if not compress:
             return
@@ -1352,8 +1777,8 @@ class MPO:
                     op_local = scipy.sparse.csr_matrix(op_local_dense)
                     op_left = current_operators[alpha]
 
-                    # Kronecker product: Left (X) Local
-                    term = scipy.sparse.kron(op_left, op_local, format="csr")
+                    # Kronecker product: local (x) accumulated (MPS to_vec order)
+                    term = scipy.sparse.kron(op_local, op_left, format="csr")
 
                     accumulated = term if accumulated is None else accumulated + term
 
@@ -1494,6 +1919,88 @@ class MPO:
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
 
         return mpo
+
+    def __add__(self, other: MPO) -> MPO:
+        """Add two MPOs via direct bond stacking.
+
+        Args:
+            other: The other MPO to add. Must have identical length.
+
+        Returns:
+            A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
+
+        Raises:
+            ValueError: If the MPO lengths do not match.
+        """
+        if self.length != other.length:
+            msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
+            raise ValueError(msg)
+
+        new_mpo = MPO()
+        new_mpo.length = self.length
+        new_mpo.physical_dimension = copy.copy(self.physical_dimension)
+        new_tensors: list[np.ndarray] = []
+
+        length = self.length
+        if length == 1:
+            a = self.tensors[0]
+            b = other.tensors[0]
+            p_out, p_in, la, ra = a.shape
+            _, _, lb, rb = b.shape
+            new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+            new_t[:, :, :la, :ra] = a
+            new_t[:, :, la:, ra:] = b
+            new_tensors.append(new_t)
+        else:
+            for i in range(length):
+                a = self.tensors[i]
+                b = other.tensors[i]
+
+                p_out, p_in, la, ra = a.shape
+                _, _, lb, rb = b.shape
+
+                if i == 0:
+                    new_t = np.concatenate([a, b], axis=3)
+                elif i == length - 1:
+                    new_t = np.concatenate([a, b], axis=2)
+                else:
+                    new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+                    new_t[:, :, :la, :ra] = a
+                    new_t[:, :, la:, ra:] = b
+
+                new_tensors.append(new_t)
+
+        new_mpo.tensors = new_tensors
+        return new_mpo
+
+    @classmethod
+    def mpo_sum(cls, mpos: list[MPO]) -> MPO:
+        """Efficient sequential addition of a batch of MPOs.
+
+        Args:
+            mpos: List of MPOs to sum.
+
+        Returns:
+            A new MPO directly representing the sum.
+
+        Raises:
+            ValueError: If ``mpos`` is empty.
+        """
+        if not mpos:
+            msg = "mpo_sum requires at least one MPO."
+            raise ValueError(msg)
+
+        if len(mpos) == 1:
+            m = cls()
+            m.length = mpos[0].length
+            m.physical_dimension = copy.copy(mpos[0].physical_dimension)
+            m.tensors = [t.copy() for t in mpos[0].tensors]
+            return m
+
+        res = mpos[0]
+        for other in mpos[1:]:
+            res += other
+        return res
 
     def check_if_valid_mpo(self) -> bool:
         """MPO validity check.
