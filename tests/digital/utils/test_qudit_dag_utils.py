@@ -40,7 +40,7 @@ def simple_circuit() -> QuantumCircuit:
     """
     qc = QuantumCircuit(3, [2, 5, 4])
     qc.cx([1, 2])
-    qc.rz(1, [0, 3, np.pi / 2])
+    qc.rz(1, [1, 3, np.pi / 2])
     qc.r(0, [0, 1, np.pi, np.pi / 2])
     return qc
 
@@ -158,6 +158,22 @@ class TestDependencies:
         assert g1 in g2.dependencies
         assert g0 not in g2.dependencies
 
+    def test_control_qudit_blocks_only_at_ctrl_lev(self) -> None:
+        """A CEx's control qudit blocks on its ctrl_lev, not the target's transition levels."""
+        qc = QuantumCircuit(2, [3, 2])
+        qc.cx([0, 1])  # ctrl_lev=1 (default), target levels {0, 1}
+        qc.rz(0, [0, 2, np.pi / 4])  # touches control qudit at {0, 2} -- disjoint from ctrl_lev
+        dag = circuit_to_dag(qc)
+        assert dag.nodes[0] not in dag.nodes[1].dependencies
+
+    def test_control_qudit_blocks_when_overlapping_ctrl_lev(self) -> None:
+        """A gate touching the control qudit's actual ctrl_lev is correctly blocked."""
+        qc = QuantumCircuit(2, [3, 2])
+        qc.cx([0, 1])  # ctrl_lev=1
+        qc.rz(0, [1, 2, np.pi / 4])  # touches level 1 -- overlaps ctrl_lev
+        dag = circuit_to_dag(qc)
+        assert dag.nodes[0] in dag.nodes[1].dependencies
+
 
 class TestSubspaceMap:
     """Tests for SubspaceMap tracking (Algorithm 4/5)."""
@@ -169,7 +185,7 @@ class TestSubspaceMap:
         qc.cx([0, 1])
         qc.cx([1, 2])
         dag = circuit_to_dag(qc)
-        assert dag.get_subspace(0, 2) == ({0, 1}, {0, 1})
+        assert dag.get_subspace(0, 2) == ({1}, {0, 1})
 
     def test_isolated_qudit_has_empty_subspace(self) -> None:
         """A qudit never touched by a multi-qudit gate stays unrecorded."""
@@ -195,24 +211,24 @@ class TestSubspaceMap:
         dag = circuit_to_dag(qc)
         gate = qc.cx([1, 2])
         dag.apply_operation_back(gate, [1, 2])
-        assert dag.get_subspace(1, 2) == ({0, 1}, {0, 1})
+        assert dag.get_subspace(1, 2) == ({1}, {0, 1})
 
 
 class TestLevelTracking:
     """Tests for energy-level tracking per gate."""
 
     def test_cx_levels(self, simple_circuit: QuantumCircuit) -> None:
-        """CX with default lev_a=lev_b=0 uses the lowest two levels."""
+        """CX records ctrl_lev for the control qudit and lev_a/lev_b for the target."""
         dag = circuit_to_dag(simple_circuit)
         cx_node = dag.nodes[0]
-        assert cx_node.levels[1] == [0, 1]
+        assert cx_node.levels[1] == [1]
         assert cx_node.levels[2] == [0, 1]
 
     def test_rz_levels_with_high_transition(self, simple_circuit: QuantumCircuit) -> None:
-        """RZ with lev_a=0, lev_b=3 records levels [0, 3]."""
+        """RZ with lev_a=1, lev_b=3 records levels [1, 3]."""
         dag = circuit_to_dag(simple_circuit)
         rz_node = dag.nodes[1]
-        assert rz_node.levels[1] == [0, 3]
+        assert rz_node.levels[1] == [1, 3]
 
     def test_r_gate_levels(self, simple_circuit: QuantumCircuit) -> None:
         """R gate with lev_a=0, lev_b=1 records levels [0, 1]."""

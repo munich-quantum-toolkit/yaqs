@@ -40,22 +40,32 @@ level sets within which the joint history of q and q' is known to be
 confined so far (paper Section III-A)."""
 
 
-def _levels_for_gate(gate: Gate, _qudit_idx: int, dimension: int) -> list[int]:
+def _levels_for_gate(gate: Gate, position: int, dimension: int) -> list[int]:
     """Return which energy levels *gate* acts on for a given qudit.
 
     MQT Qudit gates carry ``lev_a`` and ``lev_b`` (the two transition levels).
     When both are 0 the gate does not have a meaningful two-level transition
     (e.g. a full-unitary gate), so the full level range is returned.
 
+    Controlled gates that encode their control qudit as the first entry of
+    ``target_qudits`` (e.g. ``CEx``) expose a distinct ``ctrl_lev`` attribute
+    for the level that triggers the control -- using ``lev_a``/``lev_b`` (the
+    *target's* transition levels) for that qudit would be wrong, since the
+    control qudit is left unchanged in every branch except ``ctrl_lev``.
+
     Args:
         gate: The MQT Qudit gate object.
-        _qudit_idx: Index of the qudit within the full circuit (reserved for a
-            future per-qudit override; not used today).
+        position: This qudit's position within the gate's own ``target_qudits``
+            list (0 = first entry, etc.), used to recognize the control slot
+            of gates like ``CEx``.
         dimension: Physical dimension of that qudit.
 
     Returns:
         Sorted list of level indices the gate touches.
     """
+    if position == 0 and hasattr(gate, "ctrl_lev"):
+        return [gate.ctrl_lev]
+
     lev_a: int = getattr(gate, "lev_a", 0)
     lev_b: int = getattr(gate, "lev_b", 0)
 
@@ -326,7 +336,7 @@ class QuditDAG:
                 targets = [targets]
 
             dims = [self.dimensions[q] for q in targets]
-            levels = {q: _levels_for_gate(instruction, q, self.dimensions[q]) for q in targets}
+            levels = {q: _levels_for_gate(instruction, i, self.dimensions[q]) for i, q in enumerate(targets)}
 
             node = QuditOpNode(idx, instruction, targets, dims, levels)
 
@@ -370,7 +380,7 @@ class QuditDAG:
         """
         new_idx = max((n.index for n in self.nodes), default=-1) + 1
         dims = [self.dimensions[q] for q in qargs]
-        levels = {q: _levels_for_gate(gate, q, self.dimensions[q]) for q in qargs}
+        levels = {q: _levels_for_gate(gate, i, self.dimensions[q]) for i, q in enumerate(qargs)}
         node = QuditOpNode(new_idx, gate, qargs, dims, levels)
         _wire_dependencies(node, self.nodes)
         _update_subspace_map(self.subspace_map, self.num_qudits, qargs, levels)
