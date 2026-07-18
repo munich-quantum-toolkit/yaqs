@@ -250,6 +250,50 @@ def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
     assert np.isclose(sum(probabilities), 1.0)
 
 
+def test_stochastic_process_jump_independent_of_process_order() -> None:
+    """Jump application is independent of NoiseModel process list order (#505)."""
+    dt = 0.1
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    def make_noise(order: str) -> NoiseModel:
+        lowerings = [{"name": "lowering", "sites": [q], "strength": 0.6} for q in range(3)]
+        dephasings = [{"name": "pauli_z", "sites": [q], "strength": 0.3} for q in range(3)]
+        if order == "grouped":
+            processes = lowerings + dephasings
+        else:
+            processes = [proc for q in range(3) for proc in (lowerings[q], dephasings[q])]
+        return NoiseModel(processes)
+
+    class _JumpAtIndex1:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 1  # crosses lowering@1 (grouped) vs pauli_z@0 (site-major) before the fix
+
+    base = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    base.tensors[0] *= 0.99  # non-unit norm so a jump is triggered
+    grouped = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("grouped"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    site_major = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("site_major"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    for a, b in zip(grouped.tensors, site_major.tensors, strict=False):
+        np.testing.assert_allclose(a, b)
+
+
 def test_stochastic_process_no_jump_unknown_gauge() -> None:
     """A no-jump path with unknown gauge re-canonicalizes the MPS at site 0."""
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])

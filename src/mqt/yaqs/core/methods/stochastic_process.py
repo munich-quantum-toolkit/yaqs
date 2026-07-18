@@ -207,8 +207,10 @@ def stochastic_process(
     # Select process by index using probabilities over all processes
     assert len(probabilities) == len(noise_model.processes), "Probabilities and processes must have the same length"
 
-    choice_idx = rng.choice(len(noise_model.processes), p=probabilities)
-    chosen_process = noise_model.processes[choice_idx]
+    # probabilities are in site-sweep order; recover the operator in that same order (#505)
+    ordered_processes = sorted(noise_model.processes, key=lambda process: (process["sites"][0], len(process["sites"])))
+    choice_idx = rng.choice(len(ordered_processes), p=probabilities)
+    chosen_process = ordered_processes[choice_idx]
 
     # Extract information from chosen process
     sites = chosen_process["sites"]
