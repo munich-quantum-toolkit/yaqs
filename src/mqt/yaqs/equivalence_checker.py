@@ -17,7 +17,7 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from qiskit.converters import circuit_to_dag
 
@@ -75,7 +75,7 @@ def _validate_representation(representation: str) -> Representation:
     if representation not in allowed:
         msg = f"representation must be one of {allowed!r}, got {representation!r}."
         raise ValueError(msg)
-    return cast("Representation", representation)
+    return representation
 
 
 def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
