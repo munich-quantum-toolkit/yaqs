@@ -9,6 +9,10 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed TJM jump selection to align processes with site-sweep probabilities ([#506]) ([**@Pouri96**])
+
 ## [0.6.0] - 2026-07-06
 
 ### Added
@@ -150,6 +154,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
+[#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
 [#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
 [#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
@@ -220,6 +226,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
 [**@linusschulte**]: https://github.com/linusschulte
+[**@Pouri96**]: https://github.com/Pouri96
 
 <!-- General links -->
 
