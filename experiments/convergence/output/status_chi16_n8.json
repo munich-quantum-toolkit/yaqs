@@ -1,0 +1,9 @@
+{
+  "chi": 16,
+  "substeps": 8,
+  "config_hash": "60c5f6e09b155e7b",
+  "cache_key": "chi16_n8_60c5f6e09b155e7b",
+  "n_rows": 16,
+  "max_step": 15,
+  "bytes_per_complex128": 16
+}

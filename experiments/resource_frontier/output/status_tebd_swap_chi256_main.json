@@ -1,0 +1,8 @@
+{
+  "method": "tebd_swap",
+  "chi": 256,
+  "tag": "main",
+  "n_rows": 16,
+  "max_step": 15,
+  "max_infidelity": 8.715250743307479e-13
+}

@@ -1,0 +1,6 @@
+sequence,method,seed,chi_max,param_count,infidelity,runtime_cumulative,pareto
+commuting,hybrid_tdvp,11,8,936,0.05695586803257968,0.4113687379285693,True
+commuting,hybrid_tdvp,11,16,2728,0.001590787313994646,0.4612971509923227,True
+commuting,tebd_swap,11,64,6824,0.0,0.155826403060928,True
+commuting,tebd_swap,22,64,6824,0.0,0.15110289078438655,True
+commuting,tebd_swap,33,32,6824,0.0,0.15683149313554168,True

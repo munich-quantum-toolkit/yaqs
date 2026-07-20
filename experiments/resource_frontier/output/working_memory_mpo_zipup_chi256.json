@@ -1,0 +1,15 @@
+{
+  "method": "mpo_zipup",
+  "chi_max": 256,
+  "target_step": 15,
+  "baseline_rss_bytes": 282607616,
+  "peak_rss_bytes": 402108416,
+  "peak_rss_increase_bytes": 119500800,
+  "peak_rss_increase_MiB": 113.96484375,
+  "peak_param_count": 433640,
+  "peak_mps_storage_bytes": 6938240,
+  "peak_mps_storage_MiB": 6.6168212890625,
+  "largest_intermediate_elements": 0,
+  "ordering_note": "",
+  "common_target_step": 15
+}

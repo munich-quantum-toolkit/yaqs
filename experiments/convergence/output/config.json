@@ -1,0 +1,47 @@
+{
+  "abs_inf_tol": 0.0001,
+  "benchmark_id": "convergence_tfim_tdvp_substeps",
+  "bytes_per_complex128": 16,
+  "chi_values": [
+    16,
+    32,
+    64
+  ],
+  "config_hash": "60c5f6e09b155e7b",
+  "dt": 0.1,
+  "grid": [
+    4,
+    4
+  ],
+  "initial_state": "|0...0>",
+  "ising": {
+    "J": 1.0,
+    "h": 1.0
+  },
+  "krylov_tol": 1e-12,
+  "library_note": "Identical 4\u00d74 TFIM Strang circuit and gate_runtime TDVP settings as experiments/fixed_resources and experiments/resource_frontier. tdvp_sweeps=n splits each two-qubit gate into n equal-angle substeps.",
+  "method": "hybrid_tdvp",
+  "model": "ising",
+  "num_qubits": 16,
+  "rel_inf_tol": 0.05,
+  "reliability_threshold": 0.01,
+  "substeps_extended": 8,
+  "substeps_initial": [
+    1,
+    2,
+    4
+  ],
+  "svd_threshold": 1e-13,
+  "target_steps": 15,
+  "tdvp_mode": "2site",
+  "thread_env": {
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  },
+  "tmax": 1.5,
+  "trotter_order": 2,
+  "trunc_mode": "discarded_weight"
+}

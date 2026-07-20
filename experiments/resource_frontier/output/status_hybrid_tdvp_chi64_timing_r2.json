@@ -1,0 +1,8 @@
+{
+  "method": "hybrid_tdvp",
+  "chi": 64,
+  "tag": "timing_r2",
+  "n_rows": 16,
+  "max_step": 15,
+  "max_infidelity": 0.007683931968177737
+}

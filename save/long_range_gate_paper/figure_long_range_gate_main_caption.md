@@ -1,0 +1,3 @@
+# Figure: Controlled accuracy of long-range gate application
+
+Controlled accuracy of long-range gate application. **a**, Infidelity after a single long-range Pauli rotation at χmax = 8. Lines show medians over three Pauli axes and three random initial states; shading shows the full range. The dashed guide denotes quadratic angle dependence. **b**, Accumulation of infidelity through commuting and mixed 36-gate sequences at χmax = 16. Lines and shading show the median and range over three initial states. **c**, Final infidelity against the actual peak number of MPS parameters. **d**, Final infidelity against cumulative gate-update time. Points in **c** and **d** correspond, in order, to χmax = 8, 16, 32, 64. Values below 10⁻¹⁴ are shown at the plotting floor.

@@ -1,0 +1,153 @@
+{
+  "L": 12,
+  "angles_exp_a": [
+    0.025,
+    0.05,
+    0.1,
+    0.2
+  ],
+  "chi_max_values": [
+    8,
+    16,
+    64
+  ],
+  "experiments": {
+    "A": {
+      "angles": [
+        0.025,
+        0.05,
+        0.1,
+        0.2
+      ],
+      "chi": [
+        8,
+        16,
+        64
+      ],
+      "pair": [
+        2,
+        9
+      ],
+      "substeps": [
+        1,
+        2,
+        4,
+        8
+      ]
+    },
+    "B": {
+      "chi": [
+        8,
+        64
+      ],
+      "pairs": [
+        [
+          4,
+          7
+        ],
+        [
+          3,
+          8
+        ],
+        [
+          2,
+          9
+        ]
+      ],
+      "substeps": [
+        1,
+        8
+      ],
+      "theta": 0.1
+    },
+    "C": {
+      "chi": [
+        8,
+        16,
+        64
+      ],
+      "layers": 12,
+      "substeps": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "theta": 0.05
+    },
+    "validation_local_vs_full": {
+      "chi": [
+        16,
+        64
+      ],
+      "gate": [
+        "rxx",
+        0.1,
+        [
+          2,
+          9
+        ]
+      ],
+      "seed": 11,
+      "substeps": [
+        1,
+        4
+      ]
+    }
+  },
+  "gate_modes": {
+    "full_tdvp": "full-tdvp",
+    "hybrid_tdvp": "tdvp",
+    "mpo_zipup": "mpo",
+    "tebd_swap": "swaps"
+  },
+  "global_tdvp_note": "Digital gate_mode='full-tdvp' applies local 2TDVP windows to every two-qubit gate with an analytic generator; not full-chain analog TDVP.",
+  "krylov_tol": 1e-12,
+  "min_keep_examples": {
+    "16": 2,
+    "64": 2,
+    "8": 2
+  },
+  "min_keep_rule": "min(2, max_bond_dim) when capped else 2",
+  "mpo_zipup_internal_svd_threshold": 1e-06,
+  "pilot_mode": true,
+  "preset": "exact",
+  "preset_defaults": {
+    "krylov_tol": 1e-12,
+    "max_bond_dim": null,
+    "num_traj": 1024,
+    "svd_threshold": 1e-13
+  },
+  "seeds": [
+    11
+  ],
+  "svd_threshold": 1e-13,
+  "target_bond_profile": [
+    1,
+    2,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    2,
+    1
+  ],
+  "tdvp_mode": "2site",
+  "tdvp_substep_time": "1 / tdvp_sweeps of unit gate evolution",
+  "tdvp_substeps": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "tdvp_sweep_direction": "symmetric left-to-right then right-to-left per substep",
+  "theta_range": 0.1,
+  "theta_sequence": 0.05,
+  "trunc_mode": "discarded_weight",
+  "variational_mpo": "not_implemented"
+}

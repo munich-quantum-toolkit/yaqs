@@ -1,0 +1,8 @@
+{
+  "method": "mpo_zipup",
+  "chi": 8,
+  "tag": "timing_r1",
+  "n_rows": 4,
+  "max_step": 3,
+  "max_infidelity": 0.0321583376800022
+}

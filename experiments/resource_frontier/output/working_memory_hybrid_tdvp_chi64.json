@@ -1,0 +1,15 @@
+{
+  "method": "hybrid_tdvp",
+  "chi_max": 64,
+  "target_step": 15,
+  "baseline_rss_bytes": 282607616,
+  "peak_rss_bytes": 940818432,
+  "peak_rss_increase_bytes": 658210816,
+  "peak_rss_increase_MiB": 627.71875,
+  "peak_param_count": 43688,
+  "peak_mps_storage_bytes": 699008,
+  "peak_mps_storage_MiB": 0.6666259765625,
+  "largest_intermediate_elements": 0,
+  "ordering_note": "",
+  "common_target_step": 15
+}
