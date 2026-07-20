@@ -299,7 +299,7 @@ For $d>2$ local Hilbert spaces (e.g. transmon leakage), pass a `d×d` `matrix` m
 ## Related topics
 
 - {doc}`analog_simulation` — TJM workflow with static noise strengths
-- {doc}`circuit_simulation` — noisy digital simulation
+- {doc}`strong_simulation` — strong digital simulation
 - {doc}`scheduled_jumps` — deterministic jumps at fixed times (library or custom `matrix`)
 - {doc}`representation_comparison` — MCWF and Lindblad backends with the same `NoiseModel`
 - {doc}`simulation_parameters` — presets and `random_seed` for reproducible trajectories

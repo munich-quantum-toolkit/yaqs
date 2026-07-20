@@ -143,7 +143,7 @@ H_jw = Hamiltonian.fermi_hubbard_1d(num_orbitals, t=t, u=u, jordan_wigner=True)
 Use this mode when you need Pauli-string semantics with full JW signs between orbitals.
 
 ```{note}
-The analog MPO factories omit a chemical potential $\mu$. For a **digital** Trotter circuit with $\mu$, see {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit` and {doc}`circuit_simulation`.
+The analog MPO factories omit a chemical potential $\mu$. For a **digital** Trotter circuit with $\mu$, see {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit` and {doc}`strong_simulation`.
 ```
 
 Correctness of the fermionic and JW MPOs is covered by `test_fermi_hubbard_1d_*` in the package test suite.

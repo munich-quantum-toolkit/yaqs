@@ -4,6 +4,8 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+## [0.6.0]
+
 The unreleased API refresh replaces free functions and deep module paths with a small set of
 top-level types. The pieces fit together: construct physics objects and parameters, run through
 `Simulator`, read everything from `Result`.

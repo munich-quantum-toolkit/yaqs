@@ -1,7 +1,7 @@
 # Custom Gates in YAQS
 
 ```{note}
-This is a **reference guide** with static code blocks; it is not executed during the documentation build. Runnable circuit examples are in {doc}`circuit_simulation` and {doc}`equivalence_checking`.
+This is a **reference guide** with static code blocks; it is not executed during the documentation build. Runnable circuit examples are in {doc}`strong_simulation` and {doc}`equivalence_checking`.
 ```
 
 YAQS represents every digital gate as a {class}`~mqt.yaqs.core.libraries.gate_library.BaseGate`
@@ -298,7 +298,7 @@ MPS contraction; there is no single-qubit TDVP gate path in circuit simulation.
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
-- {doc}`circuit_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
+- {doc}`strong_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
 - {mod}`~mqt.yaqs.digital.utils.dag_utils` — translation implementation and
   `SUPPORTED_QISKIT_GATE_NAMES`
 - {mod}`~mqt.yaqs.core.libraries.gate_library` — built-in gate definitions and generator examples

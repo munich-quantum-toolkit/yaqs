@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from torch_support import import_torch
 
 from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
     build_training_dataset,
@@ -35,7 +36,7 @@ def test_extract_ket_fallback_for_zero_projector() -> None:
 
 def test_pack_dataset_shapes() -> None:
     """Rollout arrays convert to a three-tensor TensorDataset."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     rho0 = np.zeros((2, 8), dtype=np.float32)
     e_features = np.zeros((2, 3, 32), dtype=np.float32)
@@ -50,7 +51,7 @@ def test_pack_dataset_shapes() -> None:
 
 def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
     """End-to-end build_training_dataset and train_surrogate_model run on a tiny Ising chain."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
@@ -96,7 +97,7 @@ def test_build_training_dataset_timesteps_length_mismatch_raises() -> None:
 
 def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     """Trained surrogate achieves modest error on held-out rollout samples."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 

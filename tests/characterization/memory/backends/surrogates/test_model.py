@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from torch_support import import_torch
 
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.characterization.memory.shared.interventions import (
@@ -34,7 +35,7 @@ def _tiny_model(*, layernorm_in: bool = False, num_interventions: int | None = N
     Returns:
         A tiny untrained :class:`ProcessTensorSurrogate` on CPU.
     """
-    pytest.importorskip("torch")
+    import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
@@ -72,7 +73,7 @@ def _make_probe_set(*, cut: int = 1, num_interventions: int = 1, n_p: int = 2, n
 
 def test_process_tensor_surrogate_forward_shape_cpu() -> None:
     """Forward pass returns one rho8 vector per sequence step."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
@@ -85,7 +86,7 @@ def test_process_tensor_surrogate_forward_shape_cpu() -> None:
 
 def test_process_tensor_surrogate_predict_numpy_roundtrip() -> None:
     """Predict with return_numpy=True yields a float32 ndarray."""
-    pytest.importorskip("torch")
+    import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
@@ -99,7 +100,7 @@ def test_process_tensor_surrogate_predict_numpy_roundtrip() -> None:
 
 def test_process_tensor_surrogate_predict_tensor_return_and_restores_mode() -> None:
     """Predict can return torch tensors and preserves train/eval mode."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -136,7 +137,7 @@ def test_process_tensor_surrogate_predict_tensor_return_and_restores_mode() -> N
 
 def test_process_tensor_surrogate_fit_invalid_prefix_loss_raises() -> None:
     """Fit rejects unknown prefix_loss modes."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -153,7 +154,7 @@ def test_process_tensor_surrogate_fit_invalid_prefix_loss_raises() -> None:
 
 def test_process_tensor_surrogate_predict_final_state_batch_matches_forward_last_step() -> None:
     """predict_final_state_batch agrees with the last forward-pass output."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
@@ -167,7 +168,7 @@ def test_process_tensor_surrogate_predict_final_state_batch_matches_forward_last
 
 def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
     """Fit infers num_interventions from training data."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -184,7 +185,7 @@ def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
 
 def test_process_tensor_surrogate_default_rho0_is_ground_state_rho8() -> None:
     """Default initial state matches the normalized |0> density matrix."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
     from mqt.yaqs.characterization.memory.shared.encoding import (  # noqa: PLC0415
@@ -215,7 +216,7 @@ def test_intervention_parts_reassemble_to_same_choi_features() -> None:
 
 def test_process_tensor_surrogate_init_rejects_incompatible_head_width() -> None:
     """d_model must be divisible by nhead."""
-    pytest.importorskip("torch")
+    import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
@@ -225,7 +226,7 @@ def test_process_tensor_surrogate_init_rejects_incompatible_head_width() -> None
 
 def test_process_tensor_surrogate_rejects_non_positive_nhead() -> None:
     """nhead=0 raises ValueError instead of ZeroDivisionError."""
-    pytest.importorskip("torch")
+    import_torch()
     from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
 
     with pytest.raises(ValueError, match="nhead must be positive"):
@@ -240,7 +241,7 @@ def test_process_tensor_surrogate_d_e_property_matches_input_projection() -> Non
 
 def test_process_tensor_surrogate_layernorm_in_forward() -> None:
     """layernorm_in=True applies input LayerNorm before the encoder."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     model = _tiny_model(layernorm_in=True)
     e_features = torch.zeros((1, 2, 32), dtype=torch.float32)
@@ -251,7 +252,7 @@ def test_process_tensor_surrogate_layernorm_in_forward() -> None:
 
 def test_process_tensor_surrogate_forward_rejects_bad_rho0_shape() -> None:
     """Forward validates rho0 batch shape."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     model = _tiny_model()
     e_features = torch.zeros((2, 3, 32), dtype=torch.float32)
@@ -262,7 +263,7 @@ def test_process_tensor_surrogate_forward_rejects_bad_rho0_shape() -> None:
 
 def test_process_tensor_surrogate_predict_final_state_batch_validation_errors() -> None:
     """predict_final_state_batch validates feature tensor ranks and rho0 shapes."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     model = _tiny_model()
     e_features = torch.zeros((2, 3, 32), dtype=torch.float32)
@@ -283,7 +284,7 @@ def test_process_tensor_surrogate_num_interventions_for_probe_requires_num_inter
 
 def test_process_tensor_surrogate_rho_to_features_casts_to_float64() -> None:
     """_rho_to_features preserves shape and promotes to float64."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     model = _tiny_model()
     rho = torch.zeros((2, 8), dtype=torch.float32)
@@ -296,7 +297,7 @@ def test_process_tensor_surrogate_rho_to_features_casts_to_float64() -> None:
 
 def test_sinusoidal_positional_encoding_rejects_nonpositive_width() -> None:
     """Positional encoding requires a positive model width."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from mqt.yaqs.characterization.memory.backends.surrogates.model import (  # noqa: PLC0415
         _sinusoidal_positional_encoding,
@@ -308,7 +309,7 @@ def test_sinusoidal_positional_encoding_rejects_nonpositive_width() -> None:
 
 def test_process_tensor_surrogate_fit_prefix_loss_modes() -> None:
     """Fit supports full and all prefix-loss horizons."""
-    torch = pytest.importorskip("torch")
+    torch = import_torch()
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -324,7 +325,7 @@ def test_process_tensor_surrogate_fit_prefix_loss_modes() -> None:
 
 def test_process_tensor_surrogate_evaluate_probes_shape_and_restores_mode() -> None:
     """evaluate_probes returns Pauli tomography rows and restores train/eval mode."""
-    pytest.importorskip("torch")
+    import_torch()
 
     model = _tiny_model(num_interventions=1)
     model.train()
@@ -337,7 +338,7 @@ def test_process_tensor_surrogate_evaluate_probes_shape_and_restores_mode() -> N
 
 def test_process_tensor_surrogate_evaluate_probes_with_past_and_future_segments() -> None:
     """evaluate_probes stitches non-empty past and future feature segments."""
-    pytest.importorskip("torch")
+    import_torch()
 
     model = _tiny_model(num_interventions=3)
     probe_set = _make_probe_set(cut=2, num_interventions=3, n_p=1, n_f=2)
@@ -347,7 +348,7 @@ def test_process_tensor_surrogate_evaluate_probes_with_past_and_future_segments(
 
 def test_process_tensor_surrogate_evaluate_probes_rejects_k_mismatch() -> None:
     """evaluate_probes rejects ProbeSet num_interventions values that differ from training horizon."""
-    pytest.importorskip("torch")
+    import_torch()
 
     model = _tiny_model(num_interventions=2)
     probe_set = _make_probe_set(cut=1, num_interventions=3, n_p=1, n_f=1)

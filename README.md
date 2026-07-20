@@ -32,6 +32,7 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 - **Equivalence checking**: Scalable comparison of quantum circuits [2].
 - **Process characterization**: Quantify non-Markovian memory in multi-time quantum processes, how much temporal history a process retains, with exact reference checks where needed ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
 - **Process tensor surrogates**: Train a causal Transformer surrogate for fast prediction of non-Markovian response to local interventions and measurement over time ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
+- **Noise model characterization**: Fit Markovian Lindblad jump rates from observable dynamics ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html)).
 - **Hardware-oriented modeling**: Realistic noise models including Gaussian and other strength distributions, plus hardware dynamics such as transmon–resonator systems, and heterogeneous site dimensions ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
 - **Multiple backends**: Monte Carlo wavefunction and master equation evolution are available for analog simulation on smaller systems, alongside the scalable MPS trajectory path.
 
@@ -83,24 +84,60 @@ To support this endeavor, please consider:
 (.venv) $ pip install mqt.yaqs
 ```
 
-```python
-from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+### Simulation
 
-sim = Simulator()
-state = State(3, initial="zeros")
+[Analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
+
+Noisy analog Hamiltonian simulation
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
+
+sim = Simulator(show_progress=False)
+state = State(length=3, initial="zeros")
 H = Hamiltonian.ising(length=3, J=1.0, g=0.5)
-params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
-print(sim.run(state, H, params).expectation_values[0])
+noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
+params = AnalogSimParams(
+    observables=[Observable("z", sites=0)],
+    elapsed_time=0.5,
+    dt=0.1,
+    preset="fast",
+    num_traj=8,
+)
+print(sim.run(state, H, params, noise).expectation_values[0][-1])
 ```
 
-Operational memory characterization:
+[Strong simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/strong_simulation.html)
+
+Noisy digital circuit simulation
+
+```python
+from qiskit.circuit import QuantumCircuit
+
+from mqt.yaqs import NoiseModel, Observable, Simulator, State, StrongSimParams
+
+circuit = QuantumCircuit(3)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.cx(1, 2)
+noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
+params = StrongSimParams(observables=[Observable("z", sites=0)], preset="fast", num_traj=8)
+result = Simulator(show_progress=False).run(State(3, initial="zeros"), circuit, params, noise)
+print(result.expectation_values[0])
+```
+
+### Characterization
+
+[Environmental memory guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
+
+Environmental memory characterization
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
 ham = Hamiltonian.ising(length=3, J=1.0, g=0.5)
 params = AnalogSimParams(dt=0.1)
-result = MemoryCharacterizer().characterize(
+result = MemoryCharacterizer(show_progress=False).characterize(
     ham,
     params,
     num_interventions=4,
@@ -111,7 +148,39 @@ result = MemoryCharacterizer().characterize(
 print(result.summary())
 ```
 
-**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [Characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
+[Noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html)
+
+Noise model characterization
+
+```python
+import numpy as np
+
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
+
+n = 2
+ham = Hamiltonian.ising(length=n, J=1.0, g=2.0)
+state = State(n, initial="zeros")
+observables = [Observable("z", sites=s) for s in range(n)]
+params = AnalogSimParams(observables=observables, elapsed_time=0.5, dt=0.1, sample_timesteps=True)
+reference = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.1} for s in range(n)])
+guess = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.3} for s in range(n)])
+result = NoiseCharacterizer(show_progress=False).characterize(
+    ham,
+    params,
+    init_state=state,
+    init_guess=guess,
+    observables=observables,
+    reference_model=reference,
+    x_low=np.zeros(n),
+    x_up=np.full(n, 0.5),
+    max_iter=30,
+    popsize=6,
+    seed=0,
+)
+print(result.optimal_model)
+```
+
+**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html) · [Strong simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/strong_simulation.html) · [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html) · [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
 
 ## System Requirements
 
@@ -121,24 +190,6 @@ Building (and running) is continuously tested under Linux, macOS, and Windows us
 ## Cite This
 
 Please cite the work that best fits your use case.
-
-### The Munich Quantum Toolkit (the project)
-
-When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
-
-```bibtex
-@inproceedings{mqt,
-  title        = {The {{MQT}} Handbook: {{A}} Summary of Design Automation Tools and Software for Quantum Computing},
-  shorttitle   = {{The MQT Handbook}},
-  author       = {Wille, Robert and Berent, Lucas and Forster, Tobias and Kunasaikaran, Jagatheesan and Mato, Kevin and Peham, Tom and Quetschlich, Nils and Rovara, Damian and Sander, Aaron and Schmid, Ludwig and Schoenberger, Daniel and Stade, Yannick and Burgholzer, Lukas},
-  year         = 2024,
-  booktitle    = {IEEE International Conference on Quantum Software (QSW)},
-  doi          = {10.1109/QSW62656.2024.00013},
-  eprint       = {2405.17543},
-  eprinttype   = {arxiv},
-  addendum     = {A live version of this document is available at \url{https://mqt.readthedocs.io}}
-}
-```
 
 ### Peer-Reviewed Research
 
@@ -163,6 +214,24 @@ _arXiv:2508.10096 (2025)._
 A. Sander, S. Cichy, M. Eigel, J. Eisert, M. Fröhlich, T. Peham, R. Wille.
 Computational regimes in matrix-product-state-based quantum trajectory simulations.
 _arXiv:2606.13779 (2026)._
+
+### The Munich Quantum Toolkit (the project)
+
+When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
+
+```bibtex
+@inproceedings{mqt,
+  title        = {The {{MQT}} Handbook: {{A}} Summary of Design Automation Tools and Software for Quantum Computing},
+  shorttitle   = {{The MQT Handbook}},
+  author       = {Wille, Robert and Berent, Lucas and Forster, Tobias and Kunasaikaran, Jagatheesan and Mato, Kevin and Peham, Tom and Quetschlich, Nils and Rovara, Damian and Sander, Aaron and Schmid, Ludwig and Schoenberger, Daniel and Stade, Yannick and Burgholzer, Lukas},
+  year         = 2024,
+  booktitle    = {IEEE International Conference on Quantum Software (QSW)},
+  doi          = {10.1109/QSW62656.2024.00013},
+  eprint       = {2405.17543},
+  eprinttype   = {arxiv},
+  addendum     = {A live version of this document is available at \url{https://mqt.readthedocs.io}}
+}
+```
 
 ---
 

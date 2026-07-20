@@ -9,8 +9,9 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
-# Fixed
-- fix TJM jump selection to align processes with site-sweep probabilities ([#506]) ([**@Pouri96**])
+### Fixed
+
+- fixed TJM jump selection to align processes with site-sweep probabilities ([#506]) ([**@Pouri96**])
 
 ## [0.6.0] - 2026-07-06
 

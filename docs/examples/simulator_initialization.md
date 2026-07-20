@@ -256,4 +256,4 @@ For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_
 - {doc}`quickstart` — minimal first simulation
 - {doc}`simulation_parameters` — physics-side presets and truncation
 - {doc}`analog_simulation` — TJM workflow with noise
-- {doc}`circuit_simulation` — digital simulation entry point
+- {doc}`strong_simulation` — strong simulation entry point

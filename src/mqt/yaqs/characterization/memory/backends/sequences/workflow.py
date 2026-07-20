@@ -86,10 +86,10 @@ def simulate_sequences(
         solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
 
     Returns:
-        - ``record_step_states=True``: list of :class:`SequenceRecord`
-        - ``record_diagnostics=True``: ``(final_packed, simulation_diagnostics)`` with
-          ``final_packed`` of shape ``(N, 8)``
-        - otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states
+        If ``record_step_states=True``, a list of :class:`SequenceRecord`. If
+        ``record_diagnostics=True``, a tuple ``(final_packed, simulation_diagnostics)``
+        where ``final_packed`` has shape ``(N, 8)``. Otherwise a float32 array of shape
+        ``(N, 8)`` with final packed reduced states.
 
     Raises:
         ValueError: If input lengths are inconsistent or modes are incompatible.
