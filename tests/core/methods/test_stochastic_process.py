@@ -255,7 +255,7 @@ def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
 
 
 def test_stochastic_process_jump_independent_of_process_order() -> None:
-    """Jump application is independent of NoiseModel process list order (#505)."""
+    """Jump application is independent of NoiseModel process list order."""
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
@@ -276,7 +276,7 @@ def test_stochastic_process_jump_independent_of_process_order() -> None:
         @staticmethod
         def choice(size: int, p: list[float]) -> int:
             _ = (size, p)
-            return 1  # crosses lowering@1 (grouped) vs pauli_z@0 (site-major) before the fix
+            return 1  # site-sweep index 1: pauli_z@0
 
     base = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     base.tensors[0] *= 0.99  # non-unit norm so a jump is triggered
@@ -299,7 +299,7 @@ def test_stochastic_process_jump_independent_of_process_order() -> None:
 
 
 def test_stochastic_process_jump_independent_of_process_order_mixed_channels() -> None:
-    """Jump application is independent of list order for mixed 1- and 2-site channels (#505)."""
+    """Jump application is independent of list order for mixed 1- and 2-site channels."""
     num_qubits = 3
     noise_factor = 0.01
     dt = 0.1
@@ -332,7 +332,7 @@ def test_stochastic_process_jump_independent_of_process_order_mixed_channels() -
         @staticmethod
         def choice(size: int, p: list[float]) -> int:
             _ = (size, p)
-            return 1  # crosses pauli_y@0 (site-sweep) vs pauli_x@1 (grouped) before the fix
+            return 1  # site-sweep index 1: pauli_y@0
 
     base = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     base.tensors[0] *= 0.99
