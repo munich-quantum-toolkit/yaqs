@@ -110,7 +110,8 @@ def test_create_probability_distribution_no_noise() -> None:
     noise_model = NoiseModel([])
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    assert len(ordered_processes) == 0, "No processes should be computed with empty noise model."
     assert len(probabilities) == 0, "No probabilities should be computed with empty noise model."
 
 
@@ -129,11 +130,12 @@ def test_create_probability_distribution_one_site() -> None:
     ])
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
     # One applicable process
+    assert len(ordered_processes) == 1
     assert len(probabilities) == 1
     # Check process properties
-    process = noise_model.processes[0]
+    process = ordered_processes[0]
     assert process["sites"] == [1]
     assert process["strength"] == pytest.approx(0.5)
     # Check probability normalization
@@ -225,11 +227,12 @@ def test_create_probability_distribution_two_site() -> None:
     ])
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
     # One applicable process
+    assert len(ordered_processes) == 1
     assert len(probabilities) == 1
     # Check process properties
-    process = noise_model.processes[0]
+    process = ordered_processes[0]
     assert process["sites"] == [0, 1]
     assert process["strength"] == pytest.approx(0.2)
     # Check probability normalization
@@ -245,9 +248,110 @@ def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
     ])
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    assert len(ordered_processes) == 1
     assert len(probabilities) == 1
     assert np.isclose(sum(probabilities), 1.0)
+
+
+def test_stochastic_process_jump_independent_of_process_order() -> None:
+    """Jump application is independent of NoiseModel process list order."""
+    dt = 0.1
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    def make_noise(order: str) -> NoiseModel:
+        lowerings = [{"name": "lowering", "sites": [q], "strength": 0.6} for q in range(3)]
+        dephasings = [{"name": "pauli_z", "sites": [q], "strength": 0.3} for q in range(3)]
+        if order == "grouped":
+            processes = lowerings + dephasings
+        else:
+            processes = [proc for q in range(3) for proc in (lowerings[q], dephasings[q])]
+        return NoiseModel(processes)
+
+    class _JumpAtIndex1:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 1  # site-sweep index 1: pauli_z@0
+
+    base = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    base.tensors[0] *= 0.99  # non-unit norm so a jump is triggered
+    grouped = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("grouped"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    site_major = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("site_major"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    for a, b in zip(grouped.tensors, site_major.tensors, strict=False):
+        np.testing.assert_allclose(a, b)
+
+
+def test_stochastic_process_jump_independent_of_process_order_mixed_channels() -> None:
+    """Jump application is independent of list order for mixed 1- and 2-site channels."""
+    num_qubits = 3
+    noise_factor = 0.01
+    dt = 0.1
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    def make_noise(order: str) -> NoiseModel:
+        one_site = [{"name": "pauli_x", "sites": [i], "strength": noise_factor} for i in range(num_qubits)] + [
+            {"name": "pauli_y", "sites": [i], "strength": noise_factor} for i in range(num_qubits)
+        ]
+        two_site = [
+            {"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_factor} for i in range(num_qubits - 1)
+        ] + [{"name": "crosstalk_yy", "sites": [i, i + 1], "strength": noise_factor} for i in range(num_qubits - 1)]
+        if order == "grouped":
+            processes = list(one_site) + list(two_site)
+        else:
+            processes = []
+            for i in range(num_qubits):
+                processes.append({"name": "pauli_x", "sites": [i], "strength": noise_factor})
+                processes.append({"name": "pauli_y", "sites": [i], "strength": noise_factor})
+                if i < num_qubits - 1:
+                    processes.append({"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_factor})
+                    processes.append({"name": "crosstalk_yy", "sites": [i, i + 1], "strength": noise_factor})
+        return NoiseModel(processes)
+
+    class _JumpAtIndex1:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 1  # site-sweep index 1: pauli_y@0
+
+    base = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    base.tensors[0] *= 0.99
+    grouped = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("grouped"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    site_major = stochastic_process(
+        copy.deepcopy(base),
+        make_noise("site_major"),
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpAtIndex1()),
+    )
+    for a, b in zip(grouped.tensors, site_major.tensors, strict=False):
+        np.testing.assert_allclose(a, b)
 
 
 def test_stochastic_process_no_jump_unknown_gauge() -> None:
@@ -412,7 +516,7 @@ def test_stochastic_process_non_adjacent_non_pauli_jump_raises() -> None:
     with (
         patch(
             "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
-            return_value=[1.0],
+            return_value=([noise_model.processes[0]], [1.0]),
         ),
         pytest.raises(ValueError, match="nearest-neighbor"),
     ):
