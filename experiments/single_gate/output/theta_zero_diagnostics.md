@@ -20,9 +20,9 @@
 
 | χ | max bond | norm | copy infidelity | canonical infidelity | identical |
 |---:|---:|---:|---:|---:|---|
-| 8 | 8 | 1.000000000000 | 2.665e-15 | 5.329e-15 | True |
-| 12 | 8 | 1.000000000000 | 2.665e-15 | 5.329e-15 | True |
-| 16 | 8 | 1.000000000000 | 2.665e-15 | 5.329e-15 | True |
+| 8 | 8 | 1.000000000000 | 0.000e+00 | 0.000e+00 | True |
+| 12 | 8 | 1.000000000000 | 0.000e+00 | 0.000e+00 | True |
+| 16 | 8 | 1.000000000000 | 0.000e+00 | 0.000e+00 | True |
 
 **Initial state:** PASS
 
@@ -30,29 +30,29 @@
 
 | χ | method | exact inf | in-out inf | vec dist | Δnorm | disc. weight | var. obj (init→final) | pass |
 |---:|---|---:|---:|---:|---:|---:|---|---|
-| 8 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.031e-13 | 2.087e-14 | 2.026e-30 |  | True |
-| 8 | mpo_zipup | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 1.678e-32 |  | True |
-| 8 | tebd_swap | 5.503e-01 | 5.503e-01 | 5.487e-01 | 1.987e-01 | 1.055e+00 |  | True |
-| 8 | variational_mpo | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
-| 12 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.031e-13 | 2.087e-14 | 2.026e-30 |  | True |
-| 12 | mpo_zipup | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 1.678e-32 |  | True |
-| 12 | tebd_swap | 4.203e-01 | 4.203e-01 | 4.940e-01 | 1.243e-01 | 4.716e-01 |  | True |
-| 12 | variational_mpo | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
-| 16 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.031e-13 | 2.087e-14 | 2.026e-30 |  | True |
-| 16 | mpo_zipup | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 1.678e-32 |  | True |
-| 16 | tebd_swap | 0.000e+00 | 0.000e+00 | 5.055e-15 | 2.665e-15 | 3.043e-30 |  | True |
-| 16 | variational_mpo | 2.665e-15 | 2.665e-15 | 1.971e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
+| 8 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.010e-13 | 2.087e-14 | 2.026e-30 |  | True |
+| 8 | mpo_zipup | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 1.678e-32 |  | True |
+| 8 | tebd_swap | 2.998e-01 | 2.998e-01 | 5.713e-01 | 1.987e-01 | 1.055e+00 |  | True |
+| 8 | variational_mpo | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
+| 12 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.010e-13 | 2.087e-14 | 2.026e-30 |  | True |
+| 12 | mpo_zipup | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 1.678e-32 |  | True |
+| 12 | tebd_swap | 2.440e-01 | 2.440e-01 | 5.110e-01 | 1.243e-01 | 4.716e-01 |  | True |
+| 12 | variational_mpo | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
+| 16 | hybrid_tdvp | 0.000e+00 | 0.000e+00 | 1.010e-13 | 2.087e-14 | 2.026e-30 |  | True |
+| 16 | mpo_zipup | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 1.678e-32 |  | True |
+| 16 | tebd_swap | 4.441e-16 | 4.441e-16 | 4.201e-15 | 2.665e-15 | 3.043e-30 |  | True |
+| 16 | variational_mpo | 0.000e+00 | 0.000e+00 | 1.984e-15 | 1.110e-16 | 0.000e+00 | 0.00e+00→0.00e+00 | True |
 
 ### SWAP routing (RZZ(0)=I via tebd_swap)
 
 | χ | exact inf | in-out inf | note |
 |---:|---:|---:|---|
-| 8 | 5.503e-01 | 5.503e-01 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
-| 12 | 4.203e-01 | 4.203e-01 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
-| 16 | 0.000e+00 | 0.000e+00 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
+| 8 | 2.998e-01 | 2.998e-01 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
+| 12 | 2.440e-01 | 2.440e-01 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
+| 16 | 4.441e-16 | 4.441e-16 | SWAP-forward/SWAP-back routing with RZZ(0)=I through tebd_swap path (no gate bypass) |
 
 **TDVP/MPO θ=0:** PASS
-**TEBD χ=16 θ=0:** PASS (χ=8 routing error ≈ 5.503e-01, expected from truncated SWAPs)
+**TEBD χ=16 θ=0:** PASS (χ=8 routing error ≈ 2.998e-01, expected from truncated SWAPs)
 
 ## 4. Continuity around θ=0
 
@@ -60,75 +60,75 @@ Includes unchanged-input baseline infidelity (valid fixed-χ reference).
 
 | χ | x=θ/(2π) | method | exact inf | unchanged baseline | compression residual |
 |---:|---:|---|---:|---:|---:|
-| 8 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 2.665e-15 |  |
-| 8 | 0.0e+00 | mpo_zipup | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 8 | 0.0e+00 | tebd_swap | 5.503e-01 | 2.665e-15 |  |
-| 8 | 0.0e+00 | variational_mpo | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 8 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 8 | 1.0e-12 | mpo_zipup | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 8 | 1.0e-12 | tebd_swap | 5.503e-01 | 1.776e-15 |  |
-| 8 | 1.0e-12 | variational_mpo | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 8 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 8 | 1.0e-10 | mpo_zipup | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 8 | 1.0e-10 | tebd_swap | 5.503e-01 | 1.776e-15 |  |
-| 8 | 1.0e-10 | variational_mpo | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 8 | 1.0e-08 | hybrid_tdvp | 0.000e+00 | 3.109e-15 |  |
-| 8 | 1.0e-08 | mpo_zipup | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 8 | 1.0e-08 | tebd_swap | 5.503e-01 | 3.109e-15 |  |
-| 8 | 1.0e-08 | variational_mpo | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 8 | 1.0e-06 | hybrid_tdvp | 6.188e-12 | 9.868e-12 |  |
-| 8 | 1.0e-06 | mpo_zipup | 1.051e-01 | 9.868e-12 | 1.051e-01 |
-| 8 | 1.0e-06 | tebd_swap | 5.503e-01 | 9.868e-12 |  |
-| 8 | 1.0e-06 | variational_mpo | 1.051e-01 | 9.868e-12 | 1.051e-01 |
-| 8 | 1.0e-04 | hybrid_tdvp | 6.262e-08 | 9.866e-08 |  |
-| 8 | 1.0e-04 | mpo_zipup | 1.051e-01 | 9.866e-08 | 1.051e-01 |
-| 8 | 1.0e-04 | tebd_swap | 5.503e-01 | 9.866e-08 |  |
-| 8 | 1.0e-04 | variational_mpo | 1.051e-01 | 9.866e-08 | 1.051e-01 |
-| 12 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 2.665e-15 |  |
-| 12 | 0.0e+00 | mpo_zipup | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 12 | 0.0e+00 | tebd_swap | 4.203e-01 | 2.665e-15 |  |
-| 12 | 0.0e+00 | variational_mpo | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 12 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 12 | 1.0e-12 | mpo_zipup | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 12 | 1.0e-12 | tebd_swap | 4.203e-01 | 1.776e-15 |  |
-| 12 | 1.0e-12 | variational_mpo | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 12 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 12 | 1.0e-10 | mpo_zipup | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 12 | 1.0e-10 | tebd_swap | 4.203e-01 | 1.776e-15 |  |
-| 12 | 1.0e-10 | variational_mpo | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 12 | 1.0e-08 | hybrid_tdvp | 0.000e+00 | 3.109e-15 |  |
-| 12 | 1.0e-08 | mpo_zipup | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 12 | 1.0e-08 | tebd_swap | 4.203e-01 | 3.109e-15 |  |
-| 12 | 1.0e-08 | variational_mpo | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 12 | 1.0e-06 | hybrid_tdvp | 6.188e-12 | 9.868e-12 |  |
-| 12 | 1.0e-06 | mpo_zipup | 1.251e-02 | 9.868e-12 | 1.251e-02 |
-| 12 | 1.0e-06 | tebd_swap | 4.203e-01 | 9.868e-12 |  |
-| 12 | 1.0e-06 | variational_mpo | 1.251e-02 | 9.868e-12 | 1.251e-02 |
-| 12 | 1.0e-04 | hybrid_tdvp | 5.125e-09 | 9.866e-08 |  |
-| 12 | 1.0e-04 | mpo_zipup | 1.251e-02 | 9.866e-08 | 1.251e-02 |
-| 12 | 1.0e-04 | tebd_swap | 4.203e-01 | 9.866e-08 |  |
-| 12 | 1.0e-04 | variational_mpo | 1.251e-02 | 9.866e-08 | 1.251e-02 |
-| 16 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 2.665e-15 |  |
-| 16 | 0.0e+00 | mpo_zipup | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 16 | 0.0e+00 | tebd_swap | 0.000e+00 | 2.665e-15 |  |
-| 16 | 0.0e+00 | variational_mpo | 2.665e-15 | 2.665e-15 | 3.331e-15 |
-| 16 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 16 | 1.0e-12 | mpo_zipup | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 16 | 1.0e-12 | tebd_swap | 0.000e+00 | 1.776e-15 |  |
-| 16 | 1.0e-12 | variational_mpo | 1.554e-15 | 1.776e-15 | 3.331e-15 |
-| 16 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 1.776e-15 |  |
-| 16 | 1.0e-10 | mpo_zipup | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 16 | 1.0e-10 | tebd_swap | 0.000e+00 | 1.776e-15 |  |
-| 16 | 1.0e-10 | variational_mpo | 1.776e-15 | 1.776e-15 | 3.331e-15 |
-| 16 | 1.0e-08 | hybrid_tdvp | 0.000e+00 | 3.109e-15 |  |
-| 16 | 1.0e-08 | mpo_zipup | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 16 | 1.0e-08 | tebd_swap | 0.000e+00 | 3.109e-15 |  |
-| 16 | 1.0e-08 | variational_mpo | 5.329e-15 | 3.109e-15 | 4.885e-15 |
-| 16 | 1.0e-06 | hybrid_tdvp | 6.188e-12 | 9.868e-12 |  |
-| 16 | 1.0e-06 | mpo_zipup | 2.220e-15 | 9.868e-12 | 2.665e-15 |
-| 16 | 1.0e-06 | tebd_swap | 3.098e-09 | 9.868e-12 |  |
-| 16 | 1.0e-06 | variational_mpo | 2.220e-15 | 9.868e-12 | 2.665e-15 |
-| 16 | 1.0e-04 | hybrid_tdvp | 5.125e-09 | 9.866e-08 |  |
+| 8 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 8 | 0.0e+00 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 0.0e+00 | tebd_swap | 2.998e-01 | 0.000e+00 |  |
+| 8 | 0.0e+00 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 8 | 1.0e-12 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 1.0e-12 | tebd_swap | 2.998e-01 | 0.000e+00 |  |
+| 8 | 1.0e-12 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 8 | 1.0e-10 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 1.0e-10 | tebd_swap | 2.998e-01 | 0.000e+00 |  |
+| 8 | 1.0e-10 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 8 | 1.0e-08 | hybrid_tdvp | 8.882e-16 | 6.661e-16 |  |
+| 8 | 1.0e-08 | mpo_zipup | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 8 | 1.0e-08 | tebd_swap | 2.998e-01 | 6.661e-16 |  |
+| 8 | 1.0e-08 | variational_mpo | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 8 | 1.0e-06 | hybrid_tdvp | 6.247e-12 | 9.866e-12 |  |
+| 8 | 1.0e-06 | mpo_zipup | 5.403e-02 | 9.866e-12 | 5.403e-02 |
+| 8 | 1.0e-06 | tebd_swap | 2.998e-01 | 9.866e-12 |  |
+| 8 | 1.0e-06 | variational_mpo | 5.403e-02 | 9.866e-12 | 5.403e-02 |
+| 8 | 1.0e-04 | hybrid_tdvp | 6.247e-08 | 9.866e-08 |  |
+| 8 | 1.0e-04 | mpo_zipup | 5.403e-02 | 9.866e-08 | 5.403e-02 |
+| 8 | 1.0e-04 | tebd_swap | 2.998e-01 | 9.866e-08 |  |
+| 8 | 1.0e-04 | variational_mpo | 5.403e-02 | 9.866e-08 | 5.403e-02 |
+| 12 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 12 | 0.0e+00 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 0.0e+00 | tebd_swap | 2.440e-01 | 0.000e+00 |  |
+| 12 | 0.0e+00 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 12 | 1.0e-12 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 1.0e-12 | tebd_swap | 2.440e-01 | 0.000e+00 |  |
+| 12 | 1.0e-12 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 12 | 1.0e-10 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 1.0e-10 | tebd_swap | 2.440e-01 | 0.000e+00 |  |
+| 12 | 1.0e-10 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 12 | 1.0e-08 | hybrid_tdvp | 8.882e-16 | 6.661e-16 |  |
+| 12 | 1.0e-08 | mpo_zipup | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 12 | 1.0e-08 | tebd_swap | 2.440e-01 | 6.661e-16 |  |
+| 12 | 1.0e-08 | variational_mpo | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 12 | 1.0e-06 | hybrid_tdvp | 6.247e-12 | 9.866e-12 |  |
+| 12 | 1.0e-06 | mpo_zipup | 6.274e-03 | 9.866e-12 | 6.274e-03 |
+| 12 | 1.0e-06 | tebd_swap | 2.440e-01 | 9.866e-12 |  |
+| 12 | 1.0e-06 | variational_mpo | 6.274e-03 | 9.866e-12 | 6.274e-03 |
+| 12 | 1.0e-04 | hybrid_tdvp | 5.095e-09 | 9.866e-08 |  |
+| 12 | 1.0e-04 | mpo_zipup | 6.274e-03 | 9.866e-08 | 6.274e-03 |
+| 12 | 1.0e-04 | tebd_swap | 2.440e-01 | 9.866e-08 |  |
+| 12 | 1.0e-04 | variational_mpo | 6.274e-03 | 9.866e-08 | 6.274e-03 |
+| 16 | 0.0e+00 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 16 | 0.0e+00 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 0.0e+00 | tebd_swap | 4.441e-16 | 0.000e+00 |  |
+| 16 | 0.0e+00 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 1.0e-12 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 16 | 1.0e-12 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 1.0e-12 | tebd_swap | 0.000e+00 | 0.000e+00 |  |
+| 16 | 1.0e-12 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 1.0e-10 | hybrid_tdvp | 0.000e+00 | 0.000e+00 |  |
+| 16 | 1.0e-10 | mpo_zipup | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 1.0e-10 | tebd_swap | 0.000e+00 | 0.000e+00 |  |
+| 16 | 1.0e-10 | variational_mpo | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| 16 | 1.0e-08 | hybrid_tdvp | 8.882e-16 | 6.661e-16 |  |
+| 16 | 1.0e-08 | mpo_zipup | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 16 | 1.0e-08 | tebd_swap | 1.110e-15 | 6.661e-16 |  |
+| 16 | 1.0e-08 | variational_mpo | 9.992e-16 | 6.661e-16 | 0.000e+00 |
+| 16 | 1.0e-06 | hybrid_tdvp | 6.247e-12 | 9.866e-12 |  |
+| 16 | 1.0e-06 | mpo_zipup | 0.000e+00 | 9.866e-12 | 2.220e-16 |
+| 16 | 1.0e-06 | tebd_swap | 2.920e-14 | 9.866e-12 |  |
+| 16 | 1.0e-06 | variational_mpo | 0.000e+00 | 9.866e-12 | 2.220e-16 |
+| 16 | 1.0e-04 | hybrid_tdvp | 5.095e-09 | 9.866e-08 |  |
 | 16 | 1.0e-04 | mpo_zipup | 0.000e+00 | 9.866e-08 | 0.000e+00 |
 | 16 | 1.0e-04 | tebd_swap | 0.000e+00 | 9.866e-08 |  |
 | 16 | 1.0e-04 | variational_mpo | 0.000e+00 | 9.866e-08 | 0.000e+00 |

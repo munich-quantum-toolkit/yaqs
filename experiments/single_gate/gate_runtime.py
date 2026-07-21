@@ -142,8 +142,62 @@ def bond_profile(mps: MPS) -> list[int]:
 
 
 def fidelity(a: np.ndarray, b: np.ndarray) -> float:
-    """Squared overlap fidelity."""
-    return float(abs(np.vdot(a, b)) ** 2)
+    """Normalized state fidelity ``|⟨a|b⟩|² / (‖a‖² ‖b‖²)``."""
+    return normalized_state_fidelity(a, b)["fidelity_normalized"]
+
+
+def normalized_state_fidelity(
+    exact: np.ndarray,
+    approx: np.ndarray,
+    *,
+    clip_tol: float = 1e-12,
+) -> dict[str, float]:
+    """Compute normalized state fidelity without modifying either vector.
+
+    Uses
+    ``F = |⟨e|a⟩|² / (⟨e|e⟩ ⟨a|a⟩)`` and ``I = 1 - F``.
+    Values outside ``[0, 1]`` by more than ``clip_tol`` raise ``ValueError``;
+    smaller floating-point excursions are clipped into range.
+
+    Args:
+        exact: Reference statevector.
+        approx: Approximate statevector (may be unnormalized).
+        clip_tol: Allowed floating-point excursion before raising.
+
+    Returns:
+        Provenance dictionary with raw overlap, norms, normalized fidelity,
+        infidelity, and L2 norm loss ``1 - ‖a‖/‖e‖``.
+    """
+    e = np.asarray(exact, dtype=np.complex128).reshape(-1)
+    a = np.asarray(approx, dtype=np.complex128).reshape(-1)
+    overlap_squared_raw = float(abs(np.vdot(e, a)) ** 2)
+    norm_squared_exact = float(np.real(np.vdot(e, e)))
+    norm_squared_approx = float(np.real(np.vdot(a, a)))
+    if norm_squared_exact <= 0.0 or norm_squared_approx <= 0.0:
+        msg = (
+            "normalized_state_fidelity requires nonzero norms; "
+            f"got ‖e‖²={norm_squared_exact}, ‖a‖²={norm_squared_approx}"
+        )
+        raise ValueError(msg)
+    fidelity_normalized = overlap_squared_raw / (norm_squared_exact * norm_squared_approx)
+    if fidelity_normalized < -clip_tol or fidelity_normalized > 1.0 + clip_tol:
+        msg = f"Fidelity {fidelity_normalized} outside [0, 1] by more than {clip_tol}"
+        raise ValueError(msg)
+    fidelity_normalized = float(min(1.0, max(0.0, fidelity_normalized)))
+    infidelity_normalized = 1.0 - fidelity_normalized
+    norm_exact = float(np.sqrt(norm_squared_exact))
+    norm_approx = float(np.sqrt(norm_squared_approx))
+    norm_loss = 1.0 - (norm_approx / norm_exact)
+    return {
+        "overlap_squared_raw": overlap_squared_raw,
+        "norm_squared_exact": norm_squared_exact,
+        "norm_squared_approx": norm_squared_approx,
+        "fidelity_normalized": fidelity_normalized,
+        "infidelity_normalized": infidelity_normalized,
+        "norm_loss": float(norm_loss),
+        "norm_exact": norm_exact,
+        "norm_approx": norm_approx,
+    }
 
 
 def phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:

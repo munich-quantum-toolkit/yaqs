@@ -19,6 +19,7 @@ from gate_runtime import (
     bond_profile,
     make_dag_node,
     make_gate,
+    normalized_state_fidelity,
     prepare_initial_state,
     track_discarded_weight,
 )
@@ -98,8 +99,8 @@ def run_one_diagnostic(
     output_profile = bond_profile(state_mps)
     output_max_bond = _peak_bond(output_profile)
     output_norm = float(np.linalg.norm(output_vec))
-    io_fid = float(abs(np.vdot(initial_vec, output_vec)) ** 2)
-    ex_fid = float(abs(np.vdot(exact_vec, output_vec)) ** 2)
+    io_metrics = normalized_state_fidelity(initial_vec, output_vec)
+    ex_metrics = normalized_state_fidelity(exact_vec, output_vec)
 
     return DiagnosticRecord(
         method=method,
@@ -111,8 +112,8 @@ def run_one_diagnostic(
         peak_max_bond=max(input_max_bond, output_max_bond),
         input_norm=input_norm,
         output_norm=output_norm,
-        input_output_infidelity=max(0.0, 1.0 - io_fid),
-        exact_infidelity=max(0.0, 1.0 - ex_fid),
+        input_output_infidelity=io_metrics["infidelity_normalized"],
+        exact_infidelity=ex_metrics["infidelity_normalized"],
         discarded_weight=tracker.per_gate if method != "variational_mpo" else 0.0,
         variational_converged=None if vres is None else vres.converged,
         variational_sweeps=None if vres is None else vres.sweeps,
@@ -202,8 +203,9 @@ def analyze_diagnostics(records: list[DiagnosticRecord]) -> dict[str, Any]:
             "θ/(2π)=10⁻⁸ for all tested χ. The O(10⁻¹) plateau seen in the χ=8 angle sweep for "
             "x≳10⁻⁶ is a bond-dimension compression artifact: the untruncated gate raises entanglement "
             "beyond χ=8, and zip-up truncation discards weight (norm drops to ≈0.973). This is not an "
-            "identity-gate or fidelity-definition failure. TEBD+SWAP retains a θ-independent routing "
-            "overhead at χ=8 (≈0.55 at θ=0) from truncated SWAP networks."
+            "identity-gate or fidelity-definition failure. Infidelities use normalized state fidelity "
+            "(divide by ‖exact‖²‖approx‖²). TEBD+SWAP retains a θ-independent routing overhead at χ=8 "
+            "(normalized infidelity ≈0.30 at θ=0) from truncated SWAP networks."
         ),
     }
 

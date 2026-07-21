@@ -16,11 +16,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from config import FIGURES_DIR, FIGURE_STEM, FIT_X_MAX, FIT_X_MIN, OUTPUT_DIR, PLOT_FLOOR
 from matplotlib.lines import Line2D
+from matplotlib.ticker import LogLocator, NullFormatter
 
-FIG_WIDTH_MM = 180.0
-FIG_HEIGHT_MM = 55.0
+FIG_WIDTH_MM = 180.0  # Nature Communications double-column width
+FIG_HEIGHT_MM = 58.0
 MM_TO_IN = 1.0 / 25.4
 DPI = 600
+ANGLE_XLABEL = r"$\theta/(2\pi)$"
+INFIDELITY_YLABEL = r"Infidelity ($1{-}F$)"
 
 METHODS = ("hybrid_tdvp", "tebd_swap", "mpo_zipup", "variational_mpo")
 METHOD_LABELS = {
@@ -29,14 +32,22 @@ METHOD_LABELS = {
     "mpo_zipup": "MPO zip-up",
     "variational_mpo": "Variational MPO",
 }
+# Red / blue / green / orange (high-chroma, print-safe).
 METHOD_STYLES = {
-    "hybrid_tdvp": {"color": "#0072B2", "marker": "o", "linestyle": "-", "fillstyle": "full"},
-    "tebd_swap": {"color": "#D55E00", "marker": "^", "linestyle": "-", "fillstyle": "full"},
-    "mpo_zipup": {"color": "#009E73", "marker": "s", "linestyle": "-", "fillstyle": "full"},
-    "variational_mpo": {"color": "#CC79A7", "marker": "D", "linestyle": "--", "fillstyle": "none"},
+    "hybrid_tdvp": {"color": "#E31A1C", "marker": "o", "linestyle": "-", "fillstyle": "full"},
+    "tebd_swap": {"color": "#1F78B4", "marker": "^", "linestyle": "-", "fillstyle": "full"},
+    "mpo_zipup": {"color": "#33A02C", "marker": "s", "linestyle": "-", "fillstyle": "full"},
+    "variational_mpo": {"color": "#FF7F00", "marker": "D", "linestyle": "--", "fillstyle": "none"},
 }
 PANEL_LABELS = ("(a)", "(b)", "(c)", "(d)")
-Y_FLOOR_DISPLAY = PLOT_FLOOR / 3.0  # slightly below 10^-12 for visibility
+PANEL_LABEL_ZORDER = 100
+# Exact / machine-precision results are shown at 1e-16.
+DISPLAY_FLOOR = 1e-16
+Y_FLOOR_DISPLAY = DISPLAY_FLOOR / 3.0
+# Treat values at or below this as numerical zero (display at DISPLAY_FLOOR).
+PRECISION_THRESHOLD = 1e-14
+# In mixed series, omit isolated sub-threshold spikes (a/b special-angle drops).
+OMIT_BELOW = PLOT_FLOOR  # 1e-12
 
 
 def _apply_style() -> None:
@@ -64,7 +75,8 @@ def _apply_style() -> None:
 
 
 def _display_y(val: float) -> float:
-    return max(val, PLOT_FLOOR)
+    """Map numerical-zero infidelity to 1e-16; keep larger values unchanged."""
+    return DISPLAY_FLOOR if val <= PRECISION_THRESHOLD else float(val)
 
 
 def load_rows(db_path: Path, task_type: str) -> list[dict[str, Any]]:
@@ -108,86 +120,85 @@ def _plot_method_curves(ax: plt.Axes, rows: list[dict[str, Any]], *, show_theta2
         if row["method"] == "mpo_zipup":
             zip_lookup[row["x_fraction"], "mpo"] = row["infidelity"]
 
-    for method in METHODS:
-        style = METHOD_STYLES[method]
-        generic = sorted(
-            [r for r in rows if r["method"] == method and not r["special_angle"]],
-            key=operator.itemgetter("x_fraction"),
-        )
-        special = sorted(
-            [r for r in rows if r["method"] == method and r["special_angle"]],
-            key=operator.itemgetter("x_fraction"),
-        )
-        if generic:
-            xs = np.array([r["x_fraction"] for r in generic])
-            ys = np.array([_display_y(r["infidelity"]) for r in generic])
-            below = np.array([r["infidelity"] < PLOT_FLOOR for r in generic])
-            linestyle = style["linestyle"]
-            if method == "variational_mpo":
-                coincident = all(abs(r["infidelity"] - zip_lookup.get((r["x_fraction"], "mpo"), -1.0)) < 1e-14 for r in generic)
-                if coincident:
-                    linestyle = "--"
-            ax.plot(xs, ys, color=style["color"], linestyle=linestyle, zorder=2)
-            ax.plot(
-                xs[~below],
-                ys[~below],
-                linestyle="none",
-                marker=style["marker"],
-                color=style["color"],
-                fillstyle=style["fillstyle"],
-                markeredgecolor=style["color"],
-                markeredgewidth=0.5,
-                markersize=3.0 if method == "variational_mpo" else 2.8,
-                zorder=3,
-            )
-            if np.any(below):
-                ax.plot(
-                    xs[below],
-                    ys[below],
-                    linestyle="none",
-                    marker="v",
-                    color=style["color"],
-                    markersize=2.5,
-                    zorder=3,
-                )
-        if special:
-            xs = np.array([r["x_fraction"] for r in special])
-            ys = np.array([_display_y(r["infidelity"]) for r in special])
-            ax.plot(
-                xs,
-                ys,
-                linestyle="none",
-                marker=style["marker"],
-                color=style["color"],
-                fillstyle=style["fillstyle"],
-                markeredgecolor=style["color"],
-                markeredgewidth=0.5,
-                markersize=4.0 if method == "variational_mpo" else 3.5,
-                zorder=4,
-            )
-
     if show_theta2:
-        tdvp = sorted([r for r in rows if r["method"] == "hybrid_tdvp" and not r["special_angle"]], key=operator.itemgetter("x_fraction"))
+        tdvp = sorted(
+            [r for r in rows if r["method"] == "hybrid_tdvp"],
+            key=operator.itemgetter("x_fraction"),
+        )
         fit_pts = [r for r in tdvp if FIT_X_MIN <= r["x_fraction"] <= FIT_X_MAX]
         if fit_pts:
             ref = fit_pts[len(fit_pts) // 2]
             guide_x = np.logspace(np.log10(FIT_X_MIN), np.log10(FIT_X_MAX), 20)
-            guide_y = ref["infidelity"] * (guide_x / ref["x_fraction"]) ** 2 * 0.55
-            disp_y = [_display_y(y) for y in guide_y]
-            ax.plot(guide_x, disp_y, linestyle="--", color="0.55", linewidth=0.6, zorder=1)
-            ann_x = FIT_X_MAX
-            ann_y = _display_y(ref["infidelity"] * (ann_x / ref["x_fraction"]) ** 2 * 0.55)
-            ax.text(
-                ann_x * 1.45,
-                ann_y,
-                r"$\propto\theta^2$",
-                fontsize=7.0,
+            guide_y = ref["infidelity"] * (guide_x / ref["x_fraction"]) ** 2 * 0.35
+            disp_y = np.array([_display_y(y) for y in guide_y])
+            ax.plot(
+                guide_x,
+                disp_y,
+                linestyle=(0, (2.5, 1.25)),
                 color="0.15",
+                linewidth=1.15,
+                zorder=1,
+            )
+            # Anchor label near the right end of the guide, just below it.
+            ax.text(
+                float(guide_x[-2]),
+                float(disp_y[-2]) / 1.8,
+                r"$\propto\theta^2$",
+                fontsize=8.0,
+                fontweight="bold",
+                color="0.05",
                 ha="left",
                 va="center",
-                bbox={"boxstyle": "round,pad=0.12", "facecolor": "white", "edgecolor": "none", "alpha": 0.92},
-                zorder=5,
+                zorder=2,
+                bbox={"boxstyle": "round,pad=0.1", "facecolor": "white", "edgecolor": "none", "alpha": 0.92},
             )
+
+    # Draw TDVP last so it sits above the other methods.
+    plot_order = [m for m in METHODS if m != "hybrid_tdvp"] + ["hybrid_tdvp"]
+    for method in plot_order:
+        style = METHOD_STYLES[method]
+        pts = sorted(
+            [r for r in rows if r["method"] == method],
+            key=operator.itemgetter("x_fraction"),
+        )
+        if not pts:
+            continue
+        xs = np.array([r["x_fraction"] for r in pts])
+        raw = np.array([r["infidelity"] for r in pts])
+        omit = raw < OMIT_BELOW
+        # Mixed series (a/b): omit isolated sub-threshold spikes.
+        # All-below series (c): plot actual values (near ~1e-16).
+        all_omit = bool(np.all(omit))
+        use = np.ones(len(pts), dtype=bool) if all_omit else ~omit
+        if not np.any(use):
+            continue
+        xs_u = xs[use]
+        ys_u = np.array([_display_y(v) for v in raw[use]])
+        linestyle = style["linestyle"]
+        if method == "variational_mpo":
+            coincident = all(
+                abs(r["infidelity"] - zip_lookup.get((r["x_fraction"], "mpo"), -1.0)) < 1e-14 for r in pts
+            )
+            if coincident:
+                linestyle = "--"
+        line_z = 20 if method == "hybrid_tdvp" else 10
+        marker_z = line_z + 1
+        lw = 1.15 if method == "hybrid_tdvp" else 0.9
+        ax.plot(xs_u, ys_u, color=style["color"], linestyle=linestyle, linewidth=lw, zorder=line_z)
+        # Interleave markers only when exact methods coincide at 1e-16.
+        marker_kwargs: dict[str, Any] = {
+            "linestyle": "none",
+            "marker": style["marker"],
+            "color": style["color"],
+            "fillstyle": style["fillstyle"],
+            "markeredgecolor": style["color"],
+            "markeredgewidth": 0.5,
+            "markersize": 3.2 if method == "hybrid_tdvp" else (3.0 if method == "variational_mpo" else 2.8),
+            "zorder": marker_z,
+        }
+        if all_omit:
+            marker_kwargs["markevery"] = (METHODS.index(method), len(METHODS))
+        ax.plot(xs_u, ys_u, **marker_kwargs)
 
 
 def plot_figure(
@@ -204,7 +215,7 @@ def plot_figure(
     ax0 = fig.add_subplot(gs[0, 0])
     ax1 = fig.add_subplot(gs[0, 1], sharey=ax0)
     ax2 = fig.add_subplot(gs[0, 2], sharey=ax0)
-    ax3 = fig.add_subplot(gs[0, 3])
+    ax3 = fig.add_subplot(gs[0, 3], sharey=ax0)
     axes = [ax0, ax1, ax2, ax3]
     chi_panels = [chi_low, chi_mid, chi_full]
 
@@ -238,14 +249,30 @@ def plot_figure(
         ax.set_xlim(1e-4, 1.0)
         ax.set_ylim(y_lo, y_hi)
         ax.set_title(rf"$\chi_{{\max}}={chi}$")
+        ax.set_xlabel(ANGLE_XLABEL)
         ax.set_xticks([1e-4, 1e-3, 1e-2, 1e-1, 1.0])
         ax.set_xticklabels([r"$10^{-4}$", r"$10^{-3}$", r"$10^{-2}$", r"$10^{-1}$", r"$10^{0}$"])
+        ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+        ax.yaxis.set_major_locator(LogLocator(base=10.0))
+        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)))
+        ax.yaxis.set_minor_formatter(NullFormatter())
         ax.grid(True, which="major", axis="y", color="0.92", linewidth=0.35)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.text(0.03, 0.97, PANEL_LABELS[idx], transform=ax.transAxes, fontsize=8.0, fontweight="bold", va="top")
+        ax.text(
+            0.03,
+            0.97,
+            PANEL_LABELS[idx],
+            transform=ax.transAxes,
+            fontsize=8.0,
+            fontweight="bold",
+            ha="left",
+            va="top",
+            zorder=PANEL_LABEL_ZORDER,
+        )
         if idx == 0:
-            ax.set_ylabel("Infidelity, 1 − F")
+            ax.set_ylabel(INFIDELITY_YLABEL)
             ax.legend(
                 handles=method_handles,
                 loc="lower right",
@@ -257,7 +284,9 @@ def plot_figure(
             plt.setp(ax.get_yticklabels(), visible=False)
 
     ax = axes[3]
-    colors = {8: "#0072B2", 12: "#56B4E9", 16: "#999999"}
+    tdvp_red = METHOD_STYLES["hybrid_tdvp"]["color"]
+    # Same TDVP red; differentiate χ by opacity (light → full).
+    chi_alpha = {chi_low: 0.35, chi_mid: 0.65, chi_full: 1.0}
     for chi in chi_panels:
         subset = sorted(
             [r for r in substep_rows if r["chi_max"] == chi],
@@ -267,31 +296,19 @@ def plot_figure(
             continue
         ns = np.array([int(r["substeps"]) for r in subset])
         raw = np.array([float(r["infidelity"]) for r in subset])
-        below = raw <= 0.0
-        below |= raw < PLOT_FLOOR
-        ys = np.array([PLOT_FLOOR if b else max(v, PLOT_FLOOR) for v, b in zip(raw, below, strict=True)])
-        color = colors.get(chi, "#0072B2")
-        ax.plot(ns, ys, color=color, linewidth=0.9, zorder=2)
-        if np.any(~below):
-            ax.plot(
-                ns[~below],
-                ys[~below],
-                linestyle="none",
-                marker="o",
-                color=color,
-                markersize=3.0,
-                zorder=3,
-            )
-        if np.any(below):
-            ax.plot(
-                ns[below],
-                np.full(np.sum(below), PLOT_FLOOR),
-                linestyle="none",
-                marker="v",
-                color=color,
-                markersize=2.8,
-                zorder=3,
-            )
+        ys = np.array([_display_y(v) for v in raw])
+        alpha = chi_alpha.get(chi, 1.0)
+        ax.plot(ns, ys, color=tdvp_red, linewidth=0.9, alpha=alpha, zorder=2)
+        ax.plot(
+            ns,
+            ys,
+            linestyle="none",
+            marker="o",
+            color=tdvp_red,
+            alpha=alpha,
+            markersize=3.0,
+            zorder=3,
+        )
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
     ax.set_xlim(0.8, 80)
@@ -300,23 +317,46 @@ def plot_figure(
     ax.set_xticks(list(substep_ticks))
     ax.set_xticklabels([str(v) for v in substep_ticks])
     ax.set_xlabel("TDVP substeps")
+    ax.yaxis.set_major_locator(LogLocator(base=10.0))
+    ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)))
+    ax.yaxis.set_minor_formatter(NullFormatter())
     ax.grid(True, which="major", axis="y", color="0.92", linewidth=0.35)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.text(0.03, 0.97, PANEL_LABELS[3], transform=ax.transAxes, fontsize=8.0, fontweight="bold", va="top")
+    plt.setp(ax.get_yticklabels(), visible=False)
+    ax.text(
+        0.03,
+        0.97,
+        PANEL_LABELS[3],
+        transform=ax.transAxes,
+        fontsize=8.0,
+        fontweight="bold",
+        ha="left",
+        va="top",
+        zorder=PANEL_LABEL_ZORDER,
+    )
     chi_handles = [
-        Line2D([0], [0], color=colors[chi], marker="o", linestyle="-", markersize=3.0, label=rf"$\chi_{{\max}}={chi}$")
+        Line2D(
+            [0],
+            [0],
+            color=tdvp_red,
+            marker="o",
+            linestyle="-",
+            markersize=3.0,
+            alpha=chi_alpha[chi],
+            label=rf"$\chi_{{\max}}={chi}$",
+        )
         for chi in chi_panels
     ]
     ax.legend(
         handles=chi_handles,
-        loc="lower left",
-        bbox_to_anchor=(0.0, 0.34),
+        loc="upper left",
         frameon=False,
         fontsize=6.0,
+        handlelength=1.5,
     )
 
-    fig.subplots_adjust(left=0.06, right=0.99, bottom=0.18, top=0.90)
+    fig.subplots_adjust(left=0.08, right=0.99, bottom=0.20, top=0.88)
     return fig
 
 

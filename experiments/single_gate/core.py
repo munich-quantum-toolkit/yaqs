@@ -20,10 +20,13 @@ from gate_runtime import (
     bond_profile,
     make_dag_node,
     make_gate,
+    normalized_state_fidelity,
     param_count_from_profile,
     track_discarded_weight,
 )
 from variational import VariationalResult, apply_variational_mpo_gate
+
+FIDELITY_DEFINITION = "normalized_state_fidelity_v2"
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,13 @@ class RunResult:
 
     infidelity: float
     fidelity: float
+    overlap_squared_raw: float
+    norm_squared_exact: float
+    norm_squared_approx: float
+    fidelity_normalized: float
+    infidelity_normalized: float
+    norm_loss: float
+    fidelity_definition: str
     max_bond: int
     bond_profile: list[int]
     param_count: int
@@ -88,12 +98,18 @@ def run_method(
     runtime = time.perf_counter() - t0
     peak_memory_mb = max(mem0, _peak_memory_mb())
     approx_vec = state.to_vec().astype(np.complex128, copy=False)
-    raw_fidelity = float(abs(np.vdot(exact_vec, approx_vec)) ** 2)
-    infidelity = max(0.0, 1.0 - raw_fidelity)
+    metrics = normalized_state_fidelity(exact_vec, approx_vec)
     prof = bond_profile(state)
     return RunResult(
-        infidelity=infidelity,
-        fidelity=raw_fidelity,
+        infidelity=metrics["infidelity_normalized"],
+        fidelity=metrics["fidelity_normalized"],
+        overlap_squared_raw=metrics["overlap_squared_raw"],
+        norm_squared_exact=metrics["norm_squared_exact"],
+        norm_squared_approx=metrics["norm_squared_approx"],
+        fidelity_normalized=metrics["fidelity_normalized"],
+        infidelity_normalized=metrics["infidelity_normalized"],
+        norm_loss=metrics["norm_loss"],
+        fidelity_definition=FIDELITY_DEFINITION,
         max_bond=max(prof),
         bond_profile=prof,
         param_count=param_count_from_profile(prof, L_DEFAULT),
@@ -129,6 +145,13 @@ def result_row(
         "substeps": substeps,
         "infidelity": result.infidelity,
         "fidelity": result.fidelity,
+        "overlap_squared_raw": result.overlap_squared_raw,
+        "norm_squared_exact": result.norm_squared_exact,
+        "norm_squared_approx": result.norm_squared_approx,
+        "fidelity_normalized": result.fidelity_normalized,
+        "infidelity_normalized": result.infidelity_normalized,
+        "norm_loss": result.norm_loss,
+        "fidelity_definition": result.fidelity_definition,
         "max_bond": result.max_bond,
         "bond_profile": result.bond_profile,
         "param_count": result.param_count,

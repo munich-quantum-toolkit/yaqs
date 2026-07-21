@@ -31,12 +31,14 @@ from gate_runtime import (
     gate_matrix,
     make_dag_node,
     make_gate,
+    normalized_state_fidelity,
     phase_align,
     prepare_initial_state,
     track_discarded_weight,
 )
-from mqt.yaqs.core.data_structures.mpo import MPO
 from variational import VariationalResult, apply_variational_mpo_gate
+
+from mqt.yaqs.core.data_structures.mpo import MPO
 
 DIAGNOSTIC_CHI = (8, 12, 16)
 CONTINUITY_X = (0.0, 1e-12, 1e-10, 1e-8, 1e-6, 1e-4)
@@ -154,7 +156,7 @@ def _mpo_action_infidelity(mpo_a: MPO, mpo_b: MPO, *, seed: int = 11) -> float:
     mpo_b.multiply(right, compress=False)
     va = left.to_vec().astype(np.complex128, copy=False)
     vb = right.to_vec().astype(np.complex128, copy=False)
-    return max(0.0, 1.0 - float(abs(np.vdot(va, vb)) ** 2))
+    return normalized_state_fidelity(va, vb)["infidelity_normalized"]
 
 
 def verify_gate_construction() -> list[GateConstructionRow]:
@@ -250,7 +252,7 @@ def verify_initial_state(initial: dict[str, Any]) -> list[InitialStateRow]:
         canon_inf = max(0.0, 1.0 - fidelity(base_vec, canon_vec))
 
         method_vecs = []
-        for method in METHODS:
+        for _method in METHODS:
             probe = copy.deepcopy(initial["mps"])
             probe_vec = probe.to_vec().astype(np.complex128, copy=False)
             method_vecs.append(probe_vec)
@@ -275,7 +277,7 @@ def verify_initial_state(initial: dict[str, Any]) -> list[InitialStateRow]:
 
 
 def _unchanged_input_baseline(initial_vec: np.ndarray, exact_vec: np.ndarray) -> float:
-    return max(0.0, 1.0 - float(abs(np.vdot(exact_vec, initial_vec)) ** 2))
+    return normalized_state_fidelity(exact_vec, initial_vec)["infidelity_normalized"]
 
 
 def _run_algorithm(
@@ -315,7 +317,7 @@ def _run_algorithm(
         _apply_gate_mpo(uncompressed, make_gate(GATE_TYPE, theta, Q0, Q1), chi=None, compress=False)
         target_vec = uncompressed.to_vec().astype(np.complex128, copy=False)
         out_vec_pre = state.to_vec().astype(np.complex128, copy=False)
-        compression_residual = max(0.0, 1.0 - float(abs(np.vdot(target_vec, out_vec_pre)) ** 2))
+        compression_residual = normalized_state_fidelity(target_vec, out_vec_pre)["infidelity_normalized"]
     else:
         with track_discarded_weight(tracker):
             state, _rt, _dw = apply_method(
@@ -328,23 +330,24 @@ def _run_algorithm(
             _apply_gate_mpo(uncompressed, make_gate(GATE_TYPE, theta, Q0, Q1), chi=None, compress=False)
             target_vec = uncompressed.to_vec().astype(np.complex128, copy=False)
             out_vec_pre = state.to_vec().astype(np.complex128, copy=False)
-            compression_residual = max(0.0, 1.0 - float(abs(np.vdot(target_vec, out_vec_pre)) ** 2))
+            compression_residual = normalized_state_fidelity(target_vec, out_vec_pre)["infidelity_normalized"]
 
     output_vec = state.to_vec().astype(np.complex128, copy=False)
     out_profile = bond_profile(state)
     output_max_bond = max(out_profile)
     norm_before = float(np.linalg.norm(initial_vec))
     norm_after = float(np.linalg.norm(output_vec))
-    io_inf = max(0.0, 1.0 - float(abs(np.vdot(initial_vec, output_vec)) ** 2))
-    ex_inf = max(0.0, 1.0 - float(abs(np.vdot(exact_vec, output_vec)) ** 2))
-    aligned = phase_align(exact_vec, output_vec)
-    vec_dist = float(np.linalg.norm(aligned - exact_vec))
+    io_inf = normalized_state_fidelity(initial_vec, output_vec)["infidelity_normalized"]
+    ex_inf = normalized_state_fidelity(exact_vec, output_vec)["infidelity_normalized"]
+    exact_n = exact_vec / max(float(np.linalg.norm(exact_vec)), 1e-300)
+    approx_n = output_vec / max(norm_after, 1e-300)
+    aligned = phase_align(exact_n, approx_n)
+    vec_dist = float(np.linalg.norm(aligned - exact_n))
     baseline = _unchanged_input_baseline(initial_vec, exact_vec)
 
     variational_worse: bool | None = None
     if vres is not None:
-        input_vs_out = max(0.0, 1.0 - float(abs(np.vdot(initial_vec, output_vec)) ** 2))
-        variational_worse = input_vs_out > THETA_ZERO_INF_TOL or (
+        variational_worse = io_inf > THETA_ZERO_INF_TOL or (
             vres.objective_final > vres.objective_initial + 1e-12
         )
 
@@ -516,8 +519,7 @@ def export_csv(path: Path, report: DiagnosticReport) -> None:
         row = asdict(item)
         row["section"] = "initial_state"
         rows.append(row)
-    for item in report.algorithm_runs:
-        rows.append(asdict(item))
+    rows.extend(asdict(item) for item in report.algorithm_runs)
 
     fields: list[str] = []
     for row in rows:
@@ -565,11 +567,8 @@ def write_markdown(path: Path, report: DiagnosticReport) -> None:
             "|---:|---:|---:|---:|---:|---|",
         ]
     )
-    for r in report.initial_state:
-        lines.append(
-            f"| {r.chi_max} | {r.input_max_bond} | {r.input_norm:.12f} | "
-            f"{r.copy_infidelity:.3e} | {r.canonical_infidelity:.3e} | {r.identical_across_methods} |"
-        )
+    lines.extend(f"| {r.chi_max} | {r.input_max_bond} | {r.input_norm:.12f} | "
+            f"{r.copy_infidelity:.3e} | {r.canonical_infidelity:.3e} | {r.identical_across_methods} |" for r in report.initial_state)
     lines.append(f"\n**Initial state:** {'PASS' if s['initial_state_pass'] else 'FAIL'}")
 
     lines.extend(
@@ -603,21 +602,18 @@ def write_markdown(path: Path, report: DiagnosticReport) -> None:
             "|---:|---:|---:|---|",
         ]
     )
-    for r in sorted(
+    lines.extend(f"| {r.chi_max} | {r.exact_infidelity:.3e} | {r.input_output_infidelity:.3e} | "
+            f"{r.failure_message} |" for r in sorted(
         [x for x in report.algorithm_runs if x.section == "swap_routing"],
         key=lambda x: x.chi_max,
-    ):
-        lines.append(
-            f"| {r.chi_max} | {r.exact_infidelity:.3e} | {r.input_output_infidelity:.3e} | "
-            f"{r.failure_message} |"
-        )
+    ))
 
     lines.extend(
         [
             "",
             f"**TDVP/MPO θ=0:** {'PASS' if s['theta_zero_tdvp_mpo_pass'] else 'FAIL'}",
-            f"**TEBD χ=16 θ=0:** {'PASS' if s['theta_zero_tebd_chi16_pass'] else 'FAIL'} "
-            f"(χ=8 routing error ≈ {s['tebd_chi8_theta0_routing_error']:.3e}, expected from truncated SWAPs)",
+            (f"**TEBD χ=16 θ=0:** {'PASS' if s['theta_zero_tebd_chi16_pass'] else 'FAIL'} "
+            f"(χ=8 routing error ≈ {s['tebd_chi8_theta0_routing_error']:.3e}, expected from truncated SWAPs)"),
             "",
             "## 4. Continuity around θ=0",
             "",

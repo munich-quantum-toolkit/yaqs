@@ -34,7 +34,7 @@ from config import (
     pick_intermediate_chi,
     production_config,
 )
-from core import result_row, run_method
+from core import FIDELITY_DEFINITION, result_row, run_method
 from diagnostics import (
     analyze_diagnostics,
     append_diagnostics_to_validation,
@@ -66,6 +66,13 @@ ROW_COLUMNS = (
     "substeps",
     "infidelity",
     "fidelity",
+    "overlap_squared_raw",
+    "norm_squared_exact",
+    "norm_squared_approx",
+    "fidelity_normalized",
+    "infidelity_normalized",
+    "norm_loss",
+    "fidelity_definition",
     "max_bond",
     "bond_profile",
     "param_count",
@@ -77,6 +84,33 @@ ROW_COLUMNS = (
     "variational_converged",
     "variational_failed",
     "failure_message",
+)
+
+_TEXT_COLUMNS = frozenset({
+    "task_id",
+    "task_type",
+    "method",
+    "bond_profile",
+    "failure_message",
+    "fidelity_definition",
+})
+_INTEGER_COLUMNS = frozenset({
+    "chi_max",
+    "special_angle",
+    "substeps",
+    "max_bond",
+    "param_count",
+    "variational_converged",
+    "variational_failed",
+})
+_PROVENANCE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("overlap_squared_raw", "REAL"),
+    ("norm_squared_exact", "REAL"),
+    ("norm_squared_approx", "REAL"),
+    ("fidelity_normalized", "REAL"),
+    ("infidelity_normalized", "REAL"),
+    ("norm_loss", "REAL"),
+    ("fidelity_definition", "TEXT"),
 )
 
 
@@ -100,8 +134,8 @@ class MainTextStore:
 
     def _init_schema(self) -> None:
         cols_sql = ", ".join(
-            f"{c} TEXT" if c in {"task_id", "task_type", "method", "bond_profile", "failure_message"} else
-            f"{c} INTEGER" if c in {"chi_max", "special_angle", "substeps", "max_bond", "param_count", "variational_converged", "variational_failed"} else
+            f"{c} TEXT" if c in _TEXT_COLUMNS else
+            f"{c} INTEGER" if c in _INTEGER_COLUMNS else
             f"{c} REAL"
             for c in ROW_COLUMNS
         )
@@ -121,6 +155,90 @@ class MainTextStore:
             )
             """
         )
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Add provenance columns to older SQLite databases."""
+        existing = {row[1] for row in self._conn.execute("PRAGMA table_info(results)")}
+        for name, sql_type in _PROVENANCE_COLUMNS:
+            if name not in existing:
+                self._conn.execute(f"ALTER TABLE results ADD COLUMN {name} {sql_type}")
+
+    def backfill_normalized_fidelity(self, *, clip_tol: float = 1e-12) -> dict[str, Any]:
+        """Derive normalized fidelity from raw overlap and stored L2 norms.
+
+        ``norm_before`` / ``norm_after`` store Euclidean norms ``‖ψ‖``, so
+        ``⟨ψ|ψ⟩ = norm²``. Existing ``fidelity`` held raw ``|⟨e|a⟩|²`` before
+        migration; that value is preserved in ``overlap_squared_raw``.
+        """
+        if self.get_meta("fidelity_definition") == FIDELITY_DEFINITION:
+            return {"updated": 0, "already_migrated": True}
+        rows = self._conn.execute(
+            "SELECT task_id, fidelity, norm_before, norm_after, fidelity_definition FROM results"
+        ).fetchall()
+        updated = 0
+        max_raw_vs_norm = 0.0
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            for task_id_val, fidelity_val, norm_before, norm_after, existing_def in rows:
+                if existing_def == FIDELITY_DEFINITION:
+                    continue
+                overlap_raw = float(fidelity_val)
+                nb = float(norm_before)
+                na = float(norm_after)
+                n2e = nb * nb
+                n2a = na * na
+                if n2e <= 0.0 or n2a <= 0.0:
+                    msg = f"Cannot backfill task {task_id_val}: zero norm"
+                    raise ValueError(msg)
+                f_norm = overlap_raw / (n2e * n2a)
+                if f_norm < -clip_tol or f_norm > 1.0 + clip_tol:
+                    msg = f"Backfill fidelity {f_norm} outside [0,1] for {task_id_val}"
+                    raise ValueError(msg)
+                f_norm = float(min(1.0, max(0.0, f_norm)))
+                i_norm = 1.0 - f_norm
+                i_raw = 1.0 - overlap_raw
+                max_raw_vs_norm = max(max_raw_vs_norm, abs(i_raw - i_norm))
+                norm_loss = 1.0 - (na / nb) if nb > 0.0 else float("nan")
+                self._conn.execute(
+                    """
+                    UPDATE results SET
+                        overlap_squared_raw=?,
+                        norm_squared_exact=?,
+                        norm_squared_approx=?,
+                        fidelity_normalized=?,
+                        infidelity_normalized=?,
+                        norm_loss=?,
+                        fidelity_definition=?,
+                        fidelity=?,
+                        infidelity=?
+                    WHERE task_id=?
+                    """,
+                    (
+                        overlap_raw,
+                        n2e,
+                        n2a,
+                        f_norm,
+                        i_norm,
+                        norm_loss,
+                        FIDELITY_DEFINITION,
+                        f_norm,
+                        i_norm,
+                        task_id_val,
+                    ),
+                )
+                updated += 1
+            self._conn.execute("COMMIT")
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
+        self.set_meta("fidelity_definition", FIDELITY_DEFINITION)
+        self.set_meta("fidelity_backfill_max_raw_vs_norm_infidelity", f"{max_raw_vs_norm:.16e}")
+        return {
+            "updated": updated,
+            "already_migrated": False,
+            "max_raw_vs_norm_infidelity": max_raw_vs_norm,
+        }
 
     def has_task(self, tid: str) -> bool:
         row = self._conn.execute("SELECT 1 FROM results WHERE task_id=? LIMIT 1", (tid,)).fetchone()
@@ -323,6 +441,7 @@ class MainTextBenchmark:
             "chi_intermediate": chi_mid,
             "chi_full": chi_full,
             "selection_note": chi_full_note,
+            "fidelity_definition": FIDELITY_DEFINITION,
             "rule": (
                 "Prefer smallest chi with all methods <= 1e-10 on scan angles; "
                 "otherwise smallest chi with TEBD/MPO/variational <= 1e-10 and TDVP <= 1e-8"
@@ -493,6 +612,93 @@ class MainTextBenchmark:
         ]
         (self.output_dir / "single_gate_validation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    def reselect_chi_from_scan(self) -> tuple[int, int, str]:
+        """Recompute χ selection using current (normalized) chi_scan infidelities."""
+        all_scan = self.store.fetch_rows("chi_scan")
+        chi_full: int | None = None
+        chi_full_note = ""
+        for chi in CHI_SCAN_LADDER:
+            subset = [r for r in all_scan if int(r["chi_max"]) == chi]
+            if len(subset) != len(CHI_SCAN_X) * len(METHODS):
+                continue
+            by_method = {
+                method: max(float(r["infidelity"]) for r in subset if r["method"] == method)
+                for method in METHODS
+            }
+            if max(by_method.values()) <= FULL_INFIDELITY_THRESHOLD:
+                chi_full = chi
+                chi_full_note = "strict_all_methods"
+                break
+        if chi_full is None:
+            for chi in CHI_SCAN_LADDER:
+                subset = [r for r in all_scan if int(r["chi_max"]) == chi]
+                if len(subset) != len(CHI_SCAN_X) * len(METHODS):
+                    continue
+                by_method = {
+                    method: max(float(r["infidelity"]) for r in subset if r["method"] == method)
+                    for method in METHODS
+                }
+                non_tdvp_ok = all(by_method[m] <= FULL_INFIDELITY_THRESHOLD for m in METHODS if m != "hybrid_tdvp")
+                tdvp_ok = by_method["hybrid_tdvp"] <= 1e-8
+                if non_tdvp_ok and tdvp_ok:
+                    chi_full = chi
+                    chi_full_note = (
+                        f"relaxed_tdvp: smallest chi with TEBD/MPO/variational <= {FULL_INFIDELITY_THRESHOLD:.0e} "
+                        f"and TDVP <= 1e-8 (worst TDVP={by_method['hybrid_tdvp']:.3e})"
+                    )
+                    break
+        if chi_full is None:
+            msg = "No chi in scan ladder reached the accuracy targets on preliminary angles"
+            raise RuntimeError(msg)
+        chi_mid = pick_intermediate_chi(self.chi_low, chi_full)
+        self.chi_mid = chi_mid
+        self.chi_full = chi_full
+        self.store.set_meta("chi_low", str(self.chi_low))
+        self.store.set_meta("chi_intermediate", str(chi_mid))
+        self.store.set_meta("chi_full", str(chi_full))
+        save_json(self.output_dir / "chi_selection.json", {
+            "chi0": self.chi_low,
+            "chi_intermediate": chi_mid,
+            "chi_full": chi_full,
+            "selection_note": chi_full_note,
+            "fidelity_definition": FIDELITY_DEFINITION,
+            "rule": (
+                "Prefer smallest chi with all methods <= 1e-10 on scan angles; "
+                "otherwise smallest chi with TEBD/MPO/variational <= 1e-10 and TDVP <= 1e-8"
+            ),
+        })
+        return chi_mid, chi_full, chi_full_note
+
+    def export_all_csvs(self) -> None:
+        export_csv(self.output_dir / "single_gate_chi_scan.csv", self.store.fetch_rows("chi_scan"))
+        export_csv(self.output_dir / "single_gate_angle_sweep.csv", self.store.fetch_rows("angle_sweep"))
+        export_csv(self.output_dir / "single_gate_substeps.csv", self.store.fetch_rows("substep_sweep"))
+
+    def recompute_after_fidelity_migration(self) -> dict[str, Any]:
+        """Backfill normalized fidelity, reselect χ, refresh CSVs and validation text."""
+        backfill = self.store.backfill_normalized_fidelity()
+        self.load_selected_chi()
+        old_mid, old_full = self.chi_mid, self.chi_full
+        chi_mid, chi_full, note = self.reselect_chi_from_scan()
+        self.export_all_csvs()
+        save_json(self.output_dir / "config.json", production_config(
+            chi_low=self.chi_low, chi_mid=int(self.chi_mid), chi_full=int(self.chi_full)
+        ))
+        # Refresh θ=0 validation rows stored under task_type validation if present.
+        validation = self.run_validation()
+        completed = self.validate_completed()
+        self.write_validation_report(validation, completed)
+        return {
+            "backfill": backfill,
+            "chi_selection_note": note,
+            "chi_mid_before": old_mid,
+            "chi_full_before": old_full,
+            "chi_mid_after": chi_mid,
+            "chi_full_after": chi_full,
+            "validation": validation,
+            "completed": completed,
+        }
+
     def load_selected_chi(self) -> None:
         chi_mid = self.store.get_meta("chi_intermediate")
         chi_full = self.store.get_meta("chi_full")
@@ -540,6 +746,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run MPO identity/small-angle diagnostics and update validation report",
     )
+    parser.add_argument(
+        "--migrate-fidelity",
+        action="store_true",
+        help="Backfill normalized fidelity from stored raw overlap and norms, then refresh CSVs/validation",
+    )
     return parser.parse_args()
 
 
@@ -556,6 +767,13 @@ def main() -> int:
     t0 = time.perf_counter()
     try:
         bench = MainTextBenchmark(output_dir, logger)
+        if args.migrate_fidelity:
+            summary = bench.recompute_after_fidelity_migration()
+            logger.log(
+                f"Fidelity migration: updated={summary['backfill']['updated']} "
+                f"chi_full {summary['chi_full_before']}→{summary['chi_full_after']}"
+            )
+            return 0
         if args.theta_zero_only:
             run_and_save(output_dir)
             logger.log("θ=0 diagnostics complete")
