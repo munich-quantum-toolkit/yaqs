@@ -16,7 +16,7 @@
 - ``"dense"`` — exhaustive discrete-basis tomography (``16**num_interventions`` sequences),
   optionally with noise; returns
   :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
-- ``"mpo"`` — direct leg-by-leg MPO construction (noiseless); returns
+- ``"mpo"`` — direct MPO construction (noiseless); returns
   :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 
 The lower-level :func:`run_all_sequences` returns
@@ -391,7 +391,7 @@ def build_process_tensor(
     # Dense reconstruction
     check: bool = True,
     atol: float = 1e-8,
-    # MPO (direct) construction
+    # Direct MPO construction
     compress_every: int = 16,
     tol: float = 1e-12,
     max_bond_dim: int | None = 64,
@@ -405,7 +405,7 @@ def build_process_tensor(
 
     - ``return_type="dense"``: exhaustive discrete-basis tomography
       (``16**num_interventions`` sequences; supports ``noise_model``).
-    - ``return_type="mpo"``: direct leg-by-leg MPO construction (noiseless only).
+    - ``return_type="mpo"``: direct MPO construction (noiseless only).
 
     Args:
         operator: Hamiltonian MPO.
@@ -413,7 +413,7 @@ def build_process_tensor(
         timesteps: Optional process-tensor schedule evolution durations (length
             ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
         noise_model: Optional open-system noise model (dense tomography only).
-        parallel: Whether to parallelize over sequences (dense path only).
+        parallel: Whether to parallelize dense tomography sequences or MPO construction.
         num_trajectories: MCWF trajectories per sequence (dense path only).
         basis: Tomography / Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
@@ -422,7 +422,7 @@ def build_process_tensor(
         atol: Absolute tolerance for the dense self-check.
         compress_every: Direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
-        max_bond_dim: Optional MPO / branch bond-dimension cap (direct path).
+        max_bond_dim: Optional MPO / branch bond-dimension cap for direct construction.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.
@@ -456,6 +456,8 @@ def build_process_tensor(
             solver=solver,
             initial_rho=initial_rho,
             initial_rho_atol=initial_rho_atol,
+            parallel=parallel,
+            _execution=_execution,
         )
     if return_type != "dense":
         msg = f"Unknown return_type {return_type!r} (expected 'dense' or 'mpo')."

@@ -249,7 +249,7 @@ fig.tight_layout()
 ```
 
 Dense and MPO should overlap; the surrogate approximates the same draw at the reference `rho0`.
-Held-out Hamiltonian rollouts above use random probe `rho0` values from data generation — a different setup than the fixed reference state baked into process tensors.
+Held-out Hamiltonian rollouts above use random probe `rho0` values from data generation — a different setup than the fixed reference state stored on process tensors.
 
 The same information functionals are available on either backend.
 For this short horizon, conditional mutual information is near zero while QMI grows when more past legs are included:

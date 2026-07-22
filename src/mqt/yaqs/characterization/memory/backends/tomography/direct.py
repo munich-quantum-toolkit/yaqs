@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config, resolve_worker_ctx, run_indexed_jobs
 
 from ...shared.encoding import normalize_backend_rho
 from ...shared.intervention_steps import apply_intervention_to_backend
@@ -38,6 +40,8 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+_N_CHOI = 16
 
 
 @dataclass
@@ -160,6 +164,55 @@ def _evolve_initial_state(
     return np.asarray(state, dtype=np.complex128).reshape(-1)
 
 
+def _branch_extension_worker(
+    job_idx: int,
+    job_payload: dict[str, Any] | None = None,
+) -> tuple[tuple[int, ...], NDArray[np.complex128], float, NDArray[np.complex128]] | None:
+    """Extend one branch by one Choi-basis intervention and post-evolution.
+
+    Flat index layout is ``branch_index * 16 + choi_index``.
+
+    Args:
+        job_idx: Flat index over branches and Choi-basis elements.
+        job_payload: Shared step payload; defaults to
+            :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`.
+
+    Returns:
+        ``(history, psi, weight, rho_out)`` for kept extensions, or ``None`` when the
+        cumulative weight falls below the discard threshold.
+    """
+    ctx = resolve_worker_ctx(job_payload)
+    br_idx, choi_idx = divmod(int(job_idx), _N_CHOI)
+    br: _Branch = ctx["branches"][br_idx]
+    prep_idx, meas_idx = ctx["choi_indices"][choi_idx]
+    basis_set = ctx["basis_set"]
+    meas_psi, prep_psi = basis_set[meas_idx][1], basis_set[prep_idx][1]
+
+    state = np.asarray(br.psi, dtype=np.complex128).reshape(-1).copy()
+    state, step_prob = apply_intervention_to_backend(
+        state,
+        (meas_psi, prep_psi),
+        solver=ctx["solver"],
+        chain_length=int(ctx["chain_length"]),
+    )
+    weight = float(br.weight) * float(step_prob)
+    if weight <= 1e-30:
+        return None
+
+    state = _evolve_backend_state(
+        state,
+        ctx["operator"],
+        None,
+        ctx["sim_params"],
+        ctx["solver"],
+        traj_idx=0,
+        static_ctx=ctx["static_ctx"],
+    )
+    rho_out = normalize_backend_rho(extract_site0_rho(state))
+    history = (*br.history, choi_idx)
+    return history, np.asarray(state, dtype=np.complex128).reshape(-1), weight, rho_out
+
+
 def _apply_timestep(
     branches: list[_Branch],
     *,
@@ -170,8 +223,9 @@ def _apply_timestep(
     choi_indices: list[tuple[int, int]],
     choi_duals: list[NDArray[np.complex128]],
     solver: StochasticSolver,
+    execution: ExecutionConfig,
 ) -> tuple[list[_Branch], list[MPO]]:
-    """Extend every branch by one local CPTP leg and return rank-1 MPO terms.
+    """Extend every branch by one local CPTP leg via indexed jobs.
 
     Args:
         branches: Ensemble before the intervention leg.
@@ -182,42 +236,41 @@ def _apply_timestep(
         choi_indices: Map from Choi index to ``(prep_idx, meas_idx)``.
         choi_duals: Dual Choi operators for rank-1 MPO assembly.
         solver: Stochastic solver name.
+        execution: Parallel / serial job-dispatch configuration.
 
     Returns:
         Expanded branches and the corresponding rank-1 MPO terms.
     """
     step_params, static_ctx = _prepare_step(operator, sim_params, duration, solver=solver)
+    n_jobs = len(branches) * _N_CHOI
+    payload: dict[str, Any] = {
+        "branches": branches,
+        "operator": operator,
+        "sim_params": step_params,
+        "basis_set": basis_set,
+        "choi_indices": choi_indices,
+        "solver": solver,
+        "static_ctx": static_ctx,
+        "chain_length": int(operator.length),
+    }
+    job_results = run_indexed_jobs(
+        _branch_extension_worker,
+        payload=payload,
+        n_jobs=n_jobs,
+        config=execution,
+        desc=f"MPO construction ({len(branches)} branches)",
+    )
 
     expanded: list[_Branch] = []
     terms: list[MPO] = []
-    for br in branches:
-        for choi_idx in range(16):
-            prep_idx, meas_idx = choi_indices[choi_idx]
-            meas_psi, prep_psi = basis_set[meas_idx][1], basis_set[prep_idx][1]
-            state = np.asarray(br.psi, dtype=np.complex128).reshape(-1).copy()
-            state, step_prob = apply_intervention_to_backend(
-                state,
-                (meas_psi, prep_psi),
-                solver=solver,
-                chain_length=int(operator.length),
-            )
-            weight = float(br.weight) * float(step_prob)
-            if weight <= 1e-30:
-                continue
-            state = _evolve_backend_state(
-                state,
-                operator,
-                None,
-                step_params,
-                solver,
-                traj_idx=0,
-                static_ctx=static_ctx,
-            )
-            rho_out = normalize_backend_rho(extract_site0_rho(state))
-            history = (*br.history, choi_idx)
-            dual_ops = [choi_duals[idx].T for idx in history]
-            terms.append(_rank1_mpo_term(rho_out, dual_ops, weight=weight))
-            expanded.append(_Branch(history=history, psi=state, weight=weight))
+    for job_idx in range(n_jobs):
+        out = job_results[job_idx]
+        if out is None:
+            continue
+        history, state, weight, rho_out = out
+        dual_ops = [choi_duals[idx].T for idx in history]
+        terms.append(_rank1_mpo_term(rho_out, dual_ops, weight=weight))
+        expanded.append(_Branch(history=history, psi=state, weight=weight))
     return expanded, terms
 
 
@@ -235,12 +288,15 @@ def build_process_tensor_direct(
     solver: StochasticSolver | None = None,
     initial_rho: np.ndarray | None = None,
     initial_rho_atol: float = 1e-8,
+    parallel: bool = True,
+    _execution: ExecutionConfig | None = None,
 ) -> MPOProcessTensor:
     """Build a process-tensor MPO by leg-by-leg contraction.
 
     At each timestep only ``16 * chi`` local basis updates are simulated, where ``chi`` is the
-    compressed branch count from the previous leg. This avoids enumerating all ``16**k`` sequences.
-    Direct construction is noiseless (site-0 interventions only).
+    compressed branch count from the previous step. This avoids enumerating all ``16**k`` sequences.
+    Construction is noiseless (site-0 interventions only). Within each intervention step, branch
+    extensions are dispatched with :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`.
 
     Args:
         operator: Hamiltonian MPO.
@@ -250,12 +306,14 @@ def build_process_tensor_direct(
         basis_seed: Optional seed when ``basis="random"``.
         tol: MPO compression tolerance.
         max_bond_dim: Optional cap on the branch ensemble / MPO bond dimension. ``None`` keeps
-            all branches (exact, but scales as ``16**t`` per leg).
-        n_sweeps: MPO compression sweeps after each leg.
+            all branches (exact, but scales as ``16**t`` per step).
+        n_sweeps: MPO compression sweeps after each step.
         compress_every: Rank-1 accumulation batch size before intermediate compression.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional reference site-0 state after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
+        parallel: Whether to parallelize branch extensions within each intervention step.
+        _execution: Optional internal execution configuration.
 
     Returns:
         MPO process-tensor wrapper.
@@ -279,6 +337,7 @@ def build_process_tensor_direct(
 
     basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
+    execution = merge_execution_config(_execution, parallel=parallel)
 
     ref_rho = _reference_initial_rho(
         operator,
@@ -310,6 +369,7 @@ def build_process_tensor_direct(
             choi_indices=choi_indices,
             choi_duals=choi_duals,
             solver=stochastic_solver,
+            execution=execution,
         )
         if not terms:
             msg = f"Direct construction produced no rank-1 terms at leg {step_idx + 1}."

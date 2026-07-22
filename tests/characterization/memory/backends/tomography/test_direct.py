@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
@@ -112,4 +113,64 @@ def test_mpo_rejects_noise_model() -> None:
             timesteps=[0.0, 0.0],
             return_type="mpo",
             noise_model=NoiseModel([]),
+        )
+
+
+def test_direct_parallel_matches_serial() -> None:
+    """Parallel and serial direct construction agree on the process-tensor matrix."""
+    ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.1, 0.1]
+    serial = cast(
+        "MPOProcessTensor",
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=None,
+            compress_every=1,
+        ),
+    )
+    parallel = cast(
+        "MPOProcessTensor",
+        MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=None,
+            compress_every=1,
+        ),
+    )
+    np.testing.assert_allclose(parallel.to_matrix(), serial.to_matrix(), atol=1e-8)
+
+
+def test_direct_parallel_temporal_entropy_matches_dense() -> None:
+    """Parallel direct MPO agrees with dense tomography on temporal entanglement."""
+    ham = Hamiltonian.ising(length=2, J=0.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.1, 0.1, 0.1]
+    mc = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False)
+    pt_dense = cast(
+        "DenseProcessTensor",
+        mc.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense"),
+    )
+    pt_mpo = cast(
+        "MPOProcessTensor",
+        mc.build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=None,
+            compress_every=1,
+        ),
+    )
+    for cut in (1, 2):
+        dense = pt_dense.compute_temporal_entropy(cut)
+        mpo = pt_mpo.compute_temporal_entropy(cut)
+        assert float(cast("float", mpo["entropy"])) == pytest.approx(
+            float(cast("float", dense["entropy"])),
+            abs=1e-6,
         )

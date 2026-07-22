@@ -215,7 +215,7 @@ With `"auto"`, MCWF is used when `hamiltonian.length <= vector_max_qubits` (defa
 
 Operational memory ($S_V$) comes from probe responses.
 **Temporal entanglement** $S_{PT}(c)$ is computed directly from a process tensor at the same causal cut.
-Build a dense (tomography) or MPO (direct) process tensor, then call `compute_temporal_entropy`:
+Build a dense process tensor via tomography, or an MPO via direct construction, then call `compute_temporal_entropy`:
 
 ```{code-cell} ipython3
 k = 3
@@ -254,7 +254,7 @@ pt_result = mc.characterize(
 print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
 ```
 
-Dense and MPO agree on $S_{PT}$ for small $k$; use `return_type="mpo"` when you need a cheaper noiseless construction.
+Dense and MPO agree on $S_{PT}$ for small $k$; prefer `return_type="mpo"` for noiseless construction at larger $k$.
 `characterize(pt, ...)` still builds $S_V$ from probe responses (native MPO `evaluate_probes`, without densifying for the V-matrix path).
 
 ## Related topics

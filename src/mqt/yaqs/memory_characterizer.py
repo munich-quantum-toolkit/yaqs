@@ -336,7 +336,7 @@ class MemoryCharacterizer:
 
         - ``return_type="dense"``: exhaustive tomography (scales as ``16**num_interventions``;
           supports ``noise_model``).
-        - ``return_type="mpo"``: direct leg-by-leg MPO growth (noiseless only).
+        - ``return_type="mpo"``: direct MPO construction (noiseless only).
 
         Args:
             hamiltonian: System Hamiltonian.
@@ -350,11 +350,11 @@ class MemoryCharacterizer:
             return_type: ``"dense"`` (tomography) or ``"mpo"`` (direct construction).
             check: Whether to validate CPTP properties during dense construction.
             atol: CPTP check tolerance.
-            compress_every: Direct-MPO compression cadence during construction.
+            compress_every: How often to compress while accumulating direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Optional MPO bond-dimension cap (direct path).
-            n_sweeps: MPO variational refinement sweeps.
-            parallel: Override instance parallel setting (dense path only).
+            max_bond_dim: Optional MPO bond-dimension cap for direct construction.
+            n_sweeps: MPO compression sweeps.
+            parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
             initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
 

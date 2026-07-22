@@ -11,7 +11,7 @@
 (``16**num_interventions`` sequences) and returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
 
-``return_type="mpo"`` grows an MPO leg-by-leg (noiseless) and returns
+``return_type="mpo"`` builds an MPO by direct construction (noiseless) and returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 """
 

@@ -55,13 +55,14 @@ def test_build_process_tensor_rejects_k_zero() -> None:
 
 
 def test_build_process_tensor_parallel_smoke() -> None:
-    """build_process_tensor runs with parallel execution enabled."""
+    """build_process_tensor runs with parallel execution enabled for dense and MPO."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-    dense = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False).build_process_tensor(
-        ham, params, timesteps=[0.0, 0.0], return_type="dense"
-    )
+    mc = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False)
+    dense = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="dense")
     assert dense.to_matrix().shape == (8, 8)
+    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="mpo", compress_every=1)
+    assert mpo.to_matrix().shape == (8, 8)
 
 
 def test_build_process_tensor_stores_reference_initial_rho() -> None:
