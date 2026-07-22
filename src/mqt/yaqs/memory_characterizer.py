@@ -321,12 +321,12 @@ class MemoryCharacterizer:
         num_trajectories: int = 100,
         basis: TomographyBasis = "tetrahedral",
         basis_seed: int | None = None,
-        return_type: Literal["dense", "mpo"] = "dense",
+        return_type: Literal["dense", "mpo"] = "mpo",
         check: bool = True,
         atol: float = 1e-8,
         compress_every: int = 16,
         tol: float = 1e-12,
-        max_bond_dim: int | None = 64,
+        max_bond_dim: int | None = None,
         n_sweeps: int = 2,
         parallel: bool | None = None,
         initial_rho: np.ndarray | None = None,
@@ -334,9 +334,9 @@ class MemoryCharacterizer:
     ) -> DenseProcessTensor | MPOProcessTensor:
         """Build a process tensor via dense tomography or direct MPO construction.
 
+        - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
         - ``return_type="dense"``: exhaustive tomography (scales as ``16**num_interventions``;
           supports ``noise_model``).
-        - ``return_type="mpo"``: direct MPO construction (noiseless only).
 
         Args:
             hamiltonian: System Hamiltonian.
@@ -347,12 +347,13 @@ class MemoryCharacterizer:
             num_trajectories: Monte Carlo trajectories per tomography sample (dense only).
             basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
-            return_type: ``"dense"`` (tomography) or ``"mpo"`` (direct construction).
+            return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
             check: Whether to validate CPTP properties during dense construction.
             atol: CPTP check tolerance.
             compress_every: How often to compress while accumulating direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Optional MPO bond-dimension cap for direct construction.
+            max_bond_dim: Optional MPO / branch bond-dimension cap for direct construction.
+                ``None`` (default) keeps all branches for an exact noiseless MPO.
             n_sweeps: MPO compression sweeps.
             parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.

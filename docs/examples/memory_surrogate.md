@@ -197,21 +197,20 @@ Extend the per-leg list when `num_interventions > 1` to probe multi-step sequenc
 ## Validate against exact references
 
 Build process tensors for the same schedule.
-Dense uses exhaustive tomography; MPO uses direct construction (noiseless).
+By default, `build_process_tensor` returns an MPO from direct construction (noiseless).
+Pass `return_type="dense"` for exhaustive tomography.
 For process tensors, `rho0` in `predict` must match `pt.initial_rho` (the site-0 state after the initial leg of the reference schedule).
 
 **Dense** and **MPO** implementations should agree on identical interventions.
 Compare all three backends on a **stochastic sequence drawn from the training style** (`measure_prepare` here): pass a **fresh** `np.random.default_rng(seed)` to each `predict` call (reusing one RNG object advances its state between calls).
 
 ```{code-cell} ipython3
+pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
 pt_dense = mc.build_process_tensor(
     ham, params, timesteps=timesteps, return_type="dense", num_trajectories=48,
 )
-pt_mpo = mc.build_process_tensor(
-    ham, params, timesteps=timesteps, return_type="mpo",
-)
 
-rho0 = pt_dense.initial_rho
+rho0 = pt_mpo.initial_rho
 compare_seed = 7
 
 rho_dense = mc.predict(

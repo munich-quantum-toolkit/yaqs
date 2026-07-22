@@ -38,20 +38,24 @@ def test_build_process_tensor_returns_dense_and_mpo_smoke() -> None:
     dense = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="dense")
     assert dense.to_matrix().shape == (8, 8)
 
-    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="mpo", compress_every=1)
+    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], compress_every=1)
     mat = mpo.to_matrix()
     assert mat.shape == (8, 8)
     np.testing.assert_allclose(mat, dense.to_matrix(), atol=1e-8)
 
 
 def test_build_process_tensor_rejects_k_zero() -> None:
-    """Zero-step tomography is rejected before sequence enumeration."""
+    """Zero-step schedules are rejected for both MPO and dense construction."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
-    with pytest.raises(ValueError, match="No sequences for num_interventions=0"):
+    with pytest.raises(ValueError, match="at least one intervention"):
         build_process_tensor(op, params, timesteps=[])
-    with pytest.raises(ValueError, match="No sequences for num_interventions=0"):
+    with pytest.raises(ValueError, match="at least one intervention"):
         build_process_tensor(op, params, timesteps=[0.1])
+    with pytest.raises(ValueError, match="No sequences for num_interventions=0"):
+        build_process_tensor(op, params, timesteps=[], return_type="dense")
+    with pytest.raises(ValueError, match="No sequences for num_interventions=0"):
+        build_process_tensor(op, params, timesteps=[0.1], return_type="dense")
 
 
 def test_build_process_tensor_parallel_smoke() -> None:
@@ -61,7 +65,7 @@ def test_build_process_tensor_parallel_smoke() -> None:
     mc = MemoryCharacterizer(parallel=True, max_workers=2, show_progress=False)
     dense = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="dense")
     assert dense.to_matrix().shape == (8, 8)
-    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], return_type="mpo", compress_every=1)
+    mpo = mc.build_process_tensor(ham, params, timesteps=[0.0, 0.0], compress_every=1)
     assert mpo.to_matrix().shape == (8, 8)
 
 

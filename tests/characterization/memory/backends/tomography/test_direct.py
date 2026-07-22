@@ -16,13 +16,36 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import MPOProcessTensor
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 if TYPE_CHECKING:
-    from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
-        DenseProcessTensor,
-        MPOProcessTensor,
+    from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor
+
+
+def test_build_process_tensor_defaults_to_mpo() -> None:
+    """Default return_type is direct MPO construction."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    pt = MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+        ham, params, timesteps=[0.0, 0.0], compress_every=1
     )
+    assert isinstance(pt, MPOProcessTensor)
+
+
+def test_default_mpo_recreates_dense_process_tensor() -> None:
+    """Default MPO construction matches the dense Choi matrix on a small schedule."""
+    ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.1, 0.1, 0.1]
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1)
+    pt_dense = mc.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense")
+
+    assert isinstance(pt_mpo, MPOProcessTensor)
+    np.testing.assert_allclose(pt_mpo.to_matrix(), pt_dense.to_matrix(), atol=1e-8)
+    np.testing.assert_allclose(pt_mpo.initial_rho, pt_dense.initial_rho, atol=1e-10)
 
 
 @pytest.mark.parametrize("j_val", [0.0, 1.0])
@@ -46,14 +69,7 @@ def test_direct_mpo_matches_dense_temporal_entropy(j_val: float, num_interventio
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(
-            ham.mpo,
-            params,
-            timesteps=timesteps,
-            return_type="mpo",
-            max_bond_dim=None,
-            compress_every=1,
-        ),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
     )
 
     for cut in range(1, num_interventions + 1):
@@ -74,23 +90,11 @@ def test_direct_j_zero_matches_dense_temporal_entropy() -> None:
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt_dense = cast(
         "DenseProcessTensor",
-        mc.build_process_tensor(
-            ham,
-            params,
-            timesteps=timesteps,
-            return_type="dense",
-        ),
+        mc.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense"),
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(
-            ham.mpo,
-            params,
-            timesteps=timesteps,
-            return_type="mpo",
-            max_bond_dim=None,
-            compress_every=1,
-        ),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
@@ -107,13 +111,7 @@ def test_mpo_rejects_noise_model() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
 
     with pytest.raises(ValueError, match="does not support noise_model"):
-        build_process_tensor(
-            ham.mpo,
-            params,
-            timesteps=[0.0, 0.0],
-            return_type="mpo",
-            noise_model=NoiseModel([]),
-        )
+        build_process_tensor(ham.mpo, params, timesteps=[0.0, 0.0], noise_model=NoiseModel([]))
 
 
 def test_direct_parallel_matches_serial() -> None:
@@ -127,8 +125,6 @@ def test_direct_parallel_matches_serial() -> None:
             ham,
             params,
             timesteps=timesteps,
-            return_type="mpo",
-            max_bond_dim=None,
             compress_every=1,
         ),
     )
@@ -138,8 +134,6 @@ def test_direct_parallel_matches_serial() -> None:
             ham,
             params,
             timesteps=timesteps,
-            return_type="mpo",
-            max_bond_dim=None,
             compress_every=1,
         ),
     )
@@ -158,14 +152,7 @@ def test_direct_parallel_temporal_entropy_matches_dense() -> None:
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        mc.build_process_tensor(
-            ham,
-            params,
-            timesteps=timesteps,
-            return_type="mpo",
-            max_bond_dim=None,
-            compress_every=1,
-        ),
+        mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
@@ -187,7 +174,6 @@ def test_direct_tjm_matches_mcwf() -> None:
             ham,
             params,
             timesteps=timesteps,
-            return_type="mpo",
             max_bond_dim=4,
             compress_every=1,
         ),
@@ -198,7 +184,6 @@ def test_direct_tjm_matches_mcwf() -> None:
             ham,
             params,
             timesteps=timesteps,
-            return_type="mpo",
             max_bond_dim=4,
             compress_every=1,
         ),

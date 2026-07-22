@@ -13,11 +13,11 @@
 
 :func:`build_process_tensor` dispatches on ``return_type``:
 
+- ``"mpo"`` (default) — direct MPO construction (noiseless); returns
+  :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 - ``"dense"`` — exhaustive discrete-basis tomography (``16**num_interventions`` sequences),
   optionally with noise; returns
   :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
-- ``"mpo"`` — direct MPO construction (noiseless); returns
-  :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 
 The lower-level :func:`run_all_sequences` returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData` for the dense path.
@@ -387,14 +387,14 @@ def build_process_tensor(
     num_trajectories: int = 100,
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
-    return_type: Literal["dense", "mpo"] = "dense",
+    return_type: Literal["dense", "mpo"] = "mpo",
     # Dense reconstruction
     check: bool = True,
     atol: float = 1e-8,
     # Direct MPO construction
     compress_every: int = 16,
     tol: float = 1e-12,
-    max_bond_dim: int | None = 64,
+    max_bond_dim: int | None = None,
     n_sweeps: int = 2,
     solver: StochasticSolver | None = None,
     initial_rho: np.ndarray | None = None,
@@ -403,9 +403,9 @@ def build_process_tensor(
 ) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor as dense tomography or a direct MPO.
 
+    - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
     - ``return_type="dense"``: exhaustive discrete-basis tomography
       (``16**num_interventions`` sequences; supports ``noise_model``).
-    - ``return_type="mpo"``: direct MPO construction (noiseless only).
 
     Args:
         operator: Hamiltonian MPO.
@@ -417,12 +417,13 @@ def build_process_tensor(
         num_trajectories: MCWF trajectories per sequence (dense path only).
         basis: Tomography / Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
-        return_type: ``"dense"`` (tomography) or ``"mpo"`` (direct construction).
+        return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
         check: Run self-consistency check for dense reconstruction.
         atol: Absolute tolerance for the dense self-check.
         compress_every: Direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
         max_bond_dim: Optional MPO / branch bond-dimension cap for direct construction.
+            ``None`` (default) keeps all branches for an exact noiseless MPO.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.

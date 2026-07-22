@@ -7,12 +7,12 @@
 
 """Process-tensor construction (dense tomography and direct MPO).
 
+``return_type="mpo"`` (default) builds an MPO by direct construction (noiseless) and returns
+:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
+
 ``return_type="dense"`` runs exhaustive discrete-basis tomography
 (``16**num_interventions`` sequences) and returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
-
-``return_type="mpo"`` builds an MPO by direct construction (noiseless) and returns
-:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 """
 
 from .basis import TomographyBasis as TomographyBasis
