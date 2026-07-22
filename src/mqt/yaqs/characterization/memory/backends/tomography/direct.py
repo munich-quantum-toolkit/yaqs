@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from numpy.typing import NDArray
 
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config, resolve_worker_ctx, run_indexed_jobs
 
 from ...shared.encoding import normalize_backend_rho
@@ -34,14 +36,12 @@ from .data import _rank1_mpo_term, accumulate_rank1_terms
 from .process_tensors import MPOProcessTensor, validate_initial_rho
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from mqt.yaqs.analog.mcwf import MCWFContext
     from mqt.yaqs.core.data_structures.mpo import MPO
-    from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 _N_CHOI = 16
+BackendState = MPS | NDArray[np.complex128]
 
 
 @dataclass
@@ -49,8 +49,22 @@ class _Branch:
     """One definite past intervention history and backend state before the next leg."""
 
     history: tuple[int, ...]
-    psi: MPS | NDArray[np.complex128]
+    psi: BackendState
     weight: float
+
+
+def _clone_backend_state(state: BackendState) -> BackendState:
+    """Return an independent copy of a dense or MPS backend state.
+
+    Args:
+        state: Dense vector (MCWF) or MPS (TJM).
+
+    Returns:
+        Deep-copied MPS or a contiguous dense copy.
+    """
+    if isinstance(state, MPS):
+        return copy.deepcopy(state)
+    return np.asarray(state, dtype=np.complex128).reshape(-1).copy()
 
 
 def _compress_branches(
@@ -59,12 +73,15 @@ def _compress_branches(
     max_bond_dim: int | None,
     tol: float,
 ) -> list[_Branch]:
-    """Compress the branch ensemble to at most ``max_bond_dim`` states via weighted SVD.
+    """Compress the branch ensemble to at most ``max_bond_dim`` states.
+
+    Dense (MCWF) ensembles use a weighted SVD. MPS (TJM) ensembles keep the
+    highest-weight branches without densifying.
 
     Args:
         branches: Current ensemble of weighted backend states.
         max_bond_dim: Optional cap on retained branches; ``None`` keeps all.
-        tol: Singular-value floor when selecting kept modes.
+        tol: Singular-value floor when selecting kept dense modes.
 
     Returns:
         Compressed branch list (unchanged when already within the cap).
@@ -73,6 +90,10 @@ def _compress_branches(
         return branches
     if len(branches) == 1:
         return branches
+
+    if isinstance(branches[0].psi, MPS):
+        ordered = sorted(branches, key=lambda br: br.weight, reverse=True)
+        return ordered[: int(max_bond_dim)]
 
     dim = int(np.asarray(branches[0].psi, dtype=np.complex128).reshape(-1).size)
     n = len(branches)
@@ -83,8 +104,7 @@ def _compress_branches(
 
     _u, singular_values, vh = np.linalg.svd(mat, full_matrices=False)
     keep = int(np.sum(singular_values > tol))
-    if max_bond_dim is not None:
-        keep = min(keep, int(max_bond_dim))
+    keep = min(keep, int(max_bond_dim))
     keep = max(1, keep)
 
     out: list[_Branch] = []
@@ -138,7 +158,7 @@ def _evolve_initial_state(
     duration: float,
     *,
     solver: StochasticSolver,
-) -> NDArray[np.complex128]:
+) -> BackendState:
     """Evolve from ``|0...0>`` for one schedule slot.
 
     Args:
@@ -148,11 +168,11 @@ def _evolve_initial_state(
         solver: Stochastic solver name.
 
     Returns:
-        Backend state vector after the initial evolution.
+        Backend state after the initial evolution (dense for MCWF, MPS for TJM).
     """
     step_params, static_ctx = _prepare_step(operator, sim_params, duration, solver=solver)
     state = _initialize_backend_state(operator, solver)
-    state = _evolve_backend_state(
+    return _evolve_backend_state(
         state,
         operator,
         None,
@@ -161,16 +181,16 @@ def _evolve_initial_state(
         traj_idx=0,
         static_ctx=static_ctx,
     )
-    return np.asarray(state, dtype=np.complex128).reshape(-1)
 
 
 def _branch_extension_worker(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
-) -> tuple[tuple[int, ...], NDArray[np.complex128], float, NDArray[np.complex128]] | None:
+) -> tuple[tuple[int, ...], BackendState, float, NDArray[np.complex128]] | None:
     """Extend one branch by one Choi-basis intervention and post-evolution.
 
-    Flat index layout is ``branch_index * 16 + choi_index``.
+    Flat index layout is ``branch_index * 16 + choi_index``. Branch states keep their
+    native backend type (dense for MCWF, MPS for TJM).
 
     Args:
         job_idx: Flat index over branches and Choi-basis elements.
@@ -188,7 +208,7 @@ def _branch_extension_worker(
     basis_set = ctx["basis_set"]
     meas_psi, prep_psi = basis_set[meas_idx][1], basis_set[prep_idx][1]
 
-    state = np.asarray(br.psi, dtype=np.complex128).reshape(-1).copy()
+    state = _clone_backend_state(br.psi)
     state, step_prob = apply_intervention_to_backend(
         state,
         (meas_psi, prep_psi),
@@ -210,7 +230,7 @@ def _branch_extension_worker(
     )
     rho_out = normalize_backend_rho(extract_site0_rho(state))
     history = (*br.history, choi_idx)
-    return history, np.asarray(state, dtype=np.complex128).reshape(-1), weight, rho_out
+    return history, state, weight, rho_out
 
 
 def _apply_timestep(

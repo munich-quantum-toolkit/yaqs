@@ -174,3 +174,33 @@ def test_direct_parallel_temporal_entropy_matches_dense() -> None:
             float(cast("float", dense["entropy"])),
             abs=1e-6,
         )
+
+
+def test_direct_tjm_matches_mcwf() -> None:
+    """Direct MPO construction preserves MPS states under TJM and matches MCWF."""
+    ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.1, 0.1]
+    mcwf = cast(
+        "MPOProcessTensor",
+        MemoryCharacterizer(representation="vector", parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=4,
+            compress_every=1,
+        ),
+    )
+    tjm = cast(
+        "MPOProcessTensor",
+        MemoryCharacterizer(representation="mps", parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=4,
+            compress_every=1,
+        ),
+    )
+    np.testing.assert_allclose(tjm.to_matrix(), mcwf.to_matrix(), atol=1e-6)
