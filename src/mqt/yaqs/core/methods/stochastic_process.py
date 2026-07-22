@@ -16,7 +16,7 @@ to simulate noise-induced evolution in quantum many-body systems.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -56,7 +56,7 @@ def create_probability_distribution(
     noise_model: NoiseModel | None,
     dt: float,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-) -> list[float]:
+) -> tuple[list[dict[str, Any]], list[float]]:
     """Create a probability distribution for potential quantum jumps in the system.
 
     The function sweeps from left to right over the sites of the MPS. For each
@@ -73,9 +73,9 @@ def create_probability_distribution(
       pair.
 
     After all possible jumps are considered, the per-process probabilities are
-    normalized and returned. The associated jump operators and target sites are
-    *not* returned; they must be recovered separately from ``noise_model.processes``
-    using the same iteration order.
+    normalized and returned together with the corresponding processes in the same
+    site-sweep order. ``stochastic_process`` must index both lists with the same
+    ``choice_idx``.
 
     Args:
         state: The Matrix Product MPS, assumed left-canonical at site 0 on entry.
@@ -86,14 +86,17 @@ def create_probability_distribution(
         sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
 
     Returns:
-        Normalized probabilities corresponding to applicable processes
+        A tuple ``(ordered_processes, probabilities)`` where ``ordered_processes`` are
+        the applicable jump processes in site-sweep order and ``probabilities`` are
+        the corresponding normalized jump probabilities.
     """
     if noise_model is None or not noise_model.processes:
-        return []
+        return [], []
 
     if state.orthogonality_center is not None:
         state.assert_center(0, context="create_probability_distribution")
 
+    ordered_processes: list[dict[str, Any]] = []
     dp_m_list: list[float] = []
 
     for site in range(state.length):
@@ -109,6 +112,7 @@ def create_probability_distribution(
                 jumped_state = copy.deepcopy(state)
                 jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
                 dp_m = dt * gamma * jumped_state.norm(site)
+                ordered_processes.append(process)
                 dp_m_list.append(float(dp_m.real))
 
         # --- 2-site jumps starting at [site, site+1] ---
@@ -118,6 +122,7 @@ def create_probability_distribution(
                     if is_pauli(process):
                         gamma = process["strength"]
                         dp_m = dt * gamma * state.norm(site)
+                        ordered_processes.append(process)
                         dp_m_list.append(float(dp_m.real))
 
                     elif process["sites"][1] == site + 1:
@@ -142,11 +147,12 @@ def create_probability_distribution(
                         jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
                         # compute the norm at `site` from the updated post-jump tensors
                         dp_m = dt * gamma * jumped_state.norm(site)
+                        ordered_processes.append(process)
                         dp_m_list.append(float(dp_m.real))
 
     # Normalize the probabilities
     dp: float = float(np.sum(dp_m_list))
-    return [val / dp for val in dp_m_list]
+    return ordered_processes, [val / dp for val in dp_m_list]
 
 
 def stochastic_process(
@@ -193,7 +199,7 @@ def stochastic_process(
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.
-    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
 
     if len(probabilities) == 0:
         if state.orthogonality_center is not None:
@@ -204,11 +210,8 @@ def stochastic_process(
             state.set_canonical_form(0)
         return state
 
-    # Select process by index using probabilities over all processes
-    assert len(probabilities) == len(noise_model.processes), "Probabilities and processes must have the same length"
-
-    choice_idx = rng.choice(len(noise_model.processes), p=probabilities)
-    chosen_process = noise_model.processes[choice_idx]
+    choice_idx = rng.choice(len(ordered_processes), p=probabilities)
+    chosen_process = ordered_processes[choice_idx]
 
     # Extract information from chosen process
     sites = chosen_process["sites"]

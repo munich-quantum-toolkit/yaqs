@@ -9,6 +9,12 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed TJM jump selection to align processes with site-sweep probabilities ([#506]) ([**@Pouri96**])
+
+## [0.6.0] - 2026-07-06
+
 ### Added
 
 - added analytical noise characterization module and digital twin pipeline ([#288]) ([**@aleramos119**], [**@aaronleesander**])
@@ -138,7 +144,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.6.0
 [0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
@@ -147,6 +154,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
+[#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
 [#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
 [#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
@@ -217,6 +226,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
 [**@linusschulte**]: https://github.com/linusschulte
+[**@Pouri96**]: https://github.com/Pouri96
 
 <!-- General links -->
 
