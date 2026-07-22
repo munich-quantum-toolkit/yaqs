@@ -5,11 +5,13 @@
 #
 # Licensed under the MIT License
 
-"""Process-tensor tomography (exact/exhaustive).
+"""Process-tensor construction (dense tomography and direct MPO).
 
-This subpackage constructs a process tensor from exhaustive discrete intervention sequences (size
-``16**num_interventions`` for ``num_interventions`` steps), optionally under MCWF/TJM noise, and returns a
-:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor` or
+``return_type="dense"`` runs exhaustive discrete-basis tomography
+(``16**num_interventions`` sequences) and returns
+:class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
+
+``return_type="mpo"`` grows an MPO leg-by-leg (noiseless) and returns
 :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 """
 
@@ -21,3 +23,5 @@ from .constructor import build_process_tensor as build_process_tensor
 from .data import SequenceData as SequenceData
 from .process_tensors import DenseProcessTensor as DenseProcessTensor
 from .process_tensors import MPOProcessTensor as MPOProcessTensor
+from .process_tensors import compute_block_entropy as compute_block_entropy
+from .process_tensors import evaluate_probes as evaluate_probes

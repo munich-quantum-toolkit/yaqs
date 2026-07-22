@@ -15,10 +15,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.mps import MPS
-
-from ..sequences.workers import _get_times_cached
 from ...shared.encoding import normalize_backend_rho
 from ...shared.intervention_steps import apply_intervention_to_backend
 from ...shared.utils import (
@@ -29,6 +25,7 @@ from ...shared.utils import (
     make_mcwf_static_context,
     resolve_stochastic_solver,
 )
+from ..sequences.workers import _get_times_cached
 from .basis import TomographyBasis, assemble_fixed_basis, compute_dual_choi_basis
 from .constructor import _reference_initial_rho
 from .data import _rank1_mpo_term, accumulate_rank1_terms
@@ -37,6 +34,9 @@ from .process_tensors import MPOProcessTensor, validate_initial_rho
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.analog.mcwf import MCWFContext
+    from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -49,23 +49,22 @@ class _Branch:
     weight: float
 
 
-def _choi_step_pair(
-    basis_set: list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]],
-    choi_indices: list[tuple[int, int]],
-    choi_index: int,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Return the measure/prepare ket pair for one discrete Choi index."""
-    prep_idx, meas_idx = choi_indices[choi_index]
-    return basis_set[meas_idx][1], basis_set[prep_idx][1]
-
-
 def _compress_branches(
     branches: list[_Branch],
     *,
     max_bond_dim: int | None,
     tol: float,
 ) -> list[_Branch]:
-    """Compress branch ensemble to at most ``max_bond_dim`` states via weighted SVD."""
+    """Compress the branch ensemble to at most ``max_bond_dim`` states via weighted SVD.
+
+    Args:
+        branches: Current ensemble of weighted backend states.
+        max_bond_dim: Optional cap on retained branches; ``None`` keeps all.
+        tol: Singular-value floor when selecting kept modes.
+
+    Returns:
+        Compressed branch list (unchanged when already within the cap).
+    """
     if max_bond_dim is None or len(branches) <= max_bond_dim:
         return branches
     if len(branches) == 1:
@@ -94,10 +93,39 @@ def _compress_branches(
             psi = np.asarray(branches[i_dom].psi, dtype=np.complex128).reshape(-1).copy()
             norm = float(np.linalg.norm(psi))
         else:
-            psi = psi / norm
+            psi /= norm
         weight = float(singular_values[row] ** 2)
         out.append(_Branch(history=branches[i_dom].history, psi=psi, weight=weight))
     return out
+
+
+def _prepare_step(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    duration: float,
+    *,
+    solver: StochasticSolver,
+) -> tuple[AnalogSimParams, MCWFContext | None]:
+    """Build local sim params and MCWF context for one schedule slot.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        duration: Evolution duration for this slot.
+        solver: Stochastic solver name.
+
+    Returns:
+        Tuple ``(step_params, static_ctx)``.
+    """
+    local_params = copy.copy(sim_params)
+    local_params.get_state = True
+    local_params.num_traj = 1
+    static_ctx = make_mcwf_static_context(operator, local_params, noise_model=None) if solver == "MCWF" else None
+    times_cache: dict[tuple[float, float], np.ndarray] = {}
+    step_params = copy.copy(local_params)
+    step_params.elapsed_time = float(duration)
+    step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=float(duration))
+    return step_params, static_ctx
 
 
 def _evolve_initial_state(
@@ -107,16 +135,19 @@ def _evolve_initial_state(
     *,
     solver: StochasticSolver,
 ) -> NDArray[np.complex128]:
-    """Evolve from ``|0...0>`` for one schedule slot."""
-    local_params = copy.copy(sim_params)
-    local_params.get_state = True
-    local_params.num_traj = 1
-    static_ctx = make_mcwf_static_context(operator, local_params, noise_model=None) if solver == "MCWF" else None
+    """Evolve from ``|0...0>`` for one schedule slot.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        duration: Evolution duration for ``U_0``.
+        solver: Stochastic solver name.
+
+    Returns:
+        Backend state vector after the initial evolution.
+    """
+    step_params, static_ctx = _prepare_step(operator, sim_params, duration, solver=solver)
     state = _initialize_backend_state(operator, solver)
-    times_cache: dict[tuple[float, float], np.ndarray] = {}
-    step_params = copy.copy(local_params)
-    step_params.elapsed_time = float(duration)
-    step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=float(duration))
     state = _evolve_backend_state(
         state,
         operator,
@@ -140,21 +171,29 @@ def _apply_timestep(
     choi_duals: list[NDArray[np.complex128]],
     solver: StochasticSolver,
 ) -> tuple[list[_Branch], list[MPO]]:
-    """Extend every branch by one local CPTP leg and return rank-1 MPO terms."""
-    local_params = copy.copy(sim_params)
-    local_params.get_state = True
-    local_params.num_traj = 1
-    static_ctx = make_mcwf_static_context(operator, local_params, noise_model=None) if solver == "MCWF" else None
-    times_cache: dict[tuple[float, float], np.ndarray] = {}
-    step_params = copy.copy(local_params)
-    step_params.elapsed_time = float(duration)
-    step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=float(duration))
+    """Extend every branch by one local CPTP leg and return rank-1 MPO terms.
+
+    Args:
+        branches: Ensemble before the intervention leg.
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        duration: Evolution duration after the intervention.
+        basis_set: Discrete basis kets ``(label, ket, dual)``.
+        choi_indices: Map from Choi index to ``(prep_idx, meas_idx)``.
+        choi_duals: Dual Choi operators for rank-1 MPO assembly.
+        solver: Stochastic solver name.
+
+    Returns:
+        Expanded branches and the corresponding rank-1 MPO terms.
+    """
+    step_params, static_ctx = _prepare_step(operator, sim_params, duration, solver=solver)
 
     expanded: list[_Branch] = []
     terms: list[MPO] = []
     for br in branches:
         for choi_idx in range(16):
-            meas_psi, prep_psi = _choi_step_pair(basis_set, choi_indices, choi_idx)
+            prep_idx, meas_idx = choi_indices[choi_idx]
+            meas_psi, prep_psi = basis_set[meas_idx][1], basis_set[prep_idx][1]
             state = np.asarray(br.psi, dtype=np.complex128).reshape(-1).copy()
             state, step_prob = apply_intervention_to_backend(
                 state,
@@ -175,7 +214,7 @@ def _apply_timestep(
                 static_ctx=static_ctx,
             )
             rho_out = normalize_backend_rho(extract_site0_rho(state))
-            history = br.history + (choi_idx,)
+            history = (*br.history, choi_idx)
             dual_ops = [choi_duals[idx].T for idx in history]
             terms.append(_rank1_mpo_term(rho_out, dual_ops, weight=weight))
             expanded.append(_Branch(history=history, psi=state, weight=weight))
@@ -201,6 +240,7 @@ def build_process_tensor_direct(
 
     At each timestep only ``16 * chi`` local basis updates are simulated, where ``chi`` is the
     compressed branch count from the previous leg. This avoids enumerating all ``16**k`` sequences.
+    Direct construction is noiseless (site-0 interventions only).
 
     Args:
         operator: Hamiltonian MPO.

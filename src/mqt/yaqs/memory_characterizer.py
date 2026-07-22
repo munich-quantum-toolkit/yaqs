@@ -7,7 +7,7 @@
 
 """Operational memory characterization entry point for YAQS."""
 
-# ruff: noqa: ANN401, PLC0415 -- lazy torch imports, unified dispatch targets
+# ruff:file-ignore[any-type, import-outside-top-level] -- lazy torch imports, unified dispatch targets
 
 from __future__ import annotations
 
@@ -317,7 +317,6 @@ class MemoryCharacterizer:
         sim_params: AnalogSimParams,
         timesteps: list[float] | None = None,
         *,
-        method: Literal["exhaustive", "direct"] = "exhaustive",
         noise_model: NoiseModel | None = None,
         num_trajectories: int = 100,
         basis: TomographyBasis = "tetrahedral",
@@ -325,39 +324,42 @@ class MemoryCharacterizer:
         return_type: Literal["dense", "mpo"] = "dense",
         check: bool = True,
         atol: float = 1e-8,
-        compress_every: int = 100,
+        compress_every: int = 16,
         tol: float = 1e-12,
-        max_bond_dim: int | None = None,
+        max_bond_dim: int | None = 64,
         n_sweeps: int = 2,
         parallel: bool | None = None,
         initial_rho: np.ndarray | None = None,
         initial_rho_atol: float = 1e-8,
     ) -> DenseProcessTensor | MPOProcessTensor:
-        """Build an exhaustive reference process tensor (validation only; scales as ``16**num_interventions``).
+        """Build a process tensor via dense tomography or direct MPO construction.
+
+        - ``return_type="dense"``: exhaustive tomography (scales as ``16**num_interventions``;
+          supports ``noise_model``).
+        - ``return_type="mpo"``: direct leg-by-leg MPO growth (noiseless only).
 
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
             timesteps: Optional process-tensor schedule evolution durations (length
                 ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
-            noise_model: Optional noise model during tomography sequences.
-            num_trajectories: Monte Carlo trajectories per tomography sample.
-            basis: Intervention basis for process-tensor tomography.
+            noise_model: Optional noise model (dense tomography only).
+            num_trajectories: Monte Carlo trajectories per tomography sample (dense only).
+            basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
-            method: ``"exhaustive"`` tomography (default) or ``"direct"`` leg-by-leg construction.
-            return_type: ``"dense"`` or ``"mpo"`` process-tensor storage.
-            check: Whether to validate CPTP properties during construction.
+            return_type: ``"dense"`` (tomography) or ``"mpo"`` (direct construction).
+            check: Whether to validate CPTP properties during dense construction.
             atol: CPTP check tolerance.
-            compress_every: MPO compression cadence during construction.
+            compress_every: Direct-MPO compression cadence during construction.
             tol: MPO compression tolerance.
-            max_bond_dim: Optional MPO bond-dimension cap.
+            max_bond_dim: Optional MPO bond-dimension cap (direct path).
             n_sweeps: MPO variational refinement sweeps.
-            parallel: Override instance parallel setting.
+            parallel: Override instance parallel setting (dense path only).
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
             initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
 
         Returns:
-            Dense or MPO reference process tensor for small-horizon validation.
+            Dense or MPO process tensor depending on ``return_type``.
         """
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
@@ -365,7 +367,6 @@ class MemoryCharacterizer:
             operator,
             sim_params,
             timesteps,
-            method=method,
             noise_model=noise_model,
             num_trajectories=num_trajectories,
             basis=basis,
@@ -866,7 +867,7 @@ class MemoryCharacterizer:
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
-    def predict(  # noqa: PLR6301 -- public instance API
+    def predict(  # ruff:ignore[no-self-use] -- public instance API
         self,
         target: Any,
         rho0: np.ndarray,

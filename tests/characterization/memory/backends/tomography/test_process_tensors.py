@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001 -- white-box tests exercise private process-tensor prediction helpers
+# ruff:file-ignore[private-member-access] -- white-box tests exercise private process-tensor prediction helpers
 
 """Tests for DenseProcessTensor and MPOProcessTensor wrappers."""
 
@@ -17,16 +17,15 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
-    causal_block_axis_indices,
-    causal_block_operator_entropy,
+    compute_block_entropy,
     compute_entropy_dense,
     convert_probe_callable,
     encode_cptp_choi,
-    evaluate_dense_probes,
+    evaluate_probes,
     refold_unfused_to_upsilon,
     trace_partial_dense,
     upsilon_to_unfused_operator,
@@ -37,6 +36,40 @@ from mqt.yaqs.characterization.memory.shared.interventions import InterventionMa
 from mqt.yaqs.core.data_structures.mpo import MPO
 
 _REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+
+
+def _tiny_mpo_process_tensor(*, num_interventions: int = 1) -> MPOProcessTensor:
+    """Build a noiseless direct MPO process tensor for wrapper unit tests.
+
+    Returns:
+        MPO process tensor with the requested number of intervention legs.
+    """
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    timesteps = [0.0] * (num_interventions + 1)
+    return cast(
+        "MPOProcessTensor",
+        build_process_tensor(
+            ham.mpo,
+            params,
+            timesteps=timesteps,
+            return_type="mpo",
+            max_bond_dim=None,
+            compress_every=1,
+        ),
+    )
+
+
+def _single_site_mpo_pt(rho: np.ndarray) -> MPOProcessTensor:
+    """Wrap a single-site output density matrix as a zero-intervention MPO PT.
+
+    Returns:
+        MPO process tensor whose only site encodes ``rho``.
+    """
+    tensors = [np.asarray(rho, dtype=np.complex128).reshape(2, 2, 1, 1)]
+    mpo = MPO()
+    mpo.custom(tensors, transpose=False)
+    return MPOProcessTensor(mpo, [], initial_rho=_REF_RHO0.copy())
 
 
 def test_dense_process_tensor_predict_matches_helper() -> None:
@@ -103,18 +136,7 @@ def test_mpo_process_tensor_qmi_fallback_to_dense() -> None:
 
 def test_mpo_process_tensor_predict_smoke_identity_map() -> None:
     """MPOProcessTensor.predict returns a physical density matrix for a trivial intervention."""
-    rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-    data = SequenceData(
-        sequences=[(0,)],
-        outputs=[rho],
-        weights=[1.0],
-        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
-        choi_indices=[(0, 0)] * 16,
-        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
-        timesteps=[0.1],
-        initial_rho=_REF_RHO0,
-    )
-    pt = data.to_mpo_process_tensor(compress_every=1)
+    pt = _tiny_mpo_process_tensor(num_interventions=1)
 
     def id_map(x: np.ndarray) -> np.ndarray:
         return x
@@ -127,17 +149,7 @@ def test_mpo_process_tensor_predict_smoke_identity_map() -> None:
 
 def test_mpo_process_tensor_predict_raises_on_empty_interventions() -> None:
     """Predict rejects empty interventions when num_interventions>0."""
-    data = SequenceData(
-        sequences=[(0,)],
-        outputs=[np.eye(2, dtype=np.complex128)],
-        weights=[1.0],
-        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
-        choi_indices=[(0, 0)] * 16,
-        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
-        timesteps=[0.1],
-        initial_rho=_REF_RHO0,
-    )
-    pt = data.to_mpo_process_tensor(compress_every=1)
+    pt = _tiny_mpo_process_tensor(num_interventions=1)
     with pytest.raises(ValueError, match="interventions list must be non-empty"):
         pt.predict([])
 
@@ -145,34 +157,14 @@ def test_mpo_process_tensor_predict_raises_on_empty_interventions() -> None:
 def test_mpo_process_tensor_predict_zero_steps() -> None:
     """MPOProcessTensor.predict([]) returns the stored output when num_interventions=0."""
     rho = np.array([[0.6, 0.1 + 0.0j], [0.1 - 0.0j, 0.4]], dtype=np.complex128)
-    data = SequenceData(
-        sequences=[()],
-        outputs=[rho],
-        weights=[1.0],
-        choi_basis=[],
-        choi_indices=[],
-        choi_duals=[],
-        timesteps=[],
-        initial_rho=_REF_RHO0,
-    )
-    pt = data.to_mpo_process_tensor(compress_every=1)
+    pt = _single_site_mpo_pt(rho)
     rho_out = pt.predict([])
     np.testing.assert_allclose(rho_out, rho, atol=1e-10)
 
 
 def test_mpo_process_tensor_predict_raises_on_length_mismatch() -> None:
     """Predict rejects intervention lists whose length mismatches the process tensor."""
-    data = SequenceData(
-        sequences=[(0,)],
-        outputs=[np.eye(2, dtype=np.complex128)],
-        weights=[1.0],
-        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
-        choi_indices=[(0, 0)] * 16,
-        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
-        timesteps=[0.1],
-        initial_rho=_REF_RHO0,
-    )
-    pt = data.to_mpo_process_tensor(compress_every=1)
+    pt = _tiny_mpo_process_tensor(num_interventions=1)
 
     def id_map(x: np.ndarray) -> np.ndarray:
         return x
@@ -318,14 +310,14 @@ def test_dense_process_tensor_evaluate_probes_smoke() -> None:
     """Dense process-tensor probe evaluation returns Pauli tomography coefficients."""
     pt = _tiny_process_tensor(num_interventions=1)
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    pauli = evaluate_dense_probes(pt, probe_set)
+    pauli = evaluate_probes(pt, probe_set)
     assert pauli.shape == (2, 2, 4)
     wrapped = pt.evaluate_probes(probe_set)
     np.testing.assert_allclose(wrapped, pauli)
 
 
-def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
-    """MPOProcessTensor wrappers delegate probe and information metrics to dense."""
+def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying() -> None:
+    """MPO probe evaluation matches dense and does not call :meth:`to_dense`."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
@@ -336,19 +328,30 @@ def test_mpo_process_tensor_evaluate_probes_and_cmi_delegates() -> None:
     dense_pt = mpo_pt.to_dense()
 
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=np.random.default_rng(1))
+    original_to_dense = mpo_pt.to_dense
+
+    def _fail_to_dense() -> DenseProcessTensor:
+        msg = "evaluate_probes must not densify the MPO process tensor"
+        raise AssertionError(msg)
+
+    mpo_pt.to_dense = _fail_to_dense  # type: ignore[method-assign]
     mpo_pauli = mpo_pt.evaluate_probes(probe_set)
+    mpo_pt.to_dense = original_to_dense  # type: ignore[method-assign]
+
     dense_pauli = dense_pt.evaluate_probes(probe_set)
     assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
+    np.testing.assert_allclose(mpo_pauli, dense_pauli, atol=1e-6)
 
     assert isinstance(mpo_pt.cmi(), float)
     assert mpo_pt._num_interventions_for_probe() == 2
 
 
-def test_causal_block_axis_indices_match_unfuse_layout() -> None:
+def test_block_axis_indices_match_unfuse_layout() -> None:
     """Causal-block axis indices align with upsilon_to_unfused_operator layout."""
     k = 3
-    blocks = causal_block_axis_indices(k)
-    op = upsilon_to_unfused_operator(np.eye(2 * 4**k, dtype=np.complex128), k)
+    ups = np.eye(2 * 4**k, dtype=np.complex128)
+    op = upsilon_to_unfused_operator(ups, k)
+    blocks = cast("list[list[int]]", compute_block_entropy(ups, k, 1)["blocks"])
     assert len(blocks) == k + 1
     assert blocks[0] == [3, 5]
     assert blocks[1] == [2, 7, 4, 9]
@@ -357,7 +360,7 @@ def test_causal_block_axis_indices_match_unfuse_layout() -> None:
     assert op.ndim == 2 + 4 * k
 
 
-def test_causal_block_operator_entropy_markov_j0() -> None:
+def test_compute_block_entropy_markov_j0() -> None:
     """Uncoupled Ising process has vanishing causal-block entropy at every cut."""
     ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
@@ -368,17 +371,15 @@ def test_causal_block_operator_entropy_markov_j0() -> None:
             params,
             timesteps=[0.1] * 4,
             return_type="dense",
-            method="exhaustive",
-            compress_every=1,
         ),
     )
     for cut in (1, 2, 3):
-        result = pt.causal_block_operator_entropy(cut)
+        result = pt.compute_block_entropy(cut)
         assert cast("int", result["schmidt_rank"]) == 1
         assert float(cast("float", result["entropy"])) == pytest.approx(0.0, abs=1e-10)
 
 
-def test_causal_block_operator_entropy_correlated_j1() -> None:
+def test_compute_block_entropy_correlated_j1() -> None:
     """Correlated process has positive causal-block entropy at the center cut."""
     ham = Hamiltonian.ising(length=6, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
@@ -389,60 +390,20 @@ def test_causal_block_operator_entropy_correlated_j1() -> None:
             params,
             timesteps=[0.1] * 4,
             return_type="dense",
-            method="exhaustive",
-            compress_every=1,
         ),
     )
-    result = pt.causal_block_operator_entropy(2)
+    result = pt.compute_block_entropy(2)
     assert cast("int", result["schmidt_rank"]) > 1
     assert float(cast("float", result["entropy"])) > 0.0
 
 
-def test_causal_block_operator_entropy_scale_invariant() -> None:
+def test_compute_block_entropy_scale_invariant() -> None:
     """Overall scaling of upsilon does not change causal-block entropy."""
     k = 2
     ups = np.eye(2 * 4**k, dtype=np.complex128)
-    base = float(cast("float", causal_block_operator_entropy(ups, k, 1)["entropy"]))
-    scaled = float(cast("float", causal_block_operator_entropy(2.5 * ups, k, 1)["entropy"]))
+    base = float(cast("float", compute_block_entropy(ups, k, 1)["entropy"]))
+    scaled = float(cast("float", compute_block_entropy(2.5 * ups, k, 1)["entropy"]))
     assert base == pytest.approx(scaled, abs=1e-12)
-
-
-def test_causal_block_mutual_information_markov_j0() -> None:
-    """Uncoupled Ising process has vanishing past-future mutual information."""
-    ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
-    pt = cast(
-        "DenseProcessTensor",
-        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
-            ham,
-            params,
-            timesteps=[0.1] * 4,
-            return_type="dense",
-            method="exhaustive",
-            compress_every=1,
-        ),
-    )
-    result = pt.causal_block_mutual_information(2)
-    assert float(cast("float", result["mutual_information"])) == pytest.approx(0.0, abs=1e-10)
-
-
-def test_causal_block_mutual_information_correlated_j1() -> None:
-    """Correlated process has positive past-future mutual information."""
-    ham = Hamiltonian.ising(length=6, J=1.0, g=1.0)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
-    pt = cast(
-        "DenseProcessTensor",
-        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
-            ham,
-            params,
-            timesteps=[0.1] * 4,
-            return_type="dense",
-            method="exhaustive",
-            compress_every=1,
-        ),
-    )
-    result = pt.causal_block_mutual_information(2)
-    assert float(cast("float", result["mutual_information"])) > 0.0
 
 
 def test_refold_unfused_to_upsilon_roundtrip() -> None:
