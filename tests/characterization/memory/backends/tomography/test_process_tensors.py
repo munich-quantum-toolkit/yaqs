@@ -21,8 +21,8 @@ from mqt.yaqs.characterization.memory.backends.tomography.constructor import bui
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
-    compute_temporal_entropy,
     compute_entropy_dense,
+    compute_temporal_entropy,
     convert_probe_callable,
     encode_cptp_choi,
     evaluate_probes,
@@ -316,7 +316,9 @@ def test_dense_process_tensor_evaluate_probes_smoke() -> None:
     np.testing.assert_allclose(wrapped, pauli)
 
 
-def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying() -> None:
+def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """MPO probe evaluation matches dense and does not call :meth:`to_dense`."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8)
@@ -328,20 +330,21 @@ def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying() -
     dense_pt = mpo_pt.to_dense()
 
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=np.random.default_rng(1))
-    original_to_dense = mpo_pt.to_dense
 
-    def _fail_to_dense() -> DenseProcessTensor:
+    def _fail_to_dense(self: MPOProcessTensor) -> DenseProcessTensor:
+        _ = self
         msg = "evaluate_probes must not densify the MPO process tensor"
         raise AssertionError(msg)
 
-    mpo_pt.to_dense = _fail_to_dense  # type: ignore[method-assign]
+    monkeypatch.setattr(MPOProcessTensor, "to_dense", _fail_to_dense)
     mpo_pauli = mpo_pt.evaluate_probes(probe_set)
-    mpo_pt.to_dense = original_to_dense  # type: ignore[method-assign]
 
     dense_pauli = dense_pt.evaluate_probes(probe_set)
     assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
     np.testing.assert_allclose(mpo_pauli, dense_pauli, atol=1e-6)
 
+    # Restore before methods that still densify (qmi/cmi).
+    monkeypatch.undo()
     assert isinstance(mpo_pt.cmi(), float)
     assert mpo_pt._num_interventions_for_probe() == 2
 
