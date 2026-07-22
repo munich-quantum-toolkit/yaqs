@@ -394,7 +394,7 @@ def build_process_tensor(
     # Direct MPO construction
     compress_every: int = 16,
     tol: float = 1e-12,
-    max_bond_dim: int | None = None,
+    max_bond_dim: int | None = 64,
     n_sweeps: int = 2,
     solver: StochasticSolver | None = None,
     initial_rho: np.ndarray | None = None,
@@ -422,8 +422,8 @@ def build_process_tensor(
         atol: Absolute tolerance for the dense self-check.
         compress_every: Direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
-        max_bond_dim: Optional MPO / branch bond-dimension cap for direct construction.
-            ``None`` (default) keeps all branches for an exact noiseless MPO.
+        max_bond_dim: Cap on the branch ensemble / MPO bond dimension for direct construction.
+            Defaults to ``64`` for scalability; pass ``None`` for exact uncapped construction.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.

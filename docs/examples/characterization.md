@@ -250,8 +250,9 @@ pt_result = mc.characterize(
 print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
 ```
 
-Dense and default (uncapped) MPO construction agree on $S_{PT}$ for small $k$.
-Use `return_type="dense"` when you need noise, and set `max_bond_dim` only if you intentionally want a truncated direct MPO.
+Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for small $k$.
+Use `return_type="dense"` when you need noise. The default `max_bond_dim=64` keeps direct
+construction scalable; pass `max_bond_dim=None` for an exact noiseless MPO.
 `characterize(pt, ...)` still builds $S_V$ from probe responses (native MPO `evaluate_probes`, without densifying for the V-matrix path).
 
 ## Related topics

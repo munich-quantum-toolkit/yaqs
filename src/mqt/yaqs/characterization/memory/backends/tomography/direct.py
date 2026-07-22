@@ -302,7 +302,7 @@ def build_process_tensor_direct(
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
     tol: float = 1e-12,
-    max_bond_dim: int | None = None,
+    max_bond_dim: int | None = 64,
     n_sweeps: int = 2,
     compress_every: int = 16,
     solver: StochasticSolver | None = None,
@@ -325,8 +325,8 @@ def build_process_tensor_direct(
         basis: Discrete Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
         tol: MPO compression tolerance.
-        max_bond_dim: Optional cap on the branch ensemble / MPO bond dimension. ``None`` (default)
-            keeps all branches for an exact noiseless construction.
+        max_bond_dim: Cap on the branch ensemble / MPO bond dimension. Defaults to ``64`` so
+            branch compression runs for scalability; pass ``None`` for exact uncapped construction.
         n_sweeps: MPO compression sweeps after each step.
         compress_every: Rank-1 accumulation batch size before intermediate compression.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).

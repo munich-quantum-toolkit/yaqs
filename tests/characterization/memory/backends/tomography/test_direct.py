@@ -34,13 +34,13 @@ def test_build_process_tensor_defaults_to_mpo() -> None:
 
 
 def test_default_mpo_recreates_dense_process_tensor() -> None:
-    """Default MPO construction matches the dense Choi matrix on a small schedule."""
+    """Uncapped default MPO path matches the dense Choi matrix on a small schedule."""
     ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     timesteps = [0.1, 0.1, 0.1]
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
 
-    pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1)
+    pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps, max_bond_dim=None, compress_every=1)
     pt_dense = mc.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense")
 
     assert isinstance(pt_mpo, MPOProcessTensor)
@@ -69,7 +69,7 @@ def test_direct_mpo_matches_dense_temporal_entropy(j_val: float, num_interventio
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
     )
 
     for cut in range(1, num_interventions + 1):
@@ -94,7 +94,7 @@ def test_direct_j_zero_matches_dense_temporal_entropy() -> None:
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
@@ -152,7 +152,7 @@ def test_direct_parallel_temporal_entropy_matches_dense() -> None:
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1),
+        mc.build_process_tensor(ham, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
