@@ -21,8 +21,8 @@ from mqt.yaqs.characterization.memory.backends.tomography.constructor import bui
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
-    compute_temporal_entropy,
     compute_entropy_dense,
+    compute_temporal_entropy,
     convert_probe_callable,
     encode_cptp_choi,
     evaluate_probes,
