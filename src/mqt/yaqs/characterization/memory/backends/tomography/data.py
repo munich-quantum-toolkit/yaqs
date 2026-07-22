@@ -5,11 +5,12 @@
 #
 # Licensed under the MIT License
 
-"""Exhaustive discrete-basis process-tensor data + reconstruction helpers.
+"""Exhaustive discrete-basis process-tensor data + dense reconstruction helpers.
 
-The main product of :func:`~mqt.yaqs.characterization.memory.backends.tomography.constructor.build_process_tensor`
-is :class:`SequenceData`. It can be converted to dense or MPO process-tensor representations via
-:meth:`SequenceData.to_dense_process_tensor` and :meth:`SequenceData.to_mpo_process_tensor`.
+:class:`SequenceData` holds exhaustive tomography outputs and converts to a dense process
+tensor via :meth:`SequenceData.to_dense_process_tensor`. Rank-1 MPO helpers in this module
+support direct MPO construction in
+:mod:`mqt.yaqs.characterization.memory.backends.tomography.direct`.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
-from .process_tensors import DenseProcessTensor, MPOProcessTensor
+from .process_tensors import DenseProcessTensor
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -30,7 +31,14 @@ if TYPE_CHECKING:
 
 
 def _num_intervention_steps(timesteps: list[float]) -> int:
-    """Return intervention-leg count ``k`` from a process-tensor schedule of length ``k + 1``."""
+    """Return intervention-leg count ``k`` from a process-tensor schedule of length ``k + 1``.
+
+    Args:
+        timesteps: Process-tensor schedule durations.
+
+    Returns:
+        Number of intervention legs ``max(0, len(timesteps) - 1)``.
+    """
     return max(0, len(timesteps) - 1)
 
 
@@ -121,22 +129,6 @@ def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], N
         out_vecs[(slice(None), *alpha)] = np.asarray(data.outputs[i], dtype=np.complex128).reshape(-1)
         seq_weights[alpha] = float(data.weights[i])
     return out_vecs, seq_weights
-
-
-def _iter_rank1_terms(data: SequenceData) -> Iterable[MPO]:
-    """Yield rank-1 MPO terms for MPO process-tensor construction.
-
-    Args:
-        data: SequenceData instance.
-
-    Yields:
-        MPO rank-1 terms.
-    """
-    for i, alpha in enumerate(data.sequences):
-        rho_out = data.outputs[i]
-        w = float(data.weights[i])
-        dual_ops = [data.choi_duals[a].T for a in alpha]
-        yield _rank1_mpo_term(rho_out, dual_ops, weight=w)
 
 
 def assemble_upsilon(
@@ -256,34 +248,3 @@ class SequenceData:
             atol=atol,
         )
         return DenseProcessTensor(upsilon, list(self.timesteps), initial_rho=self.initial_rho.copy())
-
-    def to_mpo_process_tensor(
-        self,
-        *,
-        compress_every: int = 100,
-        tol: float = 1e-12,
-        max_bond_dim: int | None = None,
-        n_sweeps: int = 2,
-    ) -> MPOProcessTensor:
-        """Build an MPO process tensor via rank-1 accumulation.
-
-        Args:
-            compress_every: Compress after this many terms.
-            tol: Compression tolerance.
-            max_bond_dim: Optional maximum bond dimension.
-            n_sweeps: Number of compression sweeps.
-
-        Returns:
-            MPO process-tensor representation.
-        """
-        num_steps = _num_intervention_steps(self.timesteps)
-        mpo = accumulate_rank1_terms(
-            _iter_rank1_terms(self),
-            num_steps=num_steps,
-            dims=(2, 2),
-            compress_every=compress_every,
-            tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
-        )
-        return MPOProcessTensor(mpo, self.timesteps, initial_rho=self.initial_rho.copy())

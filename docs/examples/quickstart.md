@@ -135,7 +135,8 @@ For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence
 
 ## 4. Characterize environmental memory
 
-Probe a probe qubit coupled to a short chain at an interior temporal cut. The memory spectrum and response matrix show how many independent past branches remain visible at the cut:
+Probe a probe qubit coupled to a short chain at an interior temporal cut. The memory spectrum and response matrix show how many independent past branches remain visible at the cut ($S_V$).
+For temporal entanglement of a process tensor ($S_{PT}$), see {doc}`characterization`.
 
 ```{code-cell} ipython3
 import numpy as np
