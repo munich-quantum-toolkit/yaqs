@@ -21,7 +21,7 @@ from mqt.yaqs.characterization.memory.backends.tomography.constructor import bui
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
     MPOProcessTensor,
-    compute_block_entropy,
+    compute_temporal_entropy,
     compute_entropy_dense,
     convert_probe_callable,
     encode_cptp_choi,
@@ -351,7 +351,7 @@ def test_block_axis_indices_match_unfuse_layout() -> None:
     k = 3
     ups = np.eye(2 * 4**k, dtype=np.complex128)
     op = upsilon_to_unfused_operator(ups, k)
-    blocks = cast("list[list[int]]", compute_block_entropy(ups, k, 1)["blocks"])
+    blocks = cast("list[list[int]]", compute_temporal_entropy(ups, k, 1)["blocks"])
     assert len(blocks) == k + 1
     assert blocks[0] == [3, 5]
     assert blocks[1] == [2, 7, 4, 9]
@@ -360,8 +360,8 @@ def test_block_axis_indices_match_unfuse_layout() -> None:
     assert op.ndim == 2 + 4 * k
 
 
-def test_compute_block_entropy_markov_j0() -> None:
-    """Uncoupled Ising process has vanishing causal-block entropy at every cut."""
+def test_compute_temporal_entropy_markov_j0() -> None:
+    """Uncoupled Ising process has vanishing temporal entanglement at every cut."""
     ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
     pt = cast(
@@ -374,13 +374,13 @@ def test_compute_block_entropy_markov_j0() -> None:
         ),
     )
     for cut in (1, 2, 3):
-        result = pt.compute_block_entropy(cut)
+        result = pt.compute_temporal_entropy(cut)
         assert cast("int", result["schmidt_rank"]) == 1
         assert float(cast("float", result["entropy"])) == pytest.approx(0.0, abs=1e-10)
 
 
-def test_compute_block_entropy_correlated_j1() -> None:
-    """Correlated process has positive causal-block entropy at the center cut."""
+def test_compute_temporal_entropy_correlated_j1() -> None:
+    """Correlated process has positive temporal entanglement at the center cut."""
     ham = Hamiltonian.ising(length=6, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=1)
     pt = cast(
@@ -392,17 +392,17 @@ def test_compute_block_entropy_correlated_j1() -> None:
             return_type="dense",
         ),
     )
-    result = pt.compute_block_entropy(2)
+    result = pt.compute_temporal_entropy(2)
     assert cast("int", result["schmidt_rank"]) > 1
     assert float(cast("float", result["entropy"])) > 0.0
 
 
-def test_compute_block_entropy_scale_invariant() -> None:
-    """Overall scaling of upsilon does not change causal-block entropy."""
+def test_compute_temporal_entropy_scale_invariant() -> None:
+    """Overall scaling of upsilon does not change temporal entanglement."""
     k = 2
     ups = np.eye(2 * 4**k, dtype=np.complex128)
-    base = float(cast("float", compute_block_entropy(ups, k, 1)["entropy"]))
-    scaled = float(cast("float", compute_block_entropy(2.5 * ups, k, 1)["entropy"]))
+    base = float(cast("float", compute_temporal_entropy(ups, k, 1)["entropy"]))
+    scaled = float(cast("float", compute_temporal_entropy(2.5 * ups, k, 1)["entropy"]))
     assert base == pytest.approx(scaled, abs=1e-12)
 
 

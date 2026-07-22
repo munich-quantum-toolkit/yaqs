@@ -323,7 +323,7 @@ def _block_axis_indices(num_interventions: int) -> list[list[int]]:
     return blocks
 
 
-def compute_block_entropy(
+def compute_temporal_entropy(
     upsilon: NDArray[np.complex128],
     num_interventions: int,
     cut: int,
@@ -331,16 +331,16 @@ def compute_block_entropy(
     rtol: float = 1e-12,
     weight_tol: float = 1e-30,
 ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
-    """Compute operator-Schmidt entropy across causally regrouped channel blocks.
+    r"""Compute temporal entanglement of the process tensor at a causal cut.
 
-    Partitions causal blocks ``B_0, …, B_k`` at cut ``c`` as::
+    Partitions causal blocks ``B_0, \ldots, B_k`` at cut ``c`` as::
 
         LEFT  = B_0, …, B_{c-1}
         RIGHT = B_c, …, B_k
 
     and computes the operator-Schmidt spectrum of the unfused Choi operator without
-    partial tracing or trace normalization. This is the temporal process-tensor entropy
-    :math:`S_{PT}^{cb}`, distinct from operational response entropy :math:`S_V`.
+    partial tracing or trace normalization. The result is temporal entanglement
+    :math:`S_{PT}(c)`, distinct from operational response entropy :math:`S_V(c)`.
 
     Args:
         upsilon: Dense process-tensor Choi matrix.
@@ -350,7 +350,7 @@ def compute_block_entropy(
         weight_tol: Absolute floor on ``sum(s**2)``; below this raises ``ValueError``.
 
     Returns:
-        Dictionary with keys ``entropy`` (:math:`S_{PT}^{cb}`), ``effective_rank``,
+        Dictionary with keys ``entropy`` (:math:`S_{PT}`), ``effective_rank``,
         ``schmidt_rank``, ``singular_values``, ``weights``, ``left_axes``, ``right_axes``,
         ``blocks``, ``block_labels``.
 
@@ -454,14 +454,14 @@ class DenseProcessTensor:
         size = self.upsilon.shape[0]
         return int(np.round(np.log2(size / 2) / 2))
 
-    def compute_block_entropy(
+    def compute_temporal_entropy(
         self,
         cut: int,
         *,
         rtol: float = 1e-12,
         weight_tol: float = 1e-30,
     ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
-        """Compute temporal causal-block entropy :math:`S_{PT}^{cb}` at ``cut``.
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
 
         Args:
             cut: Causal cut index ``c`` matching the response protocol.
@@ -469,9 +469,9 @@ class DenseProcessTensor:
             weight_tol: Absolute floor on ``sum(s**2)``.
 
         Returns:
-            Result dictionary from :func:`compute_block_entropy`.
+            Result dictionary from :func:`compute_temporal_entropy`.
         """
-        return compute_block_entropy(
+        return compute_temporal_entropy(
             self.upsilon,
             self._num_interventions(),
             cut,
@@ -727,14 +727,14 @@ class MPOProcessTensor(MPO):
     def _num_interventions_for_probe(self) -> int:
         return int(self.length) - 1
 
-    def compute_block_entropy(
+    def compute_temporal_entropy(
         self,
         cut: int,
         *,
         rtol: float = 1e-12,
         weight_tol: float = 1e-30,
     ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
-        """Compute temporal causal-block entropy :math:`S_{PT}^{cb}` at ``cut``.
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
 
         Delegates to the dense representation via :meth:`to_dense`.
 
@@ -744,9 +744,9 @@ class MPOProcessTensor(MPO):
             weight_tol: Absolute floor on ``sum(s**2)``.
 
         Returns:
-            Result dictionary from :func:`compute_block_entropy`.
+            Result dictionary from :func:`compute_temporal_entropy`.
         """
-        return self.to_dense().compute_block_entropy(cut, rtol=rtol, weight_tol=weight_tol)
+        return self.to_dense().compute_temporal_entropy(cut, rtol=rtol, weight_tol=weight_tol)
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses for V-matrix assembly.

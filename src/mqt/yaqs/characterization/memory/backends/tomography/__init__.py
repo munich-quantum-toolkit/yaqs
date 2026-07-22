@@ -23,5 +23,5 @@ from .constructor import build_process_tensor as build_process_tensor
 from .data import SequenceData as SequenceData
 from .process_tensors import DenseProcessTensor as DenseProcessTensor
 from .process_tensors import MPOProcessTensor as MPOProcessTensor
-from .process_tensors import compute_block_entropy as compute_block_entropy
+from .process_tensors import compute_temporal_entropy as compute_temporal_entropy
 from .process_tensors import evaluate_probes as evaluate_probes

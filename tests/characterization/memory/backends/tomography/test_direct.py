@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
 @pytest.mark.parametrize("j_val", [0.0, 1.0])
 @pytest.mark.parametrize("num_interventions", [1, 2])
-def test_direct_mpo_matches_dense_block_entropy(j_val: float, num_interventions: int) -> None:
-    """Direct MPO and dense tomography agree on causal-block entropy at small k."""
+def test_direct_mpo_matches_dense_temporal_entropy(j_val: float, num_interventions: int) -> None:
+    """Direct MPO and dense tomography agree on temporal entanglement at small k."""
     ham = Hamiltonian.ising(length=2, J=float(j_val), g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     timesteps = [0.0] * (num_interventions + 1)
@@ -56,8 +56,8 @@ def test_direct_mpo_matches_dense_block_entropy(j_val: float, num_interventions:
     )
 
     for cut in range(1, num_interventions + 1):
-        dense = pt_dense.compute_block_entropy(cut)
-        mpo = pt_mpo.compute_block_entropy(cut)
+        dense = pt_dense.compute_temporal_entropy(cut)
+        mpo = pt_mpo.compute_temporal_entropy(cut)
         assert float(cast("float", mpo["entropy"])) == pytest.approx(
             float(cast("float", dense["entropy"])),
             abs=1e-6,
@@ -65,7 +65,7 @@ def test_direct_mpo_matches_dense_block_entropy(j_val: float, num_interventions:
         assert cast("int", mpo["schmidt_rank"]) == cast("int", dense["schmidt_rank"])
 
 
-def test_direct_j_zero_matches_dense_block_entropy() -> None:
+def test_direct_j_zero_matches_dense_temporal_entropy() -> None:
     """Direct MPO matches dense tomography for a memoryless chain."""
     ham = Hamiltonian.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
@@ -92,8 +92,8 @@ def test_direct_j_zero_matches_dense_block_entropy() -> None:
         ),
     )
     for cut in (1, 2):
-        dense = pt_dense.compute_block_entropy(cut)
-        mpo = pt_mpo.compute_block_entropy(cut)
+        dense = pt_dense.compute_temporal_entropy(cut)
+        mpo = pt_mpo.compute_temporal_entropy(cut)
         assert float(cast("float", mpo["entropy"])) == pytest.approx(
             float(cast("float", dense["entropy"])),
             abs=1e-6,
