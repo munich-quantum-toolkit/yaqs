@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff:file-ignore[private-member-access] -- white-box tests exercise private process-tensor prediction helpers
+# ruff: noqa: SLF001 -- white-box tests exercise private process-tensor prediction helpers
 
 """Tests for DenseProcessTensor and MPOProcessTensor wrappers."""
 

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff:file-ignore[import-private-name] -- white-box tests import private tomography basis helpers
+# ruff: noqa: PLC2701 -- white-box tests import private tomography basis helpers
 
 """Tests for process-tensor tomography basis construction."""
 

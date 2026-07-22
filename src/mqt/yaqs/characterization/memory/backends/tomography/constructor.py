@@ -441,7 +441,7 @@ def build_process_tensor(
                 "return_type='mpo' uses direct construction and does not support noise_model; use return_type='dense'."
             )
             raise ValueError(msg)
-        from .direct import build_process_tensor_direct  # ruff:ignore[import-outside-top-level]
+        from .direct import build_process_tensor_direct  # noqa: PLC0415
 
         return build_process_tensor_direct(
             operator,

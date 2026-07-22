@@ -30,7 +30,7 @@ def test_direct_mpo_matches_dense_temporal_entropy(j_val: float, num_interventio
     """Direct MPO and dense tomography agree on temporal entanglement at small k."""
     ham = Hamiltonian.ising(length=2, J=float(j_val), g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
-    timesteps = [0.0] * (num_interventions + 1)
+    timesteps = [0.1] * (num_interventions + 1)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
 
     pt_dense = cast(
