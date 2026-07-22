@@ -203,7 +203,7 @@ def _unfuse_slot_index(fused: int, *, out_first: bool = True) -> tuple[int, int]
     return fused % 2, fused // 2
 
 
-def upsilon_to_unfused_operator(
+def _upsilon_to_unfused_operator(
     upsilon: NDArray[np.complex128],
     num_interventions: int,
     *,
@@ -215,12 +215,7 @@ def upsilon_to_unfused_operator(
     ``slot_t = output_t ⊗ input_t`` and ``f = 2 * output + input`` when ``out_first=True``.
 
     Returns:
-        Tensor with axes, in order::
-
-            final_ket, final_bra,
-            slot1_out_ket, slot1_in_ket, slot1_out_bra, slot1_in_bra,
-            …,
-            slotk_out_ket, slotk_in_ket, slotk_out_bra, slotk_in_bra.
+        Tensor with axes ``final_ket/bra`` then per-slot ``out/in`` ket/bra pairs.
 
     Raises:
         ValueError: If ``upsilon`` shape is inconsistent with ``num_interventions``.
@@ -246,66 +241,10 @@ def upsilon_to_unfused_operator(
     return out
 
 
-def refold_unfused_to_upsilon(
-    op: NDArray[np.complex128],
-    num_interventions: int,
-    *,
-    out_first: bool = True,
-) -> NDArray[np.complex128]:
-    """Inverse of :func:`upsilon_to_unfused_operator`.
-
-    Returns:
-        Dense process-tensor Choi matrix with fused intervention legs.
-    """
-    k = num_interventions
-    dims = [2] + [4] * k
-    mat = np.zeros((2 * 4**k, 2 * 4**k), dtype=np.complex128)
-    view = mat.reshape(*dims, *dims)
-    n = k + 1
-    for idx in np.ndindex(*dims, *dims):
-        sub_k, sub_b = idx[:n], idx[n:]
-        coords: list[int] = [sub_k[0], sub_b[0]]
-        for t in range(k):
-            ok, ik = _unfuse_slot_index(sub_k[t + 1], out_first=out_first)
-            ob, ib = _unfuse_slot_index(sub_b[t + 1], out_first=out_first)
-            coords.extend([ok, ik, ob, ib])
-        view[idx] = op[tuple(coords)]
-    return mat
-
-
-def _block_axis_labels(num_interventions: int) -> list[list[str]]:
-    """Return semantic labels for causal blocks ``B_0 … B_k``.
-
-    Args:
-        num_interventions: Number of intervention slots ``k``.
-
-    Returns:
-        List of ``k + 1`` blocks, each a list of axis-name strings.
-    """
-    k = num_interventions
-    blocks: list[list[str]] = [["slot1_in_ket", "slot1_in_bra"]]
-    blocks.extend(
-        [
-            f"slot{t + 1}_out_ket",
-            f"slot{t + 2}_in_ket",
-            f"slot{t + 1}_out_bra",
-            f"slot{t + 2}_in_bra",
-        ]
-        for t in range(k - 1)
-    )
-    blocks.append([
-        f"slot{k}_out_ket",
-        "final_ket",
-        f"slot{k}_out_bra",
-        "final_bra",
-    ])
-    return blocks
-
-
 def _block_axis_indices(num_interventions: int) -> list[list[int]]:
     """Return unfused tensor axis indices for causal blocks ``B_0 … B_k``.
 
-    Axis numbering matches :func:`upsilon_to_unfused_operator`:
+    Axis numbering matches :func:`_upsilon_to_unfused_operator`:
 
     - ``final_ket=0``, ``final_bra=1``
     - slot ``t`` (0-based): ``out_ket=2+4t``, ``in_ket=3+4t``, ``out_bra=4+4t``, ``in_bra=5+4t``
@@ -330,7 +269,7 @@ def compute_temporal_entropy(
     *,
     rtol: float = 1e-12,
     weight_tol: float = 1e-30,
-) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+) -> dict[str, NDArray[np.float64] | float | int]:
     r"""Compute temporal entanglement of the process tensor at a causal cut.
 
     Partitions causal blocks ``B_0, \ldots, B_k`` at cut ``c`` as::
@@ -351,16 +290,14 @@ def compute_temporal_entropy(
 
     Returns:
         Dictionary with keys ``entropy`` (:math:`S_{PT}`), ``effective_rank``,
-        ``schmidt_rank``, ``singular_values``, ``weights``, ``left_axes``, ``right_axes``,
-        ``blocks``, ``block_labels``.
+        ``schmidt_rank``, ``singular_values``, and ``weights``.
 
     Raises:
         ValueError: If ``cut`` is invalid or the squared-Schmidt weight sum is below ``weight_tol``.
     """
     _validate_cut(cut, num_interventions)
-    op = upsilon_to_unfused_operator(upsilon, num_interventions)
+    op = _upsilon_to_unfused_operator(upsilon, num_interventions)
     blocks = _block_axis_indices(num_interventions)
-    labels = _block_axis_labels(num_interventions)
     left_axes = [i for b in blocks[:cut] for i in b]
     right_axes = [i for b in blocks[cut:] for i in b]
     perm = left_axes + right_axes
@@ -390,10 +327,6 @@ def compute_temporal_entropy(
         "schmidt_rank": schmidt_rank,
         "singular_values": singular_values,
         "weights": weights,
-        "left_axes": left_axes,
-        "right_axes": right_axes,
-        "blocks": blocks,
-        "block_labels": labels,
     }
 
 
@@ -460,7 +393,7 @@ class DenseProcessTensor:
         *,
         rtol: float = 1e-12,
         weight_tol: float = 1e-30,
-    ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+    ) -> dict[str, NDArray[np.float64] | float | int]:
         """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
 
         Args:
@@ -733,7 +666,7 @@ class MPOProcessTensor(MPO):
         *,
         rtol: float = 1e-12,
         weight_tol: float = 1e-30,
-    ) -> dict[str, NDArray[np.complex128] | float | int | list[int] | list[list[int]] | list[list[str]]]:
+    ) -> dict[str, NDArray[np.float64] | float | int]:
         """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
 
         Delegates to the dense representation via :meth:`to_dense`.

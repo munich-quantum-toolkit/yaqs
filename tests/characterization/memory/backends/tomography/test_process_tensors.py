@@ -26,9 +26,7 @@ from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import
     convert_probe_callable,
     encode_cptp_choi,
     evaluate_probes,
-    refold_unfused_to_upsilon,
     trace_partial_dense,
-    upsilon_to_unfused_operator,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
@@ -349,20 +347,6 @@ def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
     assert mpo_pt._num_interventions_for_probe() == 2
 
 
-def test_block_axis_indices_match_unfuse_layout() -> None:
-    """Causal-block axis indices align with upsilon_to_unfused_operator layout."""
-    k = 3
-    ups = np.eye(2 * 4**k, dtype=np.complex128)
-    op = upsilon_to_unfused_operator(ups, k)
-    blocks = cast("list[list[int]]", compute_temporal_entropy(ups, k, 1)["blocks"])
-    assert len(blocks) == k + 1
-    assert blocks[0] == [3, 5]
-    assert blocks[1] == [2, 7, 4, 9]
-    assert blocks[2] == [6, 11, 8, 13]
-    assert blocks[3] == [10, 0, 12, 1]
-    assert op.ndim == 2 + 4 * k
-
-
 def test_compute_temporal_entropy_markov_j0() -> None:
     """Uncoupled Ising process has vanishing temporal entanglement at every cut."""
     ham = Hamiltonian.ising(length=6, J=0.0, g=1.0)
@@ -407,13 +391,3 @@ def test_compute_temporal_entropy_scale_invariant() -> None:
     base = float(cast("float", compute_temporal_entropy(ups, k, 1)["entropy"]))
     scaled = float(cast("float", compute_temporal_entropy(2.5 * ups, k, 1)["entropy"]))
     assert base == pytest.approx(scaled, abs=1e-12)
-
-
-def test_refold_unfused_to_upsilon_roundtrip() -> None:
-    """Unfuse and refold recover the original upsilon matrix."""
-    k = 2
-    rng = np.random.default_rng(0)
-    ups = rng.standard_normal((2 * 4**k, 2 * 4**k)) + 1j * rng.standard_normal((2 * 4**k, 2 * 4**k))
-    op = upsilon_to_unfused_operator(ups, k)
-    back = refold_unfused_to_upsilon(op, k)
-    np.testing.assert_allclose(back, ups, atol=1e-12)
