@@ -17,7 +17,9 @@ mystnb:
 Open quantum systems in YAQS couple a **probe qubit** (site 0) to an **environment** simulated by the remaining chain.
 **Environmental memory** measures how long the environment keeps past control and measurement choices relevant for future probe responses, evaluated at a temporal cut $c$ in a sequence of interventions.
 
-Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to probe the process: assemble the weighted **response matrix** $\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
+Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to probe **operational memory**: assemble the weighted **response matrix** $\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
+
+Alternatively, build a process tensor (default: direct MPO) and call `compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the multi-time process itself — a distinct quantity from $S_V(c)$.
 For fast dynamics under control sequences, see {doc}`memory_surrogate`.
 
 ## Setup
@@ -208,6 +210,50 @@ fig.tight_layout()
 
 `MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` selects MCWF, `"mps"` selects TJM for the **environment** chain.
 With `"auto"`, MCWF is used when `hamiltonian.length <= vector_max_qubits` (default 10).
+
+## Temporal entanglement from a process tensor
+
+Operational memory ($S_V$) comes from probe responses.
+**Temporal entanglement** $S_{PT}(c)$ is computed directly from a process tensor at the same causal cut.
+By default, `build_process_tensor` uses direct MPO construction (`return_type="mpo"`).
+Pass `return_type="dense"` for exhaustive tomography (required for `noise_model`):
+
+```{code-cell} ipython3
+k = 3
+cut_pt = 2
+timesteps = [0.1] * (k + 1)
+
+pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
+pt_dense = mc.build_process_tensor(
+    ham,
+    params,
+    timesteps=timesteps,
+    return_type="dense",
+)
+
+s_mpo = pt_mpo.compute_temporal_entropy(cut_pt)
+s_dense = pt_dense.compute_temporal_entropy(cut_pt)
+print(
+    f"S_PT(c={cut_pt}): mpo={s_mpo['entropy']:.4f}, "
+    f"dense={s_dense['entropy']:.4f}, schmidt_rank={s_mpo['schmidt_rank']}"
+)
+
+# Same process tensor also supports operational memory via characterize:
+pt_result = mc.characterize(
+    pt_mpo,
+    cut=cut_pt,
+    num_interventions=k,
+    n_pasts=6,
+    n_futures=6,
+    rng=np.random.default_rng(7),
+)
+print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
+```
+
+Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for small $k$.
+Use `return_type="dense"` when you need noise. The default `max_bond_dim=64` keeps direct
+construction scalable; pass `max_bond_dim=None` for an exact noiseless MPO.
+`characterize(pt, ...)` still builds $S_V$ from probe responses (native MPO `evaluate_probes`, without densifying for the V-matrix path).
 
 ## Related topics
 

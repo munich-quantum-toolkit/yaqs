@@ -9,6 +9,10 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Added
+
+- added direct MPO Process Tensor construction and temporal entanglement ([#508]) ([**@aaronleesander**])
+
 ### Fixed
 
 - fixed TJM jump selection to align processes with site-sweep probabilities ([#506]) ([**@Pouri96**])
@@ -154,6 +158,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
 [#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
