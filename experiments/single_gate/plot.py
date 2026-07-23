@@ -350,7 +350,8 @@ def plot_figure(
     ]
     ax.legend(
         handles=chi_handles,
-        loc="upper left",
+        loc="lower left",
+        bbox_to_anchor=(0.02, 0.22),
         frameon=False,
         fontsize=6.0,
         handlelength=1.5,
