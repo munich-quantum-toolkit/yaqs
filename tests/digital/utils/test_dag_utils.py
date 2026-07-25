@@ -357,7 +357,7 @@ class _CustomNamedUnitary(Gate):
     def __init__(self) -> None:
         super().__init__("custom", 1, [])
 
-    def to_matrix(self) -> np.ndarray:  # noqa: PLR6301
+    def to_matrix(self) -> np.ndarray:
         return np.array([[0, 1], [1, 0]], dtype=np.complex128)
 
 
