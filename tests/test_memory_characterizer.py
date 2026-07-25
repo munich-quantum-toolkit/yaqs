@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import math
 from typing import Any, cast
 
@@ -19,6 +20,10 @@ from torch_support import requires_torch
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
+
+with contextlib.suppress(ImportError):
+    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate
 
 _PAPER_L = 6
 _PAPER_K = 20
@@ -163,13 +168,7 @@ def test_train_default_style_is_haar(
 
     def _fake_train(*_args: object, **kwargs: object) -> object:
         captured["intervention_style"] = str(kwargs["intervention_style"])
-        from mqt.yaqs.characterization.memory.backends.surrogates.model import (
-            ProcessTensorSurrogate,
-        )
-
         return ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
-
-    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # ruff:ignore[import-outside-top-level]
 
     monkeypatch.setattr(wf, "train_surrogate_model", _fake_train)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
@@ -254,15 +253,8 @@ def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltoni
 
 
 @requires_torch
-def test_process_tensor_surrogate_characterize_singular_values_shape(
-    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
-) -> None:
+def test_process_tensor_surrogate_characterize_singular_values_shape() -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
-        ProcessTensorSurrogate,
-    )
-
-    _ham, _params = ham_and_params
     model = ProcessTensorSurrogate(
         d_e=32,
         d_rho=8,

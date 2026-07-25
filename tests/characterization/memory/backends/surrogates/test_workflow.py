@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import numpy as np
 import pytest
 from torch_support import import_torch
@@ -26,6 +28,13 @@ from mqt.yaqs.characterization.memory.shared.metrics import (
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+with contextlib.suppress(ImportError):
+    from torch.utils.data import TensorDataset
+
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
 
 def test_extract_ket_fallback_for_zero_projector() -> None:
@@ -98,12 +107,6 @@ def test_build_training_dataset_timesteps_length_mismatch_raises() -> None:
 def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     """Trained surrogate achieves modest error on held-out rollout samples."""
     torch = import_torch()
-
-    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
-
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
-        ProcessTensorSurrogate,
-    )
 
     torch.manual_seed(0)
 
