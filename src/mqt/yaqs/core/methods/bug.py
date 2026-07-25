@@ -84,7 +84,7 @@ def choose_stack_tensor(
         NDArray[np.complex128]: The tensor to be stacked.
 
     """
-    if site == state.length - 1:  # noqa: SIM108
+    if site == state.length - 1:  # ruff:ignore[if-else-block-instead-of-if-exp]
         # This is the only leaf case.
         old_stack_tensor = state.tensors[site]
     else:

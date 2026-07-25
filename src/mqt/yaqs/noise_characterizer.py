@@ -7,7 +7,7 @@
 
 """User-facing entry point for Markovian noise-parameter characterization."""
 
-# ruff: noqa: ANN401 -- optimizer kwargs forwarded to CMA-ES
+# ruff:file-ignore[any-type] -- optimizer kwargs forwarded to CMA-ES
 
 from __future__ import annotations
 

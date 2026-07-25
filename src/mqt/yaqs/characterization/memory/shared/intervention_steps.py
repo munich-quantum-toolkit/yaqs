@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- shared intervention steps reuse private backend helpers
+# ruff:file-ignore[import-private-name] -- shared intervention steps reuse private backend helpers
 
 """Shared parsing and application of intervention probe steps."""
 

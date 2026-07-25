@@ -7,7 +7,7 @@
 
 """Analytical optimization orchestration for Markovian noise characterization."""
 
-# ruff: noqa: ANN401 -- optimizer kwargs forwarded to CMA-ES
+# ruff:file-ignore[any-type] -- optimizer kwargs forwarded to CMA-ES
 
 from __future__ import annotations
 

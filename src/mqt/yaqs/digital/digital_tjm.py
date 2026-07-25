@@ -156,7 +156,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             single_qubit_nodes.append(node)
         elif len(node.qargs) == 2:
             # Group two-qubit gates by even/odd based on the lower qubit index.
-            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # noqa: SLF001
+            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # ruff:ignore[private-member-access]
             if min(q0, q1) % 2 == 0:
                 even_nodes.append(node)
             else:
@@ -165,9 +165,9 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             raise NotImplementedError
 
     # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
-    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # noqa: SLF001
-    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
-    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # ruff:ignore[private-member-access]
+    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
+    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
@@ -558,7 +558,7 @@ def _per_call_shots(sim_params: WeakSimParams) -> int:
         Number of shots for the current worker invocation.
     """
     try:
-        from mqt.yaqs.simulator import WORKER_CTX  # noqa: PLC0415
+        from mqt.yaqs.simulator import WORKER_CTX  # ruff:ignore[import-outside-top-level]
 
         return int(WORKER_CTX["per_call_shots"])
     except KeyError:

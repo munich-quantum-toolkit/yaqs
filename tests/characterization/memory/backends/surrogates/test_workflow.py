@@ -99,9 +99,11 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     """Trained surrogate achieves modest error on held-out rollout samples."""
     torch = import_torch()
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     torch.manual_seed(0)
 
@@ -164,7 +166,7 @@ def test_build_training_dataset_requires_torch_before_simulation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """build_training_dataset fails fast when torch is unavailable."""
-    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
+    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # ruff:ignore[import-outside-top-level]
 
     def _raise_import() -> None:
         msg = "no torch"

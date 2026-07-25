@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box validation of process-tensor schedule worker internals
+# ruff:file-ignore[import-private-name] -- white-box validation of process-tensor schedule worker internals
 
 """Tests for process-tensor schedule worker validation and diagnostic simulation."""
 

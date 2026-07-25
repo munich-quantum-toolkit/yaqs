@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: N806, PLC2701, SLF001 -- surrogate tests use E tensors and private helpers
+# ruff:file-ignore[non-lowercase-variable-in-function, import-private-name, private-member-access] -- surrogate tests use E tensors and private helpers
 
 """Tests for the ProcessTensorSurrogate surrogate model."""
 
@@ -37,7 +37,9 @@ def _tiny_model(*, layernorm_in: bool = False, num_interventions: int | None = N
     """
     import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     return ProcessTensorSurrogate(
         d_e=32,
@@ -75,7 +77,9 @@ def test_process_tensor_surrogate_forward_shape_cpu() -> None:
     """Forward pass returns one rho8 vector per sequence step."""
     torch = import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = torch.zeros((2, 3, 32), dtype=torch.float32)
@@ -88,7 +92,9 @@ def test_process_tensor_surrogate_predict_numpy_roundtrip() -> None:
     """Predict with return_numpy=True yields a float32 ndarray."""
     import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = np.zeros((1, 2, 32), dtype=np.float32)
@@ -102,9 +108,11 @@ def test_process_tensor_surrogate_predict_tensor_return_and_restores_mode() -> N
     """Predict can return torch tensors and preserves train/eval mode."""
     torch = import_torch()
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     model.train()
@@ -139,9 +147,11 @@ def test_process_tensor_surrogate_fit_invalid_prefix_loss_raises() -> None:
     """Fit rejects unknown prefix_loss modes."""
     torch = import_torch()
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E_t = torch.zeros((2, 2, 32), dtype=torch.float32)
@@ -156,7 +166,9 @@ def test_process_tensor_surrogate_predict_final_state_batch_matches_forward_last
     """predict_final_state_batch agrees with the last forward-pass output."""
     torch = import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = torch.randn((5, 4, 32), dtype=torch.float32)
@@ -170,9 +182,11 @@ def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
     """Fit infers num_interventions from training data."""
     torch = import_torch()
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     k = 4
     model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
@@ -187,8 +201,10 @@ def test_process_tensor_surrogate_default_rho0_is_ground_state_rho8() -> None:
     """Default initial state matches the normalized |0> density matrix."""
     torch = import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
-    from mqt.yaqs.characterization.memory.shared.encoding import (  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
+    from mqt.yaqs.characterization.memory.shared.encoding import (  # ruff:ignore[import-outside-top-level]
         normalize_backend_rho,
         pack_rho8,
     )
@@ -218,7 +234,9 @@ def test_process_tensor_surrogate_init_rejects_incompatible_head_width() -> None
     """d_model must be divisible by nhead."""
     import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     with pytest.raises(ValueError, match="d_model=33 must be divisible by nhead=4"):
         ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=33, nhead=4)
@@ -227,7 +245,9 @@ def test_process_tensor_surrogate_init_rejects_incompatible_head_width() -> None
 def test_process_tensor_surrogate_rejects_non_positive_nhead() -> None:
     """nhead=0 raises ValueError instead of ZeroDivisionError."""
     import_torch()
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     with pytest.raises(ValueError, match="nhead must be positive"):
         ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=0)
@@ -299,7 +319,7 @@ def test_sinusoidal_positional_encoding_rejects_nonpositive_width() -> None:
     """Positional encoding requires a positive model width."""
     torch = import_torch()
 
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import (  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (  # ruff:ignore[import-outside-top-level]
         _sinusoidal_positional_encoding,
     )
 
@@ -311,7 +331,7 @@ def test_process_tensor_surrogate_fit_prefix_loss_modes() -> None:
     """Fit supports full and all prefix-loss horizons."""
     torch = import_torch()
 
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
     model = _tiny_model()
     e_t = torch.zeros((3, 3, 32), dtype=torch.float32)

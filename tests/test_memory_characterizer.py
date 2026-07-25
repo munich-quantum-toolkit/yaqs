@@ -163,11 +163,13 @@ def test_train_default_style_is_haar(
 
     def _fake_train(*_args: object, **kwargs: object) -> object:
         captured["intervention_style"] = str(kwargs["intervention_style"])
-        from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+        from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+            ProcessTensorSurrogate,
+        )
 
         return ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=16, nhead=2, num_layers=1, dim_ff=32)
 
-    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # noqa: PLC0415
+    import mqt.yaqs.characterization.memory.backends.surrogates.workflow as wf  # ruff:ignore[import-outside-top-level]
 
     monkeypatch.setattr(wf, "train_surrogate_model", _fake_train)
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
@@ -256,7 +258,9 @@ def test_process_tensor_surrogate_characterize_singular_values_shape(
     ham_and_params: tuple[Hamiltonian, AnalogSimParams],
 ) -> None:
     """Characterize returns the full SVD spectrum for a surrogate."""
-    from mqt.yaqs.characterization.memory.backends.surrogates.model import ProcessTensorSurrogate  # noqa: PLC0415
+    from mqt.yaqs.characterization.memory.backends.surrogates.model import (
+        ProcessTensorSurrogate,
+    )
 
     _ham, _params = ham_and_params
     model = ProcessTensorSurrogate(

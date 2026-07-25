@@ -155,7 +155,7 @@ class Hamiltonian:
     def ising(
         cls,
         length: int,
-        J: float,  # noqa: N803
+        J: float,  # ruff:ignore[invalid-argument-name]
         g: float,
         *,
         bc: str = "open",
@@ -186,9 +186,9 @@ class Hamiltonian:
     def heisenberg(
         cls,
         length: int,
-        Jx: float,  # noqa: N803
-        Jy: float,  # noqa: N803
-        Jz: float,  # noqa: N803
+        Jx: float,  # ruff:ignore[invalid-argument-name]
+        Jy: float,  # ruff:ignore[invalid-argument-name]
+        Jz: float,  # ruff:ignore[invalid-argument-name]
         h: float = 0.0,
         *,
         bc: str = "open",

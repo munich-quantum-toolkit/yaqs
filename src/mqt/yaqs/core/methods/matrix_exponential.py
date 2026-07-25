@@ -78,7 +78,7 @@ def expm_krylov(
     use_numba = False
     if vec.size >= NUMBA_THRESHOLD:
         try:
-            from .lanczos_numba import normalize_and_store, orthogonalize_step  # noqa: PLC0415
+            from .lanczos_numba import normalize_and_store, orthogonalize_step  # ruff:ignore[import-outside-top-level]
 
             use_numba = True
         except (ImportError, OSError):

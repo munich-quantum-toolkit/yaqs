@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from tqdm import tqdm
 
-from mqt.yaqs.core.linalg._threading import threadpool_limits_one  # noqa: PLC2701
+from mqt.yaqs.core.linalg._threading import threadpool_limits_one  # ruff:ignore[import-private-name]
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator

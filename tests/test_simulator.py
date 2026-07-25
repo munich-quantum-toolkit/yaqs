@@ -14,7 +14,7 @@ qubit counts.
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806, PLC2701
+# ruff:file-ignore[non-lowercase-variable-in-function, import-private-name]
 
 from __future__ import annotations
 
@@ -1353,7 +1353,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
     )
     sim = Simulator(show_progress=False)
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        sim.run(state, cast(Any, mpo), params, None)  # noqa: TC006  # cast is required to exercise the runtime TypeError guard for non-Hamiltonian operators
+        sim.run(state, cast(Any, mpo), params, None)  # ruff:ignore[runtime-cast-value]  # cast is required to exercise the runtime TypeError guard for non-Hamiltonian operators
 
 
 def test_analog_run_rejects_non_state_initial_state() -> None:
@@ -1366,7 +1366,7 @@ def test_analog_run_rejects_non_state_initial_state() -> None:
     )
     sim = Simulator(show_progress=False)
     with pytest.raises(TypeError, match="Analog simulation requires initial_state to be a list or State"):
-        sim.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # noqa: TC006  # cast is required to exercise the runtime TypeError guard for non-State initial states
+        sim.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # ruff:ignore[runtime-cast-value]  # cast is required to exercise the runtime TypeError guard for non-State initial states
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
