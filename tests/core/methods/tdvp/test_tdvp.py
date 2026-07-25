@@ -8,7 +8,7 @@
 """Tests for the public TDVP entry point and sweep orchestration."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806, PLC2701
+# ruff:file-ignore[non-lowercase-variable-in-function, import-private-name]
 
 from __future__ import annotations
 

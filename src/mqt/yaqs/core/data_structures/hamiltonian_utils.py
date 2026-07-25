@@ -50,8 +50,8 @@ def attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
     wrapped.physical_dimension = mpo.physical_dimension
     wrapped.representation = "mpo"
     # Private fields: wrapped is a fresh Hamiltonian from __new__; attach_mpo is the sole initializer.
-    wrapped._tensors = None  # noqa: SLF001
-    wrapped._matrix = None  # noqa: SLF001
-    wrapped._sparse_matrix = None  # noqa: SLF001
-    wrapped._mpo = mpo  # noqa: SLF001
-    wrapped._encoded_as = "mpo"  # noqa: SLF001
+    wrapped._tensors = None  # ruff:ignore[private-member-access]
+    wrapped._matrix = None  # ruff:ignore[private-member-access]
+    wrapped._sparse_matrix = None  # ruff:ignore[private-member-access]
+    wrapped._mpo = mpo  # ruff:ignore[private-member-access]
+    wrapped._encoded_as = "mpo"  # ruff:ignore[private-member-access]

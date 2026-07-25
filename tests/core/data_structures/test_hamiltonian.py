@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001 -- white-box tests exercise private Hamiltonian encoders
+# ruff:file-ignore[private-member-access] -- white-box tests exercise private Hamiltonian encoders
 
 """Tests for :class:`mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`."""
 

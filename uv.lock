@@ -1816,6 +1816,7 @@ dev = [
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "qiskit-qasm3-import" },
+    { name = "torch" },
 ]
 docs = [
     { name = "furo" },
@@ -1839,6 +1840,7 @@ test = [
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "qiskit-qasm3-import" },
+    { name = "torch" },
 ]
 
 [package.metadata]
@@ -1874,6 +1876,10 @@ dev = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "qiskit-qasm3-import", specifier = ">=0.4.1" },
+    { name = "torch", marker = "python_full_version < '3.12'", specifier = ">=2.2" },
+    { name = "torch", marker = "python_full_version == '3.12.*'", specifier = ">=2.2" },
+    { name = "torch", marker = "python_full_version == '3.13.*'", specifier = ">=2.4" },
+    { name = "torch", marker = "python_full_version >= '3.14'", specifier = ">=2.9" },
 ]
 docs = [
     { name = "furo", specifier = ">=2025.9.25" },
@@ -1898,6 +1904,10 @@ test = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "qiskit-qasm3-import", specifier = ">=0.4.1" },
+    { name = "torch", marker = "python_full_version < '3.12'", specifier = ">=2.2" },
+    { name = "torch", marker = "python_full_version == '3.12.*'", specifier = ">=2.2" },
+    { name = "torch", marker = "python_full_version == '3.13.*'", specifier = ">=2.4" },
+    { name = "torch", marker = "python_full_version >= '3.14'", specifier = ">=2.9" },
 ]
 
 [[package]]

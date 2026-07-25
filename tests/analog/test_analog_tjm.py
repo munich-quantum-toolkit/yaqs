@@ -28,7 +28,7 @@ specified Hamiltonian and noise model, and that observable measurements are prop
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff:file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 

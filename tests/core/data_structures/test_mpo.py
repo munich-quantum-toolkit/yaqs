@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001, N806 -- white-box tests exercise private MPO compression helpers
+# ruff:file-ignore[private-member-access, non-lowercase-variable-in-function] -- white-box tests exercise private MPO compression helpers
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
@@ -816,7 +816,7 @@ def test_compute_schmidt_spectrum_trivial_cut_returns_frobenius_norm() -> None:
     [(True, TypeError), ("left", TypeError), (-1, ValueError), (5, ValueError)],
 )
 def test_compute_schmidt_spectrum_rejects_invalid_cut(
-    invalid_cut: int | str | bool,  # noqa: FBT001
+    invalid_cut: int | str | bool,  # ruff:ignore[boolean-type-hint-positional-argument]
     exc_type: type[Exception],
 ) -> None:
     """Invalid cut specifiers raise TypeError or ValueError."""
