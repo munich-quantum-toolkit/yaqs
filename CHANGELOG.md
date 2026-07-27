@@ -15,6 +15,11 @@ releases may include breaking changes.
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
 
+### Removed
+
+- removed support for generating LaTeX documentation ([#514])
+  ([**@denialhaag**])
+
 ### Fixed
 
 - fixed TJM jump selection to align processes with site-sweep probabilities
@@ -215,6 +220,7 @@ changelogs._
 
 <!-- PR links -->
 
+[#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
 [#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
