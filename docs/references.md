@@ -1,19 +1,15 @@
-```{raw} latex
-\begingroup
-\renewcommand\section[1]{\endgroup}
-\phantomsection
-```
-
-````{only} html
 # References
 
-*MQT YAQS* implements algorithms from peer-reviewed research.
-**When you use YAQS in academic work, please cite the publications that correspond to the features you use:**
+*MQT YAQS* implements algorithms from peer-reviewed research. **When you use MQT
+YAQS in academic work, please cite the publications that correspond to the
+features you use:**
 
-- {footcite:p}`sander2025_TJM` for open **analog** system simulation (tensor jump method),
+- {footcite:p}`sander2025_TJM` for open **analog** system simulation (tensor
+  jump method),
 - {footcite:p}`sander2025_CircuitTDVP` for **digital circuit** simulation,
 - {footcite:p}`sander2025_EquivalenceChecking` for **equivalence checking**, and
-- {footcite:p}`sander2026_computationalregimes` for **trajectory unravellings** and their computational trade-offs.
+- {footcite:p}`sander2026_computationalregimes` for **trajectory unravellings**
+  and their computational trade-offs.
 
 Representative BibTeX entries:
 
@@ -57,10 +53,10 @@ Representative BibTeX entries:
 }
 ```
 
-YAQS is developed as part of the [Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io).
-If you refer to the broader MQT software ecosystem (not a specific YAQS method above), you may additionally cite {footcite:p}`mqt`.
+*MQT YAQS* is part of the Munich Quantum Toolkit, which is described in
+{cite:p}`mqt`.
 
-A full bibliography is given below.
+A full list of references is given below.
 
 ```{footbibliography}
 :filter: False
@@ -71,4 +67,3 @@ sander2025_EquivalenceChecking
 sander2026_computationalregimes
 mqt
 ```
-````

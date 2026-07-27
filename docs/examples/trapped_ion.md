@@ -15,14 +15,15 @@ mystnb:
 # Trapped-Ion Position-Grid Emulation
 
 This example evolves a **single ion** on a finite position grid with
-{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion`. Each ion is one MPO site;
-the local Hilbert space is the grid itself. The Hamiltonian combines a
-finite-difference kinetic term and a harmonic trap—see {doc}`hamiltonians` for the
-factory API and two-ion Coulomb extensions.
+{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion`. Each ion is one MPO
+site; the local Hilbert space is the grid itself. The Hamiltonian combines a
+finite-difference kinetic term and a harmonic trap—see {doc}`hamiltonians` for
+the factory API and two-ion Coulomb extensions.
 
-We initialize a displaced harmonic-oscillator wavepacket in a static central well.
-In the continuum limit, its center follows $\langle x(t)\rangle = x_0 \cos(\omega t)$,
-so after half a trap period it reaches the opposite turning point.
+We initialize a displaced harmonic-oscillator wavepacket in a static central
+well. In the continuum limit, its center follows
+$\langle x(t)\rangle = x_0 \cos(\omega t)$, so after half a trap period it
+reaches the opposite turning point.
 
 ## 1. Hamiltonian and initial state
 
@@ -67,8 +68,8 @@ final_state = result.output_state.vector
 final_x = float(np.sum(positions * np.abs(final_state) ** 2))
 ```
 
-The final $\langle x\rangle$ is close to $-x_0$ but not exact because the simulation uses a
-finite grid and a finite-difference kinetic operator.
+The final $\langle x\rangle$ is close to $-x_0$ but not exact because the
+simulation uses a finite grid and a finite-difference kinetic operator.
 
 ```{code-cell} ipython3
 print(f"Initial <x>       = {initial_displacement:.6f}")
@@ -110,7 +111,8 @@ plt.show()
 
 ## Related topics
 
-- {doc}`hamiltonians` — `MPO.trapped_ion` parameters and two-ion Coulomb channels
+- {doc}`hamiltonians` — `MPO.trapped_ion` parameters and two-ion Coulomb
+  channels
 - {doc}`transmon_emulation` — another mixed-dimensional hardware model
 - {doc}`analog_simulation` — analog time evolution and noise models
 - {doc}`state_initialization` — custom `physical_dimensions` and manual vectors

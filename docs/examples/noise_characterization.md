@@ -14,7 +14,11 @@ mystnb:
 
 # Analytical Optimization Digital Twin from Experimental Trajectories
 
-Build a **digital twin** of an open quantum system using **analytical optimization**: learn unknown Lindblad jump rates from observable time series via simulator forward modeling and CMA-ES, validate the fit on the measured traces, then deploy the learned model in {class}`~mqt.yaqs.Simulator` to predict **held-out** observables.
+Build a **digital twin** of an open quantum system using
+**analytical optimization**: learn unknown Lindblad jump rates from observable
+time series via simulator forward modeling and CMA-ES, validate the fit on the
+measured traces, then deploy the learned model in {class}`~mqt.yaqs.Simulator`
+to predict **held-out** observables.
 
 The entry point is {class}`~mqt.yaqs.NoiseCharacterizer`.
 
@@ -24,17 +28,21 @@ A machine-learning pipeline with the same I/O (reference trajectories in, fitted
 ```
 
 ```{note}
-Rates are not always uniquely identifiable from a sparse observable set.
-Judge a fit by **trajectory overlap** first; rate bars are secondary validation.
+Rates are not always uniquely identifiable from a sparse observable set. Judge a
+fit by **trajectory overlap** first; rate bars are secondary validation.
 ```
 
 ```{note}
-**Forward backends:** `representation="auto"` (default) prefers deterministic Lindblad on small chains, then MCWF (`"vector"`), then TJM (`"mps"`). See {doc}`representation_comparison` for cross-backend validation.
+**Forward backends:** `representation="auto"` (default) prefers deterministic
+Lindblad on small chains, then MCWF (`"vector"`), then TJM (`"mps"`). See
+{doc}`representation_comparison` for cross-backend validation.
 ```
 
 ## 1. Minimal fit
 
-Three-site transverse-field Ising chain with homogeneous Pauli noise. Pass `reference_model=` to simulate target trajectories internally (benchmark shortcut); for lab data use `ref_expectations=` instead (section 3).
+Three-site transverse-field Ising chain with homogeneous Pauli noise. Pass
+`reference_model=` to simulate target trajectories internally (benchmark
+shortcut); for lab data use `ref_expectations=` instead (section 3).
 
 ```{code-cell} ipython3
 import warnings
@@ -154,7 +162,10 @@ fig.tight_layout()
 
 ## 3. Experimental data
 
-When trajectories come from the lab (or an external simulator), pass them as `ref_expectations` with shape `(n_obs, n_times)` matching `observables` and `sim_params.times`. Below we reuse the reference trajectories from section 1 as a stand-in for measured data.
+When trajectories come from the lab (or an external simulator), pass them as
+`ref_expectations` with shape `(n_obs, n_times)` matching `observables` and
+`sim_params.times`. Below we reuse the reference trajectories from section 1 as
+a stand-in for measured data.
 
 ```{code-cell} ipython3
 experimental_data = np.asarray(result.ref_traj, dtype=float)
@@ -178,7 +189,8 @@ print(f"lab-data fit RMSE: {lab_result.trajectory_rmse():.2e}")
 
 ## 4. Predict held-out observables with the twin
 
-Plug `result.optimal_model` into {class}`~mqt.yaqs.Simulator` and compare to the hidden reference on observables **not** used during fitting.
+Plug `result.optimal_model` into {class}`~mqt.yaqs.Simulator` and compare to the
+hidden reference on observables **not** used during fitting.
 
 ```{code-cell} ipython3
 pred_params = AnalogSimParams(
@@ -211,7 +223,8 @@ fig.tight_layout()
 
 ## 5. Stochastic experimental data (MCWF)
 
-The same workflow works with trajectory-averaged MCWF data. Increase `num_traj` until observables stabilize; the objective becomes stochastic.
+The same workflow works with trajectory-averaged MCWF data. Increase `num_traj`
+until observables stabilize; the objective becomes stochastic.
 
 ```{code-cell} ipython3
 mcwf_sim_params = AnalogSimParams(
@@ -261,6 +274,8 @@ fig.tight_layout()
 
 ## See also
 
-- {doc}`representation_comparison` — Lindblad vs MCWF vs TJM on the same benchmark
+- {doc}`representation_comparison` — Lindblad vs MCWF vs TJM on the same
+  benchmark
 - {doc}`analog_simulation` — open-system simulation overview
-- {doc}`characterization` — non-Markovian **memory** characterization (the memory twin submodule)
+- {doc}`characterization` — non-Markovian **memory** characterization (the
+  memory twin submodule)

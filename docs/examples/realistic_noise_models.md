@@ -14,20 +14,32 @@ mystnb:
 
 # Realistic Noise Models
 
-YAQS ships a library of physically motivated jump operators—relaxation (`lowering`), excitation (`raising`), single-qubit Pauli channels, and nearest-neighbor crosstalk (`crosstalk_xx`, `crosstalk_zz`, …)—that you assemble into a {class}`~mqt.yaqs.core.data_structures.noise_model.NoiseModel`.
+YAQS ships a library of physically motivated jump operators—relaxation
+(`lowering`), excitation (`raising`), single-qubit Pauli channels, and
+nearest-neighbor crosstalk (`crosstalk_xx`, `crosstalk_zz`, …)—that you assemble
+into a {class}`~mqt.yaqs.core.data_structures.noise_model.NoiseModel`.
 
-For hardware with **static disorder** (calibration drift, fabrication spread), each process strength can be a **distribution** instead of a fixed float. YAQS samples one concrete strength per process when {meth}`~mqt.yaqs.Simulator.run` starts; all trajectories in that run share the same sampled disorder. The realized model is stored on {attr}`~mqt.yaqs.Result.noise_model`.
+For hardware with **static disorder** (calibration drift, fabrication spread),
+each process strength can be a **distribution** instead of a fixed float. YAQS
+samples one concrete strength per process when {meth}`~mqt.yaqs.Simulator.run`
+starts; all trajectories in that run share the same sampled disorder. The
+realized model is stored on {attr}`~mqt.yaqs.Result.noise_model`.
 
 This page shows:
 
 1. A typical multi-channel noise model for an analog chain.
-2. **Log-normal disorder on strengths** (recommended when rates span orders of magnitude) and other built-in distributions.
-3. How sampled disorder changes open-system dynamics compared to a median-strength baseline.
-4. **Custom jump operators** via an explicit `matrix` (not only built-in library names).
+2. **Log-normal disorder on strengths** (recommended when rates span orders of
+   magnitude) and other built-in distributions.
+3. How sampled disorder changes open-system dynamics compared to a
+   median-strength baseline.
+4. **Custom jump operators** via an explicit `matrix` (not only built-in library
+   names).
 
 ## 1. Built-in noise processes
 
-Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in the operator `matrix` (or per-site `factors` for long-range crosstalk) from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
+Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in
+the operator `matrix` (or per-site `factors` for long-range crosstalk) from
+{class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
@@ -46,9 +58,12 @@ noise_model = NoiseModel(processes)
 
 ## 2. Log-normal disorder on strengths
 
-When calibration rates vary across devices or qubits, strengths often span **several orders of magnitude**. A **log-normal** distribution is usually more realistic than a symmetric Gaussian on the rate itself.
+When calibration rates vary across devices or qubits, strengths often span
+**several orders of magnitude**. A **log-normal** distribution is usually more
+realistic than a symmetric Gaussian on the rate itself.
 
-Replace a scalar `strength` with a dict. For log-normal sampling, `mean` and `std` are the parameters of the underlying normal distribution on $\log\gamma$:
+Replace a scalar `strength` with a dict. For log-normal sampling, `mean` and
+`std` are the parameters of the underlying normal distribution on $\log\gamma$:
 
 ```{code-cell} ipython3
 bell_curve_strength = {"distribution": "lognormal", "mean": -2.3, "std": 0.5}
@@ -73,7 +88,8 @@ Other supported distributions:
 | `"normal"`           | `mean`, `std` | Symmetric spread around a target rate; negatives are clamped to `0`.                      |
 | `"truncated_normal"` | `mean`, `std` | Same shape as normal but sampled only for non-negative strengths.                         |
 
-Sample many independent disorder realizations and plot the bell curve on a log scale:
+Sample many independent disorder realizations and plot the bell curve on a log
+scale:
 
 ```{code-cell} ipython3
 import matplotlib.pyplot as plt
@@ -117,9 +133,12 @@ plt.show()
 
 We evolve a short Ising chain from a Néel product state and compare:
 
-- **Baseline:** every site uses the log-normal **median** $\exp(\text{mean})$ as a fixed strength.
-- **Disordered:** strengths are drawn from the log-normal once at the start of each run.
-- **Ensemble band:** several independent disorder draws (different `random_seed`) to show typical spread.
+- **Baseline:** every site uses the log-normal **median** $\exp(\text{mean})$ as
+  a fixed strength.
+- **Disordered:** strengths are drawn from the log-normal once at the start of
+  each run.
+- **Ensemble band:** several independent disorder draws (different
+  `random_seed`) to show typical spread.
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
@@ -202,11 +221,15 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-Re-running with the same `random_seed` reproduces the same sampled strengths and trajectory-averaged curve. Leave `random_seed=None` for fresh disorder draws in production Monte Carlo studies.
+Re-running with the same `random_seed` reproduces the same sampled strengths and
+trajectory-averaged curve. Leave `random_seed=None` for fresh disorder draws in
+production Monte Carlo studies.
 
 ## 4. Disorder on a noisy circuit
 
-The same distribution syntax works in digital simulation. Below, bit-flip rates on each qubit follow independent log-normal draws; one sample is drawn per `Simulator.run` call.
+The same distribution syntax works in digital simulation. Below, bit-flip rates
+on each qubit follow independent log-normal draws; one sample is drawn per
+`Simulator.run` call.
 
 ```{code-cell} ipython3
 from mqt.yaqs import Observable, StrongSimParams
@@ -236,7 +259,8 @@ circuit_result = sim.run(State(num_qubits, initial="zeros"), circuit, circuit_pa
 
 ## 5. Long-range crosstalk
 
-Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS attaches per-site Pauli factors automatically:
+Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS
+attaches per-site Pauli factors automatically:
 
 ```{code-cell} ipython3
 lr_model = NoiseModel([
@@ -247,7 +271,10 @@ sampled = lr_model.sample(rng=0)
 
 ## 6. Custom jump operators
 
-Every noise process is a dictionary. Besides the built-in {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary` names (`lowering`, `pauli_x`, `crosstalk_xx`, …), you can supply your own operator as a NumPy array:
+Every noise process is a dictionary. Besides the built-in
+{class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary` names (`lowering`,
+`pauli_x`, `crosstalk_xx`, …), you can supply your own operator as a NumPy
+array:
 
 | Key        | Required | Description                                                                                                                        |
 | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -256,11 +283,16 @@ Every noise process is a dictionary. Besides the built-in {class}`~mqt.yaqs.core
 | `strength` | yes      | Rate $\gamma$ in Lindblad form; YAQS uses jump operators $L_k = \sqrt{\gamma}\,L$.                                                 |
 | `matrix`   | no       | Local operator $L$ as a `d×d` array (`d=2` for qubits). If omitted, YAQS looks up `name` in `NoiseLibrary`.                        |
 
-YAQS does not check complete positivity; supply physically meaningful jump operators. The same `matrix` override works for **scheduled jumps** (see {doc}`scheduled_jumps`) and for all backends—TJM (`mps`), MCWF (`vector`), Lindblad (`density_matrix`), and noisy circuits.
+YAQS does not check complete positivity; supply physically meaningful jump
+operators. The same `matrix` override works for **scheduled jumps** (see
+{doc}`scheduled_jumps`) and for all backends—TJM (`mps`), MCWF (`vector`),
+Lindblad (`density_matrix`), and noisy circuits.
 
 ### Amplitude damping with an explicit $\sigma_-$
 
-The built-in `lowering` operator is $\sigma_- = |0\rangle\langle 1|$. You can pass the same matrix explicitly and mix custom and library processes in one model:
+The built-in `lowering` operator is $\sigma_- = |0\rangle\langle 1|$. You can
+pass the same matrix explicitly and mix custom and library processes in one
+model:
 
 ```{code-cell} ipython3
 import numpy as np
@@ -273,7 +305,8 @@ custom_model = NoiseModel([
 ])
 ```
 
-Run a short analog simulation—the custom operator is used wherever `NoiseModel.processes` is consumed:
+Run a short analog simulation—the custom operator is used wherever
+`NoiseModel.processes` is consumed:
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
@@ -294,13 +327,17 @@ sim_params = AnalogSimParams(
 result = Simulator(show_progress=False).run(state, hamiltonian, sim_params, custom_model)
 ```
 
-For $d>2$ local Hilbert spaces (e.g. transmon leakage), pass a `d×d` `matrix` matching the site's physical dimension—see {doc}`transmon_emulation`.
+For $d>2$ local Hilbert spaces (e.g. transmon leakage), pass a `d×d` `matrix`
+matching the site's physical dimension—see {doc}`transmon_emulation`.
 
 ## Related topics
 
 - {doc}`analog_simulation` — TJM workflow with static noise strengths
 - {doc}`strong_simulation` — strong digital simulation
-- {doc}`scheduled_jumps` — deterministic jumps at fixed times (library or custom `matrix`)
-- {doc}`representation_comparison` — MCWF and Lindblad backends with the same `NoiseModel`
-- {doc}`simulation_parameters` — presets and `random_seed` for reproducible trajectories
+- {doc}`scheduled_jumps` — deterministic jumps at fixed times (library or custom
+  `matrix`)
+- {doc}`representation_comparison` — MCWF and Lindblad backends with the same
+  `NoiseModel`
+- {doc}`simulation_parameters` — presets and `random_seed` for reproducible
+  trajectories
 - {doc}`quickstart` — minimal first simulation

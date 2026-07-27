@@ -14,14 +14,22 @@ mystnb:
 
 # Transmon-Resonator Chain Emulation
 
-This example simulates a **qubit–resonator–qubit** chain with {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon` (dipole coupling per {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.coupled_transmon`).
+This example simulates a **qubit–resonator–qubit** chain with
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon`
+(dipole coupling per
+{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.coupled_transmon`).
 
-We prepare $|100\rangle$ (left transmon excited) and evolve for one resonant swap period $T_{\mathrm{swap}} = \pi/(\sqrt{2}\,g)$. The same evolution is run **twice**:
+We prepare $|100\rangle$ (left transmon excited) and evolve for one resonant
+swap period $T_{\mathrm{swap}} = \pi/(\sqrt{2}\,g)$. The same evolution is run
+**twice**:
 
 1. **Noiseless** — unitary analog simulation (TDVP on the MPO).
-2. **Noisy** — open-system simulation with relaxation and dephasing on the qubit sites (TJM trajectories).
+2. **Noisy** — open-system simulation with relaxation and dephasing on the qubit
+   sites (TJM trajectories).
 
-PVM observables track probabilities for bitstrings using only local indices $0$ and $1$ per site. With `qubit_dim = resonator_dim = 3`, population in the $|2\rangle$ level appears as **leakage** (not counted in those bitstrings).
+PVM observables track probabilities for bitstrings using only local indices $0$
+and $1$ per site. With `qubit_dim = resonator_dim = 3`, population in the
+$|2\rangle$ level appears as **leakage** (not counted in those bitstrings).
 
 ## 1. Hamiltonian and initial state
 
@@ -109,7 +117,11 @@ times = sim_params.times
 
 ## 4. Noisy SWAP
 
-Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For log-normal and other distributed noise strengths, see {doc}`realistic_noise_models`.
+Relaxation and dephasing on transmon sites (even indices). Built-in `lowering`
+and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump
+matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a
+computational-subspace dephasing operator). For log-normal and other distributed
+noise strengths, see {doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel

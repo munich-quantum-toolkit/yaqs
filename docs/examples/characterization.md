@@ -14,13 +14,21 @@ mystnb:
 
 # Probing Environmental Memory
 
-Open quantum systems in YAQS couple a **probe qubit** (site 0) to an **environment** simulated by the remaining chain.
-**Environmental memory** measures how long the environment keeps past control and measurement choices relevant for future probe responses, evaluated at a temporal cut $c$ in a sequence of interventions.
+Open quantum systems in YAQS couple a **probe qubit** (site 0) to an
+**environment** simulated by the remaining chain. **Environmental memory**
+measures how long the environment keeps past control and measurement choices
+relevant for future probe responses, evaluated at a temporal cut $c$ in a
+sequence of interventions.
 
-Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to probe **operational memory**: assemble the weighted **response matrix** $\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
+Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
+probe **operational memory**: assemble the weighted **response matrix**
+$\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode
+spectrum.
 
-Alternatively, build a process tensor (default: direct MPO) and call `compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the multi-time process itself — a distinct quantity from $S_V(c)$.
-For fast dynamics under control sequences, see {doc}`memory_surrogate`.
+Alternatively, build a process tensor (default: direct MPO) and call
+`compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the
+multi-time process itself — a distinct quantity from $S_V(c)$. For fast dynamics
+under control sequences, see {doc}`memory_surrogate`.
 
 ## Setup
 
@@ -38,13 +46,15 @@ mc = MemoryCharacterizer(show_progress=False)
 psi0 = make_zero_psi(length)
 ```
 
-Throughout, `num_interventions` is the probe-sequence length $k$ and `cut` is the causal-break index $c$ (the break sits at step $c-1$; future legs use steps $c+1,\ldots,k$).
-Use $k>1$ and an interior cut so both past and future probe legs contribute to $\widetilde{V}(c)$.
+Throughout, `num_interventions` is the probe-sequence length $k$ and `cut` is
+the causal-break index $c$ (the break sits at step $c-1$; future legs use steps
+$c+1,\ldots,k$). Use $k>1$ and an interior cut so both past and future probe
+legs contribute to $\widetilde{V}(c)$.
 
 ## Characterize with the Hamiltonian backend
 
-The full chain (system + environment) is simulated for each probe sequence.
-This is the reference memory metric when you have a microscopic open-system model.
+The full chain (system + environment) is simulated for each probe sequence. This
+is the reference memory metric when you have a microscopic open-system model.
 
 ```{code-cell} ipython3
 cut, num_interventions = 4, 6
@@ -80,7 +90,8 @@ fig.suptitle(
 fig.tight_layout()
 ```
 
-Use `preset="quick"`, `"balanced"`, or `"accurate"` for default probe-grid sizes, or set `n_pasts` / `n_futures` explicitly.
+Use `preset="quick"`, `"balanced"`, or `"accurate"` for default probe-grid
+sizes, or set `n_pasts` / `n_futures` explicitly.
 
 ### Reading `CharacterizationResult`
 
@@ -97,22 +108,31 @@ Use `preset="quick"`, `"balanced"`, or `"accurate"` for default probe-grid sizes
 
 ## Theory: split-cut probing
 
-Environmental memory asks: across a grid of past and future control settings on the probe, how many independent ways does the **environment** still correlate past choices with accessible future responses?
+Environmental memory asks: across a grid of past and future control settings on
+the probe, how many independent ways does the **environment** still correlate
+past choices with accessible future responses?
 
 The split-cut protocol:
 
-1. Sample past control legs $\alpha=(U_1,\ldots,U_{c-1})$ and future legs $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
-2. Insert a **causal break** at step $c$: measure on the past side and prepare on the future side while the environment continues to evolve.
-3. For each grid entry, simulate the open system, record probe weights and the output Pauli vector $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the weighted probe responses into $\widetilde{V}(c)$ and compute $S_V(c)$ from the normalized mode spectrum.
+1. Sample past control legs $\alpha=(U_1,\ldots,U_{c-1})$ and future legs
+   $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
+2. Insert a **causal break** at step $c$: measure on the past side and prepare
+   on the future side while the environment continues to evolve.
+3. For each grid entry, simulate the open system, record probe weights and the
+   output Pauli vector
+   $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
+4. Assemble the weighted probe responses into $\widetilde{V}(c)$ and compute
+   $S_V(c)$ from the normalized mode spectrum.
 
-Hamiltonian `characterize` obtains weights from simulated intervention probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`).
-Surrogate and exact-reference backends use the same probing protocol with analytic weights on the reference probe path.
+Hamiltonian `characterize` obtains weights from simulated intervention
+probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`). Surrogate
+and exact-reference backends use the same probing protocol with analytic weights
+on the reference probe path.
 
 ### Coupling strength and memory
 
-Stronger Ising coupling $J$ between the probe and the environment typically increases cross-cut memory.
-Reuse one `probe_set` when sweeping $J$:
+Stronger Ising coupling $J$ between the probe and the environment typically
+increases cross-cut memory. Reuse one `probe_set` when sweeping $J$:
 
 ```{code-cell} ipython3
 j_values = np.linspace(0.0, 2.0, 9)
@@ -149,22 +169,27 @@ fig.tight_layout()
 
 `characterize` accepts `intervention_style=` (default `"haar"`):
 
-- **`"haar"`** — random unitaries on sequence legs; measure/prepare only at the causal cut.
+- **`"haar"`** — random unitaries on sequence legs; measure/prepare only at the
+  causal cut.
 - **`"measure_prepare"`** — rank-1 measure–prepare maps on every leg.
 - **`"clifford"`** — random single-qubit Clifford gates on legs.
 
-Pass `probe_set=` from a Hamiltonian run so surrogate or exact-reference backends evaluate the **same** probe ensemble ({doc}`memory_surrogate`).
+Pass `probe_set=` from a Hamiltonian run so surrogate or exact-reference
+backends evaluate the **same** probe ensemble ({doc}`memory_surrogate`).
 
 (reset-delay)=
 
 ## Memory persistence: reset delay at the causal break
 
-Pass `delay=N` to insert $N$ soft-reset slots $(\lvert 0\rangle, \lvert 0\rangle)$ at the causal cut while the **environment** keeps evolving.
-Extra reset time lets the environment decouple from the past before future controls act, so $S_V(c)$ often **decreases** at strong probe-environment coupling (weaker coupling can show the opposite trend).
+Pass `delay=N` to insert $N$ soft-reset slots
+$(\lvert 0\rangle, \lvert 0\rangle)$ at the causal cut while the **environment**
+keeps evolving. Extra reset time lets the environment decouple from the past
+before future controls act, so $S_V(c)$ often **decreases** at strong
+probe-environment coupling (weaker coupling can show the opposite trend).
 
-The logical `num_interventions` and `cut` are unchanged; the physical sequence length becomes `num_interventions + delay + 1`.
-Reuse the same `probe_set` when sweeping `delay`.
-`delay > 0` is supported for Hamiltonian characterize only.
+The logical `num_interventions` and `cut` are unchanged; the physical sequence
+length becomes `num_interventions + delay + 1`. Reuse the same `probe_set` when
+sweeping `delay`. `delay > 0` is supported for Hamiltonian characterize only.
 
 ```{code-cell} ipython3
 delay_length = 6
@@ -208,15 +233,17 @@ fig.tight_layout()
 
 ## Representation
 
-`MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"` selects MCWF, `"mps"` selects TJM for the **environment** chain.
-With `"auto"`, MCWF is used when `hamiltonian.length <= vector_max_qubits` (default 10).
+`MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"`
+selects MCWF, `"mps"` selects TJM for the **environment** chain. With `"auto"`,
+MCWF is used when `hamiltonian.length <= vector_max_qubits` (default 10).
 
 ## Temporal entanglement from a process tensor
 
-Operational memory ($S_V$) comes from probe responses.
-**Temporal entanglement** $S_{PT}(c)$ is computed directly from a process tensor at the same causal cut.
-By default, `build_process_tensor` uses direct MPO construction (`return_type="mpo"`).
-Pass `return_type="dense"` for exhaustive tomography (required for `noise_model`):
+Operational memory ($S_V$) comes from probe responses. **Temporal entanglement**
+$S_{PT}(c)$ is computed directly from a process tensor at the same causal cut.
+By default, `build_process_tensor` uses direct MPO construction
+(`return_type="mpo"`). Pass `return_type="dense"` for exhaustive tomography
+(required for `noise_model`):
 
 ```{code-cell} ipython3
 k = 3
@@ -250,13 +277,16 @@ pt_result = mc.characterize(
 print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
 ```
 
-Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for small $k$.
-Use `return_type="dense"` when you need noise. The default `max_bond_dim=64` keeps direct
-construction scalable; pass `max_bond_dim=None` for an exact noiseless MPO.
-`characterize(pt, ...)` still builds $S_V$ from probe responses (native MPO `evaluate_probes`, without densifying for the V-matrix path).
+Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for
+small $k$. Use `return_type="dense"` when you need noise. The default
+`max_bond_dim=64` keeps direct construction scalable; pass `max_bond_dim=None`
+for an exact noiseless MPO. `characterize(pt, ...)` still builds $S_V$ from
+probe responses (native MPO `evaluate_probes`, without densifying for the
+V-matrix path).
 
 ## Related topics
 
 - {doc}`quickstart` — minimal characterize and surrogate predict snippets
-- {doc}`memory_surrogate` — train a surrogate, predict dynamics, validate against exact references
+- {doc}`memory_surrogate` — train a surrogate, predict dynamics, validate
+  against exact references
 - API reference: :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`
