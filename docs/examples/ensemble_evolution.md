@@ -14,10 +14,16 @@ mystnb:
 
 # Ensemble Evolution
 
-Use this page when you need **two-time correlators** (`multi_time_observables` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`) or **ensemble averages** over `list[State]` inputs—for dynamical typicality studies, transport correlators, and finite-temperature observables estimated from random pure states.
+Use this page when you need **two-time correlators** (`multi_time_observables`
+on
+{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`)
+or **ensemble averages** over `list[State]` inputs—for dynamical typicality
+studies, transport correlators, and finite-temperature observables estimated
+from random pure states.
 
-This page demonstrates workflows for computing two-time correlations in a deterministic (noiseless, unitary) ensemble in YAQS.
-The focus is on compact, executable examples:
+This page demonstrates workflows for computing two-time correlations in a
+deterministic (noiseless, unitary) ensemble in YAQS. The focus is on compact,
+executable examples:
 
 - Single-state auto/two-time correlations.
 - Ensemble-averaged correlations (typicality view).
@@ -25,8 +31,8 @@ The focus is on compact, executable examples:
 
 ## 1. Unitary analog evolution primer
 
-In unitary analog evolution, we have no noise or tensor jumps.
-Omit `noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
+In unitary analog evolution, we have no noise or tensor jumps. Omit
+`noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
 
 ```{code-cell} ipython3
 import numpy as np
@@ -84,20 +90,20 @@ plt.show()
 
 For an initial state $|\psi(0)\rangle$ and unitary $U(t)$:
 
-- Autocorrelation (for one observable $O$):
-  \[
-  C\_{OO}(t) = \langle \psi(0)| U^\dagger(t)\, O\, U(t)\, O |\psi(0)\rangle.
-  \]
-- Generic two-time correlation (probe $A$ and kick $B$):
-  \[
-  C\_{AB}(t) = \langle \psi(0)| U^\dagger(t)\, A\, U(t)\, B |\psi(0)\rangle.
-  \]
+- Autocorrelation (for one observable $O$): \[ C\_{OO}(t) = \langle \psi(0)|
+  U^\dagger(t)\, O\, U(t)\, O |\psi(0)\rangle. \]
+- Generic two-time correlation (probe $A$ and kick $B$): \[ C\_{AB}(t) = \langle
+  \psi(0)| U^\dagger(t)\, A\, U(t)\, B |\psi(0)\rangle. \]
 
-These quantities probe dynamical memory and relaxation.
-They are standard observables in **dynamical quantum typicality (DQT)** and related finite-temperature dynamics studies, where one compares single-trajectory and ensemble-averaged behavior.
+These quantities probe dynamical memory and relaxation. They are standard
+observables in **dynamical quantum typicality (DQT)** and related
+finite-temperature dynamics studies, where one compares single-trajectory and
+ensemble-averaged behavior.
 
-The unitary-ensemble backend computes `multi_time_observables` pairs for `list[State]` inputs (each with `representation="mps"`, the default).
-Autocorrelation is the special case where both the observables are the same `(O, O)`. For a single-state demonstration, we pass a list with one element.
+The unitary-ensemble backend computes `multi_time_observables` pairs for
+`list[State]` inputs (each with `representation="mps"`, the default).
+Autocorrelation is the special case where both the observables are the same
+`(O, O)`. For a single-state demonstration, we pass a list with one element.
 
 ```{code-cell} ipython3
 sz_mid = Observable("z", mid)
@@ -137,12 +143,16 @@ plt.show()
 
 ## 3. Typicality view: from one state to an ensemble
 
-In dynamical typicality studies, one often averages correlations over an ensemble of initial states.
-Under certain thermalisation guarantees, one can show that the typical relaxation behavior of _any_ state can be represented by an ensemble average of the expectation over randomly initialised states.
-For sufficiently rich ensembles, this can approximate high-temperature traces and reveal robust transport trends.
+In dynamical typicality studies, one often averages correlations over an
+ensemble of initial states. Under certain thermalisation guarantees, one can
+show that the typical relaxation behavior of _any_ state can be represented by
+an ensemble average of the expectation over randomly initialised states. For
+sufficiently rich ensembles, this can approximate high-temperature traces and
+reveal robust transport trends.
 
-YAQS supports this directly by passing `list[State]` into `Simulator.run`.
-Each member evolves independently, which, when parallelized by the unitary backend, offers computational advantage to calculate these variables.
+YAQS supports this directly by passing `list[State]` into `Simulator.run`. Each
+member evolves independently, which, when parallelized by the unitary backend,
+offers computational advantage to calculate these variables.
 
 ```{code-cell} ipython3
 num_states = 8
@@ -179,30 +189,32 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-In this illustrative run, the ensemble-averaged $C_{zz}(t)$ appears to decay toward zero while $C_{zx}(t)$ stays comparatively close to zero over the sampled window; other runs may show different behavior.
+In this illustrative run, the ensemble-averaged $C_{zz}(t)$ appears to decay
+toward zero while $C_{zx}(t)$ stays comparatively close to zero over the sampled
+window; other runs may show different behavior.
 
 ## 4. Spin transport example: periodic spin-current autocorrelation
 
 For periodic XXZ chains, define local bond current
 
-<!-- prettier-ignore-start -->
-\[
+```{math}
 j_r = J_{xx} \bigl(S_r^x S_{r+1}^y - S_r^y S_{r+1}^x\bigr)
-\]
-<!-- prettier-ignore-end -->
+```
 
-and total current $J = \sum_r j_r$.
-The normalized autocorrelator
+and total current $J = \sum_r j_r$. The normalized autocorrelator
 
-<!-- prettier-ignore-start -->
-\[
+```{math}
 C_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
-\]
-<!-- prettier-ignore-end -->
+```
 
-can be assembled from all bond-pair two-time correlators.
-Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories ([Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601)).
-For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review ([Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)).
+can be assembled from all bond-pair two-time correlators. Such current
+autocorrelations are central to linear-response spin transport; dynamical
+typicality makes it practical to estimate high-temperature ensemble quantities
+from a few random pure-state trajectories
+([Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601)).
+For finite-temperature Drude weights, diffusion, and integrable XXZ
+phenomenology—including the role of conservation laws—see the review
+([Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)).
 
 ```{code-cell} ipython3
 def spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -269,15 +281,27 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-This finite-size, short-time run already shows different relaxation trends for different anisotropies.
-In the thermodynamic limit and Kubo picture, the long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to ballistic versus diffusive transport in the XXZ chain; [Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003) summarizes the established finite-temperature picture (including subtleties at $\Delta=1$ and in finite systems).
-The illustrative curves here use small $L$ and a handful of Haar-random states; larger-scale or higher-accuracy studies follow typicality, as in [Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601).
+This finite-size, short-time run already shows different relaxation trends for
+different anisotropies. In the thermodynamic limit and Kubo picture, the
+long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to
+ballistic versus diffusive transport in the XXZ chain;
+[Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)
+summarizes the established finite-temperature picture (including subtleties at
+$\Delta=1$ and in finite systems). The illustrative curves here use small $L$
+and a handful of Haar-random states; larger-scale or higher-accuracy studies
+follow typicality, as in
+[Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601).
 
 :::{tip} Practical notes: scaling runs and MPS entanglement
 
 - Scale gradually: `L`, ensemble size, `dt`, `elapsed_time`, and `max_bond_dim`.
-- Enable ensemble parallelization (`Simulator(parallel=True)`) when you have many initial states.
-- **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `svd_threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
+- Enable ensemble parallelization (`Simulator(parallel=True)`) when you have
+  many initial states.
+- **MPS entanglement:** under unitary evolution, entanglement entropy and
+  required bond dimension typically **grow** with time (until truncation or
+  saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten
+  `svd_threshold` only with care, or shorten the window so the MPS remains an
+  accurate ansatz for your observable.
 
 :::
 

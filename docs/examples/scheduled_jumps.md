@@ -15,17 +15,23 @@ mystnb:
 # Scheduled Jumps
 
 This example demonstrates how to use **scheduled noise jumps** in YAQS.
-Scheduled jumps allow you to apply specific operators at predetermined times during an analog simulation. This is useful for simulating controlled gates, sudden noise events, or time-dependent perturbations without needing a full time-dependent Hamiltonian.
+Scheduled jumps allow you to apply specific operators at predetermined times
+during an analog simulation. This is useful for simulating controlled gates,
+sudden noise events, or time-dependent perturbations without needing a full
+time-dependent Hamiltonian.
 
-In this example, we simulate a 10-site Ising chain and apply a scheduled Pauli-X flip to a specific site at $t=1.0$.
+In this example, we simulate a 10-site Ising chain and apply a scheduled Pauli-X
+flip to a specific site at $t=1.0$.
 
 ```{important}
-Scheduled jump times must lie on the simulation time grid: choose `time` as a multiple of `dt` (for example `dt=0.1` → `0.0, 0.1, 0.2, …`).
+Scheduled jump times must lie on the simulation time grid: choose `time` as a
+multiple of `dt` (for example `dt=0.1` → `0.0, 0.1, 0.2, …`).
 ```
 
 ## 1. Setup
 
-First, we define the Hamiltonian and the initial state. We'll use a standard transverse-field Ising model.
+First, we define the Hamiltonian and the initial state. We'll use a standard
+transverse-field Ising model.
 
 ```{code-cell} ipython3
 from mqt.yaqs import Hamiltonian, State
@@ -43,13 +49,20 @@ state = State(L, initial="zeros")
 
 ## 2. Define the Scheduled Jump
 
-We define a scheduled jump using a list of dictionaries in the `NoiseModel`. Each dictionary must specify:
+We define a scheduled jump using a list of dictionaries in the `NoiseModel`.
+Each dictionary must specify:
 
 - `time`: The time at which to apply the jump.
 - `sites`: A list of site indices the jump acts on.
-- `name`: The name of the jump operator (e.g., `"x"`, `"y"`, `"z"`, `"crosstalk_xx"`), **or** any label when you pass a custom `matrix` (see below).
+- `name`: The name of the jump operator (e.g., `"x"`, `"y"`, `"z"`,
+  `"crosstalk_xx"`), **or** any label when you pass a custom `matrix` (see
+  below).
 
-If `matrix` is omitted, `name` is resolved from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`. To apply a custom operator, add a `matrix` key with a local `d×d` NumPy array (`d=2` for qubits); `name` is then only an identifier. See {doc}`realistic_noise_models` § 6 for the full process-dict schema.
+If `matrix` is omitted, `name` is resolved from
+{class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`. To apply a custom
+operator, add a `matrix` key with a local `d×d` NumPy array (`d=2` for qubits);
+`name` is then only an identifier. See {doc}`realistic_noise_models` § 6 for the
+full process-dict schema.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
@@ -64,7 +77,8 @@ noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 
 ### Custom operator example
 
-A $\pi/2 rotation about $Y$ can be scheduled explicitly instead of using a library name:
+A $\pi/2 rotation about $Y$ can be scheduled explicitly instead of using a
+library name:
 
 ```{code-cell} ipython3
 import numpy as np
@@ -77,7 +91,10 @@ custom_noise_model = NoiseModel(scheduled_jumps=custom_jump)
 
 ## 3. Simulation Parameters
 
-We measure the $Z$ expectation value on the **jumped site** ($\langle Z_5 \rangle$). A Pauli-X jump flips that site's magnetization; measuring a distant site would show only a weak entanglement signal and can look like no jump occurred.
+We measure the $Z$ expectation value on the **jumped site**
+($\langle Z_5 \rangle$). A Pauli-X jump flips that site's magnetization;
+measuring a distant site would show only a weak entanglement signal and can look
+like no jump occurred.
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, Observable
@@ -146,5 +163,6 @@ plt.show()
 ## Related topics
 
 - {doc}`analog_simulation` — TJM workflow and noise models
-- {doc}`realistic_noise_models` — built-in and custom jump operators, distributed strengths
+- {doc}`realistic_noise_models` — built-in and custom jump operators,
+  distributed strengths
 - {doc}`simulation_parameters` — time grids and `dt` alignment
