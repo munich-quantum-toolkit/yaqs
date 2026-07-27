@@ -90,10 +90,17 @@ plt.show()
 
 For an initial state $|\psi(0)\rangle$ and unitary $U(t)$:
 
-- Autocorrelation (for one observable $O$): \[ C\_{OO}(t) = \langle \psi(0)|
-  U^\dagger(t)\, O\, U(t)\, O |\psi(0)\rangle. \]
-- Generic two-time correlation (probe $A$ and kick $B$): \[ C\_{AB}(t) = \langle
-  \psi(0)| U^\dagger(t)\, A\, U(t)\, B |\psi(0)\rangle. \]
+- Autocorrelation (for one observable $O$):
+
+  ```{math}
+  C_{OO}(t) = \langle \psi(0)| U^\dagger(t)\, O\, U(t)\, O |\psi(0)\rangle
+  ```
+
+- Generic two-time correlation (probe $A$ and kick $B$):
+
+  ```{math}
+  C_{AB}(t) = \langle \psi(0)| U^\dagger(t)\, A\, U(t)\, B |\psi(0)\rangle
+  ```
 
 These quantities probe dynamical memory and relaxation. They are standard
 observables in **dynamical quantum typicality (DQT)** and related
