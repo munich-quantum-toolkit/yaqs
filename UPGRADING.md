@@ -4,6 +4,21 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Use the validated loader for state-preparation benchmark targets
+
+Code consuming `benchmarks/state_preparation_target_states.json` should use
+`benchmarks.state_preparation.load_target_collection`, `load_target`, or `iter_targets` instead of
+parsing the fixture directly. The loader validates the versioned fixture and target metadata,
+returns immutable records, and exposes the raw-file SHA-256 checksum required for reproducible run
+provenance.
+
+```python
+from benchmarks.state_preparation import load_target
+
+target = load_target(6, "tfim_critical")
+state_vector = target.state_vector_copy()
+```
+
 ### `simulator.run` becomes `Simulator(...).run(...)`
 
 The free `mqt.yaqs.simulator.run` function has been replaced by a `Simulator` class.

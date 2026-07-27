@@ -41,6 +41,7 @@ from .schema import (
     benchmark_record_from_dict,
     benchmark_record_from_json,
 )
+from .targets import TargetCollection, TargetRecord, iter_targets, load_target, load_target_collection
 
 __all__ = [
     "BALLARIN_NOISE_ID",
@@ -67,8 +68,13 @@ __all__ = [
     "InitializationConfig",
     "NoiseConfig",
     "OptimizerConfig",
+    "TargetCollection",
+    "TargetRecord",
     "TargetSelection",
     "benchmark_record_from_csv_row",
     "benchmark_record_from_dict",
     "benchmark_record_from_json",
+    "iter_targets",
+    "load_target",
+    "load_target_collection",
 ]
