@@ -4,6 +4,18 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Use gate-local providers for context-dependent circuit noise
+
+Noisy Krotov evaluation and training functions now accept an optional
+`noise_provider` keyword. Providers receive immutable gate metadata and the
+trajectory-local random-number generator, and may return either a local
+`NoiseModel` or a realized `RandomUnitaryInstruction`. A deliberate mixed
+channel can return `CompositeGateNoiseInstruction`, whose tagged components run
+in tuple order. Existing positional global `NoiseModel` calls remain unchanged.
+
+Passing both a global model and a provider is rejected. Move the relevant local
+model into an explicit composite provider when mixed mechanisms are required.
+
 ### Use the validated loader for state-preparation benchmark targets
 
 Code consuming `benchmarks/state_preparation_target_states.json` should use

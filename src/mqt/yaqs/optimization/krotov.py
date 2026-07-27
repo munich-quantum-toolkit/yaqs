@@ -40,6 +40,14 @@ import numpy as np
 from ..core import linalg
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
+from .gate_noise import (
+    CompositeGateNoiseInstruction,
+    GateNoiseContext,
+    RandomUnitaryInstruction,
+    TJMNoiseInstruction,
+    ValidatedGateNoiseInstruction,
+    validate_gate_noise_instruction,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,6 +56,7 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.simulation_parameters import Observable
     from ..core.methods.decompositions import TruncMode
+    from .gate_noise import GateNoiseProvider
     from .parameterized_circuit import ParameterizedCircuit, ParameterizedGate
 
     StatePrep = Callable[[NDArray[np.float64]], MPS]
@@ -241,11 +250,25 @@ class KrotovNoiseMap:
         normalized: Whether the forward state was normalized after the operators.
         jump_process_index: Index of the sampled jump process in the local noise
             model, or ``None`` for a no-jump realization.
+        channel_id: Optional provider-defined channel identifier.
+        outcome_labels: Provider-defined labels for the realized outcome.
+        source_gate_index: Circuit gate index that produced this map.
+        resolved_native_angle: Resolved native gate angle used by the provider.
+        is_identity: Whether the realized map is physically the identity, when known.
+        normalization_checkpoints: Operator counts after which replay normalizes
+            before applying any subsequent operator. The legacy ``normalized``
+            flag continues to request normalization after the complete sequence.
     """
 
     operators: tuple[tuple[NDArray[np.complex128], tuple[int, ...]], ...] = ()
     normalized: bool = False
     jump_process_index: int | None = None
+    channel_id: str | None = None
+    outcome_labels: tuple[str, ...] = ()
+    source_gate_index: int | None = None
+    resolved_native_angle: float | None = None
+    is_identity: bool | None = None
+    normalization_checkpoints: tuple[int, ...] = ()
 
 
 @dataclass
@@ -403,9 +426,28 @@ def _dissipation_operator(process: dict[str, Any], dt: float) -> tuple[NDArray[n
 
 
 def _apply_noise_map(state: MPS, noise_map: KrotovNoiseMap, truncation: KrotovTruncation) -> None:
-    """Apply a realized circuit-TJM map to an MPS in place."""
-    for matrix, sites in noise_map.operators:
+    """Apply a realized circuit-TJM map to an MPS in place.
+
+    Raises:
+        ValueError: If a normalization checkpoint is not a valid operator count.
+    """
+    operator_count = len(noise_map.operators)
+    checkpoints = noise_map.normalization_checkpoints
+    if any(
+        isinstance(checkpoint, bool) or not isinstance(checkpoint, int) or checkpoint < 0 or checkpoint > operator_count
+        for checkpoint in checkpoints
+    ):
+        msg = (
+            f"Normalization checkpoints must be integer operator counts in [0, {operator_count}], got {checkpoints!r}."
+        )
+        raise ValueError(msg)
+    checkpoint_set = set(checkpoints)
+    if 0 in checkpoint_set:
+        state.normalize_preserving_phase()
+    for operator_index, (matrix, sites) in enumerate(noise_map.operators, start=1):
         _apply_operator(state, matrix, sites, truncation)
+        if operator_index in checkpoint_set:
+            state.normalize_preserving_phase()
     if noise_map.normalized:
         state.normalize_preserving_phase()
 
@@ -500,6 +542,236 @@ def _sample_noise_map_and_apply(
     if pauli_only:
         return KrotovNoiseMap(operators=((jump_op, sites),), jump_process_index=jump_index)
     return KrotovNoiseMap(operators=tuple(operators), normalized=True, jump_process_index=jump_index)
+
+
+def _gate_noise_context(
+    gate_index: int,
+    gate: ParameterizedGate,
+    sites: tuple[int, ...],
+    resolved_angle: float | None,
+) -> GateNoiseContext:
+    """Build the immutable provider context for one resolved circuit gate.
+
+    Returns:
+        Complete gate-local context with deterministic identifier fallbacks.
+    """
+    logical_gate_id = gate.logical_gate_id if gate.logical_gate_id is not None else gate_index
+    native_gate_id = gate.native_gate_id if gate.native_gate_id is not None else gate_index
+    return GateNoiseContext(
+        gate_index=gate_index,
+        gate_name=gate.name,
+        sites=sites,
+        arity=len(sites),
+        resolved_angle=resolved_angle,
+        logical_gate_id=logical_gate_id,
+        native_gate_id=native_gate_id,
+        parameter_index=gate.param_index,
+    )
+
+
+def _embed_gate_local_operator(
+    matrix: NDArray[np.complex128],
+    sites: tuple[int, ...],
+    gate_sites: tuple[int, ...],
+) -> NDArray[np.complex128]:
+    """Embed one validated provider operator into the current gate support.
+
+    Returns:
+        Dense operator on all current gate sites.
+    """
+    if sites == gate_sites:
+        return matrix
+    assert len(gate_sites) == 2
+    assert len(sites) == 1
+    identity = np.eye(2, dtype=np.complex128)
+    if sites[0] == gate_sites[0]:
+        return np.kron(matrix, identity)
+    assert sites[0] == gate_sites[1]
+    return np.kron(identity, matrix)
+
+
+def _operator_sequence_is_identity(
+    operators: tuple[tuple[NDArray[np.complex128], tuple[int, ...]], ...],
+    gate_sites: tuple[int, ...],
+    *,
+    normalized: bool,
+    normalization_checkpoints: tuple[int, ...] = (),
+) -> bool | None:
+    """Classify whether a realized provider replay is physically identity.
+
+    Returns:
+        Whether the ordered operator product is identity up to global phase and,
+        when only final normalization is replayed, a nonzero scalar. Intermediate
+        normalization makes the state-dependent map unsuitable for this simple
+        operator-product classification, so ``None`` is returned.
+    """
+    if normalization_checkpoints:
+        return None
+
+    dimension = 2 ** len(gate_sites)
+    identity = np.eye(dimension, dtype=np.complex128)
+    product = identity
+    for matrix, sites in operators:
+        product = _embed_gate_local_operator(matrix, sites, gate_sites) @ product
+
+    scalar = np.trace(product) / dimension
+    if abs(scalar) <= 1e-12 or not np.allclose(product, scalar * identity, atol=1e-10, rtol=1e-10):
+        return False
+    return normalized or bool(np.isclose(abs(scalar), 1.0, atol=1e-10, rtol=1e-10))
+
+
+def _annotate_tjm_noise_map(
+    noise_map: KrotovNoiseMap,
+    instruction: TJMNoiseInstruction,
+    context: GateNoiseContext,
+) -> KrotovNoiseMap:
+    """Attach gate-local diagnostics to one sampled TJM map.
+
+    Returns:
+        A map with the same physical replay operators and provider diagnostics.
+    """
+    if noise_map.jump_process_index is None:
+        outcome_labels = ("no_jump",)
+    else:
+        process = instruction.noise_model.processes[noise_map.jump_process_index]
+        outcome_labels = (str(process["name"]),)
+    # The legacy sampler omits scalar Pauli drift and therefore leaves
+    # ``normalized=False`` on its compact replay map, even though it normalized
+    # the sampled state. Provider maps must preserve that boundary because a
+    # preceding composite component may have truncated the MPS norm.
+    normalized = noise_map.normalized or not _noise_model_is_trivial(instruction.noise_model)
+    return KrotovNoiseMap(
+        operators=noise_map.operators,
+        normalized=normalized,
+        jump_process_index=noise_map.jump_process_index,
+        channel_id=instruction.channel_id,
+        outcome_labels=outcome_labels,
+        source_gate_index=context.gate_index,
+        resolved_native_angle=context.resolved_angle,
+        is_identity=_operator_sequence_is_identity(
+            noise_map.operators,
+            context.sites,
+            normalized=normalized,
+            normalization_checkpoints=noise_map.normalization_checkpoints,
+        ),
+        normalization_checkpoints=noise_map.normalization_checkpoints,
+    )
+
+
+def _apply_validated_provider_noise(
+    state: MPS,
+    context: GateNoiseContext,
+    instruction: ValidatedGateNoiseInstruction,
+    truncation: KrotovTruncation,
+    tjm_options: KrotovTJMOptions,
+    rng: np.random.Generator,
+) -> KrotovNoiseMap:
+    """Apply one already validated gate-local noise instruction.
+
+    Returns:
+        The realized replay map, including provider diagnostics.
+    """
+    if isinstance(instruction, TJMNoiseInstruction):
+        sampled_map = _sample_noise_map_and_apply(
+            state,
+            instruction.noise_model,
+            truncation,
+            tjm_options,
+            rng,
+        )
+        return _annotate_tjm_noise_map(sampled_map, instruction, context)
+    if isinstance(instruction, RandomUnitaryInstruction):
+        operators = tuple((operator.matrix, operator.sites) for operator in instruction.operators)
+        outcome_labels = instruction.outcome_labels or tuple(
+            operator.label for operator in instruction.operators if operator.label is not None
+        )
+        noise_map = KrotovNoiseMap(
+            operators=operators,
+            channel_id=instruction.channel_id,
+            outcome_labels=outcome_labels,
+            source_gate_index=context.gate_index,
+            resolved_native_angle=context.resolved_angle,
+            is_identity=_operator_sequence_is_identity(
+                operators,
+                context.sites,
+                normalized=False,
+            ),
+        )
+        _apply_noise_map(state, noise_map, truncation)
+        return noise_map
+
+    assert isinstance(instruction, CompositeGateNoiseInstruction)
+    component_maps = [
+        _apply_validated_provider_noise(
+            state,
+            context,
+            child,
+            truncation,
+            tjm_options,
+            rng,
+        )
+        for child in instruction.instructions
+    ]
+    operators: list[tuple[NDArray[np.complex128], tuple[int, ...]]] = []
+    normalization_checkpoints: list[int] = []
+    for noise_map in component_maps:
+        offset = len(operators)
+        normalization_checkpoints.extend(offset + checkpoint for checkpoint in noise_map.normalization_checkpoints)
+        operators.extend(noise_map.operators)
+        if noise_map.normalized:
+            normalization_checkpoints.append(len(operators))
+
+    operator_tuple = tuple(operators)
+    final_operator_count = len(operator_tuple)
+    normalized = final_operator_count in normalization_checkpoints
+    intermediate_checkpoints = tuple(
+        sorted({checkpoint for checkpoint in normalization_checkpoints if checkpoint != final_operator_count})
+    )
+    return KrotovNoiseMap(
+        operators=operator_tuple,
+        normalized=normalized,
+        channel_id=instruction.channel_id,
+        outcome_labels=tuple(label for noise_map in component_maps for label in noise_map.outcome_labels),
+        source_gate_index=context.gate_index,
+        resolved_native_angle=context.resolved_angle,
+        is_identity=_operator_sequence_is_identity(
+            operator_tuple,
+            context.sites,
+            normalized=normalized,
+            normalization_checkpoints=intermediate_checkpoints,
+        ),
+        normalization_checkpoints=intermediate_checkpoints,
+    )
+
+
+def _apply_provider_noise(
+    state: MPS,
+    context: GateNoiseContext,
+    noise_provider: GateNoiseProvider,
+    truncation: KrotovTruncation,
+    tjm_options: KrotovTJMOptions,
+    rng: np.random.Generator,
+) -> KrotovNoiseMap:
+    """Request, validate, and apply one provider's gate-local noise instruction.
+
+    Returns:
+        The realized replay map, including provider diagnostics.
+    """
+    instruction = validate_gate_noise_instruction(noise_provider(context, rng), context)
+    if instruction is None:
+        return KrotovNoiseMap(
+            source_gate_index=context.gate_index,
+            resolved_native_angle=context.resolved_angle,
+            is_identity=True,
+        )
+    return _apply_validated_provider_noise(
+        state,
+        context,
+        instruction,
+        truncation,
+        tjm_options,
+        rng,
+    )
 
 
 def _expectation(state: MPS, observable: Observable) -> float:
@@ -650,6 +922,8 @@ def forward_tjm_trajectory(
     tjm_options: KrotovTJMOptions,
     rng: np.random.Generator,
     noise_maps: list[KrotovNoiseMap] | None = None,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> KrotovTrajectory:
     """Propagate one fixed circuit-TJM trajectory through a parameterized circuit.
 
@@ -667,13 +941,19 @@ def forward_tjm_trajectory(
         tjm_options: Circuit-TJM trajectory settings.
         rng: Random number generator used when sampling maps.
         noise_maps: Optional fixed realized maps to replay.
+        noise_provider: Optional gate-local provider. It cannot be combined with
+            a global ``noise_model``.
 
     Returns:
         Forward trajectory storage for this realization.
 
     Raises:
-        ValueError: If a fixed map list does not match the circuit length.
+        ValueError: If noise sources conflict or a fixed map list does not match
+            the circuit length.
     """
+    if noise_model is not None and noise_provider is not None:
+        msg = "A global noise_model and gate-local noise_provider cannot be used simultaneously."
+        raise ValueError(msg)
     if noise_maps is not None and len(noise_maps) != len(circuit.gates):
         msg = f"Expected {len(circuit.gates)} fixed noise maps, got {len(noise_maps)}."
         raise ValueError(msg)
@@ -684,7 +964,11 @@ def forward_tjm_trajectory(
 
     for gate_index, gate in enumerate(circuit.gates):
         phi = copy.deepcopy(states[-1])
-        matrix, sites = circuit.gate_matrix(gate, theta, x)
+        if noise_provider is not None and noise_maps is None:
+            matrix, sites, resolved_angle = circuit.gate_matrix_and_angle(gate, theta, x)
+        else:
+            matrix, sites = circuit.gate_matrix(gate, theta, x)
+            resolved_angle = None
         _apply_operator(phi, matrix, sites, truncation)
         gate_outputs.append(copy.deepcopy(phi))
 
@@ -692,6 +976,16 @@ def forward_tjm_trajectory(
         if noise_maps is not None:
             noise_map = noise_maps[gate_index]
             _apply_noise_map(state_after_noise, noise_map, truncation)
+        elif gate.noise_enabled and _should_apply_noise(gate_index, sites, tjm_options) and noise_provider is not None:
+            context = _gate_noise_context(gate_index, gate, sites, resolved_angle)
+            noise_map = _apply_provider_noise(
+                state_after_noise,
+                context,
+                noise_provider,
+                truncation,
+                tjm_options,
+                rng,
+            )
         elif _should_apply_noise(gate_index, sites, tjm_options) and not _noise_model_is_trivial(noise_model):
             local_model = _local_noise_model(noise_model, sites)
             noise_map = _sample_noise_map_and_apply(state_after_noise, local_model, truncation, tjm_options, rng)
@@ -722,6 +1016,8 @@ def _forward_tjm_trajectories(
     tjm_options: KrotovTJMOptions,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> list[KrotovTrajectory]:
     """Generate or replay an ensemble of circuit-TJM trajectories.
 
@@ -729,8 +1025,12 @@ def _forward_tjm_trajectories(
         List of trajectory forward-storage objects.
 
     Raises:
-        ValueError: If the fixed map list count does not match the trajectory count.
+        ValueError: If noise sources conflict or the fixed map list count does not
+            match the trajectory count.
     """
+    if noise_model is not None and noise_provider is not None:
+        msg = "A global noise_model and gate-local noise_provider cannot be used simultaneously."
+        raise ValueError(msg)
     if fixed_noise_maps is not None and len(fixed_noise_maps) != tjm_options.num_trajectories:
         msg = f"Expected {tjm_options.num_trajectories} trajectory map lists, got {len(fixed_noise_maps)}."
         raise ValueError(msg)
@@ -749,7 +1049,8 @@ def _forward_tjm_trajectories(
                 noise_model,
                 tjm_options,
                 rng,
-                maps,
+                noise_maps=maps,
+                noise_provider=noise_provider,
             )
         )
     return trajectories
@@ -1162,6 +1463,7 @@ def noisy_state_preparation_contribution(
     *,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], float, float, list[KrotovTrajectory]]:
     """Compute the noisy circuit-TJM state-preparation Krotov contribution.
 
@@ -1182,6 +1484,8 @@ def noisy_state_preparation_contribution(
         iteration: Outer optimizer iteration used to refresh trajectory seeds.
         fixed_noise_maps: Optional fixed realizations for common-random-number
             finite differences.
+        noise_provider: Optional gate-local provider. It cannot be combined with
+            a global ``noise_model``.
 
     Returns:
         Tuple ``(contribution, loss, mean_fidelity, trajectories)``.
@@ -1197,6 +1501,7 @@ def noisy_state_preparation_contribution(
             truncation,
             iteration=iteration,
             fixed_noise_maps=fixed_noise_maps,
+            noise_provider=noise_provider,
         )
 
     x = np.array([], dtype=np.float64)
@@ -1211,6 +1516,7 @@ def noisy_state_preparation_contribution(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
 
     contribution = np.zeros(circuit.num_params, dtype=np.float64)
@@ -1237,6 +1543,7 @@ def noisy_state_preparation_cross_contribution(
     *,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], float, float, list[KrotovTrajectory]]:
     """Compute the cross-trajectory circuit-TJM state-preparation contribution.
 
@@ -1261,6 +1568,7 @@ def noisy_state_preparation_cross_contribution(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
 
     stale_costates = [
@@ -1298,6 +1606,7 @@ def noisy_state_preparation_metrics(
     truncation: KrotovTruncation | None = None,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[float, float, list[float]]:
     """Evaluate noisy state-preparation infidelity and trajectory fidelities.
 
@@ -1317,6 +1626,7 @@ def noisy_state_preparation_metrics(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     fidelities = [float(abs(target.scalar_product(trajectory.states[-1])) ** 2) for trajectory in trajectories]
     mean_fidelity = float(np.mean(fidelities))
@@ -1334,6 +1644,7 @@ def noisy_state_preparation_loss(
     truncation: KrotovTruncation | None = None,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> float:
     """Evaluate noisy circuit-TJM state-preparation infidelity.
 
@@ -1350,6 +1661,7 @@ def noisy_state_preparation_loss(
         truncation=truncation,
         iteration=iteration,
         fixed_noise_maps=fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     return loss_value
 
@@ -1368,6 +1680,7 @@ def noisy_sample_contribution(
     *,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], float, float, list[float], list[KrotovTrajectory]]:
     """Compute one noisy supervised sample contribution with YAQS trajectory averaging.
 
@@ -1389,6 +1702,8 @@ def noisy_sample_contribution(
         iteration: Outer optimizer iteration used to refresh trajectory seeds.
         fixed_noise_maps: Optional fixed realizations for common-random-number
             finite differences.
+        noise_provider: Optional gate-local provider. It cannot be combined with
+            a global ``noise_model``.
 
     Returns:
         Tuple ``(contribution, loss, averaged_readout, trajectory_readouts, trajectories)``.
@@ -1403,6 +1718,7 @@ def noisy_sample_contribution(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     trajectory_readouts = [_expectation(trajectory.states[-1], readout.observable) for trajectory in trajectories]
     zbar = float(np.mean(trajectory_readouts))
@@ -1433,6 +1749,7 @@ def noisy_sample_loss(
     truncation: KrotovTruncation | None = None,
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[float, float, list[float]]:
     """Evaluate a noisy supervised sample loss with trajectory-averaged readout.
 
@@ -1450,6 +1767,7 @@ def noisy_sample_loss(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     trajectory_readouts = [_expectation(trajectory.states[-1], readout.observable) for trajectory in trajectories]
     zbar = float(np.mean(trajectory_readouts))
@@ -1945,6 +2263,8 @@ def _noisy_state_preparation_batch_epoch(
     truncation: KrotovTruncation,
     iteration: int,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], float, float, float]:
     """Run one noisy full-trajectory-gradient state-preparation update.
 
@@ -1961,6 +2281,7 @@ def _noisy_state_preparation_batch_epoch(
         truncation,
         iteration=iteration,
         fixed_noise_maps=fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     theta -= step_size * contribution
     return theta, float(np.linalg.norm(contribution)), loss_value, fidelity
@@ -1977,6 +2298,8 @@ def _noisy_state_preparation_online_update(
     truncation: KrotovTruncation,
     iteration: int,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Run one stale-adjoint noisy online sweep for state preparation.
 
@@ -1994,7 +2317,8 @@ def _noisy_state_preparation_online_update(
             initial_state,
             truncation,
             iteration,
-            fixed_noise_maps,
+            fixed_noise_maps=fixed_noise_maps,
+            noise_provider=noise_provider,
         )
 
     x = np.array([], dtype=np.float64)
@@ -2009,6 +2333,7 @@ def _noisy_state_preparation_online_update(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
 
     scale = 1.0 / tjm_options.num_trajectories
@@ -2052,6 +2377,8 @@ def _noisy_state_preparation_online_cross_update(
     truncation: KrotovTruncation,
     iteration: int,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Run one stale-adjoint online sweep with cross-trajectory pairings.
 
@@ -2074,6 +2401,7 @@ def _noisy_state_preparation_online_cross_update(
         tjm_options,
         iteration,
         fixed_noise_maps,
+        noise_provider=noise_provider,
     )
     stale_costates = [
         _trajectory_chi_tildes(circuit, theta, x, trajectory, copy.deepcopy(target), truncation)
@@ -2121,6 +2449,8 @@ def _train_noisy_state_preparation(
     options: KrotovOptions,
     initial_state: MPS | None,
     switch_iteration: int,
+    *,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> KrotovResult:
     """Shared noisy state-preparation loop for online, batch, and hybrid modes.
 
@@ -2143,6 +2473,7 @@ def _train_noisy_state_preparation(
             noise_model,
             tjm_options,
             options.seed,
+            noise_provider=noise_provider,
         )
         fixed_maps = [traj.noise_maps for traj in trajs]
 
@@ -2157,6 +2488,7 @@ def _train_noisy_state_preparation(
         truncation=truncation,
         iteration=0,
         fixed_noise_maps=fixed_maps,
+        noise_provider=noise_provider,
     )
     _record_state_preparation(trace, 0, "init", loss, fidelity, 0.0, 0.0, 0.0)
 
@@ -2175,6 +2507,7 @@ def _train_noisy_state_preparation(
                 truncation,
                 options.seed + iteration,
                 fixed_noise_maps=fixed_maps,
+                noise_provider=noise_provider,
             )
             gradient_norm = float(np.linalg.norm(contribution))
             phase = "online"
@@ -2192,6 +2525,7 @@ def _train_noisy_state_preparation(
                 truncation,
                 options.seed + iteration,
                 fixed_noise_maps=fixed_maps,
+                noise_provider=noise_provider,
             )
             phase = "batch"
 
@@ -2205,6 +2539,7 @@ def _train_noisy_state_preparation(
             truncation=truncation,
             iteration=options.seed + iteration,
             fixed_noise_maps=fixed_maps,
+            noise_provider=noise_provider,
         )
         update_norm = float(np.linalg.norm(theta - theta_before))
         _record_state_preparation(trace, iteration, phase, loss, fidelity, step, gradient_norm, update_norm)
@@ -2514,6 +2849,7 @@ def train_krotov_noisy_state_preparation_online(
     initial_theta: NDArray[np.float64],
     options: KrotovOptions | None = None,
     initial_state: MPS | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> KrotovResult:
     """Train a noisy circuit-TJM state-preparation objective with online sweeps.
 
@@ -2531,6 +2867,7 @@ def train_krotov_noisy_state_preparation_online(
         options,
         initial_state,
         switch_iteration=options.max_iterations,
+        noise_provider=noise_provider,
     )
 
 
@@ -2543,6 +2880,7 @@ def train_krotov_noisy_state_preparation_batch(
     initial_theta: NDArray[np.float64],
     options: KrotovOptions | None = None,
     initial_state: MPS | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> KrotovResult:
     """Train a noisy circuit-TJM state-preparation objective with batch updates.
 
@@ -2560,6 +2898,7 @@ def train_krotov_noisy_state_preparation_batch(
         options,
         initial_state,
         switch_iteration=0,
+        noise_provider=noise_provider,
     )
 
 
@@ -2572,6 +2911,7 @@ def train_krotov_noisy_state_preparation_hybrid(
     initial_theta: NDArray[np.float64],
     options: KrotovOptions | None = None,
     initial_state: MPS | None = None,
+    noise_provider: GateNoiseProvider | None = None,
 ) -> KrotovResult:
     """Train a noisy circuit-TJM state-preparation objective with a hybrid schedule.
 
@@ -2589,6 +2929,7 @@ def train_krotov_noisy_state_preparation_hybrid(
         options,
         initial_state,
         switch_iteration=options.switch_iteration,
+        noise_provider=noise_provider,
     )
 
 

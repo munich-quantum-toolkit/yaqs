@@ -156,6 +156,9 @@ class ParameterizedGate:
         data_map: Optional sample-dependent contribution to the angle map.
         fixed_params: Parameter values for fixed gates constructed with library parameters
             (e.g. a frozen ``u`` gate). Ignored for single-angle gates.
+        logical_gate_id: Optional identifier of the source logical gate.
+        native_gate_id: Optional identifier of this gate in a compiled native circuit.
+        noise_enabled: Whether a gate-local noise provider may act after this gate.
     """
 
     name: str
@@ -165,6 +168,9 @@ class ParameterizedGate:
     angle_offset: float = 0.0
     data_map: Callable[[NDArray[np.float64]], float] | None = None
     fixed_params: tuple[float, ...] = ()
+    logical_gate_id: int | str | None = None
+    native_gate_id: int | str | None = None
+    noise_enabled: bool = True
 
     @property
     def is_trainable(self) -> bool:
@@ -204,8 +210,10 @@ class ParameterizedCircuit:
                 inferred as ``max(param_index) + 1``.
 
         Raises:
+            TypeError: If a gate identifier or ``noise_enabled`` has an invalid type.
             ValueError: If a gate acts on invalid sites, a trainable gate is not a
-                supported one-parameter gate, or a parameter index is out of range.
+                supported one-parameter gate, a parameter index is out of range, or
+                gate metadata is invalid.
         """
         self.num_qubits = num_qubits
         self.gates = list(gates)
@@ -233,6 +241,30 @@ class ParameterizedCircuit:
             if (gate.data_map is not None or not np.isclose(gate.angle_offset, 0.0)) and not gate.is_parametric:
                 msg = f"Gate '{gate.name}' has an angle map but is not a one-parameter gate."
                 raise ValueError(msg)
+            for identifier_name, identifier in (
+                ("logical_gate_id", gate.logical_gate_id),
+                ("native_gate_id", gate.native_gate_id),
+            ):
+                if identifier is None:
+                    continue
+                if isinstance(identifier, bool) or not isinstance(identifier, (int, str)):
+                    msg = (
+                        f"Gate '{gate.name}' {identifier_name} must be a nonnegative integer, "
+                        f"a nonempty string, or None, got {identifier!r}."
+                    )
+                    raise TypeError(msg)
+                if isinstance(identifier, int) and identifier < 0:
+                    msg = f"Gate '{gate.name}' {identifier_name} must be nonnegative, got {identifier!r}."
+                    raise ValueError(msg)
+                if isinstance(identifier, str) and (not identifier or identifier != identifier.strip()):
+                    msg = (
+                        f"Gate '{gate.name}' {identifier_name} must be a nonempty string "
+                        "without surrounding whitespace."
+                    )
+                    raise ValueError(msg)
+            if not isinstance(gate.noise_enabled, bool):
+                msg = f"Gate '{gate.name}' noise_enabled must be a bool, got {gate.noise_enabled!r}."
+                raise TypeError(msg)
             if gate.param_index is not None:
                 max_index = max(max_index, gate.param_index)
 
@@ -286,9 +318,36 @@ class ParameterizedCircuit:
             A tuple ``(matrix, sites)`` where ``sites`` is sorted ascending and
             ``matrix`` acts on the merged index ``|q_min, q_max>`` for two-qubit gates.
         """
+        matrix, sites, _resolved_angle = self.gate_matrix_and_angle(gate, theta, x)
+        return matrix, sites
+
+    def gate_matrix_and_angle(
+        self,
+        gate: ParameterizedGate,
+        theta: NDArray[np.float64],
+        x: NDArray[np.float64] | None = None,
+    ) -> tuple[NDArray[np.complex128], tuple[int, ...], float | None]:
+        """Build a gate matrix and return its resolved angle when applicable.
+
+        The angle map of a parametric gate is evaluated exactly once and the
+        resulting scalar is reused to construct the matrix. Nonparametric gates
+        return ``None`` as their resolved angle.
+
+        Args:
+            gate: The circuit factor.
+            theta: Trainable parameter vector.
+            x: Input sample for data-dependent angle maps.
+
+        Returns:
+            A tuple ``(matrix, sites, resolved_angle)`` where ``sites`` is sorted
+            ascending and ``resolved_angle`` is the scalar angle of a parametric
+            gate or ``None`` for a nonparametric gate.
+        """
         attr = getattr(GateLibrary, gate.name)
+        resolved_angle: float | None = None
         if gate.is_parametric:
-            library_gate = attr([self.angle(gate, theta, x)])
+            resolved_angle = self.angle(gate, theta, x)
+            library_gate = attr([resolved_angle])
         elif gate.fixed_params:
             library_gate = attr(list(gate.fixed_params))
         else:
@@ -297,7 +356,7 @@ class ParameterizedCircuit:
         matrix = np.asarray(library_gate.matrix, dtype=np.complex128)
         if len(gate.sites) == 2 and gate.sites[0] > gate.sites[1]:
             matrix = _swap_two_site_convention(matrix)
-        return matrix, tuple(sorted(gate.sites))
+        return matrix, tuple(sorted(gate.sites)), resolved_angle
 
     @staticmethod
     def derivative_operator(gate: ParameterizedGate) -> tuple[NDArray[np.complex128], tuple[int, ...]]:

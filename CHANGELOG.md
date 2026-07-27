@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added a validated gate-local noise-provider interface for parameterized-circuit trajectory simulation ([**@MaxFroehlich1410**])
 - added validated, immutable loading and lookup APIs for state-preparation benchmark target fixtures ([**@MaxFroehlich1410**])
 - added versioned, strictly validated configuration and result schemas for reproducible state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added MPS-based Krotov-inspired discrete adjoint optimizer for parameterized circuits (online/batch/hybrid variants) in new `mqt.yaqs.optimization` subpackage ([**@MaxFroehlich1410**])

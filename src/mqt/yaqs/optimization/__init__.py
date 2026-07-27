@@ -14,6 +14,15 @@ gate-list circuit representation it operates on.
 
 from __future__ import annotations
 
+from .gate_noise import (
+    CompositeGateNoiseInstruction,
+    GateNoiseContext,
+    GateNoiseInstruction,
+    GateNoiseProvider,
+    LocalOperator,
+    RandomUnitaryInstruction,
+    TJMNoiseInstruction,
+)
 from .krotov import (
     KrotovNoiseMap,
     KrotovOptions,
@@ -23,6 +32,7 @@ from .krotov import (
     KrotovTrajectory,
     KrotovTruncation,
     empirical_loss,
+    forward_tjm_trajectory,
     noisy_sample_contribution,
     noisy_sample_loss,
     noisy_state_preparation_contribution,
@@ -53,6 +63,10 @@ from .parameterized_circuit import (
 )
 
 __all__ = [
+    "CompositeGateNoiseInstruction",
+    "GateNoiseContext",
+    "GateNoiseInstruction",
+    "GateNoiseProvider",
     "KrotovNoiseMap",
     "KrotovOptions",
     "KrotovReadout",
@@ -60,12 +74,16 @@ __all__ = [
     "KrotovTJMOptions",
     "KrotovTrajectory",
     "KrotovTruncation",
+    "LocalOperator",
     "ParameterizedCircuit",
     "ParameterizedGate",
+    "RandomUnitaryInstruction",
+    "TJMNoiseInstruction",
     "brickwall_matrix_product_disentangler_num_parameters",
     "create_brickwall_matrix_product_disentangler_parameterized_circuit",
     "create_sequential_matrix_product_disentangler_parameterized_circuit",
     "empirical_loss",
+    "forward_tjm_trajectory",
     "noisy_sample_contribution",
     "noisy_sample_loss",
     "noisy_state_preparation_contribution",
