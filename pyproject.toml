@@ -88,7 +88,8 @@ log_level = "INFO"
 filterwarnings = ["error"]
 
 [tool.coverage]
-run.source = ["mqt.yaqs"]
+run.branch = true
+run.source = ["mqt.yaqs", "benchmarks.state_preparation"]
 report.exclude_also = [
     '\.\.\.',
     'if TYPE_CHECKING:',

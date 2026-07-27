@@ -19,7 +19,7 @@ against dense state-vector references:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 import pytest
@@ -46,14 +46,17 @@ from mqt.yaqs.optimization import (
     create_brickwall_matrix_product_disentangler_parameterized_circuit,
     create_sequential_matrix_product_disentangler_parameterized_circuit,
     empirical_loss,
+    noisy_sample_contribution,
     noisy_sample_loss,
     noisy_state_preparation_contribution,
     noisy_state_preparation_cross_contribution,
+    noisy_state_preparation_loss,
     noisy_state_preparation_metrics,
     sample_contribution,
     state_preparation_contribution,
     state_preparation_loss,
     state_preparation_metrics,
+    state_preparation_terminal_costate,
     train_krotov_batch,
     train_krotov_hybrid,
     train_krotov_noisy_state_preparation_batch,
@@ -227,7 +230,7 @@ def test_forward_states_match_dense_statevector() -> None:
 @pytest.mark.parametrize(("loss", "use_bias", "label"), [("mse", True, -1.0), ("mse", False, 1.0), ("bce", False, 1.0)])
 def test_batch_direction_equals_finite_difference_gradient(
     loss: Literal["mse", "bce"],
-    use_bias: bool,  # noqa: FBT001
+    use_bias: bool,  # ruff: ignore[boolean-type-hint-positional-argument]
     label: float,
 ) -> None:
     """The batch Krotov direction equals the exact gradient of the empirical loss."""
@@ -289,7 +292,9 @@ def test_backward_costates_match_dense_adjoint() -> None:
 
 def test_online_sweep_matches_dense_reference() -> None:
     """One online stale-adjoint sweep matches a dense re-implementation."""
-    from mqt.yaqs.optimization.krotov import _online_sample_update  # noqa: PLC0415, PLC2701
+    from mqt.yaqs.optimization.krotov import (
+        _online_sample_update,  # ruff: ignore[import-private-name]
+    )
 
     circuit = build_test_circuit()
     readout = KrotovReadout(observable=Observable("z", 0), loss="mse")
@@ -421,6 +426,67 @@ def test_from_qiskit_matches_statevector() -> None:
 
     overlap = np.vdot(reference, states[-1].to_vec())
     assert abs(overlap) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_parameterized_circuit_constructor_validation_branches() -> None:
+    """ParameterizedCircuit should reject malformed gate specifications."""
+    with pytest.raises(ValueError, match="one or two sites"):
+        ParameterizedCircuit(3, [ParameterizedGate("rx", (0, 1, 2), param_index=0)])
+    with pytest.raises(ValueError, match="not found in GateLibrary"):
+        ParameterizedCircuit(1, [ParameterizedGate("unknown", (0,))])
+    with pytest.raises(ValueError, match="has an angle map"):
+        ParameterizedCircuit(1, [ParameterizedGate("h", (0,), angle_offset=0.1)])
+    with pytest.raises(ValueError, match="num_params=2 is smaller"):
+        ParameterizedCircuit(1, [ParameterizedGate("rx", (0,), param_index=2)], num_params=2)
+
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("rx", (0,), data_map=lambda x: float(x[0]))])
+    with pytest.raises(ValueError, match="no input sample"):
+        circuit.gate_matrix(circuit.gates[0], np.array([], dtype=np.float64), None)
+
+
+def test_validate_disentangler_unitary_rejects_invalid_matrices() -> None:
+    """SMPD unitary validation should reject wrong shapes and non-unitary matrices."""
+    from mqt.yaqs.optimization.parameterized_circuit import (
+        _validate_disentangler_unitary,  # ruff: ignore[import-private-name]
+    )
+
+    with pytest.raises(ValueError, match="Expected a \\(4, 4\\) SMPD unitary"):
+        _validate_disentangler_unitary(np.eye(2, dtype=np.complex128), num_sites=2)
+    with pytest.raises(ValueError, match="must be unitary"):
+        _validate_disentangler_unitary(np.array([[1.0, 1.0], [0.0, 1.0]], dtype=np.complex128), num_sites=1)
+
+
+def test_from_qiskit_validation_branches() -> None:
+    """The Qiskit converter should reject unsupported parameterized instructions."""
+    theta = Parameter("theta")
+    beta = Parameter("beta")
+
+    skipped = QuantumCircuit(1, 1)
+    skipped.h(0)
+    skipped.barrier()
+    skipped.measure(0, 0)
+    converted = ParameterizedCircuit.from_qiskit(skipped)
+    assert [(gate.name, gate.sites) for gate in converted.gates] == [("h", (0,))]
+
+    unsupported = QuantumCircuit(1)
+    unsupported.u(theta, 0.1, 0.2, 0)
+    with pytest.raises(ValueError, match="not a supported one-parameter gate"):
+        ParameterizedCircuit.from_qiskit(unsupported, parameters=[theta])
+
+    multi_parameter = QuantumCircuit(1)
+    multi_parameter.rx(theta + beta, 0)
+    with pytest.raises(ValueError, match="exactly one free parameter"):
+        ParameterizedCircuit.from_qiskit(multi_parameter, parameters=[theta, beta])
+
+    missing_parameter = QuantumCircuit(1)
+    missing_parameter.rx(theta, 0)
+    with pytest.raises(ValueError, match="not found in the provided parameter ordering"):
+        ParameterizedCircuit.from_qiskit(missing_parameter, parameters=[beta])
+
+    non_affine = QuantumCircuit(1)
+    non_affine.rx(theta * theta, 0)
+    with pytest.raises(ValueError, match="is not affine"):
+        ParameterizedCircuit.from_qiskit(non_affine, parameters=[theta])
 
 
 def test_bmpd_parameterized_circuit_uses_scalar_gate_parameters() -> None:
@@ -818,6 +884,281 @@ def test_tjm_noisy_gate_indices_apply_noise_only_at_selected_gates() -> None:
     assert trajectory.noise_maps[2].operators == ()
 
 
+def test_krotov_readout_and_tjm_option_validation_branches() -> None:
+    """Krotov readout and TJM option validators should reject unsupported settings."""
+    with pytest.raises(ValueError, match="Unknown loss kind"):
+        KrotovReadout(observable=Observable("z", 0), loss=cast("Any", "mae"))
+    with pytest.raises(ValueError, match="bias is only supported"):
+        KrotovReadout(observable=Observable("z", 0), loss="bce", use_bias=True)
+
+    with pytest.raises(ValueError, match="num_trajectories"):
+        KrotovTJMOptions(num_trajectories=0)
+    with pytest.raises(ValueError, match="positive finite"):
+        KrotovTJMOptions(dt=np.inf)
+    with pytest.raises(ValueError, match="noise application mode"):
+        KrotovTJMOptions(apply_noise_to=cast("Any", "single-qubit"))
+    with pytest.raises(ValueError, match="must be nonnegative"):
+        KrotovTJMOptions(noisy_gate_indices=(-1,))
+    with pytest.raises(ValueError, match="trajectory update mode"):
+        KrotovTJMOptions(trajectory_update=cast("Any", "batch"))
+    with pytest.raises(ValueError, match="not implemented"):
+        KrotovTJMOptions(differentiate_jump_normalization=True)
+
+
+def test_step_size_schedule_validation_branches() -> None:
+    """Learning-rate schedule helper should handle decays and reject unknown modes."""
+    from mqt.yaqs.optimization.krotov import _step_size  # ruff: ignore[import-outside-top-level, import-private-name]
+
+    assert _step_size(0.8, 3, "inverse", 0.5) == pytest.approx(0.4)
+    assert _step_size(0.8, 3, "exp", 0.5) == pytest.approx(0.8 * np.exp(-1.0))
+    with pytest.raises(ValueError, match="Unknown learning-rate schedule"):
+        _step_size(0.8, 1, cast("Any", "linear"), 0.0)
+
+
+def test_krotov_state_validation_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """State-resolution helpers should copy valid states and reject incompatible ones."""
+    from mqt.yaqs.optimization.krotov import (
+        _normalized_mps_copy,  # ruff: ignore[import-private-name]
+        _resolve_fixed_initial_state,  # ruff: ignore[import-private-name]
+        _resolve_initial_state,  # ruff: ignore[import-private-name]
+        _resolve_target_state,  # ruff: ignore[import-private-name]
+    )
+
+    initial = MPS(1, state="ones")
+    resolved = _resolve_initial_state(initial, np.array([], dtype=np.float64), 1)
+    assert resolved is not initial
+    np.testing.assert_allclose(resolved.to_vec(), initial.to_vec())
+
+    zero_state = MPS(length=1, tensors=[np.zeros((2, 1, 1), dtype=np.complex128)])
+    with pytest.raises(ValueError, match="nonzero finite norm"):
+        _normalized_mps_copy(zero_state)
+
+    imaginary_norm_state = MPS(1)
+
+    def complex_scalar_product(_other: MPS, sites: int | list[int] | None = None) -> np.complex128:
+        _ = sites
+        return np.complex128(1.0 + 1.0j)
+
+    monkeypatch.setattr(imaginary_norm_state, "scalar_product", complex_scalar_product)
+    with pytest.raises(ValueError, match="imaginary part"):
+        _normalized_mps_copy(imaginary_norm_state)
+
+    with pytest.raises(ValueError, match="Target state has 1 qubits"):
+        _resolve_target_state(MPS(1), num_qubits=2)
+    with pytest.raises(ValueError, match="Initial state has 1 qubits"):
+        _resolve_fixed_initial_state(MPS(1), num_qubits=2)
+
+
+def test_noise_sampling_validation_and_rare_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Noisy-map sampling should handle trivial, no-jump, jump, and zero-weight paths."""
+    from mqt.yaqs.optimization.krotov import (
+        _jump_probability_weights,  # ruff: ignore[import-private-name]
+        _sample_noise_map_and_apply,  # ruff: ignore[import-private-name]
+    )
+
+    truncation = KrotovTruncation()
+    zero_noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
+    assert _jump_probability_weights(MPS(1), zero_noise, 1.0, truncation) == [0.0]
+
+    empty_map = _sample_noise_map_and_apply(
+        MPS(1),
+        None,
+        truncation,
+        KrotovTJMOptions(),
+        np.random.default_rng(0),
+    )
+    assert empty_map.operators == ()
+    assert empty_map.jump_process_index is None
+
+    pauli_noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+    no_jump_map = _sample_noise_map_and_apply(
+        MPS(1),
+        pauli_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(0),
+    )
+    assert no_jump_map.operators == ()
+    assert no_jump_map.jump_process_index is None
+
+    jumping_noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 2.0}])
+    jump_map = _sample_noise_map_and_apply(
+        MPS(1),
+        jumping_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(1),
+    )
+    assert len(jump_map.operators) == 1
+    assert jump_map.jump_process_index == 0
+    assert jump_map.normalized is False
+
+    projector = np.diag([1.0, 0.0]).astype(np.complex128)
+    non_pauli_weak_noise = NoiseModel(
+        [{"name": "projector", "sites": [0], "strength": 0.1, "matrix": projector}],
+    )
+    non_pauli_no_jump_map = _sample_noise_map_and_apply(
+        MPS(1),
+        non_pauli_weak_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(0),
+    )
+    assert len(non_pauli_no_jump_map.operators) == 1
+    assert non_pauli_no_jump_map.normalized is True
+    assert non_pauli_no_jump_map.jump_process_index is None
+
+    non_pauli_jumping_noise = NoiseModel(
+        [{"name": "projector", "sites": [0], "strength": 2.0, "matrix": projector}],
+    )
+    non_pauli_jump_map = _sample_noise_map_and_apply(
+        MPS(1),
+        non_pauli_jumping_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(1),
+    )
+    assert len(non_pauli_jump_map.operators) == 2
+    assert non_pauli_jump_map.normalized is True
+    assert non_pauli_jump_map.jump_process_index == 0
+
+    def zero_weights(*_args: object, **_kwargs: object) -> list[float]:
+        return [0.0]
+
+    monkeypatch.setattr("mqt.yaqs.optimization.krotov._jump_probability_weights", zero_weights)
+    pauli_zero_weight_map = _sample_noise_map_and_apply(
+        MPS(1),
+        jumping_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(1),
+    )
+    assert pauli_zero_weight_map.operators == ()
+    assert pauli_zero_weight_map.jump_process_index is None
+
+    zero_weight_map = _sample_noise_map_and_apply(
+        MPS(1),
+        non_pauli_jumping_noise,
+        truncation,
+        KrotovTJMOptions(dt=1.0),
+        np.random.default_rng(1),
+    )
+    assert len(zero_weight_map.operators) == 1
+    assert zero_weight_map.normalized is True
+    assert zero_weight_map.jump_process_index is None
+
+
+def test_tjm_fixed_noise_map_validation_branches() -> None:
+    """Fixed noisy trajectory map lists should match gate and trajectory counts."""
+    from mqt.yaqs.optimization.krotov import (
+        _forward_tjm_trajectories,  # ruff: ignore[import-private-name]
+    )
+
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("rx", (0,), param_index=0)])
+    theta = np.array([0.2])
+    truncation = KrotovTruncation()
+    tjm_options = KrotovTJMOptions(num_trajectories=2)
+
+    with pytest.raises(ValueError, match="fixed noise maps"):
+        forward_tjm_trajectory(
+            circuit,
+            theta,
+            np.array([], dtype=np.float64),
+            MPS(1),
+            truncation,
+            None,
+            tjm_options,
+            np.random.default_rng(0),
+            noise_maps=[],
+        )
+    with pytest.raises(ValueError, match="trajectory map lists"):
+        _forward_tjm_trajectories(
+            circuit,
+            theta,
+            np.array([], dtype=np.float64),
+            MPS(1),
+            truncation,
+            None,
+            tjm_options,
+            fixed_noise_maps=[[]],
+        )
+
+
+def test_cross_gate_contribution_empty_inputs_returns_zero() -> None:
+    """The cross-trajectory gate signal is zero when either trajectory set is empty."""
+    from mqt.yaqs.optimization.krotov import (
+        _cross_gate_contribution,  # ruff: ignore[import-private-name]
+    )
+
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("ry", (0,), param_index=0)])
+    assert _cross_gate_contribution(circuit, circuit.gates[0], [], [], KrotovTruncation()) == pytest.approx(0.0)
+
+
+def test_noisy_online_cross_update_branch_runs() -> None:
+    """The cross-trajectory noisy online state-preparation branch should execute."""
+    from mqt.yaqs.optimization.krotov import (
+        _noisy_state_preparation_online_update,  # ruff: ignore[import-private-name]
+    )
+
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("ry", (0,), param_index=0)])
+    theta = np.array([0.2])
+    target = MPS(1)
+    new_theta, contribution = _noisy_state_preparation_online_update(
+        circuit,
+        theta,
+        target,
+        None,
+        KrotovTJMOptions(num_trajectories=2, trajectory_update="cross"),
+        step_size=0.05,
+        initial_state=None,
+        truncation=KrotovTruncation(),
+        iteration=0,
+    )
+
+    assert new_theta.shape == theta.shape
+    assert contribution.shape == theta.shape
+    assert np.all(np.isfinite(new_theta))
+    assert np.all(np.isfinite(contribution))
+
+
+def test_noisy_public_wrappers_cover_loss_and_sample_paths() -> None:
+    """Public noisy loss/contribution wrappers should return consistent noiseless values."""
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("ry", (0,), param_index=0)])
+    theta = np.array([0.0])
+    target = np.array([1.0, 0.0], dtype=np.complex128)
+    tjm_options = KrotovTJMOptions(num_trajectories=1)
+    truncation = KrotovTruncation()
+
+    chi, terminal_loss, fidelity = state_preparation_terminal_costate(MPS(1), target)
+    assert chi.length == 1
+    assert terminal_loss == pytest.approx(0.0)
+    assert fidelity == pytest.approx(1.0)
+    assert noisy_state_preparation_loss(
+        circuit, theta, target, None, tjm_options, truncation=truncation
+    ) == pytest.approx(
+        0.0,
+    )
+
+    readout = KrotovReadout(observable=Observable("z", 0), loss="mse")
+    contribution, loss_value, zbar, trajectory_readouts, trajectories = noisy_sample_contribution(
+        circuit,
+        theta,
+        np.array([], dtype=np.float64),
+        1.0,
+        readout,
+        0.0,
+        None,
+        tjm_options,
+        MPS(1),
+        truncation,
+    )
+    np.testing.assert_allclose(contribution, np.array([0.0]), atol=1e-12)
+    assert loss_value == pytest.approx(0.0)
+    assert zbar == pytest.approx(1.0)
+    assert trajectory_readouts == [pytest.approx(1.0)]
+    assert len(trajectories) == 1
+
+
 def test_noisy_state_preparation_fixed_trajectory_gradient_matches_finite_difference() -> None:
     """Fixed realized drift maps give a finite-difference pathwise gradient."""
     circuit = ParameterizedCircuit(1, [ParameterizedGate("ry", (0,), param_index=0)])
@@ -1058,8 +1399,8 @@ def test_noisy_state_preparation_crn_monotonic_descent() -> None:
         circuit, target_state, noise_model, tjm_options, initial_theta=initial_theta, options=options
     )
 
-    fidelities = result.trace["fidelity"]
-    
+    fidelities = np.asarray(result.trace["fidelity"], dtype=np.float64)
+
     # Assert monotonic increase
     for i in range(len(fidelities) - 1):
         assert fidelities[i + 1] >= fidelities[i] - 1e-12

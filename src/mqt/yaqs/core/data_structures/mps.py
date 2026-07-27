@@ -268,6 +268,59 @@ class MPS:
         if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
 
+    @classmethod
+    def from_statevector(cls, vector: NDArray[np.complex128]) -> MPS:
+        """Convert a dense qubit statevector into an exact normalized MPS.
+
+        Args:
+            vector: One-dimensional dense statevector in YAQS/Qiskit little-endian basis order.
+
+        Returns:
+            An exact MPS representation of the normalized statevector.
+
+        Raises:
+            ValueError: If the vector is not one-dimensional, has non-qubit dimension, or is zero.
+        """
+        dense = np.asarray(vector, dtype=np.complex128)
+        if dense.ndim != 1:
+            msg = f"Statevector must be one-dimensional, got shape {dense.shape}."
+            raise ValueError(msg)
+        if dense.size < 2:
+            msg = "Statevector must contain at least one qubit."
+            raise ValueError(msg)
+
+        num_qubits = int(np.log2(dense.size))
+        if 2**num_qubits != dense.size:
+            msg = f"Statevector length must be a power of two, got {dense.size}."
+            raise ValueError(msg)
+
+        norm = float(np.linalg.norm(dense))
+        if norm <= 0.0 or not np.isfinite(norm):
+            msg = "Statevector must have nonzero finite norm."
+            raise ValueError(msg)
+
+        current = (dense / norm).reshape([2] * num_qubits)
+        left_bond = 1
+        left_to_right_tensors: list[NDArray[np.complex128]] = []
+        for _site in range(num_qubits - 1):
+            matrix = current.reshape(left_bond * 2, -1)
+            u_matrix, singular_values, vh_matrix = np.linalg.svd(matrix, full_matrices=False)
+            right_bond = len(singular_values)
+            left_to_right_tensors.append(
+                np.asarray(u_matrix.reshape(left_bond, 2, right_bond).transpose(1, 0, 2), dtype=np.complex128)
+            )
+            current = np.diag(singular_values) @ vh_matrix
+            left_bond = right_bond
+
+        left_to_right_tensors.append(
+            np.asarray(current.reshape(left_bond, 2, 1).transpose(1, 0, 2), dtype=np.complex128)
+        )
+
+        # YAQS stores site 0 as the least significant qubit, while the left-to-right
+        # SVD above factors the dense tensor from the most significant axis.
+        tensors = [tensor.transpose(0, 2, 1) for tensor in reversed(left_to_right_tensors)]
+        return cls(num_qubits, tensors=tensors)
+
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
         """Initialize a list of MPS tensors representing a product state from a basis string.
 
@@ -598,6 +651,24 @@ class MPS:
         if form == "B":
             self.flip_network()
 
+    def normalize_preserving_phase(self, form: str = "B", decomposition: str = "SVD") -> None:
+        """Normalize this MPS without changing its represented global phase.
+
+        Standard SVD canonicalization may choose singular-vector signs/gauges
+        arbitrarily. This method restores the pre-normalization global phase after
+        canonicalization, which is useful when stored forward states and adjoints
+        must keep consistent relative phases.
+
+        Args:
+            form: Canonical form passed to :meth:`normalize`.
+            decomposition: Decomposition type passed to :meth:`normalize`.
+        """
+        reference = copy.deepcopy(self)
+        self.normalize(form, decomposition=decomposition)
+        overlap = reference.scalar_product(self)
+        if abs(overlap) > 0.0:
+            self.tensors[0] *= np.conj(overlap) / abs(overlap)
+
     def compress(
         self,
         threshold: float,
@@ -746,8 +817,7 @@ class MPS:
                 assert operator.sites == i, f"Operator sites mismatch {operator.sites}, {i}"
 
             assert i is not None, f"Invalid type for 'sites': expected int or list[int], got {type(sites).__name__}"
-            a = temp_state.tensors[i]
-            temp_state.tensors[i] = oe.contract("ab, bcd->acd", operator.gate.matrix, a)
+            temp_state.apply_local_operator(operator.gate.matrix, [i], allow_long_range=False)
 
         elif operator.gate.matrix.shape[0] == 4:  # Two-site correlator
             assert isinstance(sites, list)
@@ -760,37 +830,191 @@ class MPS:
             assert operator.sites[1] - operator.sites[0] == 1, (
                 "Only nearest-neighbor observables are currently implemented."
             )
-            a = temp_state.tensors[i]
-            b = temp_state.tensors[j]
-            d_i, left, _ = a.shape
-            d_j, _, right = b.shape
-
-            # 1) merge A,B into theta of shape (l, d_i*d_j, r)
-            theta = np.tensordot(a, b, axes=(2, 1))  # (d_i, l, d_j, r)
-            theta = theta.transpose(1, 0, 2, 3)  # (l, d_i, d_j, r)
-            theta = theta.reshape(left, d_i * d_j, right)  # (l, d_i*d_j, r)
-
-            # 2) apply operator on the combined phys index
-            theta = oe.contract("ab, cbd->cad", operator.gate.matrix, theta)  # (l, d_i*d_j, r)
-            theta = theta.reshape(left, d_i, d_j, right)  # back to (l, d_i, d_j, r)
-
-            # 3) split via SVD
-            theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
-
-            chi_new = len(s_vec)  # keep all singular values
-
-            # build new A, B in (p, l, r) order
-            u_tensor = u_mat.reshape(left, d_i, chi_new)  # (l, d_i, r_new)
-            a_new = u_tensor.transpose(1, 0, 2)  # → (d_i, l, r_new)
-
-            v_tensor = (np.diag(s_vec) @ v_mat).reshape(chi_new, d_j, right)  # (l_new, d_j, r)
-            b_new = v_tensor.transpose(1, 0, 2)  # → (d_j, l_new, r)
-
-            temp_state.tensors[i] = a_new
-            temp_state.tensors[j] = b_new
+            temp_state.apply_local_operator(operator.gate.matrix, [i, j], allow_long_range=False)
 
         return self.scalar_product(temp_state, sites)
+
+    @staticmethod
+    def _permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        """Permute a wrap-ordered gate to merged nearest-neighbor ordering.
+
+        Args:
+            gate4: Two-site gate in ``|q_{L-1}, q_0>`` ordering.
+
+        Returns:
+            Gate matrix in ``|q_0, q_{L-1}>`` ordering.
+        """
+        p_perm = np.zeros((4, 4), dtype=np.complex128)
+        for a in range(2):
+            for b in range(2):
+                p_perm[2 * b + a, 2 * a + b] = 1.0
+        return p_perm.conj().T @ gate4 @ p_perm
+
+    @staticmethod
+    def _swap_operator(local_dim: int) -> NDArray[np.complex128]:
+        """Construct the nearest-neighbor SWAP matrix for equal local dimensions.
+
+        Args:
+            local_dim: Local physical dimension of both swapped sites.
+
+        Returns:
+            Dense SWAP matrix on the merged two-site physical index.
+        """
+        swap = np.zeros((local_dim * local_dim, local_dim * local_dim), dtype=np.complex128)
+        for left_state in range(local_dim):
+            for right_state in range(local_dim):
+                col = left_state * local_dim + right_state
+                row = right_state * local_dim + left_state
+                swap[row, col] = 1.0
+        return swap
+
+    def _apply_adjacent_two_site_operator(
+        self,
+        matrix: NDArray[np.complex128],
+        left_site: int,
+        *,
+        threshold: float,
+        max_bond_dim: int | None,
+        min_bond_dim: int,
+        trunc_mode: TruncMode,
+    ) -> None:
+        """Apply a two-site operator to adjacent MPS tensors in place."""
+        right_site = left_site + 1
+        left_tensor = self.tensors[left_site]
+        right_tensor = self.tensors[right_site]
+        d_left, d_right = left_tensor.shape[0], right_tensor.shape[0]
+
+        merged = merge_two_site(left_tensor, right_tensor)
+        updated = np.asarray(oe.contract("ab,bcd->acd", matrix, merged), dtype=np.complex128)
+        new_left, new_right = split_two_site(
+            updated,
+            [d_left, d_right],
+            svd_distribution="right",
+            trunc_mode=trunc_mode,
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_bond_dim=min_bond_dim,
+        )
+        self.tensors[left_site] = new_left
+        self.tensors[right_site] = new_right
+
+    def apply_local_operator(
+        self,
+        matrix: NDArray[np.complex128],
+        sites: int | list[int] | tuple[int, ...],
+        *,
+        threshold: float = 0.0,
+        max_bond_dim: int | None = None,
+        min_bond_dim: int = 1,
+        trunc_mode: TruncMode = "discarded_weight",
+        allow_long_range: bool = True,
+    ) -> None:
+        """Apply a one- or two-site operator to this MPS in place.
+
+        Two-site operators are interpreted in ascending-site order. If
+        ``allow_long_range`` is true, non-adjacent qubit operators are applied by
+        adjacent SWAP chains before and after the local update.
+
+        Args:
+            matrix: Dense local operator matrix.
+            sites: One site or two sites in ascending order.
+            threshold: SVD truncation threshold used when splitting two-site tensors.
+            max_bond_dim: Optional hard cap on the post-split bond dimension.
+            min_bond_dim: Minimum number of singular values retained by each split.
+            trunc_mode: Singular-value truncation mode.
+            allow_long_range: Whether to support non-adjacent two-site operators via SWAP chains.
+
+        Raises:
+            ValueError: If the operator shape, sites, or long-range dimensions are unsupported.
+        """
+        sites_list = [sites] if isinstance(sites, int) else [int(site) for site in sites]
+        operator = np.asarray(matrix, dtype=np.complex128)
+
+        for site in sites_list:
+            if site < 0 or site >= self.length:
+                msg = f"Local operator site {site} outside range(0, {self.length})."
+                raise ValueError(msg)
+
+        if len(sites_list) == 1:
+            site = sites_list[0]
+            local_dim = self.tensors[site].shape[0]
+            if operator.shape != (local_dim, local_dim):
+                msg = f"One-site operator shape must be {(local_dim, local_dim)}, got {operator.shape}."
+                raise ValueError(msg)
+            self.tensors[site] = np.asarray(
+                oe.contract("ab,bcd->acd", operator, self.tensors[site]), dtype=np.complex128
+            )
+            return
+
+        if len(sites_list) != 2:
+            msg = "Local operator must act on one or two sites."
+            raise ValueError(msg)
+
+        left_site, right_site = sites_list
+        if left_site >= right_site:
+            msg = "Two-site operator sites must be in ascending order."
+            raise ValueError(msg)
+
+        d_left = self.tensors[left_site].shape[0]
+        d_right = self.tensors[right_site].shape[0]
+        expected_shape = (d_left * d_right, d_left * d_right)
+        if operator.shape != expected_shape:
+            msg = f"Two-site operator shape must be {expected_shape}, got {operator.shape}."
+            raise ValueError(msg)
+
+        if right_site == left_site + 1:
+            self._apply_adjacent_two_site_operator(
+                operator,
+                left_site,
+                threshold=threshold,
+                max_bond_dim=max_bond_dim,
+                min_bond_dim=min_bond_dim,
+                trunc_mode=trunc_mode,
+            )
+            return
+
+        if not allow_long_range:
+            msg = "Only nearest-neighbor two-site observables are currently implemented."
+            raise ValueError(msg)
+
+        for site in range(right_site - 1, left_site, -1):
+            local_dim = self.tensors[site].shape[0]
+            next_dim = self.tensors[site + 1].shape[0]
+            if local_dim != next_dim:
+                msg = "Long-range two-site operators via SWAP chains require equal physical dimensions."
+                raise ValueError(msg)
+            self._apply_adjacent_two_site_operator(
+                self._swap_operator(local_dim),
+                site,
+                threshold=threshold,
+                max_bond_dim=max_bond_dim,
+                min_bond_dim=min_bond_dim,
+                trunc_mode=trunc_mode,
+            )
+
+        self._apply_adjacent_two_site_operator(
+            operator,
+            left_site,
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_bond_dim=min_bond_dim,
+            trunc_mode=trunc_mode,
+        )
+
+        for site in range(left_site + 1, right_site):
+            local_dim = self.tensors[site].shape[0]
+            next_dim = self.tensors[site + 1].shape[0]
+            if local_dim != next_dim:
+                msg = "Long-range two-site operators via SWAP chains require equal physical dimensions."
+                raise ValueError(msg)
+            self._apply_adjacent_two_site_operator(
+                self._swap_operator(local_dim),
+                site,
+                threshold=threshold,
+                max_bond_dim=max_bond_dim,
+                min_bond_dim=min_bond_dim,
+                trunc_mode=trunc_mode,
+            )
 
     def apply_local(self, observable: Observable) -> None:
         r"""Apply a one- or two-site local observable to this MPS in-place.
@@ -807,57 +1031,10 @@ class MPS:
             ValueError: If the observable is not one- or two-site local under the
                 supported adjacency conventions.
         """
-
-        def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
-            """Permute wrap gate from |q_{L-1}, q_0> to merged |q_0, q_{L-1}> ordering.
-
-            Returns:
-                Permuted 4x4 gate matrix.
-            """
-            p_perm = np.zeros((4, 4), dtype=np.complex128)
-            for a in range(2):
-                for b in range(2):
-                    p_perm[2 * b + a, 2 * a + b] = 1.0
-            return p_perm.conj().T @ gate4 @ p_perm
-
-        def apply_two_site_nn_inplace(state: MPS, site_left: int, mat4: NDArray[np.complex128]) -> None:
-            """Apply 4x4 gate to adjacent sites (site_left, site_left+1) in-place via SVD."""
-            i, j = site_left, site_left + 1
-            a = state.tensors[i]
-            b = state.tensors[j]
-            d_i, left, _ = a.shape
-            d_j, _, right = b.shape
-
-            theta = np.tensordot(a, b, axes=(2, 1)).transpose(1, 0, 2, 3)
-            theta = theta.reshape(left, d_i * d_j, right)
-            theta = oe.contract("ab, cbd->cad", mat4, theta).reshape(left, d_i, d_j, right)
-
-            theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
-
-            u_tensor = u_mat.reshape(left, d_i, len(s_vec)).transpose(1, 0, 2)
-            v_tensor = (np.diag(s_vec) @ v_mat).reshape(len(s_vec), d_j, right).transpose(1, 0, 2)
-
-            state.tensors[i] = u_tensor
-            state.tensors[j] = v_tensor
-
-        def bubble_swaps_forward(state: MPS) -> None:
-            """Move logical q_0 next to q_{L-1} via adjacent SWAPs."""
-            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
-            for i in range(state.length - 2):
-                apply_two_site_nn_inplace(state, i, sw)
-
-        def bubble_swaps_backward(state: MPS) -> None:
-            """Undo bubble_swaps_forward."""
-            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
-            for i in reversed(range(state.length - 2)):
-                apply_two_site_nn_inplace(state, i, sw)
-
         sites = [observable.sites] if isinstance(observable.sites, int) else observable.sites
 
         if observable.gate.matrix.shape[0] == 2:
-            site = sites[0]
-            self.tensors[site] = oe.contract("ab, bcd->acd", observable.gate.matrix, self.tensors[site])
+            self.apply_local_operator(observable.gate.matrix, [int(sites[0])], allow_long_range=False)
             return
 
         if observable.gate.matrix.shape[0] == 4:
@@ -867,23 +1044,21 @@ class MPS:
             if length == 2:
                 if i == length - 1 and j == 0:
                     mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
-                    g_merged = permuted_periodic_wrap(mat)
-                    apply_two_site_nn_inplace(self, 0, g_merged)
+                    g_merged = self._permuted_periodic_wrap(mat)
+                    self.apply_local_operator(g_merged, [0, 1], allow_long_range=False)
                     return
                 i, j = min(i, j), max(i, j)
             elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
                 mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
-                bubble_swaps_forward(self)
-                g_merged = permuted_periodic_wrap(mat)
-                apply_two_site_nn_inplace(self, length - 2, g_merged)
-                bubble_swaps_backward(self)
+                g_merged = self._permuted_periodic_wrap(mat)
+                self.apply_local_operator(g_merged, [0, length - 1], allow_long_range=True)
                 return
 
             if j != i + 1:
                 msg = "Only nearest-neighbor two-site observables are currently implemented."
                 raise ValueError(msg)
 
-            apply_two_site_nn_inplace(self, i, np.asarray(observable.gate.matrix, dtype=np.complex128))
+            self.apply_local_operator(observable.gate.matrix, [i, j], allow_long_range=False)
             return
 
         msg = "Local observable must be one-site or nearest-neighbor two-site."
@@ -1037,7 +1212,7 @@ class MPS:
             if site != self.length - 1:
                 projected_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
 
-                temp_state.tensors[site + 1] = (  # noqa: B909
+                temp_state.tensors[site + 1] = (  # ruff: ignore[loop-iterator-mutation]
                     1
                     / np.sqrt(probabilities[chosen_index])
                     * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])

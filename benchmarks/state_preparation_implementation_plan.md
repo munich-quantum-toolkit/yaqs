@@ -231,12 +231,31 @@ Add typed records for:
 - `BenchmarkConfig`
 - `TargetSelection`
 - `AnsatzConfig`
+- `InitializationConfig`
 - `OptimizerConfig`
 - `EvaluationConfig`
 - `NoiseConfig`
 - `CircuitStatistics`
 - `BenchmarkResult`
 - `BenchmarkFailure`
+
+Keep initialization in its own record because its rule, random seed, scale, or
+warm-start checksum independently changes the trained artifact and stable run
+identity. A warm-start filesystem path is provenance, but only the content
+checksum belongs in the scientific run key.
+
+Treat these records as fully resolved run cells rather than permissive input
+templates. In particular:
+
+- bind every target identifier to the fixture's exact format and generation
+  seed;
+- require distinct resolved seeds for initialization, optimizer ordering,
+  training, and testing;
+- require an explicit positive `tjm_dt` for standard TJM noise (the canonical
+  presets use `1.0`, while another explicit value is a distinct
+  parameterization); and
+- reject noiseless trajectory-sidecar or confidence-interval requests and
+  confidence intervals with fewer than two samples.
 
 ### Required result fields
 
@@ -250,6 +269,7 @@ Represent every field in the benchmark reporting template:
 - ansatz description;
 - layer count;
 - parameter count;
+- evaluated circuit depth;
 - one- and two-qubit gate counts;
 - optimizer budget;
 - training trajectories or shots;
@@ -274,15 +294,20 @@ Add:
 - MPS truncation settings;
 - logical and native gate counts;
 - pruned native-gate count;
+- logical pre-compilation, native pre-pruning, and final materialized-circuit
+  noiseless fidelities;
+- trajectory uncertainty and an optional `normal_clipped` confidence interval;
 - optimization and evaluation wall times;
 - YAQS, Python, NumPy, and SciPy versions;
 - Git commit and dirty-tree flag;
 - result status;
-- parameter-checkpoint path; and
-- checkpoint checksum.
+- mandatory parameter-checkpoint path; and
+- mandatory checkpoint checksum.
 
 Do not overload the benchmark's target-generation `seed` field with any runtime
-seed.
+seed. The confidence level, confidence-interval method, trajectory-sidecar
+storage policy, and artifact path spelling are post-processing or output
+policies and do not change the scientific run identifier.
 
 ### Tests
 
@@ -296,10 +321,19 @@ seed.
 - Schema-version validation.
 - Failure-record serialization.
 - Deterministic run-identifier construction.
+- Exact target-seed and fixture-format validation.
+- Cross-record parameter, gate-count, pruning, and fidelity consistency.
+- Strict derived-field type checking, including rejection of Boolean aliases
+  for integer counts.
+- Integer-spelled JSON numbers accepted and normalized for real-valued fields.
+- Required successful checkpoints and Ballarin pre-pruning diagnostics.
+- Confidence-interval method and sample-budget validation.
 
 ### Acceptance criteria
 
-Every planned run can be represented losslessly and deterministically.
+Every planned run can be represented losslessly and deterministically, and no
+accepted configuration is structurally incapable of producing a valid success
+record.
 
 ## Work package 2: Validated target loader
 
@@ -880,6 +914,9 @@ Include:
 - Atomic writes.
 - Duplicate-run prevention.
 - Resume completed runs.
+- Compare stored Git and software provenance before treating an existing
+  scientific run identifier as reusable; require an explicit override when the
+  implementation fingerprint differs.
 - Preserve successful rows after later failures.
 - Explicit overwrite option.
 - Validation before writing.

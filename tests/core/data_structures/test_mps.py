@@ -7,7 +7,7 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806
+# ruff: file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 
@@ -103,6 +103,36 @@ def _dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.nd
     g_merged = _permuted_periodic_wrap_gate(g)
     g_nn = _dense_embed_adjacent_two_site(length, length - 2, g_merged)
     return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
+
+
+def _dense_embed_two_site_little_endian(length: int, site_left: int, site_right: int, gate4: np.ndarray) -> np.ndarray:
+    """Embed a two-site gate in the dense ordering returned by :meth:`MPS.to_vec`.
+
+    Args:
+        length: Number of qubits.
+        site_left: Lower site index.
+        site_right: Higher site index.
+        gate4: Two-site gate matrix in ascending-site ordering.
+
+    Returns:
+        np.ndarray: Embedded dense operator.
+    """
+    dim = 2**length
+    dense = np.zeros((dim, dim), dtype=np.complex128)
+    gate = np.asarray(gate4, dtype=np.complex128)
+    for col in range(dim):
+        bits = [(col >> site) & 1 for site in range(length)]
+        local_col = 2 * bits[site_left] + bits[site_right]
+        for local_row in range(4):
+            amp = gate[local_row, local_col]
+            if np.isclose(amp, 0.0):
+                continue
+            out_bits = bits.copy()
+            out_bits[site_left] = (local_row >> 1) & 1
+            out_bits[site_right] = local_row & 1
+            row = sum(bit << site for site, bit in enumerate(out_bits))
+            dense[row, col] += amp
+    return dense
 
 
 def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -475,6 +505,34 @@ def test_mps_apply_local_periodic_wrap_matches_dense_expectation() -> None:
     assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
 
 
+def test_mps_apply_local_operator_long_range_matches_dense_vector() -> None:
+    """Long-range local-operator application should match the dense vector reference."""
+    length = 5
+    rng = np.random.default_rng(2027)
+    gate4 = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
+
+    mps = MPS(length, state="random", pad=16)
+    mps.normalize("B")
+    psi = np.asarray(mps.to_vec(), dtype=np.complex128)
+
+    mps.apply_local_operator(gate4, [1, 4])
+
+    dense = _dense_embed_two_site_little_endian(length, 1, 4, gate4)
+    np.testing.assert_allclose(np.asarray(mps.to_vec()), dense @ psi, atol=1e-9)
+
+
+def test_mps_apply_local_operator_respects_max_bond_dim() -> None:
+    """The shared local-operator path should apply caller-supplied SVD truncation settings."""
+    rng = np.random.default_rng(2028)
+    gate4 = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
+    mps = MPS(2, state="x+")
+
+    mps.apply_local_operator(gate4, [0, 1], max_bond_dim=1)
+
+    assert mps.tensors[0].shape[2] == 1
+    assert mps.tensors[1].shape[1] == 1
+
+
 def test_mps_apply_local_non_adjacent_two_site_raises() -> None:
     """Two-site 4x4 observables must be nearest neighbors (or periodic wrap)."""
     length = 4
@@ -580,6 +638,25 @@ def test_single_shot_basis() -> None:
     psi_y_minus = MPS(length=1, state="y-")
     for _ in range(10):
         assert psi_y_minus.measure_single_shot(basis="Y") == 1
+
+
+def test_measurement_validation_branches() -> None:
+    """Invalid measurement inputs should raise clear errors."""
+    mps = MPS(length=1, state="zeros")
+
+    with pytest.raises(ValueError, match="Invalid basis"):
+        mps.measure_single_shot(basis="A")
+    with pytest.raises(ValueError, match="Invalid site"):
+        mps.measure(site=1)
+    with pytest.raises(ValueError, match="Invalid basis"):
+        mps.measure(site=0, basis="A")
+
+
+def test_measure_y_basis_branch() -> None:
+    """Single-site projective measurement should support the Y basis."""
+    mps = MPS(length=1, state="y+")
+
+    assert mps.measure(site=0, basis="Y", rng=np.random.default_rng(0)) == 0
 
 
 def test_measure_shots_basis() -> None:
@@ -788,6 +865,73 @@ def test_convert_to_vector() -> None:
             expected = np.kron(expected, state)
 
         assert np.allclose(psi, expected, atol=tol)
+
+
+def test_mps_from_statevector_roundtrip_normalizes() -> None:
+    """Dense statevectors should convert to normalized MPS in ``to_vec`` order."""
+    vector = rng.normal(size=8) + 1j * rng.normal(size=8)
+
+    mps = MPS.from_statevector(vector)
+
+    np.testing.assert_allclose(mps.to_vec(), vector / np.linalg.norm(vector), atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("vector", "match"),
+    [
+        (np.eye(2, dtype=np.complex128), "one-dimensional"),
+        (np.array([1.0], dtype=np.complex128), "at least one qubit"),
+        (np.array([1.0, 0.0, 0.0], dtype=np.complex128), "power of two"),
+        (np.zeros(2, dtype=np.complex128), "nonzero finite norm"),
+    ],
+)
+def test_mps_from_statevector_validates_input(vector: np.ndarray, match: str) -> None:
+    """Invalid dense statevectors should be rejected before building tensors."""
+    with pytest.raises(ValueError, match=match):
+        MPS.from_statevector(vector)
+
+
+def test_mps_validation_error_branches() -> None:
+    """Small validation branches should reject malformed or incompatible MPS inputs."""
+    with pytest.raises(ValueError, match="Invalid state string"):
+        MPS(length=1, state="invalid")
+
+    assert MPS(length=2).almost_equal(MPS(length=3)) is False
+    assert MPS(length=2).almost_equal(MPS(length=2, pad=2)) is False
+
+    altered = copy.deepcopy(MPS(length=2))
+    altered.tensors[0][0, 0, 0] = 0.5
+    assert MPS(length=2).almost_equal(altered) is False
+
+    with pytest.raises(ValueError, match="Invalid `sites` argument"):
+        MPS(length=3).scalar_product(MPS(length=3), sites=[0, 1, 2])
+
+
+def test_zero_norm_entropy_and_projection_branches() -> None:
+    """Zero-probability branches should return zero without dividing by the norm."""
+    zero_bond_state = MPS(
+        length=2,
+        tensors=[
+            np.zeros((2, 1, 2), dtype=np.complex128),
+            np.zeros((2, 2, 1), dtype=np.complex128),
+        ],
+    )
+
+    assert zero_bond_state.get_entropy([0, 1]) == pytest.approx(0.0)
+    assert MPS(length=1, state="zeros").project_onto_bitstring("1") == pytest.approx(0.0)
+
+
+def test_normalize_preserving_phase_matches_original_vector_phase() -> None:
+    """Phase-preserving normalization should keep the original vector direction."""
+    vector = rng.normal(size=8) + 1j * rng.normal(size=8)
+    mps = MPS.from_statevector(vector)
+    mps.tensors[0] *= 2.5 * np.exp(0.73j)
+    original = np.asarray(mps.to_vec(), dtype=np.complex128)
+
+    mps.normalize_preserving_phase()
+
+    np.testing.assert_allclose(mps.to_vec(), original / np.linalg.norm(original), atol=1e-12)
+    assert mps.norm() == pytest.approx(1.0, abs=1e-12)
 
 
 def test_convert_to_vector_fidelity() -> None:

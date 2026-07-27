@@ -3,7 +3,7 @@ import copy
 import numpy as np
 
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.state import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.optimization.parameterized_circuit import create_brickwall_matrix_product_disentangler_parameterized_circuit
 from mqt.yaqs.optimization.krotov import (
     KrotovOptions,
@@ -19,8 +19,7 @@ depth = 1
 statevec = np.random.randn(2**num_qubits) + 1j * np.random.randn(2**num_qubits)
 statevec /= np.linalg.norm(statevec)
 
-from mqt.yaqs.optimization.krotov import _mps_from_statevector
-target_state = _mps_from_statevector(statevec)
+target_state = MPS.from_statevector(statevec)
 
 circuit = create_brickwall_matrix_product_disentangler_parameterized_circuit(num_qubits, depth, initial_single_qubit_layer=True)
 initial_theta = np.random.randn(circuit.num_params) * 0.1

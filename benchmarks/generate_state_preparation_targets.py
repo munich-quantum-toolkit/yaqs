@@ -11,32 +11,29 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import scipy
 from scipy.sparse.linalg import LinearOperator, eigsh
 
+if __package__:
+    from .state_preparation.constants import SUPPORTED_QUBIT_COUNTS as QUBIT_COUNTS
+    from .state_preparation.constants import TARGET_FIXTURE_FORMAT, TARGET_IDS
+else:
+    _constants = importlib.import_module("state_preparation.constants")
+    QUBIT_COUNTS = cast("tuple[int, int]", _constants.SUPPORTED_QUBIT_COUNTS)
+    TARGET_FIXTURE_FORMAT = cast("str", _constants.TARGET_FIXTURE_FORMAT)
+    TARGET_IDS = cast("tuple[str, ...]", _constants.TARGET_IDS)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from numpy.typing import NDArray
-
-QUBIT_COUNTS = (6, 12)
-TARGET_IDS = (
-    "gaussian_mu0p5_sigma0p1",
-    "tfim_ferro",
-    "tfim_critical",
-    "tfim_para",
-    "haar_random_1",
-    "haar_random_2",
-    "haar_random_3",
-    "random_mps_bond2",
-    "random_mps_bond3",
-)
 
 DEFAULT_OUTPUT_PATH = Path(__file__).with_name("state_preparation_target_states.json")
 GAUSSIAN_MEAN = 0.5
@@ -372,7 +369,7 @@ def generate_target_data(num_qubits: Sequence[int] = QUBIT_COUNTS) -> dict[str, 
         Complete JSON-serializable target-state payload.
     """
     return {
-        "format": "yaqs.state_preparation_targets.v1",
+        "format": TARGET_FIXTURE_FORMAT,
         "generated_by": "benchmarks/generate_state_preparation_targets.py",
         "complex_encoding": "[real, imaginary]",
         "basis_order": "little_endian: amplitude index k has qubit i equal to bit i of k",
@@ -440,8 +437,8 @@ def target_data_matches(actual: object, expected: dict[str, object]) -> bool:
     if not isinstance(actual, dict):
         return False
 
-    actual_payload = copy.deepcopy(actual)
-    expected_payload = copy.deepcopy(expected)
+    actual_payload: dict[str, object] = copy.deepcopy(cast("dict[str, object]", actual))
+    expected_payload: dict[str, object] = copy.deepcopy(expected)
     for key in VERSION_METADATA_KEYS:
         actual_version = actual_payload.pop(key, None)
         expected_payload.pop(key, None)
@@ -462,8 +459,8 @@ def target_data_matches(actual: object, expected: dict[str, object]) -> bool:
     for actual_record, expected_record in zip(actual_targets, expected_targets, strict=True):
         if not isinstance(actual_record, dict) or not isinstance(expected_record, dict):
             return False
-        actual_record_copy = copy.deepcopy(actual_record)
-        expected_record_copy = copy.deepcopy(expected_record)
+        actual_record_copy: dict[str, object] = copy.deepcopy(cast("dict[str, object]", actual_record))
+        expected_record_copy: dict[str, object] = copy.deepcopy(cast("dict[str, object]", expected_record))
 
         actual_vector = actual_record_copy.pop("state_vector", None)
         expected_vector = expected_record_copy.pop("state_vector", None)
@@ -480,8 +477,8 @@ def target_data_matches(actual: object, expected: dict[str, object]) -> bool:
         if isinstance(expected_parameters, dict) and "ground_energy" in expected_parameters:
             if not isinstance(actual_parameters, dict):
                 return False
-            actual_energy = actual_parameters.pop("ground_energy", None)
-            expected_energy = expected_parameters.pop("ground_energy", None)
+            actual_energy = cast("dict[str, object]", actual_parameters).pop("ground_energy", None)
+            expected_energy = cast("dict[str, object]", expected_parameters).pop("ground_energy", None)
             if not _numeric_values_match(actual_energy, expected_energy, atol=GROUND_ENERGY_ATOL):
                 return False
 

@@ -33,15 +33,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
-import opt_einsum as oe
 
 from ..core import linalg
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -56,11 +54,6 @@ if TYPE_CHECKING:
     TargetState = MPS | NDArray[np.complex128]
 
 _BCE_EPS = 1e-7
-
-_SWAP_MATRIX = np.array(
-    [[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
-    dtype=np.complex128,
-)
 
 LossKind = Literal["mse", "bce"]
 ScheduleKind = Literal["constant", "inverse", "exp"]
@@ -84,7 +77,7 @@ class KrotovTruncation:
 
     max_bond_dim: int | None = None
     svd_threshold: float = 0.0
-    trunc_mode: str = "discarded_weight"
+    trunc_mode: TruncMode = "discarded_weight"
     min_bond_dim: int = 1
 
 
@@ -298,48 +291,6 @@ def _step_size(base: float, iteration: int, schedule: ScheduleKind, decay: float
     raise ValueError(msg)
 
 
-def _apply_one_site(state: MPS, matrix: NDArray[np.complex128], site: int) -> None:
-    """Apply a single-qubit operator to an MPS in place.
-
-    Args:
-        state: The MPS to update.
-        matrix: ``2 x 2`` operator.
-        site: Site the operator acts on.
-    """
-    state.tensors[site] = np.asarray(oe.contract("ab,bcd->acd", matrix, state.tensors[site]), dtype=np.complex128)
-
-
-def _apply_two_site_adjacent(
-    state: MPS, matrix: NDArray[np.complex128], left_site: int, truncation: KrotovTruncation
-) -> None:
-    """Apply a two-qubit operator to adjacent sites of an MPS in place.
-
-    Args:
-        state: The MPS to update.
-        matrix: ``4 x 4`` operator on the merged index ``|q_left, q_right>``.
-        left_site: The lower of the two adjacent sites.
-        truncation: Truncation settings for the SVD split.
-    """
-    right_site = left_site + 1
-    left_tensor = state.tensors[left_site]
-    right_tensor = state.tensors[right_site]
-    d_left, d_right = left_tensor.shape[0], right_tensor.shape[0]
-
-    merged = merge_two_site(left_tensor, right_tensor)
-    updated = np.asarray(oe.contract("ab,bcd->acd", matrix, merged), dtype=np.complex128)
-    new_left, new_right = split_two_site(
-        updated,
-        [d_left, d_right],
-        svd_distribution="right",
-        trunc_mode=cast("TruncMode", truncation.trunc_mode),
-        threshold=truncation.svd_threshold,
-        max_bond_dim=truncation.max_bond_dim,
-        min_bond_dim=truncation.min_bond_dim,
-    )
-    state.tensors[left_site] = new_left
-    state.tensors[right_site] = new_right
-
-
 def _apply_operator(
     state: MPS,
     matrix: NDArray[np.complex128],
@@ -357,20 +308,14 @@ def _apply_operator(
         sites: Sites the operator acts on, sorted ascending.
         truncation: Truncation settings for the SVD splits.
     """
-    if len(sites) == 1:
-        _apply_one_site(state, matrix, sites[0])
-        return
-
-    left_site, right_site = sites
-    if right_site == left_site + 1:
-        _apply_two_site_adjacent(state, matrix, left_site, truncation)
-        return
-
-    for i in range(right_site - 1, left_site, -1):
-        _apply_two_site_adjacent(state, _SWAP_MATRIX, i, truncation)
-    _apply_two_site_adjacent(state, matrix, left_site, truncation)
-    for i in range(left_site + 1, right_site):
-        _apply_two_site_adjacent(state, _SWAP_MATRIX, i, truncation)
+    state.apply_local_operator(
+        matrix,
+        sites,
+        threshold=truncation.svd_threshold,
+        max_bond_dim=truncation.max_bond_dim,
+        min_bond_dim=truncation.min_bond_dim,
+        trunc_mode=truncation.trunc_mode,
+    )
 
 
 def _noise_model_is_trivial(noise_model: NoiseModel | None) -> bool:
@@ -462,7 +407,7 @@ def _apply_noise_map(state: MPS, noise_map: KrotovNoiseMap, truncation: KrotovTr
     for matrix, sites in noise_map.operators:
         _apply_operator(state, matrix, sites, truncation)
     if noise_map.normalized:
-        _normalize_preserving_phase(state)
+        state.normalize_preserving_phase()
 
 
 def _pullback_noise_map(costate: MPS, noise_map: KrotovNoiseMap, truncation: KrotovTruncation) -> None:
@@ -479,22 +424,7 @@ def _pullback_noise_map(costate: MPS, noise_map: KrotovNoiseMap, truncation: Kro
 
 def _state_norm(state: MPS) -> float:
     """Return the real full-network norm of an MPS."""
-    return max(0.0, float(np.real(state.scalar_product(state))))
-
-
-def _normalize_preserving_phase(state: MPS) -> None:
-    """Normalize an MPS without changing its represented global phase.
-
-    MPS SVD canonicalization may choose singular-vector signs/gauges
-    arbitrarily. For Krotov adjoints, that representation phase must stay
-    consistent with the pre-normalized trajectory state; otherwise terminal
-    costates and stored forward gate outputs can acquire incompatible phases.
-    """
-    reference = copy.deepcopy(state)
-    state.normalize("B", decomposition="SVD")
-    overlap = reference.scalar_product(state)
-    if abs(overlap) > 0.0:
-        state.tensors[0] *= np.conj(overlap) / abs(overlap)
+    return max(0.0, float(state.norm()))
 
 
 def _jump_probability_weights(
@@ -548,7 +478,7 @@ def _sample_noise_map_and_apply(
 
     jump_probability = float(np.clip(1.0 - _state_norm(state), 0.0, 1.0))
     if rng.random() >= jump_probability:
-        _normalize_preserving_phase(state)
+        state.normalize_preserving_phase()
         if pauli_only:
             return KrotovNoiseMap()
         return KrotovNoiseMap(operators=tuple(operators), normalized=True)
@@ -556,7 +486,7 @@ def _sample_noise_map_and_apply(
     weights = _jump_probability_weights(state, local_noise_model, tjm_options.dt, truncation)
     total = float(np.sum(weights))
     if total <= 0.0:
-        _normalize_preserving_phase(state)
+        state.normalize_preserving_phase()
         if pauli_only:
             return KrotovNoiseMap()
         return KrotovNoiseMap(operators=tuple(operators), normalized=True)
@@ -566,7 +496,7 @@ def _sample_noise_map_and_apply(
     jump_op, sites = _jump_operator(local_noise_model.processes[jump_index])
     operators.append((jump_op, sites))
     _apply_operator(state, jump_op, sites, truncation)
-    _normalize_preserving_phase(state)
+    state.normalize_preserving_phase()
     if pauli_only:
         return KrotovNoiseMap(operators=((jump_op, sites),), jump_process_index=jump_index)
     return KrotovNoiseMap(operators=tuple(operators), normalized=True, jump_process_index=jump_index)
@@ -582,9 +512,7 @@ def _expectation(state: MPS, observable: Observable) -> float:
     Returns:
         The real expectation value.
     """
-    ket = copy.deepcopy(state)
-    ket.apply_local(observable)
-    value = state.scalar_product(ket)
+    value = state.mixed_expectation(state, observable)
     return float(np.real(value))
 
 
@@ -609,57 +537,6 @@ def _resolve_initial_state(
     if isinstance(initial_state, MPS):
         return copy.deepcopy(initial_state)
     return initial_state(x)
-
-
-def _mps_from_statevector(vector: NDArray[np.complex128]) -> MPS:
-    """Convert a dense qubit statevector into an exact normalized MPS.
-
-    Args:
-        vector: One-dimensional dense statevector in YAQS/Qiskit little-endian basis order.
-
-    Returns:
-        An exact MPS representation of the normalized statevector.
-
-    Raises:
-        ValueError: If the vector is not one-dimensional, has non-qubit dimension, or is zero.
-    """
-    dense = np.asarray(vector, dtype=np.complex128)
-    if dense.ndim != 1:
-        msg = f"Target statevector must be one-dimensional, got shape {dense.shape}."
-        raise ValueError(msg)
-    if dense.size < 2:
-        msg = "Target statevector must contain at least one qubit."
-        raise ValueError(msg)
-
-    num_qubits = int(np.log2(dense.size))
-    if 2**num_qubits != dense.size:
-        msg = f"Target statevector length must be a power of two, got {dense.size}."
-        raise ValueError(msg)
-
-    norm = float(np.linalg.norm(dense))
-    if norm <= 0.0 or not np.isfinite(norm):
-        msg = "Target statevector must have nonzero finite norm."
-        raise ValueError(msg)
-
-    current = (dense / norm).reshape([2] * num_qubits)
-    left_bond = 1
-    left_to_right_tensors: list[NDArray[np.complex128]] = []
-    for _site in range(num_qubits - 1):
-        matrix = current.reshape(left_bond * 2, -1)
-        u_matrix, singular_values, vh_matrix = np.linalg.svd(matrix, full_matrices=False)
-        right_bond = len(singular_values)
-        left_to_right_tensors.append(
-            np.asarray(u_matrix.reshape(left_bond, 2, right_bond).transpose(1, 0, 2), dtype=np.complex128)
-        )
-        current = np.diag(singular_values) @ vh_matrix
-        left_bond = right_bond
-
-    left_to_right_tensors.append(np.asarray(current.reshape(left_bond, 2, 1).transpose(1, 0, 2), dtype=np.complex128))
-
-    # YAQS stores site 0 as the least significant qubit, while the left-to-right
-    # SVD above factors the dense tensor from the most significant axis.
-    tensors = [tensor.transpose(0, 2, 1) for tensor in reversed(left_to_right_tensors)]
-    return MPS(num_qubits, tensors=tensors)
 
 
 def _normalized_mps_copy(state: MPS) -> MPS:
@@ -701,9 +578,7 @@ def _resolve_target_state(target_state: TargetState, num_qubits: int) -> MPS:
     Raises:
         ValueError: If the target length is incompatible with the circuit.
     """
-    target = (
-        _normalized_mps_copy(target_state) if isinstance(target_state, MPS) else _mps_from_statevector(target_state)
-    )
+    target = _normalized_mps_copy(target_state) if isinstance(target_state, MPS) else MPS.from_statevector(target_state)
     if target.length != num_qubits:
         msg = f"Target state has {target.length} qubits, but the circuit has {num_qubits}."
         raise ValueError(msg)
@@ -2069,7 +1944,7 @@ def _noisy_state_preparation_batch_epoch(
     initial_state: MPS | None,
     truncation: KrotovTruncation,
     iteration: int,
-    fixed_noise_maps: list[list['KrotovNoiseMap']] | None = None,
+    fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
 ) -> tuple[NDArray[np.float64], float, float, float]:
     """Run one noisy full-trajectory-gradient state-preparation update.
 
@@ -2101,7 +1976,7 @@ def _noisy_state_preparation_online_update(
     initial_state: MPS | None,
     truncation: KrotovTruncation,
     iteration: int,
-    fixed_noise_maps: list[list['KrotovNoiseMap']] | None = None,
+    fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Run one stale-adjoint noisy online sweep for state preparation.
 
@@ -2176,7 +2051,7 @@ def _noisy_state_preparation_online_cross_update(
     initial_state: MPS | None,
     truncation: KrotovTruncation,
     iteration: int,
-    fixed_noise_maps: list[list['KrotovNoiseMap']] | None = None,
+    fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Run one stale-adjoint online sweep with cross-trajectory pairings.
 
