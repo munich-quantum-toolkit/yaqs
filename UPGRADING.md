@@ -4,6 +4,27 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Materialize Ballarin circuits before final evaluation
+
+Use `benchmarks.state_preparation.materialize_ballarin_circuit` after
+`compile_quantinuum_native` and noiseless optimization. The materializer binds
+every native angle, canonicalizes `RZZ` angles to `[-pi, pi)`, removes rotations
+whose canonical magnitude is at most `1e-4` together with any corresponding
+compiler basis-change round trip, and cancels only exact inverse
+compilation-only basis changes.
+
+The returned `BallarinCircuitMaterialization` preserves stable native gate IDs
+and exposes compact final indices plus explicit pruning and cancellation
+provenance. Its authoritative `FrozenNativeCircuit` is a fully bound,
+zero-parameter executable snapshot. Use the same snapshot for final noiseless
+and noisy evaluation; call `to_parameterized_circuit()` only when a detached
+mutable copy is required.
+
+Construct the matching post-gate product-Pauli channel with
+`create_ballarin_noise_provider`. It acts only after retained native `RZZ`
+gates, uses the canonical angle magnitude for the Ballarin calibration, and
+does not compose with the common one- or two-qubit benchmark rates.
+
 ### Compile state-preparation circuits to the Quantinuum-native basis
 
 Use `benchmarks.state_preparation.compile_quantinuum_native` to preserve
