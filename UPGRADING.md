@@ -4,6 +4,39 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Run Krotov state preparation through the method adapter
+
+Use `benchmarks.state_preparation.KrotovStatePreparationMethod` to construct
+the shared BMPD ansatz, initialize parameters, run noiseless full-batch Krotov
+optimization, extract final parameters and training fidelity, and perform
+noiseless evaluation. The adapter accepts the typed benchmark configuration
+records and returns complete normalized optimizer metadata.
+
+Random initialization uses a dedicated NumPy generator seeded by
+`InitializationConfig`; it never reads or modifies NumPy's global random
+state. Warm starts verify their declared SHA-256 checksum before decoding and
+accept versioned Krotov NPZ checkpoints or legacy numeric NPY vectors.
+
+Use `state_preparation_training_id` rather than `BenchmarkConfig.run_id` to
+cache optimization artifacts. The training identifier excludes test noise and
+evaluation policy so the exact same trained parameters can be reused across
+every test configuration. `train_state_preparation_method` performs that
+method-generic training boundary once and returns a
+`StatePreparationTrainingArtifact` with immutable parameter bytes, detached
+optimizer metadata, training fidelity, and a serialized checkpoint for
+evaluation fan-out. Pass the validated `TargetCollection` matching the
+configuration; the helper resolves the record itself and verifies the fixture
+format and checksum before computing. Failures carry their reporting phase and
+original exception in `StatePreparationTrainingError`.
+
+Checkpoints contain parameters rather than target-specific optimizer traces.
+They are bound to the complete data-free logical circuit, use explicit
+little-endian numeric encodings, and reject incompatible layouts before use.
+Training artifacts are factory-created so arbitrary checkpoint bytes cannot be
+attached to otherwise valid parameters.
+Checkpoint serialization returns bytes; atomic file writes and result-stream
+persistence remain the reporting layer's responsibility.
+
 ### Collect state-preparation circuit statistics centrally
 
 Use `benchmarks.state_preparation.collect_circuit_statistics` instead of
