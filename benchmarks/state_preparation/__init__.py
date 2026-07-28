@@ -9,6 +9,13 @@
 
 from __future__ import annotations
 
+from .circuits import (
+    BasisChangeRelationship,
+    LogicalToNativeMapping,
+    NativeAngleExpression,
+    NativeCompilation,
+    compile_quantinuum_native,
+)
 from .constants import (
     BALLARIN_NOISE_ID,
     DEPHASING_NOISE_IDS,
@@ -79,12 +86,16 @@ __all__ = [
     "TARGET_IDS",
     "TWO_SITE_DEPOLARIZING_OPERATORS",
     "AnsatzConfig",
+    "BasisChangeRelationship",
     "BenchmarkConfig",
     "BenchmarkFailure",
     "BenchmarkResult",
     "CircuitStatistics",
     "EvaluationConfig",
     "InitializationConfig",
+    "LogicalToNativeMapping",
+    "NativeAngleExpression",
+    "NativeCompilation",
     "NoiseConfig",
     "OptimizerConfig",
     "PauliDistribution",
@@ -96,6 +107,7 @@ __all__ = [
     "benchmark_record_from_csv_row",
     "benchmark_record_from_dict",
     "benchmark_record_from_json",
+    "compile_quantinuum_native",
     "create_standard_noise_provider",
     "get_standard_noise_definition",
     "iter_targets",

@@ -4,6 +4,23 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Compile state-preparation circuits to the Quantinuum-native basis
+
+Use `benchmarks.state_preparation.compile_quantinuum_native` to preserve
+one-qubit gate operations and native `RZZ` rotations while rewriting every
+logical `RXX` or `RYY` into noiseless basis changes around exactly one
+angle-preserving `RZZ`. All compiled one-qubit gates are marked noiseless under
+the Ballarin convention. The returned immutable mapping records retain source
+indices, parameterization, native indices, and the complete basis-change group
+required for later pruning.
+
+Unsupported two-qubit gates are rejected instead of being passed through.
+Compilation neither resolves nor canonicalizes angles, and it preserves the
+logical circuit's parameter-vector size, including unused indices.
+Mapping indices describe the pre-pruning circuit; downstream materialization
+should build a new circuit and mapping together while retaining each gate's
+stable `native_gate_id`.
+
 ### Construct standard benchmark noise through the gate-local registry
 
 Use `benchmarks.state_preparation.create_standard_noise_provider` for the ten
