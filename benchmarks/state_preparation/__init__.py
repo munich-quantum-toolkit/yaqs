@@ -80,6 +80,7 @@ from .schema import (
     benchmark_record_from_dict,
     benchmark_record_from_json,
 )
+from .statistics import EvaluatedRepresentation, NativeCircuitSource, collect_circuit_statistics
 from .targets import TargetCollection, TargetRecord, iter_targets, load_target, load_target_collection
 
 __all__ = [
@@ -116,12 +117,14 @@ __all__ = [
     "BenchmarkFailure",
     "BenchmarkResult",
     "CircuitStatistics",
+    "EvaluatedRepresentation",
     "EvaluationConfig",
     "FrozenNativeCircuit",
     "FrozenNativeGate",
     "InitializationConfig",
     "LogicalToNativeMapping",
     "NativeAngleExpression",
+    "NativeCircuitSource",
     "NativeCompilation",
     "NoiseConfig",
     "OptimizerConfig",
@@ -139,6 +142,7 @@ __all__ = [
     "benchmark_record_from_json",
     "canonicalize_native_rzz_angle",
     "canonicalize_rzz_angle",
+    "collect_circuit_statistics",
     "compile_quantinuum_native",
     "create_ballarin_noise_provider",
     "create_standard_noise_provider",

@@ -4,6 +4,20 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Collect state-preparation circuit statistics centrally
+
+Use `benchmarks.state_preparation.collect_circuit_statistics` instead of
+counting gates in benchmark scripts. The collector records configured BMPD
+depth, brickwall layer count, trainable parameter count, dependency depth, and
+one- and two-qubit gate counts for both the logical and native circuits, with
+optional counts by gate name.
+
+For standard-noise rows, select the logical evaluated representation. For
+Ballarin rows, pass the final `BallarinCircuitMaterialization` and select the
+native representation. The latter reports counts after threshold pruning and
+safe basis-change cancellation while retaining the logical counts as extended
+metadata.
+
 ### Materialize Ballarin circuits before final evaluation
 
 Use `benchmarks.state_preparation.materialize_ballarin_circuit` after

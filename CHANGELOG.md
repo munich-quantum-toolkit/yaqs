@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added centralized logical and final native circuit statistics for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added immutable final-circuit materialization and exact angle-dependent Ballarin product-Pauli noise for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added a traceable Quantinuum-native compiler for state-preparation circuits ([**@MaxFroehlich1410**])
 - added a validated gate-local registry for all ten standard state-preparation noise configurations ([**@MaxFroehlich1410**])
