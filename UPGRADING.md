@@ -4,6 +4,19 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Sample independent product-Pauli benchmark noise locally
+
+State-preparation benchmarks can now use
+`benchmarks.state_preparation.sample_product_pauli_channel` to sample two
+independent local Pauli distributions. The helper consumes one trajectory-local
+random draw per site and returns only the realized non-identity
+`LocalOperator`s, in call order.
+
+Apply the returned one-site operators sequentially, or wrap them in a
+`RandomUnitaryInstruction` for a gate-local provider. Do not combine product
+outcomes into a weighted two-site matrix: the helper already samples the
+channel probabilities exactly, and its matrices are bare unitary Paulis.
+
 ### Use gate-local providers for context-dependent circuit noise
 
 Noisy Krotov evaluation and training functions now accept an optional

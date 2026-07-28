@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added an exact independent product-Pauli sampler for state-preparation noise benchmarks ([**@MaxFroehlich1410**])
 - added a validated gate-local noise-provider interface for parameterized-circuit trajectory simulation ([**@MaxFroehlich1410**])
 - added validated, immutable loading and lookup APIs for state-preparation benchmark target fixtures ([**@MaxFroehlich1410**])
 - added versioned, strictly validated configuration and result schemas for reproducible state-preparation benchmarks ([**@MaxFroehlich1410**])

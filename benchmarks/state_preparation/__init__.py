@@ -21,6 +21,7 @@ from .constants import (
     TARGET_GENERATION_SEEDS,
     TARGET_IDS,
 )
+from .noise import PauliDistribution, sample_local_pauli, sample_product_pauli_channel
 from .schema import (
     CONFIDENCE_INTERVAL_METHODS,
     CONFIG_SCHEMA_VERSION,
@@ -68,6 +69,7 @@ __all__ = [
     "InitializationConfig",
     "NoiseConfig",
     "OptimizerConfig",
+    "PauliDistribution",
     "TargetCollection",
     "TargetRecord",
     "TargetSelection",
@@ -77,4 +79,6 @@ __all__ = [
     "iter_targets",
     "load_target",
     "load_target_collection",
+    "sample_local_pauli",
+    "sample_product_pauli_channel",
 ]
