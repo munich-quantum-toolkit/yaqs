@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added a validated gate-local registry for all ten standard state-preparation noise configurations ([**@MaxFroehlich1410**])
 - added an exact independent product-Pauli sampler for state-preparation noise benchmarks ([**@MaxFroehlich1410**])
 - added a validated gate-local noise-provider interface for parameterized-circuit trajectory simulation ([**@MaxFroehlich1410**])
 - added validated, immutable loading and lookup APIs for state-preparation benchmark target fixtures ([**@MaxFroehlich1410**])
@@ -179,6 +180,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Contributor -->
 
+[**@MaxFroehlich1410**]: https://github.com/MaxFroehlich1410
 [**@aaronleesander**]: https://github.com/aaronleesander
 [**@denialhaag**]: https://github.com/denialhaag
 [**@Gauthameshwar**]: https://github.com/Gauthameshwar

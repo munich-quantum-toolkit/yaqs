@@ -4,6 +4,20 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Construct standard benchmark noise through the gate-local registry
+
+Use `benchmarks.state_preparation.create_standard_noise_provider` for the ten
+standard dephasing and depolarizing benchmark identifiers. The provider builds
+a fresh local TJM model from each gate's support, applies the full benchmark
+strength to every jump operator, and tags realized maps with the selected
+identifier.
+
+Pass the explicit `NoiseConfig.tjm_dt` to `KrotovTJMOptions` and use
+`apply_noise_to="all"`; the provider itself implements the identifier's
+one-qubit versus two-qubit placement. Do not construct one global model or
+combine a standard provider with `ballarin_coupled`, which remains a separate
+exact product-Pauli channel.
+
 ### Sample independent product-Pauli benchmark noise locally
 
 State-preparation benchmarks can now use
