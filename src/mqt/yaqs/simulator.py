@@ -394,6 +394,58 @@ def _store_lindblad_final_state(
 _call_backend = call_serial_capped
 
 
+def _plan_digital_shots(
+    sim_params: DigitalSimParams,
+    *,
+    noisy: bool,
+) -> tuple[int, int | None, tuple[int, int] | None]:
+    """Plan trajectory count and per-call shot allocation for a digital run.
+
+    Args:
+        sim_params: Digital simulation parameters (observables, shots, num_traj).
+        noisy: Whether a non-trivial noise model is active.
+
+    Returns:
+        ``(effective_num_traj, per_call_shots, shot_distribution)`` where
+        ``per_call_shots`` is a fixed per-trajectory shot count (or ``None``),
+        and ``shot_distribution`` is ``(total_shots, n_traj)`` for combined
+        noisy runs that divide the budget across trajectories.
+    """
+    wants_obs = bool(sim_params.observables)
+    wants_shots = sim_params.shots is not None
+    shots_only = wants_shots and not wants_obs
+
+    per_call_shots: int | None = None
+    # (total_shots, n_traj) for combined noisy runs; per-traj allocation may be 0.
+    shot_distribution: tuple[int, int] | None = None
+
+    if shots_only:
+        assert sim_params.shots is not None
+        if noisy:
+            # One stochastic state per shot (ignore num_traj for the ensemble).
+            effective_num_traj = sim_params.shots
+            per_call_shots = 1
+        else:
+            # One noiseless trajectory; sample the full shot budget from the final state.
+            effective_num_traj = 1
+            per_call_shots = sim_params.shots
+    elif wants_obs:
+        # Observables (and diagnostics) always use num_traj when noisy, else one traj.
+        effective_num_traj = sim_params.num_traj if noisy else 1
+        if wants_shots:
+            assert sim_params.shots is not None
+            if noisy:
+                # Distribute the total shot budget across the observable ensemble.
+                shot_distribution = (sim_params.shots, effective_num_traj)
+            else:
+                per_call_shots = sim_params.shots
+    else:
+        # get_state only
+        effective_num_traj = 1
+
+    return effective_num_traj, per_call_shots, shot_distribution
+
+
 # ---------------------------------------------------------------------------
 # 8) SIMULATOR — public entry point
 # Owns the execution-side configuration (parallel/serial, workers, progress,
@@ -838,33 +890,7 @@ class Simulator:
             msg = "Cannot return state in noisy circuit simulation due to stochastics."
             raise ValueError(msg)
 
-        per_call_shots: int | None = None
-        # (total_shots, n_traj) for combined noisy runs; per-traj allocation may be 0.
-        shot_distribution: tuple[int, int] | None = None
-
-        if shots_only:
-            assert sim_params.shots is not None
-            if noisy:
-                # One stochastic state per shot (ignore num_traj for the ensemble).
-                effective_num_traj = sim_params.shots
-                per_call_shots = 1
-            else:
-                # One noiseless trajectory; sample the full shot budget from the final state.
-                effective_num_traj = 1
-                per_call_shots = sim_params.shots
-        elif wants_obs:
-            # Observables (and diagnostics) always use num_traj when noisy, else one traj.
-            effective_num_traj = sim_params.num_traj if noisy else 1
-            if wants_shots:
-                assert sim_params.shots is not None
-                if noisy:
-                    # Distribute the total shot budget across the observable ensemble.
-                    shot_distribution = (sim_params.shots, effective_num_traj)
-                else:
-                    per_call_shots = sim_params.shots
-        else:
-            # get_state only
-            effective_num_traj = 1
+        effective_num_traj, per_call_shots, shot_distribution = _plan_digital_shots(sim_params, noisy=noisy)
 
         effective_num_mid_measurements = sim_params.num_mid_measurements
         if sim_params.sample_layers:
@@ -942,32 +968,36 @@ class Simulator:
             if traj_final is not None:
                 final_mps = traj_final
 
-        if self.parallel and effective_num_traj > 1:
-            for i, traj_payload in run_backend_parallel(
-                worker_fn=_digital_worker,
-                payload=payload,
-                n_jobs=effective_num_traj,
-                max_workers=self.max_workers,
-                show_progress=self.show_progress,
-                desc="Running trajectories",
-                max_retries=self.max_retries,
-                retry_exceptions=self.retry_exceptions,
-                mp_context=self.mp_context,
-            ):
-                traj_data, traj_diag, shot_counts, traj_final = traj_payload
-                _consume(i, traj_data, traj_diag, shot_counts, traj_final)
-        else:
-            n_threads = available_cpus()
-            args: list[tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]] = [
-                (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
-            ]
-            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
-            for i, arg in enumerate(iterator):
-                traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(backend, arg, n_threads=n_threads)
-                _consume(i, traj_data, traj_diag, shot_counts, traj_final)
+        try:
+            if self.parallel and effective_num_traj > 1:
+                for i, traj_payload in run_backend_parallel(
+                    worker_fn=_digital_worker,
+                    payload=payload,
+                    n_jobs=effective_num_traj,
+                    max_workers=self.max_workers,
+                    show_progress=self.show_progress,
+                    desc="Running trajectories",
+                    max_retries=self.max_retries,
+                    retry_exceptions=self.retry_exceptions,
+                    mp_context=self.mp_context,
+                ):
+                    traj_data, traj_diag, shot_counts, traj_final = traj_payload
+                    _consume(i, traj_data, traj_diag, shot_counts, traj_final)
+            else:
+                n_threads = available_cpus()
+                args: list[tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]] = [
+                    (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
+                ]
+                iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
+                for i, arg in enumerate(iterator):
+                    traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(
+                        backend, arg, n_threads=n_threads
+                    )
+                    _consume(i, traj_data, traj_diag, shot_counts, traj_final)
+        finally:
+            WORKER_CTX.pop("per_call_shots", None)
+            WORKER_CTX.pop("shot_distribution", None)
 
-        WORKER_CTX.pop("per_call_shots", None)
-        WORKER_CTX.pop("shot_distribution", None)
         _store_final_mps(result, final_mps)
         if diag_per_traj is not None:
             result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)

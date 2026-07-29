@@ -573,16 +573,13 @@ def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
     Returns:
         Non-negative shot count for the current worker invocation.
     """
-    try:
-        from mqt.yaqs.simulator import WORKER_CTX  # ruff:ignore[import-outside-top-level]
+    from mqt.yaqs.simulator import WORKER_CTX  # ruff:ignore[import-outside-top-level]
 
-        if "per_call_shots" in WORKER_CTX:
-            return int(WORKER_CTX["per_call_shots"])
-        if "shot_distribution" in WORKER_CTX:
-            total_shots, n_traj = WORKER_CTX["shot_distribution"]
-            base, rem = divmod(int(total_shots), int(n_traj))
-            return base + (1 if traj_idx < rem else 0)
-    except KeyError:
-        pass
+    if "per_call_shots" in WORKER_CTX:
+        return int(WORKER_CTX["per_call_shots"])
+    if "shot_distribution" in WORKER_CTX:
+        total_shots, n_traj = WORKER_CTX["shot_distribution"]
+        base, rem = divmod(int(total_shots), int(n_traj))
+        return base + (1 if traj_idx < rem else 0)
     assert sim_params.shots is not None
     return sim_params.shots

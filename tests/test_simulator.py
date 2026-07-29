@@ -198,7 +198,7 @@ def test_analog_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets
+        # Noisy analog observable simulation can drift slightly across platforms / minimum dependency sets
         # due to floating-point reduction order and BLAS/LAPACK differences.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
@@ -250,7 +250,7 @@ def test_analog_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets
+        # Noisy analog observable simulation can drift slightly across platforms / minimum dependency sets
         # due to floating-point reduction order and BLAS/LAPACK differences.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
@@ -628,7 +628,7 @@ def test_digital_shots_noise() -> None:
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
     It sets up DigitalSimParams with a sufficient number of shots for statistical verification, max bond dimension,
     threshold, and window size, and a noise model with small strengths. After running Simulator.run, the test
-    verifies that sim_params.num_traj equals the number of shots, that each measurement is a dictionary,
+    verifies that result.measurements holds one measurement dictionary per shot trajectory,
     and that the total number of shots recorded in result.counts equals the expected number.
     """
     num_qubits = 5
@@ -658,8 +658,8 @@ def test_digital_shots_no_noise() -> None:
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
     and configures DigitalSimParams with a sufficient number of shots. When noise_model is None,
-    the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
-    are consistent with this behavior.
+    the noiseless shots path uses one trajectory and records one measurement dictionary. The test
+    verifies that the measurements and results are consistent with this behavior.
     """
     num_qubits = 5
     initial_state = State(num_qubits)
@@ -1560,7 +1560,11 @@ def test_digital_shots_parallel_returns_counts() -> None:
 
 
 def test_digital_observables_parallel_records_final_mps() -> None:
-    """Noiseless parallel digital observable simulation with ``get_state=True`` returns the output MPS."""
+    """Noiseless digital observable simulation with ``get_state=True`` returns the output MPS.
+
+    Noiseless digital observable runs always use one trajectory, so ``parallel=True``
+    takes the serial execution fallback rather than the worker pool.
+    """
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
     circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=2)
@@ -1726,4 +1730,4 @@ def test_simulator_run_qasm_path_and_string_observables_match(tmp_path: Path) ->
     )
     path_result = Simulator(parallel=False, show_progress=False).run(state, qasm_path, sim_params)
     string_result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
-    assert path_result.expectation_values[0] == string_result.expectation_values[0]
+    np.testing.assert_array_equal(path_result.expectation_values[0], string_result.expectation_values[0])

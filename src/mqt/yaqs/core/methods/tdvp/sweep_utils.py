@@ -102,9 +102,9 @@ def _scale_dt(
         Effective local evolution time for site and bond updates.
 
     """
-    if not isinstance(sim_params, DigitalSimParams):
-        return float(sim_params.dt) * step_scale
-    return step_scale
+    if isinstance(sim_params, DigitalSimParams):
+        return step_scale
+    return float(sim_params.dt) * step_scale
 
 
 # --- Fixed-χ bond bookkeeping ---
@@ -199,7 +199,7 @@ def uses_fixed_chi(sim_params: AnalogSimParams | DigitalSimParams) -> bool:
         Analog Hamiltonian evolution is excluded (per-sweep renorm breaks ensembles).
 
     """
-    return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
+    return sim_params.max_bond_dim is not None and isinstance(sim_params, DigitalSimParams)
 
 
 def _get_norm(state: MPS) -> float:

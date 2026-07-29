@@ -18,7 +18,8 @@ YAQS draws a sharp line between **what** you simulate and **how** it runs:
 
 | Layer                                                                                                                              | Role                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`~mqt.yaqs.DigitalSimParams` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                             |
+| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`~mqt.yaqs.DigitalSimParams` | The physics: initial state, operator, time grid, observables, trajectory count, truncation.                                                                    |
+| {class}`~mqt.yaqs.NoiseModel`                                                                                                      | Optional physics input supplied to {meth}`~mqt.yaqs.Simulator.run`.                                                                                            |
 | {class}`~mqt.yaqs.Simulator`                                                                                                       | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
 
 This page walks through every option on the {class}`~mqt.yaqs.Simulator` class
@@ -251,7 +252,7 @@ on them safely. The full set is:
 
 | Property                                 | Populated for                                                                                                                                                         |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `observables`                            | Analog and digital runs with observables. Empty list for shots-only digital.                                                                                          |
+| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                    |
 | `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                    |
 | `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                       |
 | `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                 |

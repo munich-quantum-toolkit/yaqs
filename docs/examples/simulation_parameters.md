@@ -121,8 +121,7 @@ def _trunc_summary(params: AnalogSimParams | DigitalSimParams) -> dict[str, obje
     }
     if isinstance(params, DigitalSimParams) and params.shots is not None:
         out["shots"] = params.shots
-    else:
-        out["num_traj"] = params.num_traj
+    out["num_traj"] = params.num_traj
     return out
 ```
 

@@ -1664,6 +1664,25 @@ def test_digital_tjm_shots_smoke_via_simulator() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
+def test_digital_tjm_observables_and_shots_via_simulator() -> None:
+    """Combined observables and shots via ``Simulator`` fill expectations and counts."""
+    length = 4
+    state = State(length, initial="random")
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 3)
+    qc.measure_all()
+
+    shots = 16
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], shots=shots)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (1,)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == shots
+
+
 def test_noisy_digital_tjm_matches_reference() -> None:
     """Noisy circuit TJM matches seeded reference at ``num_traj=100``.
 

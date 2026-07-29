@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..data_structures.simulation_parameters import DigitalSimParams
 from .decompositions import left_qr, right_qr
 from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
     from ..data_structures.mpo import MPO
     from ..data_structures.mps import MPS
-    from ..data_structures.simulation_parameters import AnalogSimParams
+    from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
 def prepare_canonical_site_tensors(
@@ -204,9 +203,6 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) ->
 
     if state.orthogonality_center is not None:
         state.assert_center(0, context="bug")
-
-    if isinstance(sim_params, DigitalSimParams):
-        sim_params.dt = 1
 
     canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)
     right_end_dimension = state.tensors[-1].shape[2]
