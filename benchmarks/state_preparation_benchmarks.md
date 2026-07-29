@@ -41,14 +41,19 @@ Required run metadata:
 
 Use the following rates for dephasing and depolarizing noise:
 
-| Gate context | Strength |
-| --- | ---: |
-| Noise applied after single-qubit gates | `0.064%` (`6.4e-4`) |
-| Jump operators applied after multi-qubit gates | `0.51%` (`5.1e-3`) |
+| Gate context                                   |            Strength |
+| ---------------------------------------------- | ------------------: |
+| Noise applied after single-qubit gates         | `0.064%` (`6.4e-4`) |
+| Jump operators applied after multi-qubit gates |  `0.51%` (`5.1e-3`) |
 
-The strength is interpreted as the per-gate jump/channel strength used by the
-simulator. If a method uses a different internal parameterization, it must state
-the conversion.
+Each listed strength is the strength of **each jump operator**, not a total
+channel strength divided among the operators. For example, single-site
+depolarizing noise after a one-qubit gate has three processes (`X`, `Y`, and
+`Z`), each with strength `6.4e-4`; the nine-operator two-site depolarizing
+channel has nine processes, each with strength `5.1e-3`. YAQS passes these
+values to circuit TJM as Lindblad-process rates with the configured `tjm_dt`.
+An implementation using another parameterization must document its conversion
+from this per-operator convention.
 
 ### N1: Ballarin/Quantinuum Angle-Dependent Local Depolarizing Noise
 
@@ -75,15 +80,15 @@ Definition:
 - Immediately after each retained ideal `RZZ(theta)` on qubits `i` and `j`,
   apply the product channel `K_i(a) ⊗ K_j(a)`, where
 
-```math
+```{math}
 \epsilon(a) = 2.1 \times 10^{-4} + 1.43 \times 10^{-3} a,
 ```
 
-```math
+```{math}
 r(a) = \frac{1}{3}\left(1-\sqrt{1-\frac{5}{4}\epsilon(a)}\right),
 ```
 
-```math
+```{math}
 K_q(a)(\rho) =
   [1-3r(a)]\rho
   + r(a)\left(X_q\rho X_q + Y_q\rho Y_q + Z_q\rho Z_q\right).
@@ -97,6 +102,13 @@ two local sets. In a trajectory implementation, independently sample
 `1-3r`, `r`, `r`, and `r`, respectively, and apply the sampled Pauli pair
 after the ideal gate. This is a product of two local depolarizing channels,
 not a correlated two-qubit Pauli channel.
+
+The implementation samples this categorical channel directly: one draw is
+made for qubit `i` and one independent draw for qubit `j`. It does not
+approximate the 16 branch probabilities with TJM rates or combine the sampled
+operators into a weighted matrix. This makes each trajectory an exact sample
+from the specified channel. A finite ensemble average is still a Monte Carlo
+estimate of the noisy fidelity and therefore has sampling uncertainty.
 
 Post-gate placement and the use of `abs(theta)` for signed rotations are
 explicit conventions of this benchmark; the paper does not specify those two
@@ -128,13 +140,13 @@ Dephasing should be benchmarked with explicit choices along two axes:
 
 Recommended configurations:
 
-| Identifier | Site support | Gate placement | Strengths |
-| --- | --- | --- | --- |
-| `dephasing_1s_1q` | `single_site` | `single_qubit_gates` | `6.4e-4` after 1q gates |
-| `dephasing_1s_2q` | `single_site` | `multi_qubit_gates` | `5.1e-3` after multi-qubit gates |
-| `dephasing_1s_all` | `single_site` | `all_gates` | `6.4e-4` after 1q gates, `5.1e-3` after multi-qubit gates |
-| `dephasing_2s_2q` | `two_site` | multi-qubit gates only | `5.1e-3` after multi-qubit gates |
-| `dephasing_1s2s_all` | `single_site` plus `two_site` | `all_gates` | `6.4e-4` after 1q gates, `5.1e-3` for all jump operators after multi-qubit gates |
+| Identifier           | Site support                  | Gate placement         | Strengths                                                                        |
+| -------------------- | ----------------------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| `dephasing_1s_1q`    | `single_site`                 | `single_qubit_gates`   | `6.4e-4` after 1q gates                                                          |
+| `dephasing_1s_2q`    | `single_site`                 | `multi_qubit_gates`    | `5.1e-3` after multi-qubit gates                                                 |
+| `dephasing_1s_all`   | `single_site`                 | `all_gates`            | `6.4e-4` after 1q gates, `5.1e-3` after multi-qubit gates                        |
+| `dephasing_2s_2q`    | `two_site`                    | multi-qubit gates only | `5.1e-3` after multi-qubit gates                                                 |
+| `dephasing_1s2s_all` | `single_site` plus `two_site` | `all_gates`            | `6.4e-4` after 1q gates, `5.1e-3` for all jump operators after multi-qubit gates |
 
 If the full benchmark matrix is too large, the minimum dephasing set is
 `dephasing_1s_all` and `dephasing_2s_2q`.
@@ -146,22 +158,57 @@ Depolarizing should use the same support and placement axes as dephasing.
 - Single-site depolarizing: local `X`, `Y`, and `Z` Pauli jump operators on each
   affected qubit.
 - Two-site depolarizing/correlated Pauli noise: correlated two-qubit Pauli jump
-  operators on the two qubits of a multi-qubit gate. The exact operator set must
-  be documented by the implementation, for example `XX`, `YY`, `ZZ` only or all
-  non-identity two-qubit Pauli products.
+  operators on the two qubits of a multi-qubit gate. The frozen operator set is
+  exactly
+
+```text
+XX, XY, XZ, YX, YY, YZ, ZX, ZY, ZZ
+```
+
+Each of these nine operators has the full applicable per-operator strength.
+Identity factors are excluded: operators such as `X tensor I`, `I tensor Z`,
+and `I tensor I` belong to neither the two-site set nor its rate budget. The
+`1s2s` configurations add the six single-site processes (three Paulis on each
+gate qubit) to these nine two-site processes.
 
 Recommended configurations:
 
-| Identifier | Site support | Gate placement | Strengths |
-| --- | --- | --- | --- |
-| `depolarizing_1s_1q` | `single_site` | `single_qubit_gates` | `6.4e-4` after 1q gates |
-| `depolarizing_1s_2q` | `single_site` | `multi_qubit_gates` | `5.1e-3` after multi-qubit gates |
-| `depolarizing_1s_all` | `single_site` | `all_gates` | `6.4e-4` after 1q gates, `5.1e-3` after multi-qubit gates |
-| `depolarizing_2s_2q` | `two_site` | multi-qubit gates only | `5.1e-3` after multi-qubit gates |
-| `depolarizing_1s2s_all` | `single_site` plus `two_site` | `all_gates` | `6.4e-4` after 1q gates, `5.1e-3` for all jump operators after multi-qubit gates |
+| Identifier              | Site support                  | Gate placement         | Strengths                                                                        |
+| ----------------------- | ----------------------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| `depolarizing_1s_1q`    | `single_site`                 | `single_qubit_gates`   | `6.4e-4` after 1q gates                                                          |
+| `depolarizing_1s_2q`    | `single_site`                 | `multi_qubit_gates`    | `5.1e-3` after multi-qubit gates                                                 |
+| `depolarizing_1s_all`   | `single_site`                 | `all_gates`            | `6.4e-4` after 1q gates, `5.1e-3` after multi-qubit gates                        |
+| `depolarizing_2s_2q`    | `two_site`                    | multi-qubit gates only | `5.1e-3` after multi-qubit gates                                                 |
+| `depolarizing_1s2s_all` | `single_site` plus `two_site` | `all_gates`            | `6.4e-4` after 1q gates, `5.1e-3` for all jump operators after multi-qubit gates |
 
 If the full benchmark matrix is too large, the minimum depolarizing set is
 `depolarizing_1s_all` and `depolarizing_2s_2q`.
+
+### Exact Channels and Finite-Trajectory Estimates
+
+The channel definitions above are exact. Direct Ballarin sampling selects an
+exact product-channel branch, while standard dephasing and depolarizing models
+select circuit-TJM no-jump or jump trajectories from their specified process
+sets. Reported noisy fidelities are arithmetic means over the configured
+number of fresh test trajectories; they are not exact density-matrix
+fidelities.
+
+For at least two noisy test trajectories, report the sample standard deviation
+(`ddof=1`), its standard error `s / sqrt(N)`, and the configured confidence
+interval. The bundled runner uses a clipped normal 95% interval:
+
+```{math}
+\left[
+  \max(0, \bar{F} - z_{0.975}s/\sqrt{N}),
+  \min(1, \bar{F} + z_{0.975}s/\sqrt{N})
+\right].
+```
+
+With one trajectory, the mean is valid but sampling uncertainty is undefined.
+Increasing `--test-trajectories` reduces Monte Carlo uncertainty but does not
+change the exact channel being sampled. Compare methods using the same test
+budget and resolved seeds, and interpret overlapping intervals as uncertainty
+in the finite-trajectory estimate rather than equivalence of the methods.
 
 ## Target States
 
@@ -195,7 +242,7 @@ Definition:
   `k` has qubit `i` equal to bit `i` of `k`, and qubit `i` has quantics weight
   `2^{-(i+1)}`:
 
-```math
+```{math}
 x_k = \sum_{i=0}^{n-1} \operatorname{bit}_i(k) 2^{-(i+1)}.
 ```
 
@@ -204,7 +251,7 @@ x_k = \sum_{i=0}^{n-1} \operatorname{bit}_i(k) 2^{-(i+1)}.
 - The target encodes the classical Gaussian probability density `f(x)` as
   amplitudes `psi(x) = sqrt(f(x))`. The unnormalized amplitudes are therefore
 
-```math
+```{math}
 \psi(x) \propto \exp\left(-\frac{(x - 0.5)^2}{4(0.1)^2}\right).
 ```
 
@@ -214,7 +261,7 @@ x_k = \sum_{i=0}^{n-1} \operatorname{bit}_i(k) 2^{-(i+1)}.
 
 Use ground states of the transverse-field Ising model (TFIM)
 
-```math
+```{math}
 H = -J \sum_i Z_i Z_{i+1} - h \sum_i X_i.
 ```
 
@@ -223,11 +270,11 @@ transverse field `h`. In the little-endian state-vector convention, site `i` is
 qubit `i` and bit `i` of the computational-basis index. The benchmark includes
 one state in each regime:
 
-| Identifier | Regime | Condition | Eigensolver base seed |
-| --- | --- | --- | --- |
-| `tfim_ferro` | ferromagnetic | `h / J = 0.5` | `1729` |
-| `tfim_critical` | critical | `h / J = 1.0` | `2718` |
-| `tfim_para` | paramagnetic | `h / J = 1.5` | `3141` |
+| Identifier      | Regime        | Condition     | Eigensolver base seed |
+| --------------- | ------------- | ------------- | --------------------- |
+| `tfim_ferro`    | ferromagnetic | `h / J = 0.5` | `1729`                |
+| `tfim_critical` | critical      | `h / J = 1.0` | `2718`                |
+| `tfim_para`     | paramagnetic  | `h / J = 1.5` | `3141`                |
 
 For an `n`-qubit target, the deterministic eigensolver initial-vector seed is
 `base_seed + 10000 * n`. The base seed is not a physical disorder seed. The
@@ -238,8 +285,8 @@ uniform `h_i`, and ground-state energy for each qubit count.
 
 Generate three complete random dense states for each qubit count.
 
-| Identifier | Description | Seed |
-| --- | --- | --- |
+| Identifier      | Description                           | Seed   |
+| --------------- | ------------------------------------- | ------ |
 | `haar_random_1` | Dense normalized complex random state | `4001` |
 | `haar_random_2` | Dense normalized complex random state | `4002` |
 | `haar_random_3` | Dense normalized complex random state | `4003` |
@@ -255,10 +302,10 @@ Recommended generation rule:
 
 Generate two random MPS states for each qubit count.
 
-| Identifier | Bond dimension | Seed |
-| --- | ---: | --- |
-| `random_mps_bond2` | `2` | `5002` |
-| `random_mps_bond3` | `3` | `5003` |
+| Identifier         | Bond dimension | Seed   |
+| ------------------ | -------------: | ------ |
+| `random_mps_bond2` |            `2` | `5002` |
+| `random_mps_bond3` |            `3` | `5003` |
 
 Recommended generation rule:
 
@@ -289,32 +336,155 @@ Each reported result must include the exact noise identifier, target identifier,
 qubit count, circuit size, optimizer settings, training budget, and test
 evaluation budget.
 
-## Reporting Template
+### Train/Test Separation
 
-Use one row per final benchmark result. The fidelity columns distinguish the
-optimization trajectories from the independent test evaluation.
+The bundled Krotov benchmark trains each target, ansatz, initialization, and
+optimizer configuration once without noise. It then evaluates the identical
+checkpoint under every selected test-noise configuration. Test noise and test
+trajectory settings are excluded from the stable training identity, so adding
+a test cell must not retrain or alter the parameters.
 
-| Field | Description |
-| --- | --- |
-| `method` | Name of the state-preparation method |
-| `num_qubits` | `6` or `12` |
-| `target_id` | One of the target identifiers above |
-| `noise_id` | Noise configuration identifier |
-| `seed` | Target-generation seed or `none` |
-| `ansatz` | Brickwall ansatz details |
-| `num_layers` | Final number of ansatz layers |
-| `num_parameters` | Final number of trainable parameters |
-| `num_1q_gates` | Final one-qubit gate count |
-| `num_2q_gates` | Final two-qubit gate count |
-| `optimizer_budget` | Iterations, trajectories, shots, or other optimization budget |
-| `train_trajectories_or_shots` | Trajectories or shots used during optimization |
-| `train_fidelity` | Final fidelity after optimization on the same trajectories or shots used for training |
-| `test_noiseless_fidelity` | Final trained parameters evaluated without noise |
-| `test_noisy_fidelity` | Final trained parameters evaluated under `noise_id` with fresh trajectories or shots |
-| `test_trajectories_or_shots` | Fresh trajectories or shots used for the test evaluation |
-| `wall_time_seconds` | End-to-end runtime |
-| `notes` | Deviations, failures, or implementation details |
+`train_fidelity` describes optimization on the training objective.
+`logical_test_noiseless_fidelity` is a fresh logical-circuit evaluation of the
+final checkpoint. `test_noiseless_fidelity` and `test_noisy_fidelity` use the
+actual evaluated representation: the logical circuit for noiseless and
+standard-noise rows, and the final materialized native circuit for Ballarin
+rows. No test trajectory may be reused for optimization.
 
-## Open Item To Freeze
+### Native Gate-Count Rules
 
-- Exact two-site depolarizing operator set.
+Noiseless and standard-noise rows report gate counts and depth for the logical
+brickwall circuit. Ballarin rows report the final Quantinuum-native circuit
+after binding, angle canonicalization, `RZZ` threshold pruning, and safe
+cancellation of exact inverse compilation-only basis changes. A pruned `RXX`
+or `RYY` removes its central native `RZZ` and the associated basis-change round
+trip; retained basis changes count as one-qubit gates. The pre-pruning native
+counts and number of pruned rotations remain available in the nested
+`circuit_statistics` record. The logical parameter count and configured
+brickwall layer count never change during native materialization.
+
+### Seed Derivation
+
+Target-generation seeds are frozen in the target fixture. For a runner
+initialization seed `s`, parameter initialization uses `s`, optimizer ordering
+uses `(s + 1) mod 2^64`, and the independent noisy test evaluation uses
+`(s + 2) mod 2^64`. The noiseless training configuration has no trajectory
+seed.
+
+Each test trajectory is derived from the resolved test seed with stable
+`SeedSequence` domain tags, the repeated-evaluation index, and the trajectory
+index. Together with the runner's explicit seed offsets, this separates the
+initialization, optimizer, repeated-test, and test-trajectory streams. The
+public seed-domain registry also reserves a training-trajectory domain for
+methods that use noisy training; the current benchmark trains noiselessly and
+does not consume it. Results are reproducible independently of execution
+order; do not replace the derivation with a shared mutable random generator.
+
+## Presets and Command-Line Usage
+
+Install the project from the repository root:
+
+```bash
+uv sync
+```
+
+The three frozen presets are:
+
+| Preset    | Targets              | Noise identifiers                                                                                       | Optimization/test budget              | Result rows |
+| --------- | -------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------- | ----------: |
+| `smoke`   | First 6-qubit target | All 12                                                                                                  | 0 iterations, 2 test trajectories     |          12 |
+| `minimum` | All 18               | Noiseless, Ballarin, `dephasing_1s_all`, `dephasing_2s_2q`, `depolarizing_1s_all`, `depolarizing_2s_2q` | 100 iterations, 100 test trajectories |         108 |
+| `full`    | All 18               | All 12                                                                                                  | 100 iterations, 100 test trajectories |         216 |
+
+These cardinalities are per method, layer choice, and initialization seed.
+Inspect any fully resolved matrix without creating output:
+
+```bash
+uv run python -m benchmarks.state_preparation.runner \
+  --preset smoke \
+  --dry-run
+```
+
+Run the bounded end-to-end configuration:
+
+```bash
+uv run python -m benchmarks.state_preparation.runner \
+  --preset smoke \
+  --output-dir state_preparation_results/smoke
+```
+
+Run or resume the canonical minimum and full configurations:
+
+```bash
+uv run python -m benchmarks.state_preparation.runner \
+  --preset minimum \
+  --output-dir state_preparation_results/minimum
+
+uv run python -m benchmarks.state_preparation.runner \
+  --preset full \
+  --output-dir state_preparation_results/full
+
+uv run python -m benchmarks.state_preparation.runner \
+  --preset full \
+  --output-dir state_preparation_results/full \
+  --resume
+```
+
+Existing output requires an explicit `--resume` or `--overwrite`. Resume
+validates the manifest and artifacts, skips successful run IDs, and retries
+failed or missing cells. `--overwrite` starts a replacement result stream.
+Use `--fail-fast` to stop after the first failed cell. Repeated
+`--num-qubits`, `--target-id`, `--noise-id`, `--method`, `--num-layers`, and
+`--initialization-seed` options filter or expand a preset.
+
+A JSON configuration can carry the same values. Command-line options override
+the JSON file, which overrides the selected preset:
+
+```json
+{
+  "format": "yaqs.state_preparation.runner_config.v1",
+  "preset": "minimum",
+  "num_qubits": [6],
+  "target_ids": ["tfim_critical"],
+  "test_trajectories": 500,
+  "output_dir": "state_preparation_results/critical-6q"
+}
+```
+
+```bash
+uv run python -m benchmarks.state_preparation.runner \
+  --config benchmark.json
+```
+
+## Result Schema and Artifacts
+
+`results.jsonl` is the canonical append-safe stream. Every line is either a
+successful result or a structured failure using schema
+`yaqs.state_preparation.result.v1`; `status` discriminates the two forms.
+`results.csv` is a derived flattened view. `manifest.json` records completed
+and failed run IDs, provenance history, schema versions, and artifact
+directories. Parameter checkpoints are stored under `checkpoints/`. Optional
+per-trajectory fidelity sidecars use checksum-verified NPZ files under
+`trajectories/`.
+
+Stable `run_id` values hash the complete canonical configuration. Stable
+training IDs omit test-only noise and evaluation policy to support train-once
+fan-out. All paths in result rows are relative to the output directory, and
+every checkpoint or sidecar has a SHA-256 checksum.
+
+Successful rows expose these reporting groups:
+
+| Group                | Fields                                                                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity             | `schema_version`, `status`, `run_id`, `method`, `num_qubits`, `target_id`, `noise_id`, `seed`                                                                                                                            |
+| Circuit              | `ansatz`, `num_layers`, `num_parameters`, `circuit_depth`, `num_1q_gates`, `num_2q_gates`, nested `circuit_statistics`                                                                                                   |
+| Training             | `optimizer_budget`, `train_trajectories_or_shots`, `train_fidelity`, `optimization_wall_time_seconds`                                                                                                                    |
+| Independent test     | `logical_test_noiseless_fidelity`, `native_pre_pruning_noiseless_fidelity`, `test_noiseless_fidelity`, `test_noisy_fidelity`, `test_trajectories_or_shots`, `sampled_nonidentity_events`, `evaluation_wall_time_seconds` |
+| Uncertainty          | `noisy_fidelity_standard_deviation`, `noisy_fidelity_standard_error`, `confidence_interval_lower`, `confidence_interval_upper`                                                                                           |
+| Provenance/artifacts | `software_versions`, `git_commit`, `git_dirty`, `git_diff_checksum`, checkpoint and trajectory paths/checksums, `wall_time_seconds`, `notes`, nested `config`                                                            |
+
+Failure rows retain the complete nested configuration and provenance while
+recording `failure_phase`, exception type/message, retryability, traceback,
+and wall time. Consumers should parse the canonical JSONL through
+`read_jsonl_records` or the derived CSV through `read_csv_records` instead of
+depending on column order.

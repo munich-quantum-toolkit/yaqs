@@ -48,6 +48,7 @@ examples/strong_circuit_simulation
 examples/sample_observable_digital_tjm
 examples/weak_circuit_simulation
 examples/equivalence_checking
+state_preparation_benchmarks
 references
 CHANGELOG
 UPGRADING

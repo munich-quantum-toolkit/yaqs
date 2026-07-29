@@ -143,6 +143,32 @@ target = load_target(6, "tfim_critical")
 state_vector = target.state_vector_copy()
 ```
 
+### Run state-preparation matrices through the reproducible CLI
+
+Use `python -m benchmarks.state_preparation.runner` instead of assembling the
+benchmark matrix manually. The runner freezes smoke, minimum, and full presets,
+prints the resolved matrix, trains each shared checkpoint once, evaluates every
+test-noise cell independently, and writes schema-validated JSONL, CSV,
+checkpoints, and a manifest.
+
+```bash
+uv run python -m benchmarks.state_preparation.runner --preset smoke
+uv run python -m benchmarks.state_preparation.runner --preset minimum
+uv run python -m benchmarks.state_preparation.runner --preset full --resume
+```
+
+The minimum preset is defined by noiseless and Ballarin evaluation plus
+`dephasing_1s_all`, `dephasing_2s_2q`, `depolarizing_1s_all`, and
+`depolarizing_2s_2q`. Earlier development snapshots of the unreleased runner
+selected `1s_1q` and `1s_2q` instead; explicitly pass those `--noise-id`
+options if that noncanonical matrix must be reproduced.
+
+Existing output is never replaced implicitly. Pass `--resume` to validate and
+continue it, or `--overwrite` to start a replacement stream. The canonical
+result file is `results.jsonl`; use
+`benchmarks.state_preparation.read_jsonl_records` rather than parsing its
+versioned records ad hoc.
+
 ### `simulator.run` becomes `Simulator(...).run(...)`
 
 The free `mqt.yaqs.simulator.run` function has been replaced by a `Simulator` class.

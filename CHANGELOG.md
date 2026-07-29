@@ -36,6 +36,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- froze the documented state-preparation noise, sampling, seed, circuit-count, preset, uncertainty, and result-schema conventions; the minimum CLI preset now uses the benchmark-defined `1s_all` and `2s_2q` configurations ([**@MaxFroehlich1410**])
 - changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])

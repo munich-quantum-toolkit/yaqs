@@ -96,6 +96,18 @@ def test_canonical_matrix_cardinality(preset: str, expected_rows: int) -> None:
     assert {config.test_noise.noise_id for config in matrix} == set(expected_noise_ids)
 
 
+def test_minimum_preset_uses_the_benchmark_defined_noise_pairs() -> None:
+    """The compact matrix must retain all-gate local and correlated channels."""
+    assert MINIMUM_NOISE_IDS == (
+        "noiseless",
+        "ballarin_coupled",
+        "dephasing_1s_all",
+        "dephasing_2s_2q",
+        "depolarizing_1s_all",
+        "depolarizing_2s_2q",
+    )
+
+
 def test_filters_are_canonical_and_unknown_identifiers_fail() -> None:
     """Repeated filters must deduplicate canonically and reject unknown names."""
     options = _options(

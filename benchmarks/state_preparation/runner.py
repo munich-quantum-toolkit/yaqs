@@ -21,8 +21,6 @@ from typing import IO, TYPE_CHECKING, NoReturn, cast
 
 from .constants import (
     BALLARIN_NOISE_ID,
-    DEPHASING_NOISE_IDS,
-    DEPOLARIZING_NOISE_IDS,
     NOISE_IDS,
     NOISELESS_NOISE_ID,
     STANDARD_NOISE_IDS,
@@ -60,10 +58,10 @@ METHOD_IDS = (KROTOV_METHOD_ID,)
 MINIMUM_NOISE_IDS = (
     NOISELESS_NOISE_ID,
     BALLARIN_NOISE_ID,
-    DEPHASING_NOISE_IDS[0],
-    DEPHASING_NOISE_IDS[1],
-    DEPOLARIZING_NOISE_IDS[0],
-    DEPOLARIZING_NOISE_IDS[1],
+    "dephasing_1s_all",
+    "dephasing_2s_2q",
+    "depolarizing_1s_all",
+    "depolarizing_2s_2q",
 )
 
 _CONFIGURATION_KEYS = frozenset({
