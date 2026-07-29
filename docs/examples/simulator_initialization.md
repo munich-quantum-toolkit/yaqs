@@ -252,7 +252,7 @@ on them safely. The full set is:
 
 | Property                                 | Populated for                                                                                                                                                         |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                    |
+| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                     |
 | `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                    |
 | `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                       |
 | `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                 |
