@@ -461,11 +461,16 @@ def digital_tjm(
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
-    Simulates a quantum circuit using the Tensor Jump Method.
+    Simulates one circuit trajectory (optionally with noise jumps).
+
+    When ``shots`` is set, this worker may measure a per-trajectory allocation of the
+    total shot budget. For combined noisy runs the simulator distributes ``shots``
+    across ``num_traj``; a zero allocation is valid and yields empty counts without
+    calling :meth:`~mqt.yaqs.MPS.measure_shots` with ``0``.
 
     Args:
         args: A tuple containing:
-            - Trajectory index (for parallelization and seeding)
+            - Trajectory index (for parallelization, seeding, and shot allocation)
             - Initial MPS
             - Noise model, or ``None``
             - Digital simulation parameters
@@ -474,7 +479,8 @@ def digital_tjm(
     Returns:
         ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
         diagnostics are populated when observables are requested (or for get-state-only
-        runs that follow the observable path). Counts are populated when ``shots`` is set.
+        runs that follow the observable path). Counts are populated when ``shots`` is set
+        (possibly an empty dict when this trajectory's allocation is zero).
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
 
@@ -552,18 +558,20 @@ def digital_tjm(
 
     if wants_shots:
         per_call = _per_call_shots(sim_params, traj_idx)
-        # Combined noisy runs may allocate zero shots to some trajectories when
-        # shots < num_traj; do not call measure_shots(0) (that incorrectly yields 1).
+        # Zero allocation is valid when shots < num_traj; never call measure_shots(0).
         counts = state.measure_shots(per_call) if per_call > 0 else {}
 
     return results if wants_obs else None, diagnostics, counts, final
 
 
 def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
-    """Return shots for this worker call (may differ from ``sim_params.shots`` when noisy).
+    """Return this trajectory's share of the total ``shots`` budget.
+
+    For combined noisy runs, ``WORKER_CTX["shot_distribution"]`` holds
+    ``(total_shots, num_traj)`` and this may return ``0`` for some ``traj_idx``.
 
     Returns:
-        Number of shots for the current worker invocation.
+        Non-negative shot count for the current worker invocation.
     """
     try:
         from mqt.yaqs.simulator import WORKER_CTX  # ruff:ignore[import-outside-top-level]

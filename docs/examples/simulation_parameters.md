@@ -209,6 +209,20 @@ Used for circuit simulation. Set non-empty `observables` for expectation values,
 Observables and shots may be requested together. Optionally enable layer
 sampling with `sample_layers=True` (see {doc}`circuit_observables`).
 
+`num_traj` and `shots` are **independent** controls:
+
+| Parameter  | Meaning                                                                  |
+| ---------- | ------------------------------------------------------------------------ |
+| `num_traj` | Noisy stochastic trajectories for observables and trajectory diagnostics |
+| `shots`    | Total bitstring-sample budget                                            |
+
+- **Noisy + observables (+ optional shots):** run `num_traj` trajectories. If
+  `shots` is also set, that **total** budget is distributed across those
+  trajectories. `shots < num_traj` is supported: some trajectories still
+  contribute observables but receive zero measurement samples.
+- **Noiseless:** one trajectory is enough; all `shots` are sampled from that
+  final state.
+
 ### Two-qubit gate mode (`gate_mode`)
 
 Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic
@@ -274,16 +288,29 @@ When `shots` is set, YAQS stores measurement histograms in `Result.counts` as a
 default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via
 `int(bitstring, 2)`.
 
-You can request observables and shots in one run. In a **noisy** combined
-simulation, `shots` is the **total** number of computational-basis samples and
-is distributed across the `num_traj` stochastic states (some trajectories may
-receive zero samples when `shots < num_traj`). Observables are still aggregated
-over every trajectory.
-
 ```{code-cell} ipython3
 shot_params = DigitalSimParams(shots=1000)
 shot_exact = DigitalSimParams(shots=1000, preset="exact")
-combined = DigitalSimParams(observables=[Observable("z", 0)], shots=1000)
+```
+
+### Combined observables and shots
+
+Request both outputs on one `DigitalSimParams`. For a noisy run, set `num_traj`
+for the observable ensemble and `shots` for the total sample budget:
+
+```{code-cell} ipython3
+combined = DigitalSimParams(
+    observables=[Observable("z", 0)],
+    shots=1000,
+    num_traj=64,
+)
+# Example of shots < num_traj (valid): two samples total, four trajectories.
+combined_sparse = DigitalSimParams(
+    observables=[Observable("z", 0)],
+    shots=2,
+    num_traj=4,
+)
+_trunc_summary(combined)
 ```
 
 See {doc}`circuit_shots` for a full shot-readout example.

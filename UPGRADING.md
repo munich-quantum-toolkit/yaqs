@@ -10,11 +10,22 @@ of changes including minor and patch releases, please refer to the
 
 Circuit simulation now uses a single {class}`~mqt.yaqs.DigitalSimParams` type.
 Outputs are selected by which fields you set (`observables`, `shots`, and/or
-`get_state`). Simulation physics for equivalent configurations is unchanged.
+`get_state`). The merged class permits observables and shots **simultaneously**;
+simulation physics for equivalent single-output configurations is unchanged.
 
 All `DigitalSimParams` constructor arguments are **keyword-only**. Migration
 must use keyword arguments; positional calls are rejected (a bare positional
 integer would be ambiguous among `shots`, `num_traj`, and `max_bond_dim`).
+
+`num_traj` and `shots` remain independent:
+
+- `num_traj` — noisy stochastic trajectories for observables/diagnostics.
+- `shots` — total bitstring-sample budget.
+- **Noisy combined runs** execute `num_traj` trajectories and distribute the
+  total `shots` across them. `shots < num_traj` is supported (some trajectories
+  get zero samples but still contribute observables).
+- **Noiseless runs** use one trajectory; all `shots` are sampled from that final
+  state.
 
 ```python
 from mqt.yaqs import DigitalSimParams, Observable
@@ -31,10 +42,11 @@ DigitalSimParams(
 DigitalSimParams(shots=1024)
 DigitalSimParams(shots=1024, max_bond_dim=4)
 
-# Observables and shots in one run
+# Observables and shots in one run (noisy: distribute shots across num_traj)
 DigitalSimParams(
     observables=[Observable("z", sites=0)],
     shots=1024,
+    num_traj=64,
 )
 ```
 

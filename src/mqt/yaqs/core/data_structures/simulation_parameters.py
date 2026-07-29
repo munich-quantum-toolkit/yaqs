@@ -454,16 +454,28 @@ class DigitalSimParams(_ObservableOrderingMixin):
     Configures MPS circuit simulation. Outputs are selected by which fields are set:
     non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
     counts, and ``get_state`` yields the final state. At least one of these must be set.
-    Observables and shots may be requested together; shots sample from amplitudes and do
-    not projectively measure the configured observables.
+    Observables and shots may be requested together; shots sample bitstrings from amplitudes
+    and do not projectively measure the configured observables.
+
+    ``num_traj`` and ``shots`` are independent controls:
+
+    - ``num_traj`` is the number of noisy stochastic trajectories used to estimate
+      observables and trajectory diagnostics.
+    - ``shots`` is the total requested bitstring-sample budget.
+    - When both ``observables`` and ``shots`` are set for a **noisy** circuit, the
+      simulator runs ``num_traj`` trajectories and distributes the total ``shots``
+      across them. If ``shots < num_traj``, some trajectories still contribute
+      observable data but receive zero measurement samples (supported; no error).
+    - For **noiseless** circuits, one trajectory is sufficient; all ``shots`` are
+      sampled from that final state.
 
     Attributes:
         dt: Placeholder for code compatibility with analog evolution helpers.
         observables: Observables tracked during the simulation (may be empty).
         sorted_observables: Observables sorted by site for efficient MPS evaluation.
         observable_sorted_indices: Maps each user-list index to the sorted worker-buffer row.
-        shots: Number of computational-basis measurement shots, or ``None`` if unused.
-        num_traj: Number of trajectories for noisy observable ensembles.
+        shots: Total computational-basis bitstring-sample budget, or ``None`` if unused.
+        num_traj: Number of noisy stochastic trajectories for observables/diagnostics.
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling.
         max_bond_dim: Maximum bond dimension, or ``None`` for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
@@ -509,8 +521,13 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
         Args:
             observables: List of observables to measure during simulation.
-            shots: Number of computational-basis measurement shots, or ``None`` to skip.
-            num_traj: Number of trajectories for noisy observable ensembles.
+            shots: Total bitstring-sample budget for computational-basis readout, or
+                ``None`` to skip. Independent of ``num_traj``; when both are used with
+                noise, this budget is distributed across the ``num_traj`` trajectories.
+            num_traj: Number of noisy stochastic trajectories used to estimate
+                observables and trajectory diagnostics. Ignored for noiseless runs
+                (one trajectory is enough). When ``shots < num_traj`` in a noisy
+                combined run, some trajectories receive zero samples by design.
             max_bond_dim: Maximum bond dimension, or ``None`` for no cap. Omit to use the
                 preset; pass ``None`` explicitly for no cap.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and

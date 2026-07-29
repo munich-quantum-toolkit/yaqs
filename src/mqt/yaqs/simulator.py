@@ -811,9 +811,15 @@ class Simulator:
     ) -> None:
         """Run digital circuit simulation trajectories.
 
-        Ensemble sizing: shots-only uses ``shots``
-        (noisy) or one trajectory (clean); observables use ``num_traj`` when noisy.
-        Combined observables+shots uses the observables ensemble and distributes shots.
+        ``num_traj`` and ``shots`` are independent:
+
+        - ``num_traj`` sizes the noisy stochastic ensemble for observables and diagnostics.
+        - ``shots`` is the total bitstring-sample budget.
+        - Shots-only noisy runs use ``shots`` one-shot trajectories; noiseless shots-only
+          and noiseless combined runs use one trajectory and sample all ``shots`` from it.
+        - Combined noisy runs (observables and shots) run ``num_traj`` trajectories and
+          distribute the total ``shots`` across them. ``shots < num_traj`` is valid: some
+          trajectories still contribute observables but receive zero measurement samples.
 
         Raises:
             ValueError: If ``get_state`` is ``True`` with a non-trivial noise model.
@@ -833,21 +839,26 @@ class Simulator:
             raise ValueError(msg)
 
         per_call_shots: int | None = None
+        # (total_shots, n_traj) for combined noisy runs; per-traj allocation may be 0.
         shot_distribution: tuple[int, int] | None = None
 
         if shots_only:
             assert sim_params.shots is not None
             if noisy:
+                # One stochastic state per shot (ignore num_traj for the ensemble).
                 effective_num_traj = sim_params.shots
                 per_call_shots = 1
             else:
+                # One noiseless trajectory; sample the full shot budget from the final state.
                 effective_num_traj = 1
                 per_call_shots = sim_params.shots
         elif wants_obs:
+            # Observables (and diagnostics) always use num_traj when noisy, else one traj.
             effective_num_traj = sim_params.num_traj if noisy else 1
             if wants_shots:
                 assert sim_params.shots is not None
                 if noisy:
+                    # Distribute the total shot budget across the observable ensemble.
                     shot_distribution = (sim_params.shots, effective_num_traj)
                 else:
                     per_call_shots = sim_params.shots
