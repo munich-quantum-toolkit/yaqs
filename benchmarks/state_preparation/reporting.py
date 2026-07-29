@@ -235,14 +235,40 @@ def _run_git(repository_root: Path, *arguments: str) -> bytes:
     return completed.stdout
 
 
-def _dirty_repository_payload(repository_root: Path, status: bytes) -> bytes:
+def _git_pathspecs(repository_root: Path, excluded_paths: Sequence[Path]) -> tuple[str, ...]:
+    """Build Git pathspecs that omit generated output directories.
+
+    Returns:
+        A repository-wide include followed by normalized exclusions.
+
+    Raises:
+        TypeError: If an excluded path is not a path.
+    """
+    pathspecs = ["."]
+    for excluded_path in excluded_paths:
+        if not isinstance(excluded_path, Path):
+            msg = f"excluded_paths must contain only pathlib.Path values, got {type(excluded_path).__name__}."
+            raise TypeError(msg)
+        resolved = excluded_path.resolve()
+        if resolved.is_relative_to(repository_root):
+            relative = resolved.relative_to(repository_root)
+            if relative.parts:
+                pathspecs.append(f":(top,exclude,literal){relative.as_posix()}")
+    return tuple(pathspecs)
+
+
+def _dirty_repository_payload(
+    repository_root: Path,
+    status: bytes,
+    pathspecs: Sequence[str],
+) -> bytes:
     """Build a content-sensitive fingerprint payload for a dirty repository.
 
     Returns:
         Tracked changes, status metadata, and untracked-file content digests.
     """
-    tracked_diff = _run_git(repository_root, "diff", "HEAD", "--binary", "--no-ext-diff")
-    untracked = _run_git(repository_root, "ls-files", "--others", "--exclude-standard", "-z")
+    tracked_diff = _run_git(repository_root, "diff", "HEAD", "--binary", "--no-ext-diff", "--", *pathspecs)
+    untracked = _run_git(repository_root, "ls-files", "--others", "--exclude-standard", "-z", "--", *pathspecs)
     payload = bytearray(b"status\0")
     payload.extend(status)
     payload.extend(b"\0tracked-diff\0")
@@ -267,11 +293,17 @@ def _dirty_repository_payload(repository_root: Path, status: bytes) -> bytes:
     return bytes(payload)
 
 
-def capture_run_provenance(repository_root: Path) -> RunProvenance:
+def capture_run_provenance(
+    repository_root: Path,
+    *,
+    excluded_paths: Sequence[Path] = (),
+) -> RunProvenance:
     """Capture software versions and a content-sensitive Git fingerprint.
 
     Args:
         repository_root: Root of the Git checkout being executed.
+        excluded_paths: Generated paths to omit from the implementation
+            fingerprint when they are inside the repository.
 
     Returns:
         The validated provenance snapshot.
@@ -283,10 +315,19 @@ def capture_run_provenance(repository_root: Path) -> RunProvenance:
         msg = f"repository_root must be a pathlib.Path, got {type(repository_root).__name__}."
         raise TypeError(msg)
     root = repository_root.resolve()
+    pathspecs = _git_pathspecs(root, excluded_paths)
     commit = _run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
-    status = _run_git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    status = _run_git(
+        root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        *pathspecs,
+    )
     dirty = bool(status)
-    diff_checksum = _sha256(_dirty_repository_payload(root, status)) if dirty else None
+    diff_checksum = _sha256(_dirty_repository_payload(root, status, pathspecs)) if dirty else None
     try:
         yaqs_version = importlib.metadata.version("mqt.yaqs")
     except importlib.metadata.PackageNotFoundError:

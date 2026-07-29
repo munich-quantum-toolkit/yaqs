@@ -447,3 +447,8 @@ def test_capture_run_provenance_tracks_dirty_content(tmp_path: Path) -> None:
     changed_untracked = capture_run_provenance(repository)
     assert dirty_tracked.git_diff_checksum != dirty_untracked.git_diff_checksum
     assert dirty_untracked.git_diff_checksum != changed_untracked.git_diff_checksum
+
+    excluded = capture_run_provenance(repository, excluded_paths=(untracked,))
+    untracked.write_text("three\n", encoding="utf-8")
+    changed_excluded = capture_run_provenance(repository, excluded_paths=(untracked,))
+    assert excluded.git_diff_checksum == changed_excluded.git_diff_checksum
