@@ -46,6 +46,13 @@ from .constants import (
     TARGET_GENERATION_SEEDS,
     TARGET_IDS,
 )
+from .evaluation import (
+    IndependentEvaluation,
+    SeedDomain,
+    count_nonidentity_events,
+    derive_seed_sequence,
+    evaluate_state_preparation_artifact,
+)
 from .methods import (
     KROTOV_CHECKPOINT_FORMAT,
     KROTOV_METHOD_ID,
@@ -146,6 +153,7 @@ __all__ = [
     "EvaluationConfig",
     "FrozenNativeCircuit",
     "FrozenNativeGate",
+    "IndependentEvaluation",
     "InitializationConfig",
     "KrotovStatePreparationMethod",
     "LogicalToNativeMapping",
@@ -155,6 +163,7 @@ __all__ = [
     "NoiseConfig",
     "OptimizerConfig",
     "PauliDistribution",
+    "SeedDomain",
     "StandardNoiseDefinition",
     "StandardNoiseProvider",
     "StatePreparationMethod",
@@ -175,8 +184,11 @@ __all__ = [
     "checkpoint_checksum",
     "collect_circuit_statistics",
     "compile_quantinuum_native",
+    "count_nonidentity_events",
     "create_ballarin_noise_provider",
     "create_standard_noise_provider",
+    "derive_seed_sequence",
+    "evaluate_state_preparation_artifact",
     "get_standard_noise_definition",
     "iter_targets",
     "load_target",
