@@ -26,7 +26,7 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
-from mqt.yaqs import Simulator, State, StrongSimParams
+from mqt.yaqs import DigitalSimParams, Simulator, State
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
@@ -153,7 +153,7 @@ def _max_bond(mps: MPS) -> int:
     return max(mps.bond_dimensions()) if mps.length > 1 else 1
 
 
-def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> StrongSimParams:
+def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> DigitalSimParams:
     """Build tight digital TDVP parameters for regression tests.
 
     Args:
@@ -161,10 +161,10 @@ def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> StrongSimPara
         tdvp_sweeps: Number of symmetric TDVP substeps per gate.
 
     Returns:
-        Strong-simulation parameters with exact preset and tight tolerances.
+        DigitalSimParams with exact preset and tight tolerances.
 
     """
-    return StrongSimParams(
+    return DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=max_bond_dim,
@@ -239,7 +239,7 @@ def _prep_state(name: str, length: int) -> MPS:
             prep_qc.h(i)
         for i in range(length - 1):
             prep_qc.cx(i, i + 1)
-        params = StrongSimParams(
+        params = DigitalSimParams(
             preset="exact",
             get_state=True,
             max_bond_dim=8,
@@ -399,7 +399,7 @@ def _run_circuit(
 
     """
     init = State(prep.length, tensors=[t.copy() for t in prep.tensors])
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=max_bond_dim,

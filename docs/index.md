@@ -41,7 +41,7 @@ start with {doc}`installation`, then {doc}`examples/quickstart`.
 flowchart LR
   state[State]
   op[Hamiltonian or QuantumCircuit]
-  params["AnalogSimParams / StrongSimParams / WeakSimParams"]
+  params["AnalogSimParams / DigitalSimParams"]
   sim[Simulator]
   result[Result]
   state --> sim
@@ -70,8 +70,8 @@ flowchart LR
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
 | Learn Markovian Lindblad jump rates via analytical optimization (CMA-ES)   | {doc}`examples/noise_characterization`                                      |
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
-| Simulate a circuit and read observables (strong simulation)                | {doc}`examples/strong_simulation`                                           |
-| Get hardware-like shot histograms                                          | {doc}`examples/weak_circuit_simulation`                                     |
+| Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
+| Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
 
@@ -129,8 +129,8 @@ examples/noise_characterization
 :maxdepth: 1
 :titlesonly:
 
-examples/strong_simulation
-examples/weak_circuit_simulation
+examples/circuit_observables
+examples/circuit_shots
 examples/custom_gates
 examples/equivalence_checking
 ```

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs import Observable, Simulator, State, StrongSimParams
+from mqt.yaqs import DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.libraries.gate_library import Z
 
 if TYPE_CHECKING:
@@ -89,7 +89,7 @@ def _phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:
     return state
 
 
-def _run_strong_noiseless(
+def _run_digital_observables_noiseless(
     qc: QuantumCircuit,
     *,
     gate_mode: GateMode = "tdvp",
@@ -98,13 +98,13 @@ def _run_strong_noiseless(
     get_state: bool = False,
     tdvp_sweeps: int = 1,
 ) -> float | np.ndarray:
-    """Run a noiseless strong simulation.
+    """Run a noiseless digital observable simulation.
 
     Returns:
         Final state vector if ``get_state=True``, otherwise ``<Z_0>``.
     """
     num_qubits = qc.num_qubits
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), 0)],
         gate_mode=gate_mode,
         preset="exact",

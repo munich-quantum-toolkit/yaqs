@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 from ..decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 # --- Truncation policy ---
 
 
-def get_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+def get_min_keep(sim_params: AnalogSimParams | DigitalSimParams) -> int:
     """Return the minimum bond dimension to retain during TDVP truncation.
 
     Args:
@@ -48,7 +48,7 @@ def get_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) 
 
 def split_tdvp(
     merged: NDArray[np.complex128],
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     physical_dimensions: list[int],
     svd_distribution: str,
     *,
@@ -88,7 +88,7 @@ def split_tdvp(
 
 
 def _scale_dt(
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     step_scale: float,
 ) -> float:
     """Return the TDVP evolution timestep for the current symmetric substep.
@@ -102,7 +102,7 @@ def _scale_dt(
         Effective local evolution time for site and bond updates.
 
     """
-    if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+    if not isinstance(sim_params, DigitalSimParams):
         return float(sim_params.dt) * step_scale
     return step_scale
 
@@ -114,7 +114,7 @@ def _sync_bond_dim(
     state: MPS,
     bond_index: int,
     target_dim: int,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams | None = None,
+    sim_params: AnalogSimParams | DigitalSimParams | None = None,
 ) -> None:
     """Set both tensors on an internal bond to share dimension ``target_dim``.
 
@@ -166,7 +166,7 @@ def _sync_bond_dim(
 def _get_bond_dim(
     state: MPS,
     bond_index: int,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> int:
     """Return the shared bond dimension to use before a bond transfer contraction.
 
@@ -188,7 +188,7 @@ def _get_bond_dim(
     return max(chi_target, 1)
 
 
-def uses_fixed_chi(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> bool:
+def uses_fixed_chi(sim_params: AnalogSimParams | DigitalSimParams) -> bool:
     """Return whether fixed-χ digital renormalization policy applies.
 
     Args:
@@ -217,7 +217,7 @@ def _get_norm(state: MPS) -> float:
     return float(np.sqrt(max(norm_sq, 0.0)))
 
 
-def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | DigitalSimParams) -> None:
     """Renormalize after explicit bond truncation (call only when fixed-χ digital).
 
     Args:
@@ -228,7 +228,7 @@ def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | We
     state.normalize()
 
 
-def renorm_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+def renorm_drift(state: MPS, sim_params: AnalogSimParams | DigitalSimParams) -> None:
     """Renormalize when global norm drift exceeds tolerance (call only when fixed-χ digital).
 
     Args:
@@ -245,7 +245,7 @@ def renorm_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | Wea
 def _align_bond(
     state: MPS,
     bond_index: int,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
     """Align a bond to the fixed-χ target and optionally renormalize (digital only).
 
@@ -268,7 +268,7 @@ def _align_bond(
 
 def _cap_bonds(
     state: MPS,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
     """Truncate all internal bonds to ``max_bond_dim`` before a fixed-χ sweep.
 

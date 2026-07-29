@@ -23,7 +23,7 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Pauli, Statevector
 
-from mqt.yaqs import NoiseModel, Observable, Simulator, State, StrongSimParams, WeakSimParams
+from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
@@ -61,7 +61,7 @@ from tests.core.methods.tdvp.conftest import (
     _z_expectation,
     assert_mps_bond_invariants,
 )
-from tests.digital.conftest import _physical_second_schmidt, _run_strong_noiseless
+from tests.digital.conftest import _physical_second_schmidt, _run_digital_observables_noiseless
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -347,7 +347,7 @@ def test_apply_two_qubit_gate_tdvp_rejects_non_2site_mode() -> None:
     gate = GateLibrary.rzz([0.2])
     gate.set_sites(0, length - 1)
     state = State(length, initial="x+").mps
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=4,
@@ -477,13 +477,13 @@ def _ising_2d_mapped_circuit(length: int = 6) -> QuantumCircuit:
     return qc
 
 
-def _hybrid_tdvp_replay_params(*, max_bond_dim: int, tdvp_sweeps: int = 1) -> StrongSimParams:
-    """StrongSimParams for hybrid ``gate_mode='tdvp'`` circuit replay.
+def _hybrid_tdvp_replay_params(*, max_bond_dim: int, tdvp_sweeps: int = 1) -> DigitalSimParams:
+    """DigitalSimParams for hybrid ``gate_mode='tdvp'`` circuit replay.
 
     Returns:
         Simulation parameters routing LR gates through ``apply_two_qubit_gate_tdvp``.
     """
-    return StrongSimParams(
+    return DigitalSimParams(
         preset="exact",
         get_state=True,
         gate_mode="tdvp",
@@ -495,7 +495,7 @@ def _hybrid_tdvp_replay_params(*, max_bond_dim: int, tdvp_sweeps: int = 1) -> St
     )
 
 
-def _replay_hybrid_tdvp_through_gate(qc: QuantumCircuit, num_gates: int, *, params: StrongSimParams) -> State:
+def _replay_hybrid_tdvp_through_gate(qc: QuantumCircuit, num_gates: int, *, params: DigitalSimParams) -> State:
     """Replay a circuit gate-by-gate through hybrid TDVP routing.
 
     Returns:
@@ -650,7 +650,7 @@ def test_lr_rzz_cap_chi1() -> None:
     apply_two_qubit_gate_tdvp(
         out,
         gate,
-        StrongSimParams(
+        DigitalSimParams(
             preset="exact",
             get_state=True,
             max_bond_dim=1,
@@ -1147,7 +1147,7 @@ def test_hybrid_lr_z_obs() -> None:
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=None,
@@ -1171,7 +1171,7 @@ def test_hybrid_low_depth_smoke() -> None:
         prep_qc.h(i)
     for i in range(length - 1):
         prep_qc.cx(i, i + 1)
-    prep_params = StrongSimParams(
+    prep_params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=8,
@@ -1186,7 +1186,7 @@ def test_hybrid_low_depth_smoke() -> None:
 
     qc = QuantumCircuit(length)
     qc.rzz(0.3, 0, length - 1)
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         observables=[Observable(Z(), 0)],
@@ -1209,8 +1209,8 @@ def test_hybrid_lr_vs_full_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
+    hybrid_z = _run_digital_observables_noiseless(qc, gate_mode="tdvp")
+    tdvp_z = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -1223,8 +1223,8 @@ def test_hybrid_mixed_vs_full_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
+    hybrid_z = _run_digital_observables_noiseless(qc, gate_mode="tdvp")
+    tdvp_z = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -1236,8 +1236,8 @@ def test_sweeps_unitary() -> None:
     qc.rzz(0.3, 0, 3)
 
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    one_sweep = _run_strong_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=1)
-    two_sweeps = _run_strong_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=2)
+    one_sweep = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=1)
+    two_sweeps = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=2)
     assert isinstance(one_sweep, np.ndarray)
     assert isinstance(two_sweeps, np.ndarray)
 
@@ -1260,7 +1260,7 @@ def test_sweeps_hybrid_lr_vs_qiskit() -> None:
     qc.rx(0.2, 1)
     qc.rxx(0.25, 0, 3)
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=8)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=8)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-4)
@@ -1274,8 +1274,8 @@ def test_sweeps_hybrid_nn_unchanged() -> None:
     qc.cx(0, 1)
     qc.cz(1, 2)
 
-    baseline = _run_strong_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=1)
-    many_sweeps = _run_strong_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=5)
+    baseline = _run_digital_observables_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=1)
+    many_sweeps = _run_digital_observables_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=5)
     assert baseline == pytest.approx(many_sweeps, abs=1e-10)
 
 
@@ -1294,8 +1294,8 @@ def test_sweeps_mixed_regression() -> None:
     qc.rzz(0.2, 2, 3)
 
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    thirty_two_sweeps = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=32)
-    sixty_four_sweeps = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=64)
+    thirty_two_sweeps = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=32)
+    sixty_four_sweeps = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=64)
     assert isinstance(thirty_two_sweeps, np.ndarray)
     assert isinstance(sixty_four_sweeps, np.ndarray)
 
@@ -1327,7 +1327,7 @@ def test_tebd_lr_cx() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
@@ -1348,7 +1348,7 @@ def test_tebd_lr_cnot() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(
         mps,
         convert_dag_to_tensor_algorithm(node)[0],
@@ -1377,7 +1377,7 @@ def test_hybrid_nn_uses_tebd(gate_name: str, sites: tuple[int, int]) -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name == gate_name)
     out = State(length, initial="zeros").mps
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=8,
@@ -1406,8 +1406,8 @@ def test_zip_up_nearest_neighbor_matches_tebd() -> None:
     qc.cz(1, 2)
     qc.rx(0.3, 2)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
+    tebd_z = _run_digital_observables_noiseless(qc, gate_mode="swaps")
+    zip_up_z = _run_digital_observables_noiseless(qc, gate_mode="mpo")
     assert zip_up_z == pytest.approx(tebd_z, abs=1e-12)
 
 
@@ -1418,8 +1418,8 @@ def test_tebd_lr_vs_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
+    tebd_z = _run_digital_observables_noiseless(qc, gate_mode="swaps")
+    tdvp_z = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -1436,7 +1436,7 @@ def test_tebd_lr_vs_qiskit() -> None:
 
     # Use a stricter SVD threshold than the helper default to reduce purely numerical drift
     # from repeated TEBD split/merge operations (including SWAP insertion).
-    tebd_vec = _run_strong_noiseless(qc, gate_mode="swaps", get_state=True, svd_threshold=1e-14)
+    tebd_vec = _run_digital_observables_noiseless(qc, gate_mode="swaps", get_state=True, svd_threshold=1e-14)
     assert isinstance(tebd_vec, np.ndarray)
 
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
@@ -1452,8 +1452,8 @@ def test_tebd_mixed_vs_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
+    tebd_z = _run_digital_observables_noiseless(qc, gate_mode="swaps")
+    tdvp_z = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -1467,7 +1467,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
     qc.cx(2, 3)
 
     state = State(4, initial="zeros")
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), 0)],
         gate_mode="swaps",
         max_bond_dim=2,
@@ -1492,7 +1492,7 @@ def test_mpo_lr_cx() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
     apply_long_range_gate_mpo(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
@@ -1514,7 +1514,7 @@ def test_lr_modes_fid_cap(gate_mode: str) -> None:
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
 
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=8,
@@ -1542,8 +1542,8 @@ def test_zip_lr_vs_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
+    zip_up_z = _run_digital_observables_noiseless(qc, gate_mode="mpo")
+    tdvp_z = _run_digital_observables_noiseless(qc, gate_mode="full-tdvp")
     assert zip_up_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -1554,8 +1554,8 @@ def test_zip_lr_vs_tebd() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
-    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
+    zip_up_z = _run_digital_observables_noiseless(qc, gate_mode="mpo")
+    tebd_z = _run_digital_observables_noiseless(qc, gate_mode="swaps")
     assert zip_up_z == pytest.approx(tebd_z, abs=1e-10)
 
 
@@ -1580,7 +1580,7 @@ def test_apply_two_qubit_gate() -> None:
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
@@ -1598,7 +1598,7 @@ def test_unknown_gate_mode_raises() -> None:
     qc.cx(0, 1)
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name == "cx")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
     sim_params.gate_mode = cast("GateMode", "invalid")
     with pytest.raises(ValueError, match="Unknown gate_mode"):
         apply_two_qubit_gate(mps, node, sim_params)
@@ -1614,8 +1614,8 @@ def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
     qc.cz(1, 2)
     qc.rx(0.3, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
-    other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode))
+    hybrid_z = _run_digital_observables_noiseless(qc, gate_mode="tdvp")
+    other_z = _run_digital_observables_noiseless(qc, gate_mode=cast("GateMode", gate_mode))
     assert hybrid_z == pytest.approx(other_z, abs=1e-12)
 
 
@@ -1625,31 +1625,31 @@ def test_swaps_lr_reversed_ctrl() -> None:
     qc = QuantumCircuit(4)
     qc.h(0)
     qc.cx(3, 0)
-    swaps_z = _run_strong_noiseless(qc, gate_mode="swaps")
-    mpo_z = _run_strong_noiseless(qc, gate_mode="mpo")
+    swaps_z = _run_digital_observables_noiseless(qc, gate_mode="swaps")
+    mpo_z = _run_digital_observables_noiseless(qc, gate_mode="mpo")
     assert swaps_z == pytest.approx(mpo_z, abs=1e-10)
 
 
 # --- digital_tjm ---
 
 
-def test_digital_tjm_strong_smoke_via_simulator() -> None:
-    """Strong simulation via the public ``Simulator`` API completes and yields an observable."""
+def test_digital_tjm_observables_smoke_via_simulator() -> None:
+    """Observable simulation via the public ``Simulator`` API completes and yields an observable."""
     length = 4
     state = State(length, initial="random")
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
     assert result.expectation_values[0] is not None
     assert result.expectation_values[0].shape == (1,)
 
 
-def test_digital_tjm_weak_smoke_via_simulator() -> None:
-    """Weak simulation via the public ``Simulator`` API returns shot counts."""
+def test_digital_tjm_shots_smoke_via_simulator() -> None:
+    """Shot simulation via the public ``Simulator`` API returns shot counts."""
     length = 4
     state = State(length, initial="random")
 
@@ -1657,7 +1657,7 @@ def test_digital_tjm_weak_smoke_via_simulator() -> None:
     qc.cx(1, 3)
     qc.measure_all()
 
-    sim_params = WeakSimParams(shots=16)
+    sim_params = DigitalSimParams(shots=16)
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
     assert result.counts is not None
@@ -1710,7 +1710,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     qc.rzz(0.5, 0, 1)
     qc.rzz(0.5, 1, 2)
 
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)],
         sample_layers=True,
         num_mid_measurements=4,
@@ -1749,7 +1749,7 @@ def test_digital_tjm_longrange_noise() -> None:
         {"name": "crosstalk_xx", "sites": [2, 3], "strength": noise_factor},
     ])
 
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)],
         sample_layers=True,
         num_mid_measurements=0,
@@ -1773,7 +1773,7 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     """Circuit without any SAMPLE_OBSERVABLES barriers should yield 2 columns (initial, final).
 
     Builds a 3-qubit circuit with a few gates but no labelled 'SAMPLE_OBSERVABLES' barriers,
-    enables layer sampling via StrongSimParams, runs the simulator, and asserts that each
+    enables layer sampling via DigitalSimParams, runs the simulator, and asserts that each
     observable's results has shape (2,), corresponding to the initial and final sampling
     points only.
     """
@@ -1784,7 +1784,7 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     qc.cx(0, 1)
     qc.rzz(0.1, 1, 2)
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -1817,7 +1817,7 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     # Final segment
     qc.cx(2, 3)
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -1846,7 +1846,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
     qc.rzz(0.2, 0, 1)
     qc.measure(0, 0)  # terminal measurements are removed
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -1857,12 +1857,12 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
         assert result.expectation_values[i].shape == (3,)
 
 
-def test_weak_noiseless_get_state_returns_mps() -> None:
-    """Noiseless weak simulation with ``get_state=True`` returns the final MPS."""
+def test_shots_noiseless_get_state_returns_mps() -> None:
+    """Noiseless shot simulation with ``get_state=True`` returns the final MPS."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.measure_all()
-    sim_params = WeakSimParams(shots=4, gate_mode="tdvp", preset="exact", get_state=True)
+    sim_params = DigitalSimParams(shots=4, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(2, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
@@ -1871,28 +1871,28 @@ def test_weak_noiseless_get_state_returns_mps() -> None:
     assert result.output_state.mps.length == 2
 
 
-def test_digital_tjm_weak_noisy_get_state_returns_mps() -> None:
-    """Noisy weak ``digital_tjm`` may return the evolved MPS when ``get_state=True``."""
+def test_digital_tjm_shots_noisy_get_state_returns_mps() -> None:
+    """Noisy shot-mode ``digital_tjm`` may return the evolved MPS when ``get_state=True``."""
     mps = MPS(2, state="zeros")
     qc = QuantumCircuit(2)
     qc.h(0)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
-    sim_params = WeakSimParams(shots=1, gate_mode="tdvp", preset="exact", get_state=True)
-    counts, _, final = digital_tjm((0, mps, noise_model, sim_params, qc))
+    sim_params = DigitalSimParams(shots=1, gate_mode="tdvp", preset="exact", get_state=True)
+    _, _, counts, final = digital_tjm((0, mps, noise_model, sim_params, qc))
     assert isinstance(counts, dict)
     assert final is not None
     assert final.length == 2
 
 
-def test_weak_simulation_nearest_neighbor_counts() -> None:
-    """Weak simulation with NN gates returns valid shot counts."""
+def test_shots_nearest_neighbor_counts() -> None:
+    """Shot simulation with NN gates returns valid shot counts."""
     qc = QuantumCircuit(3)
     qc.h(0)
     qc.cx(0, 1)
     qc.measure_all()
 
     state = State(3, initial="zeros")
-    sim_params = WeakSimParams(shots=32, gate_mode="tdvp", preset="exact")
+    sim_params = DigitalSimParams(shots=32, gate_mode="tdvp", preset="exact")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
     assert sum(result.counts.values()) == 32
@@ -1909,15 +1909,15 @@ def test_weak_simulation_nearest_neighbor_counts() -> None:
         (5, (0, 1, 4)),
     ],
 )
-def test_weak_counts_match_qiskit_qubit_ordering_deterministic(num_qubits: int, ones: tuple[int, ...]) -> None:
-    """Weak counts match Qiskit (bitstring->int) for deterministic basis states."""
+def test_shot_counts_match_qiskit_qubit_ordering_deterministic(num_qubits: int, ones: tuple[int, ...]) -> None:
+    """Shot counts match Qiskit (bitstring->int) for deterministic basis states."""
     qc = QuantumCircuit(num_qubits, num_qubits)
     for q in ones:
         qc.x(q)
     qc.measure_all()
 
     shots = 32
-    sim_params = WeakSimParams(shots=shots, gate_mode="tdvp", preset="exact")
+    sim_params = DigitalSimParams(shots=shots, gate_mode="tdvp", preset="exact")
     state = State(num_qubits, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
@@ -1938,7 +1938,7 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     qc.cx(0, 1)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
     state = State(2, initial="zeros")
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), 0)],
         gate_mode="tdvp",
         num_traj=4,
@@ -1954,7 +1954,7 @@ def test_bell_state_sanity() -> None:
     qc.h(0)
     qc.cx(0, 1)
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True)
     assert isinstance(vec, np.ndarray)
     probs = np.abs(vec) ** 2
     np.testing.assert_allclose(probs[0], 0.5, atol=1e-10)
@@ -1993,7 +1993,7 @@ def test_statevector_vs_qiskit() -> None:
         circuits.append(qc)
 
     for qc in circuits:
-        vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+        vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True)
         assert isinstance(vec, np.ndarray)
         ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
         assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -2025,7 +2025,7 @@ def test_observables_vs_qiskit() -> None:
         Observable(Z(), 0),
         Observable(X(), 2),
     ]
-    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact")
+    sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact")
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
@@ -2065,7 +2065,7 @@ def test_pauli_obs_vs_qiskit() -> None:
         Observable(Z(), 0),
         Observable(X(), 2),
     ]
-    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
+    sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
@@ -2091,7 +2091,7 @@ def test_obs_order_aligned() -> None:
 
     # Intentionally not sorted by site: Result order should still match this list.
     requested = [Observable(Z(), 2), Observable(X(), 0), Observable(Z(), 0)]
-    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
+    sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 

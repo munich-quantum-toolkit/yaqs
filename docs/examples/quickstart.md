@@ -66,20 +66,21 @@ fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 ax.set_title("Staggered magnetization under damping")
 ```
 
-## 2. Strong simulation
+## 2. Circuit observables
 
 Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$
 without noise and with an optional {class}`~mqt.yaqs.NoiseModel`. See
-{doc}`strong_simulation` for noise sweeps, mid-circuit sampling, and gate modes.
+{doc}`circuit_observables` for noise sweeps, mid-circuit sampling, and gate
+modes.
 
 ```{code-cell} ipython3
-from mqt.yaqs import NoiseModel, Observable, StrongSimParams
+from mqt.yaqs import NoiseModel, Observable, DigitalSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 num_qubits = 3
 qc = create_ising_circuit(L=num_qubits, J=1.0, g=0.8, dt=0.1, timesteps=6)
 circuit_state = State(num_qubits, initial="zeros")
-circuit_params = StrongSimParams(
+circuit_params = DigitalSimParams(
     observables=[Observable("z", site) for site in range(num_qubits)],
     preset="fast",
     num_traj=32,
@@ -335,7 +336,7 @@ checks and exact-reference validation.
 | Surrogate training, prediction, and exact validation | {doc}`memory_surrogate`       |
 | Open-system dynamics, noise, time grids              | {doc}`analog_simulation`      |
 | Bell-curve (log-normal) noise strengths              | {doc}`realistic_noise_models` |
-| Strong simulation, mid-circuit sampling, OpenQASM    | {doc}`strong_simulation`      |
+| Circuit observables, mid-circuit sampling, OpenQASM  | {doc}`circuit_observables`    |
 | Accuracy presets and truncation knobs                | {doc}`simulation_parameters`  |
 | Check two circuits for equivalence                   | {doc}`equivalence_checking`   |
 

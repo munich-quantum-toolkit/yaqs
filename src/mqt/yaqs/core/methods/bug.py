@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from ..data_structures.simulation_parameters import DigitalSimParams
 from .decompositions import left_qr, right_qr
 from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
@@ -139,7 +139,7 @@ def local_update(
     canon_center_tensors: list[NDArray[np.complex128]],
     site: int,
     right_m_block: NDArray[np.complex128],
-    sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Single Site bug algorithm update.
 
@@ -181,7 +181,7 @@ def local_update(
     return basis_change_m, new_right_block
 
 
-def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams) -> None:
+def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
     """Performs the Basis-Update and Galerkin Method for an MPS.
 
     The state is updated in place.
@@ -205,7 +205,7 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     if state.orthogonality_center is not None:
         state.assert_center(0, context="bug")
 
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+    if isinstance(sim_params, DigitalSimParams):
         sim_params.dt = 1
 
     canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)

@@ -9,9 +9,9 @@
 
 This module provides classes for representing observables and simulation parameters
 for quantum simulations. It defines the Observable class for measurement, as well as
-the PhysicsSimParams, WeakSimParams, and StrongSimParams classes for configuring simulation
-runs. These classes encapsulate settings such as simulation time, time steps, bond dimension limits,
-thresholds, and window sizes. Simulation outputs are stored on
+:class:`AnalogSimParams` and :class:`DigitalSimParams` for configuring simulation
+runs. These classes encapsulate settings such as simulation time, time steps, bond
+dimension limits, and thresholds. Simulation outputs are stored on
 :class:`~mqt.yaqs.core.data_structures.result.Result`, not on these parameter objects.
 """
 
@@ -448,59 +448,51 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
-class StrongSimParams(_ObservableOrderingMixin):
-    """Strong Circuit Simulation Parameters.
+class DigitalSimParams(_ObservableOrderingMixin):
+    """Digital (circuit) simulation parameters.
 
-    A class to represent the parameters for a strong simulation.
+    Configures MPS circuit simulation. Outputs are selected by which fields are set:
+    non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
+    counts, and ``get_state`` yields the final state. At least one of these must be set.
+    Observables and shots may be requested together; shots sample from amplitudes and do
+    not projectively measure the configured observables.
 
     Attributes:
-        dt: A placeholder property for code compatibility.
-        observables: A list of observables to be tracked during the simulation.
-        sorted_observables: Observables sorted by site for efficient MPS evaluation (computed
-            from the current :attr:`observables` list).
-        observable_sorted_indices: Maps each user-list index to the corresponding row in
-            sorted worker buffers (computed from the current :attr:`observables` list).
-        num_traj: The number of trajectories to simulate.
-        random_seed: If set, seeds per-trajectory jump RNG and static noise
-            sampling for reproducible runs.
-        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap. Omit
-            the constructor argument to use the preset value; pass ``None`` explicitly for no cap.
-        preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
-            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-            examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-            strict reference/debug settings (still subject to timestep and sampling error).
-            Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-            Smaller values are more accurate but may require more Krylov vectors. Explicit values
-            override the preset.
-        trunc_mode: The type of truncation performed in TDVP. Options are
-            ``"discarded_weight"`` and ``"relative"``.
+        dt: Placeholder for code compatibility with analog evolution helpers.
+        observables: Observables tracked during the simulation (may be empty).
+        sorted_observables: Observables sorted by site for efficient MPS evaluation.
+        observable_sorted_indices: Maps each user-list index to the sorted worker-buffer row.
+        shots: Number of computational-basis measurement shots, or ``None`` if unused.
+        num_traj: Number of trajectories for noisy observable ensembles.
+        random_seed: If set, seeds per-trajectory jump RNG and static noise sampling.
+        max_bond_dim: Maximum bond dimension, or ``None`` for no cap.
+        preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
+            ``krylov_tol``. Explicit values override the preset.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
+        trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
         svd_threshold: SVD truncation threshold for bond dimension control.
-        window_size: The size of the window for the simulation. Default is ``None``.
-        get_state: If ``True``, request the final state on the returned
-            :class:`~mqt.yaqs.Result`.
-        gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``). Default is
-            ``"mpo"``. Hybrid ``"tdvp"`` applies TEBD to nearest-neighbor gates and
-            two-site TDVP (2TDVP) on a local window for long-range gates.
-        tdvp_sweeps: Number of symmetric TDVP substeps per gate. Each substep integrates
-            evolution time ``1 / tdvp_sweeps`` of the unit gate. Default is ``1``.
-        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or
-            ``"dynamic"``). Default is ``"2site"`` for circuit simulation.
+        get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
+        sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
+        num_mid_measurements: Mid-circuit barrier count when sampling layers.
+        gate_mode: Two-qubit gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
+            ``"mpo"``). Default is ``"mpo"``.
+        tdvp_sweeps: Number of symmetric TDVP substeps per gate. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"2site"``.
     """
 
-    # Properties set as placeholders for code compatibility
     dt = 1
 
     def __init__(
         self,
+        *,
         observables: list[Observable] | None = None,
+        shots: int | None = None,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
-        *,
         preset: SimulationPreset = "balanced",
         get_state: bool = False,
         sample_layers: bool = False,
@@ -510,38 +502,33 @@ class StrongSimParams(_ObservableOrderingMixin):
         tdvp_sweeps: int = 1,
         tdvp_mode: TDVPMode = "2site",
     ) -> None:
-        """Strong circuit simulation parameters initialization.
+        """Initialize digital circuit simulation parameters.
 
-        Initializes parameters for a strong quantum circuit simulation.
+        All arguments are keyword-only so positional integers cannot be silently
+        reinterpreted as ``shots``, ``num_traj``, or ``max_bond_dim``.
 
         Args:
             observables: List of observables to measure during simulation.
-            num_traj: Number of trajectories to simulate.
-            max_bond_dim: Maximum bond dimension allowed in simulation, or ``None`` for no cap. Omit
-                to use the preset value; pass ``None`` explicitly for no cap.
-            preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
-                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-                examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-                strict reference/debug settings (still subject to timestep and sampling error).
-                Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-                Smaller values are more accurate but may require more Krylov vectors. Explicit values
-                override the preset.
+            shots: Number of computational-basis measurement shots, or ``None`` to skip.
+            num_traj: Number of trajectories for noisy observable ensembles.
+            max_bond_dim: Maximum bond dimension, or ``None`` for no cap. Omit to use the
+                preset; pass ``None`` explicitly for no cap.
+            preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
+                ``krylov_tol``. Default is ``"balanced"``.
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``). Hybrid ``"tdvp"`` uses
-                TEBD for nearest-neighbor gates and two-site TDVP (2TDVP) on a local window
-                for long-range gates.
-            tdvp_sweeps: Number of symmetric TDVP substeps per gate at evolution time
-                ``1 / tdvp_sweeps`` (default ``1``).
-            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"2site"``. Selects the integrator for :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp`
-                (for example ``gate_mode="full-tdvp"``); hybrid long-range gates always use
-                2TDVP via :func:`~mqt.yaqs.core.methods.tdvp.tdvp.evolve_window`.
+            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            tdvp_sweeps: Number of symmetric TDVP substeps per gate (default ``1``).
+            tdvp_mode: TDVP integrator geometry (default ``"2site"``).
+
+        Raises:
+            ValueError: If no output is specified, ``sample_layers`` is set without observables,
+                or ``shots`` is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -551,6 +538,18 @@ class StrongSimParams(_ObservableOrderingMixin):
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = obs_list
+
+        if shots is not None and (isinstance(shots, bool) or not isinstance(shots, int) or shots < 1):
+            msg = f"shots must be a positive int or None, got {shots!r}."
+            raise ValueError(msg)
+        self.shots = shots
+
+        if sample_layers and not obs_list:
+            msg = "sample_layers requires a non-empty observables list."
+            raise ValueError(msg)
+        if not obs_list and shots is None and not get_state:
+            msg = "No output specified: set observables, shots, and/or get_state."
+            raise ValueError(msg)
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
@@ -562,101 +561,6 @@ class StrongSimParams(_ObservableOrderingMixin):
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
-        self.random_seed = random_seed
-        self.gate_mode = _validate_gate_mode(gate_mode)
-        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
-        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
-
-
-class WeakSimParams:
-    """A class to represent the parameters for a weak simulation.
-
-    Attributes:
-        dt: A placeholder property for code compatibility.
-        num_traj: A placeholder property for code compatibility.
-        shots: The number of shots for the simulation.
-        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap. Omit
-            the constructor argument to use the preset value; pass ``None`` explicitly for no cap.
-        preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
-            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-            examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-            strict reference/debug settings.
-            Explicit ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-            Smaller values are more accurate but may require more Krylov vectors. Explicit values
-            override the preset.
-        trunc_mode: The type of truncation performed in TDVP. Options are
-            ``"discarded_weight"`` and ``"relative"``.
-        svd_threshold: SVD truncation threshold for bond dimension control.
-        window_size: The window size for the simulation.
-        get_state: If ``True``, request the final state on the returned
-            :class:`~mqt.yaqs.Result`.
-        gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
-        tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
-            symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
-            of the unit gate time. Default is ``1``.
-        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"2site"`` for circuit simulation.
-    """
-
-    # Properties set as placeholders for code compatibility
-    dt = 1
-    num_traj = 0
-
-    def __init__(
-        self,
-        shots: int,
-        max_bond_dim: int | object | None = _USE_PRESET,
-        trunc_mode: str = "discarded_weight",
-        svd_threshold: float | None = None,
-        krylov_tol: float | None = None,
-        *,
-        preset: SimulationPreset = "balanced",
-        get_state: bool = False,
-        random_seed: int | None = None,
-        gate_mode: GateMode = "mpo",
-        tdvp_sweeps: int = 1,
-        tdvp_mode: TDVPMode = "2site",
-    ) -> None:
-        """Weak circuit simulation initialization.
-
-        Initializes parameters for a weak circuit simulation.
-
-        Args:
-            shots: Number of measurement shots to simulate.
-            max_bond_dim: Maximum bond dimension for simulation, or ``None`` for no cap. Omit to
-                use the preset value; pass ``None`` explicitly for no cap.
-            preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
-                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-                examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-                strict reference/debug settings.
-                Explicit ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-                Smaller values are more accurate but may require more Krylov vectors. Explicit values
-                override the preset.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
-            svd_threshold: SVD truncation threshold for bond dimension control.
-            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-            random_seed: If set, makes per-shot jump RNG reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
-            tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
-                symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
-                (default ``1``).
-            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"2site"``.
-        """
-        _validate_random_seed(random_seed)
-        preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
-        self.preset = preset
-        self.shots = shots
-        self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
-        self.svd_threshold = _validate_svd_threshold(
-            svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
-        )
-        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
-        self.get_state = get_state
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)

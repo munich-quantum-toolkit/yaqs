@@ -13,11 +13,10 @@ YAQS separates **what you evolve** ({class}`~mqt.yaqs.State`, circuits,
 Hamiltonians) from **how you truncate and sample** via parameter objects passed
 to {meth}`~mqt.yaqs.Simulator.run`:
 
-| Class                              | Use when                                                                                     |
-| ---------------------------------- | -------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.AnalogSimParams` | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
-| {class}`~mqt.yaqs.StrongSimParams` | Noisy **strong** digital simulation (per-trajectory MPS evolution with observables).         |
-| {class}`~mqt.yaqs.WeakSimParams`   | Noisy **weak** digital simulation (shot-based sampling; you set `shots` explicitly).         |
+| Class                               | Use when                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| {class}`~mqt.yaqs.AnalogSimParams`  | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
+| {class}`~mqt.yaqs.DigitalSimParams` | Circuit simulation: observables, computational-basis shots, or both.                         |
 
 This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator`
 execution options (parallelism, progress bars), see
@@ -36,7 +35,7 @@ do not import gate classes for standard measurements.
 | `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
 | `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
 | `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
-| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`strong_simulation`                |
+| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`circuit_observables`              |
 
 For custom unitaries and circuit gates, use {doc}`custom_gates` — those
 workflows still use `GateLibrary` or Qiskit circuits directly.
@@ -46,17 +45,17 @@ workflows still use `GateLibrary` or Qiskit circuits directly.
 You do **not** need to tune every numerical knob before running a simulation.
 Pick a **preset** and let it fill in the truncation and sampling settings you
 may be unfamiliar with (`svd_threshold`, `max_bond_dim`, `num_traj` on
-analog/strong runs, and `krylov_tol`).
+analog/digital-observable runs, and `krylov_tol`).
 
-All three `*SimParams` classes accept a keyword-only `preset` argument (default
+All `*SimParams` classes accept a keyword-only `preset` argument (default
 `"balanced"`):
 
-| `preset`               | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / strong) | `krylov_tol` |
-| ---------------------- | --------------- | -------------- | ---------------------------- | ------------ |
-| `"fast"`               | `1e-3`          | `16`           | `128`                        | `1e-3`       |
-| `"balanced"` (default) | `1e-6`          | `128`          | `256`                        | `1e-4`       |
-| `"accurate"`           | `1e-9`          | `4096`         | `1024`                       | `1e-6`       |
-| `"exact"`              | `1e-13`         | `None`         | `1024`                       | `1e-12`      |
+| `preset`               | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / digital observables) | `krylov_tol` |
+| ---------------------- | --------------- | -------------- | ----------------------------------------- | ------------ |
+| `"fast"`               | `1e-3`          | `16`           | `128`                                     | `1e-3`       |
+| `"balanced"` (default) | `1e-6`          | `128`          | `256`                                     | `1e-4`       |
+| `"accurate"`           | `1e-9`          | `4096`         | `1024`                                    | `1e-6`       |
+| `"exact"`              | `1e-13`         | `None`         | `1024`                                    | `1e-12`      |
 
 - **`"fast"`** — qualitative exploration and quick tests; not intended for
   strict dense comparisons.
@@ -90,10 +89,10 @@ Overridable preset fields:
 | --------------- | -------------------------------------------------- |
 | `svd_threshold` | SVD bond truncation during MPS/MPO updates         |
 | `max_bond_dim`  | Hard cap on bond dimension (`None` = no cap)       |
-| `num_traj`      | Trajectory count (analog / strong only)            |
+| `num_traj`      | Trajectory count (analog / digital observables)    |
 | `krylov_tol`    | Adaptive Krylov/Lanczos matrix exponential in TDVP |
 
-`WeakSimParams` always requires `shots` separately; `shots` is **not** part of
+Optional `shots` on `DigitalSimParams` is set explicitly and is **not** part of
 any preset.
 
 If you omit an overridable argument, the preset supplies it. If you pass a value
@@ -107,13 +106,12 @@ pass `None` explicitly to remove the cap.
 from mqt.yaqs import (
     SIMULATION_PRESETS,
     AnalogSimParams,
+    DigitalSimParams,
     Observable,
-    StrongSimParams,
-    WeakSimParams,
 )
 
 
-def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) -> dict[str, object]:
+def _trunc_summary(params: AnalogSimParams | DigitalSimParams) -> dict[str, object]:
     """Collect preset-related fields for display."""
     out: dict[str, object] = {
         "preset": params.preset,
@@ -121,7 +119,7 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
         "max_bond_dim": params.max_bond_dim,
         "krylov_tol": params.krylov_tol,
     }
-    if isinstance(params, WeakSimParams):
+    if isinstance(params, DigitalSimParams) and params.shots is not None:
         out["shots"] = params.shots
     else:
         out["num_traj"] = params.num_traj
@@ -157,14 +155,15 @@ custom_params = AnalogSimParams(
 _trunc_summary(custom_params)
 ```
 
-Weak simulation: set `shots` yourself, use a preset for truncation:
+Shot-based circuit simulation: set `shots` yourself, use a preset for
+truncation:
 
 ```{code-cell} ipython3
-weak_params = WeakSimParams(
+shot_params = DigitalSimParams(
     shots=1024,
     preset="fast",
 )
-_trunc_summary(weak_params)
+_trunc_summary(shot_params)
 ```
 
 ## `AnalogSimParams`
@@ -203,10 +202,12 @@ Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a
 {class}`~mqt.yaqs.State` and {class}`~mqt.yaqs.Hamiltonian` (see
 {doc}`analog_simulation`).
 
-## `StrongSimParams`
+## `DigitalSimParams`
 
-Used for strong circuit simulation. Provide observables and optionally enable
-layer sampling (see {doc}`strong_simulation`).
+Used for circuit simulation. Set non-empty `observables` for expectation values,
+`shots` for computational-basis counts, and/or `get_state` for the final MPS.
+Observables and shots may be requested together. Optionally enable layer
+sampling with `sample_layers=True` (see {doc}`circuit_observables`).
 
 ### Two-qubit gate mode (`gate_mode`)
 
@@ -236,13 +237,12 @@ via `evolve_window`.
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into
 multiple substeps of equal total time. Values greater than `1` are opt-in and
 may improve accuracy on some circuits. The setting applies to all TDVP kernels
-on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
+on `AnalogSimParams` and `DigitalSimParams`.
 
 Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"`
 (2TDVP), or `"dynamic"` (adaptive single/two-site updates). The default is
-**`"2site"`** (2TDVP) on `AnalogSimParams`, `StrongSimParams`, and
-`WeakSimParams`. Pass `"dynamic"` explicitly for adaptive 1/2-site switching
-during analog evolution.
+**`"2site"`** (2TDVP) on `AnalogSimParams` and `DigitalSimParams`. Pass
+`"dynamic"` explicitly for adaptive 1/2-site switching during analog evolution.
 
 Substep geometry: each substep is **symmetric** (left-to-right then
 right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and
@@ -251,41 +251,42 @@ across all substeps. Noise and dissipation after TDVP still use the full
 physical step `dt` in analog simulation.
 
 ```{code-cell} ipython3
-strong = StrongSimParams(
+digital = DigitalSimParams(
     observables=[Observable("z", 0)],
     gate_mode="tdvp",
     tdvp_sweeps=2,
     preset="accurate",
 )
-_trunc_summary(strong)
+_trunc_summary(digital)
 ```
 
 ```{code-cell} ipython3
-strong_default = StrongSimParams(
+digital_default = DigitalSimParams(
     observables=[Observable("z", 0)],
     preset="accurate",
 )
-_trunc_summary(strong_default)
+_trunc_summary(digital_default)
 ```
 
-## `WeakSimParams`
-
-Used for noisy weak simulation. **`shots` is always required** and is not part
-of the preset.
-
-YAQS stores weak-simulation measurement histograms in `Result.counts` as a
+When `shots` is set, YAQS stores measurement histograms in `Result.counts` as a
 `dict[int, int]`. The integer key encodes the measured bitstring with
 **site 0 as the least-significant bit** (little-endian). This matches Qiskit’s
 default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via
 `int(bitstring, 2)`.
 
+You can request observables and shots in one run. In a **noisy** combined
+simulation, `shots` is the **total** number of computational-basis samples and
+is distributed across the `num_traj` stochastic states (some trajectories may
+receive zero samples when `shots < num_traj`). Observables are still aggregated
+over every trajectory.
+
 ```{code-cell} ipython3
-weak_balanced = WeakSimParams(shots=1000)
-weak_exact = WeakSimParams(shots=1000, preset="exact")
+shot_params = DigitalSimParams(shots=1000)
+shot_exact = DigitalSimParams(shots=1000, preset="exact")
+combined = DigitalSimParams(observables=[Observable("z", 0)], shots=1000)
 ```
 
-See {doc}`weak_circuit_simulation` for a full example with measurement
-histograms.
+See {doc}`circuit_shots` for a full shot-readout example.
 
 ## Reference: preset table in code
 
@@ -299,5 +300,5 @@ SIMULATION_PRESETS
 
 - {doc}`quickstart` — minimal first simulation
 - {doc}`analog_simulation` — analog parameters in context
-- {doc}`strong_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
-- {doc}`weak_circuit_simulation` — `WeakSimParams` and shot readout
+- {doc}`circuit_observables` — observables, `gate_mode`, and layer sampling
+- {doc}`circuit_shots` — shot readout with `DigitalSimParams`

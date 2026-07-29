@@ -323,7 +323,7 @@ def embed_one_site_operator(
     """Embed a one-site operator into the full Hilbert space.
 
     Uses the same qubit indexing as :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`,
-    Qiskit little-endian circuits, and weak-simulation bitstring keys: site ``0`` is the
+    Qiskit little-endian circuits, and shot-count bitstring keys: site ``0`` is the
     least significant bit in the flat state index.
 
     Args:

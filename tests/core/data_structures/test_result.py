@@ -22,14 +22,13 @@ import numpy as np
 
 from mqt.yaqs import (
     AnalogSimParams,
+    DigitalSimParams,
     Hamiltonian,
     NoiseModel,
     Observable,
     Result,
     Simulator,
     State,
-    StrongSimParams,
-    WeakSimParams,
 )
 from mqt.yaqs.core.data_structures.result import aggregate_counts
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -70,32 +69,32 @@ def test_result_holds_outputs_for_analog_run() -> None:
     assert len(result.runtime_cost) == len(result.times)
 
 
-def test_result_counts_only_set_for_weak_simulation() -> None:
-    """Result.counts is populated for weak simulations and None otherwise."""
+def test_result_counts_only_set_for_shots() -> None:
+    """Result.counts is populated for shot-based digital runs and None otherwise."""
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    weak_params = WeakSimParams(shots=16, max_bond_dim=4)
-    weak_result = Simulator(parallel=False, show_progress=False).run(state, circuit, weak_params)
+    shot_params = DigitalSimParams(shots=16, max_bond_dim=4)
+    shot_result = Simulator(parallel=False, show_progress=False).run(state, circuit, shot_params)
 
-    assert weak_result.counts is not None
-    assert sum(weak_result.counts.values()) == weak_params.shots
-    assert weak_result.multi_time_times is None
-    assert weak_result.multi_time_results is None
-    assert weak_result.runtime_cost is None
-    assert weak_result.max_bond is None
-    assert weak_result.total_bond is None
+    assert shot_result.counts is not None
+    assert sum(shot_result.counts.values()) == shot_params.shots
+    assert shot_result.multi_time_times is None
+    assert shot_result.multi_time_results is None
+    assert shot_result.runtime_cost is None
+    assert shot_result.max_bond is None
+    assert shot_result.total_bond is None
 
-    strong_state = State(num_qubits, initial="zeros")
-    strong_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
-    strong_result = Simulator(parallel=False, show_progress=False).run(strong_state, circuit, strong_params)
+    obs_state = State(num_qubits, initial="zeros")
+    obs_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    obs_result = Simulator(parallel=False, show_progress=False).run(obs_state, circuit, obs_params)
 
-    assert strong_result.counts is None
-    assert strong_result.runtime_cost is not None
-    assert strong_result.max_bond is not None
-    assert strong_result.total_bond is not None
+    assert obs_result.counts is None
+    assert obs_result.runtime_cost is not None
+    assert obs_result.max_bond is not None
+    assert obs_result.total_bond is not None
 
 
 def test_result_noise_model_reflects_sampled_noise() -> None:
@@ -106,11 +105,11 @@ def test_result_noise_model_reflects_sampled_noise() -> None:
     circuit.measure_all()
 
     noise_model = NoiseModel([{"name": "pauli_z", "sites": [i], "strength": 1e-3} for i in range(num_qubits)])
-    weak_params = WeakSimParams(shots=4, max_bond_dim=4, random_seed=0)
-    result = Simulator(parallel=False, show_progress=False).run(state, circuit, weak_params, noise_model)
+    shot_params = DigitalSimParams(shots=4, max_bond_dim=4, random_seed=0)
+    result = Simulator(parallel=False, show_progress=False).run(state, circuit, shot_params, noise_model)
 
     assert result.noise_model is not None
-    assert not hasattr(weak_params, "noise_model")
+    assert not hasattr(shot_params, "noise_model")
 
 
 def test_sim_params_not_mutated_after_analog_run() -> None:
@@ -170,8 +169,8 @@ def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
     Regression: previously, the presence of any None short-circuited the aggregator
     to ``result.measurements[0]`` alone, silently dropping later valid per-shot dicts.
     """
-    weak_params = WeakSimParams(shots=1, max_bond_dim=4)
-    result = Result(sim_params=weak_params)
+    shot_params = DigitalSimParams(shots=1, max_bond_dim=4)
+    result = Result(sim_params=shot_params)
     result.measurements = [{0: 2, 1: 1}, None, {1: 3, 2: 4}]
 
     aggregate_counts(result)
@@ -181,8 +180,8 @@ def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
 
 def test_aggregate_counts_handles_all_none() -> None:
     """An all-None measurements list yields an empty counts dict."""
-    weak_params = WeakSimParams(shots=1, max_bond_dim=4)
-    result = Result(sim_params=weak_params)
+    shot_params = DigitalSimParams(shots=1, max_bond_dim=4)
+    result = Result(sim_params=shot_params)
     result.measurements = [None, None, None]
 
     aggregate_counts(result)

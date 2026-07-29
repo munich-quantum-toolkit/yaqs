@@ -9,12 +9,12 @@
 
 This module verifies the functionality of the simulator by testing both analog (Hamiltonian)
 and circuit simulation branches. It includes tests for identity circuits, two-qubit operations,
-long-range gate handling, weak and strong simulation modes, and error cases such as mismatched
+long-range gate handling, circuit observable and shot modes, and error cases such as mismatched
 qubit counts.
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff:file-ignore[non-lowercase-variable-in-function, import-private-name]
+# ruff:file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 
@@ -30,19 +30,17 @@ from mqt.yaqs import (
     MPO,
     MPS,
     AnalogSimParams,
+    DigitalSimParams,
     Hamiltonian,
     NoiseModel,
     Observable,
     Result,
     Simulator,
     State,
-    StrongSimParams,
-    WeakSimParams,
     simulator,
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _expect_shot_counts
 from tests.conftest import (
     LARGE_QASM2_STRING,
     SAMPLE_QASM3_STRING,
@@ -121,7 +119,7 @@ def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) ->
     state = State(num_qubits, initial="zeros")
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=2, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=2, max_bond_dim=4)
 
     Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, None)
 
@@ -200,7 +198,7 @@ def test_analog_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets
         # due to floating-point reduction order and BLAS/LAPACK differences.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
@@ -252,7 +250,7 @@ def test_analog_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets
         # due to floating-point reduction order and BLAS/LAPACK differences.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
@@ -502,16 +500,16 @@ def test_density_matrix_without_get_state_leaves_output_state_empty() -> None:
 def test_circuit_run_rejects_non_mps_state(state: State) -> None:
     """Circuit simulation requires State.representation='mps'."""
     circuit = QuantumCircuit(2)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
     with pytest.raises(ValueError, match=r"Circuit simulation requires State\.representation='mps'"):
         Simulator(show_progress=False).run(state, circuit, sim_params, None)
 
 
-def test_strong_simulation() -> None:
-    """Test the circuit-based simulation branch using StrongSimParams.
+def test_digital_observables() -> None:
+    """Test the circuit-based simulation branch using DigitalSimParams.
 
     This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
-    It configures StrongSimParams with specified simulation parameters and a noise model (non-None).
+    It configures DigitalSimParams with specified simulation parameters and a noise model (non-None).
     Simulator.run is then called, and the test verifies that the observables' results and trajectories
     are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
     """
@@ -521,7 +519,7 @@ def test_strong_simulation() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
@@ -550,12 +548,12 @@ def test_strong_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
-def test_strong_simulation_no_noise() -> None:
-    """Test the circuit-based simulation using StrongSimParams without noise to get a statevector.
+def test_digital_observables_no_noise() -> None:
+    """Test the circuit-based simulation using DigitalSimParams without noise to get a statevector.
 
     This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
     """
@@ -565,7 +563,7 @@ def test_strong_simulation_no_noise() -> None:
 
     state = State(length=num_qubits)
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], max_bond_dim=16, get_state=True)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], max_bond_dim=16, get_state=True)
 
     result = Simulator(show_progress=False).run(state, circ, sim_params)
     assert result.output_state is not None
@@ -577,11 +575,11 @@ def test_strong_simulation_no_noise() -> None:
     np.testing.assert_allclose(1, fidelity)
 
 
-def test_strong_simulation_parallel_off() -> None:
-    """Test the circuit-based simulation branch using StrongSimParams, parallelization off.
+def test_digital_observables_parallel_off() -> None:
+    """Test the circuit-based simulation branch using DigitalSimParams, parallelization off.
 
     This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
-    It configures StrongSimParams with specified simulation parameters and a noise model (non-None).
+    It configures DigitalSimParams with specified simulation parameters and a noise model (non-None).
     Simulator.run is then called, and the test verifies that the observables' results and trajectories
     are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
     """
@@ -591,7 +589,7 @@ def test_strong_simulation_parallel_off() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
@@ -620,15 +618,15 @@ def test_strong_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
-def test_weak_simulation_noise() -> None:
-    """Test the weak simulation branch with a non-None noise model.
+def test_digital_shots_noise() -> None:
+    """Test shot-based digital simulation with a non-None noise model.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
-    It sets up WeakSimParams with a sufficient number of shots for statistical verification, max bond dimension,
+    It sets up DigitalSimParams with a sufficient number of shots for statistical verification, max bond dimension,
     threshold, and window size, and a noise model with small strengths. After running Simulator.run, the test
     verifies that sim_params.num_traj equals the number of shots, that each measurement is a dictionary,
     and that the total number of shots recorded in result.counts equals the expected number.
@@ -639,7 +637,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=32, max_bond_dim=4, random_seed=YAQS_TEST_SEED)
+    sim_params = DigitalSimParams(shots=32, max_bond_dim=4, random_seed=YAQS_TEST_SEED)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -652,14 +650,14 @@ def test_weak_simulation_noise() -> None:
     for measurement in result.measurements:
         assert isinstance(measurement, dict)
     assert result.counts is not None
-    assert sum(result.counts.values()) == sim_params.shots, "Wrong number of shots in WeakSimParams."
+    assert sum(result.counts.values()) == sim_params.shots, "Wrong number of shots in DigitalSimParams."
 
 
-def test_weak_simulation_no_noise() -> None:
-    """Test the weak simulation branch when the noise model is None.
+def test_digital_shots_no_noise() -> None:
+    """Test shot-based digital simulation when the noise model is None.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
-    and configures WeakSimParams with a sufficient number of shots. When noise_model is None,
+    and configures DigitalSimParams with a sufficient number of shots. When noise_model is None,
     the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
     are consistent with this behavior.
     """
@@ -668,7 +666,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=64, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=64, max_bond_dim=4)
 
     noise_model = None
 
@@ -676,16 +674,120 @@ def test_weak_simulation_no_noise() -> None:
 
     assert len(result.measurements) == 1
     assert isinstance(result.measurements[0], dict), (
-        "There should be only one measurement dict when noise-free weak simulation runs in one batch."
+        "There should be only one measurement dict when noise-free shot simulation runs in one batch."
     )
     assert result.counts is not None
     max_value = max(result.counts.values())
     assert result.counts[0] == max_value, "Key 0 does not have the highest value."
-    assert sum(result.counts.values()) == sim_params.shots, "Wrong number of shots in WeakSimParams."
+    assert sum(result.counts.values()) == sim_params.shots, "Wrong number of shots in DigitalSimParams."
 
 
-def test_weak_simulation_get_state() -> None:
-    """Test the circuit-based simulation using WeakSimParams without noise to get a statevector.
+def test_digital_combined_observables_and_shots() -> None:
+    """Observables and shots together fill expectations and counts without changing obs-only results."""
+    num_qubits = 2
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
+    circuit.measure_all()
+    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    sim = Simulator(parallel=False, show_progress=False)
+
+    obs_only = sim.run(
+        State(num_qubits, initial="zeros"),
+        circuit,
+        DigitalSimParams(observables=obs, max_bond_dim=16, random_seed=YAQS_TEST_SEED),
+    )
+    combined = sim.run(
+        State(num_qubits, initial="zeros"),
+        circuit,
+        DigitalSimParams(observables=obs, shots=64, max_bond_dim=16, random_seed=YAQS_TEST_SEED),
+    )
+
+    assert len(combined.expectation_values) == num_qubits
+    for i in range(num_qubits):
+        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i])
+    assert combined.counts is not None
+    assert sum(combined.counts.values()) == 64
+    assert combined.max_bond is not None
+
+
+def test_digital_combined_observables_and_shots_noisy() -> None:
+    """Noisy combined runs keep obs-only expectations and distribute shots across trajs."""
+    num_qubits = 2
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
+    circuit.measure_all()
+    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
+    num_traj = 4
+    shots = 10
+    sim = Simulator(parallel=False, show_progress=False)
+
+    obs_only = sim.run(
+        State(num_qubits, initial="zeros"),
+        circuit,
+        DigitalSimParams(observables=obs, num_traj=num_traj, max_bond_dim=16, random_seed=YAQS_TEST_SEED),
+        noise_model,
+    )
+    combined = sim.run(
+        State(num_qubits, initial="zeros"),
+        circuit,
+        DigitalSimParams(
+            observables=obs,
+            shots=shots,
+            num_traj=num_traj,
+            max_bond_dim=16,
+            random_seed=YAQS_TEST_SEED,
+        ),
+        noise_model,
+    )
+
+    assert len(combined.expectation_values) == num_qubits
+    for i in range(num_qubits):
+        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i])
+    assert combined.counts is not None
+    assert sum(combined.counts.values()) == shots
+    assert len(combined.measurements) == num_traj
+    assert combined.max_bond is not None
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_digital_combined_noisy_shots_less_than_num_traj(*, parallel: bool) -> None:
+    """When shots < num_traj, zero-shot trajs contribute no counts but still feed observables."""
+    num_qubits = 2
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
+    circuit.measure_all()
+    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
+    num_traj = 4
+    shots = 2
+    sim = Simulator(parallel=parallel, max_workers=2 if parallel else None, show_progress=False)
+
+    result = sim.run(
+        State(num_qubits, initial="zeros"),
+        circuit,
+        DigitalSimParams(
+            observables=obs,
+            shots=shots,
+            num_traj=num_traj,
+            max_bond_dim=16,
+            random_seed=YAQS_TEST_SEED,
+        ),
+        noise_model,
+    )
+
+    assert result.counts is not None
+    assert sum(result.counts.values()) == shots
+    assert len(result.measurements) == num_traj
+    # Two trajectories get one shot each; the rest must be empty or None (never a phantom shot).
+    per_traj_totals = [0 if m is None else sum(m.values()) for m in result.measurements]
+    assert sorted(per_traj_totals) == [0, 0, 1, 1]
+    assert len(result.expectation_values) == num_qubits
+    for values in result.expectation_values:
+        assert values is not None
+        assert np.size(values) > 0
+    assert result.max_bond is not None
+
+
+def test_digital_shots_get_state() -> None:
+    """Test the circuit-based simulation using DigitalSimParams without noise to get a statevector.
 
     This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
     """
@@ -694,7 +796,7 @@ def test_weak_simulation_get_state() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=1, max_bond_dim=4, get_state=True)
+    sim_params = DigitalSimParams(shots=1, max_bond_dim=4, get_state=True)
     noise_model = None
 
     result = Simulator(show_progress=False).run(initial_state, circuit, sim_params, noise_model)
@@ -707,10 +809,10 @@ def test_weak_simulation_get_state() -> None:
     np.testing.assert_allclose(1, fidelity)
 
 
-def test_weak_simulation_get_state_noise() -> None:
-    """Test the circuit-based simulation using WeakSimParams noise to get a statevector.
+def test_digital_shots_get_state_noise() -> None:
+    """Test the circuit-based simulation using DigitalSimParams noise to get a statevector.
 
-    This test constructs a 2-site Ising circuit and configures the WeakSimParams to include a noise model and
+    This test constructs a 2-site Ising circuit and configures the DigitalSimParams to include a noise model and
     return the final state. Since the noisy simulation cannot return the statevector, an exception should be raised.
     """
     num_qubits = 2
@@ -718,7 +820,7 @@ def test_weak_simulation_get_state_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=1, max_bond_dim=4, get_state=True)
+    sim_params = DigitalSimParams(shots=1, max_bond_dim=4, get_state=True)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -741,7 +843,7 @@ def test_mismatch() -> None:
     circuit = create_ising_circuit(L=num_qubits - 1, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=1024, max_bond_dim=4)
 
     noise_model = None
 
@@ -1092,7 +1194,7 @@ def test_two_site_correlator_center_circuit() -> None:
     circ = create_ising_circuit(L=L, J=J, g=g, dt=0.1, timesteps=20)
     state = State(L, initial="zeros")
 
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[
             Observable(XX(), [L // 2, L // 2 + 1]),
             Observable(YY(), [L // 2, L // 2 + 1]),
@@ -1383,10 +1485,9 @@ def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
 
 
 def test_no_output_error() -> None:
-    """Verify that Simulator.run raises AssertionError when no output is specified."""
+    """Verify that no-output configurations are rejected."""
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
-    circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     H = Hamiltonian.ising(num_qubits, J=1, g=0.5)
     sim = Simulator(show_progress=False)
 
@@ -1400,13 +1501,12 @@ def test_no_output_error() -> None:
     with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         sim.run(state, H, sim_params_analog)
 
-    # 2. StrongSimParams (No observables, get_state=False)
-    sim_params_strong = StrongSimParams(
-        observables=[],
-        get_state=False,
-    )
-    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
-        sim.run(state, circ, sim_params_strong)
+    # 2. DigitalSimParams (No observables, get_state=False) rejected at construction
+    with pytest.raises(ValueError, match=r"No output specified: set observables, shots, and/or get_state."):
+        DigitalSimParams(
+            observables=[],
+            get_state=False,
+        )
 
 
 def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
@@ -1422,7 +1522,7 @@ def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
 def test_circuit_simulation_rejects_state_list() -> None:
     """Circuit simulation does not support ``list[State]`` initial states."""
     circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
-    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable(Z(), 0)])
     states = [State(2, initial="zeros"), State(2, initial="ones")]
     with pytest.raises(TypeError, match="Circuit simulation requires a single State initial_state"):
         Simulator(show_progress=False).run(states, circuit, params, None)
@@ -1431,7 +1531,7 @@ def test_circuit_simulation_rejects_state_list() -> None:
 def test_circuit_simulation_rejects_non_circuit_operator() -> None:
     """Circuit simulation requires a :class:`QuantumCircuit`."""
     state = State(2, initial="zeros")
-    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable(Z(), 0)])
     bad_operator = cast("Any", Hamiltonian.ising(2, J=1.0, g=0.5))
     with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit operator"):
         Simulator(show_progress=False).run(state, bad_operator, params, None)
@@ -1440,38 +1540,32 @@ def test_circuit_simulation_rejects_non_circuit_operator() -> None:
 def test_circuit_simulation_rejects_non_state_initial_state() -> None:
     """Circuit simulation requires a :class:`State` initial state."""
     circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
-    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable(Z(), 0)])
     bad_state = cast("Any", MPS(2, state="zeros"))
     with pytest.raises(TypeError, match="Circuit simulation requires a State initial_state"):
         Simulator(show_progress=False).run(bad_state, circuit, params, None)
 
 
-def test_expect_shot_counts_rejects_non_dict() -> None:
-    """``_expect_shot_counts`` raises ``TypeError`` for non-dict payloads."""
-    with pytest.raises(TypeError, match="Expected measurement result to be dict"):
-        _expect_shot_counts(np.zeros(2, dtype=np.float64))
-
-
-def test_weak_simulation_parallel_returns_counts() -> None:
-    """Parallel weak simulation aggregates per-shot counts via the worker pool."""
+def test_digital_shots_parallel_returns_counts() -> None:
+    """Parallel shot simulation aggregates per-shot counts via the worker pool."""
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
     circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [i], "strength": 1e-3} for i in range(num_qubits)])
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4, random_seed=YAQS_TEST_SEED)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4, random_seed=YAQS_TEST_SEED)
     result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, circuit, sim_params, noise_model)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_strong_simulation_parallel_records_final_mps() -> None:
-    """Noiseless parallel strong simulation with ``get_state=True`` returns the output MPS."""
+def test_digital_observables_parallel_records_final_mps() -> None:
+    """Noiseless parallel digital observable simulation with ``get_state=True`` returns the output MPS."""
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
     circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=2)
     circuit.measure_all()
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), 0)],
         num_traj=1,
         max_bond_dim=4,
@@ -1522,7 +1616,7 @@ def test_simulator_run_accepts_qasm2_path_object(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 2 file passed as a Path object."""
     qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
@@ -1532,7 +1626,7 @@ def test_simulator_run_accepts_qasm2_str_path(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 2 file passed as a str path."""
     qasm_file = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     state = State(6, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
@@ -1541,7 +1635,7 @@ def test_simulator_run_accepts_qasm2_str_path(tmp_path: Path) -> None:
 def test_simulator_run_accepts_qasm2_raw_string() -> None:
     """Verify that Simulator.run accepts a raw QASM 2 string (not a file path)."""
     state = State(6, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
@@ -1552,7 +1646,7 @@ def test_simulator_run_accepts_qasm3_path_object(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
     qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
     state = State(2, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
@@ -1563,35 +1657,35 @@ def test_simulator_run_accepts_qasm3_str_path(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
     qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
     state = State(2, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_simulator_run_strong_accepts_qasm_path(tmp_path: Path) -> None:
-    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a Path."""
+def test_simulator_run_observables_accepts_qasm_path(tmp_path: Path) -> None:
+    """Verify that Simulator.run with DigitalSimParams accepts a QASM file passed as a Path."""
     qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.expectation_values[0] is not None
 
 
-def test_simulator_run_strong_accepts_qasm_string(tmp_path: Path) -> None:
-    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a str path."""
+def test_simulator_run_observables_accepts_qasm_string(tmp_path: Path) -> None:
+    """Verify that Simulator.run with DigitalSimParams accepts a QASM file passed as a str path."""
     qasm_string = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     state = State(6, initial="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
     assert result.expectation_values[0] is not None
 
 
 @requires_qasm3_import
-def test_simulator_run_strong_accepts_qasm3_raw_string() -> None:
-    """Verify that Simulator.run with StrongSimParams accepts a raw OpenQASM 3 string."""
+def test_simulator_run_observables_accepts_qasm3_raw_string() -> None:
+    """Verify that Simulator.run with DigitalSimParams accepts a raw OpenQASM 3 string."""
     state = State(2, initial="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
     assert result.expectation_values[0] is not None
 
@@ -1611,20 +1705,20 @@ def test_simulator_run_analog_rejects_str_operator() -> None:
 
 
 @requires_qasm3_import
-def test_simulator_run_accepts_qasm3_raw_string_weak() -> None:
-    """Verify that Simulator.run with WeakSimParams accepts a raw OpenQASM 3 string."""
+def test_simulator_run_accepts_qasm3_raw_string_shots() -> None:
+    """Verify that Simulator.run with DigitalSimParams accepts a raw OpenQASM 3 string."""
     state = State(2, initial="zeros")
-    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    sim_params = DigitalSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_simulator_run_qasm_path_and_string_strong_match(tmp_path: Path) -> None:
-    """Strong simulation with fixed seed agrees for path and raw OpenQASM inputs."""
+def test_simulator_run_qasm_path_and_string_observables_match(tmp_path: Path) -> None:
+    """Digital observable simulation with fixed seed agrees for path and raw OpenQASM inputs."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), 0)],
         num_traj=1,
         max_bond_dim=4,

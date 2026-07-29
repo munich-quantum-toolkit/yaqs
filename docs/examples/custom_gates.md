@@ -3,7 +3,7 @@
 ```{note}
 This is a **reference guide** with static code blocks; it is not executed during
 the documentation build. Runnable circuit examples are in
-{doc}`strong_simulation` and {doc}`equivalence_checking`.
+{doc}`circuit_observables` and {doc}`equivalence_checking`.
 ```
 
 YAQS represents every digital gate as a
@@ -88,8 +88,8 @@ Symbolic parameters must be bound before translation; unbound
 
 - **Single-qubit gates** — contract the gate tensor onto the corresponding MPS
   site.
-- **Two-qubit gates** — routed by `StrongSimParams.gate_mode` /
-  `WeakSimParams.gate_mode` (see {doc}`simulation_parameters`):
+- **Two-qubit gates** — routed by `DigitalSimParams.gate_mode`
+  (see {doc}`simulation_parameters`):
   - **`mpo`** (default) — TEBD/SVD on nearest-neighbor pairs; long-range gates
     via extended gate MPO.
   - **`swaps`** — TEBD with SWAP routing for long-range pairs.
@@ -106,7 +106,7 @@ Symbolic parameters must be bound before translation; unbound
   circuits before comparison; mid-circuit measurements raise `ValueError`.
 
 Plain `barrier` instructions are dropped in simulation except barriers labelled
-`SAMPLE_OBSERVABLES` (used for strong-simulation layer sampling).
+`SAMPLE_OBSERVABLES` (used for digital layer sampling).
 
 ### Equivalence checking
 
@@ -157,7 +157,7 @@ do not need to inline or transpile custom gates to a fixed basis set before
 simulation or equivalence checking.
 
 ```python
-from mqt.yaqs import EquivalenceChecker, Simulator, State, WeakSimParams
+from mqt.yaqs import EquivalenceChecker, Simulator, State, DigitalSimParams
 
 qasm = """
 OPENQASM 2.0;
@@ -176,7 +176,7 @@ checker = EquivalenceChecker(representation="mpo")
 checker.check(qasm, qasm)
 
 state = State(2, initial="zeros")
-Simulator(show_progress=False).run(state, qasm, WeakSimParams(shots=128, max_bond_dim=4))
+Simulator(show_progress=False).run(state, qasm, DigitalSimParams(shots=128, max_bond_dim=4))
 ```
 
 The same rules apply to **legacy or backend-specific Qiskit gate names** that
@@ -250,7 +250,7 @@ producing an MPO that represents the sum generator on the full chain.
 {func}`~mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tdvp` then runs
 **two-site TDVP** (`tdvp_mode="2site"`) on a window around the gate for a total
 evolution time of **1** (split across `tdvp_sweeps` substeps on
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams`).
+{class}`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams`).
 
 The controlled-NOT gate illustrates the pattern (see source for exact matrices):
 
@@ -325,7 +325,7 @@ circuit simulation.
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
-- {doc}`strong_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
+- {doc}`circuit_observables` — running circuits with {class}`~mqt.yaqs.Simulator`
 - {mod}`~mqt.yaqs.digital.utils.dag_utils` — translation implementation and
   `SUPPORTED_QISKIT_GATE_NAMES`
 - {mod}`~mqt.yaqs.core.libraries.gate_library` — built-in gate definitions and

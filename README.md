@@ -141,21 +141,21 @@ params = AnalogSimParams(
 print(sim.run(state, H, params, noise).expectation_values[0][-1])
 ```
 
-[Strong simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/strong_simulation.html)
+[Circuit simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
 
-Noisy digital circuit simulation
+Noisy digital circuit simulation (observables)
 
 ```python
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs import NoiseModel, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs import NoiseModel, Observable, Simulator, State, DigitalSimParams
 
 circuit = QuantumCircuit(3)
 circuit.h(0)
 circuit.cx(0, 1)
 circuit.cx(1, 2)
 noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
-params = StrongSimParams(observables=[Observable("z", sites=0)], preset="fast", num_traj=8)
+params = DigitalSimParams(observables=[Observable("z", sites=0)], preset="fast", num_traj=8)
 result = Simulator(show_progress=False).run(State(3, initial="zeros"), circuit, params, noise)
 print(result.expectation_values[0])
 ```
@@ -219,7 +219,7 @@ print(result.optimal_model)
 ·
 [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
 ·
-[Strong simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/strong_simulation.html)
+[Circuit observables](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
 ·
 [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
 ·

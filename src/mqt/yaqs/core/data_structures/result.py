@@ -8,9 +8,8 @@
 """Result container returned by :meth:`~mqt.yaqs.Simulator.run`.
 
 This module defines :class:`Result`, which holds all outputs produced by a simulation
-run. :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`,
-:class:`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams`, and
-:class:`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` remain
+run. :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and
+:class:`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams` remain
 read-only configuration; the simulator never mutates the objects passed to
 :meth:`~mqt.yaqs.Simulator.run`.
 """
@@ -22,19 +21,19 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .simulation_parameters import AnalogSimParams, StrongSimParams
+from .simulation_parameters import AnalogSimParams, DigitalSimParams
 
 if TYPE_CHECKING:
     from numpy import complex128, float64
     from numpy.typing import NDArray
 
     from .noise_model import NoiseModel
-    from .simulation_parameters import Observable, WeakSimParams
+    from .simulation_parameters import Observable
     from .state import State
 
 
 def allocate_observable_buffers(
-    sim_params: AnalogSimParams | StrongSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     num_observables: int,
     *,
     num_traj: int,
@@ -43,10 +42,10 @@ def allocate_observable_buffers(
     """Allocate parallel trajectory and expectation buffers for each observable.
 
     Args:
-        sim_params: Analog or strong simulation parameters (weak sim has no observables).
+        sim_params: Analog or digital simulation parameters.
         num_observables: Number of observables (length of ``result.observables``).
         num_traj: Effective trajectory count for this run.
-        num_mid_measurements: Override for strong-sim layer-sampling barrier count.
+        num_mid_measurements: Override for digital layer-sampling barrier count.
 
     Returns:
         tuple[list[NDArray], list[NDArray], NDArray | None]:
@@ -68,7 +67,7 @@ def allocate_observable_buffers(
             for _ in range(num_observables):
                 trajectories.append(np.empty((num_traj, 1), dtype=np.complex128))
                 expectation_values.append(np.empty(1, dtype=np.float64))
-    elif isinstance(sim_params, StrongSimParams):
+    elif isinstance(sim_params, DigitalSimParams):
         mid = num_mid_measurements if num_mid_measurements is not None else sim_params.num_mid_measurements
         if sim_params.sample_layers:
             for _ in range(num_observables):
@@ -83,7 +82,7 @@ def allocate_observable_buffers(
 
 
 def allocate_diagnostic_buffers(
-    sim_params: AnalogSimParams | StrongSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     *,
     num_traj: int,
     num_mid_measurements: int | None = None,
@@ -94,9 +93,9 @@ def allocate_diagnostic_buffers(
     and total bond dimension. Buffers are shaped ``(3, num_traj, T)`` and ``(3, T)``.
 
     Args:
-        sim_params: Analog or strong simulation parameters.
+        sim_params: Analog or digital simulation parameters.
         num_traj: Effective trajectory count for this run.
-        num_mid_measurements: Override for strong-sim layer-sampling barrier count.
+        num_mid_measurements: Override for digital layer-sampling barrier count.
 
     Returns:
         tuple[NDArray, NDArray]: ``(per_traj, aggregate)`` with dtypes ``float64``.
@@ -163,11 +162,11 @@ class Result:
     ordering from ``sim_params.observables`` (deep-copied from the configuration);
     :attr:`expectation_values` and
     :attr:`trajectories` hold the corresponding data in lock-step by index.
-    For MPS-backed analog and strong-digital runs, :attr:`runtime_cost`,
+    For MPS-backed analog and digital runs with observables, :attr:`runtime_cost`,
     :attr:`max_bond`, and :attr:`total_bond` are populated automatically.
     """
 
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams
+    sim_params: AnalogSimParams | DigitalSimParams
     observables: list[Observable] = field(default_factory=list)
     expectation_values: list[NDArray[float64]] = field(default_factory=list)
     trajectories: list[NDArray] = field(default_factory=list)
