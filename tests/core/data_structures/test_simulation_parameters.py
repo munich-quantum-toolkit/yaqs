@@ -410,6 +410,16 @@ def test_observable_from_string_falls_back_to_pvm() -> None:
     assert np.allclose(obs.gate.matrix, np.eye(2))
 
 
+@pytest.mark.parametrize("gate_name", ["pvm", "rx"])
+def test_observable_from_non_default_constructible_string_falls_back_to_pvm(gate_name: str) -> None:
+    """PVM and parameterized gate names use the string as a measurement bitstring."""
+    obs = Observable(gate_name)
+
+    assert obs.gate.name == "pvm"
+    assert hasattr(obs.gate, "bitstring")
+    assert obs.gate.bitstring == gate_name
+
+
 def test_observable_from_gate_instance_keeps_gate_and_sites_int() -> None:
     """Passing a concrete BaseGate instance should be preserved and sites can be an int."""
     x_gate = GateLibrary.x()

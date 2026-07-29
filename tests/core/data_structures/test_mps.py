@@ -474,6 +474,34 @@ def test_local_observable_dimension_mismatch_raises() -> None:
         psi_mps.expect(Observable(np.eye(2), 0))
 
 
+def test_two_site_local_observable_dimension_mismatch_raises() -> None:
+    """Two-site observables must match the product of both local dimensions."""
+    psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
+    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+
+    with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
+        psi_mps.local_expect(observable, [0, 1])
+
+
+def test_local_expect_rejects_observables_with_unsupported_interaction() -> None:
+    """Local expectation values support at most two-site observables."""
+    psi_mps = MPS(length=3, state="zeros")
+    observable = Observable(BaseGate(np.eye(8)), [0, 1, 2])
+
+    with pytest.raises(ValueError, match="Local observable must be one-site or nearest-neighbor two-site"):
+        psi_mps.local_expect(observable, [0, 1, 2])
+
+
+def test_apply_local_rejects_one_site_observable_with_multiple_sites() -> None:
+    """One-site observables retain a defensive site-count check during application."""
+    psi_mps = MPS(length=2, state="zeros")
+    observable = Observable(X(), 0)
+    observable.sites = [0, 1]
+
+    with pytest.raises(ValueError, match=r"One-site local observable requires one site, got \[0, 1\]"):
+        psi_mps.apply_local(observable)
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2
