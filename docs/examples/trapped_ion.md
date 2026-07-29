@@ -71,8 +71,8 @@ final_x = float(position_expectation[-1])
 ```
 
 The position observable is a custom one-site matrix on the grid basis. The final
-$\langle x\rangle$ is close to $-x_0$ but not exact because the simulation uses a finite
-grid and a finite-difference kinetic operator.
+$\langle x\rangle$ is close to $-x_0$ but not exact because the simulation uses
+a finite grid and a finite-difference kinetic operator.
 
 ```{code-cell} ipython3
 print(f"Initial <x>       = {initial_displacement:.6f}")
