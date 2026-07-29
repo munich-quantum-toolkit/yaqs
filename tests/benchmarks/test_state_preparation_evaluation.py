@@ -190,6 +190,8 @@ def test_changed_test_seed_does_not_change_training_or_noiseless_evaluation(
     original_result = evaluate_state_preparation_artifact(method, artifact, config, targets)
     changed_result = evaluate_state_preparation_artifact(method, artifact, changed, targets)
     assert changed_result.training_id == original_result.training_id
+    assert changed_result.run_id == changed.run_id
+    assert changed_result.run_id != original_result.run_id
     assert changed_result.train_fidelity == original_result.train_fidelity
     assert changed_result.logical_test_noiseless_fidelity == original_result.logical_test_noiseless_fidelity
     assert changed_result.test_noiseless_fidelity == original_result.test_noiseless_fidelity

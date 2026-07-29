@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added atomic, provenance-aware reporting, resumability, parameter checkpoints, and trajectory sidecars for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added reproducible, domain-separated independent test evaluation with uncertainty statistics for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added a reusable Krotov method adapter with deterministic initialization, train-once artifacts, training identities, and versioned parameter checkpoints for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added centralized logical and final native circuit statistics for state-preparation benchmarks ([**@MaxFroehlich1410**])

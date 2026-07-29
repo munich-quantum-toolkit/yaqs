@@ -115,6 +115,7 @@ class IndependentEvaluation:
     """Complete scientific output of one independent test evaluation."""
 
     training_id: str
+    run_id: str
     repetition: int
     train_fidelity: float
     logical_test_noiseless_fidelity: float
@@ -419,6 +420,7 @@ def evaluate_state_preparation_artifact(
     if config.test_noise.noise_id == NOISELESS_NOISE_ID:
         return IndependentEvaluation(
             training_id=artifact.training_id,
+            run_id=config.run_id,
             repetition=repetition,
             train_fidelity=artifact.training_fidelity,
             logical_test_noiseless_fidelity=logical_noiseless,
@@ -444,6 +446,7 @@ def evaluate_state_preparation_artifact(
     mean, standard_deviation, standard_error, lower, upper = _uncertainty(fidelities, config)
     return IndependentEvaluation(
         training_id=artifact.training_id,
+        run_id=config.run_id,
         repetition=repetition,
         train_fidelity=artifact.training_fidelity,
         logical_test_noiseless_fidelity=logical_noiseless,
