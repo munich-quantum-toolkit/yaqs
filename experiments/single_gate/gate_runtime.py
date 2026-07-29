@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Gate execution helpers for the main-text single RZZ benchmark."""
 
@@ -87,14 +94,21 @@ def track_discarded_weight(tracker: DiscardedWeightTracker) -> Iterator[None]:
         linalg.truncate = original
 
 
-def _params(chi: int, *, gate_mode: str = "tdvp", tdvp_sweeps: int = 1) -> StrongSimParams:
+def _params(
+    chi: int,
+    *,
+    gate_mode: str = "tdvp",
+    tdvp_sweeps: int = 1,
+    krylov_tol: float | None = None,
+    svd_threshold: float | None = None,
+) -> StrongSimParams:
     return StrongSimParams(
         observables=[],
         preset=PRESET,
         gate_mode=gate_mode,  # type: ignore[arg-type]
-        svd_threshold=SVD_THRESHOLD,
+        svd_threshold=SVD_THRESHOLD if svd_threshold is None else float(svd_threshold),
         max_bond_dim=chi,
-        krylov_tol=KRYLOV_TOL,
+        krylov_tol=KRYLOV_TOL if krylov_tol is None else float(krylov_tol),
         tdvp_sweeps=tdvp_sweeps,
         tdvp_mode=TDVP_MODE,
         trunc_mode=TRUNC_MODE,
@@ -269,6 +283,7 @@ def apply_method(
     chi: int,
     substeps: int,
     tracker: DiscardedWeightTracker | None = None,
+    krylov_tol: float | None = None,
 ) -> tuple[MPS, float, float]:
     """Apply one gate with the requested method."""
     gate_modes = {
@@ -280,7 +295,12 @@ def apply_method(
     if method not in gate_modes:
         msg = f"Unknown method {method!r}"
         raise ValueError(msg)
-    params = _params(chi, gate_mode=gate_modes[method], tdvp_sweeps=substeps)
+    params = _params(
+        chi,
+        gate_mode=gate_modes[method],
+        tdvp_sweeps=substeps,
+        krylov_tol=krylov_tol,
+    )
     state = copy.deepcopy(initial_mps)
     if tracker is not None:
         tracker.reset_gate()

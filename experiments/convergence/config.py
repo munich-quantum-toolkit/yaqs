@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Settings for the 4×4 TFIM TDVP substep convergence audit."""
 
@@ -92,7 +99,7 @@ def production_config() -> dict[str, Any]:
         "method": "hybrid_tdvp",
         "initial_state": "|0...0>",
         "library_note": (
-            "Identical 4×4 TFIM Strang circuit and gate_runtime TDVP settings as "
+            "Identical 4×4 TFIM Strange circuit and gate_runtime TDVP settings as "
             "experiments/fixed_resources and experiments/resource_frontier. "
             "tdvp_sweeps=n splits each two-qubit gate into n equal-angle substeps."
         ),

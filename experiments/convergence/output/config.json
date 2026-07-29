@@ -19,7 +19,7 @@
     "h": 1.0
   },
   "krylov_tol": 1e-12,
-  "library_note": "Identical 4\u00d74 TFIM Strang circuit and gate_runtime TDVP settings as experiments/fixed_resources and experiments/resource_frontier. tdvp_sweeps=n splits each two-qubit gate into n equal-angle substeps.",
+  "library_note": "Identical 4\u00d74 TFIM Strange circuit and gate_runtime TDVP settings as experiments/fixed_resources and experiments/resource_frontier. tdvp_sweeps=n splits each two-qubit gate into n equal-angle substeps.",
   "method": "hybrid_tdvp",
   "model": "ising",
   "num_qubits": 16,

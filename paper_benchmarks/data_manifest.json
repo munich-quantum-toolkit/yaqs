@@ -1,0 +1,528 @@
+{
+  "created_utc": "2026-07-25T14:02:09.212279+00:00",
+  "excluded_datasets": [
+    {
+      "path": "experiments/single_gate/archive/pre_repair_20260723T135839Z/",
+      "reason": "pre-repair single-gate data (broken MPS.compress / zip-up / variational; TDVP n=64)"
+    },
+    {
+      "path": "experiments/fixed_resources/archive/pre_repair_20260723T145513Z/",
+      "reason": "pre-repair circuit data (artefactually short zip-up horizons)"
+    },
+    {
+      "path": "save/long_range_gate_paper/ (4833-row trials.csv)",
+      "reason": "generated 2026-07-23 14:38, before the compress/SVD/variational repairs landed; affected data per affected_benchmark_inventory.md"
+    },
+    {
+      "path": "save/single_gate_angle_full/ (3-gate, 3-seed v4 angle sweep)",
+      "reason": "same pre-repair vintage; superseded by corrected campaign + paper_benchmarks extension"
+    },
+    {
+      "path": "experiments/resource_frontier/",
+      "reason": "resource-frontier framing dropped from the manuscript; still needs regeneration per inventory"
+    },
+    {
+      "path": "experiments/convergence/",
+      "reason": "superseded: TDVP circuit subdivision re-validated inside fixed_resources (n=2)"
+    }
+  ],
+  "files": [
+    {
+      "bytes": 392,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/chi_selection.json",
+      "production_svd_semantics": true,
+      "sha256": "dcd4a278c06b7cadf1be2561f772a2d722a3fea294b511cdcbce43b83290051c",
+      "source_path": "experiments/single_gate/output/chi_selection.json"
+    },
+    {
+      "bytes": 1367,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/config.json",
+      "production_svd_semantics": true,
+      "sha256": "b96204a9fa43d31b8eee50067be4c59475237d7ea77b036e519e553c335c4267",
+      "source_path": "experiments/single_gate/output/config.json"
+    },
+    {
+      "bytes": 278528,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/results.sqlite",
+      "production_svd_semantics": true,
+      "sha256": "50e7035dbecd7cc047c75d798a69d63795584b565e8d93a5f2d6e4b9e6edb938",
+      "source_path": "experiments/single_gate/output/results.sqlite"
+    },
+    {
+      "bytes": 161892,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/single_gate_angle_sweep.csv",
+      "production_svd_semantics": true,
+      "sha256": "d508224c0db5389210a4a445bf475d9d36f640df353b71f7938d46432a172334",
+      "source_path": "experiments/single_gate/output/single_gate_angle_sweep.csv"
+    },
+    {
+      "bytes": 8654,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/single_gate_substeps.csv",
+      "production_svd_semantics": true,
+      "sha256": "1ea1ae4fb002273bbe7e330a800781c1229957f03116c1f8d9ae39f033880ad1",
+      "source_path": "experiments/single_gate/output/single_gate_substeps.csv"
+    },
+    {
+      "bytes": 42024,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "group": "single_gate_corrected",
+      "path": "raw/single_gate_corrected/single_gate_tdvp_substep_angle.csv",
+      "production_svd_semantics": true,
+      "sha256": "3bf63f7e9411893a9136129e8b80fd85b0bd8f122dbdfce49e4c1aea4c162eea",
+      "source_path": "experiments/single_gate/output/single_gate_tdvp_substep_angle.csv"
+    },
+    {
+      "bytes": 19843,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "group": "single_gate_validation",
+      "path": "raw/single_gate_validation/convergence.csv",
+      "production_svd_semantics": true,
+      "sha256": "15348d0bf8e3ab7a8e439f5f3e82a4ac80c4d9f225d2a0a8081d63cf8a6bcf9f",
+      "source_path": "experiments/single_gate/validation/convergence.csv"
+    },
+    {
+      "bytes": 4908,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "group": "single_gate_validation",
+      "path": "raw/single_gate_validation/meta.json",
+      "production_svd_semantics": true,
+      "sha256": "e0ec7b35f09f462a159654f2dfd55bae33c8b8c2bef797727868b78afebd3306",
+      "source_path": "experiments/single_gate/validation/meta.json"
+    },
+    {
+      "bytes": 215742,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "group": "single_gate_validation",
+      "path": "raw/single_gate_validation/results.csv",
+      "production_svd_semantics": true,
+      "sha256": "8857e9bc786b190e1c42686dc5670d77ef445c956e5134fd37750b7f73af27f8",
+      "source_path": "experiments/single_gate/validation/results.csv"
+    },
+    {
+      "bytes": 1460,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "group": "single_gate_validation",
+      "path": "raw/single_gate_validation/robustness_summary.json",
+      "production_svd_semantics": true,
+      "sha256": "c11d558d43a664f2ddbc84f0673bf615b39fbb444551c2e540f6d9c1c77672fd",
+      "source_path": "experiments/single_gate/validation/robustness_summary.json"
+    },
+    {
+      "bytes": 393,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "group": "single_gate_validation",
+      "path": "raw/single_gate_validation/tdvp_fit.json",
+      "production_svd_semantics": true,
+      "sha256": "10c8453987a4f9b32db1c00d7394ec9e08001e2518f29f121e679aea5ef1e781",
+      "source_path": "experiments/single_gate/validation/tdvp_fit.json"
+    },
+    {
+      "bytes": 5867,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/circuit_horizons_corrected.csv",
+      "production_svd_semantics": true,
+      "sha256": "af7b913693fafc0863dadfca23a6f4eedc4ba63d94d2939aab5502cdaaee4549",
+      "source_path": "experiments/fixed_resources/output_corrected/circuit_horizons_corrected.csv"
+    },
+    {
+      "bytes": 86258,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/circuit_results_corrected.csv",
+      "production_svd_semantics": true,
+      "sha256": "b02a1048566ff36ed1b3aa91e793136086eaa6d07f4ebc612cbbc9f7ab8a09fe",
+      "source_path": "experiments/fixed_resources/output_corrected/circuit_results_corrected.csv"
+    },
+    {
+      "bytes": 20836,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/circuit_subdivision_validation.csv",
+      "production_svd_semantics": true,
+      "sha256": "f1392a382681044c4ca34364e6e05dc069fc41fb5ce5ecd05c2aff6aa909a47b",
+      "source_path": "experiments/fixed_resources/output_corrected/circuit_subdivision_validation.csv"
+    },
+    {
+      "bytes": 2674,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/config.json",
+      "production_svd_semantics": true,
+      "sha256": "229754af43f8c4473eda0a96ded94259368596b5fb5fdce3da1547b22e7d5421",
+      "source_path": "experiments/fixed_resources/output_corrected/config.json"
+    },
+    {
+      "bytes": 2042,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/control_chi256.csv",
+      "production_svd_semantics": true,
+      "sha256": "ed3f44c73546e6aaed968b58a0c0ae79d392486563b6f507dc60fb13004ddb2d",
+      "source_path": "experiments/fixed_resources/output_corrected/control_chi256.csv"
+    },
+    {
+      "bytes": 4146,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/deterministic_repeat.csv",
+      "production_svd_semantics": true,
+      "sha256": "cc5f74f92f35b26de9014e8167142b101609b1b5cf054d8b70fb6aeeb87640d2",
+      "source_path": "experiments/fixed_resources/output_corrected/deterministic_repeat.csv"
+    },
+    {
+      "bytes": 32505984,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/exact_heisenberg_t30.npy",
+      "production_svd_semantics": true,
+      "sha256": "d6ef7a5e3cf4056e6f3e1510f4ac0b8036c7f67ceae30be20032ea1c2428c205",
+      "source_path": "experiments/fixed_resources/output_corrected/exact_heisenberg_t30.npy"
+    },
+    {
+      "bytes": 32505984,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/exact_ising_t30.npy",
+      "production_svd_semantics": true,
+      "sha256": "b78b5324aa77fb776b7f3e060739a86067c2de893df31fe979ac86f44177ff67",
+      "source_path": "experiments/fixed_resources/output_corrected/exact_ising_t30.npy"
+    },
+    {
+      "bytes": 32265,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/figure_circuit_fixed_chi.pdf",
+      "production_svd_semantics": true,
+      "sha256": "5c2ec5f24110dfda45d7c89722a11f3dc36475df5ae60498787de0a3afb628cd",
+      "source_path": "experiments/fixed_resources/output_corrected/figure_circuit_fixed_chi.pdf"
+    },
+    {
+      "bytes": 313994,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/figure_circuit_fixed_chi.png",
+      "production_svd_semantics": true,
+      "sha256": "72eb917fe202127b138c9b9cff2124cd8135ff7810051476f5cf2538af8b4106",
+      "source_path": "experiments/fixed_resources/output_corrected/figure_circuit_fixed_chi.png"
+    },
+    {
+      "bytes": 6120,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/report.md",
+      "production_svd_semantics": true,
+      "sha256": "0d63a488c0afa857df0589804962475ddf832ed82d507cd7883a333b23e125f6",
+      "source_path": "experiments/fixed_resources/output_corrected/report.md"
+    },
+    {
+      "bytes": 2730,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/run.log",
+      "production_svd_semantics": true,
+      "sha256": "9b5d0282f41991e9bfd66abb771a1db1b4f9f2ff1ef6d699a7891ea518995fa2",
+      "source_path": "experiments/fixed_resources/output_corrected/run.log"
+    },
+    {
+      "bytes": 837,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/subdivision_choice.json",
+      "production_svd_semantics": true,
+      "sha256": "b61968f53a6a029487056e6055c4194414653d3863248cc6da2c86420a1a0abc",
+      "source_path": "experiments/fixed_resources/output_corrected/subdivision_choice.json"
+    },
+    {
+      "bytes": 16608,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/threshold_sensitivity.csv",
+      "production_svd_semantics": true,
+      "sha256": "b95819636dd671235f4356b8c29e154880908f32480f9de66138eac939d72250",
+      "source_path": "experiments/fixed_resources/output_corrected/threshold_sensitivity.csv"
+    },
+    {
+      "bytes": 4792,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/variational_circuit_control.csv",
+      "production_svd_semantics": true,
+      "sha256": "14e018156d27f7d25b57211f3c2e4fbd6dc4538b7eaeae563780aa8ba1e78324",
+      "source_path": "experiments/fixed_resources/output_corrected/variational_circuit_control.csv"
+    },
+    {
+      "bytes": 145,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/variational_control_summary.json",
+      "production_svd_semantics": true,
+      "sha256": "7fe3665b745de5b55971824c15dd8b308376ff129184c77677cb087a46de59a6",
+      "source_path": "experiments/fixed_resources/output_corrected/variational_control_summary.json"
+    },
+    {
+      "bytes": 27,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "group": "circuits_corrected",
+      "path": "raw/circuits_corrected/variational_run.log",
+      "production_svd_semantics": true,
+      "sha256": "34c75c49bb3abae675994a6e88a17f9976c4385d62bfba351dd107e8ef184694",
+      "source_path": "experiments/fixed_resources/output_corrected/variational_run.log"
+    },
+    {
+      "bytes": 347,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/run_svd_cutoff_diagnostic.py",
+      "group": "svd_diagnostic",
+      "path": "raw/svd_diagnostic/cutoff_semantics.json",
+      "production_svd_semantics": true,
+      "sha256": "fe51b7bfb93257deae02acd352c181d375d9dcc9341f1629ef9e85ac91246ce3",
+      "source_path": "experiments/fixed_resources/output_svd_diagnostic/cutoff_semantics.json"
+    },
+    {
+      "bytes": 5321,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/run_svd_cutoff_diagnostic.py",
+      "group": "svd_diagnostic",
+      "path": "raw/svd_diagnostic/report.md",
+      "production_svd_semantics": true,
+      "sha256": "56e02d520d0e8079075da324d804c8a4649b41482646544a875d476fbbe13925",
+      "source_path": "experiments/fixed_resources/output_svd_diagnostic/report.md"
+    },
+    {
+      "bytes": 2698,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/run_svd_cutoff_diagnostic.py",
+      "group": "svd_diagnostic",
+      "path": "raw/svd_diagnostic/svd_cutoff_summary.csv",
+      "production_svd_semantics": true,
+      "sha256": "536b8c7dac3aed23dea21e39ffba3eb11ab951895a3753a90b77f75d18277656",
+      "source_path": "experiments/fixed_resources/output_svd_diagnostic/svd_cutoff_summary.csv"
+    },
+    {
+      "bytes": 32505984,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/exact_heisenberg_1d_t30.npy",
+      "production_svd_semantics": true,
+      "sha256": "5730764d2f98d9c7549bf3ce695e8d09ae6f974879361aacccb578820b002cbf",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 32505984,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/exact_ising_1d_t30.npy",
+      "production_svd_semantics": true,
+      "sha256": "32faf5d354ecbfe821ab068c7b5ba77634d6eaacf5a1a9a0ae7486376c7c1013",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7708,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/heisenberg_1d_chi32_full_tdvp.csv",
+      "production_svd_semantics": true,
+      "sha256": "fbe46ad20b7aa7d7f29db208b371b3af66746b62e171469edb7854440b9076e5",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7764,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/heisenberg_1d_chi32_mpo_zipup.csv",
+      "production_svd_semantics": true,
+      "sha256": "d7f78d187430bec0eabb7feccbe4397939e1f91e22888c8459ebcd9d086ba4a5",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7755,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/heisenberg_1d_chi32_tebd_swap.csv",
+      "production_svd_semantics": true,
+      "sha256": "7fcc1c3a221f8688824bdb7ec05941a397a1665a91ee519f729ba98dc923476a",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7673,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/ising_1d_chi32_full_tdvp.csv",
+      "production_svd_semantics": true,
+      "sha256": "af9b2fd5765b47b9f0614c5cc60f7ce5e38a8838d773f50d6ddf8d71a72d8f2d",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7808,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/ising_1d_chi32_mpo_zipup.csv",
+      "production_svd_semantics": true,
+      "sha256": "1aea3a4b036767b2e5292575bb8a80b94c6e2c7b08b49f185bad89bf0863f32b",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7808,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_1d/ising_1d_chi32_tebd_swap.csv",
+      "production_svd_semantics": true,
+      "sha256": "cd57e7193db4407686b892e70c90863ee8bd1cb4441a90b86e49fff3044b7e93",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7416,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_2d_full_tdvp/heisenberg_chi32_full_tdvp.csv",
+      "production_svd_semantics": true,
+      "sha256": "40a39ee0036516b58af48e3538ad202920bd6c5449abdcacc4de41239b34fbf7",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7561,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/circuits_2d_full_tdvp/ising_chi32_full_tdvp.csv",
+      "production_svd_semantics": true,
+      "sha256": "2146f892819b83e7a5b098ee62b9e7123399a82e9920431accf4e2be3788724f",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7605,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/heisenberg_chi32_full/heisenberg_chi32_hybrid_tdvp.csv",
+      "production_svd_semantics": true,
+      "sha256": "99d14b6b06da4af897dcd846bf22fddf7267a1103abe9fdcbbd0c33279de1a04",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7532,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/heisenberg_chi32_full/heisenberg_chi32_mpo_zipup.csv",
+      "production_svd_semantics": true,
+      "sha256": "dc9caa3865aa0e0f12bc41979745e8860dd18bd01b8d01f8cec6220e3ba6c57a",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 7533,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/heisenberg_chi32_full/heisenberg_chi32_tebd_swap.csv",
+      "production_svd_semantics": true,
+      "sha256": "5e4d4fa44ee5911bfdc28c09f8f9a1ce58f40d2ceddaf3083af59739602f871b",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 2020935,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/single_gate_ext.csv",
+      "production_svd_semantics": true,
+      "sha256": "29abdae3028c8cdcaae53d6dcd12f3d49b5b7a816af4394866b657f41425cbd1",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    },
+    {
+      "bytes": 1867776,
+      "dense_reference_ordering_fix": true,
+      "generating_script": "paper_benchmarks/scripts/generate_*.py",
+      "group": "raw_new",
+      "path": "raw_new/single_gate_ext.sqlite",
+      "production_svd_semantics": true,
+      "sha256": "5eb99ab163f80b751297340dd8e5786c3e6ae0e4fb804431f6955f466631bdfc",
+      "source_path": "generated by paper_benchmarks/scripts/"
+    }
+  ],
+  "git_commit": "640821100cf8453a62fbdf8337b5ad0c02018204",
+  "git_dirty_note": "working tree contains uncommitted experiment changes; raw copies are checksummed here and write-protected under paper_benchmarks/raw/",
+  "groups": {
+    "circuits_corrected": {
+      "config": "experiments/fixed_resources/output_corrected/config.json",
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/generate_corrected.py",
+      "notes": "Corrected 4x4 TFIM + Heisenberg fixed-chi circuit benchmark vs dense identical second-order Trotter reference (dt=0.1, 30 steps, snake ordering, open BC, TDVP n=2 on long-range gates only, chi_main=32); validated by chi=256 control and deterministic repeat.",
+      "production_svd_semantics": true,
+      "source": "experiments/fixed_resources/output_corrected/"
+    },
+    "single_gate_corrected": {
+      "config": "experiments/single_gate/output/config.json",
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/regenerate.py",
+      "notes": "Corrected post-repair single-gate campaign (protocol compress_rightcanon_ltr+var_multistart+tdvp_n1_v1): RZZ, seed 11, sites (2,9), L=12, chi in {8,12,16}, TDVP angle-sweep substeps n=1.",
+      "production_svd_semantics": true,
+      "source": "experiments/single_gate/output/"
+    },
+    "single_gate_validation": {
+      "config": "experiments/single_gate/validation/meta.json",
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/single_gate/validation/audit.py",
+      "notes": "Ten-seed robustness audit and variational root-cause diagnosis; diagnostic only, used for supplemental robustness statements.",
+      "production_svd_semantics": true,
+      "source": "experiments/single_gate/validation/"
+    },
+    "svd_diagnostic": {
+      "config": "experiments/fixed_resources/output_svd_diagnostic/cutoff_semantics.json",
+      "dense_reference_ordering_fix": true,
+      "generating_script": "experiments/fixed_resources/run_svd_cutoff_diagnostic.py",
+      "notes": "Internal SVD-cutoff audit only; documents discarded_weight semantics, production threshold 1e-13, gate-library hard split cutoff 1e-14. Not part of the plotting pipeline.",
+      "production_svd_semantics": true,
+      "source": "experiments/fixed_resources/output_svd_diagnostic/"
+    }
+  },
+  "validation": "see paper_benchmarks/validation_report.json"
+}

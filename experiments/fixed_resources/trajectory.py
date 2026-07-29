@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Gate application and trajectory metrics for fixed-resource circuits."""
 
@@ -6,12 +13,12 @@ from __future__ import annotations
 
 import copy
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import path_setup  # noqa: F401
-from circuits import GateOp, TrotterStep
+import path_setup  # ruff: ignore[unused-import]
+from circuits import GateOp, TrotterStep, neel_basis_string
 from config import NUM_QUBITS, TDVP_SUBSTEPS
 from gate_runtime import (
     DiscardedWeightTracker,
@@ -22,12 +29,11 @@ from gate_runtime import (
     phase_align,
     track_discarded_weight,
 )
+from qiskit.quantum_info import Statevector
+
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import product_state_vector
 from mqt.yaqs.digital.digital_tjm import apply_single_qubit_gate, apply_two_qubit_gate
-from qiskit.quantum_info import Statevector
-
-from circuits import neel_basis_string
 
 
 @dataclass
@@ -99,15 +105,72 @@ def apply_gate_dense(vec: np.ndarray, gate: GateOp, *, num_qubits: int = NUM_QUB
     return apply_two_qubit_dense(vec, num_qubits, gate.qubits[0], gate.qubits[1], g)
 
 
-def _gate_params(chi: int, method: str, *, tdvp_substeps: int = TDVP_SUBSTEPS):
+def _gate_params(
+    chi: int,
+    method: str,
+    *,
+    tdvp_substeps: int = TDVP_SUBSTEPS,
+    svd_threshold: float | None = None,
+):
     from gate_runtime import _params
 
     modes = {
         "hybrid_tdvp": "tdvp",
+        "full_tdvp": "full-tdvp",  # TDVP window update for every two-qubit gate (incl. NN)
         "tebd_swap": "swaps",
         "mpo_zipup": "mpo",
     }
-    return _params(chi, gate_mode=modes[method], tdvp_sweeps=tdvp_substeps)
+    return _params(
+        chi,
+        gate_mode=modes[method],
+        tdvp_sweeps=tdvp_substeps,
+        svd_threshold=svd_threshold,
+    )
+
+
+def _apply_variational_two_qubit(state: TrajectoryState, node, *, chi: int) -> None:
+    """Apply repaired variational MPO (input / zip-up inits only; no TDVP init).
+
+    On numerical residual-monotonicity failure, fall back to the repaired zip-up
+    state for that gate and record the failure reason (do not abort the circuit).
+    """
+    import sys
+    from pathlib import Path
+
+    sg = Path(__file__).resolve().parents[1] / "single_gate"
+    if str(sg) not in sys.path:
+        sys.path.append(str(sg))
+    from gate_runtime import _params
+    from variational import apply_variational_mpo_gate
+
+    from mqt.yaqs.core.data_structures.mpo import MPO
+    from mqt.yaqs.digital.digital_tjm import convert_dag_to_tensor_algorithm
+
+    try:
+        result = apply_variational_mpo_gate(
+            state.mps,
+            node,
+            chi=chi,
+            max_sweeps=4,
+            residual_tol=1e-8,
+            require_exact_when_chi_ge=None,
+        )
+        state.mps = result.state
+        state.variational_init = result.best_initializer
+        state.variational_converged = result.converged
+        state.variational_sweeps = result.sweeps
+        state.step_compression += float(result.objective_final)
+    except RuntimeError as exc:
+        gate = convert_dag_to_tensor_algorithm(node)[0]
+        fallback = copy.deepcopy(state.mps)
+        mpo = MPO.from_gate(gate, fallback.length)
+        mpo.multiply(fallback, sim_params=_params(chi, gate_mode="mpo", tdvp_sweeps=1), compress=True)
+        state.mps = fallback
+        state.variational_init = "zipup_fallback"
+        state.variational_converged = False
+        state.variational_sweeps = 0
+        state.failure_message = f"variational_fallback:{exc}"
+        # Do not set state.failed — zip-up fallback keeps the circuit running.
 
 
 def apply_gate_mps(
@@ -117,6 +180,7 @@ def apply_gate_mps(
     method: str,
     chi: int,
     tdvp_substeps: int = TDVP_SUBSTEPS,
+    svd_threshold: float | None = None,
 ) -> None:
     if state.failed:
         return
@@ -129,18 +193,22 @@ def apply_gate_mps(
             apply_single_qubit_gate(state.mps, node)
             state.step_discarded += tracker.per_gate
         elif method == "variational_mpo":
-            state.failed = True
-            state.failure_message = "variational_mpo omitted from this benchmark"
+            _apply_variational_two_qubit(state, node, chi=chi)
         else:
             with track_discarded_weight(tracker):
-                if len(gate.qubits) == 2:
-                    apply_two_qubit_gate(
-                        state.mps, node, _gate_params(chi, method, tdvp_substeps=tdvp_substeps)
-                    )
+                apply_two_qubit_gate(
+                    state.mps,
+                    node,
+                    _gate_params(
+                        chi, method, tdvp_substeps=tdvp_substeps, svd_threshold=svd_threshold
+                    ),
+                )
             state.step_discarded += tracker.per_gate
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # ruff: ignore[blind-except]
         state.failed = True
         state.failure_message = str(exc)
+        state.cumulative_runtime_s += time.perf_counter() - t0
+        return
     state.cumulative_runtime_s += time.perf_counter() - t0
     prof = bond_profile(state.mps)
     state.peak_bond = max(state.peak_bond, max(prof) if prof else 1)
@@ -166,11 +234,19 @@ def apply_trotter_step_mps(
     chi: int,
     tdvp_substeps: int = TDVP_SUBSTEPS,
     update_vec: bool = True,
+    svd_threshold: float | None = None,
 ) -> None:
     state.step_discarded = 0.0
     state.step_compression = 0.0
     for gate in step.gates:
-        apply_gate_mps(state, gate, method=method, chi=chi, tdvp_substeps=tdvp_substeps)
+        apply_gate_mps(
+            state,
+            gate,
+            method=method,
+            chi=chi,
+            tdvp_substeps=tdvp_substeps,
+            svd_threshold=svd_threshold,
+        )
     if update_vec:
         state.vec = state.mps.to_vec().astype(np.complex128, copy=False)
 
@@ -189,14 +265,8 @@ def compute_metrics(
 ) -> dict[str, Any]:
     ex_norm = float(np.linalg.norm(exact_vec))
     ap_norm = float(np.linalg.norm(approx_vec))
-    if ex_norm > 0:
-        exact_n = exact_vec / ex_norm
-    else:
-        exact_n = exact_vec
-    if ap_norm > 0:
-        approx_n = approx_vec / ap_norm
-    else:
-        approx_n = approx_vec
+    exact_n = exact_vec / ex_norm if ex_norm > 0 else exact_vec
+    approx_n = approx_vec / ap_norm if ap_norm > 0 else approx_vec
     raw_fid = float(abs(np.vdot(exact_n, approx_n)) ** 2)
     # Preserve roundoff-level negative (1-F); do not floor here.
     raw_infidelity = 1.0 - raw_fid
@@ -235,8 +305,14 @@ def compute_metrics(
         "variational_sweeps": state.variational_sweeps,
         "failed": int(state.failed),
         "failure_message": state.failure_message,
-        "tdvp_substeps": "",
+        "tdvp_substeps": "",  # filled by caller
     }
+
+
+def attach_tdvp_substeps(row: dict[str, Any], tdvp_substeps: int) -> dict[str, Any]:
+    out = dict(row)
+    out["tdvp_substeps"] = int(tdvp_substeps)
+    return out
 
 
 def qiskit_reference(model: str, *, timesteps: int) -> np.ndarray:

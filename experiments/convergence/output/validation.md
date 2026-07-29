@@ -2,7 +2,7 @@
 
 ## Configuration
 - Benchmark hash: `60c5f6e09b155e7b`
-- Identical 4×4 TFIM Strang circuit / gate_runtime TDVP as fixed_resources & resource_frontier
+- Identical 4×4 TFIM Strange circuit / gate_runtime TDVP as fixed_resources & resource_frontier
 - χmax ∈ [16, 32, 64]; substeps run: [1, 2, 4, 8, 16]
 - Δt=0.1 through t=1.5 (15 steps); ε=10⁻²
 - Physical gate fixed: n substeps via existing `tdvp_sweeps` (angle τ/n each)

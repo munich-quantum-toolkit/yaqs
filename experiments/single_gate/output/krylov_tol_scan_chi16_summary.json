@@ -1,0 +1,49 @@
+{
+  "by_x": {
+    "0.0001": {
+      "at_coarsest": 3.1938895972416503e-12,
+      "at_default": 3.192779374217025e-12,
+      "at_tightest": 3.1933344857293378e-12,
+      "max_infidelity": 3.1943336864515004e-12,
+      "min_infidelity": 3.192779374217025e-12,
+      "ratio_tight_over_default": 1.0001738646637457
+    },
+    "0.001": {
+      "at_coarsest": 4.623190719144077e-12,
+      "at_default": 3.669509140991067e-12,
+      "at_tightest": 3.6697311855959924e-12,
+      "max_infidelity": 4.623190719144077e-12,
+      "min_infidelity": 3.669509140991067e-12,
+      "ratio_tight_over_default": 1.0000605107103957
+    },
+    "0.01": {
+      "at_coarsest": 2.6645352591003757e-15,
+      "at_default": 0.0,
+      "at_tightest": 0.0,
+      "max_infidelity": 2.6645352591003757e-15,
+      "min_infidelity": 0.0,
+      "ratio_tight_over_default": 0.0
+    },
+    "0.1": {
+      "at_coarsest": 6.661338147750939e-16,
+      "at_default": 4.440892098500626e-16,
+      "at_tightest": 0.0,
+      "max_infidelity": 6.661338147750939e-16,
+      "min_infidelity": 0.0,
+      "ratio_tight_over_default": 0.0
+    },
+    "1.0": {
+      "at_coarsest": 1.8207657603852567e-14,
+      "at_default": 0.0,
+      "at_tightest": 0.0,
+      "max_infidelity": 1.8207657603852567e-14,
+      "min_infidelity": 0.0,
+      "ratio_tight_over_default": 0.0
+    }
+  },
+  "chi_max": 16,
+  "default_krylov_tol": 1e-12,
+  "plateau_sensitive_to_krylov_tol": true,
+  "tightening_changes_weak_floor": false,
+  "weak_angle_infidelity_span": 1.4304113449270517e-12
+}

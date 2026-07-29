@@ -37,4 +37,3 @@ This run uses seed 11 only. Summary values are direct seed-11 results (no seed a
 - local_vs_full_cross χ=16 s=4: infidelity=0.000e+00
 - local_vs_full_cross χ=64 s=1: infidelity=0.000e+00
 - local_vs_full_cross χ=64 s=4: infidelity=0.000e+00
-

@@ -28,7 +28,7 @@
     "h": 1.0
   },
   "krylov_tol": 1e-12,
-  "library_note": "Same 4\u00d74 TFIM circuit, |0\u20260> initial state, snake MPS ordering, and second-order Strang Trotter (\u0394t=0.1) as experiments/fixed_resources. Exact reference is same-circuit dense statevector evolution. Variational MPO omitted.",
+  "library_note": "Same 4\u00d74 TFIM circuit, |0\u20260> initial state, snake MPS ordering, and second-order Strange Trotter (\u0394t=0.1) as experiments/fixed_resources. Exact reference is same-circuit dense statevector evolution. Variational MPO omitted.",
   "methods": [
     "hybrid_tdvp",
     "tebd_swap",

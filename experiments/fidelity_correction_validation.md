@@ -108,4 +108,3 @@ TDVP max |norm_loss| in angle sweep: 2.309e-07. Substep curves are essentially u
 - Non-TDVP methods at χ=16 remain at numerical precision.
 - TEBD/MPO compressed-χ absolute infidelity drops (less pessimistic) when norm loss is factored out; method ordering at low χ can change quantitatively but the qualitative picture (TDVP best at low χ for small angles; TEBD routing floor; MPO exact at full χ) is unchanged.
 - No automatic regeneration of fixed_resources / resource_frontier / convergence.
-

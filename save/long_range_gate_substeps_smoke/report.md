@@ -23,5 +23,3 @@ This run uses seed 11 only. Summary values are direct seed-11 results (no seed a
 - TDVP cases with high infidelity and negligible discarded weight: 0
 
 ### Local vs full TDVP
-
-

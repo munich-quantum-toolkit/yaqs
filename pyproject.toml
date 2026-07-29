@@ -129,6 +129,7 @@ extra-paths = ["tests"]
 exclude = [
     "docs/**",
     "experiments/**",
+    "paper_benchmarks/**",
 ]
 
 
@@ -161,7 +162,7 @@ preview = true
 fix = true
 unsafe-fixes = true
 show-fixes = true
-extend-exclude = ["experiments"]
+extend-exclude = ["experiments", "paper_benchmarks"]
 
 [tool.ruff.format]
 preview = true

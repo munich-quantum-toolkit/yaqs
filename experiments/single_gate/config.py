@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Configuration for the main-text single RZZ gate benchmark."""
 
@@ -35,9 +42,9 @@ CHI_SCAN_LADDER = (8, 12, 16, 24, 32, 64, 128)
 INTERMEDIATE_LADDER = (8, 12, 16, 24, 32, 48, 64, 96, 128)
 CHI_SCAN_X = (1e-3, 1e-2, 0.1, 0.3)
 FULL_INFIDELITY_THRESHOLD = 1e-10
-ANGLE_TDVP_SUBSTEPS = 64
-SUBSTEP_ANGLE_X = 0.1
-SUBSTEP_VALUES = (1, 2, 4, 8, 16, 32, 64)
+ANGLE_TDVP_SUBSTEPS = 1  # fractional-time TDVP substeps (each = one LTR+RTL sweep)
+SUBSTEP_ANGLE_X = 1e-2  # panel (d): θ/(2π) = 10^{-2}
+SUBSTEP_VALUES = (1, 2, 4, 8, 16, 32, 64, 128)
 SPECIAL_X = (0.25, 0.5, 1.0)
 PLOT_FLOOR = 1e-12
 FIT_X_MIN = 1e-4

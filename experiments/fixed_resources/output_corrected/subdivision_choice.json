@@ -1,0 +1,35 @@
+{
+  "chosen_n": 2,
+  "production_n": 2,
+  "reason": "smallest n with doubling-stable horizon (n=2 vs 4: \u0394TFIM=0, \u0394Heis=0, prefer_exact=True)",
+  "table": [
+    {
+      "heis_inf_step1": 0.021553967830704734,
+      "heis_n_eps": 0,
+      "n": 1,
+      "tfim_inf_step1": 1.9549373617588905e-05,
+      "tfim_n_eps": 12
+    },
+    {
+      "heis_inf_step1": 0.018081478467460887,
+      "heis_n_eps": 0,
+      "n": 2,
+      "tfim_inf_step1": 1.950831794639285e-05,
+      "tfim_n_eps": 13
+    },
+    {
+      "heis_inf_step1": 0.016446986369509586,
+      "heis_n_eps": 0,
+      "n": 4,
+      "tfim_inf_step1": 1.9455885211683288e-05,
+      "tfim_n_eps": 13
+    },
+    {
+      "heis_inf_step1": 0.015773505559268264,
+      "heis_n_eps": 0,
+      "n": 8,
+      "tfim_inf_step1": 1.941187286969015e-05,
+      "tfim_n_eps": 13
+    }
+  ]
+}

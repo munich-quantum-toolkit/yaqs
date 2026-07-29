@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Settings for the 4×4 TFIM resource-frontier benchmark."""
 
@@ -57,7 +64,7 @@ T0_INFIDELITY_TOL = 1e-12
 
 LIBRARY_NOTE = (
     "Same 4×4 TFIM circuit, |0…0> initial state, snake MPS ordering, and second-order "
-    "Strang Trotter (Δt=0.1) as experiments/fixed_resources. Exact reference is same-circuit "
+    "Strange Trotter (Δt=0.1) as experiments/fixed_resources. Exact reference is same-circuit "
     "dense statevector evolution. Variational MPO omitted."
 )
 

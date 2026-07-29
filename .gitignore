@@ -2,6 +2,10 @@
 sandbox/
 experiments_hidden/
 
+# Regenerable paper-benchmark raw outputs (see paper_benchmarks/README.md)
+paper_benchmarks/raw/
+paper_benchmarks/raw_new/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

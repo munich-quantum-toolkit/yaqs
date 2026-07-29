@@ -1,0 +1,153 @@
+# Copyright (c) 2026 Chair for Design Automation, TUM
+# SPDX-License-Identifier: MIT
+"""Stage 5: Figure 3 - circuit-level assessment (2x2, double column).
+
+All four panels use gate-local TDVP on *every* two-qubit gate
+(gate_mode="full-tdvp", method "full_tdvp", n=2 fractional-time substeps),
+including nearest-neighbour gates. Comparators: TEBD+SWAP and MPO zip-up.
+
+(a) 1D TFIM J=g=1, (b) 1D XXX Heisenberg J=h=1,
+(c) 2D 4x4 TFIM, (d) 2D 4x4 Heisenberg.
+Normalized infidelity versus physical time at fixed cap chi_max = 32 against
+the dense exact reference of the identical second-order Trotter circuit.
+
+Usage:
+    uv run --with pandas python paper_benchmarks/scripts/plot_fig3.py
+"""
+
+from __future__ import annotations
+
+import matplotlib as mpl
+
+mpl.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pb_common import (
+    CIRCUIT_CHI_MAIN,
+    DOUBLE_COL_IN,
+    FIGURES_DIR,
+    METHOD_STYLES,
+    PROCESSED_DIR,
+    REFERENCE_COLOR,
+    apply_pra_style,
+    panel_label,
+    save_figure,
+)
+
+EPSILON = 1e-2
+# All panels use full_tdvp (TDVP on every two-qubit gate, including NN).
+PANELS = (
+    ("ising_1d", "1D transverse-field Ising", "full_tdvp"),
+    ("heisenberg_1d", "1D XXX Heisenberg", "full_tdvp"),
+    ("ising", r"2D transverse-field Ising ($4\times4$)", "full_tdvp"),
+    ("heisenberg", r"2D Heisenberg ($4\times4$)", "full_tdvp"),
+)
+LEGEND_LABELS = {
+    "tdvp": "gate-local TDVP",
+    "tebd_swap": "TEBD+SWAP",
+    "mpo_zipup": "MPO zip-up",
+}
+
+FLOOR = 1e-13  # display floor only: early-step values at machine precision
+
+
+def plot_model(ax, traj: pd.DataFrame, model: str, title: str, tdvp_method: str,
+               *, label_eps: bool) -> None:
+    d = traj[(traj.model == model) & (traj.trotter_step > 0)]
+    for im, method in enumerate((tdvp_method, "tebd_swap", "mpo_zipup")):
+        st = METHOD_STYLES[method]
+        g = d[d.method == method].sort_values("time")
+        x = g.time.to_numpy(dtype=float)
+        y = g.infidelity.to_numpy(dtype=float)
+        below = y < FLOOR
+        yy = y.clip(min=FLOOR * 1.6)
+        ax.plot(x, yy, color=st["color"], linestyle=st["linestyle"], zorder=2)
+        # interleaved markers keep coincident curves individually visible
+        # (in 1D, TEBD+SWAP and MPO zip-up reduce to the identical update)
+        sel = np.zeros(len(y), dtype=bool)
+        sel[im::3] = True
+        solid = sel & ~below
+        ax.plot(x[solid], yy[solid], color=st["color"], marker=st["marker"],
+                linestyle="none", markersize=3.2, zorder=3)
+        if below.any():  # machine-precision points pinned to the display floor
+            ax.plot(x[below], yy[below], color=st["color"],
+                    marker=st["marker"], linestyle="none", markersize=3.2,
+                    markerfacecolor="white", markeredgewidth=0.8, zorder=3)
+    ax.axhline(EPSILON, color=REFERENCE_COLOR, linewidth=0.7,
+               linestyle=(0, (4, 2)), zorder=1)
+    if label_eps:
+        ax.text(2.97, EPSILON * 1.35, r"$1-F=10^{-2}$", color=REFERENCE_COLOR,
+                fontsize=6.8, ha="right", va="bottom")
+    ax.set_yscale("log")
+    ax.set_xlim(0.0, 3.05)
+    ax.set_ylim(FLOOR, 3.0)
+    ax.text(0.5, 0.03, title, transform=ax.transAxes,
+            ha="center", va="bottom", fontsize=8)
+
+
+def main() -> int:
+    apply_pra_style()
+    traj = pd.read_csv(PROCESSED_DIR / "circuit_trajectories.csv")
+    traj = traj[traj.chi_max == CIRCUIT_CHI_MAIN]
+
+    fig, axes = plt.subplots(2, 2, figsize=(DOUBLE_COL_IN, 4.8),
+                             sharex=True, sharey=True)
+    for ax, lab, (model, title, tdvp_method) in zip(
+        axes.flat, ("(a)", "(b)", "(c)", "(d)"), PANELS, strict=True
+    ):
+        plot_model(ax, traj, model, title, tdvp_method, label_eps=(lab == "(b)"))
+        panel_label(ax, lab)
+    for r in range(2):
+        axes[r, 0].set_ylabel(r"$1-F$")
+    for c in range(2):
+        axes[1, c].set_xlabel(r"physical time $t$")
+
+    handles = [
+        mpl.lines.Line2D([], [], color=METHOD_STYLES[m]["color"],
+                         linestyle=METHOD_STYLES[m]["linestyle"],
+                         marker=METHOD_STYLES[m]["marker"], markersize=3.2,
+                         label=lab)
+        for m, lab in (("full_tdvp", LEGEND_LABELS["tdvp"]),
+                       ("tebd_swap", LEGEND_LABELS["tebd_swap"]),
+                       ("mpo_zipup", LEGEND_LABELS["mpo_zipup"]))
+    ]
+    fig.legend(handles=handles, loc="upper center", ncol=3,
+               bbox_to_anchor=(0.5, 1.015), columnspacing=1.8, handlelength=2.3)
+    fig.tight_layout(rect=(0, 0, 1, 0.965), w_pad=1.2)
+
+    plotted = traj[traj.method.isin(("full_tdvp", "tebd_swap", "mpo_zipup"))]
+    plotted.to_csv(PROCESSED_DIR / "fig3_source.csv", index=False)
+    pdf, png = save_figure(fig, "fig3_circuits")
+    print(f"wrote {pdf} and {png}")
+
+    caption = r"""% Auto-generated by paper_benchmarks/scripts/plot_fig3.py
+\newcommand{\figthreecaption}{%
+Circuit-level assessment at fixed bond-dimension cap $\chi_{\max}=32$:
+normalized infidelity $1-F$ versus physical time against the dense exact
+reference of the identical second-order Trotter circuit ($\Delta t=0.1$,
+30 steps, open boundaries) for gate-local TDVP, TEBD+SWAP, and MPO zip-up.
+In every panel, \emph{every} two-qubit gate is applied through the
+gate-local TDVP window update ($n=2$ fractional-time substeps), including
+nearest-neighbour gates.
+Top row: 16-site 1D chains. All 1D gates are nearest-neighbour, so
+TEBD+SWAP inserts no SWAPs and MPO zip-up reduces to the identical direct
+SVD update; their curves coincide (markers are interleaved for visibility).
+(a) 1D transverse-field Ising ($J=g=1$, initial state
+$|0\rangle^{\otimes16}$). (b) 1D XXX Heisenberg ($J=h=1$, N\'eel initial
+state). Bottom row: $4\times4$ lattices (16 qubits, snake MPS ordering).
+(c) 2D transverse-field Ising ($J=h=1$, initial state
+$|0\rangle^{\otimes16}$). (d) 2D Heisenberg ($J=1$, $h=0$, N\'eel initial
+state): a difficult regime in which every compressed method exceeds
+$10^{-2}$ within the first few steps. The thin gray line marks
+$1-F=10^{-2}$ as a visual diagnostic only. Open symbols denote
+machine-precision values pinned to the $10^{-13}$ display floor (stored
+values are not modified).}%
+"""
+    (FIGURES_DIR / "fig3_circuits_caption.tex").write_text(caption, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

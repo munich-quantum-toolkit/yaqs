@@ -843,17 +843,21 @@ class MPS:
         max_bond_dim: int | None = None,
         trunc_mode: TruncMode = "discarded_weight",
     ) -> None:
-        """Compress in place via left-to-center and right-to-left two-site SVD sweeps.
+        """Compress in place by right-canonicalizing, then truncating left-to-right.
+
+        Truncating while establishing a mixed gauge from a non-canonical product
+        state (e.g. after uncapped MPO×MPS) is not equivalent to the optimal
+        sequential SVD of the state and can leave large, θ-independent residuals.
+        The procedure here is:
+
+        1. Restore a right-canonical gauge with QR (no bond-dimension cap).
+        2. Sweep left-to-right with truncated SVD at each bond.
+        3. Restore the original orthogonality center without further truncation.
 
         Args:
             threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
             max_bond_dim: Optional cap on bond dimension.
             trunc_mode: ``"discarded_weight"`` or ``"relative"``.
-
-        Notes:
-            When the gauge is unknown, the sweep center is inferred via
-            :meth:`check_canonical_form`. After compression,
-            :attr:`orthogonality_center` is set to the sweep center used.
         """
         if self.length == 1:
             return
@@ -862,9 +866,12 @@ class MPS:
             orth_center = self._orthogonality_center
         else:
             canonical = self.check_canonical_form()
-            orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length - 1
+            orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length // 2
 
-        for site in range(orth_center):
+        # Right-canonical form without χ truncation (center at site 0).
+        self.set_canonical_form(0, decomposition="QR")
+
+        for site in range(self.length - 1):
             left_tensor = self.tensors[site]
             right_tensor = self.tensors[site + 1]
             merged = merge_two_site(left_tensor, right_tensor)
@@ -878,26 +885,14 @@ class MPS:
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new
+            self._orthogonality_center = site + 1
 
-        self.flip_network()
-        orth_flipped = self.length - 1 - orth_center
-        for site in range(orth_flipped):
-            left_tensor = self.tensors[site]
-            right_tensor = self.tensors[site + 1]
-            merged = merge_two_site(left_tensor, right_tensor)
-            left_new, right_new = split_two_site(
-                merged,
-                [left_tensor.shape[0], right_tensor.shape[0]],
-                svd_distribution="right",
-                trunc_mode=trunc_mode,
-                threshold=threshold,
-                max_bond_dim=max_bond_dim,
-            )
-            self.tensors[site] = left_new
-            self.tensors[site + 1] = right_new
-        self.flip_network()
-
-        self._orthogonality_center = orth_center
+        # Restore the caller's center without additional truncation.
+        assert self._orthogonality_center is not None
+        while self._orthogonality_center < orth_center:
+            self.shift_orthogonality_center_right(self._orthogonality_center, "QR")
+        while self._orthogonality_center > orth_center:
+            self.shift_orthogonality_center_left(self._orthogonality_center, "QR")
 
     def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).

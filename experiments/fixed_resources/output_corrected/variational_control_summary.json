@@ -1,0 +1,7 @@
+{
+  "tfim_zipup_T_eps": 1.5,
+  "tfim_variational_T_eps": 0.0,
+  "horizon_delta_steps": -15,
+  "tracks_zipup": false,
+  "include_in_main": true
+}

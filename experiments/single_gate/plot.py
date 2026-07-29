@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Publication 1×4 figure for the main-text single RZZ gate benchmark."""
 
@@ -27,10 +34,11 @@ INFIDELITY_YLABEL = r"Infidelity ($1{-}F$)"
 
 METHODS = ("hybrid_tdvp", "tebd_swap", "mpo_zipup", "variational_mpo")
 METHOD_LABELS = {
-    "hybrid_tdvp": "TDVP",
+    "hybrid_tdvp": r"TDVP ($n{=}1$)",
     "tebd_swap": "TEBD+SWAP",
     "mpo_zipup": "MPO zip-up",
     "variational_mpo": "Variational MPO",
+    "no_update": "No-update",
 }
 # Red / blue / green / orange (high-chroma, print-safe).
 METHOD_STYLES = {
@@ -38,6 +46,7 @@ METHOD_STYLES = {
     "tebd_swap": {"color": "#1F78B4", "marker": "^", "linestyle": "-", "fillstyle": "full"},
     "mpo_zipup": {"color": "#33A02C", "marker": "s", "linestyle": "-", "fillstyle": "full"},
     "variational_mpo": {"color": "#FF7F00", "marker": "D", "linestyle": "--", "fillstyle": "none"},
+    "no_update": {"color": "0.45", "marker": "", "linestyle": (0, (1.2, 1.2)), "fillstyle": "full"},
 }
 PANEL_LABELS = ("(a)", "(b)", "(c)", "(d)")
 PANEL_LABEL_ZORDER = 100
@@ -120,6 +129,25 @@ def _plot_method_curves(ax: plt.Axes, rows: list[dict[str, Any]], *, show_theta2
         if row["method"] == "mpo_zipup":
             zip_lookup[row["x_fraction"], "mpo"] = row["infidelity"]
 
+    # No-update baseline first (underneath).
+    base = sorted(
+        [r for r in rows if r["method"] == "no_update"],
+        key=operator.itemgetter("x_fraction"),
+    )
+    if base:
+        xs = np.array([r["x_fraction"] for r in base])
+        ys = np.array([_display_y(r["infidelity"]) for r in base])
+        style = METHOD_STYLES["no_update"]
+        ax.plot(
+            xs,
+            ys,
+            color=style["color"],
+            linestyle=style["linestyle"],
+            linewidth=0.8,
+            zorder=5,
+            label=METHOD_LABELS["no_update"],
+        )
+
     if show_theta2:
         tdvp = sorted(
             [r for r in rows if r["method"] == "hybrid_tdvp"],
@@ -139,7 +167,6 @@ def _plot_method_curves(ax: plt.Axes, rows: list[dict[str, Any]], *, show_theta2
                 linewidth=1.15,
                 zorder=1,
             )
-            # Anchor label near the right end of the guide, just below it.
             ax.text(
                 float(guide_x[-2]),
                 float(disp_y[-2]) / 1.8,
@@ -165,15 +192,12 @@ def _plot_method_curves(ax: plt.Axes, rows: list[dict[str, Any]], *, show_theta2
             continue
         xs = np.array([r["x_fraction"] for r in pts])
         raw = np.array([r["infidelity"] for r in pts])
-        omit = raw < OMIT_BELOW
-        # Mixed series (a/b): omit isolated sub-threshold spikes.
-        # All-below series (c): plot actual values (near ~1e-16).
-        all_omit = bool(np.all(omit))
-        use = np.ones(len(pts), dtype=bool) if all_omit else ~omit
-        if not np.any(use):
-            continue
-        xs_u = xs[use]
-        ys_u = np.array([_display_y(v) for v in raw[use]])
+        # Plot the full series; map numerical zeros via _display_y.
+        # (Older omit-below-floor logic removed a contiguous weak-angle TDVP
+        # segment at χ=16 after the compress repair.)
+        all_omit = bool(np.all(raw <= PRECISION_THRESHOLD))
+        xs_u = xs
+        ys_u = np.array([_display_y(v) for v in raw])
         linestyle = style["linestyle"]
         if method == "variational_mpo":
             coincident = all(
@@ -185,7 +209,6 @@ def _plot_method_curves(ax: plt.Axes, rows: list[dict[str, Any]], *, show_theta2
         marker_z = line_z + 1
         lw = 1.15 if method == "hybrid_tdvp" else 0.9
         ax.plot(xs_u, ys_u, color=style["color"], linestyle=linestyle, linewidth=lw, zorder=line_z)
-        # Interleave markers only when exact methods coincide at 1e-16.
         marker_kwargs: dict[str, Any] = {
             "linestyle": "none",
             "marker": style["marker"],
@@ -227,17 +250,18 @@ def plot_figure(
 
     method_handles = [
         Line2D(
-            [0], [0],
+            [0],
+            [0],
             color=METHOD_STYLES[m]["color"],
-            marker=METHOD_STYLES[m]["marker"],
+            marker=METHOD_STYLES[m]["marker"] or None,
             linestyle=METHOD_STYLES[m]["linestyle"],
             fillstyle=METHOD_STYLES[m]["fillstyle"],
             markeredgecolor=METHOD_STYLES[m]["color"],
             markeredgewidth=0.5,
-            markersize=3.5,
+            markersize=3.5 if METHOD_STYLES[m]["marker"] else 0.0,
             label=METHOD_LABELS[m],
         )
-        for m in METHODS
+        for m in ("no_update", *METHODS)
     ]
 
     for idx, chi in enumerate(chi_panels):
@@ -281,7 +305,7 @@ def plot_figure(
                 handlelength=1.5,
             )
         else:
-            plt.setp(ax.get_yticklabels(), visible=False)
+            plt.step(ax.get_yticklabels(), visible=False)
 
     ax = axes[3]
     tdvp_red = METHOD_STYLES["hybrid_tdvp"]["color"]
@@ -311,19 +335,20 @@ def plot_figure(
         )
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.set_xlim(0.8, 80)
+    ax.set_xlim(0.8, 160)
     ax.set_ylim(y_lo, y_hi)
-    substep_ticks = (1, 2, 4, 8, 16, 32, 64)
+    substep_ticks = (1, 2, 4, 8, 16, 32, 64, 128)
     ax.set_xticks(list(substep_ticks))
     ax.set_xticklabels([str(v) for v in substep_ticks])
-    ax.set_xlabel("TDVP substeps")
+    ax.set_title(r"$\theta/(2\pi)=10^{-2}$")
+    ax.set_xlabel(r"TDVP substeps $n$")
     ax.yaxis.set_major_locator(LogLocator(base=10.0))
     ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)))
     ax.yaxis.set_minor_formatter(NullFormatter())
     ax.grid(True, which="major", axis="y", color="0.92", linewidth=0.35)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    plt.setp(ax.get_yticklabels(), visible=False)
+    plt.step(ax.get_yticklabels(), visible=False)
     ax.text(
         0.03,
         0.97,
@@ -350,8 +375,7 @@ def plot_figure(
     ]
     ax.legend(
         handles=chi_handles,
-        loc="lower left",
-        bbox_to_anchor=(0.02, 0.22),
+        loc="lower right",
         frameon=False,
         fontsize=6.0,
         handlelength=1.5,

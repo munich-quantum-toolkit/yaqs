@@ -1,0 +1,77 @@
+{
+  "benchmark_id": "paper_benchmarks_single_gate_ext_v1",
+  "description": "Locked settings for the paper_benchmarks extension runs (stage 3). All conventions identical to the corrected single-gate campaign (protocol compress_rightcanon_ltr+var_multistart+tdvp_n1_v1).",
+  "single_gate_extension": {
+    "L": 12,
+    "gate_types": ["rxx", "ryy", "rzz"],
+    "seeds": [11, 22, 33],
+    "reused_cells": "rzz seed 11 taken unmodified from raw/single_gate_corrected/results.sqlite",
+    "sites": [2, 9],
+    "chi0": 8,
+    "chi_max_grid": [8, 12, 16],
+    "angle_grid": "config.build_generic_angle_grid() + build_special_angles() from experiments/single_gate/config.py (24 log-spaced generic x in [1e-4, 1] excluding specials, plus x in {0.25, 0.5, 1.0}); x = theta/(2 pi)",
+    "theta_zero_identity_rows": true,
+    "methods": ["hybrid_tdvp", "tebd_swap", "mpo_zipup", "variational_mpo", "no_update", "ttsvd_candidate"],
+    "hybrid_tdvp_substeps": 1,
+    "svd_threshold": 1e-13,
+    "trunc_mode": "discarded_weight",
+    "krylov_tol": 1e-12,
+    "gate_split_hard_cutoff": 1e-14,
+    "fidelity_definition": "normalized_state_fidelity_v2 (norm-normalized overlap; global-phase invariant)"
+  },
+  "substep_study": {
+    "x_fraction": 0.25,
+    "theta": "pi/2",
+    "chi_max": 32,
+    "substeps": [1, 2, 4, 8, 16, 32, 64, 128, 256],
+    "gate_types": ["rxx", "ryy", "rzz"],
+    "seed": 11,
+    "cap_nonbinding_evidence": "peak bond 16 < 32 and discarded weight < 1e-13 for all rows"
+  },
+  "heisenberg_full_trajectories": {
+    "model": "heisenberg",
+    "chi_max": 32,
+    "timesteps": 30,
+    "dt": 0.1,
+    "tdvp_substeps": 2,
+    "methods": ["hybrid_tdvp", "tebd_swap", "mpo_zipup"],
+    "exact_reference": "raw/circuits_corrected/exact_heisenberg_t30.npy (reused unmodified)",
+    "stop_after_crossing": false
+  },
+  "circuits_1d": {
+    "description": "1D chain circuit benchmarks; the TDVP method applies EVERY two-qubit gate through the gate-local TDVP window update (gate_mode=full-tdvp), no direct nearest-neighbour contraction.",
+    "num_qubits": 16,
+    "boundary_conditions": "open",
+    "models": {
+      "ising_1d": {
+        "hamiltonian": "H = -J sum Z_i Z_{i+1} - g sum X_i",
+        "J": 1.0,
+        "g": 1.0,
+        "initial_state": "|0...0>"
+      },
+      "heisenberg_1d": {
+        "hamiltonian": "H = -J sum (XX+YY+ZZ) - h sum Z",
+        "J": 1.0,
+        "h": 1.0,
+        "initial_state": "neel |0101...>"
+      }
+    },
+    "trotter_order": 2,
+    "trotter_layout": "bond(dt/2) [even bonds then odd bonds], field(dt), bond(dt/2); Heisenberg bond axis order rzz, rxx, ryy as in the 2D benchmark",
+    "dt": 0.1,
+    "timesteps": 30,
+    "chi_max": 32,
+    "methods": ["full_tdvp", "tebd_swap", "mpo_zipup"],
+    "full_tdvp_substeps": 2,
+    "svd_threshold": 1e-13,
+    "trunc_mode": "discarded_weight",
+    "exact_reference": "dense application of the identical Trotter circuit (raw_new/circuits_1d/exact_*_t30.npy)",
+    "stop_after_crossing": false,
+    "note": "all two-qubit gates are nearest-neighbour, so tebd_swap inserts no SWAPs and mpo_zipup reduces to the identical direct SVD update (trajectories coincide)"
+  },
+  "determinism": {
+    "blas_threads": 1,
+    "checkpointing": "sqlite task_id = sha256(canonical task payload); resume skips completed tasks",
+    "workers_env": "PB_WORKERS (default 4); tasks independent, results scheduling-invariant"
+  }
+}

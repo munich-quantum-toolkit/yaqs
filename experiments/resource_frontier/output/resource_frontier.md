@@ -9,4 +9,3 @@ Resource requirements for reliable 4×4 TFIM circuit simulation. For each target
 - Nature Communications single-column width (89 mm), stacked (a)/(b), no panel titles.
 - (a) MPS representation frontier (Pmax); (b) measured runtime trade-off (median ± IQR).
 - Shared method legend in the lower-right of panel (a).
-

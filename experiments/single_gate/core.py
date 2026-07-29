@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Core execution helpers for the main-text single RZZ gate benchmark."""
 
@@ -90,6 +97,10 @@ def run_method(
             failure_message = "variational_failed"
         elif not vres.converged:
             failure_message = "variational_not_converged"
+        elif vres.failure_reason:
+            failure_message = vres.failure_reason
+        elif vres.best_initializer:
+            failure_message = f"best_init={vres.best_initializer}"
     else:
         with track_discarded_weight(tracker):
             state, _runtime_inner, _dw = apply_method(

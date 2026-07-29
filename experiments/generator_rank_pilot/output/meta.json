@@ -1,0 +1,38 @@
+{
+  "settings": {
+    "svd_threshold": 1e-13,
+    "trunc_mode": "discarded_weight",
+    "krylov_tol": 1e-12,
+    "gate_library_split_tensor_hard_cutoff": 1e-14,
+    "tdvp_mode": "2site",
+    "layer_mpo_tol": 1e-12,
+    "exact_gatewise_threshold": 1e-15
+  },
+  "angle_convention": {
+    "qaoa": "edge Rzz(theta)=exp(-i theta/2 ZZ); layer U_C=exp(-i gamma H_C) with gamma=theta/2; angle column = theta (0.3, 0.7) => gamma in {0.15, 0.35}",
+    "oat": "pair Rxx(theta)=exp(-i theta/2 XX) with theta=2*kappa/(N-1); angle column = kappa"
+  },
+  "validation": {
+    "to_vec_little_endian": true,
+    "qaoa_expm_vs_gates_maxabs": 3.469446951953614e-17,
+    "qaoa_hmpo_vs_dense_maxabs": 4.479352914272588e-16,
+    "qaoa_gatewise_a_untrunc_infidelity": 1.1102230246251565e-16,
+    "qaoa_gatewise_b_untrunc_infidelity": 1.1102230246251565e-16,
+    "qaoa_layer_untrunc_infidelity": 1.1102230246251565e-16,
+    "qaoa_tdvp_n8_chi16_infidelity": 0.00047843930413504765,
+    "qaoa_initial_vs_exact_fidelity": 0.6280432304416949,
+    "qaoa_tdvp_zero_infidelity": 0.0,
+    "qaoa_tiny_d_h": 4.0,
+    "qaoa_tiny_d_u": 4.0,
+    "oat_expm_vs_gates_maxabs": 2.797157557069881e-17,
+    "oat_hmpo_vs_dense_maxabs": 3.043636481661797e-16,
+    "oat_gatewise_a_untrunc_infidelity": 0.0,
+    "oat_gatewise_b_untrunc_infidelity": 0.0,
+    "oat_layer_untrunc_infidelity": 0.0,
+    "oat_tdvp_n8_chi16_infidelity": 6.475151115292732e-08,
+    "oat_initial_vs_exact_fidelity": 0.8502001655986993,
+    "oat_tdvp_zero_infidelity": 0.0,
+    "oat_tiny_d_h": 3.0,
+    "oat_tiny_d_u": 3.0
+  }
+}

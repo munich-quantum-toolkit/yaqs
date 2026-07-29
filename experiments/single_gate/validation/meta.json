@@ -1,0 +1,215 @@
+{
+  "benchmark_seed": 11,
+  "L": 12,
+  "chi0_profile": [
+    1,
+    2,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    2,
+    1
+  ],
+  "pair": [
+    2,
+    9
+  ],
+  "gate": "rzz",
+  "x_means_theta_over_2pi": true,
+  "theta_formula": "theta = 2*pi*x",
+  "svd_threshold": 1e-13,
+  "krylov_tol": 1e-12,
+  "trunc_mode": "discarded_weight",
+  "tdvp_mode": "2site",
+  "angle_tdvp_substeps": 64,
+  "exact_reference": {
+    "seed": 11,
+    "angles": [
+      {
+        "x": 0.0,
+        "theta": 0.0,
+        "dense_vs_independent_max_abs": 0.0,
+        "dense_vs_uncapped_mpo_infidelity": 0.0,
+        "uncapped_max_bond": 8
+      },
+      {
+        "x": 0.0001,
+        "theta": 0.0006283185307179586,
+        "dense_vs_independent_max_abs": 0.0,
+        "dense_vs_uncapped_mpo_infidelity": 0.0,
+        "uncapped_max_bond": 16
+      },
+      {
+        "x": 0.01,
+        "theta": 0.06283185307179587,
+        "dense_vs_independent_max_abs": 0.0,
+        "dense_vs_uncapped_mpo_infidelity": 0.0,
+        "uncapped_max_bond": 16
+      },
+      {
+        "x": 0.1,
+        "theta": 0.6283185307179586,
+        "dense_vs_independent_max_abs": 0.0,
+        "dense_vs_uncapped_mpo_infidelity": 0.0,
+        "uncapped_max_bond": 16
+      },
+      {
+        "x": 1.0,
+        "theta": 6.283185307179586,
+        "dense_vs_independent_max_abs": 0.0,
+        "dense_vs_uncapped_mpo_infidelity": 0.0,
+        "uncapped_max_bond": 8
+      }
+    ],
+    "ordering": {
+      "product_site0_one_argmax": 1,
+      "expected_lsb_index": 1,
+      "site0_is_lsb": true,
+      "ttsvd_basis_check_inf": 0.0
+    },
+    "chi16_roundtrip": {
+      "uncapped_max_bond": 16,
+      "compress16_infidelity": 0.0,
+      "ttsvd16_infidelity": 2.220446049250313e-16,
+      "uncapped_infidelity": 0.0
+    },
+    "matrix_max_abs_err": 0.0,
+    "half_factor_ok": true
+  },
+  "variational_bug": {
+    "x": 0.0001,
+    "chi": 8,
+    "zip_objective": 0.05402538757007935,
+    "zip_infidelity": 0.05402538757008013,
+    "input_objective": 9.869604222778605e-08,
+    "input_infidelity": 9.866031791538887e-08,
+    "update_log": [
+      {
+        "bond": 0,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 1,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 2,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 3,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 4,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 5,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 6,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 7,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 8,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 9,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      },
+      {
+        "bond": 10,
+        "obj_before": 0.05402538757007935,
+        "obj_after": 0.05402538757007935,
+        "unchanged": true,
+        "error": ""
+      }
+    ],
+    "all_updates_unchanged": true,
+    "shape_demo": {
+      "approx_shapes_before": [
+        [
+          2,
+          8,
+          8
+        ],
+        [
+          2,
+          8,
+          8
+        ]
+      ],
+      "target_shapes": [
+        [
+          2,
+          16,
+          16
+        ],
+        [
+          2,
+          16,
+          16
+        ]
+      ],
+      "new_shapes": [
+        [
+          2,
+          16,
+          8
+        ],
+        [
+          2,
+          8,
+          16
+        ]
+      ],
+      "neighbor_left_right_bond": 8,
+      "explanation": "Replacing sites with truncated target tensors yields virtual dims that do not match neighbors; scalar_product then raises ValueError and _bond_update_from_target silently rejects the update.",
+      "objective_after_replace": "ValueError: Size of label 'd' for operand 1 (8) does not match previous terms (16)."
+    }
+  },
+  "zz_expectation_seed11": 0.019024934510766527
+}

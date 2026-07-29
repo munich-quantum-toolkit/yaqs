@@ -1,0 +1,108 @@
+Running tiny-instance validations...
+Validations passed in 0.1s
+  to_vec_little_endian: True
+  qaoa_expm_vs_gates_maxabs: 3.469446951953614e-17
+  qaoa_hmpo_vs_dense_maxabs: 4.479352914272588e-16
+  qaoa_gatewise_a_untrunc_infidelity: 1.1102230246251565e-16
+  qaoa_gatewise_b_untrunc_infidelity: 1.1102230246251565e-16
+  qaoa_layer_untrunc_infidelity: 1.1102230246251565e-16
+  qaoa_tdvp_n8_chi16_infidelity: 0.00047843930413504765
+  qaoa_initial_vs_exact_fidelity: 0.6280432304416949
+  qaoa_tdvp_zero_infidelity: 0.0
+  qaoa_tiny_d_h: 4
+  qaoa_tiny_d_u: 4
+  oat_expm_vs_gates_maxabs: 2.797157557069881e-17
+  oat_hmpo_vs_dense_maxabs: 3.043636481661797e-16
+  oat_gatewise_a_untrunc_infidelity: 0.0
+  oat_gatewise_b_untrunc_infidelity: 0.0
+  oat_layer_untrunc_infidelity: 0.0
+  oat_tdvp_n8_chi16_infidelity: 6.475151115292732e-08
+  oat_initial_vs_exact_fidelity: 0.8502001655986993
+  oat_tdvp_zero_infidelity: 0.0
+  oat_tiny_d_h: 3
+  oat_tiny_d_u: 3
+[qaoa 4x4 theta=0.3] reference built in 0.1s, D_H=6, D_U=16, exact max bond=16
+[qaoa 4x4 angle=0.3 chi=2] 9 runs, best infidelity 1.839e-01
+[qaoa 4x4 angle=0.3 chi=4] 9 runs, best infidelity 7.380e-02
+[qaoa 4x4 angle=0.3 chi=8] 9 runs, best infidelity 5.797e-03
+[qaoa 4x4 angle=0.3 chi=16] 9 runs, best infidelity 0.000e+00
+[qaoa 4x4 angle=0.3 chi=32] 9 runs, best infidelity 0.000e+00
+[qaoa 4x4 theta=0.7] reference built in 0.1s, D_H=6, D_U=16, exact max bond=16
+[qaoa 4x4 angle=0.7 chi=2] 9 runs, best infidelity 6.756e-01
+[qaoa 4x4 angle=0.7 chi=4] 9 runs, best infidelity 4.270e-01
+[qaoa 4x4 angle=0.7 chi=8] 9 runs, best infidelity 1.340e-01
+[qaoa 4x4 angle=0.7 chi=16] 9 runs, best infidelity 9.215e-15
+[qaoa 4x4 angle=0.7 chi=32] 9 runs, best infidelity 9.215e-15
+[qaoa 5x5 theta=0.3] reference built in 0.7s, D_H=7, D_U=32, exact max bond=32
+[qaoa 5x5 angle=0.3 chi=4] 9 runs, best infidelity 1.729e-01
+[qaoa 5x5 angle=0.3 chi=8] 9 runs, best infidelity 3.024e-02
+[qaoa 5x5 angle=0.3 chi=16] 9 runs, best infidelity 1.368e-03
+[qaoa 5x5 angle=0.3 chi=32] 9 runs, best infidelity -1.776e-15
+[qaoa 5x5 angle=0.3 chi=64] 9 runs, best infidelity -1.776e-15
+[qaoa 5x5 theta=0.7] reference built in 0.7s, D_H=7, D_U=32, exact max bond=32
+[qaoa 5x5 angle=0.7 chi=4] 9 runs, best infidelity 7.060e-01
+[qaoa 5x5 angle=0.7 chi=8] 9 runs, best infidelity 4.612e-01
+[qaoa 5x5 angle=0.7 chi=16] 9 runs, best infidelity 1.262e-01
+[qaoa 5x5 angle=0.7 chi=32] 9 runs, best infidelity -8.882e-16
+[qaoa 5x5 angle=0.7 chi=64] 9 runs, best infidelity -8.882e-16
+[oat N=16 kappa=0.5] reference built in 0.1s, D_H=3, D_U=9, exact max bond=8
+[oat N16 angle=0.5 chi=2] 9 runs, best infidelity 7.236e-03
+[oat N16 angle=0.5 chi=4] 9 runs, best infidelity 9.401e-06
+[oat N16 angle=0.5 chi=8] 9 runs, best infidelity 0.000e+00
+[oat N16 angle=0.5 chi=16] 9 runs, best infidelity 0.000e+00
+[oat N=16 kappa=1.5] reference built in 0.1s, D_H=3, D_U=9, exact max bond=9
+[oat N16 angle=1.5 chi=2] 9 runs, best infidelity 1.742e-01
+[oat N16 angle=1.5 chi=4] 9 runs, best infidelity 1.374e-02
+[oat N16 angle=1.5 chi=8] 9 runs, best infidelity 5.557e-07
+[oat N16 angle=1.5 chi=16] 9 runs, best infidelity 0.000e+00
+[oat N=20 kappa=0.5] reference built in 7.7s, D_H=3, D_U=11, exact max bond=8
+[oat N20 angle=0.5 chi=2] 9 runs, best infidelity 7.356e-03
+[oat N20 angle=0.5 chi=4] 9 runs, best infidelity 1.297e-05
+[oat N20 angle=0.5 chi=8] 9 runs, best infidelity 1.474e-12
+[oat N20 angle=0.5 chi=16] 9 runs, best infidelity 8.444e-13
+[oat N20 angle=0.5 chi=32] 10 runs, best infidelity 8.444e-13
+[oat N=20 kappa=1.5] reference built in 7.7s, D_H=3, D_U=47, exact max bond=11
+[oat N20 angle=1.5 chi=2] 9 runs, best infidelity 1.717e-01
+[oat N20 angle=1.5 chi=4] 9 runs, best infidelity 1.474e-02
+[oat N20 angle=1.5 chi=8] 9 runs, best infidelity 1.153e-05
+[oat N20 angle=1.5 chi=16] 9 runs, best infidelity 1.887e-15
+Traceback (most recent call last):
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/run_pilot.py", line 373, in <module>
+    main()
+    ~~~~^^
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/run_pilot.py", line 368, in main
+    run_oat()
+    ~~~~~~~^^
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/run_pilot.py", line 326, in run_oat
+    run_config(
+    ~~~~~~~~~~^
+        candidate="oat", size_label=f"N{n_qubits}", length=n_qubits, angle=kappa,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        representative_n16=(n_qubits == 20 and kappa == 0.5),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/run_pilot.py", line 238, in run_config
+    rec = pl.run_mpo_gatewise(
+        init_mps, gates, chi=chi, ordering=ordering, exact_vec=exact_vec, exact_mps=exact_mps
+    )
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/pilot_lib.py", line 402, in run_mpo_gatewise
+    return _finish(
+        rec, state, tracker, runtime,
+        exact_vec=exact_vec, exact_mps=exact_mps,
+        peak_params=peak_params, peak_bond=peak_bond, est_transient_elements=est_transient,
+    )
+  File "/home/aaron/Github/yaqs/experiments/generator_rank_pilot/pilot_lib.py", line 309, in _finish
+    fid = normalized_state_fidelity(exact_vec, state.to_vec())
+  File "/home/aaron/Github/yaqs/experiments/single_gate/gate_runtime.py", line 199, in normalized_state_fidelity
+    raise ValueError(msg)
+ValueError: Fidelity 1.0000000000012295 outside [0, 1] by more than 1e-12
+[oat N20 angle=1.5 chi=32] 9 runs, best infidelity 0.000e+00
+resume done
+thr=1e-13 n=1: infidelity=1.414e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]
+thr=1e-13 n=8: infidelity=1.270e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]
+thr=1e-16 n=1: infidelity=1.414e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]
+thr=1e-16 n=8: infidelity=1.270e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]
+thr=1e-30 n=1: infidelity=1.414e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]
+thr=1e-30 n=8: infidelity=1.270e-01 max_bond=4 profile=[2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2]

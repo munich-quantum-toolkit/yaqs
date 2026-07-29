@@ -44,7 +44,10 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     dims = matrix.shape
     matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
     u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
-    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+    # Keep Schmidt weight down to numerical noise so tiny-angle gates do not
+    # spuriously collapse to bond dimension 1 (which made MPO×MPS appear exact
+    # for θ/(2π)≲10⁻⁷ and then jump when the second singular value exceeded 1e-6).
+    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-14, min_keep=1)
     s_list = s_list[:keep]
     u_mat = u_mat[:, :keep]
     v_mat = v_mat[:keep, :]

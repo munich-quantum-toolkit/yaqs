@@ -1,4 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 """Generate TDVP substep trajectories and finalize convergence audit."""
 
@@ -130,7 +137,7 @@ def write_implementation_diagnosis(*, halt_reason: str) -> Path:
         "- nearest-neighbor two-qubit gates → **TEBD** (ignores `tdvp_sweeps`)",
         "- long-range gates with analytic generators → **TDVP** (`tdvp_sweeps` active)",
         "",
-        "So this audit only varies the long-range TDVP fraction of the Strang TFIM "
+        "So this audit only varies the long-range TDVP fraction of the Strange TFIM "
         "circuit; NN RZZ/RX pieces are identical across n.",
         "",
         "## Canonicalization / truncation vs n",
@@ -331,7 +338,7 @@ def write_validation(
         "",
         "## Configuration",
         f"- Benchmark hash: `{config_hash()}`",
-        f"- Identical 4×4 TFIM Strang circuit / gate_runtime TDVP as fixed_resources & resource_frontier",
+        f"- Identical 4×4 TFIM Strange circuit / gate_runtime TDVP as fixed_resources & resource_frontier",
         f"- χmax ∈ {list(CHI_VALUES)}; substeps run: {substeps_used}",
         f"- Δt=0.1 through t=1.5 ({TARGET_STEPS} steps); ε=10⁻²",
         "- Physical gate fixed: n substeps via existing `tdvp_sweeps` (angle τ/n each)",
