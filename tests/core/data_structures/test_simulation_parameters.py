@@ -18,7 +18,7 @@ quantum simulation. It verifies that:
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: PLC2701, SLF001 -- white-box tests of parameter validation and TDVP internals
+# ruff:file-ignore[import-private-name, private-member-access] -- white-box tests of parameter validation and TDVP internals
 
 from __future__ import annotations
 

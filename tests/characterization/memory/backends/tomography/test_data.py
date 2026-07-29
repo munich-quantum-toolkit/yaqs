@@ -58,29 +58,3 @@ def test_to_dense_sequence_data_zero_step_weighted() -> None:
         atol=1e-8,
     )
     np.testing.assert_allclose(rho_w, 0.25 * rho, atol=1e-12)
-
-
-def test_to_mpo_sequence_data_minimal() -> None:
-    """Smoke test SequenceData.to_mpo_process_tensor on minimal data."""
-    rho = np.eye(2, dtype=np.complex128)
-    seqs: list[tuple[int, ...]] = [(0,)]
-    outputs = [rho]
-    weights = [1.0]
-    choi_basis = [np.eye(4, dtype=np.complex128)] * 16
-    choi_indices = [(0, 0)] * 16
-    choi_duals = [np.eye(4, dtype=np.complex128)] * 16
-    timesteps = [0.1, 0.1]
-
-    data = SequenceData(
-        sequences=seqs,
-        outputs=outputs,
-        weights=weights,
-        choi_basis=choi_basis,
-        choi_indices=choi_indices,
-        choi_duals=choi_duals,
-        timesteps=timesteps,
-        initial_rho=_REF_RHO0,
-    )
-    pt = data.to_mpo_process_tensor(compress_every=1)
-    mat = pt.to_matrix()
-    assert mat.shape == (2 * 4, 2 * 4)

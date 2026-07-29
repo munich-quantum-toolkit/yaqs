@@ -50,7 +50,7 @@ def _require_torch() -> types.ModuleType:
         ImportError: If PyTorch is not installed.
     """
     try:
-        import torch  # noqa: PLC0415
+        import torch  # ruff:ignore[import-outside-top-level]
     except ImportError as exc:
         msg = "PyTorch is required for surrogate training; install with `uv sync --extra torch`."
         raise ImportError(msg) from exc
@@ -72,8 +72,8 @@ def pack_dataset(
     Returns:
         TensorDataset with tensors ``(e_features, rho0, rho_seq)`` in that order.
     """
-    import torch  # noqa: PLC0415
-    from torch.utils.data import TensorDataset  # noqa: PLC0415
+    import torch  # ruff:ignore[import-outside-top-level]
+    from torch.utils.data import TensorDataset  # ruff:ignore[import-outside-top-level]
 
     return TensorDataset(
         torch.as_tensor(e_features, dtype=torch.float32),
@@ -228,9 +228,9 @@ def train_surrogate_model(
     Returns:
         Trained :class:`ProcessTensorSurrogate`.
     """
-    import torch  # noqa: PLC0415
+    import torch  # ruff:ignore[import-outside-top-level]
 
-    from .model import ProcessTensorSurrogate  # noqa: PLC0415
+    from .model import ProcessTensorSurrogate  # ruff:ignore[import-outside-top-level]
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
     train_data = build_training_dataset(

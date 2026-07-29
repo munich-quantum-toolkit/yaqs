@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001 -- white-box tests of internal Krylov/Arnoldi helpers
+# ruff:file-ignore[private-member-access] -- white-box tests of internal Krylov/Arnoldi helpers
 
 """Tests for Krylov subspace methods used for matrix exponential calculations.
 
@@ -105,7 +105,7 @@ def test_expm_krylov_numba_execution() -> None:
     # Verify Numba module is available
     # Verify Numba module is available
     pytest.importorskip("mqt.yaqs.core.methods.lanczos_numba")
-    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step  # noqa: PLC0415
+    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step  # ruff:ignore[import-outside-top-level]
 
     size = 100
     v = np.ones(size, dtype=complex)

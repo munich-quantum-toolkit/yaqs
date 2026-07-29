@@ -104,10 +104,6 @@ myst_heading_anchors = 3
 # -- Options for {MyST}NB ----------------------------------------------------
 
 nb_execution_mode = "cache"
-nb_mime_priority_overrides = [
-    # builder name, mime type, priority
-    ("latex", "image/svg+xml", 15),
-]
 nb_execution_raise_on_error = True
 # Suppress noisy but harmless warnings during notebook execution (complex casts, etc.).
 nb_prolog = """
@@ -126,7 +122,7 @@ warnings.filterwarnings("ignore", category=ComplexWarning)
 class CDAStyle(UnsrtStyle):
     """Custom style for including PDF links."""
 
-    def format_url(self, _e: Entry) -> HRef:  # noqa: PLR6301
+    def format_url(self, _e: Entry) -> HRef:  # ruff:ignore[no-self-use]
         """Format URL field as a link to the PDF.
 
         Returns:
@@ -179,57 +175,4 @@ html_theme_options = {
     "source_branch": "main",
     "source_directory": "docs/",
     "navigation_with_keys": True,
-}
-
-# -- Options for LaTeX output ------------------------------------------------
-
-numfig = True
-numfig_secnum_depth = 0
-
-sd_fontawesome_latex = True
-image_converter_args = ["-density", "300"]
-latex_engine = "pdflatex"
-latex_documents = [
-    (
-        master_doc,
-        "mqt_yaqs.tex",
-        (
-            r"MQT YAQS\\{\large Scalable simulation and characterization for open systems,"
-            r" noisy circuits, and realistic hardware}"
-        ),
-        r"Chair for Design Automation\\Technical University of Munich",
-        "howto",
-        False,
-    ),
-]
-latex_logo = "_static/mqt_dark.png"
-latex_elements = {
-    "papersize": "a4paper",
-    "releasename": "Version",
-    "printindex": r"\footnotesize\raggedright\printindex",
-    "tableofcontents": "",
-    "sphinxsetup": "iconpackage=fontawesome",
-    "extrapackages": r"\usepackage{qrcode,graphicx,calc,amsthm,etoolbox,flushend,mathtools}",
-    "preamble": r"""
-\patchcmd{\thebibliography}{\addcontentsline{toc}{section}{\refname}}{}{}{}
-\DeclarePairedDelimiter\abs{\lvert}{\rvert}
-\DeclarePairedDelimiter\mket{\lvert}{\rangle}
-\DeclarePairedDelimiter\mbra{\langle}{\rvert}
-\DeclareUnicodeCharacter{03C0}{$\pi$}
-
-\newcommand*{\ket}[1]{\ensuremath{\mket{\mkern1mu#1}}}
-\newcommand*{\bra}[1]{\ensuremath{\mbra{\mkern1mu#1}}}
-\newtheorem{example}{Example}
-\clubpenalty=10000
-\widowpenalty=10000
-\interlinepenalty 10000
-\def\subparagraph{} % because IEEE classes don't define this, but titlesec assumes it's present
-""",
-    "extraclassoptions": r"journal, onecolumn",
-    "fvset": r"\fvset{fontsize=\small}",
-    "figure_align": "htb",
-}
-latex_domain_indices = False
-latex_docclass = {
-    "howto": "IEEEtran",
 }

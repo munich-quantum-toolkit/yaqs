@@ -12,11 +12,11 @@ read-only ``*SimParams`` configuration object and can be pickled.
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff:file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 
-import pickle  # noqa: S403  # test-only: controlled Result round-trip; no untrusted input deserialized
+import pickle  # ruff:ignore[suspicious-pickle-import]  # test-only: controlled Result round-trip; no untrusted input deserialized
 
 import numpy as np
 
@@ -152,7 +152,7 @@ def test_result_is_pickleable() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     blob = pickle.dumps(result)
-    restored = pickle.loads(blob)  # noqa: S301  # test-only: bytes are produced one line above (round-trip)
+    restored = pickle.loads(blob)  # ruff:ignore[suspicious-pickle-usage]  # test-only: bytes are produced one line above (round-trip)
 
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)

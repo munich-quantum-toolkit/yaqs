@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 
@@ -25,6 +25,17 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
+
+
+class SupportsPredict(Protocol):
+    """Process-tensor backends that map intervention sequences to a final state."""
+
+    def predict(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Predict the final reduced state for a sequence of interventions."""
+        ...
 
 
 def validate_initial_rho(
@@ -53,7 +64,7 @@ def validate_initial_rho(
 def convert_probe_callable(
     step: AnyInterventionStep,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
-    """Convert a probe-grid step to a CPTP map callable for :meth:`DenseProcessTensor.predict`.
+    """Convert a probe-grid step to a CPTP map callable for :meth:`~SupportsPredict.predict`.
 
     Args:
         step: Structured dict step or measure/prepare ket pair.
@@ -72,11 +83,14 @@ def convert_probe_callable(
     return inter
 
 
-def evaluate_dense_probes(process_tensor: DenseProcessTensor, probe_set: ProbeSet) -> np.ndarray:
-    """Evaluate split-cut probe Pauli responses on a dense process tensor.
+def evaluate_probes(process_tensor: SupportsPredict, probe_set: ProbeSet) -> np.ndarray:
+    """Evaluate split-cut probe Pauli responses via process-tensor :meth:`predict`.
+
+    Shared by dense and MPO process tensors for operational-memory V-matrix assembly.
+    Does not densify MPO tensors.
 
     Args:
-        process_tensor: Dense reference process-tensor backend.
+        process_tensor: Backend implementing :meth:`~SupportsPredict.predict`.
         probe_set: Sampled split-cut probes.
 
     Returns:
@@ -170,6 +184,152 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
+def _validate_cut(cut: int, num_interventions: int) -> None:
+    if cut < 1 or cut > num_interventions:
+        msg = f"cut must satisfy 1 <= cut <= num_interventions ({num_interventions}), got {cut}."
+        raise ValueError(msg)
+
+
+def _unfuse_slot_index(fused: int, *, out_first: bool = True) -> tuple[int, int]:
+    """Split a fused 4-index Choi leg into ``(output, input)`` qubit indices.
+
+    ``encode_cptp_choi`` uses ``kron(output, input)`` so ``f = 2 * out + in`` by default.
+
+    Returns:
+        Tuple ``(output_index, input_index)`` each in ``{0, 1}``.
+    """
+    if out_first:
+        return fused // 2, fused % 2
+    return fused % 2, fused // 2
+
+
+def _upsilon_to_unfused_operator(
+    upsilon: NDArray[np.complex128],
+    num_interventions: int,
+    *,
+    out_first: bool = True,
+) -> NDArray[np.complex128]:
+    """Reshape a process-tensor Choi operator into explicit ket/bra qubit axes.
+
+    Subsystem order in ``upsilon`` is ``[final(2), slot_1(4), …, slot_k(4)]`` with
+    ``slot_t = output_t ⊗ input_t`` and ``f = 2 * output + input`` when ``out_first=True``.
+
+    Returns:
+        Tensor with axes ``final_ket/bra`` then per-slot ``out/in`` ket/bra pairs.
+
+    Raises:
+        ValueError: If ``upsilon`` shape is inconsistent with ``num_interventions``.
+    """
+    k = num_interventions
+    expected = 2 * (4**k)
+    ups = np.asarray(upsilon, dtype=np.complex128)
+    if ups.shape != (expected, expected):
+        msg = f"Expected upsilon shape ({expected}, {expected}) for k={k}, got {ups.shape}."
+        raise ValueError(msg)
+    dims = [2] + [4] * k
+    mat = ups.reshape(*dims, *dims)
+    out = np.zeros([2, 2] + [2, 2, 2, 2] * k, dtype=np.complex128)
+    for idx in np.ndindex(*dims, *dims):
+        sub_k = idx[: k + 1]
+        sub_b = idx[k + 1 :]
+        coords: list[int] = [sub_k[0], sub_b[0]]
+        for t in range(k):
+            ok, ik = _unfuse_slot_index(sub_k[t + 1], out_first=out_first)
+            ob, ib = _unfuse_slot_index(sub_b[t + 1], out_first=out_first)
+            coords.extend([ok, ik, ob, ib])
+        out[tuple(coords)] = mat[idx]
+    return out
+
+
+def _block_axis_indices(num_interventions: int) -> list[list[int]]:
+    """Return unfused tensor axis indices for causal blocks ``B_0 … B_k``.
+
+    Axis numbering matches :func:`_upsilon_to_unfused_operator`:
+
+    - ``final_ket=0``, ``final_bra=1``
+    - slot ``t`` (0-based): ``out_ket=2+4t``, ``in_ket=3+4t``, ``out_bra=4+4t``, ``in_bra=5+4t``
+
+    Args:
+        num_interventions: Number of intervention slots ``k``.
+
+    Returns:
+        List of ``k + 1`` blocks of axis indices.
+    """
+    k = num_interventions
+    blocks: list[list[int]] = [[3, 5]]
+    blocks.extend([2 + 4 * t, 3 + 4 * (t + 1), 4 + 4 * t, 5 + 4 * (t + 1)] for t in range(k - 1))
+    blocks.append([2 + 4 * (k - 1), 0, 4 + 4 * (k - 1), 1])
+    return blocks
+
+
+def compute_temporal_entropy(
+    upsilon: NDArray[np.complex128],
+    num_interventions: int,
+    cut: int,
+    *,
+    rtol: float = 1e-12,
+    weight_tol: float = 1e-30,
+) -> dict[str, NDArray[np.float64] | float | int]:
+    r"""Compute temporal entanglement of the process tensor at a causal cut.
+
+    Partitions causal blocks ``B_0, \ldots, B_k`` at cut ``c`` as::
+
+        LEFT  = B_0, …, B_{c-1}
+        RIGHT = B_c, …, B_k
+
+    and computes the operator-Schmidt spectrum of the unfused Choi operator without
+    partial tracing or trace normalization. The result is temporal entanglement
+    :math:`S_{PT}(c)`, distinct from operational response entropy :math:`S_V(c)`.
+
+    Args:
+        upsilon: Dense process-tensor Choi matrix.
+        num_interventions: Intervention count ``k``.
+        cut: Causal cut index ``c`` matching the response protocol.
+        rtol: Relative threshold ``s_i > rtol * s_0`` for resolved Schmidt rank.
+        weight_tol: Absolute floor on ``sum(s**2)``; below this raises ``ValueError``.
+
+    Returns:
+        Dictionary with keys ``entropy`` (:math:`S_{PT}`), ``effective_rank``,
+        ``schmidt_rank``, ``singular_values``, and ``weights``.
+
+    Raises:
+        ValueError: If ``cut`` is invalid or the squared-Schmidt weight sum is below ``weight_tol``.
+    """
+    _validate_cut(cut, num_interventions)
+    op = _upsilon_to_unfused_operator(upsilon, num_interventions)
+    blocks = _block_axis_indices(num_interventions)
+    left_axes = [i for b in blocks[:cut] for i in b]
+    right_axes = [i for b in blocks[cut:] for i in b]
+    perm = left_axes + right_axes
+    tensor_perm = np.transpose(op, perm)
+    dim_left = int(np.prod([tensor_perm.shape[i] for i in range(len(left_axes))], dtype=np.int64))
+    dim_right = int(
+        np.prod([tensor_perm.shape[i] for i in range(len(left_axes), len(left_axes) + len(right_axes))], dtype=np.int64)
+    )
+    mat = tensor_perm.reshape(dim_left, dim_right)
+    singular_values = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
+    total_weight = float(np.sum(singular_values**2))
+    if total_weight < weight_tol:
+        msg = f"Operator-Schmidt weight sum {total_weight:.3e} below tolerance {weight_tol:.3e}."
+        raise ValueError(msg)
+    weights = singular_values**2 / total_weight
+    nz = weights > weight_tol
+    entropy = float(-np.sum(weights[nz] * np.log(weights[nz]))) if np.any(nz) else 0.0
+    if singular_values.size and singular_values[0] > 0.0:
+        resolved = singular_values > rtol * singular_values[0]
+    else:
+        resolved = singular_values > 0.0
+    schmidt_rank = int(np.sum(resolved))
+    effective_rank = float(np.exp(entropy)) if entropy > 0.0 else 1.0
+    return {
+        "entropy": entropy,
+        "effective_rank": effective_rank,
+        "schmidt_rank": schmidt_rank,
+        "singular_values": singular_values,
+        "weights": weights,
+    }
+
+
 class DenseProcessTensor:
     """Wrapper around a dense process-tensor Choi operator Upsilon."""
 
@@ -226,6 +386,31 @@ class DenseProcessTensor:
         """
         size = self.upsilon.shape[0]
         return int(np.round(np.log2(size / 2) / 2))
+
+    def compute_temporal_entropy(
+        self,
+        cut: int,
+        *,
+        rtol: float = 1e-12,
+        weight_tol: float = 1e-30,
+    ) -> dict[str, NDArray[np.float64] | float | int]:
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
+
+        Args:
+            cut: Causal cut index ``c`` matching the response protocol.
+            rtol: Relative Schmidt threshold for ``schmidt_rank``.
+            weight_tol: Absolute floor on ``sum(s**2)``.
+
+        Returns:
+            Result dictionary from :func:`compute_temporal_entropy`.
+        """
+        return compute_temporal_entropy(
+            self.upsilon,
+            self._num_interventions(),
+            cut,
+            rtol=rtol,
+            weight_tol=weight_tol,
+        )
 
     def _predict_raw(
         self,
@@ -296,12 +481,15 @@ class DenseProcessTensor:
         return self._num_interventions()
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe Pauli responses.
+        """Evaluate split-cut probe Pauli responses for V-matrix assembly.
+
+        Args:
+            probe_set: Sampled split-cut probes.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
-        return evaluate_dense_probes(self, probe_set)
+        return evaluate_probes(self, probe_set)
 
     def qmi(
         self,
@@ -472,13 +660,39 @@ class MPOProcessTensor(MPO):
     def _num_interventions_for_probe(self) -> int:
         return int(self.length) - 1
 
+    def compute_temporal_entropy(
+        self,
+        cut: int,
+        *,
+        rtol: float = 1e-12,
+        weight_tol: float = 1e-30,
+    ) -> dict[str, NDArray[np.float64] | float | int]:
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
+
+        Delegates to the dense representation via :meth:`to_dense`.
+
+        Args:
+            cut: Causal cut index ``c`` matching the response protocol.
+            rtol: Relative Schmidt threshold for ``schmidt_rank``.
+            weight_tol: Absolute floor on ``sum(s**2)``.
+
+        Returns:
+            Result dictionary from :func:`compute_temporal_entropy`.
+        """
+        return self.to_dense().compute_temporal_entropy(cut, rtol=rtol, weight_tol=weight_tol)
+
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe Pauli responses.
+        """Evaluate split-cut probe Pauli responses for V-matrix assembly.
+
+        Uses native MPO :meth:`predict` (does not densify the process tensor).
+
+        Args:
+            probe_set: Sampled split-cut probes.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
         """
-        return self.to_dense().evaluate_probes(probe_set)
+        return evaluate_probes(self, probe_set)
 
     def predict(
         self,

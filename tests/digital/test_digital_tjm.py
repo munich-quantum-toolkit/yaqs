@@ -1675,12 +1675,12 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     num_qubits = 3
     noise_factor = 0.01
 
-    # Seeded TJM reference (random_seed=7, num_traj=100)
+    # Seeded TJM reference (random_seed=7, num_traj=100); re-recorded after jump-order fix
     reference = np.array(
         [
-            [1.0, 0.92, 0.92, 0.9400000000000001, 0.9, 0.8],
-            [1.0, 0.8200000000000002, 0.7000000000000001, 0.64, 0.52, 0.44],
-            [1.0, 0.9200000000000002, 0.84, 0.72, 0.66, 0.58],
+            [1.0, 0.9400000000000001, 0.9400000000000001, 0.96, 0.88, 0.8200000000000001],
+            [1.0, 0.76, 0.64, 0.6, 0.52, 0.34],
+            [1.0, 0.96, 0.88, 0.74, 0.72, 0.7000000000000001],
         ],
         dtype=float,
     )

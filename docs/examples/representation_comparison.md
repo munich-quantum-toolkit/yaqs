@@ -14,9 +14,13 @@ mystnb:
 
 # Representation Comparison
 
-YAQS supports multiple state **representations** for analog evolution. Each path targets a different scaling regime; the table below summarizes when each is appropriate.
+YAQS supports multiple state **representations** for analog evolution. Each path
+targets a different scaling regime; the table below summarizes when each is
+appropriate.
 
-For how to set `representation` on {class}`~mqt.yaqs.core.data_structures.state.State`, see {doc}`state_initialization`.
+For how to set `representation` on
+{class}`~mqt.yaqs.core.data_structures.state.State`, see
+{doc}`state_initialization`.
 
 ## Choosing a representation
 
@@ -28,11 +32,18 @@ For how to set `representation` on {class}`~mqt.yaqs.core.data_structures.state.
 
 Practical guidance:
 
-- Start with `preset="balanced"` (or `"fast"` while exploring) on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and increase `num_traj` until observables stabilize.
+- Start with `preset="balanced"` (or `"fast"` while exploring) on
+  {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
+  and increase `num_traj` until observables stabilize.
 - Tighten `max_bond_dim` / `svd_threshold` when entanglement growth demands it.
-- For trade-offs between unravellings and trajectory cost, see {cite:p}`sander2026_computationalregimes` ({doc}`references`).
+- For trade-offs between unravellings and trajectory cost, see
+  {cite:p}`sander2026_computationalregimes` ({doc}`references`).
 
-The sections below run the **same** noisy benchmark on all three paths so you can validate agreement on small systems. We use a product $|{+}\rangle^{\otimes L}$ initial state so the MPS and dense backends encode the same physical state (Haar-random MPS states can disagree with unfolded vectors on non-local observables).
+The sections below run the **same** noisy benchmark on all three paths so you
+can validate agreement on small systems. We use a product
+$|{+}\rangle^{\otimes L}$ initial state so the MPS and dense backends encode the
+same physical state (Haar-random MPS states can disagree with unfolded vectors
+on non-local observables).
 
 ## 1. Noisy open-system benchmark
 
@@ -99,13 +110,17 @@ plt.show()
 ```
 
 ```{note}
-`vector` and `mps` curves are Monte Carlo means over `num_traj` trajectories; statistical error scales as $1/\sqrt{N_{\mathrm{traj}}}$. The `density_matrix` path returns the deterministic ensemble average directly. Increase `num_traj` and `t_max` for smoother curves.
+`vector` and `mps` curves are Monte Carlo means over `num_traj` trajectories;
+statistical error scales as $1/\sqrt{N_{\mathrm{traj}}}$. The `density_matrix`
+path returns the deterministic ensemble average directly. Increase `num_traj`
+and `t_max` for smoother curves.
 ```
 
 ## 2. Noiseless cross-check
 
-With `noise_model=None`, all three representations should agree on unitary observables (single trajectory for `mps` and `vector`).
-We use a product state here so the MPS path is exact at modest bond dimension.
+With `noise_model=None`, all three representations should agree on unitary
+observables (single trajectory for `mps` and `vector`). We use a product state
+here so the MPS path is exact at modest bond dimension.
 
 ```{code-cell} ipython3
 obs_z = Observable("z", sites=[0])

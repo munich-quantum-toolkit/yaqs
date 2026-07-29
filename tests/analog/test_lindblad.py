@@ -7,7 +7,7 @@
 
 """Tests for the Exact Lindblad Solver."""
 
-# ruff: noqa: SLF001
+# ruff:file-ignore[private-member-access]
 
 from __future__ import annotations
 

@@ -14,15 +14,22 @@ mystnb:
 
 # Memory Surrogate Training and Prediction
 
-For control sequences beyond what you can simulate exhaustively, train a **causal Transformer surrogate** on Hamiltonian rollouts of the open system.
-{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` returns the **reduced density matrix of the probe qubit** after a control sequence.
+For control sequences beyond what you can simulate exhaustively, train a
+**causal Transformer surrogate** on Hamiltonian rollouts of the open system.
+{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` returns the
+**reduced density matrix of the probe qubit** after a control sequence.
 
-Surrogate training requires PyTorch (`pip install mqt.yaqs[torch]`).
-Over **short temporal horizons** (few intervention steps), compare surrogate rollouts to Hamiltonian training targets and to exact **dense** or **MPO process tensors** built with {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_process_tensor`.
-Environmental memory probing (`characterize`) is covered in {doc}`characterization`.
+Surrogate training requires PyTorch (`pip install mqt.yaqs[torch]`). Over
+**short temporal horizons** (few intervention steps), compare surrogate rollouts
+to Hamiltonian training targets and to exact **dense** or
+**MPO process tensors** built with
+{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_process_tensor`.
+Environmental memory probing (`characterize`) is covered in
+{doc}`characterization`.
 
 ```{warning}
-Exact references scale exponentially with sequence length. Use them only over **few intervention steps** — short probes in time, not long open-system runs.
+Exact references scale exponentially with sequence length. Use them only over
+**few intervention steps** — short probes in time, not long open-system runs.
 ```
 
 ## Setup
@@ -54,13 +61,15 @@ timesteps = [0.0, 0.0, 0.0]
 intervention_style = "measure_prepare"
 ```
 
-Use a **probe + environment** chain (`length >= 2`).
-Match `intervention_style` and `timesteps` between training, `predict`, and `build_process_tensor` (length `num_interventions + 1`).
+Use a **probe + environment** chain (`length >= 2`). Match `intervention_style`
+and `timesteps` between training, `predict`, and `build_process_tensor` (length
+`num_interventions + 1`).
 
 ## Train a surrogate
 
-Training fixes `num_interventions` on the model — the horizon the network was fit to.
-The settings below mirror the accuracy regression in the test suite (`measure_prepare` legs, short schedule).
+Training fixes `num_interventions` on the model — the horizon the network was
+fit to. The settings below mirror the accuracy regression in the test suite
+(`measure_prepare` legs, short schedule).
 
 ```{code-cell} ipython3
 model = mc.train(
@@ -90,7 +99,9 @@ model = mc.train(
 
 ## Evaluate on held-out Hamiltonian rollouts
 
-Generate fresh training sequences with a different seed and compare the surrogate’s final-step predictions to the Hamiltonian targets used during dataset construction:
+Generate fresh training sequences with a different seed and compare the
+surrogate’s final-step predictions to the Hamiltonian targets used during
+dataset construction:
 
 ```{code-cell} ipython3
 held_out = build_training_dataset(
@@ -125,9 +136,12 @@ fig.tight_layout()
 
 ## Compare explicit control sequences
 
-The usual workflow after training is to call {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` with **your own control sequence** and compare outcomes across choices.
-Train a one-leg surrogate on random unitary controls, then pass different explicit unitary lists to the same model.
-This mirrors the quickstart workflow ({doc}`quickstart`) with the longer training budget used above:
+The usual workflow after training is to call
+{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` with
+**your own control sequence** and compare outcomes across choices. Train a
+one-leg surrogate on random unitary controls, then pass different explicit
+unitary lists to the same model. This mirrors the quickstart workflow
+({doc}`quickstart`) with the longer training budget used above:
 
 ```{code-cell} ipython3
 unitary_timesteps = [0.0, 0.0]
@@ -190,27 +204,32 @@ ax.legend(frameon=False)
 fig.tight_layout()
 ```
 
-Extend the per-leg list when `num_interventions > 1` to probe multi-step sequences (for example `[H, X]`).
+Extend the per-leg list when `num_interventions > 1` to probe multi-step
+sequences (for example `[H, X]`).
 
 (short-horizon-validation)=
 
 ## Validate against exact references
 
-Build exhaustive process tensors for the same schedule.
-For process tensors, `rho0` in `predict` must match `pt.initial_rho` (the site-0 state after the initial leg of the reference schedule).
+Build process tensors for the same schedule. By default, `build_process_tensor`
+returns an MPO from direct construction (noiseless). Pass `return_type="dense"`
+for exhaustive tomography. For process tensors, `rho0` in `predict` must match
+`pt.initial_rho` (the site-0 state after the initial leg of the reference
+schedule).
 
 **Dense** and **MPO** implementations should agree on identical interventions.
-Compare all three backends on a **stochastic sequence drawn from the training style** (`measure_prepare` here): pass a **fresh** `np.random.default_rng(seed)` to each `predict` call (reusing one RNG object advances its state between calls).
+Compare all three backends on a
+**stochastic sequence drawn from the training style** (`measure_prepare` here):
+pass a **fresh** `np.random.default_rng(seed)` to each `predict` call (reusing
+one RNG object advances its state between calls).
 
 ```{code-cell} ipython3
+pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
 pt_dense = mc.build_process_tensor(
     ham, params, timesteps=timesteps, return_type="dense", num_trajectories=48,
 )
-pt_mpo = mc.build_process_tensor(
-    ham, params, timesteps=timesteps, return_type="mpo", num_trajectories=48,
-)
 
-rho0 = pt_dense.initial_rho
+rho0 = pt_mpo.initial_rho
 compare_seed = 7
 
 rho_dense = mc.predict(
@@ -247,11 +266,14 @@ ax.legend(frameon=False)
 fig.tight_layout()
 ```
 
-Dense and MPO should overlap; the surrogate approximates the same draw at the reference `rho0`.
-Held-out Hamiltonian rollouts above use random probe `rho0` values from data generation — a different setup than the fixed reference state baked into process tensors.
+Dense and MPO should overlap; the surrogate approximates the same draw at the
+reference `rho0`. Held-out Hamiltonian rollouts above use random probe `rho0`
+values from data generation — a different setup than the fixed reference state
+stored on process tensors.
 
-The same information functionals are available on either backend.
-For this short horizon, conditional mutual information is near zero while QMI grows when more past legs are included:
+The same information functionals are available on either backend. For this short
+horizon, conditional mutual information is near zero while QMI grows when more
+past legs are included:
 
 ```{code-cell} ipython3
 past_choices = ("all", "first", "last")
@@ -272,10 +294,12 @@ ax.legend(frameon=False, fontsize=8, loc="upper left")
 fig.tight_layout()
 ```
 
-Split-cut response matrices and $S_V(c)$ from {doc}`characterization` probe the same memory content in an operational setting.
+Split-cut response matrices and $S_V(c)$ from {doc}`characterization` probe the
+same memory content in an operational setting.
 
 ## Related topics
 
-- {doc}`characterization` — split-cut probing, response matrix, reset-delay sweeps
+- {doc}`characterization` — split-cut probing, response matrix, reset-delay
+  sweeps
 - {doc}`quickstart` — minimal train/predict snippet
 - API reference: :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`

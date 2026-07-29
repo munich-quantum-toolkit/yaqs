@@ -113,7 +113,7 @@ def validate_stochastic_solver(solver: StochasticSolver | str | None) -> Stochas
     if solver not in {"MCWF", "TJM"}:
         msg = f"solver must be 'MCWF' or 'TJM', got {solver!r}."
         raise ValueError(msg)
-    return cast("StochasticSolver", solver)
+    return solver
 
 
 def resolve_stochastic_solver(

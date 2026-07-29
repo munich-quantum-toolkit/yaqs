@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import copy
 
-# ruff: noqa: E402
+# ruff:file-ignore[module-import-not-at-top-of-file]
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
 # Thread caps are NOT set at module level to allow single-trajectory

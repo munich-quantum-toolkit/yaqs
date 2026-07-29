@@ -18,7 +18,7 @@ import pytest
 import mqt.yaqs.characterization.memory.backends.exact as exact_mod
 from mqt.yaqs.characterization.memory.backends.exact import (
     ExactBackend,
-    _branch_weights_from_simulation,  # noqa: PLC2701
+    _branch_weights_from_simulation,  # ruff:ignore[import-private-name]
     simulate_exact,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import (
@@ -147,7 +147,7 @@ def test_exact_run_memory_characterization_builds_static_ctx_internally(monkeypa
         calls["ctx_args"] = (operator, sim_params, noise_model)
         return "CTX"
 
-    def _fake_simulate_sequences(**kwargs) -> np.ndarray | tuple[np.ndarray, list[dict[str, object]]]:  # noqa: ANN003
+    def _fake_simulate_sequences(**kwargs) -> np.ndarray | tuple[np.ndarray, list[dict[str, object]]]:  # ruff:ignore[missing-type-kwargs]
         calls["simulate_kwargs"] = kwargs
         n_tot = len(kwargs["intervention_steps_list"])
         packed = np.zeros((n_tot, 8), dtype=np.float32)
@@ -177,7 +177,7 @@ def test_exact_run_memory_characterization_builds_static_ctx_internally(monkeypa
 def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatch) -> None:
     """simulate_exact weights prod(step_probs[:cut])."""
 
-    def _fake_simulate(**kwargs) -> tuple[np.ndarray, list[dict[str, object]]]:  # noqa: ANN003
+    def _fake_simulate(**kwargs) -> tuple[np.ndarray, list[dict[str, object]]]:  # ruff:ignore[missing-type-kwargs]
         n_tot = len(kwargs["intervention_steps_list"])
         simulation_diagnostics = cast(
             "list[dict[str, object]]",

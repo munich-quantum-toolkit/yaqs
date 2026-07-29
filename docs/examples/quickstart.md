@@ -14,13 +14,21 @@ mystnb:
 
 # Quickstart
 
-This page runs minimal workflows end-to-end: analog and digital simulation, equivalence checking, environmental memory (characterize from the response matrix, then train a surrogate to predict probe density matrices under a control sequence), and Markovian noise digital-twin fitting. Install the package first ({doc}`installation`), then copy the cells below.
+This page runs minimal workflows end-to-end: analog and digital simulation,
+equivalence checking, environmental memory (characterize from the response
+matrix, then train a surrogate to predict probe density matrices under a control
+sequence), and Markovian noise digital-twin fitting. Install the package first
+({doc}`installation`), then copy the cells below.
 
-Every example in this guide uses `show_progress=False` on `Simulator`, `MemoryCharacterizer`, and `NoiseCharacterizer` so tqdm progress bars do not clutter the documentation; figures below each cell show the main results.
+Every example in this guide uses `show_progress=False` on `Simulator`,
+`MemoryCharacterizer`, and `NoiseCharacterizer` so tqdm progress bars do not
+clutter the documentation; figures below each cell show the main results.
 
 ## 1. Analog simulation
 
-Néel-initialized transverse-field Ising chain with on-site damping. Staggered $\langle Z_i \rangle$ spreads and decays in a site-dependent way under open-system evolution:
+Néel-initialized transverse-field Ising chain with on-site damping. Staggered
+$\langle Z_i \rangle$ spreads and decays in a site-dependent way under
+open-system evolution:
 
 ```{code-cell} ipython3
 import matplotlib.pyplot as plt
@@ -60,7 +68,9 @@ ax.set_title("Staggered magnetization under damping")
 
 ## 2. Strong simulation
 
-Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$ without noise and with an optional {class}`~mqt.yaqs.NoiseModel`. See {doc}`strong_simulation` for noise sweeps, mid-circuit sampling, and gate modes.
+Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$
+without noise and with an optional {class}`~mqt.yaqs.NoiseModel`. See
+{doc}`strong_simulation` for noise sweeps, mid-circuit sampling, and gate modes.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel, Observable, StrongSimParams
@@ -97,7 +107,8 @@ ax.legend(frameon=False)
 
 ## 3. Equivalence checking
 
-Verify that a native GHZ circuit matches its transpiled decomposition (different gate basis, same unitary) with {class}`~mqt.yaqs.EquivalenceChecker`:
+Verify that a native GHZ circuit matches its transpiled decomposition (different
+gate basis, same unitary) with {class}`~mqt.yaqs.EquivalenceChecker`:
 
 ```{code-cell} ipython3
 from qiskit import transpile
@@ -131,11 +142,15 @@ ax.set_title("Composed operator $W = U_2^\\dagger U_1$")
 fig.tight_layout()
 ```
 
-For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence_checking`.
+For larger circuits, compiler passes, and OpenQASM inputs, see
+{doc}`equivalence_checking`.
 
 ## 4. Characterize environmental memory
 
-Probe a probe qubit coupled to a short chain at an interior temporal cut. The memory spectrum and response matrix show how many independent past branches remain visible at the cut:
+Probe a probe qubit coupled to a short chain at an interior temporal cut. The
+memory spectrum and response matrix show how many independent past branches
+remain visible at the cut ($S_V$). For temporal entanglement of a process tensor
+($S_{PT}$), see {doc}`characterization`.
 
 ```{code-cell} ipython3
 import numpy as np
@@ -178,7 +193,9 @@ fig.tight_layout()
 
 ## 5. Fit a Markovian noise digital twin (analytical optimization)
 
-Learn Lindblad jump rates from observable trajectories with {class}`~mqt.yaqs.NoiseCharacterizer` using **analytical optimization** (simulator forward model + CMA-ES trajectory matching).
+Learn Lindblad jump rates from observable trajectories with
+{class}`~mqt.yaqs.NoiseCharacterizer` using **analytical optimization**
+(simulator forward model + CMA-ES trajectory matching).
 
 ```{code-cell} ipython3
 import warnings
@@ -246,13 +263,16 @@ fig.colorbar(im, ax=axes, shrink=0.9, label="expectation")
 fig.suptitle(rf"Twin fit: RMSE={result.trajectory_rmse():.2e}", y=1.02)
 ```
 
-See {doc}`noise_characterization` for the full analytical-optimization workflow, experimental-data fitting, held-out prediction, and MCWF fitting.
+See {doc}`noise_characterization` for the full analytical-optimization workflow,
+experimental-data fitting, held-out prediction, and MCWF fitting.
 
 ## 6. Train a surrogate and predict under controls
 
-Train a causal surrogate with {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`, then predict the probe-qubit state after one or more control legs.
-Pass an explicit per-leg list to compare different sequences on the same trained model.
-Surrogate training requires PyTorch (`pip install mqt.yaqs[torch]`).
+Train a causal surrogate with
+{class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`, then predict the
+probe-qubit state after one or more control legs. Pass an explicit per-leg list
+to compare different sequences on the same trained model. Surrogate training
+requires PyTorch (`pip install mqt.yaqs[torch]`).
 
 ```{code-cell} ipython3
 rho0 = np.eye(2, dtype=np.complex128) / 2.0
@@ -301,7 +321,10 @@ ax.legend(frameon=False)
 fig.tight_layout()
 ```
 
-`predict` also accepts a style string (for example `"haar"`) or a per-leg list mixing unitaries and measure–prepare slots. See {doc}`characterization` for environmental memory probing and {doc}`memory_surrogate` for held-out accuracy checks and exact-reference validation.
+`predict` also accepts a style string (for example `"haar"`) or a per-leg list
+mixing unitaries and measure–prepare slots. See {doc}`characterization` for
+environmental memory probing and {doc}`memory_surrogate` for held-out accuracy
+checks and exact-reference validation.
 
 ## 7. Where to go next
 
@@ -321,4 +344,5 @@ fig.tight_layout()
 - {doc}`state_initialization` — `State` presets and representations
 - {doc}`simulator_initialization` — parallelism, progress bars, `Result` fields
 - {doc}`representation_comparison` — when to use MPS, MCWF, or Lindblad backends
-- {doc}`equivalence_checking` — MPO backend, transpiler regression tests, OpenQASM
+- {doc}`equivalence_checking` — MPO backend, transpiler regression tests,
+  OpenQASM
