@@ -17,8 +17,8 @@ releases may include breaking changes.
 
 ### Changed
 
-- combined WeakSimParams and StrongSimParams into DigitalSimParams
-  ([#516]) ([**@aaronleesander**])
+- combined WeakSimParams and StrongSimParams into DigitalSimParams ([#516])
+  ([**@aaronleesander**])
 
 ### Removed
 
