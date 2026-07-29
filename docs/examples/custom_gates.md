@@ -88,8 +88,8 @@ Symbolic parameters must be bound before translation; unbound
 
 - **Single-qubit gates** — contract the gate tensor onto the corresponding MPS
   site.
-- **Two-qubit gates** — routed by `DigitalSimParams.gate_mode`
-  (see {doc}`simulation_parameters`):
+- **Two-qubit gates** — routed by `DigitalSimParams.gate_mode` (see
+  {doc}`simulation_parameters`):
   - **`mpo`** (default) — TEBD/SVD on nearest-neighbor pairs; long-range gates
     via extended gate MPO.
   - **`swaps`** — TEBD with SWAP routing for long-range pairs.
@@ -325,7 +325,8 @@ circuit simulation.
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
-- {doc}`circuit_observables` — running circuits with {class}`~mqt.yaqs.Simulator`
+- {doc}`circuit_observables` — running circuits with
+  {class}`~mqt.yaqs.Simulator`
 - {mod}`~mqt.yaqs.digital.utils.dag_utils` — translation implementation and
   `SUPPORTED_QISKIT_GATE_NAMES`
 - {mod}`~mqt.yaqs.core.libraries.gate_library` — built-in gate definitions and
