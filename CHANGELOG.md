@@ -21,6 +21,10 @@ releases may include breaking changes.
 
 ### Changed
 
+- State.representation set as sole backend selector ([#519])
+  ([**@aaronleesander**])
+- added QR canonicalization before compression sweep for stability ([#518])
+  ([**@aaronleesander**])
 - combined WeakSimParams and StrongSimParams into DigitalSimParams ([#516])
   ([**@aaronleesander**])
 
@@ -230,6 +234,8 @@ changelogs._
 <!-- PR links -->
 
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
+[#519]: https://github.com/munich-quantum-toolkit/yaqs/pull/519
+[#518]: https://github.com/munich-quantum-toolkit/yaqs/pull/518
 [#516]: https://github.com/munich-quantum-toolkit/yaqs/pull/516
 [#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508

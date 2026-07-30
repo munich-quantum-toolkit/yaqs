@@ -20,8 +20,34 @@ argument to {meth}`~mqt.yaqs.Simulator.run`. Most models are built as
 **matrix product operators (MPOs)** under the hood; the `Hamiltonian` wrapper
 materialises once at construction and can be reused across parameter sweeps.
 
+**Backend selection** is driven only by
+{class}`~mqt.yaqs.core.data_structures.state.State` representation — not by how
+the Hamiltonian was constructed:
+
+| `State.representation` | Backend  | Form materialized at `run` |
+| ---------------------- | -------- | -------------------------- |
+| `"mps"` (default)      | TJM      | MPO                        |
+| `"vector"`             | MCWF     | sparse                     |
+| `"density_matrix"`     | Lindblad | sparse                     |
+
+Hamiltonian inputs (`tensors`, `matrix`, `sparse_matrix`, or a preset such as
+`Hamiltonian.ising(...)`) are **source data**, not backend choices. The same
+`Hamiltonian` instance works with all three state representations;
+`Simulator.run` converts and caches the required MPO or sparse form.
+
+```{warning}
+Selecting ``State.representation="mps"`` (TJM) calls
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.ensure_mpo`. For a
+``sparse_matrix`` source this densifies the operator before MPO factorization,
+allocating the full Hilbert-space matrix and risking out-of-memory failures on
+large systems. Prefer an MPO preset, ``Hamiltonian.from_mpo(...)``, or
+``tensors=`` when targeting TJM.
+```
+
 This page covers the factory methods in the library. For open-system evolution
-after the Hamiltonian is defined, see {doc}`analog_simulation`.
+after the Hamiltonian is defined, see {doc}`analog_simulation`. For choosing a
+state representation, see {doc}`state_initialization` and
+{doc}`representation_comparison`.
 
 ## `Hamiltonian` versus `MPO`
 
@@ -33,14 +59,16 @@ after the Hamiltonian is defined, see {doc}`analog_simulation`.
 Typical patterns:
 
 - **Preset classmethods** — `Hamiltonian.ising(...)`, `Hamiltonian.pauli(...)`,
-  etc.
+  etc. (no `representation=` argument).
 - **Wrap an MPO** — `Hamiltonian.from_mpo(mpo)` after `MPO.bose_hubbard(...)` or
   a custom build.
-- **Manual data** — `Hamiltonian(tensors=...)` or `Hamiltonian(matrix=...)` /
-  `sparse_matrix=...` for small dense/sparse backends (MCWF / Lindblad).
+- **Manual data** — `Hamiltonian(tensors=...)`, `Hamiltonian(matrix=...)`, or
+  `Hamiltonian(sparse_matrix=...)`. Any of these can drive TJM, MCWF, or
+  Lindblad once paired with the matching `State.representation`.
 
-Access the internal MPO with `H.mpo` when you need bond dimension or tensor
-cores.
+Access the materialized MPO with `H.mpo` (after a TJM run or `H.ensure_mpo()`)
+and the sparse form with `H.sparse_matrix` (after an MCWF / Lindblad run or
+`H.ensure_sparse()`). Both can coexist on one instance.
 
 ## Built-in models (quick reference)
 
@@ -278,14 +306,16 @@ explicitly (see the factory docstring).
 
 ## Manual Hamiltonians
 
-For imported MPO cores or small-system dense operators:
+For imported MPO cores or small-system dense/sparse operators:
 
 ```python
-# MPO tensor cores (rank-4 per site, already in MPO layout)
+# MPO tensor cores (rank-4 per site, already in MPO layout) — preferred for TJM
 H = Hamiltonian(tensors=my_cores)
 
-# Dense matrix (MCWF / Lindblad when state is vector or density_matrix)
+# Dense or sparse matrix — YAQS converts to MPO or sparse as needed at run time.
+# sparse_matrix → TJM densifies; prefer tensors=/from_mpo/presets for large systems.
 H = Hamiltonian(matrix=dense_h, physical_dimension=2)
+H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ```
 
 ## Related topics

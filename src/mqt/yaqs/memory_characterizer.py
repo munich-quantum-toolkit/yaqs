@@ -143,7 +143,7 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
     if not isinstance(hamiltonian, Hamiltonian):
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
         raise TypeError(msg)
-    hamiltonian.ensure_encoded("mpo")
+    hamiltonian.ensure_mpo()
     return hamiltonian.mpo
 
 
