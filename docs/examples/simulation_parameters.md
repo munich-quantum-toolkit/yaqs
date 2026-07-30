@@ -219,6 +219,8 @@ sampling with `sample_layers=True` (see {doc}`circuit_observables`).
   `shots` is also set, that **total** budget is distributed across those
   trajectories. `shots < num_traj` is supported: some trajectories still
   contribute observables but receive zero measurement samples.
+- **Noisy + shots only:** `num_traj` is ignored; one single-shot trajectory is
+  run per shot, so configuring `num_traj` does not affect this path.
 - **Noiseless:** one trajectory is enough; all `shots` are sampled from that
   final state.
 

@@ -31,6 +31,7 @@ from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
 from ..core.methods.tdvp.tdvp import evolve_window
+from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -573,8 +574,6 @@ def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
     Returns:
         Non-negative shot count for the current worker invocation.
     """
-    from mqt.yaqs.simulator import WORKER_CTX  # ruff:ignore[import-outside-top-level]
-
     if "per_call_shots" in WORKER_CTX:
         return int(WORKER_CTX["per_call_shots"])
     if "shot_distribution" in WORKER_CTX:
