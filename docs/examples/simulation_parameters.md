@@ -41,8 +41,9 @@ do not import gate classes for standard measurements.
 For custom unitaries and circuit gates, use {doc}`custom_gates` — those
 workflows still use `GateLibrary` or Qiskit circuits directly.
 
-Named observables that require configuration accept keyword-only factory arguments. Missing or unknown arguments raise
-`TypeError`, so misspelled parameters are not silently ignored.
+Named observables that require configuration accept keyword-only factory
+arguments. Missing or unknown arguments raise `TypeError`, so misspelled
+parameters are not silently ignored.
 
 ## Start with a preset
 
