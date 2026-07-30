@@ -20,8 +20,24 @@ argument to {meth}`~mqt.yaqs.Simulator.run`. Most models are built as
 **matrix product operators (MPOs)** under the hood; the `Hamiltonian` wrapper
 materialises once at construction and can be reused across parameter sweeps.
 
+**Backend selection** is driven only by
+{class}`~mqt.yaqs.core.data_structures.state.State` representation — not by a
+second argument on Hamiltonian factories:
+
+| `State.representation` | Backend  | Hamiltonian form at `run` |
+| ---------------------- | -------- | ------------------------- |
+| `"mps"` (default)      | TJM      | MPO                       |
+| `"vector"`             | MCWF     | sparse (auto from MPO)    |
+| `"density_matrix"`     | Lindblad | sparse (auto from MPO)    |
+
+Preset factories such as `Hamiltonian.ising(...)` always build an MPO. The same
+instance works with all three state representations; `Simulator.run`
+materializes a sparse matrix for MCWF / Lindblad and caches it for reuse.
+
 This page covers the factory methods in the library. For open-system evolution
-after the Hamiltonian is defined, see {doc}`analog_simulation`.
+after the Hamiltonian is defined, see {doc}`analog_simulation`. For choosing a
+state representation, see {doc}`state_initialization` and
+{doc}`representation_comparison`.
 
 ## `Hamiltonian` versus `MPO`
 
@@ -33,14 +49,16 @@ after the Hamiltonian is defined, see {doc}`analog_simulation`.
 Typical patterns:
 
 - **Preset classmethods** — `Hamiltonian.ising(...)`, `Hamiltonian.pauli(...)`,
-  etc.
+  etc. (always MPO; no `representation=` argument).
 - **Wrap an MPO** — `Hamiltonian.from_mpo(mpo)` after `MPO.bose_hubbard(...)` or
   a custom build.
-- **Manual data** — `Hamiltonian(tensors=...)` or `Hamiltonian(matrix=...)` /
-  `sparse_matrix=...` for small dense/sparse backends (MCWF / Lindblad).
+- **Manual data** — `Hamiltonian(tensors=...)` for TJM, or
+  `Hamiltonian(matrix=...)` / `sparse_matrix=...` for small-system MCWF /
+  Lindblad only (cannot drive TJM).
 
 Access the internal MPO with `H.mpo` when you need bond dimension or tensor
-cores.
+cores. After a vector or density-matrix `run`, the cached sparse form is also
+available via `H.sparse_matrix` without losing `H.mpo`.
 
 ## Built-in models (quick reference)
 
@@ -281,10 +299,11 @@ explicitly (see the factory docstring).
 For imported MPO cores or small-system dense operators:
 
 ```python
-# MPO tensor cores (rank-4 per site, already in MPO layout)
+# MPO tensor cores (rank-4 per site, already in MPO layout) — works with TJM
 H = Hamiltonian(tensors=my_cores)
 
-# Dense matrix (MCWF / Lindblad when state is vector or density_matrix)
+# Dense or sparse matrix — MCWF / Lindblad only (State.representation vector or
+# density_matrix). TJM requires an MPO / preset / tensors=.
 H = Hamiltonian(matrix=dense_h, physical_dimension=2)
 ```
 

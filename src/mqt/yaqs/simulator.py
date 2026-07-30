@@ -740,12 +740,12 @@ class Simulator:
 
         if state_rep == "vector":
             ctx = preprocess_mcwf(
-                mps,
-                mpo_op,
+                None,
+                None,
                 noise_model,
                 worker_params,
-                psi_initial=None if mps is not None else initial_state.vector,
-                num_sites=initial_state.length if mps is None else None,
+                psi_initial=initial_state.vector,
+                num_sites=initial_state.length,
                 physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
@@ -753,8 +753,8 @@ class Simulator:
             worker_fn = _mcwf_worker
         elif state_rep == "density_matrix":
             lindblad_ctx = preprocess_lindblad(
-                mps,
-                mpo_op,
+                None,
+                None,
                 noise_model,
                 worker_params,
                 rho_initial=initial_state.density_matrix,

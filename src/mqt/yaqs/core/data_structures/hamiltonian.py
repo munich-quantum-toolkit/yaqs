@@ -36,9 +36,11 @@ class Hamiltonian:
     ``sparse_matrix``. Materialization happens at construction; reuse the same instance across
     ``run`` loops.
 
-    Pair with :class:`~mqt.yaqs.core.data_structures.state.State`: TJM and ensembles need
-    ``representation="mpo"``; MCWF and Lindblad use a sparse matrix derived from the Hamiltonian
-    at ``run`` time when the state is dense.
+    Pair with :class:`~mqt.yaqs.core.data_structures.state.State`: the state's
+    ``representation`` selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` → MCWF /
+    sparse, ``"density_matrix"`` → Lindblad / sparse). Preset factories always build an MPO;
+    :meth:`~mqt.yaqs.Simulator.run` materializes a sparse matrix when needed. Manual
+    ``matrix`` / ``sparse_matrix`` Hamiltonians cannot drive TJM.
     """
 
     def __init__(
@@ -315,36 +317,43 @@ class Hamiltonian:
 
     @property
     def mpo(self) -> MPO:
-        """MPO when encoded as ``"mpo"``.
+        """Cached MPO, if one has been materialized.
+
+        Remains available after :meth:`ensure_encoded` builds an additional sparse or
+        dense form for MCWF / Lindblad.
 
         Raises:
-            RuntimeError: If not encoded as ``"mpo"``.
+            RuntimeError: If no MPO has been materialized (e.g. dense/sparse-only init).
         """
-        if self._encoded_as != "mpo" or self._mpo is None:
+        if self._mpo is None:
             msg = f"MPO is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._mpo
 
     @property
     def sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """Sparse matrix when encoded as ``"sparse"``.
+        """Cached sparse matrix, if one has been materialized.
+
+        Remains available after further :meth:`ensure_encoded` calls that build other forms.
 
         Raises:
-            RuntimeError: If not encoded as ``"sparse"``.
+            RuntimeError: If no sparse matrix has been materialized yet.
         """
-        if self._encoded_as != "sparse" or self._sparse_matrix is None:
+        if self._sparse_matrix is None:
             msg = f"Sparse matrix is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._sparse_matrix
 
     @property
     def matrix(self) -> NDArray[np.complex128]:
-        """Dense matrix when encoded as ``"dense"``.
+        """Cached dense matrix, if one has been materialized.
+
+        Remains available after further :meth:`ensure_encoded` calls that build other forms.
 
         Raises:
-            RuntimeError: If not encoded as ``"dense"``.
+            RuntimeError: If no dense matrix has been materialized yet.
         """
-        if self._encoded_as != "dense" or self._matrix is None:
+        if self._matrix is None:
             msg = f"Dense matrix is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._matrix
