@@ -510,6 +510,20 @@ def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
         psi_mps.apply_local(Observable(np.eye(2), 0))
 
 
+def test_apply_local_rejects_invalid_two_site_observable_shape() -> None:
+    """Two-site observables must supply two sites and match both local dimensions."""
+    psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
+    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+
+    observable.sites = [0]
+    with pytest.raises(ValueError, match=r"requires two sites, got \[0\]"):
+        psi_mps.apply_local(observable)
+
+    observable.sites = [0, 1]
+    with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
+        psi_mps.apply_local(observable)
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2

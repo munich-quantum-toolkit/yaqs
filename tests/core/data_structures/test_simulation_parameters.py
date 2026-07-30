@@ -126,9 +126,9 @@ def test_observable_rejects_parameters_without_a_matching_factory() -> None:
         Observable(BaseGate(np.eye(2)), 0, parameter=1)
 
 
-@pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan])])
+@pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan]), np.array([0.0, 1.0j])])
 def test_position_observable_rejects_invalid_positions(positions: np.ndarray) -> None:
-    """Position bases must be non-empty and finite."""
+    """Position bases must be non-empty, finite, and real."""
     with pytest.raises(ValueError, match="positions must"):
         Observable("position", 0, positions=positions)
 

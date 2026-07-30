@@ -1693,9 +1693,13 @@ class Position(LocalOperator):
             positions: One-dimensional position values defining the local basis.
 
         Raises:
-            ValueError: If ``positions`` is not a non-empty, finite one-dimensional array.
+            ValueError: If ``positions`` is complex or not a non-empty, finite one-dimensional array.
         """
-        position_values = np.asarray(positions, dtype=np.float64)
+        position_values = np.asarray(positions)
+        if np.iscomplexobj(position_values):
+            msg = "positions must contain only real values."
+            raise ValueError(msg)
+        position_values = np.asarray(position_values, dtype=np.float64)
         if position_values.ndim != 1 or position_values.size == 0:
             msg = "positions must be a non-empty one-dimensional array."
             raise ValueError(msg)

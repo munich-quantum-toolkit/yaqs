@@ -1119,9 +1119,17 @@ class MPS:
             return
 
         if observable.gate.interaction == 2:
+            if len(sites) != 2:
+                msg = f"Two-site local observable requires two sites, got {sites}."
+                raise ValueError(msg)
             i, j = int(sites[0]), int(sites[1])
             length = self.length
             mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+            d_i = self.tensors[i].shape[0]
+            d_j = self.tensors[j].shape[0]
+            if mat.shape != (d_i * d_j, d_i * d_j):
+                msg = f"Two-site observable matrix shape {mat.shape} does not match site dimensions {d_i} and {d_j}."
+                raise ValueError(msg)
 
             if length == 2:
                 if i == length - 1 and j == 0:
