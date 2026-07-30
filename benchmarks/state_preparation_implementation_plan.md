@@ -1201,8 +1201,9 @@ the completed Phase I package bodies.
 
 ### Historical motivation
 
-Before Phase I, the highest five-target mean noisy fidelity among the archived
-local methods came from a bottom-up layerwise BMPD/Krotov procedure that:
+Before Phase I, the highest mean noisy fidelity among the three methods in the
+shared `rigorous_benchmark_5states.csv` protocol came from a bottom-up layerwise
+BMPD/Krotov procedure that:
 
 1. grew the BMPD ansatz through configured depths `1 -> 2 -> 3 -> 4`;
 2. relaxed each depth noiselessly;
@@ -1342,8 +1343,8 @@ experiments did before changing benchmark code.
   - the archived five-target top-down CSV used one-shot magnitude pruning, not
     iterative impact pruning;
   - vendor-labelled noise was simulated;
-  - the nominally unseeded 500-trajectory evaluation used the library's default
-    seed; and
+  - the nominally unseeded 500-trajectory evaluation deterministically used
+    trajectory seeds `0` through `499` through the library's default seed; and
   - the historical methods used different optimization budgets.
 - Freeze method names, training objectives, data-role boundaries, primary
   resource and noise conditions, Phase II target-family parameter
@@ -1351,31 +1352,60 @@ experiments did before changing benchmark code.
   screening rules, promotion rules, confirmatory analysis, multiplicity policy,
   and permissible blinded cluster-level sample-size re-estimation. The fixed
   per-cell trajectory count must never use outcome-dependent optional stopping.
+- Freeze the target-generator random-number algorithm, seed derivation and draw
+  order, numerical and gauge conventions, degeneracy tolerances, and exact
+  family/stratum/qubit allocation policy before WP16 implements the generators.
 - Create an initial preregistration seal containing the scientific questions,
   allowed candidate family, development/holdout construction rules, analysis
   template, and mechanical promotion rule.
+- Define checksum-sealed screening-manifest and screening-evidence schemas. The
+  manifest must enumerate the complete candidate-configuration and
+  family/stratum/target/optimization-seed cell universe before screening. The
+  evidence ledger must contain exactly one source-addressed outcome for every
+  manifest candidate/cell pair. Promotion must be recomputable from those two
+  artifacts; caller-supplied summaries or opaque, unchecked manifest checksums
+  cannot authorize confirmation.
 - Define a separate final-confirmation-seal schema that WP22 must instantiate
   after the pilot and screening packages finish. It contains the promoted
-  method, primary comparators, untouched target identifiers and seeds, sample
-  size, fixed test-trajectory budget, hyperparameters, resource budget, and
-  analysis checksum.
+  method, primary comparators, the externally held target-manifest checksum and
+  family counts, sample size, fixed test-trajectory budget, hyperparameters,
+  resource budget, and analysis checksum.
+- Bind every primary contrast to typed configuration references. The corrected
+  v2 comparator must use the exact screened baseline configuration, and the
+  noiseless control must carry a checksum of the WP16 matching projection that
+  proves it differs from its noisy counterpart only in preregistered treatment
+  fields.
+- Separate the checksum of the natural-language analysis template from the
+  checksum of the frozen executable analysis-source manifest.
+- Require the final seal to reference a checksum-sealed, pilot-derived
+  sample-size design with a frozen calculation method, nuisance inputs,
+  contrast set, family/stratum allocation, minimum and maximum target and
+  optimization-seed counts, achieved power and precision, and the bounded
+  nuisance-only re-estimation history. Denormalized counts in the final seal
+  must agree exactly with that design.
 - Require the initial preregistration and the instantiated final confirmation
   seal to use canonical JSON with content checksums.
 - Define a mechanical promotion rule that may select at most one noisy-training
-  configuration after screening.
+  configuration after screening. A null screen may promote the corrected v2
+  baseline only when the baseline itself passes every resource, failure, data
+  separation, and protocol-integrity requirement; a compromised baseline
+  aborts promotion.
 - Keep legacy reproduction artifacts in a separate namespace that cannot be
   consumed accidentally by confirmatory analysis.
-- Prohibit access to confirmatory target vectors or outputs before the final
-  confirmation seal is written. Identifiers and seeds may be generated
-  mechanically into a blinded manifest under the preregistered construction
-  rule, but must not be used to materialize targets before sealing.
+- Prohibit study-team access to confirmatory identifiers, seeds, target vectors,
+  or outputs before the final confirmation seal is written. An independent
+  external custodian retains the seed-bearing manifest and exposes only its
+  checksum until the final seal and execution fingerprint have been verified.
+  The in-process authorization object is an accidental-access guard, not a
+  cryptographic blinding mechanism.
 
 ### Evidence and tests
 
 - JSON schema and round-trip tests for the study protocol.
 - Stable preregistration- and confirmation-checksum tests.
-- Synthetic-data tests for the mechanical promotion and failure-inclusion
-  rules.
+- Synthetic-data tests for the complete-manifest, raw-evidence recomputation,
+  mechanical promotion, fatal-integrity, comparator-pairing, minimum sample
+  size, and failure-inclusion rules.
 - Claim-to-artifact audit tests that reject missing source paths, commits,
   configurations, or checksums.
 - Golden tests proving that all Phase I schemas and stable run identifiers are
@@ -1385,8 +1415,10 @@ experiments did before changing benchmark code.
 
 The historical evidence is traceable without inventing missing provenance, the
 screening decision rule and final-seal schema are locked before screening, and
-WP22 cannot authorize confirmation until the promoted method and confirmatory
-design have been separately checksum-locked.
+WP22 cannot authorize confirmation until the complete screening universe, raw
+screening evidence, promoted method, matched primary contrasts, executable
+analysis source, sample-size design, and confirmatory design have been
+separately checksum-locked and cross-verified.
 
 ## Work package 16: Versioned target-population and staged-training schemas
 
@@ -1431,16 +1463,19 @@ The Phase II target-population configuration must freeze:
   domain;
 - endianness, global-phase convention, floating-point precision, eigensolver
   policy, and generator version; and
-- blinded-manifest, materialized-vector, and checksum policies.
+- externally custodied manifest, authorized materialization, and checksum
+  policies.
 
 The generator must give every Phase II instance a unique stable identifier
 derived from its population configuration, family, stratum, qubit count, and
-instance seed. It must support writing a blinded manifest of identifiers,
-seeds, and parameter records without materializing state vectors. Gaussian and
-uniform-TFIM Phase I fixtures must never be reused as if a new seed made them
-independent; their Phase II family definitions must sample the sealed physical
-parameters. The canonical 18 Phase I fixtures and the five legacy reproduction
-fixtures remain in separate immutable namespaces.
+instance seed. It must support writing a seed-bearing manifest of identifiers
+and parameter records without materializing state vectors, committing its
+canonical checksum publicly, and withholding the manifest under external
+custody until authorization. Gaussian and uniform-TFIM Phase I fixtures must
+never be reused as if a new seed made them independent; their Phase II family
+definitions must sample the sealed physical parameters. The canonical 18 Phase
+I fixtures and the five legacy reproduction fixtures remain in separate
+immutable namespaces.
 
 Each stage configuration must resolve and validate:
 
@@ -1730,9 +1765,9 @@ The staged pipeline executor and Phase II artifact store from WP18.
 
 ### Objective
 
-Reproduce the highest archived five-target mean under its exact historical
-semantics, then provide a corrected publication-grade version of the same
-method.
+Reproduce the highest mean among the three methods in the archived shared
+five-target CSV protocol under its exact historical semantics, then provide a
+corrected publication-grade version of the same method.
 
 ### Historical fixtures and profile
 
@@ -2114,8 +2149,9 @@ Do not combine every strategy factorially. Use the preregistered staged screen:
   fingerprint only after that code is frozen.
 - Write the final confirmation seal containing the promoted pipeline checksum,
   two or three primary comparators, primary noise and resource condition,
-  untouched holdout target identifiers and seeds, cluster-aware sample size,
-  fixed trajectory budget, failure rule, and analysis checksum.
+  the externally held untouched target-manifest checksum and family counts,
+  cluster-aware sample size, fixed trajectory budget, failure rule, and
+  analysis checksum.
 - Do not load or evaluate confirmatory target vectors before the final seal is
   complete.
 
@@ -2178,10 +2214,10 @@ source. It must refuse to run if:
 
 ### Confirmatory population and methods
 
-- Make a newly generated, family-stratified, checksum-sealed target collection
-  with untouched instance identifiers and seeds the primary confirmatory
-  population.
-- Materialize target vectors from the blinded WP16 manifest only after the
+- Use a newly generated, family-stratified, checksum-sealed target collection
+  as the primary confirmatory population; its untouched instance identifiers
+  and seeds remain under external custody until authorization.
+- Reveal the WP16 manifest and materialize its target vectors only after the
   final seal and execution fingerprint have been verified.
 - Treat the already exposed canonical 18-target matrix as a secondary benchmark,
   not as held-out confirmation.
