@@ -263,7 +263,14 @@ def test_lowering_jump_probability_matches_mcwf_after_dissipation(
     hamiltonian = _zero_hamiltonian_mpo(length)
     noise_model = _lowering_noise_model(length)
     sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
-    ctx = preprocess_mcwf(state, hamiltonian, noise_model, sim_params)
+    ctx = preprocess_mcwf(
+        psi_initial=state.to_vec(),
+        h_sparse=hamiltonian.to_sparse_matrix(),
+        noise_model=noise_model,
+        sim_params=sim_params,
+        num_sites=state.length,
+        physical_dimensions=state.physical_dimensions,
+    )
 
     p_mcwf = _mcwf_jump_probability(state, ctx)
     p_tjm = _tjm_jump_probability_after_dissipation(state, noise_model, dt, sim_params)
@@ -288,7 +295,15 @@ def test_lowering_jump_probability_stable_over_repeated_no_jump_steps(
     hamiltonian = hamiltonian_factory(length)
     noise_model = _lowering_noise_model(length)
     sim_params = AnalogSimParams(elapsed_time=0.0, dt=dt, max_bond_dim=64, svd_threshold=1e-10)
-    ctx = preprocess_mcwf(MPS(length, state="ones"), hamiltonian, noise_model, sim_params)
+    initial = MPS(length, state="ones")
+    ctx = preprocess_mcwf(
+        psi_initial=initial.to_vec(),
+        h_sparse=hamiltonian.to_sparse_matrix(),
+        noise_model=noise_model,
+        sim_params=sim_params,
+        num_sites=initial.length,
+        physical_dimensions=initial.physical_dimensions,
+    )
 
     state = MPS(length, state="ones")
     state.normalize("B")

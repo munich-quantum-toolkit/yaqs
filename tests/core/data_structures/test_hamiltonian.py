@@ -5,12 +5,11 @@
 #
 # Licensed under the MIT License
 
-# ruff:file-ignore[private-member-access] -- white-box tests exercise private Hamiltonian encoders
-
 """Tests for :class:`mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`."""
 
 from __future__ import annotations
 
+import inspect
 from unittest.mock import patch
 
 import numpy as np
@@ -18,6 +17,7 @@ import pytest
 import scipy.sparse
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State
+from mqt.yaqs.core.data_structures import hamiltonian as hamiltonian_mod
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 
@@ -25,12 +25,8 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 def _blank_hamiltonian(**attrs: object) -> Hamiltonian:
     """Construct an uninitialized Hamiltonian for error-path tests.
 
-    Args:
-        **attrs: Keyword attributes to set on the returned instance (``name=value``).
-
     Returns:
         A Hamiltonian instance with ``attrs`` set via :func:`setattr`.
-
     """
     h = Hamiltonian.__new__(Hamiltonian)
     for name, value in attrs.items():
@@ -62,11 +58,9 @@ def test_hamiltonian_tensors_length_mismatch() -> None:
         Hamiltonian(tensors=list(mpo.tensors), length=3)
 
 
-def test_hamiltonian_tensors_rejects_conflicting_representation() -> None:
-    """representation= must not contradict tensors=."""
-    mpo = MPO.ising(2, J=1.0, g=0.5)
-    with pytest.raises(ValueError, match="inferred as 'mpo' from tensors="):
-        Hamiltonian(tensors=list(mpo.tensors), representation="sparse")
+def test_hamiltonian_rejects_representation_kwarg() -> None:
+    """representation= is no longer a public constructor argument."""
+    assert "representation" not in inspect.signature(Hamiltonian.__init__).parameters
 
 
 def test_hamiltonian_from_manual_tensors() -> None:
@@ -77,7 +71,6 @@ def test_hamiltonian_from_manual_tensors() -> None:
         rng.random(size=(2, 1, 2, 2)).astype(np.complex128),
     ]
     h = Hamiltonian(tensors=tensors)
-    assert h.representation == "mpo"
     assert h.mpo.length == 2
 
 
@@ -99,13 +92,6 @@ def test_hamiltonian_rejects_nonpositive_physical_dimension() -> None:
         Hamiltonian(matrix=np.eye(4, dtype=np.complex128), physical_dimension=0)
 
 
-def test_hamiltonian_sparse_rejects_conflicting_representation() -> None:
-    """representation= must not contradict sparse_matrix=."""
-    sparse = scipy.sparse.eye(4, dtype=np.complex128, format="csr")
-    with pytest.raises(ValueError, match="inferred as 'sparse' from sparse_matrix="):
-        Hamiltonian(sparse_matrix=sparse, representation="dense")
-
-
 def test_hamiltonian_sparse_explicit_length() -> None:
     """Sparse matrix init accepts an explicit length."""
     sparse = scipy.sparse.eye(4, dtype=np.complex128, format="csr")
@@ -124,12 +110,12 @@ def test_hamiltonian_coupled_transmon_factory() -> None:
         anharmonicity=0.2,
         coupling=0.1,
     )
-    assert h.representation == "mpo"
     assert h.length == 4
+    assert h.mpo.length == 4
 
 
 def test_hamiltonian_matrix_property_unavailable_for_mpo() -> None:
-    """Matrix property raises for MPO-only Hamiltonian."""
+    """Matrix property raises for MPO-only Hamiltonian until densified."""
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     with pytest.raises(RuntimeError, match="Dense matrix is not available"):
         _ = h.matrix
@@ -138,47 +124,46 @@ def test_hamiltonian_matrix_property_unavailable_for_mpo() -> None:
 def test_to_sparse_matrix_raises_without_data() -> None:
     """to_sparse_matrix raises when no backing data exists."""
     h = _blank_hamiltonian(
-        representation="mpo",
-        _encoded_as=None,
         _matrix=None,
         _mpo=None,
         _sparse_matrix=None,
+        _tensors=None,
     )
     with pytest.raises(RuntimeError, match="no materialized data"):
         h.to_sparse_matrix()
 
 
-def test_encode_sparse_raises_without_data() -> None:
-    """_encode('sparse') fails when no specification is available."""
+def test_ensure_sparse_raises_without_data() -> None:
+    """ensure_sparse fails when no specification is available."""
     h = _blank_hamiltonian(
-        representation="mpo",
-        _encoded_as=None,
         _matrix=None,
         _mpo=None,
         _sparse_matrix=None,
+        _tensors=None,
     )
     with pytest.raises(ValueError, match="Cannot build sparse matrix"):
-        h._encode("sparse")
+        h.ensure_sparse()
 
 
-def test_encode_dense_raises_without_data() -> None:
-    """_encode('dense') fails when no specification is available."""
+def test_ensure_mpo_raises_without_data() -> None:
+    """ensure_mpo fails when no specification is available."""
     h = _blank_hamiltonian(
-        representation="dense",
-        _encoded_as=None,
         _matrix=None,
         _mpo=None,
         _sparse_matrix=None,
+        _tensors=None,
+        physical_dimension=2,
+        length=1,
     )
-    with pytest.raises(ValueError, match="Cannot build dense matrix"):
-        h._encode("dense")
+    with pytest.raises(ValueError, match="No Hamiltonian data available to build an MPO"):
+        h.ensure_mpo()
 
 
-def test_ensure_encoded_mpo_idempotent_when_already_materialized() -> None:
-    """ensure_encoded('mpo') returns early when MPO is already cached."""
+def test_ensure_mpo_idempotent_when_already_materialized() -> None:
+    """ensure_mpo returns early when MPO is already cached."""
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     mpo = h.mpo
-    h.ensure_encoded("mpo")
+    h.ensure_mpo()
     assert h.mpo is mpo
 
 
@@ -186,12 +171,6 @@ def test_hamiltonian_matrix_not_square() -> None:
     """Dense matrix must be square."""
     with pytest.raises(ValueError, match="square 2-D"):
         Hamiltonian(matrix=np.ones((2, 3), dtype=np.complex128))
-
-
-def test_hamiltonian_matrix_rejects_conflicting_representation() -> None:
-    """representation= must not contradict matrix=."""
-    with pytest.raises(ValueError, match="inferred as 'dense' from matrix="):
-        Hamiltonian(matrix=np.eye(2, dtype=np.complex128), representation="mpo")
 
 
 def test_hamiltonian_sparse_not_square() -> None:
@@ -209,10 +188,9 @@ def test_hamiltonian_sparse_coo_converted_to_csr() -> None:
 
 
 def test_hamiltonian_dense_matrix_init() -> None:
-    """matrix= infers dense representation and length from Hilbert dimension."""
+    """matrix= stores dense data and infers length from Hilbert dimension."""
     mat = np.eye(4, dtype=np.complex128)
     h = Hamiltonian(matrix=mat)
-    assert h.representation == "dense"
     assert h.length == 2
     np.testing.assert_allclose(h.matrix, mat)
 
@@ -220,14 +198,12 @@ def test_hamiltonian_dense_matrix_init() -> None:
 def test_hamiltonian_ising_encoded_at_init() -> None:
     """Preset classmethod encodes MPO at construction."""
     h = Hamiltonian.ising(3, J=1.0, g=0.5)
-    assert h.representation == "mpo"
     assert h.mpo.length == 3
 
 
 def test_hamiltonian_heisenberg_factory() -> None:
     """Heisenberg preset builds a valid MPO-backed Hamiltonian."""
     h = Hamiltonian.heisenberg(2, Jx=1.0, Jy=0.5, Jz=0.3, h=0.1)
-    assert h.representation == "mpo"
     assert h.mpo.length == 2
 
 
@@ -244,8 +220,8 @@ def test_hamiltonian_pauli_factory() -> None:
 def test_hamiltonian_fermi_hubbard_factory() -> None:
     """Fermi-Hubbard preset builds a Hamiltonian."""
     h = Hamiltonian.fermi_hubbard_1d(2, t=1.0, u=0.5)
-    assert h.representation == "mpo"
     assert h.length == 2
+    assert h.mpo.length == 2
 
 
 def test_hamiltonian_from_mpo() -> None:
@@ -256,21 +232,20 @@ def test_hamiltonian_from_mpo() -> None:
 
 
 def test_hamiltonian_sparse_matrix_init() -> None:
-    """sparse_matrix= infers sparse representation."""
+    """sparse_matrix= stores sparse data at construction."""
     dim = 4
     sparse = scipy.sparse.eye(dim, dtype=np.complex128, format="csr")
     h = Hamiltonian(sparse_matrix=sparse)
-    assert h.representation == "sparse"
     np.testing.assert_allclose(h.sparse_matrix.toarray(), sparse.toarray())
 
 
-def test_ensure_encoded_mpo_to_sparse_cached() -> None:
+def test_ensure_sparse_from_mpo_cached() -> None:
     """Converting MPO to sparse once caches sparse_matrix for later runs."""
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     mpo = h.mpo
     with patch.object(MPO, "to_sparse_matrix", wraps=mpo.to_sparse_matrix) as mock_sparse:
-        h.ensure_encoded("sparse")
-        h.ensure_encoded("sparse")
+        h.ensure_sparse()
+        h.ensure_sparse()
     assert mock_sparse.call_count == 1
     np.testing.assert_allclose(
         h.sparse_matrix.toarray(),
@@ -278,21 +253,39 @@ def test_ensure_encoded_mpo_to_sparse_cached() -> None:
     )
 
 
-def test_ensure_encoded_dense_from_mpo() -> None:
-    """MPO Hamiltonian can materialize dense matrix without changing representation."""
-    h = Hamiltonian.ising(2, J=1.0, g=0.5)
-    assert h.representation == "mpo"
-    h.ensure_encoded("dense")
-    dense = h.matrix
-    assert dense.shape == (4, 4)
-    assert h.representation == "mpo"
-
-
-def test_ensure_encoded_sparse_from_dense_hamiltonian() -> None:
-    """Dense-init Hamiltonian can encode sparse for MCWF backends."""
+def test_ensure_sparse_from_dense_hamiltonian() -> None:
+    """Dense-init Hamiltonian can materialize sparse for MCWF backends."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
-    h.ensure_encoded("sparse")
+    h.ensure_sparse()
     np.testing.assert_allclose(h.sparse_matrix.toarray(), np.eye(4))
+
+
+def test_ensure_mpo_from_dense_and_sparse() -> None:
+    """Dense and sparse sources convert to MPO via MPO.from_matrix."""
+    dense = Hamiltonian.ising(2, J=1.0, g=0.5).to_matrix()
+    h_dense = Hamiltonian(matrix=dense.copy())
+    h_dense.ensure_mpo()
+    np.testing.assert_allclose(h_dense.mpo.to_matrix(), dense, atol=1e-10)
+
+    h_sparse = Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(dense))
+    h_sparse.ensure_mpo()
+    np.testing.assert_allclose(h_sparse.mpo.to_matrix(), dense, atol=1e-10)
+    # Sparse→MPO densifies and caches the dense form.
+    np.testing.assert_allclose(h_sparse.matrix, dense, atol=1e-10)
+
+
+def test_cached_forms_remain_available_after_conversions() -> None:
+    """Accessors return any materialized form after ensure_mpo / ensure_sparse."""
+    h = Hamiltonian.ising(2, J=1.0, g=0.5)
+    mpo = h.mpo
+
+    h.ensure_sparse()
+    assert h.mpo is mpo
+    np.testing.assert_allclose(h.sparse_matrix.toarray(), mpo.to_sparse_matrix().toarray())
+
+    dense = h.to_matrix()
+    assert h.mpo is mpo
+    np.testing.assert_allclose(dense, mpo.to_matrix(), atol=1e-12)
 
 
 def test_hamiltonian_mpo_property_unavailable_for_dense_init() -> None:
@@ -310,7 +303,7 @@ def test_hamiltonian_sparse_property_unavailable_for_mpo_init() -> None:
 
 
 def test_to_matrix_from_mpo_and_sparse() -> None:
-    """to_matrix converts from MPO or sparse without changing representation."""
+    """to_matrix converts from MPO or sparse."""
     h_mpo = Hamiltonian.ising(2, J=1.0, g=0.5)
     ref = h_mpo.mpo.to_matrix()
     np.testing.assert_allclose(h_mpo.to_matrix(), ref, atol=1e-10)
@@ -333,33 +326,6 @@ def test_to_sparse_matrix_from_mpo_only() -> None:
     np.testing.assert_allclose(sparse.toarray(), h.mpo.to_sparse_matrix().toarray())
 
 
-def test_ensure_encoded_dense_idempotent() -> None:
-    """ensure_encoded('dense') is a no-op when a dense matrix is already cached."""
-    h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
-    cached = h.matrix.copy()
-    h.ensure_encoded("dense")
-    np.testing.assert_allclose(h.matrix, cached)
-
-
-def test_ensure_encoded_dense_from_sparse_init() -> None:
-    """Sparse-init Hamiltonian can materialize a dense matrix on demand."""
-    h = Hamiltonian(sparse_matrix=scipy.sparse.eye(4, dtype=np.complex128))
-    h.ensure_encoded("dense")
-    np.testing.assert_allclose(h.matrix, np.eye(4))
-
-
-def test_build_mpo_raises_without_tensors() -> None:
-    """_build_mpo fails when no tensor specification exists."""
-    h = _blank_hamiltonian(
-        _mpo=None,
-        _tensors=None,
-        _matrix=None,
-        _sparse_matrix=None,
-    )
-    with pytest.raises(ValueError, match="No MPO specification available"):
-        h._build_mpo()
-
-
 def test_to_sparse_matrix_from_dense() -> None:
     """to_sparse_matrix converts from dense matrix storage."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
@@ -370,25 +336,17 @@ def test_to_sparse_matrix_from_dense() -> None:
 def test_to_matrix_raises_without_data() -> None:
     """to_matrix raises when no backing data exists."""
     h = _blank_hamiltonian(
-        representation="mpo",
-        _encoded_as=None,
         _matrix=None,
         _mpo=None,
         _sparse_matrix=None,
+        _tensors=None,
     )
     with pytest.raises(RuntimeError, match="no materialized data"):
         h.to_matrix()
 
 
-def test_build_mpo_raises_for_matrix_only() -> None:
-    """Cannot build MPO from dense-only specification."""
-    h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
-    with pytest.raises(ValueError, match="Cannot build an MPO from matrix"):
-        h._build_mpo()
-
-
-def test_run_rejects_mpo_hamiltonian_with_mps_state() -> None:
-    """TJM requires Hamiltonian stored as MPO."""
+def test_run_accepts_dense_hamiltonian_with_mps_state() -> None:
+    """TJM materializes an MPO from a dense-source Hamiltonian."""
     dim = 4
     mat = np.eye(dim, dtype=np.complex128)
     h = Hamiltonian(matrix=mat)
@@ -398,9 +356,9 @@ def test_run_rejects_mpo_hamiltonian_with_mps_state() -> None:
         elapsed_time=0.1,
         dt=0.1,
     )
-    sim = Simulator(show_progress=False)
-    with pytest.raises(ValueError, match=r"TJM simulation requires Hamiltonian\.representation='mpo'"):
-        sim.run(state, h, params, None)
+    result = Simulator(show_progress=False).run(state, h, params, None)
+    assert result.expectation_values[0].shape[0] >= 1
+    _ = h.mpo
 
 
 def test_run_hamiltonian_length_mismatch() -> None:
@@ -415,6 +373,72 @@ def test_run_hamiltonian_length_mismatch() -> None:
     sim = Simulator(show_progress=False)
     with pytest.raises(ValueError, match=r"does not match Hamiltonian\.length"):
         sim.run(state, h, params, None)
+
+
+def test_ensure_sparse_prefers_dense_source_after_ensure_mpo() -> None:
+    """After ensure_mpo, ensure_sparse still uses the original dense matrix."""
+    dense = Hamiltonian.ising(2, J=1.0, g=0.5).to_matrix()
+    # Perturb off-diagonals so an approximate MPO conversion can differ.
+    dense = dense.copy()
+    dense[0, 3] += 0.37
+    dense[3, 0] += 0.37
+    h = Hamiltonian(matrix=dense.copy())
+    h.ensure_mpo()
+    mpo = h.mpo
+    with patch.object(MPO, "to_sparse_matrix", wraps=mpo.to_sparse_matrix) as mock_sparse:
+        h.ensure_sparse()
+    assert mock_sparse.call_count == 0
+    np.testing.assert_allclose(h.sparse_matrix.toarray(), dense)
+
+
+@pytest.mark.parametrize("order", ["mps_then_vector", "vector_then_mps"])
+def test_dense_hamiltonian_run_order_preserves_source_fidelity(order: str) -> None:
+    """Dense-source fidelity is independent of MPS vs vector run order."""
+    length = 2
+    dense = Hamiltonian.ising(length, J=1.0, g=0.5).to_matrix().copy()
+    dense[0, 3] += 0.21
+    dense[3, 0] += 0.21
+    hamiltonian = Hamiltonian(matrix=dense.copy())
+    sim = Simulator(show_progress=False)
+    obs = Observable("z", sites=[0])
+    params_mps = AnalogSimParams(observables=[obs], elapsed_time=0.2, dt=0.05, max_bond_dim=16, svd_threshold=1e-10)
+    params_vec = AnalogSimParams(observables=[obs], elapsed_time=0.2, dt=0.05, num_traj=1)
+
+    state_mps = State(length, initial="zeros", representation="mps")
+    state_vec = State(length, initial="zeros", representation="vector")
+    state_rho = State(length, initial="zeros", representation="density_matrix")
+
+    if order == "mps_then_vector":
+        mps_val = float(sim.run(state_mps, hamiltonian, params_mps, None).expectation_values[0][-1])
+        vec_val = float(sim.run(state_vec, hamiltonian, params_vec, None).expectation_values[0][-1])
+        rho_val = float(sim.run(state_rho, hamiltonian, params_vec, None).expectation_values[0][-1])
+    else:
+        vec_val = float(sim.run(state_vec, hamiltonian, params_vec, None).expectation_values[0][-1])
+        rho_val = float(sim.run(state_rho, hamiltonian, params_vec, None).expectation_values[0][-1])
+        mps_val = float(sim.run(state_mps, hamiltonian, params_mps, None).expectation_values[0][-1])
+
+    assert vec_val == pytest.approx(rho_val, abs=1e-8)
+    assert mps_val == pytest.approx(vec_val, abs=1e-4)
+    np.testing.assert_allclose(hamiltonian.sparse_matrix.toarray(), dense)
+    np.testing.assert_allclose(hamiltonian.matrix, dense)
+
+
+def test_ensure_mpo_warns_before_large_dense_factorization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large dense→MPO conversion emits the preprocess_mcwf-style RuntimeWarning."""
+    monkeypatch.setattr(hamiltonian_mod, "_LARGE_HILBERT_DIM", 2)
+    h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
+    with pytest.warns(RuntimeWarning, match="factorizing a dense matrix into an MPO"):
+        h.ensure_mpo()
+    assert h.mpo.length == 2
+
+
+def test_ensure_mpo_warns_before_large_sparse_densification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large sparse→MPO conversion warns before densifying."""
+    monkeypatch.setattr(hamiltonian_mod, "_LARGE_HILBERT_DIM", 2)
+    h = Hamiltonian(sparse_matrix=scipy.sparse.eye(4, dtype=np.complex128, format="csr"))
+    with pytest.warns(RuntimeWarning, match="densifying a sparse matrix to build an MPO"):
+        h.ensure_mpo()
+    assert h.mpo.length == 2
 
 
 def test_to_sparse_matrix_called_once_across_two_runs() -> None:

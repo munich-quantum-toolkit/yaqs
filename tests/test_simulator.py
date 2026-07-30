@@ -1471,8 +1471,8 @@ def test_analog_run_rejects_non_state_initial_state() -> None:
         sim.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # ruff:ignore[runtime-cast-value]  # cast is required to exercise the runtime TypeError guard for non-State initial states
 
 
-def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
-    """TJM requires Hamiltonian.representation='mpo'."""
+def test_analog_run_accepts_matrix_hamiltonian_with_mps_state() -> None:
+    """TJM auto-converts dense Hamiltonians to MPO."""
     state = State(2, initial="zeros")
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
     params = AnalogSimParams(
@@ -1480,8 +1480,8 @@ def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
         elapsed_time=0.1,
         dt=0.1,
     )
-    with pytest.raises(ValueError, match=r"TJM simulation requires Hamiltonian\.representation='mpo'"):
-        Simulator(show_progress=False).run(state, h, params, None)
+    result = Simulator(show_progress=False).run(state, h, params, None)
+    assert result.expectation_values[0].shape[0] >= 1
 
 
 def test_no_output_error() -> None:
