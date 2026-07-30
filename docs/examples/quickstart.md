@@ -264,7 +264,7 @@ fig.colorbar(im, ax=axes, shrink=0.9, label="expectation")
 fig.suptitle(rf"Twin fit: RMSE={result.trajectory_rmse():.2e}", y=1.02)
 ```
 
-See {doc}`noise_characterization` for the full analytical-optimization workflow,
+See {doc}`digital_twin` for the full analytical-optimization workflow,
 experimental-data fitting, held-out prediction, and MCWF fitting.
 
 ## 6. Train a surrogate and predict under controls
@@ -332,7 +332,7 @@ checks and exact-reference validation.
 | Goal                                                 | Start here                    |
 | ---------------------------------------------------- | ----------------------------- |
 | Environmental memory probing                         | {doc}`characterization`       |
-| Markovian noise digital-twin fitting                 | {doc}`noise_characterization` |
+| Markovian noise digital-twin fitting                 | {doc}`digital_twin`           |
 | Surrogate training, prediction, and exact validation | {doc}`memory_surrogate`       |
 | Open-system dynamics, noise, time grids              | {doc}`analog_simulation`      |
 | Bell-curve (log-normal) noise strengths              | {doc}`realistic_noise_models` |

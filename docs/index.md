@@ -68,7 +68,7 @@ flowchart LR
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
 | Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
-| Learn Markovian Lindblad jump rates via analytical optimization (CMA-ES)   | {doc}`examples/noise_characterization`                                      |
+| Build a Markovian noise digital twin from measured trajectories            | {doc}`examples/digital_twin`                                                |
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
 | Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
@@ -115,12 +115,12 @@ examples/memory_surrogate
 ```
 
 ```{toctree}
-:caption: Noise Characterization
+:caption: Digital Twin
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/noise_characterization
+examples/digital_twin
 ```
 
 ```{toctree}
