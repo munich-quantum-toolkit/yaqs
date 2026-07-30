@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added a checksum-sealed Phase II state-preparation preregistration, complete screening-evidence and mechanical promotion controls, matched confirmatory contrasts, sample-size design guard, and commit-addressed legacy-evidence audit ([**@MaxFroehlich1410**])
 - added a JSON-configurable CLI with smoke, minimum, and full presets plus train-once execution, filtering, dry runs, and safe resume behavior for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added atomic, provenance-aware reporting, resumability, parameter checkpoints, and trajectory sidecars for state-preparation benchmarks ([**@MaxFroehlich1410**])
 - added reproducible, domain-separated independent test evaluation with uncertainty statistics for state-preparation benchmarks ([**@MaxFroehlich1410**])

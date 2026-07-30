@@ -1,0 +1,2 @@
+# Phase II seals use whitespace-sensitive canonical JSON.
+benchmarks/state_preparation/phase2/data/*.json
