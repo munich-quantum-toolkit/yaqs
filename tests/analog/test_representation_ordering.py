@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import scipy.sparse
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -96,3 +97,62 @@ def test_noisy_short_step_mps_vs_mcwf(
     )
     vec_val = float(sim.run(State(vector=psi.copy()), hamiltonian, params, noise).expectation_values[0][-1])
     assert mps_val == pytest.approx(vec_val, abs=1e-6)
+
+
+def test_heisenberg_noiseless_agrees_across_representations() -> None:
+    """Heisenberg preset works with mps, vector, and density_matrix without H.representation."""
+    length = 3
+    sim = Simulator(show_progress=False)
+    hamiltonian = Hamiltonian.heisenberg(length, Jx=1.0, Jy=0.5, Jz=0.3, h=0.1)
+    assert hamiltonian.representation == "mpo"
+
+    init = State(length, initial="x+")
+    psi = np.asarray(init.mps.to_vec(), dtype=np.complex128)
+    rho = np.outer(psi, psi.conj())
+    tensors = [np.asarray(t, dtype=np.complex128).copy() for t in init.mps.tensors]
+
+    obs_list = [Observable("z", s) for s in range(length)] + [Observable("x", 0)]
+    params_mps = AnalogSimParams(observables=obs_list, elapsed_time=0.4, dt=0.05, max_bond_dim=32, svd_threshold=1e-10)
+    params_dense = AnalogSimParams(observables=obs_list, elapsed_time=0.4, dt=0.05, num_traj=1)
+
+    z_x_mps = sim.run(State(length, tensors=[t.copy() for t in tensors]), hamiltonian, params_mps, None)
+    z_x_vec = sim.run(State(vector=psi.copy()), hamiltonian, params_dense, None)
+    z_x_rho = sim.run(State(density_matrix=rho.copy()), hamiltonian, params_dense, None)
+
+    assert hamiltonian.representation == "mpo"
+    _ = hamiltonian.mpo
+    _ = hamiltonian.sparse_matrix
+
+    for idx in range(len(obs_list)):
+        mps_val = float(z_x_mps.expectation_values[idx][-1])
+        vec_val = float(z_x_vec.expectation_values[idx][-1])
+        rho_val = float(z_x_rho.expectation_values[idx][-1])
+        assert vec_val == pytest.approx(rho_val, abs=1e-8), f"obs {idx} vector vs density_matrix"
+        assert mps_val == pytest.approx(vec_val, abs=1e-5), f"obs {idx} mps vs vector"
+
+
+@pytest.mark.parametrize("hamiltonian_kind", ["dense", "sparse"])
+def test_matrix_hamiltonian_runs_on_vector_and_density_matrix(hamiltonian_kind: str) -> None:
+    """User-supplied dense/sparse Hamiltonians evolve under MCWF and Lindblad."""
+    length = 2
+    ref = Hamiltonian.ising(length, J=1.0, g=0.5)
+    dense = np.asarray(ref.to_matrix(), dtype=np.complex128)
+    hamiltonian = (
+        Hamiltonian(matrix=dense.copy())
+        if hamiltonian_kind == "dense"
+        else Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(dense))
+    )
+    assert hamiltonian.representation == ("dense" if hamiltonian_kind == "dense" else "sparse")
+
+    sim = Simulator(show_progress=False)
+    obs = Observable("z", sites=[0])
+    params = AnalogSimParams(observables=[obs], elapsed_time=0.3, dt=0.05, num_traj=1)
+
+    state_vec = State(length, initial="zeros", representation="vector")
+    state_rho = State(length, initial="zeros", representation="density_matrix")
+    vec_val = float(sim.run(state_vec, hamiltonian, params, None).expectation_values[0][-1])
+    rho_val = float(sim.run(state_rho, hamiltonian, params, None).expectation_values[0][-1])
+    assert vec_val == pytest.approx(rho_val, abs=1e-8)
+
+    with pytest.raises(ValueError, match=r"TJM simulation requires Hamiltonian\.representation='mpo'"):
+        sim.run(State(length, initial="zeros", representation="mps"), hamiltonian, params, None)

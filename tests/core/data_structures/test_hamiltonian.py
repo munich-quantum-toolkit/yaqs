@@ -295,6 +295,23 @@ def test_ensure_encoded_sparse_from_dense_hamiltonian() -> None:
     np.testing.assert_allclose(h.sparse_matrix.toarray(), np.eye(4))
 
 
+def test_cached_forms_remain_available_after_ensure_encoded() -> None:
+    """Accessors return any materialized form, not only the last ensure_encoded target."""
+    h = Hamiltonian.ising(2, J=1.0, g=0.5)
+    mpo = h.mpo
+    assert h.representation == "mpo"
+
+    h.ensure_encoded("sparse")
+    assert h.representation == "mpo"
+    assert h.mpo is mpo
+    np.testing.assert_allclose(h.sparse_matrix.toarray(), mpo.to_sparse_matrix().toarray())
+
+    h.ensure_encoded("dense")
+    assert h.mpo is mpo
+    np.testing.assert_allclose(h.matrix, mpo.to_matrix(), atol=1e-12)
+    np.testing.assert_allclose(h.sparse_matrix.toarray(), mpo.to_sparse_matrix().toarray(), atol=1e-12)
+
+
 def test_hamiltonian_mpo_property_unavailable_for_dense_init() -> None:
     """Mpo property raises when only dense matrix is materialized."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
