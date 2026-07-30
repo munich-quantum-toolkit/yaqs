@@ -20,7 +20,7 @@ import pytest
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams, Observable
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
@@ -956,7 +956,7 @@ def test_multiply_mps_with_compression() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     state.check_if_valid_mps()
     assert state.orthogonality_center is not None
@@ -971,7 +971,7 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     assert state.orthogonality_center is not None
     obs = Observable(GateLibrary.z(), 1)

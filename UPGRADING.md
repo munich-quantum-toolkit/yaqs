@@ -6,6 +6,59 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: unified circuit parameters as `DigitalSimParams`
+
+Circuit simulation now uses a single {class}`~mqt.yaqs.DigitalSimParams` type.
+Outputs are selected by which fields you set (`observables`, `shots`, and/or
+`get_state`). The merged class permits observables and shots **simultaneously**;
+simulation physics for equivalent single-output configurations is unchanged.
+
+All `DigitalSimParams` constructor arguments are **keyword-only**. Migration
+must use keyword arguments; positional calls are rejected (a bare positional
+integer would be ambiguous among `shots`, `num_traj`, and `max_bond_dim`).
+
+`num_traj` and `shots` remain independent:
+
+- `num_traj` — noisy stochastic trajectories for observables/diagnostics.
+- `shots` — total bitstring-sample budget.
+- **Noisy combined runs** execute `num_traj` trajectories and distribute the
+  total `shots` across them. `shots < num_traj` is supported (some trajectories
+  get zero samples but still contribute observables).
+- **Noiseless runs** use one trajectory; all `shots` are sampled from that final
+  state.
+
+```python
+from mqt.yaqs import DigitalSimParams, Observable
+
+# Observables (optionally with layer sampling)
+DigitalSimParams(observables=[Observable("z", sites=0)], sample_layers=True)
+DigitalSimParams(
+    observables=[Observable("z", sites=0)],
+    num_traj=7,
+    max_bond_dim=64,
+)
+
+# Shot readout
+DigitalSimParams(shots=1024)
+DigitalSimParams(shots=1024, max_bond_dim=4)
+
+# Observables and shots in one run (noisy: distribute shots across num_traj)
+DigitalSimParams(
+    observables=[Observable("z", sites=0)],
+    shots=1024,
+    num_traj=64,
+)
+```
+
+| Area           | Notes                                   |
+| -------------- | --------------------------------------- |
+| Circuit params | Use `DigitalSimParams` only             |
+| Observables    | `DigitalSimParams(observables=...)`     |
+| Shots          | `DigitalSimParams(shots=N)`             |
+| Constructor    | Keyword-only (`*` after `self`)         |
+| Combined       | Set both `observables` and `shots`      |
+| Example docs   | `circuit_observables` / `circuit_shots` |
+
 ## [0.6.0]
 
 The unreleased API refresh replaces free functions and deep module paths with a
@@ -92,7 +145,7 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 | `sim_params.observables[i].results`         | `result.expectation_values[i]` |
 | `sim_params.output_state`                   | `result.output_state`          |
 | `sim_params.noise_model`                    | `result.noise_model`           |
-| `sim_params.results` (weak)                 | `result.counts`                |
+| `sim_params.results` (shot counts)          | `result.counts`                |
 | `sim_params.measurements`                   | `result.measurements`          |
 | `sim_params.multi_time_observables_times`   | `result.multi_time_times`      |
 | `sim_params.multi_time_observables_results` | `result.multi_time_results`    |
@@ -103,10 +156,10 @@ Removed from `*SimParams`: `noise_model`, `output_state`,
 Observable _configuration_ (`observables`, `multi_time_observables`, etc.) stays
 on `*SimParams`.
 
-For MPS-backed analog and strong-digital runs, `result.runtime_cost`,
+For MPS-backed analog and digital-observable runs, `result.runtime_cost`,
 `result.max_bond`, and `result.total_bond` are filled automatically (aligned
-with `result.times` or the strong-sim layer grid). MCWF, Lindblad, and weak
-digital runs leave these as `None`.
+with `result.times` or the digital layer-sampling grid). MCWF, Lindblad, and
+shot-only digital runs leave these as `None`.
 
 ### MCWF / Lindblad operator ordering (dense backends)
 
@@ -148,6 +201,7 @@ lowering noise.
 ```python
 from mqt.yaqs import (
     AnalogSimParams,
+    DigitalSimParams,
     EquivalenceChecker,
     Hamiltonian,
     MPO,
@@ -158,8 +212,6 @@ from mqt.yaqs import (
     SIMULATION_PRESETS,
     Simulator,
     State,
-    StrongSimParams,
-    WeakSimParams,
 )
 ```
 

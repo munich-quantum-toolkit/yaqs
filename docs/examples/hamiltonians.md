@@ -168,7 +168,7 @@ orbitals.
 The analog MPO factories omit a chemical potential $\mu$. For a **digital**
 Trotter circuit with $\mu$, see
 {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit`
-and {doc}`strong_simulation`.
+and {doc}`circuit_observables`.
 ```
 
 Correctness of the fermionic and JW MPOs is covered by `test_fermi_hubbard_1d_*`

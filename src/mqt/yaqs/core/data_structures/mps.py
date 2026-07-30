@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..methods.decompositions import TruncMode
-    from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+    from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 
 # Worker-global state for parallel ``measure_shots`` (initialized once per process).
 _MEASURE_SHOTS_CTX: dict[str, Any] = {}
@@ -1154,7 +1154,7 @@ class MPS:
 
     def evaluate_observables(
         self,
-        sim_params: AnalogSimParams | StrongSimParams,
+        sim_params: AnalogSimParams | DigitalSimParams,
         results: NDArray[np.float64],
         column_index: int = 0,
     ) -> None:

@@ -22,7 +22,7 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 from typing_extensions import Self
 
-from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -939,7 +939,7 @@ def test_convert_to_vector_fidelity() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
@@ -964,7 +964,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )

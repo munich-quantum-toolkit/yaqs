@@ -38,13 +38,13 @@ if TYPE_CHECKING:
 
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
-    from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
 def sweep_1site(
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
@@ -161,7 +161,7 @@ def sweep_1site(
 def sweep_2site(
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
@@ -294,7 +294,7 @@ def sweep_2site(
 def sweep_dynamic(
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,

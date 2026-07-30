@@ -16,10 +16,11 @@ mystnb:
 
 YAQS draws a sharp line between **what** you simulate and **how** it runs:
 
-| Layer                                                                                                                                                                                                | Role                                                                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`StrongSimParams <mqt.yaqs.StrongSimParams>` / {class}`WeakSimParams <mqt.yaqs.WeakSimParams>` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                             |
-| {class}`~mqt.yaqs.Simulator`                                                                                                                                                                         | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
+| Layer                                                                                                                              | Role                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`~mqt.yaqs.DigitalSimParams` | The physics: initial state, operator, time grid, observables, trajectory count, truncation.                                                                    |
+| {class}`~mqt.yaqs.NoiseModel`                                                                                                      | Optional physics input supplied to {meth}`~mqt.yaqs.Simulator.run`.                                                                                            |
+| {class}`~mqt.yaqs.Simulator`                                                                                                       | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
 
 This page walks through every option on the {class}`~mqt.yaqs.Simulator` class
 so you can tune execution without touching the physics.
@@ -246,22 +247,22 @@ result = sim.run(state, H, params)
 ```
 
 The properties that don't apply to your simulation kind return `None` (or an
-empty list for `observables` in weak simulations), so you can branch on them
-safely. The full set is:
+empty list for `observables` when only shots were requested), so you can branch
+on them safely. The full set is:
 
-| Property                                 | Populated for                                                                                                                                                        |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                                                                                                         |
-| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                   |
-| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                      |
-| `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                |
-| `runtime_cost`                           | MPS-backed analog and strong digital runs (contraction-cost heuristic over time).                                                                                    |
-| `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).                                                                                        |
-| `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).                                                                                         |
-| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                             |
-| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
-| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                    |
-| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes).                                                                                  |
+| Property                                 | Populated for                                                                                                                                                         |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                     |
+| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                    |
+| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                       |
+| `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                 |
+| `runtime_cost`                           | MPS-backed analog and digital runs that are not shots-only (contraction-cost heuristic over time).                                                                    |
+| `max_bond`                               | MPS-backed analog and digital runs that are not shots-only (maximum bond dimension over time).                                                                        |
+| `total_bond`                             | MPS-backed analog and digital runs that are not shots-only (sum of internal bond dimensions).                                                                         |
+| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                              |
+| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `DigitalSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
+| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                     |
+| `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                              |
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and
 resume analysis from disk:
@@ -295,4 +296,5 @@ For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`,
 - {doc}`quickstart` — minimal first simulation
 - {doc}`simulation_parameters` — physics-side presets and truncation
 - {doc}`analog_simulation` — TJM workflow with noise
-- {doc}`strong_simulation` — strong simulation entry point
+- {doc}`circuit_observables` — circuit observables, mid-circuit sampling, gate
+  modes

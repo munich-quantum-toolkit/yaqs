@@ -232,7 +232,7 @@ on each qubit follow independent log-normal draws; one sample is drawn per
 `Simulator.run` call.
 
 ```{code-cell} ipython3
-from mqt.yaqs import Observable, StrongSimParams
+from mqt.yaqs import Observable, DigitalSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 num_qubits = 3
@@ -247,7 +247,7 @@ circuit_noise = NoiseModel([
     for i in range(num_qubits)
 ])
 
-circuit_params = StrongSimParams(
+circuit_params = DigitalSimParams(
     observables=[Observable("z", site) for site in range(num_qubits)],
     num_traj=32,
     max_bond_dim=8,
@@ -333,7 +333,8 @@ matching the site's physical dimension—see {doc}`transmon_emulation`.
 ## Related topics
 
 - {doc}`analog_simulation` — TJM workflow with static noise strengths
-- {doc}`strong_simulation` — strong digital simulation
+- {doc}`circuit_observables` — digital circuit observables and mid-circuit
+  sampling
 - {doc}`scheduled_jumps` — deterministic jumps at fixed times (library or custom
   `matrix`)
 - {doc}`representation_comparison` — MCWF and Lindblad backends with the same

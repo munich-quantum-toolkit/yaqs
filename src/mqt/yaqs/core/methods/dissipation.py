@@ -26,7 +26,7 @@ from ..methods.decompositions import merge_two_site, split_two_site
 if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
-    from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
     from ..methods.decompositions import TruncMode
 
 
@@ -70,7 +70,7 @@ def apply_dissipation(
     state: MPS,
     noise_model: NoiseModel | None,
     dt: float,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
     """Apply dissipation to the system state using a given noise model and time step.
 
