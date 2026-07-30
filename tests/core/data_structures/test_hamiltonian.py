@@ -17,6 +17,7 @@ import pytest
 import scipy.sparse
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State
+from mqt.yaqs.core.data_structures import hamiltonian as hamiltonian_mod
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 
@@ -420,6 +421,24 @@ def test_dense_hamiltonian_run_order_preserves_source_fidelity(order: str) -> No
     assert mps_val == pytest.approx(vec_val, abs=1e-4)
     np.testing.assert_allclose(hamiltonian.sparse_matrix.toarray(), dense)
     np.testing.assert_allclose(hamiltonian.matrix, dense)
+
+
+def test_ensure_mpo_warns_before_large_dense_factorization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large dense→MPO conversion emits the preprocess_mcwf-style RuntimeWarning."""
+    monkeypatch.setattr(hamiltonian_mod, "_LARGE_HILBERT_DIM", 2)
+    h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
+    with pytest.warns(RuntimeWarning, match="factorizing a dense matrix into an MPO"):
+        h.ensure_mpo()
+    assert h.mpo.length == 2
+
+
+def test_ensure_mpo_warns_before_large_sparse_densification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large sparse→MPO conversion warns before densifying."""
+    monkeypatch.setattr(hamiltonian_mod, "_LARGE_HILBERT_DIM", 2)
+    h = Hamiltonian(sparse_matrix=scipy.sparse.eye(4, dtype=np.complex128, format="csr"))
+    with pytest.warns(RuntimeWarning, match="densifying a sparse matrix to build an MPO"):
+        h.ensure_mpo()
+    assert h.mpo.length == 2
 
 
 def test_to_sparse_matrix_called_once_across_two_runs() -> None:

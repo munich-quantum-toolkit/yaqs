@@ -35,6 +35,15 @@ Hamiltonian inputs (`tensors`, `matrix`, `sparse_matrix`, or a preset such as
 `Hamiltonian` instance works with all three state representations;
 `Simulator.run` converts and caches the required MPO or sparse form.
 
+```{warning}
+Selecting ``State.representation="mps"`` (TJM) calls
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.ensure_mpo`. For a
+``sparse_matrix`` source this densifies the operator before MPO factorization,
+allocating the full Hilbert-space matrix and risking out-of-memory failures on
+large systems. Prefer an MPO preset, ``Hamiltonian.from_mpo(...)``, or
+``tensors=`` when targeting TJM.
+```
+
 This page covers the factory methods in the library. For open-system evolution
 after the Hamiltonian is defined, see {doc}`analog_simulation`. For choosing a
 state representation, see {doc}`state_initialization` and
@@ -297,13 +306,14 @@ explicitly (see the factory docstring).
 
 ## Manual Hamiltonians
 
-For imported MPO cores or small-system dense operators:
+For imported MPO cores or small-system dense/sparse operators:
 
 ```python
-# MPO tensor cores (rank-4 per site, already in MPO layout)
+# MPO tensor cores (rank-4 per site, already in MPO layout) — preferred for TJM
 H = Hamiltonian(tensors=my_cores)
 
-# Dense or sparse matrix — YAQS converts to MPO or sparse as needed at run time
+# Dense or sparse matrix — YAQS converts to MPO or sparse as needed at run time.
+# sparse_matrix → TJM densifies; prefer tensors=/from_mpo/presets for large systems.
 H = Hamiltonian(matrix=dense_h, physical_dimension=2)
 H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ```

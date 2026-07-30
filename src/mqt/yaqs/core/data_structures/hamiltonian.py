@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -25,6 +26,9 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 __all__ = ["Hamiltonian"]
+
+# Match preprocess_mcwf: warn when full Hilbert-space matrices become expensive.
+_LARGE_HILBERT_DIM = 2**14
 
 
 class Hamiltonian:
@@ -79,47 +83,83 @@ class Hamiltonian:
         self._mpo: MPO | None = None
 
         if tensors is not None:
-            if len(tensors) == 0:
-                msg = "tensors must be a non-empty list of MPO cores."
-                raise ValueError(msg)
-            n_sites = len(tensors)
-            if length is not None and length != n_sites:
-                msg = f"length={length} does not match len(tensors)={n_sites}."
-                raise ValueError(msg)
-            self.length = n_sites if length is None else length
-            self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
-            self.ensure_mpo()
+            self._init_from_tensors(tensors, length)
         elif matrix is not None:
-            mat = np.asarray(matrix, dtype=np.complex128)
-            if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
-                msg = "matrix must be a square 2-D array."
-                raise ValueError(msg)
-            hilbert_dim = mat.shape[0]
-            if length is None:
-                self.length = infer_chain_length(hilbert_dim, physical_dimension=physical_dimension)
-            else:
-                expected = physical_dimension**length
-                if hilbert_dim != expected:
-                    msg = f"matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
-                    raise ValueError(msg)
-                self.length = length
-            self._matrix = mat
+            self._init_from_matrix(matrix, length)
         else:
             assert sparse_matrix is not None
-            sparse = sparse_to_csr(sparse_matrix)
-            hilbert_dim = sparse.shape[0]
-            if sparse.shape[0] != sparse.shape[1]:
-                msg = "sparse_matrix must be square."
+            self._init_from_sparse_matrix(sparse_matrix, length)
+
+    def _init_from_tensors(
+        self,
+        tensors: list[NDArray[np.complex128]],
+        length: int | None,
+    ) -> None:
+        """Validate and store MPO tensor cores, then materialize the MPO.
+
+        Raises:
+            ValueError: If ``tensors`` is empty or ``length`` disagrees with ``len(tensors)``.
+        """
+        if len(tensors) == 0:
+            msg = "tensors must be a non-empty list of MPO cores."
+            raise ValueError(msg)
+        n_sites = len(tensors)
+        if length is not None and length != n_sites:
+            msg = f"length={length} does not match len(tensors)={n_sites}."
+            raise ValueError(msg)
+        self.length = n_sites if length is None else length
+        self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
+        self.ensure_mpo()
+
+    def _init_from_matrix(
+        self,
+        matrix: NDArray[np.complex128],
+        length: int | None,
+    ) -> None:
+        """Validate and store a dense Hamiltonian matrix.
+
+        Raises:
+            ValueError: If ``matrix`` is not square or disagrees with ``length``.
+        """
+        mat = np.asarray(matrix, dtype=np.complex128)
+        if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+            msg = "matrix must be a square 2-D array."
+            raise ValueError(msg)
+        hilbert_dim = mat.shape[0]
+        if length is None:
+            self.length = infer_chain_length(hilbert_dim, physical_dimension=self.physical_dimension)
+        else:
+            expected = self.physical_dimension**length
+            if hilbert_dim != expected:
+                msg = f"matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
                 raise ValueError(msg)
-            if length is None:
-                self.length = infer_chain_length(hilbert_dim, physical_dimension=physical_dimension)
-            else:
-                expected = physical_dimension**length
-                if hilbert_dim != expected:
-                    msg = f"sparse_matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
-                    raise ValueError(msg)
-                self.length = length
-            self._sparse_matrix = sparse
+            self.length = length
+        self._matrix = mat
+
+    def _init_from_sparse_matrix(
+        self,
+        sparse_matrix: scipy.sparse.spmatrix,
+        length: int | None,
+    ) -> None:
+        """Validate and store a sparse Hamiltonian matrix.
+
+        Raises:
+            ValueError: If ``sparse_matrix`` is not square or disagrees with ``length``.
+        """
+        sparse = sparse_to_csr(sparse_matrix)
+        hilbert_dim = sparse.shape[0]
+        if sparse.shape[0] != sparse.shape[1]:
+            msg = "sparse_matrix must be square."
+            raise ValueError(msg)
+        if length is None:
+            self.length = infer_chain_length(hilbert_dim, physical_dimension=self.physical_dimension)
+        else:
+            expected = self.physical_dimension**length
+            if hilbert_dim != expected:
+                msg = f"sparse_matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
+                raise ValueError(msg)
+            self.length = length
+        self._sparse_matrix = sparse
 
     @classmethod
     def from_mpo(cls, mpo: MPO) -> Hamiltonian:
@@ -273,11 +313,24 @@ class Hamiltonian:
             ),
         )
 
+    @staticmethod
+    def _warn_large_hilbert_dim(dim: int, *, action: str) -> None:
+        """Emit the same large-system RuntimeWarning used by ``preprocess_mcwf``."""
+        if dim <= _LARGE_HILBERT_DIM:
+            return
+        msg = (
+            f"Hilbert-space dimension {dim} is large when {action}. "
+            "This may be very slow or run out of memory. "
+            "Prefer an MPO preset, Hamiltonian.from_mpo(...), or tensors= for large TJM runs."
+        )
+        warnings.warn(msg, RuntimeWarning, stacklevel=3)
+
     def ensure_mpo(self) -> Hamiltonian:
         """Materialize and cache an MPO form (used by TJM / ``State.representation='mps'``).
 
         Dense and sparse sources are converted via :meth:`MPO.from_matrix` (sparse is densified
-        only when this path is requested).
+        only when this path is requested). Large Hilbert-space conversions emit a
+        ``RuntimeWarning`` matching the ``preprocess_mcwf`` threshold.
 
         Returns:
             ``self`` for chaining.
@@ -293,11 +346,16 @@ class Hamiltonian:
             self._mpo = mpo
             return self
         if self._matrix is not None:
+            self._warn_large_hilbert_dim(self._matrix.shape[0], action="factorizing a dense matrix into an MPO")
             self._mpo = MPO.from_matrix(self._matrix, self.physical_dimension)
             return self
         if self._sparse_matrix is not None:
+            dim = self._sparse_matrix.shape[0]
             if self._matrix is None:
+                self._warn_large_hilbert_dim(dim, action="densifying a sparse matrix to build an MPO")
                 self._matrix = self._sparse_matrix.toarray()
+            else:
+                self._warn_large_hilbert_dim(dim, action="factorizing a dense matrix into an MPO")
             self._mpo = MPO.from_matrix(self._matrix, self.physical_dimension)
             return self
         msg = "No Hamiltonian data available to build an MPO."
