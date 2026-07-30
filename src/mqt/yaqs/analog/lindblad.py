@@ -11,10 +11,9 @@ This module integrates the ensemble-averaged master equation (deterministic in r
 
     drho/dt = -i[H, rho] + sum_k ( L_k rho L_k^dag - 0.5 {L_k^dag L_k, rho} )
 
-MPS/MPO specify the initial pure state and Hamiltonian; the state is carried as a
-dense ``dim x dim`` matrix with ``dim = prod(physical_dimensions)``. With
-``noise_model=None`` (or zero strengths), the dissipator vanishes and evolution is
-unitary on rho.
+The state is carried as a dense ``dim x dim`` matrix with
+``dim = prod(physical_dimensions)``. With ``noise_model=None`` (or zero strengths),
+the dissipator vanishes and evolution is unitary on rho.
 
 Because ``H`` and the jump operators are time-independent, the generator is fixed.
 For small systems we precompute ``exp(L dt)`` where ``L`` is the Liouvillian
@@ -41,8 +40,6 @@ from .utils import _embed_observable_sparse, _embed_operator_sparse
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.mpo import MPO
-    from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -69,48 +66,30 @@ class LindbladContext:
 
 
 def preprocess_lindblad(
-    initial_state: MPS | None,
-    hamiltonian: MPO | None,
+    *,
+    rho_initial: NDArray[np.complex128],
+    h_sparse: scipy.sparse.spmatrix,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
-    *,
-    rho_initial: NDArray[np.complex128] | None = None,
-    num_sites: int | None = None,
+    num_sites: int,
     physical_dimensions: int | list[int] | None = None,
-    h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> LindbladContext:
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
 
     Args:
-        initial_state: The initial MPS state (converted to ``rho = |psi><psi|`` when no
-            ``rho_initial`` is passed), or ``None`` when ``rho_initial`` is supplied.
-        hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
+        rho_initial: Density matrix (square) or flattened vector for vec(rho).
+        h_sparse: Sparse Hamiltonian on the full Hilbert space.
         noise_model: The noise model.
         sim_params: Simulation parameters.
-        rho_initial: Optional density matrix (square) or flattened vector for vec(rho).
-        num_sites: Number of lattice sites when ``initial_state`` is ``None``.
-        physical_dimensions: Per-site physical dimensions used to validate dense
-            density matrices and sparse Hamiltonian sizes. Defaults to qubits.
-        h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
+        num_sites: Number of lattice sites.
+        physical_dimensions: Per-site physical dimensions. Defaults to qubits.
 
     Returns:
         LindbladContext ready for time evolution.
 
     Raises:
-        ValueError: If neither ``initial_state`` nor ``rho_initial`` is provided, or if
-            ``num_sites`` is missing when only ``rho_initial`` is given.
+        ValueError: If ``rho_initial`` or ``h_sparse`` has the wrong shape or zero trace.
     """
-    if initial_state is not None:
-        num_sites = initial_state.length
-        physical_dimensions = initial_state.physical_dimensions
-    elif rho_initial is not None:
-        if num_sites is None:
-            msg = "num_sites is required when preprocess_lindblad is called with rho_initial only."
-            raise ValueError(msg)
-    else:
-        msg = "preprocess_lindblad requires initial_state or rho_initial."
-        raise ValueError(msg)
-
     dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
     site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
@@ -123,44 +102,30 @@ def preprocess_lindblad(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial state as flattened vec(rho) (column-major order of the matrix).
-    if rho_initial is not None:
-        rho_arr = np.asarray(rho_initial, dtype=np.complex128)
-        if rho_arr.ndim == 2:
-            if rho_arr.shape != (dim, dim):
-                msg = f"rho_initial shape {rho_arr.shape} does not match ({dim}, {dim})."
-                raise ValueError(msg)
-            rho_mat = rho_arr
-        else:
-            if rho_arr.size != dim * dim:
-                msg = f"rho_initial size {rho_arr.size} does not match Hilbert dimension {dim * dim}."
-                raise ValueError(msg)
-            rho_mat = rho_arr.reshape(dim, dim, order="F")
-        trace = np.trace(rho_mat)
-        if np.isclose(trace, 0.0):
-            msg = "rho_initial must have non-zero trace."
+    rho_arr = np.asarray(rho_initial, dtype=np.complex128)
+    if rho_arr.ndim == 2:
+        if rho_arr.shape != (dim, dim):
+            msg = f"rho_initial shape {rho_arr.shape} does not match ({dim}, {dim})."
             raise ValueError(msg)
-        if not np.isclose(trace, 1.0):
-            rho_mat /= trace
-        rho_vec = np.asarray(rho_mat.flatten(order="F"), dtype=np.complex128)
+        rho_mat = rho_arr
     else:
-        assert initial_state is not None
-        psi = initial_state.to_vec()
-        rho_vec = np.asarray(np.outer(psi, psi.conj()).flatten(order="F"), dtype=np.complex128)
+        if rho_arr.size != dim * dim:
+            msg = f"rho_initial size {rho_arr.size} does not match Hilbert dimension {dim * dim}."
+            raise ValueError(msg)
+        rho_mat = rho_arr.reshape(dim, dim, order="F")
+    trace = np.trace(rho_mat)
+    if np.isclose(trace, 0.0):
+        msg = "rho_initial must have non-zero trace."
+        raise ValueError(msg)
+    if not np.isclose(trace, 1.0):
+        rho_mat /= trace
+    rho_vec = np.asarray(rho_mat.flatten(order="F"), dtype=np.complex128)
 
-    # 2. Hamiltonian as sparse matrix on the full Hilbert space.
-    if h_sparse is not None:
-        h_mat = scipy.sparse.csr_matrix(h_sparse)
-        if h_mat.shape != (dim, dim):
-            msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
-            raise ValueError(msg)
-    elif hamiltonian is not None:
-        h_mat = hamiltonian.to_sparse_matrix()
-    else:
-        msg = "preprocess_lindblad requires hamiltonian or h_sparse."
+    h_mat = scipy.sparse.csr_matrix(h_sparse)
+    if h_mat.shape != (dim, dim):
+        msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
         raise ValueError(msg)
 
-    # 3. Jump operators L_k = sqrt(gamma) * op on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []
     if noise_model is not None:
         for process in noise_model.processes:
@@ -172,14 +137,12 @@ def preprocess_lindblad(
 
     is_unitary = len(jump_ops) == 0
 
-    # 4. Precompute sum_k L_k^dag L_k for the dissipator anti-commutator (skipped if noiseless).
     l_dag_l_sum = scipy.sparse.csr_matrix((dim, dim), dtype=np.complex128)
     if jump_ops:
         for op in jump_ops:
             op_csr = cast("Any", op)
             l_dag_l_sum += op_csr.conj().T @ op_csr
 
-    # 5. Embed observables; MPS-only diagnostics are not traced on rho.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"entropy", "schmidt_spectrum"}:
@@ -187,7 +150,6 @@ def preprocess_lindblad(
         else:
             embedded_observables.append(_embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims))
 
-    # 6. Fixed-step propagator exp(L dt) when vec(rho) fits in memory (time-independent generator).
     step_propagator: NDArray[np.complex128] | None = None
     vec_dim = dim * dim
     if vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM:
@@ -446,25 +408,3 @@ def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None, ND
         rho_mat = rho_vec.reshape((ctx.dim, ctx.dim), order="F")
         return obs, None, rho_mat
     return obs, None, None
-
-
-def lindblad(
-    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
-) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
-    """Run an exact Lindblad master-equation simulation.
-
-    Args:
-        args: A tuple containing:
-            - int: Trajectory identifier (unused; evolution is deterministic in rho).
-            - MPS: The initial state.
-            - NoiseModel | None: The noise model.
-            - AnalogSimParams: Simulation parameters.
-            - MPO: The Hamiltonian.
-
-    Returns:
-        tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]: Observable data,
-        no diagnostics, and optional final density matrix when ``get_state`` is set.
-    """
-    _i, initial_state, noise_model, sim_params, hamiltonian = args
-    ctx = preprocess_lindblad(initial_state, hamiltonian, noise_model, sim_params)
-    return lindblad_evolve(ctx)

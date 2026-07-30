@@ -26,7 +26,6 @@ from mqt.yaqs import (
 )
 from mqt.yaqs.analog.lindblad import (
     MAX_LIOUVILLIAN_VECTOR_DIM,
-    lindblad,
     lindblad_evolve,
     preprocess_lindblad,
 )
@@ -196,7 +195,16 @@ def test_lindblad_zero_strength_noise_runs_via_simulator() -> None:
     obs = Observable("z", sites=[0])
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs])
 
-    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert len(ctx.jump_ops) == 0
     assert ctx.is_unitary
     dim = 2**n_sites
@@ -237,7 +245,16 @@ def test_preprocess_lindblad_sets_propagator_small_system() -> None:
         elapsed_time=0.1,
         observables=[Observable("z", sites=[0])],
     )
-    ctx = preprocess_lindblad(psi, h, None, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=None,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     vec_dim = (2**n_sites) ** 2
     assert vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM
     assert ctx.step_propagator is not None
@@ -254,7 +271,16 @@ def test_lindblad_noisy_small_system_has_propagator() -> None:
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
-    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert not ctx.is_unitary
     assert ctx.step_propagator is not None
 
@@ -312,7 +338,16 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
         dt=0.05,
         sample_timesteps=True,
     )
-    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert ctx.step_propagator is not None
 
     state = State(n_sites, initial="ones", representation="density_matrix")
@@ -346,7 +381,16 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
         get_state=True,
     )
 
-    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert ctx.step_propagator is None
 
     state = State(n_sites, initial="ones", representation="density_matrix")
@@ -379,7 +423,16 @@ def test_lindblad_evolve_get_state_false_returns_no_matrix() -> None:
         get_state=False,
         sample_timesteps=False,
     )
-    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    psi_vec = psi.to_vec()
+    rho0 = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho0,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     obs, diag, rho = lindblad_evolve(ctx)
     assert obs.shape == (1, 1)
     assert diag is None
@@ -397,7 +450,16 @@ def test_rho_vec_at_elapsed_time_returns_initial_state_at_zero() -> None:
         dt=0.1,
         get_state=True,
     )
-    ctx = preprocess_lindblad(psi, h, None, sim_params)
+    psi_vec = psi.to_vec()
+    rho = np.outer(psi_vec, psi_vec.conj())
+    ctx = preprocess_lindblad(
+        rho_initial=rho,
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=None,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     rho_vec = lindblad_mod._rho_vec_at_elapsed_time(ctx)
     np.testing.assert_allclose(rho_vec, ctx.rho_initial)
 
@@ -406,7 +468,6 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
     """Fractional elapsed times use an extra ``expm(L * remainder)`` after full ``dt`` steps."""
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
-    psi = MPS(n_sites, state="ones")
     h = MPO.identity(n_sites)
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
@@ -425,12 +486,12 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
         get_state=True,
     )
     ctx = preprocess_lindblad(
-        psi,
-        hamiltonian.mpo,
-        noise,
-        sim_params,
         rho_initial=initial_state.density_matrix,
+        h_sparse=hamiltonian.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
         num_sites=n_sites,
+        physical_dimensions=initial_state.physical_dimensions,
     )
     assert ctx.step_propagator is not None
     rho_vec = lindblad_mod._rho_vec_at_elapsed_time(ctx)
@@ -440,30 +501,3 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
         dtype=np.complex128,
     )
     np.testing.assert_allclose(rho, expected, atol=1e-4)
-
-
-def test_lindblad_entry_point_returns_density_matrix() -> None:
-    """The ``lindblad`` worker entry point forwards ``get_state`` output."""
-    n_sites = 1
-    psi = MPS(n_sites, state="ones")
-    h = MPO.identity(n_sites)
-    for i in range(len(h.tensors)):
-        h.tensors[i] *= 0.0
-    noise = NoiseModel(
-        processes=[
-            {"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
-        ],
-    )
-    sim_params = AnalogSimParams(
-        observables=[Observable("z", sites=[0])],
-        elapsed_time=0.2,
-        dt=0.1,
-        get_state=True,
-        sample_timesteps=False,
-    )
-    obs, diag, rho = lindblad((0, psi, noise, sim_params, h))
-    assert obs.shape == (1, 1)
-    assert diag is None
-    assert rho is not None
-    assert rho.shape == (2, 2)
-    assert np.isclose(np.trace(rho), 1.0)

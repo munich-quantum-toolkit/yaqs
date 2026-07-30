@@ -63,7 +63,6 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.mpo import MPO
     from .core.data_structures.mps import MPS
     from .core.parallel_utils import MPContext
@@ -246,31 +245,14 @@ def _materialized_mps(state: State) -> MPS | None:
         return None
 
 
-def _hamiltonian_backend_target(state_rep: str) -> str:
-    """Internal storage target for ``Hamiltonian`` given ``State.representation``.
-
-    Returns:
-        ``"sparse"`` for vector or density-matrix states, otherwise ``"mpo"``.
-    """
-    if state_rep in {"vector", "density_matrix"}:
-        return "sparse"
-    return "mpo"
-
-
 def _validate_state_hamiltonian_pairing(state: State, hamiltonian: Hamiltonian) -> None:
     """Check ``State`` and ``Hamiltonian`` can be evolved together.
 
     Raises:
-        ValueError: If representations or lengths are incompatible.
+        ValueError: If lengths are incompatible.
     """
     if state.length != hamiltonian.length:
         msg = f"State.length={state.length} does not match Hamiltonian.length={hamiltonian.length}."
-        raise ValueError(msg)
-    if state.representation == "mps" and hamiltonian.representation != "mpo":
-        msg = (
-            "TJM simulation requires Hamiltonian.representation='mpo'. "
-            "Use State.representation='vector' or 'density_matrix' for matrix Hamiltonians."
-        )
         raise ValueError(msg)
 
 
@@ -278,16 +260,16 @@ def _prepare_hamiltonian_for_run(
     hamiltonian: Hamiltonian,
     state_rep: str,
 ) -> tuple[MPO | None, Any]:
-    """Ensure ``hamiltonian`` is encoded for the backend matching ``state_rep``.
+    """Ensure ``hamiltonian`` is converted for the backend matching ``state_rep``.
 
     Returns:
         ``(mpo, h_sparse)`` with one entry set for the active backend.
     """
-    target = _hamiltonian_backend_target(state_rep)
-    hamiltonian.ensure_encoded(cast("Representation", target))
-    if target == "mpo":
-        return hamiltonian.mpo, None
-    return None, hamiltonian.sparse_matrix
+    if state_rep in {"vector", "density_matrix"}:
+        hamiltonian.ensure_sparse()
+        return None, hamiltonian.sparse_matrix
+    hamiltonian.ensure_mpo()
+    return hamiltonian.mpo, None
 
 
 def _prepare_result_observables(
@@ -687,7 +669,7 @@ class Simulator:
             if any(spec.representation != "mps" for spec in initial_state_list):
                 msg = "list[State] analog ensemble currently supports only State.representation='mps'."
                 raise ValueError(msg)
-            operator.ensure_encoded("mpo")
+            operator.ensure_mpo()
             for spec in initial_state_list:
                 spec.ensure_encoded("mps")
                 _validate_state_hamiltonian_pairing(spec, operator)
@@ -740,27 +722,23 @@ class Simulator:
 
         if state_rep == "vector":
             ctx = preprocess_mcwf(
-                None,
-                None,
-                noise_model,
-                worker_params,
                 psi_initial=initial_state.vector,
+                h_sparse=h_sparse,
+                noise_model=noise_model,
+                sim_params=worker_params,
                 num_sites=initial_state.length,
                 physical_dimensions=initial_state.physical_dimensions,
-                h_sparse=h_sparse,
             )
             payload = {"ctx": ctx}
             worker_fn = _mcwf_worker
         elif state_rep == "density_matrix":
             lindblad_ctx = preprocess_lindblad(
-                None,
-                None,
-                noise_model,
-                worker_params,
                 rho_initial=initial_state.density_matrix,
+                h_sparse=h_sparse,
+                noise_model=noise_model,
+                sim_params=worker_params,
                 num_sites=initial_state.length,
                 physical_dimensions=initial_state.physical_dimensions,
-                h_sparse=h_sparse,
             )
             payload = {"ctx": lindblad_ctx}
             worker_fn = _lindblad_ctx_worker

@@ -8,8 +8,7 @@
 """Monte Carlo wavefunction (MCWF) evolution for ``representation='vector'``.
 
 This module implements a stochastic unraveling of the Lindblad master equation for
-small systems. MPS/MPO inputs are contracted to a dense state vector and sparse
-operators; the trajectory is evolved in Hilbert space (not in a tensor network).
+small systems. Evolution uses a dense state vector and sparse operators.
 
 Effective non-Hermitian dynamics between jumps:
 
@@ -42,8 +41,6 @@ from ..core.random_utils import make_trajectory_rng
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.mpo import MPO
-    from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -71,51 +68,33 @@ class MCWFContext:
 
 
 def preprocess_mcwf(
-    initial_state: MPS | None,
-    hamiltonian: MPO | None,
+    *,
+    psi_initial: NDArray[np.complex128],
+    h_sparse: scipy.sparse.spmatrix,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
-    *,
-    psi_initial: NDArray[np.complex128] | None = None,
-    num_sites: int | None = None,
+    num_sites: int,
     physical_dimensions: int | list[int] | None = None,
-    h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
-    Called once per :meth:`Simulator.run` before trajectory workers start (see
-    ``preprocess_mcwf`` in ``simulator.py``).
+    Called once per :meth:`Simulator.run` before trajectory workers start.
 
     Args:
-        initial_state: The initial MPS state, or ``None`` when ``psi_initial`` is supplied.
-        hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
+        psi_initial: Dense state vector (unit norm applied here).
+        h_sparse: Sparse Hamiltonian on the full Hilbert space.
         noise_model: The noise model.
         sim_params: Simulation parameters.
-        psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
-        num_sites: Number of lattice sites when ``initial_state`` is ``None``.
-        physical_dimensions: Per-site physical dimensions used to validate dense
-            vector and sparse Hamiltonian sizes. Defaults to qubits.
-        h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
+        num_sites: Number of lattice sites.
+        physical_dimensions: Per-site physical dimensions. Defaults to qubits.
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
 
     Raises:
-        ValueError: If neither ``initial_state`` nor ``psi_initial`` is provided, if
-            ``num_sites`` is missing when only ``psi_initial`` is given, if
-            ``psi_initial`` has the wrong Hilbert-space size, or if ``psi_initial`` has zero norm.
+        ValueError: If ``psi_initial`` has the wrong Hilbert-space size or zero norm, or if
+            ``h_sparse`` has the wrong shape.
     """
-    if initial_state is not None:
-        num_sites = initial_state.length
-        physical_dimensions = initial_state.physical_dimensions
-    elif psi_initial is not None:
-        if num_sites is None:
-            msg = "num_sites is required when preprocess_mcwf is called with psi_initial only."
-            raise ValueError(msg)
-    else:
-        msg = "preprocess_mcwf requires initial_state or psi_initial."
-        raise ValueError(msg)
-
     dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
     site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
@@ -127,35 +106,21 @@ def preprocess_mcwf(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial state |psi> as dense vector.
-    if psi_initial is not None:
-        psi = np.asarray(psi_initial, dtype=np.complex128).reshape(-1)
-        if psi.size != dim:
-            msg = f"psi_initial size {psi.size} does not match Hilbert dimension {dim}."
-            raise ValueError(msg)
-        norm = np.linalg.norm(psi)
-        if np.isclose(norm, 0.0):
-            msg = "psi_initial must have non-zero norm."
-            raise ValueError(msg)
-        psi /= norm
-    else:
-        assert initial_state is not None
-        psi = initial_state.to_vec()
-        psi /= np.linalg.norm(psi)
+    psi = np.asarray(psi_initial, dtype=np.complex128).reshape(-1)
+    if psi.size != dim:
+        msg = f"psi_initial size {psi.size} does not match Hilbert dimension {dim}."
+        raise ValueError(msg)
+    norm = np.linalg.norm(psi)
+    if np.isclose(norm, 0.0):
+        msg = "psi_initial must have non-zero norm."
+        raise ValueError(msg)
+    psi /= norm
 
-    # 2. Hamiltonian as sparse matrix on the full Hilbert space.
-    if h_sparse is not None:
-        h_mat = scipy.sparse.csr_matrix(h_sparse)
-        if h_mat.shape != (dim, dim):
-            msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
-            raise ValueError(msg)
-    elif hamiltonian is not None:
-        h_mat = hamiltonian.to_sparse_matrix()
-    else:
-        msg = "preprocess_mcwf requires hamiltonian or h_sparse."
+    h_mat = scipy.sparse.csr_matrix(h_sparse)
+    if h_mat.shape != (dim, dim):
+        msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
         raise ValueError(msg)
 
-    # 3. Jump operators L_k = sqrt(gamma) * op embedded on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []
     if noise_model is not None:
         for process in noise_model.processes:
@@ -167,7 +132,6 @@ def preprocess_mcwf(
 
     is_unitary = len(jump_ops) == 0
 
-    # 4. Effective Hamiltonian for the no-jump evolution between stochastic events.
     heff = h_mat.copy()
     if jump_ops:
         sum_ldag_l = scipy.sparse.csr_matrix((dim, dim), dtype=complex)
@@ -176,7 +140,6 @@ def preprocess_mcwf(
             sum_ldag_l += op_csr.conj().T @ op_csr
         heff -= 0.5j * sum_ldag_l
 
-    # 5. Fixed-step propagator U_step = exp(-i H_eff dt) (time-independent H in YAQS).
     step_propagator: NDArray[np.complex128] | None = None
     if dim <= MAX_PRECOMPUTE_DIM:
         h_dense = heff.toarray()
@@ -185,7 +148,6 @@ def preprocess_mcwf(
         else:
             step_propagator = linalg.expm(-1j * sim_params.dt * h_dense)
 
-    # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"entropy", "schmidt_spectrum"}:

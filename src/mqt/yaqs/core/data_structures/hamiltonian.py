@@ -15,10 +15,8 @@ import numpy as np
 import scipy.sparse
 
 from .hamiltonian_utils import (
-    Representation,
     attach_mpo,
     sparse_to_csr,
-    validate_representation,
 )
 from .mpo import MPO
 from .state_utils import infer_chain_length
@@ -26,28 +24,25 @@ from .state_utils import infer_chain_length
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-__all__ = ["Hamiltonian", "Representation"]
+__all__ = ["Hamiltonian"]
 
 
 class Hamiltonian:
     """Hamiltonian for :meth:`~mqt.yaqs.Simulator.run` (analog evolution).
 
     Build via classmethods (``ising``, ``pauli``, …) or pass ``tensors`` / ``matrix`` /
-    ``sparse_matrix``. Materialization happens at construction; reuse the same instance across
-    ``run`` loops.
+    ``sparse_matrix``. These choices describe **source data**, not the simulation backend.
 
     Pair with :class:`~mqt.yaqs.core.data_structures.state.State`: the state's
-    ``representation`` selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` → MCWF /
-    sparse, ``"density_matrix"`` → Lindblad / sparse). Preset factories always build an MPO;
-    :meth:`~mqt.yaqs.Simulator.run` materializes a sparse matrix when needed. Manual
-    ``matrix`` / ``sparse_matrix`` Hamiltonians cannot drive TJM.
+    ``representation`` alone selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` →
+    MCWF / sparse, ``"density_matrix"`` → Lindblad / sparse).
+    :meth:`~mqt.yaqs.Simulator.run` converts and caches the required MPO or sparse form.
     """
 
     def __init__(
         self,
         length: int | None = None,
         *,
-        representation: Representation | None = None,
         tensors: list[NDArray[np.complex128]] | None = None,
         matrix: NDArray[np.complex128] | None = None,
         sparse_matrix: scipy.sparse.spmatrix | None = None,
@@ -55,15 +50,14 @@ class Hamiltonian:
     ) -> None:
         """Build a Hamiltonian from manual tensor or matrix data.
 
-        For preset Hamiltonians use :meth:`ising`, :meth:`hamiltonian`, etc.
+        For preset Hamiltonians use :meth:`ising`, :meth:`heisenberg`, etc.
 
         Args:
             length: Number of sites. Inferred from ``len(tensors)`` or matrix dimension when omitted.
-            representation: Only for ambiguous cases; usually inferred from manual data.
-            tensors: MPO tensor cores; infers ``representation="mpo"``.
-            matrix: Dense operator matrix; infers ``representation="dense"``.
-            sparse_matrix: Sparse operator; infers ``representation="sparse"``.
-            physical_dimension: Local Hilbert-space dimension for MPO construction from ``tensors``.
+            tensors: MPO tensor cores.
+            matrix: Dense operator matrix.
+            sparse_matrix: Sparse operator.
+            physical_dimension: Local Hilbert-space dimension (uniform sites).
 
         Raises:
             ValueError: If no manual data is given, data are mutually exclusive, shapes are invalid,
@@ -82,9 +76,7 @@ class Hamiltonian:
         self._tensors: list[NDArray[np.complex128]] | None = None
         self._matrix: NDArray[np.complex128] | None = None
         self._sparse_matrix: scipy.sparse.csr_matrix | None = None
-        self.representation: Representation
         self._mpo: MPO | None = None
-        self._encoded_as: Representation | None = None
 
         if tensors is not None:
             if len(tensors) == 0:
@@ -96,10 +88,7 @@ class Hamiltonian:
                 raise ValueError(msg)
             self.length = n_sites if length is None else length
             self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
-            if representation is not None and representation != "mpo":
-                msg = "representation is inferred as 'mpo' from tensors=; omit representation=."
-                raise ValueError(msg)
-            self.representation = "mpo"
+            self.ensure_mpo()
         elif matrix is not None:
             mat = np.asarray(matrix, dtype=np.complex128)
             if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
@@ -115,10 +104,6 @@ class Hamiltonian:
                     raise ValueError(msg)
                 self.length = length
             self._matrix = mat
-            if representation is not None and representation != "dense":
-                msg = "representation is inferred as 'dense' from matrix=; omit representation=."
-                raise ValueError(msg)
-            self.representation = "dense"
         else:
             assert sparse_matrix is not None
             sparse = sparse_to_csr(sparse_matrix)
@@ -135,16 +120,10 @@ class Hamiltonian:
                     raise ValueError(msg)
                 self.length = length
             self._sparse_matrix = sparse
-            if representation is not None and representation != "sparse":
-                msg = "representation is inferred as 'sparse' from sparse_matrix=; omit representation=."
-                raise ValueError(msg)
-            self.representation = "sparse"
-
-        self._encode(self.representation)
 
     @classmethod
     def from_mpo(cls, mpo: MPO) -> Hamiltonian:
-        """Wrap an existing :class:`MPO` (already encoded as ``"mpo"``).
+        """Wrap an existing :class:`MPO`.
 
         Returns:
             A :class:`Hamiltonian` referencing ``mpo``.
@@ -169,7 +148,7 @@ class Hamiltonian:
         """Transverse-field Ising Hamiltonian (delegates to :meth:`MPO.ising`).
 
         Returns:
-            A :class:`Hamiltonian` with ``representation="mpo"``.
+            A :class:`Hamiltonian` wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.ising(
@@ -202,7 +181,7 @@ class Hamiltonian:
         """Heisenberg Hamiltonian (delegates to :meth:`MPO.heisenberg`).
 
         Returns:
-            A :class:`Hamiltonian` with ``representation="mpo"``.
+            A :class:`Hamiltonian` wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.heisenberg(
@@ -235,7 +214,7 @@ class Hamiltonian:
         """Pauli-string Hamiltonian from one- and two-body terms (delegates to :meth:`MPO.pauli`).
 
         Returns:
-            A :class:`Hamiltonian` with ``representation="mpo"``.
+            A :class:`Hamiltonian` wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.pauli(
@@ -262,7 +241,7 @@ class Hamiltonian:
         """1D Fermi-Hubbard Hamiltonian (delegates to :meth:`MPO.fermi_hubbard_1d`).
 
         Returns:
-            A :class:`Hamiltonian` with ``representation="mpo"``.
+            A :class:`Hamiltonian` wrapping the constructed MPO.
         """
         return cls.from_mpo(MPO.fermi_hubbard_1d(length, t=t, u=u, jordan_wigner=jordan_wigner))
 
@@ -280,7 +259,7 @@ class Hamiltonian:
         """Coupled transmon-resonator chain (delegates to :meth:`MPO.coupled_transmon`).
 
         Returns:
-            A :class:`Hamiltonian` with ``representation="mpo"``.
+            A :class:`Hamiltonian` wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.coupled_transmon(
@@ -294,39 +273,74 @@ class Hamiltonian:
             ),
         )
 
-    def _build_mpo(self) -> MPO:
-        """Build or return the MPO representation.
+    def ensure_mpo(self) -> Hamiltonian:
+        """Materialize and cache an MPO form (used by TJM / ``State.representation='mps'``).
+
+        Dense and sparse sources are converted via :meth:`MPO.from_matrix` (sparse is densified
+        only when this path is requested).
 
         Returns:
-            The materialized :class:`MPO`.
+            ``self`` for chaining.
 
         Raises:
-            ValueError: If this Hamiltonian was created from matrix data only.
+            ValueError: If no data is available to build an MPO.
         """
-        if self._mpo is None:
-            if self._matrix is not None or self._sparse_matrix is not None:
-                msg = "Cannot build an MPO from matrix or sparse_matrix data; use tensors= or a preset classmethod."
-                raise ValueError(msg)
-            if self._tensors is None:
-                msg = "No MPO specification available."
-                raise ValueError(msg)
+        if self._mpo is not None:
+            return self
+        if self._tensors is not None:
             mpo = MPO()
             mpo.custom([np.asarray(t, dtype=np.complex128) for t in self._tensors])
             self._mpo = mpo
-        return self._mpo
+            return self
+        if self._matrix is not None:
+            self._mpo = MPO.from_matrix(self._matrix, self.physical_dimension)
+            return self
+        if self._sparse_matrix is not None:
+            if self._matrix is None:
+                self._matrix = self._sparse_matrix.toarray()
+            self._mpo = MPO.from_matrix(self._matrix, self.physical_dimension)
+            return self
+        msg = "No Hamiltonian data available to build an MPO."
+        raise ValueError(msg)
+
+    def ensure_sparse(self) -> Hamiltonian:
+        """Materialize and cache a sparse matrix (used by MCWF / Lindblad).
+
+        Prefers the authoritative dense matrix when present so a later sparse
+        conversion after ``ensure_mpo()`` does not rebuild from a possibly
+        truncated MPO.
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            ValueError: If no data is available to build a sparse matrix.
+        """
+        if self._sparse_matrix is not None:
+            return self
+        if self._matrix is not None:
+            self._sparse_matrix = scipy.sparse.csr_matrix(self._matrix)
+            return self
+        if self._mpo is not None:
+            self._sparse_matrix = sparse_to_csr(self._mpo.to_sparse_matrix())
+            return self
+        if self._tensors is not None:
+            self.ensure_mpo()
+            assert self._mpo is not None
+            self._sparse_matrix = sparse_to_csr(self._mpo.to_sparse_matrix())
+            return self
+        msg = "Cannot build sparse matrix from Hamiltonian specification."
+        raise ValueError(msg)
 
     @property
     def mpo(self) -> MPO:
         """Cached MPO, if one has been materialized.
 
-        Remains available after :meth:`ensure_encoded` builds an additional sparse or
-        dense form for MCWF / Lindblad.
-
         Raises:
-            RuntimeError: If no MPO has been materialized (e.g. dense/sparse-only init).
+            RuntimeError: If no MPO has been materialized yet; call :meth:`ensure_mpo`.
         """
         if self._mpo is None:
-            msg = f"MPO is not available for representation={self.representation!r}."
+            msg = "MPO is not available; call ensure_mpo() first."
             raise RuntimeError(msg)
         return self._mpo
 
@@ -334,13 +348,11 @@ class Hamiltonian:
     def sparse_matrix(self) -> scipy.sparse.csr_matrix:
         """Cached sparse matrix, if one has been materialized.
 
-        Remains available after further :meth:`ensure_encoded` calls that build other forms.
-
         Raises:
-            RuntimeError: If no sparse matrix has been materialized yet.
+            RuntimeError: If no sparse matrix has been materialized yet; call :meth:`ensure_sparse`.
         """
         if self._sparse_matrix is None:
-            msg = f"Sparse matrix is not available for representation={self.representation!r}."
+            msg = "Sparse matrix is not available; call ensure_sparse() first."
             raise RuntimeError(msg)
         return self._sparse_matrix
 
@@ -348,70 +360,16 @@ class Hamiltonian:
     def matrix(self) -> NDArray[np.complex128]:
         """Cached dense matrix, if one has been materialized.
 
-        Remains available after further :meth:`ensure_encoded` calls that build other forms.
-
         Raises:
             RuntimeError: If no dense matrix has been materialized yet.
         """
         if self._matrix is None:
-            msg = f"Dense matrix is not available for representation={self.representation!r}."
+            msg = "Dense matrix is not available."
             raise RuntimeError(msg)
         return self._matrix
 
-    def _encode(self, representation: Representation | None = None) -> Hamiltonian:
-        """Materialize internal storage for the requested representation.
-
-        Returns:
-            ``self`` for chaining.
-
-        Raises:
-            ValueError: If the requested representation cannot be built from the specification.
-        """
-        rep: Representation = self.representation if representation is None else validate_representation(representation)
-        if self._encoded_as == rep:
-            if rep == "mpo" and self._mpo is not None:
-                return self
-            if rep == "sparse" and self._sparse_matrix is not None:
-                return self
-            if rep == "dense" and self._matrix is not None:
-                return self
-
-        if rep == "mpo":
-            self._build_mpo()
-        elif rep == "sparse":
-            if self._sparse_matrix is None:
-                if self._mpo is not None:
-                    self._sparse_matrix = sparse_to_csr(self._mpo.to_sparse_matrix())
-                elif self._matrix is not None:
-                    self._sparse_matrix = scipy.sparse.csr_matrix(self._matrix)
-                else:
-                    msg = "Cannot build sparse matrix from Hamiltonian specification."
-                    raise ValueError(msg)
-        elif rep == "dense":
-            if self._matrix is None:
-                if self._sparse_matrix is not None:
-                    self._matrix = self._sparse_matrix.toarray()
-                elif self._mpo is not None:
-                    self._matrix = self._mpo.to_matrix()
-                else:
-                    msg = "Cannot build dense matrix from Hamiltonian specification."
-                    raise ValueError(msg)
-        else:
-            msg = f"Unknown representation: {rep!r}"
-            raise ValueError(msg)
-        self._encoded_as = rep
-        return self
-
-    def ensure_encoded(self, representation: Representation | None = None) -> Hamiltonian:
-        """Materialize ``representation`` if needed (used by :meth:`~mqt.yaqs.Simulator.run`).
-
-        Returns:
-            ``self`` for chaining.
-        """
-        return self._encode(representation)
-
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Dense matrix (converts from cached MPO/sparse without changing :attr:`representation`).
+        """Dense matrix (converts from cached MPO/sparse without requiring prior encode).
 
         Returns:
             Dense Hamiltonian matrix on the full Hilbert space.
@@ -429,7 +387,9 @@ class Hamiltonian:
         raise RuntimeError(msg)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """Sparse matrix (converts from cached forms without changing :attr:`representation`).
+        """Sparse matrix (converts from cached forms; does not mutate caches).
+
+        Prefer :meth:`ensure_sparse` when the sparse form should be cached for reuse.
 
         Returns:
             Sparse Hamiltonian matrix on the full Hilbert space.
