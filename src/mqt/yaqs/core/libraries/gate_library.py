@@ -1681,6 +1681,30 @@ class LocalOperator(BaseGate):
         self.interaction = 1
 
 
+class Position(LocalOperator):
+    """One-site position operator for a supplied position basis."""
+
+    name = "position"
+
+    def __init__(self, *, positions: ArrayLike) -> None:
+        """Create a position operator that is diagonal in the supplied basis.
+
+        Args:
+            positions: One-dimensional position values defining the local basis.
+
+        Raises:
+            ValueError: If ``positions`` is not a non-empty, finite one-dimensional array.
+        """
+        position_values = np.asarray(positions, dtype=np.float64)
+        if position_values.ndim != 1 or position_values.size == 0:
+            msg = "positions must be a non-empty one-dimensional array."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(position_values)):
+            msg = "positions must contain only finite values."
+            raise ValueError(msg)
+        super().__init__(np.diag(position_values))
+
+
 class Entropy(BaseGate):
     """Meta-observable for bipartite entanglement entropy across a cut.
 
@@ -1793,6 +1817,7 @@ class GateLibrary:
         p1: Class for projector ``|1⟩⟨1|``.
         pvm: Class for projection-valued measurement onto a given bitstring.
         local: Class for arbitrary one-site local operators.
+        position: Class for a one-site position operator in a supplied position basis.
 
         entropy:      Class representing a request for bipartite entanglement entropy across a cut.
         schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
@@ -1844,6 +1869,7 @@ class GateLibrary:
     p1 = P1
     pvm = PVM
     local = LocalOperator
+    position = Position
 
     entropy = Entropy
     schmidt_spectrum = SchmidtSpectrum

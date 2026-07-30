@@ -74,6 +74,54 @@ def test_observable_accepts_custom_local_matrix() -> None:
     assert obs.sites == 0
 
 
+def test_observable_accepts_named_position_operator() -> None:
+    """Position observables build a diagonal local operator from the supplied basis."""
+    positions = np.array([-1.5, 0.0, 2.5])
+
+    obs = Observable("position", 1, positions=positions)
+
+    assert obs.gate.name == "position"
+    assert obs.gate.interaction == 1
+    np.testing.assert_allclose(obs.gate.matrix, np.diag(positions))
+    assert obs.sites == 1
+
+
+def test_position_observable_requires_positions() -> None:
+    """Position observables require their basis values as a keyword argument."""
+    with pytest.raises(TypeError, match="required keyword-only argument: 'positions'"):
+        Observable("position", 0)
+
+
+@pytest.mark.parametrize(
+    ("gate", "kwargs", "match"),
+    [
+        ("position", {"position_values": [0.0, 1.0]}, "unexpected keyword argument 'position_values'"),
+        ("z", {"positions": [0.0, 1.0]}, "unexpected keyword argument 'positions'"),
+    ],
+)
+def test_named_observable_rejects_unexpected_parameters(
+    gate: str,
+    kwargs: dict[str, object],
+    match: str,
+) -> None:
+    """Named observable factories reject misspelled or inapplicable parameters."""
+    with pytest.raises(TypeError, match=match):
+        Observable(gate, 0, **kwargs)
+
+
+def test_matrix_observable_rejects_named_parameters() -> None:
+    """Factory parameters cannot be supplied with a matrix observable."""
+    with pytest.raises(TypeError, match="only supported for named observables"):
+        Observable(np.eye(2), 0, positions=[0.0, 1.0])
+
+
+@pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan])])
+def test_position_observable_rejects_invalid_positions(positions: np.ndarray) -> None:
+    """Position bases must be non-empty and finite."""
+    with pytest.raises(ValueError, match="positions must"):
+        Observable("position", 0, positions=positions)
+
+
 @pytest.mark.parametrize("matrix", [np.ones(3), np.ones((2, 3))])
 def test_observable_rejects_invalid_custom_local_matrix(matrix: np.ndarray) -> None:
     """Matrix observables must be two-dimensional and square."""
@@ -410,14 +458,13 @@ def test_observable_from_string_falls_back_to_pvm() -> None:
     assert np.allclose(obs.gate.matrix, np.eye(2))
 
 
-@pytest.mark.parametrize("gate_name", ["pvm", "rx"])
-def test_observable_from_non_default_constructible_string_falls_back_to_pvm(gate_name: str) -> None:
-    """PVM and parameterized gate names use the string as a measurement bitstring."""
-    obs = Observable(gate_name)
+def test_observable_from_explicit_pvm_string_falls_back_to_pvm() -> None:
+    """The explicit PVM name retains its historical string-resolution behavior."""
+    obs = Observable("pvm")
 
     assert obs.gate.name == "pvm"
     assert hasattr(obs.gate, "bitstring")
-    assert obs.gate.bitstring == gate_name
+    assert obs.gate.bitstring == "pvm"
 
 
 def test_observable_from_gate_instance_keeps_gate_and_sites_int() -> None:

@@ -44,7 +44,7 @@ initial_grid_state /= np.linalg.norm(initial_grid_state)
 
 hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ion(positions, masses=[1.0], omega=omega))
 state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim])
-position_observable = Observable(np.diag(positions), 0)
+position_observable = Observable("position", 0, positions=positions)
 ```
 
 ## 2. Noiseless evolution to $T/2$

@@ -526,7 +526,7 @@ def test_trapped_ion_one_ion_position_observable_centers_on_trap() -> None:
         physical_dimensions=[positions.size],
     )
 
-    position = Observable(np.diag(positions), 0)
+    position = Observable("position", 0, positions=positions)
 
     np.testing.assert_allclose(mps.expect(position), trap_center, atol=6e-2)
 

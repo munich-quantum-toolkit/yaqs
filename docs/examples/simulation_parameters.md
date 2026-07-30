@@ -34,12 +34,16 @@ do not import gate classes for standard measurements.
 | `"x"`, `"y"`, `"z"`            | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
 | `"h"`, `"s"`, `"t"`, `"rx"`, … | Other single-qubit gates from the built-in library             | `Observable("h", sites=0)`                  |
 | `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
+| `"position"`                   | Position operator for a supplied local position basis          | `Observable("position", 0, positions=grid)` |
 | `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
 | `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
 | bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`strong_simulation`                |
 
 For custom unitaries and circuit gates, use {doc}`custom_gates` — those
 workflows still use `GateLibrary` or Qiskit circuits directly.
+
+Named observables that require configuration accept keyword-only factory arguments. Missing or unknown arguments raise
+`TypeError`, so misspelled parameters are not silently ignored.
 
 ## Start with a preset
 

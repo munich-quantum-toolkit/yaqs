@@ -233,31 +233,45 @@ class Observable:
         sites: The site or site indices on which this observable is measured.
     """
 
-    def __init__(self, gate: BaseGate | str | ArrayLike, sites: int | list[int] | None = None) -> None:
+    def __init__(
+        self,
+        gate: BaseGate | str | ArrayLike,
+        sites: int | list[int] | None = None,
+        **gate_kwargs: object,
+    ) -> None:
         """Initializes an Observable instance.
 
         Args:
             gate: The gate or one-site local matrix that will act as the observable.
             sites: The qubit or site indices on which this observable is measured.
+            **gate_kwargs: Keyword-only arguments for a named gate or observable factory.
+
+        Raises:
+            TypeError: If factory arguments are missing, unexpected, or supplied for a gate instance or matrix.
         """
         if isinstance(gate, str):
-            if gate == "entropy":
-                resolved_gate = GateLibrary.entropy()
-            elif gate == "schmidt_spectrum":
-                resolved_gate = GateLibrary.schmidt_spectrum()
-            elif gate == "pvm":
+            if gate == "pvm":
+                if gate_kwargs:
+                    msg = "'pvm' does not accept observable parameters."
+                    raise TypeError(msg)
                 resolved_gate = GateLibrary.pvm(gate)
             elif hasattr(GateLibrary, gate):
                 attr = getattr(GateLibrary, gate)
-                try:
-                    resolved_gate = attr()
-                except TypeError:
-                    resolved_gate = GateLibrary.pvm(gate)
+                resolved_gate = attr(**gate_kwargs)
             else:
+                if gate_kwargs:
+                    msg = f"Unknown observable {gate!r} does not accept observable parameters."
+                    raise TypeError(msg)
                 resolved_gate = GateLibrary.pvm(gate)
         elif isinstance(gate, BaseGate):
+            if gate_kwargs:
+                msg = "Observable parameters are only supported for named observables."
+                raise TypeError(msg)
             resolved_gate = gate
         else:
+            if gate_kwargs:
+                msg = "Observable parameters are only supported for named observables."
+                raise TypeError(msg)
             resolved_gate = GateLibrary.local(gate)
         assert hasattr(GateLibrary, resolved_gate.name), f"Observable {resolved_gate.name} not found in GateLibrary."
         self.gate: BaseGate = copy.deepcopy(resolved_gate)

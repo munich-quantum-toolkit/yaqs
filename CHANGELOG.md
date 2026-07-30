@@ -13,7 +13,7 @@ releases may include breaking changes.
 ### Added
 
 - added custom one-site matrix observables for non-qubit local dimensions
-  ([#497]) ([**@linusschulte**])
+ , including named position observables ([#497]) ([**@linusschulte**])
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
 
