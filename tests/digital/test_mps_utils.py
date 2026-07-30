@@ -18,7 +18,7 @@ from qiskit.quantum_info import Statevector
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, Z
 from mqt.yaqs.digital.digital_tjm import apply_long_range_gate_mpo, apply_two_qubit_gate_tebd
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def _sim_params() -> StrongSimParams:
-    return StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
+def _sim_params() -> DigitalSimParams:
+    return DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
 
 
 def _gate_from_circuit(qc: QuantumCircuit, *, op_name: str | None = None) -> BaseGate:
@@ -203,7 +203,7 @@ def test_swap_via_mpo_matches_tebd() -> None:
     length = 4
     swap = GateLibrary.swap()
     swap.set_sites(1, 2)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
 
     mpo_path = MPS(length, state="basis", basis_string="1010")
     mpo_path.normalize()

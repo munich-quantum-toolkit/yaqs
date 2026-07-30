@@ -12,15 +12,15 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Weak Circuit Simulation
+# Shot-Based Circuit Simulation
 
-**Weak** digital simulation samples computational-basis **shots** after a noisy
+Digital circuit simulation can sample computational-basis **shots** after
 circuit evolution, mimicking hardware readout statistics. Use
-{class}`~mqt.yaqs.WeakSimParams` and read bitstring counts from
-{attr}`~mqt.yaqs.Result.counts`.
+{class}`~mqt.yaqs.DigitalSimParams` with `shots=...` and read bitstring counts
+from {attr}`~mqt.yaqs.Result.counts`.
 
 For expectation-value simulation and mid-circuit observables, see
-{doc}`strong_simulation`. For parameter presets and truncation settings, see
+{doc}`circuit_observables`. For parameter presets and truncation settings, see
 {doc}`simulation_parameters`.
 
 You can pass an OpenQASM file path or raw OpenQASM string to
@@ -66,14 +66,14 @@ the all-zeros bitstring compared with the noiseless run.
 
 ## 3. Simulation parameters and run
 
-`WeakSimParams` requires an explicit `shots` count (not covered by accuracy
+`DigitalSimParams` requires an explicit `shots` count (not covered by accuracy
 presets). We run the **same** circuit twice: once without noise (ideal readout
 statistics) and once with on-site amplitude damping.
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator, WeakSimParams
+from mqt.yaqs import Simulator, DigitalSimParams
 
-sim_params = WeakSimParams(shots=1024, max_bond_dim=16, svd_threshold=1e-6, random_seed=7)
+sim_params = DigitalSimParams(shots=1024, max_bond_dim=16, svd_threshold=1e-6, random_seed=7)
 
 sim = Simulator(show_progress=False)
 result_clean = sim.run(state, circuit, sim_params)
@@ -81,6 +81,10 @@ result_noisy = sim.run(state, circuit, sim_params, noise_model)
 ```
 
 For log-normal disorder on relaxation rates, see {doc}`realistic_noise_models`.
+To collect observables and shots in one call, set both fields on
+{class}`~mqt.yaqs.DigitalSimParams`. In a noisy combined run, `shots` is the
+**total** sample budget distributed across `num_traj` stochastic trajectories;
+see {doc}`simulation_parameters`.
 
 ## 4. Noiseless vs noisy readout histogram
 
@@ -126,7 +130,7 @@ ax.set_xticks(x)
 ax.set_xticklabels(bitstrings, rotation=45, ha="right", fontsize=8)
 ax.set_xlabel("Bitstring (Hamming weight $\\leq 2$)")
 ax.set_ylabel("Counts")
-ax.set_title(f"Weak simulation: relaxation drives readout toward $|0\\rangle^{{\\otimes {num_qubits}}}$")
+ax.set_title(f"Shot readout: relaxation drives counts toward $|0\\rangle^{{\\otimes {num_qubits}}}$")
 ax.legend()
 ax.grid(alpha=0.3, axis="y")
 plt.show()
@@ -134,6 +138,5 @@ plt.show()
 
 ## Related topics
 
-- {doc}`strong_simulation` — strong simulation with final and mid-circuit
-  observables
+- {doc}`circuit_observables` — expectation values and mid-circuit sampling
 - {doc}`custom_gates` — custom unitaries and gate translation

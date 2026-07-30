@@ -12,13 +12,13 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Analytical Optimization Digital Twin from Experimental Trajectories
+# Building a Digital Twin
 
-Build a **digital twin** of an open quantum system using
-**analytical optimization**: learn unknown Lindblad jump rates from observable
-time series via simulator forward modeling and CMA-ES, validate the fit on the
-measured traces, then deploy the learned model in {class}`~mqt.yaqs.Simulator`
-to predict **held-out** observables.
+Build a **digital twin** of an open quantum system: learn unknown Lindblad jump
+rates from observable time series via simulator forward modeling and CMA-ES
+(analytical optimization), validate the fit on the measured traces, then deploy
+the learned model in {class}`~mqt.yaqs.Simulator` to predict **held-out**
+observables.
 
 The entry point is {class}`~mqt.yaqs.NoiseCharacterizer`.
 

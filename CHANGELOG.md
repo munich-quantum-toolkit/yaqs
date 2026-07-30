@@ -17,6 +17,11 @@ releases may include breaking changes.
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
 
+### Changed
+
+- combined WeakSimParams and StrongSimParams into DigitalSimParams ([#516])
+  ([**@aaronleesander**])
+
 ### Removed
 
 - removed support for generating LaTeX documentation ([#514])
@@ -223,6 +228,7 @@ changelogs._
 <!-- PR links -->
 
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
+[#516]: https://github.com/munich-quantum-toolkit/yaqs/pull/516
 [#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506

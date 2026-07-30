@@ -45,8 +45,8 @@ tensor-network code, or wrap an existing MPS with {meth}`State.from_mps`
 <mqt.yaqs.core.data_structures.state.State.from_mps>`.
 
 **Circuit simulation** requires `representation="mps"` (the preset default).
-`Simulator.run` with `StrongSimParams` / `WeakSimParams` rejects vector and
-density-matrix states.
+`Simulator.run` with `DigitalSimParams` rejects vector and density-matrix
+states.
 
 ## How `representation` is chosen
 

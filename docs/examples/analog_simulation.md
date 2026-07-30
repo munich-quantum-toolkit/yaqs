@@ -125,9 +125,8 @@ first_run = run_reproducible()
 second_run = run_reproducible()
 ```
 
-The same `random_seed` field exists on
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams`
-and {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`.
+Circuit simulations expose the same `random_seed` setting through
+{class}`~mqt.yaqs.DigitalSimParams`.
 
 ## 5. Run and visualize
 

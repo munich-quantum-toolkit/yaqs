@@ -22,7 +22,7 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 from typing_extensions import Self
 
-from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -1000,7 +1000,7 @@ def test_convert_to_vector_fidelity() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
@@ -1025,7 +1025,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
@@ -1219,6 +1219,29 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
         assert bond_right <= 3
+
+
+def test_compress_canonicalizes_unknown_gauge_before_truncating() -> None:
+    """Compression of a non-canonical MPS should not retain a gauge-dependent residual."""
+    local_rng = np.random.default_rng(42)
+    shapes = [(2, 1, 4), (2, 4, 4), (2, 4, 4), (2, 4, 1)]
+    tensors = [
+        np.asarray(
+            local_rng.normal(size=shape) + 1j * local_rng.normal(size=shape),
+            dtype=np.complex128,
+        )
+        for shape in shapes
+    ]
+    mps = MPS(length=4, tensors=tensors)
+    before = mps.to_vec()
+    assert mps.orthogonality_center is None
+
+    mps.compress(threshold=1e-14, max_bond_dim=2)
+
+    relative_residual = np.linalg.norm(before - mps.to_vec()) / np.linalg.norm(before)
+    assert relative_residual < 0.1
+    assert mps.orthogonality_center == 2
+    assert mps.check_canonical_form() == [2]
 
 
 def test_compress_single_site_returns_immediately() -> None:
