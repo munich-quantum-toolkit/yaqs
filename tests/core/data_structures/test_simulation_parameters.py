@@ -35,7 +35,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     Observable,
     _validate_tdvp_sweeps,
 )
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
@@ -112,6 +112,18 @@ def test_matrix_observable_rejects_named_parameters() -> None:
     """Factory parameters cannot be supplied with a matrix observable."""
     with pytest.raises(TypeError, match="only supported for named observables"):
         Observable(np.eye(2), 0, positions=[0.0, 1.0])
+
+
+def test_observable_rejects_parameters_without_a_matching_factory() -> None:
+    """Only recognized named factories accept additional observable parameters."""
+    with pytest.raises(TypeError, match="'pvm' does not accept observable parameters"):
+        Observable("pvm", bitstring="0")
+
+    with pytest.raises(TypeError, match="Unknown observable 'unknown'"):
+        Observable("unknown", parameter=1)
+
+    with pytest.raises(TypeError, match="only supported for named observables"):
+        Observable(BaseGate(np.eye(2)), 0, parameter=1)
 
 
 @pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan])])

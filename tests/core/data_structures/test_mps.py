@@ -502,6 +502,14 @@ def test_apply_local_rejects_one_site_observable_with_multiple_sites() -> None:
         psi_mps.apply_local(observable)
 
 
+def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
+    """One-site observables must match the local dimension during direct application."""
+    psi_mps = MPS(length=1, physical_dimensions=[3], state="zeros")
+
+    with pytest.raises(ValueError, match="does not match site 0 dimension 3"):
+        psi_mps.apply_local(Observable(np.eye(2), 0))
+
+
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
     length = 2
