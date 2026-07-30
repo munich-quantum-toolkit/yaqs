@@ -30,7 +30,7 @@ reaches the opposite turning point.
 ```{code-cell} ipython3
 import numpy as np
 
-from mqt.yaqs import Hamiltonian, MPO, State
+from mqt.yaqs import Hamiltonian, MPO, Observable, State
 
 omega = 1.0
 initial_displacement = 1.0
@@ -44,6 +44,7 @@ initial_grid_state /= np.linalg.norm(initial_grid_state)
 
 hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ion(positions, masses=[1.0], omega=omega))
 state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim])
+position_observable = Observable("position", 0, positions=positions)
 ```
 
 ## 2. Noiseless evolution to $T/2$
@@ -52,7 +53,7 @@ state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim
 from mqt.yaqs import AnalogSimParams, Simulator
 
 params = AnalogSimParams(
-    observables=[],
+    observables=[position_observable],
     elapsed_time=half_period,
     dt=half_period / 16,
     max_bond_dim=None,
@@ -60,16 +61,18 @@ params = AnalogSimParams(
     krylov_tol=1e-12,
     preset="exact",
     get_state=True,
-    sample_timesteps=False,
+    sample_timesteps=True,
 )
 
 result = Simulator(show_progress=False).run(state, hamiltonian, params)
 final_state = result.output_state.vector
-final_x = float(np.sum(positions * np.abs(final_state) ** 2))
+position_expectation = np.real(result.expectation_values[0])
+final_x = float(position_expectation[-1])
 ```
 
-The final $\langle x\rangle$ is close to $-x_0$ but not exact because the
-simulation uses a finite grid and a finite-difference kinetic operator.
+The position observable is a custom one-site matrix on the grid basis. The final
+$\langle x\rangle$ is close to $-x_0$ but not exact because the simulation uses
+a finite grid and a finite-difference kinetic operator.
 
 ```{code-cell} ipython3
 print(f"Initial <x>       = {initial_displacement:.6f}")
@@ -77,7 +80,7 @@ print(f"Final <x> at T/2  = {final_x:.6f}")
 print(f"Continuum target  = {-initial_displacement:.6f}")
 ```
 
-## 3. Wavepacket at $t=0$ and $t=T/2$
+## 3. Wavepacket over time
 
 ```{code-cell} ipython3
 ---
@@ -88,24 +91,27 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-prob_initial = np.abs(initial_grid_state) ** 2
-prob_final = np.abs(final_state) ** 2
+dense_hamiltonian = hamiltonian.to_matrix()
+eigenvalues, eigenvectors = np.linalg.eigh(dense_hamiltonian)
+coefficients = eigenvectors.conj().T @ initial_grid_state
+phases = np.exp(-1j * eigenvalues[:, None] * params.times[None, :])
+states = eigenvectors @ (coefficients[:, None] * phases)
+probability_density = np.abs(states) ** 2
 
-fig, axes = plt.subplots(1, 2, figsize=(8, 3.2), layout="constrained", sharey=True)
-axes[0].fill_between(positions, prob_initial, alpha=0.35, color="tab:blue")
-axes[0].plot(positions, prob_initial, color="tab:blue", lw=1.5)
-axes[0].set_title(r"$t = 0$")
-axes[0].set_xlabel(r"$x$")
-axes[0].set_ylabel(r"$|\psi(x)|^2$")
-axes[0].grid(alpha=0.3)
-
-axes[1].fill_between(positions, prob_final, alpha=0.35, color="tab:orange")
-axes[1].plot(positions, prob_final, color="tab:orange", lw=1.5)
-axes[1].set_title(rf"$t = T/2$")
-axes[1].set_xlabel(r"$x$")
-axes[1].grid(alpha=0.3)
-
-fig.suptitle("Harmonic wavepacket reflection on a position grid")
+fig, ax = plt.subplots(figsize=(7.2, 3.6), layout="constrained")
+image = ax.imshow(
+    probability_density,
+    aspect="auto",
+    origin="lower",
+    extent=(params.times[0], params.times[-1], positions[0], positions[-1]),
+    cmap="viridis",
+)
+ax.plot(params.times, position_expectation, color="white", lw=1.4, label=r"$\langle x\rangle$")
+ax.set_xlabel(r"$t$")
+ax.set_ylabel(r"$x$")
+ax.set_title("Position-grid wavepacket density")
+ax.legend(loc="upper right")
+fig.colorbar(image, ax=ax, label=r"$|\psi(x,t)|^2$")
 plt.show()
 ```
 

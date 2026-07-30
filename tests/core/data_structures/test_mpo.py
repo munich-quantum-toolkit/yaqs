@@ -513,6 +513,47 @@ def test_trapped_ion_coulomb_truncation() -> None:
     np.testing.assert_allclose(truncated_coulomb, expected_rank_2, atol=1e-12)
 
 
+def test_trapped_ion_one_ion_position_observable_centers_on_trap() -> None:
+    """The one-ion ground-state position expectation follows the static trap center."""
+    positions = np.linspace(-2.0, 2.0, 9, dtype=np.float64)
+    trap_center = 0.4
+    mpo = MPO.trapped_ion(positions, [1.0], omega=1.0, trap_center=trap_center)
+    _energy, eigenvectors = np.linalg.eigh(mpo.to_matrix())
+    ground_state = eigenvectors[:, 0]
+    mps = MPS(
+        length=1,
+        tensors=[ground_state.reshape(positions.size, 1, 1)],
+        physical_dimensions=[positions.size],
+    )
+
+    position = Observable("position", 0, positions=positions)
+
+    np.testing.assert_allclose(mps.expect(position), trap_center, atol=6e-2)
+
+
+def test_trapped_ion_two_ion_coulomb_increases_ground_state_separation() -> None:
+    """Softened Coulomb repulsion increases the two-ion ground-state separation."""
+    positions = np.linspace(-3.0, 3.0, 9, dtype=np.float64)
+    grid_dim = positions.size
+    separation = np.abs(positions[:, None] - positions[None, :])
+
+    def ground_state_separation(coulomb_strength: float) -> float:
+        mpo = MPO.trapped_ion(
+            positions,
+            [1.0, 1.0],
+            omega=0.6,
+            coulomb_strength=coulomb_strength,
+        )
+        _energy, eigenvectors = np.linalg.eigh(mpo.to_matrix())
+        probabilities = np.abs(eigenvectors[:, 0].reshape(grid_dim, grid_dim)) ** 2
+        return float(np.sum(separation * probabilities))
+
+    uncoupled_separation = ground_state_separation(0.0)
+    repulsive_separation = ground_state_separation(0.8)
+
+    assert repulsive_separation > uncoupled_separation + 0.2
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
