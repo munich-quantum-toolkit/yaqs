@@ -14,9 +14,15 @@ mystnb:
 
 # Noisy Analog Simulation
 
-This guide walks through an open-system **analog** simulation with the tensor jump method (TJM): build a Hamiltonian, attach a noise model, configure {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`, and visualize time-resolved observables.
+This guide walks through an open-system **analog** simulation with the tensor
+jump method (TJM): build a Hamiltonian, attach a noise model, configure
+{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`,
+and visualize time-resolved observables.
 
-For log-normal disorder on strengths and static calibration spread, see {doc}`realistic_noise_models`. For execution options (parallelism, progress bars), see {doc}`simulator_initialization`. To build Ising, Hubbard, Pauli-string, or hardware Hamiltonians, see {doc}`hamiltonians`.
+For log-normal disorder on strengths and static calibration spread, see
+{doc}`realistic_noise_models`. For execution options (parallelism, progress
+bars), see {doc}`simulator_initialization`. To build Ising, Hubbard,
+Pauli-string, or hardware Hamiltonians, see {doc}`hamiltonians`.
 
 ## 1. Hamiltonian
 
@@ -28,11 +34,15 @@ J, g = 1.0, 0.8
 H_0 = Hamiltonian.ising(L, J, g)
 ```
 
-See {doc}`hamiltonians` for Pauli sums, Fermi–Hubbard, Bose–Hubbard, and coupled-transmon factories.
+See {doc}`hamiltonians` for Pauli sums, Fermi–Hubbard, Bose–Hubbard, and
+coupled-transmon factories.
 
 ## 2. Initial state and noise model
 
-We prepare a Néel state $\ket{01010\ldots}$ and track staggered magnetization under a transverse-field Ising model with on-site amplitude damping. The alternating $\langle Z_i \rangle$ pattern at $t=0$ spreads and decays in a site-dependent way.
+We prepare a Néel state $\ket{01010\ldots}$ and track staggered magnetization
+under a transverse-field Ising model with on-site amplitude damping. The
+alternating $\langle Z_i \rangle$ pattern at $t=0$ spreads and decays in a
+site-dependent way.
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel, State
@@ -45,7 +55,8 @@ noise_model = NoiseModel([
 ])
 ```
 
-Pass a float for each `strength` here. For distribution-valued strengths (log-normal and other distributions), see {doc}`realistic_noise_models`.
+Pass a float for each `strength` here. For distribution-valued strengths
+(log-normal and other distributions), see {doc}`realistic_noise_models`.
 
 ## 3. Simulation parameters
 
@@ -64,13 +75,22 @@ sim_params = AnalogSimParams(
 )
 ```
 
-Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per physical step `dt`, improving unitary accuracy without changing the noise timestep.
+Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per
+physical step `dt`, improving unitary accuracy without changing the noise
+timestep.
 
-**Evolution integrator:** analog simulations default to `EvolutionMode.TDVP` (two-site TDVP sweeps). `EvolutionMode.BUG` is available as an alternative on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` when you want the BUG integrator instead.
+**Evolution integrator:** analog simulations default to `EvolutionMode.TDVP`
+(two-site TDVP sweeps). `EvolutionMode.BUG` is available as an alternative on
+{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
+when you want the BUG integrator instead.
 
 ## 4. Reproducible stochastic runs
 
-With `num_traj > 1`, each {meth}`~mqt.yaqs.Simulator.run` call averages independent quantum-jump trajectories. Set {attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed` to fix the pseudorandom stream across trajectories (and for distribution-valued noise strengths):
+With `num_traj > 1`, each {meth}`~mqt.yaqs.Simulator.run` call averages
+independent quantum-jump trajectories. Set
+{attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed`
+to fix the pseudorandom stream across trajectories (and for distribution-valued
+noise strengths):
 
 ```{code-cell} ipython3
 import copy
@@ -105,7 +125,8 @@ first_run = run_reproducible()
 second_run = run_reproducible()
 ```
 
-The same `random_seed` field exists on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`.
+Circuit simulations expose the same `random_seed` setting through
+{class}`~mqt.yaqs.DigitalSimParams`.
 
 ## 5. Run and visualize
 

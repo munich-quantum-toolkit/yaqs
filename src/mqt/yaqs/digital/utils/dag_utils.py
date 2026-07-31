@@ -116,7 +116,7 @@ def _get_qubit_indices(dag: DAGCircuit | None, node: DAGOpNode) -> list[int]:
         if dag is not None:
             indices.append(dag.find_bit(qubit).index)
         else:
-            indices.append(qubit._index)  # noqa: SLF001
+            indices.append(qubit._index)  # ruff:ignore[private-member-access]
     return indices
 
 
@@ -412,7 +412,7 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
-                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
+                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # ruff:ignore[private-member-access]
                 largest_distance = max(largest_distance, distance)
 
     return largest_distance
@@ -447,7 +447,7 @@ def select_starting_point(num_qubits: int, dag: DAGCircuit) -> tuple[range, rang
         for gate in layer_circuit.data:
             # If a two-qubit gate appears with an odd-indexed starting qubit, switch the ordering.
             if gate.operation.num_qubits == 2:
-                if gate.qubits[0]._index % 2 != 0:  # noqa: SLF001
+                if gate.qubits[0]._index % 2 != 0:  # ruff:ignore[private-member-access]
                     odd = True
                 break
 

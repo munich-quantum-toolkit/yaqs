@@ -7,7 +7,7 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806, SLF001, PLR6301
+# ruff:file-ignore[non-lowercase-variable-in-function, private-member-access, no-self-use]
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 from typing_extensions import Self
 
-from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -439,6 +439,89 @@ def test_local_expect_x_on_plus_state() -> None:
     psi_mps = MPS(length=3, state="x+")
     val = psi_mps.local_expect(x, sites=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
+def test_non_qubit_local_expectation_from_matrix_observable() -> None:
+    """A matrix observable can be measured on a non-qubit local site."""
+    amplitudes = np.sqrt(np.array([0.2, 0.3, 0.5], dtype=np.float64)).astype(np.complex128)
+    tensor0 = amplitudes.reshape(3, 1, 1)
+    tensor1 = np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1)
+    psi_mps = MPS(length=2, tensors=[tensor0, tensor1], physical_dimensions=[3, 2])
+    position = np.diag(np.array([-1.0, 0.5, 2.0], dtype=np.float64))
+
+    val = psi_mps.expect(Observable(position, 0))
+
+    expected = 0.2 * -1.0 + 0.3 * 0.5 + 0.5 * 2.0
+    np.testing.assert_allclose(val, expected, atol=1e-12)
+
+
+def test_four_level_local_observable_is_not_treated_as_two_site() -> None:
+    """A ``4 x 4`` matrix observable acts on one four-level site when wrapped as local."""
+    amplitudes = np.array([0.5, 0.5j, -0.5, 0.5], dtype=np.complex128)
+    psi_mps = MPS(length=1, tensors=[amplitudes.reshape(4, 1, 1)], physical_dimensions=[4])
+    matrix = np.diag(np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float64))
+
+    val = psi_mps.expect(Observable(matrix, 0))
+
+    np.testing.assert_allclose(val, 1.5, atol=1e-12)
+
+
+def test_local_observable_dimension_mismatch_raises() -> None:
+    """One-site matrix observables must match the measured site's local dimension."""
+    psi_mps = MPS(length=1, physical_dimensions=[3], state="zeros")
+
+    with pytest.raises(ValueError, match="does not match site 0 dimension 3"):
+        psi_mps.expect(Observable(np.eye(2), 0))
+
+
+def test_two_site_local_observable_dimension_mismatch_raises() -> None:
+    """Two-site observables must match the product of both local dimensions."""
+    psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
+    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+
+    with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
+        psi_mps.local_expect(observable, [0, 1])
+
+
+def test_local_expect_rejects_observables_with_unsupported_interaction() -> None:
+    """Local expectation values support at most two-site observables."""
+    psi_mps = MPS(length=3, state="zeros")
+    observable = Observable(BaseGate(np.eye(8)), [0, 1, 2])
+
+    with pytest.raises(ValueError, match="Local observable must be one-site or nearest-neighbor two-site"):
+        psi_mps.local_expect(observable, [0, 1, 2])
+
+
+def test_apply_local_rejects_one_site_observable_with_multiple_sites() -> None:
+    """One-site observables retain a defensive site-count check during application."""
+    psi_mps = MPS(length=2, state="zeros")
+    observable = Observable(X(), 0)
+    observable.sites = [0, 1]
+
+    with pytest.raises(ValueError, match=r"One-site local observable requires one site, got \[0, 1\]"):
+        psi_mps.apply_local(observable)
+
+
+def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
+    """One-site observables must match the local dimension during direct application."""
+    psi_mps = MPS(length=1, physical_dimensions=[3], state="zeros")
+
+    with pytest.raises(ValueError, match="does not match site 0 dimension 3"):
+        psi_mps.apply_local(Observable(np.eye(2), 0))
+
+
+def test_apply_local_rejects_invalid_two_site_observable_shape() -> None:
+    """Two-site observables must supply two sites and match both local dimensions."""
+    psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
+    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+
+    observable.sites = [0]
+    with pytest.raises(ValueError, match=r"requires two sites, got \[0\]"):
+        psi_mps.apply_local(observable)
+
+    observable.sites = [0, 1]
+    with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
+        psi_mps.apply_local(observable)
 
 
 def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
@@ -939,7 +1022,7 @@ def test_convert_to_vector_fidelity() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
@@ -964,7 +1047,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = DigitalSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
@@ -1158,6 +1241,29 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
         assert bond_right <= 3
+
+
+def test_compress_canonicalizes_unknown_gauge_before_truncating() -> None:
+    """Compression of a non-canonical MPS should not retain a gauge-dependent residual."""
+    local_rng = np.random.default_rng(42)
+    shapes = [(2, 1, 4), (2, 4, 4), (2, 4, 4), (2, 4, 1)]
+    tensors = [
+        np.asarray(
+            local_rng.normal(size=shape) + 1j * local_rng.normal(size=shape),
+            dtype=np.complex128,
+        )
+        for shape in shapes
+    ]
+    mps = MPS(length=4, tensors=tensors)
+    before = mps.to_vec()
+    assert mps.orthogonality_center is None
+
+    mps.compress(threshold=1e-14, max_bond_dim=2)
+
+    relative_residual = np.linalg.norm(before - mps.to_vec()) / np.linalg.norm(before)
+    assert relative_residual < 0.1
+    assert mps.orthogonality_center == 2
+    assert mps.check_canonical_form() == [2]
 
 
 def test_compress_single_site_returns_immediately() -> None:

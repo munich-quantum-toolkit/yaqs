@@ -8,7 +8,7 @@
 """Tests for trajectory RNG helpers and reproducible simulation."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff:file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 

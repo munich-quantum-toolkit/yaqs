@@ -1,14 +1,69 @@
 # Upgrade Guide
 
-This document describes breaking changes and how to upgrade. For a complete list of changes including minor and patch releases, please refer to the [changelog](CHANGELOG.md).
+This document describes breaking changes and how to upgrade. For a complete list
+of changes including minor and patch releases, please refer to the
+[changelog](CHANGELOG.md).
 
 ## [Unreleased]
 
+### Breaking: unified circuit parameters as `DigitalSimParams`
+
+Circuit simulation now uses a single {class}`~mqt.yaqs.DigitalSimParams` type.
+Outputs are selected by which fields you set (`observables`, `shots`, and/or
+`get_state`). The merged class permits observables and shots **simultaneously**;
+simulation physics for equivalent single-output configurations is unchanged.
+
+All `DigitalSimParams` constructor arguments are **keyword-only**. Migration
+must use keyword arguments; positional calls are rejected (a bare positional
+integer would be ambiguous among `shots`, `num_traj`, and `max_bond_dim`).
+
+`num_traj` and `shots` remain independent:
+
+- `num_traj` — noisy stochastic trajectories for observables/diagnostics.
+- `shots` — total bitstring-sample budget.
+- **Noisy combined runs** execute `num_traj` trajectories and distribute the
+  total `shots` across them. `shots < num_traj` is supported (some trajectories
+  get zero samples but still contribute observables).
+- **Noiseless runs** use one trajectory; all `shots` are sampled from that final
+  state.
+
+```python
+from mqt.yaqs import DigitalSimParams, Observable
+
+# Observables (optionally with layer sampling)
+DigitalSimParams(observables=[Observable("z", sites=0)], sample_layers=True)
+DigitalSimParams(
+    observables=[Observable("z", sites=0)],
+    num_traj=7,
+    max_bond_dim=64,
+)
+
+# Shot readout
+DigitalSimParams(shots=1024)
+DigitalSimParams(shots=1024, max_bond_dim=4)
+
+# Observables and shots in one run (noisy: distribute shots across num_traj)
+DigitalSimParams(
+    observables=[Observable("z", sites=0)],
+    shots=1024,
+    num_traj=64,
+)
+```
+
+| Area           | Notes                                   |
+| -------------- | --------------------------------------- |
+| Circuit params | Use `DigitalSimParams` only             |
+| Observables    | `DigitalSimParams(observables=...)`     |
+| Shots          | `DigitalSimParams(shots=N)`             |
+| Constructor    | Keyword-only (`*` after `self`)         |
+| Combined       | Set both `observables` and `shots`      |
+| Example docs   | `circuit_observables` / `circuit_shots` |
+
 ## [0.6.0]
 
-The unreleased API refresh replaces free functions and deep module paths with a small set of
-top-level types. The pieces fit together: construct physics objects and parameters, run through
-`Simulator`, read everything from `Result`.
+The unreleased API refresh replaces free functions and deep module paths with a
+small set of top-level types. The pieces fit together: construct physics objects
+and parameters, run through `Simulator`, read everything from `Result`.
 
 ### Recommended migration (end-to-end)
 
@@ -82,64 +137,71 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 
 ### `Result` field map
 
-`Simulator.run` no longer mutates the `*SimParams` you pass in. `result.sim_params` references
-your original configuration unchanged.
+`Simulator.run` no longer mutates the `*SimParams` you pass in.
+`result.sim_params` references your original configuration unchanged.
 
 | Old (`sim_params` / `Observable`)           | New (`result`)                 |
 | ------------------------------------------- | ------------------------------ |
 | `sim_params.observables[i].results`         | `result.expectation_values[i]` |
 | `sim_params.output_state`                   | `result.output_state`          |
 | `sim_params.noise_model`                    | `result.noise_model`           |
-| `sim_params.results` (weak)                 | `result.counts`                |
+| `sim_params.results` (shot counts)          | `result.counts`                |
 | `sim_params.measurements`                   | `result.measurements`          |
 | `sim_params.multi_time_observables_times`   | `result.multi_time_times`      |
 | `sim_params.multi_time_observables_results` | `result.multi_time_results`    |
 
-Removed from `*SimParams`: `noise_model`, `output_state`, `multi_time_observables_times`,
-`multi_time_observables_results`, `measurements`, `results`, `aggregate_trajectories`,
-`aggregate_measurements`. Observable _configuration_ (`observables`, `multi_time_observables`,
-etc.) stays on `*SimParams`.
+Removed from `*SimParams`: `noise_model`, `output_state`,
+`multi_time_observables_times`, `multi_time_observables_results`,
+`measurements`, `results`, `aggregate_trajectories`, `aggregate_measurements`.
+Observable _configuration_ (`observables`, `multi_time_observables`, etc.) stays
+on `*SimParams`.
 
-For MPS-backed analog and strong-digital runs, `result.runtime_cost`, `result.max_bond`, and
-`result.total_bond` are filled automatically (aligned with `result.times` or the strong-sim layer
-grid). MCWF, Lindblad, and weak digital runs leave these as `None`.
+For MPS-backed analog and digital-observable runs, `result.runtime_cost`,
+`result.max_bond`, and `result.total_bond` are filled automatically (aligned
+with `result.times` or the digital layer-sampling grid). MCWF, Lindblad, and
+shot-only digital runs leave these as `None`.
 
 ### MCWF / Lindblad operator ordering (dense backends)
 
-MCWF (`State(..., representation="vector")`) and Lindblad (`representation="density_matrix"`)
-embed jump operators and observables on the full Hilbert space using the same **site-0 LSB**
-convention as MPS `to_vec`, Qiskit little-endian circuits, and the TJM (MPO) dissipation path.
-Before this release, those dense embeddings used a different Kronecker-product order, so jump
-probabilities, observables, and cross-solver comparisons could disagree with TJM even when the
-`NoiseModel` definition looked identical.
+MCWF (`State(..., representation="vector")`) and Lindblad
+(`representation="density_matrix"`) embed jump operators and observables on the
+full Hilbert space using the same **site-0 LSB** convention as MPS `to_vec`,
+Qiskit little-endian circuits, and the TJM (MPO) dissipation path. Before this
+release, those dense embeddings used a different Kronecker-product order, so
+jump probabilities, observables, and cross-solver comparisons could disagree
+with TJM even when the `NoiseModel` definition looked identical.
 
-**What changed:** `_embed_operator_sparse` / `_embed_observable_sparse` (and their dense
-counterparts) now delegate to `state_utils.embed_*` helpers instead of building
-`left ⊗ op ⊗ right` with reversed tensor-leg order.
+**What changed:** `_embed_operator_sparse` / `_embed_observable_sparse` (and
+their dense counterparts) now delegate to `state_utils.embed_*` helpers instead
+of building `left ⊗ op ⊗ right` with reversed tensor-leg order.
 
-**Why it matters:** MCWF, Lindblad, and TJM now agree on how a local operator on `sites=[i]` or
-adjacent `sites=[i, i+1]` is placed in the full space. Regression tests compare TJM dissipative
-norm loss to MCWF jump probabilities under lowering noise.
+**Why it matters:** MCWF, Lindblad, and TJM now agree on how a local operator on
+`sites=[i]` or adjacent `sites=[i, i+1]` is placed in the full space. Regression
+tests compare TJM dissipative norm loss to MCWF jump probabilities under
+lowering noise.
 
 **What you need to do:**
 
-- If you only pass standard `NoiseModel` processes (`sites`, built-in names, or matrices authored
-  for the listed site order), **no change is required**—results may shift slightly because the
-  previous ordering was incorrect.
-- If you hand-built full-space jump operators or compared MCWF/Lindblad outputs to TJM using
-  custom dense embeddings, rebuild those operators with
+- If you only pass standard `NoiseModel` processes (`sites`, built-in names, or
+  matrices authored for the listed site order),
+  **no change is required**—results may shift slightly because the previous
+  ordering was incorrect.
+- If you hand-built full-space jump operators or compared MCWF/Lindblad outputs
+  to TJM using custom dense embeddings, rebuild those operators with
   `mqt.yaqs.core.data_structures.state_utils.embed_one_site_operator`,
-  `embed_adjacent_two_site_operator`, or `embed_two_site_factors`, or pass the same local matrices
-  through `NoiseModel` and let the solvers embed them.
-- For adjacent two-site **matrix** processes, list sites in ascending order `[i, i+1]` with the
-  local matrix written for that pair order. If you pass reversed sites `[i+1, i]`, the matrix is
-  transposed automatically to match the `(i, i+1)` leg order.
+  `embed_adjacent_two_site_operator`, or `embed_two_site_factors`, or pass the
+  same local matrices through `NoiseModel` and let the solvers embed them.
+- For adjacent two-site **matrix** processes, list sites in ascending order
+  `[i, i+1]` with the local matrix written for that pair order. If you pass
+  reversed sites `[i+1, i]`, the matrix is transposed automatically to match the
+  `(i, i+1)` leg order.
 
 ### Top-level public API
 
 ```python
 from mqt.yaqs import (
     AnalogSimParams,
+    DigitalSimParams,
     EquivalenceChecker,
     Hamiltonian,
     MPO,
@@ -150,26 +212,25 @@ from mqt.yaqs import (
     SIMULATION_PRESETS,
     Simulator,
     State,
-    StrongSimParams,
-    WeakSimParams,
 )
 ```
 
-`Representation` is not exported at the top level (the name means different things on `State` vs
-`Hamiltonian`). Custom gates and circuits still use `mqt.yaqs.core.libraries` when needed.
+`Representation` is not exported at the top level (the name means different
+things on `State` vs `Hamiltonian`). Custom gates and circuits still use
+`mqt.yaqs.core.libraries` when needed.
 
 ### Platform note
 
-Starting with this release, x86 macOS is no longer tested in CI; we cannot guarantee that MQT YAQS
-installs and runs correctly on those systems.
+Starting with this release, x86 macOS is no longer tested in CI; we cannot
+guarantee that MQT YAQS installs and runs correctly on those systems.
 
 ## [0.3.2]
 
 ### End of support for Python 3.9
 
-Starting with this release, MQT YAQS no longer supports Python 3.9.
-This is in line with the scheduled end of life of the version.
-As a result, MQT YAQS is no longer tested under Python 3.9 and requires Python 3.10 or later.
+Starting with this release, MQT YAQS no longer supports Python 3.9. This is in
+line with the scheduled end of life of the version. As a result, MQT YAQS is no
+longer tested under Python 3.9 and requires Python 3.10 or later.
 
 <!-- Version links -->
 

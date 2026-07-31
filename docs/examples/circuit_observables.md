@@ -12,17 +12,29 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Strong Simulation
+# Circuit Observables
 
-**Strong** digital simulation evolves a matrix-product state (MPS) through a Qiskit circuit and evaluates Pauli (or custom) observables. Pass an optional {class}`~mqt.yaqs.NoiseModel` as the fourth argument to {meth}`~mqt.yaqs.Simulator.run` for open-system tensor-jump trajectories; omit it for a single unitary path (regardless of `num_traj`).
+Evolve a matrix-product state (MPS) through a Qiskit circuit and evaluate Pauli
+(or custom) observables. Pass observables on {class}`~mqt.yaqs.DigitalSimParams`
+and an optional {class}`~mqt.yaqs.NoiseModel` as the fourth argument to
+{meth}`~mqt.yaqs.Simulator.run` for open-system tensor-jump trajectories; omit
+it for a single unitary path (regardless of `num_traj`).
 
-| Workflow                    | Typical use                                         | Key settings                                                                                                                 |
-| --------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Final observables**       | Noise scaling, benchmarking, device studies         | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` with observables evaluated after the last gate |
-| **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `StrongSimParams(sample_layers=True)` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit                      |
-| **Shot-based readout**      | Hardware-like bitstring statistics                  | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` — see {doc}`weak_circuit_simulation`             |
+For computational-basis shot histograms, see {doc}`circuit_shots`. You can also
+request observables and `shots` together on one `DigitalSimParams`.
 
-Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or OpenQASM strings). The initial state should use `representation="mps"` (the default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For accuracy presets, truncation knobs, and `random_seed`, see {doc}`simulation_parameters`. For log-normal disorder on noise strengths, see {doc}`realistic_noise_models`.
+| Workflow                    | Typical use                                         | Key settings                                                                             |
+| --------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Final observables**       | Noise scaling, benchmarking, device studies         | `DigitalSimParams(observables=...)` evaluated after the last gate                        |
+| **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `sample_layers=True` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit   |
+| **Shot-based readout**      | Hardware-like bitstring statistics                  | `DigitalSimParams(shots=...)` — see {doc}`circuit_shots`                                 |
+
+Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or
+OpenQASM strings). The initial state should use `representation="mps"` (the
+default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For
+accuracy presets, truncation knobs, and `random_seed`, see
+{doc}`simulation_parameters`. For log-normal disorder on noise strengths, see
+{doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
 import matplotlib.pyplot as plt
@@ -35,16 +47,17 @@ sim = Simulator(show_progress=False)
 
 ## 1. Minimal run: unitary vs open-system noise
 
-Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$ without noise and with on-site amplitude damping:
+Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$
+without noise and with on-site amplitude damping:
 
 ```{code-cell} ipython3
-from mqt.yaqs import NoiseModel, Observable, State, StrongSimParams
+from mqt.yaqs import NoiseModel, Observable, State, DigitalSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 num_qubits = 3
 qc = create_ising_circuit(L=num_qubits, J=1.0, g=0.8, dt=0.1, timesteps=6)
 circuit_state = State(num_qubits, initial="zeros")
-circuit_params = StrongSimParams(
+circuit_params = DigitalSimParams(
     observables=[Observable("z", site) for site in range(num_qubits)],
     preset="fast",
     num_traj=32,
@@ -72,13 +85,14 @@ ax.legend(frameon=False)
 
 ## 2. Noise-strength sweep
 
-On a longer chain, sweep a global relaxation rate $\gamma$ and track how each qubit's final $\langle Z_i \rangle$ moves toward $+1$ as damping dominates:
+On a longer chain, sweep a global relaxation rate $\gamma$ and track how each
+qubit's final $\langle Z_i \rangle$ moves toward $+1$ as damping dominates:
 
 ```{code-cell} ipython3
 num_qubits = 5
 circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=10)
 state = State(num_qubits, initial="zeros")
-sim_params = StrongSimParams(
+sim_params = DigitalSimParams(
     observables=[Observable("z", site) for site in range(num_qubits)],
     num_traj=64,
     max_bond_dim=8,
@@ -112,12 +126,20 @@ ax.grid(alpha=0.3, which="both")
 (mid-circuit-observables)=
 
 ```{note}
-This section uses `num_traj=64` during the documentation build. Increase `num_traj` locally for lower-variance layer curves.
+This section uses `num_traj=64` during the documentation build. Increase
+`num_traj` locally for lower-variance layer curves.
 ```
 
-Set `sample_layers=True` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you want measurements. YAQS records observables at the circuit start, after each labelled barrier, and after the final gate layer.
+Set `sample_layers=True` on
+{class}`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams`
+and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you
+want measurements. YAQS records observables at the circuit start, after each
+labelled barrier, and after the final gate layer.
 
-The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$ entanglers, and tracks how amplitude damping gradually drives each $\langle Z_i \rangle$ toward $+1$. Only barriers labelled `SAMPLE_OBSERVABLES` trigger sampling; unlabelled barriers are ignored.
+The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$
+entanglers, and tracks how amplitude damping gradually drives each
+$\langle Z_i \rangle$ toward $+1$. Only barriers labelled `SAMPLE_OBSERVABLES`
+trigger sampling; unlabelled barriers are ignored.
 
 ```{code-cell} ipython3
 from qiskit.circuit import QuantumCircuit
@@ -137,7 +159,7 @@ layer_noise = NoiseModel([
 ])
 
 layer_state = State(layer_qubits, initial="x+", pad=16)
-layer_params = StrongSimParams(
+layer_params = DigitalSimParams(
     observables=[Observable("z", i) for i in range(layer_qubits)],
     num_traj=64,
     sample_layers=True,
@@ -168,10 +190,13 @@ fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 
 ## 4. OpenQASM inputs
 
-Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
+Pass an OpenQASM 2 source string (or file path) directly to
+{meth}`~mqt.yaqs.Simulator.run` instead of building a
+{class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in
+the program are translated like any other Qiskit operation.
 
 ```{code-cell} ipython3
-from mqt.yaqs import WeakSimParams
+from mqt.yaqs import DigitalSimParams
 
 qasm = """
 OPENQASM 2.0;
@@ -190,17 +215,23 @@ qasm_state = State(2, initial="zeros")
 qasm_result = sim.run(
     qasm_state,
     qasm,
-    WeakSimParams(shots=128, max_bond_dim=4),
+    DigitalSimParams(shots=128, max_bond_dim=4),
 )
 ```
 
-OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms; see {doc}`equivalence_checking`.
+OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`.
+{class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms;
+see {doc}`equivalence_checking`.
 
 ## 5. Gate application modes
 
-`StrongSimParams.gate_mode` (and `WeakSimParams.gate_mode`) selects how two-qubit gates are applied to the MPS. The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses a local TDVP window when an analytic generator is available. See {doc}`simulation_parameters` and {doc}`custom_gates` for the full matrix.
+`DigitalSimParams.gate_mode` selects how two-qubit gates are applied to the MPS.
+The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses
+a local TDVP window when an analytic generator is available. See
+{doc}`simulation_parameters` and {doc}`custom_gates` for the full matrix.
 
-Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both modes:
+Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both
+modes:
 
 ```{code-cell} ipython3
 lr_qc = QuantumCircuit(3)
@@ -210,7 +241,7 @@ lr_qc.cx(0, 2)
 lr_state = State(3, initial="zeros")
 z0_by_mode = {}
 for mode in ("mpo", "tdvp"):
-    mode_params = StrongSimParams(
+    mode_params = DigitalSimParams(
         observables=[Observable("z", 0)],
         num_traj=1,
         gate_mode=mode,
@@ -224,8 +255,11 @@ print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 
 ## 6. Related topics
 
-- {doc}`weak_circuit_simulation` — shot-based readout with {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`
+- {doc}`circuit_shots` — computational-basis shot histograms with
+  {class}`~mqt.yaqs.DigitalSimParams`
 - {doc}`custom_gates` — custom unitaries and gate translation
-- {doc}`realistic_noise_models` — log-normal and other distributed noise strengths
-- {doc}`equivalence_checking` — verify that two circuits implement the same unitary
-- {doc}`quickstart` — minimal analog, strong-simulation, and equivalence-check workflows
+- {doc}`realistic_noise_models` — log-normal and other distributed noise
+  strengths
+- {doc}`equivalence_checking` — verify that two circuits implement the same
+  unitary
+- {doc}`quickstart` — minimal analog, circuit, and equivalence-check workflows

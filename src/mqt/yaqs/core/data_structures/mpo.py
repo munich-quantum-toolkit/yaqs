@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     from ..libraries.gate_library import BaseGate
     from ..methods.decompositions import TruncMode
-    from .simulation_parameters import StrongSimParams, WeakSimParams
+    from .simulation_parameters import DigitalSimParams
 
 ComplexTensor = NDArray[np.complex128]
 
@@ -328,7 +328,7 @@ class MPO:
     def ising(
         cls,
         length: int,
-        J: float,  # noqa: N803
+        J: float,  # ruff:ignore[invalid-argument-name]
         g: float,
         *,
         bc: str = "open",
@@ -367,9 +367,9 @@ class MPO:
     def heisenberg(
         cls,
         length: int,
-        Jx: float,  # noqa: N803
-        Jy: float,  # noqa: N803
-        Jz: float,  # noqa: N803
+        Jx: float,  # ruff:ignore[invalid-argument-name]
+        Jy: float,  # ruff:ignore[invalid-argument-name]
+        Jz: float,  # ruff:ignore[invalid-argument-name]
         h: float = 0.0,
         *,
         bc: str = "open",
@@ -1407,7 +1407,7 @@ class MPO:
         self,
         other: MPS,
         *,
-        sim_params: StrongSimParams | WeakSimParams | None = None,
+        sim_params: DigitalSimParams | None = None,
         compress: bool = True,
     ) -> None: ...
 
@@ -1429,7 +1429,7 @@ class MPO:
         self,
         other: MPS | MPO,
         *,
-        sim_params: StrongSimParams | WeakSimParams | None = None,
+        sim_params: DigitalSimParams | None = None,
         compress: bool = True,
         start_site: int = 0,
         conjugate: bool = False,
@@ -1492,7 +1492,7 @@ class MPO:
         self,
         state: MPS,
         *,
-        sim_params: StrongSimParams | WeakSimParams | None,
+        sim_params: DigitalSimParams | None,
         compress: bool,
     ) -> None:
         """Apply this MPO to ``state`` with optional compression.

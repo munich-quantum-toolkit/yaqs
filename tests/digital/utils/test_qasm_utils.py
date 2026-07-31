@@ -17,7 +17,7 @@ from qiskit.qasm2 import loads
 
 from mqt.yaqs import EquivalenceChecker
 from mqt.yaqs.digital.utils.qasm_utils import (
-    _parse_qasm_version,  # noqa: PLC2701 — unit tests target the private parser directly
+    _parse_qasm_version,  # ruff:ignore[import-private-name] — unit tests target the private parser directly
     load_circuit,
 )
 from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file

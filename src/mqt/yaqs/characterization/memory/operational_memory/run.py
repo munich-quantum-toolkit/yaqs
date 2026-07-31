@@ -102,7 +102,7 @@ def _exact_backend_cls_if_needed(*, delay: int, parallel: bool | None) -> type |
         The exact backend class, or ``None`` when delay and parallel are both inactive.
     """
     if delay > 0 or parallel is not None:
-        from ..backends.exact import ExactBackend  # noqa: PLC0415
+        from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
 
         return ExactBackend
     return None
@@ -287,7 +287,7 @@ def run_memory_characterization(
     exact_backend_cls = _exact_backend_cls_if_needed(delay=delay, parallel=parallel)
     execution_override: ExecutionConfig | None = None
     if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
-        from ..backends.exact import ExactBackend  # noqa: PLC0415
+        from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
 
         assert isinstance(process, ExactBackend)
         execution_override = process.execution_config(parallel=parallel)

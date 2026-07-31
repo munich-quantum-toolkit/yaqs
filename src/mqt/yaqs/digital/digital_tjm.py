@@ -25,16 +25,13 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.data_structures.simulation_parameters import (
-    StrongSimParams,
-    WeakSimParams,
-)
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
 from ..core.methods.tdvp.tdvp import evolve_window
+from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -43,7 +40,7 @@ if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
-    from ..core.data_structures.simulation_parameters import GateMode
+    from ..core.data_structures.simulation_parameters import DigitalSimParams, GateMode
     from ..core.methods.decompositions import TruncMode
 
 
@@ -156,7 +153,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             single_qubit_nodes.append(node)
         elif len(node.qargs) == 2:
             # Group two-qubit gates by even/odd based on the lower qubit index.
-            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # noqa: SLF001
+            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # ruff:ignore[private-member-access]
             if min(q0, q1) % 2 == 0:
                 even_nodes.append(node)
             else:
@@ -165,9 +162,9 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             raise NotImplementedError
 
     # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
-    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # noqa: SLF001
-    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
-    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # ruff:ignore[private-member-access]
+    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
+    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
@@ -278,7 +275,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
 def apply_two_qubit_gate_tdvp(
     state: MPS,
     gate: BaseGate,
-    sim_params: StrongSimParams | WeakSimParams,
+    sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via generator MPO and TDVP.
 
@@ -324,7 +321,7 @@ def apply_two_qubit_gate_tdvp(
 def apply_two_qubit_gate_tebd(
     state: MPS,
     gate: BaseGate,
-    sim_params: StrongSimParams | WeakSimParams,
+    sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
 
@@ -393,7 +390,7 @@ def apply_two_qubit_gate_tebd(
 def apply_long_range_gate_mpo(
     state: MPS,
     gate: BaseGate,
-    sim_params: StrongSimParams | WeakSimParams,
+    sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
     """Apply a long-range two-qubit gate via :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.multiply`.
 
@@ -412,7 +409,7 @@ def apply_long_range_gate_mpo(
     return first_site, last_site
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimParams) -> tuple[int, int]:
     """Apply a two-qubit gate using the configured two-qubit gate mode.
 
     Args:
@@ -461,41 +458,54 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
 
 def digital_tjm(
-    args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
-) -> tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
+    args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
-    Simulates a quantum circuit using the Tensor Jump Method.
+    Simulates one circuit trajectory (optionally with noise jumps).
+
+    When ``shots`` is set, this worker may measure a per-trajectory allocation of the
+    total shot budget. For combined noisy runs the simulator distributes ``shots``
+    across ``num_traj``; a zero allocation is valid and yields empty counts without
+    calling :meth:`~mqt.yaqs.MPS.measure_shots` with ``0``.
 
     Args:
-        args: A tuple containing the following elements:
-            - An index or identifier, primarily for parallelization
-            - The initial state of the system represented as a Matrix Product MPS.
-            - The noise model to be applied during the simulation, or None if no noise is to be applied.
-            - Parameters for the simulation, either for strong or weak simulation.
-            - The quantum circuit to be simulated.
+        args: A tuple containing:
+            - Trajectory index (for parallelization, seeding, and shot allocation)
+            - Initial MPS
+            - Noise model, or ``None``
+            - Digital simulation parameters
+            - Quantum circuit
 
     Returns:
-        The results of the simulation.
-        If StrongSimParams are used, the results are the measured observables.
-        If WeakSimParams are used, the results are the measurement outcomes for each shot.
+        ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
+        diagnostics are populated when observables are requested (or for get-state-only
+        runs that follow the observable path). Counts are populated when ``shots`` is set
+        (possibly an empty dict when this trajectory's allocation is zero).
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
     diagnostics: NDArray[np.float64] | None = None
+    results: NDArray[np.float64] | None = None
+    wants_obs = bool(sim_params.observables)
+    wants_shots = sim_params.shots is not None
+    shots_only = wants_shots and not wants_obs
+    noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
 
-    # Initialize results depending on simulation type
-    if isinstance(sim_params, StrongSimParams):
+    # Observable / get-state path allocates diagnostics (shots-only leaves them None).
+    if not shots_only:
         num_cols = (sim_params.num_mid_measurements + 2) if sim_params.sample_layers else 1
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
+        n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
-            results = np.zeros((len(sim_params.sorted_observables), sim_params.num_mid_measurements + 2))
+            results = np.zeros((n_obs, sim_params.num_mid_measurements + 2))
             state.record_diagnostics(diagnostics, 0)
-            state.evaluate_observables(sim_params, results, 0)
+            if wants_obs:
+                state.evaluate_observables(sim_params, results, 0)
         else:
-            results = np.zeros((len(sim_params.sorted_observables), 1))
+            results = np.zeros((n_obs, 1))
 
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
@@ -507,13 +517,11 @@ def digital_tjm(
             apply_single_qubit_gate(state, node)
             dag.remove_op_node(node)
 
-        # Process two-qubit gates in even/odd sweeps.
         for _, group in [("even", even_nodes), ("odd", odd_nodes)]:
             for node in group:
                 first_site, last_site = apply_two_qubit_gate(state, node, sim_params)
 
-                if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-                    # Normalizes state
+                if not noisy:
                     state.normalize(form="B", decomposition="QR")
                 else:
                     local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
@@ -522,44 +530,55 @@ def digital_tjm(
 
                 dag.remove_op_node(node)
 
-        # Process measurement barriers (only when sampling layers in strong sim)
-        if isinstance(sim_params, StrongSimParams) and sim_params.sample_layers:
+        if sim_params.sample_layers:
             for measure_barrier in measure_barriers:
                 dag.remove_op_node(measure_barrier)
                 col_idx += 1
                 assert diagnostics is not None
+                assert results is not None
                 state.record_diagnostics(diagnostics, col_idx)
                 state.evaluate_observables(sim_params, results, col_idx)
 
-    if isinstance(sim_params, WeakSimParams):
-        per_call_shots = _per_call_shots(sim_params)
-        if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
-            counts = state.measure_shots(per_call_shots)
-            final = state if sim_params.get_state else None
-            return counts, None, final
-        return state.measure_shots(shots=1), None, state if sim_params.get_state else None
+    counts: dict[int, int] | None = None
+    final = state if sim_params.get_state else None
+
+    if shots_only:
+        per_call = 1 if noisy else _per_call_shots(sim_params, traj_idx)
+        counts = state.measure_shots(per_call) if per_call > 0 else {}
+        return None, None, counts, final
 
     if state.orthogonality_center is None:
         state.normalize(form="B", decomposition="QR")
 
-    assert isinstance(sim_params, StrongSimParams)
     assert diagnostics is not None
+    assert results is not None
     final_col = results.shape[1] - 1
     state.record_diagnostics(diagnostics, final_col)
-    state.evaluate_observables(sim_params, results, final_col)
-    final = state if sim_params.get_state else None
-    return results, diagnostics, final
+    if wants_obs:
+        state.evaluate_observables(sim_params, results, final_col)
+
+    if wants_shots:
+        per_call = _per_call_shots(sim_params, traj_idx)
+        # Zero allocation is valid when shots < num_traj; never call measure_shots(0).
+        counts = state.measure_shots(per_call) if per_call > 0 else {}
+
+    return results if wants_obs else None, diagnostics, counts, final
 
 
-def _per_call_shots(sim_params: WeakSimParams) -> int:
-    """Return shots for this worker call (may differ from ``sim_params.shots`` when noisy).
+def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
+    """Return this trajectory's share of the total ``shots`` budget.
+
+    For combined noisy runs, ``WORKER_CTX["shot_distribution"]`` holds
+    ``(total_shots, num_traj)`` and this may return ``0`` for some ``traj_idx``.
 
     Returns:
-        Number of shots for the current worker invocation.
+        Non-negative shot count for the current worker invocation.
     """
-    try:
-        from mqt.yaqs.simulator import WORKER_CTX  # noqa: PLC0415
-
+    if "per_call_shots" in WORKER_CTX:
         return int(WORKER_CTX["per_call_shots"])
-    except KeyError:
-        return sim_params.shots
+    if "shot_distribution" in WORKER_CTX:
+        total_shots, n_traj = WORKER_CTX["shot_distribution"]
+        base, rem = divmod(int(total_shots), int(n_traj))
+        return base + (1 if traj_idx < rem else 0)
+    assert sim_params.shots is not None
+    return sim_params.shots

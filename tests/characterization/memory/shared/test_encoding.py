@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box tests import private encoding helpers
+# ruff:file-ignore[import-private-name] -- white-box tests import private encoding helpers
 
 """Tests for process-tensor Choi and density-matrix encoding helpers."""
 

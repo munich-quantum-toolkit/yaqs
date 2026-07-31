@@ -421,11 +421,11 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             if gate.operation.num_qubits <= 1:
                 continue
 
-            distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
+            distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # ruff:ignore[private-member-access]
             if distance <= 2:
                 continue
 
-            location = min(gate.qubits[0]._index, gate.qubits[-1]._index)  # noqa: SLF001
+            location = min(gate.qubits[0]._index, gate.qubits[-1]._index)  # ruff:ignore[private-member-access]
 
             dag = dag2 if conjugate else dag1
 
@@ -433,8 +433,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                 if (
                     node.name == gate.operation.name
                     and len(node.qargs) >= 2
-                    and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
-                    and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
+                    and node.qargs[0]._index == gate.qubits[0]._index  # ruff:ignore[private-member-access]
+                    and node.qargs[1]._index == gate.qubits[1]._index  # ruff:ignore[private-member-access]
                 ):
                     gate_ = convert_dag_to_tensor_algorithm(node)[0]
                     gate_mpo = MPO.from_gate(gate_, distance)

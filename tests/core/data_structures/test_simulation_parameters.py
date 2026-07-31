@@ -18,7 +18,7 @@ quantum simulation. It verifies that:
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: PLC2701, SLF001 -- white-box tests of parameter validation and TDVP internals
+# ruff:file-ignore[import-private-name, private-member-access] -- white-box tests of parameter validation and TDVP internals
 
 from __future__ import annotations
 
@@ -31,12 +31,11 @@ from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories,
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
+    DigitalSimParams,
     Observable,
-    StrongSimParams,
-    WeakSimParams,
     _validate_tdvp_sweeps,
 )
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
@@ -60,6 +59,85 @@ def test_observable_creation_valid() -> None:
 
     assert np.array_equal(obs.gate.matrix, np.array([[0, 1], [1, 0]]))
     assert obs.sites == site
+
+
+def test_observable_accepts_custom_local_matrix() -> None:
+    """Observable accepts square matrices as arbitrary one-site local operators."""
+    matrix = np.diag(np.array([-1.0, 0.25, 2.0]))
+
+    obs = Observable(matrix, 0)
+
+    assert obs.gate.name == "local"
+    assert obs.gate.interaction == 1
+    np.testing.assert_allclose(obs.gate.matrix, matrix)
+    assert obs.sites == 0
+
+
+def test_observable_accepts_named_position_operator() -> None:
+    """Position observables build a diagonal local operator from the supplied basis."""
+    positions = np.array([-1.5, 0.0, 2.5])
+
+    obs = Observable("position", 1, positions=positions)
+
+    assert obs.gate.name == "position"
+    assert obs.gate.interaction == 1
+    np.testing.assert_allclose(obs.gate.matrix, np.diag(positions))
+    assert obs.sites == 1
+
+
+def test_position_observable_requires_positions() -> None:
+    """Position observables require their basis values as a keyword argument."""
+    with pytest.raises(TypeError, match="required keyword-only argument: 'positions'"):
+        Observable("position", 0)
+
+
+@pytest.mark.parametrize(
+    ("gate", "kwargs", "match"),
+    [
+        ("position", {"position_values": [0.0, 1.0]}, "unexpected keyword argument 'position_values'"),
+        ("z", {"positions": [0.0, 1.0]}, "unexpected keyword argument 'positions'"),
+    ],
+)
+def test_named_observable_rejects_unexpected_parameters(
+    gate: str,
+    kwargs: dict[str, object],
+    match: str,
+) -> None:
+    """Named observable factories reject misspelled or inapplicable parameters."""
+    with pytest.raises(TypeError, match=match):
+        Observable(gate, 0, **kwargs)
+
+
+def test_matrix_observable_rejects_named_parameters() -> None:
+    """Factory parameters cannot be supplied with a matrix observable."""
+    with pytest.raises(TypeError, match="only supported for named observables"):
+        Observable(np.eye(2), 0, positions=[0.0, 1.0])
+
+
+def test_observable_rejects_parameters_without_a_matching_factory() -> None:
+    """Only recognized named factories accept additional observable parameters."""
+    with pytest.raises(TypeError, match="'pvm' does not accept observable parameters"):
+        Observable("pvm", bitstring="0")
+
+    with pytest.raises(TypeError, match="Unknown observable 'unknown'"):
+        Observable("unknown", parameter=1)
+
+    with pytest.raises(TypeError, match="only supported for named observables"):
+        Observable(BaseGate(np.eye(2)), 0, parameter=1)
+
+
+@pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan]), np.array([0.0, 1.0j])])
+def test_position_observable_rejects_invalid_positions(positions: np.ndarray) -> None:
+    """Position bases must be non-empty, finite, and real."""
+    with pytest.raises(ValueError, match="positions must"):
+        Observable("position", 0, positions=positions)
+
+
+@pytest.mark.parametrize("matrix", [np.ones(3), np.ones((2, 3))])
+def test_observable_rejects_invalid_custom_local_matrix(matrix: np.ndarray) -> None:
+    """Matrix observables must be two-dimensional and square."""
+    with pytest.raises(ValueError, match="Local operator matrix"):
+        Observable(matrix, 0)
 
 
 def test_analog_simparams_basic() -> None:
@@ -135,9 +213,9 @@ def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, 
         ("exact", SIMULATION_PRESETS["exact"]),
     ],
 )
-def test_strong_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
-    """StrongSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
-    params = StrongSimParams(preset=preset)
+def test_digital_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
+    """DigitalSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
+    params = DigitalSimParams(preset=preset, get_state=True)
     assert params.preset == preset
     assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
@@ -156,9 +234,9 @@ def test_analog_simparams_default_constructor_uses_balanced() -> None:
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
 
-def test_weak_simparams_default_constructor_uses_balanced() -> None:
-    """WeakSimParams(shots=...) uses the balanced preset by default."""
-    params = WeakSimParams(shots=100)
+def test_digital_simparams_shots_default_uses_balanced() -> None:
+    """DigitalSimParams(shots=...) uses the balanced preset by default."""
+    params = DigitalSimParams(shots=100)
     balanced = SIMULATION_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
@@ -168,36 +246,36 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
 
 
 def test_gate_mode_defaults_and_validation() -> None:
-    """Strong and weak digital params default to mpo and validate gate_mode names."""
-    assert StrongSimParams().gate_mode == "mpo"
-    assert WeakSimParams(shots=1).gate_mode == "mpo"
-    assert StrongSimParams(gate_mode="full-tdvp").gate_mode == "full-tdvp"
-    assert StrongSimParams(gate_mode="mpo").gate_mode == "mpo"
+    """Digital params default to mpo and validate gate_mode names."""
+    assert DigitalSimParams(get_state=True).gate_mode == "mpo"
+    assert DigitalSimParams(shots=1).gate_mode == "mpo"
+    assert DigitalSimParams(get_state=True, gate_mode="full-tdvp").gate_mode == "full-tdvp"
+    assert DigitalSimParams(get_state=True, gate_mode="mpo").gate_mode == "mpo"
     with pytest.raises(ValueError, match="gate_mode"):
-        StrongSimParams(gate_mode=cast("GateMode", "invalid"))
+        DigitalSimParams(get_state=True, gate_mode=cast("GateMode", "invalid"))
 
 
 def test_tdvp_mode_defaults_and_validation() -> None:
     """All simulation params default to 2site TDVP."""
     assert AnalogSimParams().tdvp_mode == "2site"
-    assert StrongSimParams().tdvp_mode == "2site"
-    assert WeakSimParams(shots=1).tdvp_mode == "2site"
-    assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"
-    assert StrongSimParams(tdvp_mode="2site").tdvp_mode == "2site"
+    assert DigitalSimParams(get_state=True).tdvp_mode == "2site"
+    assert DigitalSimParams(shots=1).tdvp_mode == "2site"
+    assert DigitalSimParams(get_state=True, tdvp_mode="1site").tdvp_mode == "1site"
+    assert DigitalSimParams(get_state=True, tdvp_mode="2site").tdvp_mode == "2site"
     with pytest.raises(ValueError, match="tdvp_mode"):
-        StrongSimParams(tdvp_mode=cast("TDVPMode", "invalid"))
+        DigitalSimParams(get_state=True, tdvp_mode=cast("TDVPMode", "invalid"))
 
 
 def test_tdvp_sweeps_defaults_and_validation() -> None:
-    """Analog, strong, and weak params default tdvp_sweeps to 1 and validate inputs."""
+    """Analog and digital params default tdvp_sweeps to 1 and validate inputs."""
     assert AnalogSimParams().tdvp_sweeps == 1
-    assert StrongSimParams().tdvp_sweeps == 1
-    assert WeakSimParams(shots=1).tdvp_sweeps == 1
-    assert StrongSimParams(tdvp_sweeps=3).tdvp_sweeps == 3
+    assert DigitalSimParams(get_state=True).tdvp_sweeps == 1
+    assert DigitalSimParams(shots=1).tdvp_sweeps == 1
+    assert DigitalSimParams(get_state=True, tdvp_sweeps=3).tdvp_sweeps == 3
     with pytest.raises(ValueError, match="tdvp_sweeps"):
-        StrongSimParams(tdvp_sweeps=0)
+        DigitalSimParams(get_state=True, tdvp_sweeps=0)
     with pytest.raises(ValueError, match="tdvp_sweeps"):
-        StrongSimParams(tdvp_sweeps=-1)
+        DigitalSimParams(get_state=True, tdvp_sweeps=-1)
 
 
 @pytest.mark.parametrize("invalid", [1.5, True])
@@ -216,9 +294,9 @@ def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
         ("exact", SIMULATION_PRESETS["exact"]),
     ],
 )
-def test_weak_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
-    """WeakSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
-    params = WeakSimParams(shots=100, preset=preset)
+def test_digital_simparams_shots_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
+    """DigitalSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
+    params = DigitalSimParams(shots=100, preset=preset)
     assert params.preset == preset
     assert params.shots == 100
     assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
@@ -257,34 +335,36 @@ def test_analog_simparams_max_bond_dim_none_overrides_preset() -> None:
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
 
-def test_strong_simparams_preset_explicit_overrides() -> None:
+def test_digital_simparams_preset_explicit_overrides() -> None:
     """Explicit numerical arguments override presets."""
-    params = StrongSimParams(preset="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
+    params = DigitalSimParams(
+        preset="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12, get_state=True
+    )
     assert params.svd_threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
     assert params.krylov_tol == pytest.approx(1e-12)
 
 
-def test_weak_simparams_preset_explicit_overrides() -> None:
+def test_digital_simparams_shots_preset_explicit_overrides() -> None:
     """Explicit numerical arguments override presets."""
-    params = WeakSimParams(shots=100, preset="fast", svd_threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
+    params = DigitalSimParams(shots=100, preset="fast", svd_threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
     assert params.shots == 100
     assert params.svd_threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.krylov_tol == pytest.approx(1e-12)
 
 
-def test_strong_simparams_rejects_invalid_preset() -> None:
+def test_digital_simparams_rejects_invalid_preset() -> None:
     """Invalid preset names raise ValueError."""
     with pytest.raises(ValueError, match="preset must be one of"):
-        StrongSimParams(preset="invalid")  # ty: ignore[invalid-argument-type]
+        DigitalSimParams(preset="invalid", get_state=True)  # ty: ignore[invalid-argument-type]
 
 
-def test_strong_simparams_rejects_none_preset() -> None:
+def test_digital_simparams_rejects_none_preset() -> None:
     """preset=None is not supported."""
     with pytest.raises(ValueError, match="preset must be one of"):
-        StrongSimParams(preset=None)  # ty: ignore[invalid-argument-type]
+        DigitalSimParams(preset=None, get_state=True)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("bad_tol", [0.0, -1.0, float("inf"), float("nan")])
@@ -389,6 +469,15 @@ def test_observable_from_string_falls_back_to_pvm() -> None:
     assert obs.gate.bitstring == bitstring
     # PVM uses identity placeholder matrix for compatibility in your implementation
     assert np.allclose(obs.gate.matrix, np.eye(2))
+
+
+def test_observable_from_explicit_pvm_string_falls_back_to_pvm() -> None:
+    """The explicit PVM name retains its historical string-resolution behavior."""
+    obs = Observable("pvm")
+
+    assert obs.gate.name == "pvm"
+    assert hasattr(obs.gate, "bitstring")
+    assert obs.gate.bitstring == "pvm"
 
 
 def test_observable_from_gate_instance_keeps_gate_and_sites_int() -> None:
@@ -497,14 +586,14 @@ def test_aggregate_trajectories_schmidt_requires_array() -> None:
         aggregate_trajectories(run_result)
 
 
-def test_strong_params_sorting_and_fields() -> None:
+def test_digital_params_sorting_and_fields() -> None:
     """Constructor sorts non-PVM observables by site; PVM observables are appended."""
     obs_z3 = Observable(GateLibrary.z(), sites=3)
     obs_x2 = Observable(GateLibrary.x(), sites=2)
     obs_y1 = Observable(GateLibrary.y(), sites=1)
     obs_ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
 
-    params = StrongSimParams(
+    params = DigitalSimParams(
         observables=[obs_z3, obs_x2, obs_y1, obs_ssp],
         num_traj=7,
         max_bond_dim=128,
@@ -535,42 +624,42 @@ def test_strong_params_sorting_and_fields() -> None:
     assert params.num_mid_measurements == 2
 
 
-def test_strong_params_rejects_mixed_pvm_with_non_pvm() -> None:
+def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
     """Constructor must assert when mixing PVM with non-PVM observables."""
     pvm = Observable(GateLibrary.pvm("101"), sites=None)
     z0 = Observable(GateLibrary.z(), sites=0)
     with pytest.raises(AssertionError):
-        _ = StrongSimParams(observables=[pvm, z0])
+        _ = DigitalSimParams(observables=[pvm, z0])
 
 
-def test_strong_params_accepts_all_pvm_or_all_non_pvm() -> None:
+def test_digital_params_accepts_all_pvm_or_all_non_pvm() -> None:
     """Constructor allows all-PVM and all-non-PVM sets."""
     # All PVM
     p1 = Observable(GateLibrary.pvm("0"), sites=None)
     p2 = Observable(GateLibrary.pvm("1"), sites=None)
-    _ = StrongSimParams(observables=[p1, p2])  # should not raise
+    _ = DigitalSimParams(observables=[p1, p2])  # should not raise
 
     # All non-PVM
     z0 = Observable(GateLibrary.z(), sites=0)
     x1 = Observable(GateLibrary.x(), sites=1)
-    _ = StrongSimParams(observables=[z0, x1])  # should not raise
+    _ = DigitalSimParams(observables=[z0, x1])  # should not raise
 
 
-def test_strong_aggregate_regular_mean() -> None:
+def test_digital_aggregate_regular_mean() -> None:
     """Regular observables: results = mean(trajectories, axis=0)."""
     x = Observable(GateLibrary.x(), sites=2)
     traj = np.array(
         [[0.0, 1.0, 2.0], [2.0, 1.0, 0.0], [1.0, 1.0, 1.0]],
         dtype=np.float64,
     )
-    params = StrongSimParams(observables=[x], num_traj=3)
+    params = DigitalSimParams(observables=[x], num_traj=3)
     run_result = Result(sim_params=params, observables=[x], trajectories=[traj], expectation_values=[np.empty(3)])
     aggregate_trajectories(run_result)
 
     np.testing.assert_allclose(run_result.expectation_values[0], traj.mean(axis=0))
 
 
-def test_strong_aggregate_schmidt_concat() -> None:
+def test_digital_aggregate_schmidt_concat() -> None:
     """Schmidt spectrum: concatenation of raveled list entries."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
     ssp_traj = np.array([
@@ -579,7 +668,7 @@ def test_strong_aggregate_schmidt_concat() -> None:
         np.array([0.2, 0.1], dtype=np.float64),
     ])
 
-    params = StrongSimParams(observables=[ssp], num_traj=3)
+    params = DigitalSimParams(observables=[ssp], num_traj=3)
     run_result = Result(sim_params=params, observables=[ssp], trajectories=[ssp_traj], expectation_values=[np.empty(6)])
     aggregate_trajectories(run_result)
 
@@ -588,7 +677,7 @@ def test_strong_aggregate_schmidt_concat() -> None:
     )
 
 
-def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
+def test_digital_aggregate_mixed_regular_and_schmidt() -> None:
     """Combination case: regular and Schmidt updated correctly in one call."""
     z = Observable(GateLibrary.z(), sites=0)
     z_traj = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
@@ -596,7 +685,7 @@ def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
     ssp_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
-    params = StrongSimParams(observables=[z, ssp], num_traj=2)
+    params = DigitalSimParams(observables=[z, ssp], num_traj=2)
     run_result = Result(
         sim_params=params,
         observables=[z, ssp],
@@ -609,12 +698,12 @@ def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
     np.testing.assert_allclose(run_result.expectation_values[1], np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
 
 
-def test_strong_aggregate_schmidt_requires_array() -> None:
+def test_digital_aggregate_schmidt_requires_array() -> None:
     """Schmidt branch must assert if trajectories is not an array."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
     bad_traj = [0.9, 0.1]
 
-    params = StrongSimParams(observables=[ssp], num_traj=1)
+    params = DigitalSimParams(observables=[ssp], num_traj=1)
 
     run_result = Result(
         sim_params=params,
@@ -631,12 +720,12 @@ def test_strong_aggregate_schmidt_requires_array() -> None:
     ("param_cls", "kwargs"),
     [
         (AnalogSimParams, {}),
-        (WeakSimParams, {"shots": 1}),
-        (StrongSimParams, {}),
+        (DigitalSimParams, {"shots": 1}),
+        (DigitalSimParams, {"get_state": True}),
     ],
 )
 def test_random_seed_rejects_invalid_type(
-    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    param_cls: type[AnalogSimParams | DigitalSimParams],
     kwargs: dict[str, object],
 ) -> None:
     """random_seed must be None or int."""
@@ -648,14 +737,45 @@ def test_random_seed_rejects_invalid_type(
     ("param_cls", "kwargs"),
     [
         (AnalogSimParams, {}),
-        (WeakSimParams, {"shots": 1}),
-        (StrongSimParams, {}),
+        (DigitalSimParams, {"shots": 1}),
+        (DigitalSimParams, {"get_state": True}),
     ],
 )
 def test_random_seed_rejects_negative(
-    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    param_cls: type[AnalogSimParams | DigitalSimParams],
     kwargs: dict[str, object],
 ) -> None:
     """random_seed must be non-negative when set."""
     with pytest.raises(ValueError, match="random_seed must be non-negative"):
         param_cls(random_seed=-1, **kwargs)  # ty: ignore[invalid-argument-type]
+
+
+def test_digital_simparams_requires_output() -> None:
+    """DigitalSimParams requires observables, shots, and/or get_state."""
+    with pytest.raises(ValueError, match="No output specified"):
+        DigitalSimParams()
+
+
+def test_digital_simparams_sample_layers_requires_observables() -> None:
+    """sample_layers without observables is rejected."""
+    with pytest.raises(ValueError, match="sample_layers requires"):
+        DigitalSimParams(shots=4, sample_layers=True)
+
+
+def test_digital_simparams_rejects_invalid_shots() -> None:
+    """Shots must be a positive int when provided."""
+    with pytest.raises(ValueError, match="shots must be a positive int"):
+        DigitalSimParams(shots=0)
+    with pytest.raises(ValueError, match="shots must be a positive int"):
+        DigitalSimParams(shots=-1)
+
+
+def test_digital_simparams_rejects_positional_arguments() -> None:
+    """All DigitalSimParams constructor arguments are keyword-only."""
+    obs = [Observable("z", 0)]
+    with pytest.raises(TypeError, match=r"keyword-only|takes 1 positional"):
+        DigitalSimParams(obs)  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError, match=r"keyword-only|takes 1 positional"):
+        DigitalSimParams(obs, 7, 64)  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError, match=r"keyword-only|takes 1 positional"):
+        DigitalSimParams(1024, 4)  # ty: ignore[too-many-positional-arguments]

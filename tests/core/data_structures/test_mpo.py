@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: SLF001, N806 -- white-box tests exercise private MPO compression helpers
+# ruff:file-ignore[private-member-access, non-lowercase-variable-in-function] -- white-box tests exercise private MPO compression helpers
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
@@ -20,7 +20,7 @@ import pytest
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams, Observable
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
@@ -513,6 +513,47 @@ def test_trapped_ion_coulomb_truncation() -> None:
     np.testing.assert_allclose(truncated_coulomb, expected_rank_2, atol=1e-12)
 
 
+def test_trapped_ion_one_ion_position_observable_centers_on_trap() -> None:
+    """The one-ion ground-state position expectation follows the static trap center."""
+    positions = np.linspace(-2.0, 2.0, 9, dtype=np.float64)
+    trap_center = 0.4
+    mpo = MPO.trapped_ion(positions, [1.0], omega=1.0, trap_center=trap_center)
+    _energy, eigenvectors = np.linalg.eigh(mpo.to_matrix())
+    ground_state = eigenvectors[:, 0]
+    mps = MPS(
+        length=1,
+        tensors=[ground_state.reshape(positions.size, 1, 1)],
+        physical_dimensions=[positions.size],
+    )
+
+    position = Observable("position", 0, positions=positions)
+
+    np.testing.assert_allclose(mps.expect(position), trap_center, atol=6e-2)
+
+
+def test_trapped_ion_two_ion_coulomb_increases_ground_state_separation() -> None:
+    """Softened Coulomb repulsion increases the two-ion ground-state separation."""
+    positions = np.linspace(-3.0, 3.0, 9, dtype=np.float64)
+    grid_dim = positions.size
+    separation = np.abs(positions[:, None] - positions[None, :])
+
+    def ground_state_separation(coulomb_strength: float) -> float:
+        mpo = MPO.trapped_ion(
+            positions,
+            [1.0, 1.0],
+            omega=0.6,
+            coulomb_strength=coulomb_strength,
+        )
+        _energy, eigenvectors = np.linalg.eigh(mpo.to_matrix())
+        probabilities = np.abs(eigenvectors[:, 0].reshape(grid_dim, grid_dim)) ** 2
+        return float(np.sum(separation * probabilities))
+
+    uncoupled_separation = ground_state_separation(0.0)
+    repulsive_separation = ground_state_separation(0.8)
+
+    assert repulsive_separation > uncoupled_separation + 0.2
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
@@ -816,7 +857,7 @@ def test_compute_schmidt_spectrum_trivial_cut_returns_frobenius_norm() -> None:
     [(True, TypeError), ("left", TypeError), (-1, ValueError), (5, ValueError)],
 )
 def test_compute_schmidt_spectrum_rejects_invalid_cut(
-    invalid_cut: int | str | bool,  # noqa: FBT001
+    invalid_cut: int | str | bool,  # ruff:ignore[boolean-type-hint-positional-argument]
     exc_type: type[Exception],
 ) -> None:
     """Invalid cut specifiers raise TypeError or ValueError."""
@@ -956,7 +997,7 @@ def test_multiply_mps_with_compression() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     state.check_if_valid_mps()
     assert state.orthogonality_center is not None
@@ -971,7 +1012,7 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     assert state.orthogonality_center is not None
     obs = Observable(GateLibrary.z(), 1)

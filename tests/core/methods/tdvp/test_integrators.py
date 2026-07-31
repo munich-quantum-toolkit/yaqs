@@ -8,7 +8,7 @@
 """Tests for TDVP integrators (analog and sweep orchestration)."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff:file-ignore[non-lowercase-variable-in-function]
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
@@ -110,7 +110,7 @@ def test_2site_sweep_scaling() -> None:
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact", tdvp_mode="2site")
 
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
@@ -126,7 +126,7 @@ def test_2site_sweep_symmetric() -> None:
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact", tdvp_mode="2site")
 
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
@@ -138,7 +138,7 @@ def test_2site_tdvp_tracks_center_mid_sweep() -> None:
     L = 4
     state = MPS(L, state="zeros")
     operator = MPO.ising(L, 1.0, 0.5)
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
     original_update = MPS.update_center_after_split
     seen: list[int | None] = []
 
@@ -414,7 +414,7 @@ def test_fixed_chi_2site_capped_sweep() -> None:
     gate = GateLibrary.rzz([0.2])
     gate.set_sites(0, length - 1)
     prep = deepcopy(State(length, initial="x+").mps)
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         gate_mode="full-tdvp",
@@ -436,7 +436,7 @@ def test_dynamic_digital_fixed_chi_renorm() -> None:
     gate = GateLibrary.rzz([0.2])
     gate.set_sites(0, length - 1)
     prep = deepcopy(State(length, initial="x+").mps)
-    params = StrongSimParams(
+    params = DigitalSimParams(
         preset="exact",
         get_state=True,
         max_bond_dim=2,

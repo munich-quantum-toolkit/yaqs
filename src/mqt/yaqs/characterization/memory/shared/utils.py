@@ -113,7 +113,7 @@ def validate_stochastic_solver(solver: StochasticSolver | str | None) -> Stochas
     if solver not in {"MCWF", "TJM"}:
         msg = f"solver must be 'MCWF' or 'TJM', got {solver!r}."
         raise ValueError(msg)
-    return cast("StochasticSolver", solver)
+    return solver
 
 
 def resolve_stochastic_solver(
@@ -461,5 +461,12 @@ def make_mcwf_static_context(
     Returns:
         A backend-specific preprocessing context suitable for reuse across many worker calls.
     """
-    dummy_mps = MPS(length=operator.length, state="zeros")
-    return preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
+    psi0 = MPS(length=operator.length, state="zeros").to_vec()
+    return preprocess_mcwf(
+        psi_initial=psi0,
+        h_sparse=operator.to_sparse_matrix(),
+        noise_model=noise_model,
+        sim_params=sim_params,
+        num_sites=operator.length,
+        physical_dimensions=operator.physical_dimension,
+    )

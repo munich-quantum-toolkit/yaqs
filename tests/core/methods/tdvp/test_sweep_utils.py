@@ -8,7 +8,7 @@
 """Tests for TDVP sweep utilities and truncation policy."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806, PLC2701
+# ruff:file-ignore[non-lowercase-variable-in-function, import-private-name]
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
     _align_bond,
@@ -332,14 +332,14 @@ def test_uses_fixed_chi() -> None:
     """Fixed-χ policy applies to digital params with a cap, not analog or uncapped digital."""
     assert not uses_fixed_chi(AnalogSimParams())
     assert not uses_fixed_chi(AnalogSimParams(max_bond_dim=4))
-    assert not uses_fixed_chi(StrongSimParams(preset="exact", get_state=True))
-    assert uses_fixed_chi(StrongSimParams(preset="exact", get_state=True, max_bond_dim=4))
+    assert not uses_fixed_chi(DigitalSimParams(preset="exact", get_state=True))
+    assert uses_fixed_chi(DigitalSimParams(preset="exact", get_state=True, max_bond_dim=4))
 
 
 def test_renorm_trunc_always_normalizes() -> None:
     """Truncation renorm always calls normalize when invoked."""
     state = MPS(2, state="zeros")
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2)
     with patch.object(MPS, "normalize") as mock_normalize:
         renorm_trunc(state, params)
         mock_normalize.assert_called_once()
@@ -348,7 +348,7 @@ def test_renorm_trunc_always_normalizes() -> None:
 def test_renorm_drift_skips_when_within_tolerance() -> None:
     """Drift renorm is a no-op when the global norm is already unit."""
     state = MPS(2, state="zeros")
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
     with patch.object(MPS, "normalize") as mock_normalize:
         renorm_drift(state, params)
         mock_normalize.assert_not_called()
@@ -359,7 +359,7 @@ def test_renorm_drift_normalizes_large_drift() -> None:
     state = MPS(2, state="zeros")
     state.tensors[0] *= 0.1
     state.tensors[1] *= 0.1
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
     with patch.object(MPS, "normalize") as mock_normalize:
         renorm_drift(state, params)
         mock_normalize.assert_called_once()
@@ -369,7 +369,7 @@ def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:
     """SVD bond sync enforces a shared capped dimension on both adjacent tensors."""
     state = _seeded_haar_random_mps(4, pad=4)
     state.normalize()
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     reference = state.to_vec()
     _sync_bond_dim(state, 1, 2, params)
     assert state.tensors[1].shape[2] == 2
@@ -381,7 +381,7 @@ def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:
 def test_sync_bond_dim_preserves_low_rank_state() -> None:
     """Bond sync is exact when the target dimension keeps the full Schmidt rank."""
     state = MPS(2, state="x+")
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     reference = state.to_vec()
     _sync_bond_dim(state, 0, 1, params)
     assert state.tensors[0].shape[2] == 1
@@ -391,8 +391,8 @@ def test_sync_bond_dim_preserves_low_rank_state() -> None:
 
 def test_get_min_keep_with_and_without_cap() -> None:
     """Minimum retained bond rank respects an explicit max_bond_dim cap."""
-    uncapped = StrongSimParams(preset="exact", get_state=True)
-    capped = StrongSimParams(preset="exact", get_state=True, max_bond_dim=1)
+    uncapped = DigitalSimParams(preset="exact", get_state=True)
+    capped = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=1)
     assert get_min_keep(uncapped) == 2
     assert get_min_keep(capped) == 1
 
@@ -400,7 +400,7 @@ def test_get_min_keep_with_and_without_cap() -> None:
 def test_scale_dt_analog_vs_digital() -> None:
     """Analog sweeps scale by dt; digital gate sweeps use the substep fraction directly."""
     analog = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True)
-    digital = StrongSimParams(preset="exact", get_state=True)
+    digital = DigitalSimParams(preset="exact", get_state=True)
     assert _scale_dt(analog, 0.5) == pytest.approx(0.05)
     assert _scale_dt(digital, 0.5) == pytest.approx(0.5)
 
@@ -410,7 +410,7 @@ def test_get_bond_dim_caps_target() -> None:
     t0 = np.zeros((2, 1, 4), dtype=np.complex128)
     t1 = np.zeros((2, 4, 1), dtype=np.complex128)
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2)
     assert _get_bond_dim(state, 0, params) == 2
 
 
@@ -419,7 +419,7 @@ def test_align_bond_syncs_mismatched_shapes() -> None:
     t0 = np.zeros((2, 1, 2), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     _align_bond(state, 0, params)
     assert state.tensors[0].shape[2] == state.tensors[1].shape[1]
     assert state.tensors[0].shape[2] <= 2
@@ -428,7 +428,7 @@ def test_align_bond_syncs_mismatched_shapes() -> None:
 def test_align_bond_noop_without_max_bond_dim() -> None:
     """Bond alignment is skipped when no fixed bond cap is configured."""
     state = MPS(2, state="x+")
-    params = StrongSimParams(preset="exact", get_state=True)
+    params = DigitalSimParams(preset="exact", get_state=True)
     before = [tensor.copy() for tensor in state.tensors]
     _align_bond(state, 0, params)
     for original, updated in zip(before, state.tensors, strict=True):
@@ -438,7 +438,7 @@ def test_align_bond_noop_without_max_bond_dim() -> None:
 def test_align_bond_noop_when_bonds_already_match() -> None:
     """Bond alignment is a no-op when adjacent virtual indices already agree."""
     state = MPS(2, state="x+")
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=4)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=4)
     before = [tensor.copy() for tensor in state.tensors]
     _align_bond(state, 0, params)
     for original, updated in zip(before, state.tensors, strict=True):
@@ -449,7 +449,7 @@ def test_cap_bonds_truncates_oversized_internal_bonds() -> None:
     """Global bond capping shrinks bonds above max_bond_dim before a sweep."""
     state = _seeded_haar_random_mps(4, pad=4)
     state.normalize()
-    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     _cap_bonds(state, params)
     for bond in range(state.length - 1):
         assert state.tensors[bond].shape[2] <= 2
@@ -473,7 +473,7 @@ def test_sync_bond_dim_padding_path() -> None:
     t0 = np.zeros((2, 1, 1), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
-    _sync_bond_dim(state, 0, 2, StrongSimParams(preset="exact", get_state=True, max_bond_dim=2))
+    _sync_bond_dim(state, 0, 2, DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2))
     assert state.tensors[0].shape[2] == 2
     assert state.tensors[1].shape[1] == 2
 
@@ -483,6 +483,6 @@ def test_sync_bond_dim_aligns_mismatched_bond_widths() -> None:
     t0 = np.zeros((2, 1, 2), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
-    _sync_bond_dim(state, 0, 2, StrongSimParams(preset="exact", get_state=True, max_bond_dim=2))
+    _sync_bond_dim(state, 0, 2, DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2))
     assert state.tensors[0].shape[2] == 2
     assert state.tensors[1].shape[1] == 2

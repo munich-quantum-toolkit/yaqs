@@ -173,7 +173,14 @@ def test_mcwf_zero_strength_noise() -> None:
 
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[Observable("z", sites=[0])])
 
-    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    ctx = preprocess_mcwf(
+        psi_initial=psi.to_vec(),
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert len(ctx.jump_ops) == 0
     assert ctx.is_unitary
     dim = 2**n_sites
@@ -187,7 +194,14 @@ def test_preprocess_mcwf_rejects_mismatched_h_sparse_shape() -> None:
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
     bad_h = scipy.sparse.eye(8, format="csr")
     with pytest.raises(ValueError, match=r"h_sparse must have shape \(4, 4\)"):
-        preprocess_mcwf(psi, None, None, sim_params, h_sparse=bad_h)
+        preprocess_mcwf(
+            psi_initial=psi.to_vec(),
+            h_sparse=bad_h,
+            noise_model=None,
+            sim_params=sim_params,
+            num_sites=psi.length,
+            physical_dimensions=psi.physical_dimensions,
+        )
 
 
 def test_preprocess_mcwf_sets_propagator_small_system() -> None:
@@ -200,7 +214,14 @@ def test_preprocess_mcwf_sets_propagator_small_system() -> None:
         elapsed_time=0.1,
         observables=[Observable("z", sites=[0])],
     )
-    ctx = preprocess_mcwf(psi, h, None, sim_params)
+    ctx = preprocess_mcwf(
+        psi_initial=psi.to_vec(),
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=None,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     dim = 2**n_sites
     assert dim <= MAX_PRECOMPUTE_DIM
     assert ctx.step_propagator is not None
@@ -217,7 +238,14 @@ def test_mcwf_noisy_system_has_propagator() -> None:
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
-    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    ctx = preprocess_mcwf(
+        psi_initial=psi.to_vec(),
+        h_sparse=h.to_sparse_matrix(),
+        noise_model=noise,
+        sim_params=sim_params,
+        num_sites=psi.length,
+        physical_dimensions=psi.physical_dimensions,
+    )
     assert not ctx.is_unitary
     assert ctx.step_propagator is not None
 

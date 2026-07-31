@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box tests import private backend helpers
+# ruff:file-ignore[import-private-name] -- white-box tests import private backend helpers
 
 """Tests for process-tensor simulation utility helpers."""
 

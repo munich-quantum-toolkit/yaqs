@@ -25,9 +25,8 @@ from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
+    DigitalSimParams,
     Observable,
-    StrongSimParams,
-    WeakSimParams,
 )
 from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
@@ -40,6 +39,7 @@ __all__ = [
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
+    "DigitalSimParams",
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",
@@ -49,8 +49,6 @@ __all__ = [
     "Result",
     "Simulator",
     "State",
-    "StrongSimParams",
-    "WeakSimParams",
     "__version__",
     "simulator",
     "version_info",

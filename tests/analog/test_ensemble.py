@@ -166,6 +166,25 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
     assert result_off.multi_time_times is None
 
 
+def test_list_mps_analog_ensemble_accepts_dense_hamiltonian() -> None:
+    """MPS ensembles auto-convert dense Hamiltonians to MPO."""
+    length = 2
+    dense = Hamiltonian.ising(length, J=0.2, g=0.1).to_matrix()
+    hamiltonian = Hamiltonian(matrix=dense)
+    states = [
+        State(length, initial="zeros", representation="mps"),
+        State(length, initial="ones", representation="mps"),
+    ]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    assert len(result.expectation_values) == 1
+    _ = hamiltonian.mpo
+
+
 def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
     """List-of-MPS analog ensemble only supports the mps representation path."""
     length = 2

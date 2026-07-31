@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import left_qr, right_qr
 from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
     from ..data_structures.mpo import MPO
     from ..data_structures.mps import MPS
-    from ..data_structures.simulation_parameters import AnalogSimParams
+    from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
 def prepare_canonical_site_tensors(
@@ -84,7 +83,7 @@ def choose_stack_tensor(
         NDArray[np.complex128]: The tensor to be stacked.
 
     """
-    if site == state.length - 1:  # noqa: SIM108
+    if site == state.length - 1:  # ruff:ignore[if-else-block-instead-of-if-exp]
         # This is the only leaf case.
         old_stack_tensor = state.tensors[site]
     else:
@@ -139,7 +138,7 @@ def local_update(
     canon_center_tensors: list[NDArray[np.complex128]],
     site: int,
     right_m_block: NDArray[np.complex128],
-    sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Single Site bug algorithm update.
 
@@ -181,7 +180,7 @@ def local_update(
     return basis_change_m, new_right_block
 
 
-def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams) -> None:
+def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
     """Performs the Basis-Update and Galerkin Method for an MPS.
 
     The state is updated in place.
@@ -204,9 +203,6 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
 
     if state.orthogonality_center is not None:
         state.assert_center(0, context="bug")
-
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
 
     canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)
     right_end_dimension = state.tensors[-1].shape[2]

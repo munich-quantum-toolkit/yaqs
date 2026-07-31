@@ -45,7 +45,7 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
-from mqt.yaqs import EquivalenceChecker, State, StrongSimParams
+from mqt.yaqs import DigitalSimParams, EquivalenceChecker, State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
@@ -56,7 +56,7 @@ from mqt.yaqs.digital.utils.dag_utils import (
     select_starting_point,
 )
 from tests.core.methods.tdvp.conftest import _fidelity
-from tests.digital.conftest import _run_strong_noiseless
+from tests.digital.conftest import _run_digital_observables_noiseless
 
 
 def test_supported_qiskit_gate_names_exact() -> None:
@@ -254,7 +254,7 @@ def test_custom_one_qubit_unitary_matches_qiskit_statevector() -> None:
     qc.append(UnitaryGate(unitary), [1])
     qc.h(0)
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -267,7 +267,7 @@ def test_custom_two_qubit_unitary_matches_qiskit_statevector() -> None:
     qc.append(UnitaryGate(unitary), [0, 1])
     qc.h(0)
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -280,7 +280,7 @@ def test_custom_two_qubit_unitary_reversed_qargs_matches_qiskit() -> None:
     qc.h(0)
     qc.append(UnitaryGate(unitary), [2, 0])
 
-    vec = _run_strong_noiseless(qc, gate_mode="mpo", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -293,7 +293,7 @@ def test_custom_long_range_two_qubit_unitary_matches_qiskit() -> None:
     qc.h(0)
     qc.append(UnitaryGate(unitary), [0, 2])
 
-    vec = _run_strong_noiseless(qc, gate_mode="mpo", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -320,7 +320,7 @@ def test_builtin_two_qubit_gate_reversed_qargs_match_qiskit(
     qc.h(0)
     getattr(qc, gate_name)(*qargs)
 
-    vec = _run_strong_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -345,7 +345,7 @@ def test_fixed_nonsymmetric_two_qubit_unitary_qarg_ordering(
     qc.h(0)
     qc.append(UnitaryGate(_FIXED_NONSYMMETRIC_2Q), list(qargs))
 
-    vec = _run_strong_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -357,7 +357,7 @@ class _CustomNamedUnitary(Gate):
     def __init__(self) -> None:
         super().__init__("custom", 1, [])
 
-    def to_matrix(self) -> np.ndarray:  # noqa: PLR6301
+    def to_matrix(self) -> np.ndarray:  # ruff:ignore[no-self-use]
         return np.array([[0, 1], [1, 0]], dtype=np.complex128)
 
 
@@ -400,7 +400,7 @@ def test_qiskit_standard_gate_matrix_fallback_matches_qiskit(
     assert gate.name == gate_name
     assert not hasattr(gate, "generator")
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    vec = _run_digital_observables_noiseless(qc, gate_mode="tdvp", get_state=True)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -441,8 +441,8 @@ def test_generator_less_nn_custom_gate_routes_tebd() -> None:
     assert not hasattr(gate, "generator")
 
     out = copy.deepcopy(State(2, initial="zeros").mps)
-    params = StrongSimParams(
-        observables=[],
+    params = DigitalSimParams(
+        get_state=True,
         gate_mode="tdvp",
         preset="exact",
         svd_threshold=1e-12,
@@ -473,8 +473,8 @@ def test_generator_less_lr_custom_gate_routes_mpo() -> None:
     assert not hasattr(gate, "generator")
 
     out = copy.deepcopy(State(length, initial="zeros").mps)
-    params = StrongSimParams(
-        observables=[],
+    params = DigitalSimParams(
+        get_state=True,
         gate_mode="tdvp",
         preset="exact",
         svd_threshold=1e-12,

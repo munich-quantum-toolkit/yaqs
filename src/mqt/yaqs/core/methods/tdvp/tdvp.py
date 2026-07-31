@@ -18,14 +18,14 @@ if TYPE_CHECKING:
 
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
-    from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
 def _run_sweeps(
     evolve_once: Callable[..., None],
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     /,
     *args: object,
     **kwargs: object,
@@ -69,7 +69,7 @@ def _run_sweeps(
 def tdvp(
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -114,7 +114,7 @@ def tdvp(
 def evolve_window(
     state: MPS,
     operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
     """Evolve a window-local MPS without post-sweep renormalization before grafting.
 

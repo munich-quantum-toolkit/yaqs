@@ -7,7 +7,7 @@
 
 """Operational memory characterization entry point for YAQS."""
 
-# ruff: noqa: ANN401, PLC0415 -- lazy torch imports, unified dispatch targets
+# ruff:file-ignore[any-type, import-outside-top-level] -- lazy torch imports, unified dispatch targets
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
     if not isinstance(hamiltonian, Hamiltonian):
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
         raise TypeError(msg)
-    hamiltonian.ensure_encoded("mpo")
+    hamiltonian.ensure_mpo()
     return hamiltonian.mpo
 
 
@@ -868,7 +868,7 @@ class MemoryCharacterizer:
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
-    def predict(  # noqa: PLR6301 -- public instance API
+    def predict(  # ruff:ignore[no-self-use] -- public instance API
         self,
         target: Any,
         rho0: np.ndarray,

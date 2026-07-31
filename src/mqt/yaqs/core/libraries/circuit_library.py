@@ -18,7 +18,7 @@ respective Hamiltonians.
 from __future__ import annotations
 
 # ignore non-lowercase argument names for physics notation
-# ruff: noqa: N803
+# ruff:file-ignore[invalid-argument-name]
 import numpy as np
 from qiskit.circuit import QuantumCircuit, QuantumRegister
 

@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
-    from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
     from ..methods.decompositions import TruncMode
 
 
@@ -55,7 +55,7 @@ def create_probability_distribution(
     state: MPS,
     noise_model: NoiseModel | None,
     dt: float,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
 ) -> tuple[list[dict[str, Any]], list[float]]:
     """Create a probability distribution for potential quantum jumps in the system.
 
@@ -159,7 +159,7 @@ def stochastic_process(
     state: MPS,
     noise_model: NoiseModel | None,
     dt: float,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | DigitalSimParams,
     rng: np.random.Generator | None = None,
 ) -> MPS:
     """Perform a stochastic process on the given state, simulating a quantum jump.

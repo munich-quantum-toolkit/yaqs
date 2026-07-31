@@ -14,9 +14,40 @@ mystnb:
 
 # Building Hamiltonians
 
-Analog simulations take a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` as the operator argument to {meth}`~mqt.yaqs.Simulator.run`. Most models are built as **matrix product operators (MPOs)** under the hood; the `Hamiltonian` wrapper materialises once at construction and can be reused across parameter sweeps.
+Analog simulations take a
+{class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` as the operator
+argument to {meth}`~mqt.yaqs.Simulator.run`. Most models are built as
+**matrix product operators (MPOs)** under the hood; the `Hamiltonian` wrapper
+materialises once at construction and can be reused across parameter sweeps.
 
-This page covers the factory methods in the library. For open-system evolution after the Hamiltonian is defined, see {doc}`analog_simulation`.
+**Backend selection** is driven only by
+{class}`~mqt.yaqs.core.data_structures.state.State` representation — not by how
+the Hamiltonian was constructed:
+
+| `State.representation` | Backend  | Form materialized at `run` |
+| ---------------------- | -------- | -------------------------- |
+| `"mps"` (default)      | TJM      | MPO                        |
+| `"vector"`             | MCWF     | sparse                     |
+| `"density_matrix"`     | Lindblad | sparse                     |
+
+Hamiltonian inputs (`tensors`, `matrix`, `sparse_matrix`, or a preset such as
+`Hamiltonian.ising(...)`) are **source data**, not backend choices. The same
+`Hamiltonian` instance works with all three state representations;
+`Simulator.run` converts and caches the required MPO or sparse form.
+
+```{warning}
+Selecting ``State.representation="mps"`` (TJM) calls
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.ensure_mpo`. For a
+``sparse_matrix`` source this densifies the operator before MPO factorization,
+allocating the full Hilbert-space matrix and risking out-of-memory failures on
+large systems. Prefer an MPO preset, ``Hamiltonian.from_mpo(...)``, or
+``tensors=`` when targeting TJM.
+```
+
+This page covers the factory methods in the library. For open-system evolution
+after the Hamiltonian is defined, see {doc}`analog_simulation`. For choosing a
+state representation, see {doc}`state_initialization` and
+{doc}`representation_comparison`.
 
 ## `Hamiltonian` versus `MPO`
 
@@ -27,11 +58,17 @@ This page covers the factory methods in the library. For open-system evolution a
 
 Typical patterns:
 
-- **Preset classmethods** — `Hamiltonian.ising(...)`, `Hamiltonian.pauli(...)`, etc.
-- **Wrap an MPO** — `Hamiltonian.from_mpo(mpo)` after `MPO.bose_hubbard(...)` or a custom build.
-- **Manual data** — `Hamiltonian(tensors=...)` or `Hamiltonian(matrix=...)` / `sparse_matrix=...` for small dense/sparse backends (MCWF / Lindblad).
+- **Preset classmethods** — `Hamiltonian.ising(...)`, `Hamiltonian.pauli(...)`,
+  etc. (no `representation=` argument).
+- **Wrap an MPO** — `Hamiltonian.from_mpo(mpo)` after `MPO.bose_hubbard(...)` or
+  a custom build.
+- **Manual data** — `Hamiltonian(tensors=...)`, `Hamiltonian(matrix=...)`, or
+  `Hamiltonian(sparse_matrix=...)`. Any of these can drive TJM, MCWF, or
+  Lindblad once paired with the matching `State.representation`.
 
-Access the internal MPO with `H.mpo` when you need bond dimension or tensor cores.
+Access the materialized MPO with `H.mpo` (after a TJM run or `H.ensure_mpo()`)
+and the sparse form with `H.sparse_matrix` (after an MCWF / Lindblad run or
+`H.ensure_sparse()`). Both can coexist on one instance.
 
 ## Built-in models (quick reference)
 
@@ -45,7 +82,8 @@ Access the internal MPO with `H.mpo` when you need bond dimension or tensor core
 | Coupled transmon chain      | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon`                                                       | alternating qubit / resonator dims    |
 | Trapped ion (position grid) | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` → `Hamiltonian.from_mpo`                                                   | grid points per ion (1–2 ions)        |
 
-Open (`bc="open"`) and periodic (`bc="periodic"`) boundaries are supported on the Pauli builders.
+Open (`bc="open"`) and periodic (`bc="periodic"`) boundaries are supported on
+the Pauli builders.
 
 ## Pauli-string Hamiltonians
 
@@ -53,9 +91,9 @@ Open (`bc="open"`) and periodic (`bc="periodic"`) boundaries are supported on th
 
 The transverse-field Ising Hamiltonian on an open chain is
 
-$$
-H = -J \sum_i Z_i Z_{i+1} - g \sum_i X_i .
-$$
+```{math}
+H = -J \sum_i Z_i Z_{i+1} - g \sum_i X_i.
+```
 
 ```{code-cell} ipython3
 from mqt.yaqs import Hamiltonian
@@ -67,7 +105,9 @@ H_ising = Hamiltonian.ising(L, J, g)
 
 ### Structured one- and two-body Pauli terms
 
-{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.pauli` expands nearest-neighbour `two_body` and on-site `one_body` lists into Pauli strings automatically:
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.pauli` expands
+nearest-neighbour `two_body` and on-site `one_body` lists into Pauli strings
+automatically:
 
 ```{code-cell} ipython3
 H_ising = Hamiltonian.pauli(
@@ -86,7 +126,10 @@ H_heisenberg = Hamiltonian.heisenberg(L, Jx=1.0, Jy=1.0, Jz=1.0, h=0.2)
 
 ### Explicit Pauli strings (`from_pauli_sum`)
 
-For **arbitrary** Pauli strings—including long-range couplings—pass `(coefficient, spec)` pairs to {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.from_pauli_sum`. Each `spec` lists operators with **site indices**, e.g. `"Z0 Z3"` or `"X2"`:
+For **arbitrary** Pauli strings—including long-range couplings—pass
+`(coefficient, spec)` pairs to
+{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.from_pauli_sum`. Each `spec` lists
+operators with **site indices**, e.g. `"Z0 Z3"` or `"X2"`:
 
 ```{code-cell} ipython3
 from mqt.yaqs import MPO
@@ -103,16 +146,18 @@ Long-range terms are ordinary entries in `terms`:
 terms.append((0.1, "Z0 Z3"))  # Z on sites 0 and 3
 ```
 
-Pauli labels are `I`, `X`, `Y`, `Z` (case-insensitive). Only `physical_dimension=2` is supported for this builder.
+Pauli labels are `I`, `X`, `Y`, `Z` (case-insensitive). Only
+`physical_dimension=2` is supported for this builder.
 
 ## Fermi–Hubbard (1D)
 
-{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` implements
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d`
+implements
 
-$$
+```{math}
 H = -t \sum_{i,\sigma} \left(c^\dagger_{i,\sigma} c_{i+1,\sigma} + \mathrm{h.c.}\right)
 + U \sum_i n_{i,\uparrow} n_{i,\downarrow}
-$$
+```
 
 (open boundaries, no chemical potential).
 
@@ -120,7 +165,8 @@ $$
 
 One **physical site** has local dimension 4 with basis
 $|0\rangle, |\!\downarrow\rangle, |\!\uparrow\rangle, |\!\uparrow\downarrow\rangle$.
-Ladder operators act on the composite ↑/↓ space per site (not a Jordan–Wigner qubit chain across sites).
+Ladder operators act on the composite ↑/↓ space per site (not a Jordan–Wigner
+qubit chain across sites).
 
 ```{code-cell} ipython3
 num_sites = 4
@@ -129,35 +175,44 @@ t, u = 1.0, 0.5
 H_fermi = Hamiltonian.fermi_hubbard_1d(num_sites, t=t, u=u)
 ```
 
-Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using `physical_dimensions=[4] * num_sites` when building product Fock states (see {doc}`state_initialization`).
+Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using
+`physical_dimensions=[4] * num_sites` when building product Fock states (see
+{doc}`state_initialization`).
 
 ### Jordan–Wigner Pauli chain
 
-Pass `jordan_wigner=True` for a qubit chain in the order 1↑, 1↓, 2↑, 2↓, … Here `length` is the number of **spin orbitals** (must be even):
+Pass `jordan_wigner=True` for a qubit chain in the order 1↑, 1↓, 2↑, 2↓, … Here
+`length` is the number of **spin orbitals** (must be even):
 
 ```{code-cell} ipython3
 num_orbitals = 2 * num_sites
 H_jw = Hamiltonian.fermi_hubbard_1d(num_orbitals, t=t, u=u, jordan_wigner=True)
 ```
 
-Use this mode when you need Pauli-string semantics with full JW signs between orbitals.
+Use this mode when you need Pauli-string semantics with full JW signs between
+orbitals.
 
 ```{note}
-The analog MPO factories omit a chemical potential $\mu$. For a **digital** Trotter circuit with $\mu$, see {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit` and {doc}`strong_simulation`.
+The analog MPO factories omit a chemical potential $\mu$. For a **digital**
+Trotter circuit with $\mu$, see
+{func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit`
+and {doc}`circuit_observables`.
 ```
 
-Correctness of the fermionic and JW MPOs is covered by `test_fermi_hubbard_1d_*` in the package test suite.
+Correctness of the fermionic and JW MPOs is covered by `test_fermi_hubbard_1d_*`
+in the package test suite.
 
 ## Bose–Hubbard
 
 The Bose–Hubbard model
 
-$$
+```{math}
 H = \sum_i \left(\omega\, n_i + \frac{U}{2}\, n_i(n_i-1)\right)
 - J \sum_i \left(a^\dagger_i a_{i+1} + \mathrm{h.c.}\right)
-$$
+```
 
-is available on {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.bose_hubbard`. Wrap the MPO for analog simulation:
+is available on {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.bose_hubbard`.
+Wrap the MPO for analog simulation:
 
 ```{code-cell} ipython3
 from mqt.yaqs import Hamiltonian, MPO
@@ -174,11 +229,14 @@ H_bh = Hamiltonian.from_mpo(
 )
 ```
 
-Initial states must respect the boson dimension, e.g. `State(length, initial="zeros", physical_dimensions=[local_dim] * length)`.
+Initial states must respect the boson dimension, e.g.
+`State(length, initial="zeros", physical_dimensions=[local_dim] * length)`.
 
 ## Coupled transmon–resonator chains
 
-{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon` builds an alternating chain of transmon qubits and resonators with local dimensions `qubit_dim` and `resonator_dim`:
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon`
+builds an alternating chain of transmon qubits and resonators with local
+dimensions `qubit_dim` and `resonator_dim`:
 
 ```{code-cell} ipython3
 H_transmon = Hamiltonian.coupled_transmon(
@@ -196,12 +254,17 @@ A full SWAP-style open-system example is in {doc}`transmon_emulation`.
 
 ## Trapped-ion position grid
 
-{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` builds a **static** Hamiltonian for one or two ions on a uniform position grid. Each ion is one MPO site with local dimension equal to the number of grid points. The local terms are a harmonic trap plus a centered finite-difference kinetic energy; for two ions, a softened Coulomb repulsion is compressed into MPO channels (optional SVD truncation via `coulomb_cutoff` or `max_bond_dim`).
+{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` builds a **static**
+Hamiltonian for one or two ions on a uniform position grid. Each ion is one MPO
+site with local dimension equal to the number of grid points. The local terms
+are a harmonic trap plus a centered finite-difference kinetic energy; for two
+ions, a softened Coulomb repulsion is compressed into MPO channels (optional SVD
+truncation via `coulomb_cutoff` or `max_bond_dim`).
 
-$$
+```{math}
 H = \sum_i \left[-\frac{\hbar^2}{2m_i}\frac{d^2}{dx_i^2} + \tfrac{1}{2} m_i \omega^2 (x_i - q)^2\right]
 + \frac{g}{\sqrt{(x_1-x_2)^2 + a^2}}
-$$
+```
 
 (the Coulomb term applies only when two masses are supplied).
 
@@ -231,22 +294,28 @@ H_pair = Hamiltonian.from_mpo(
 )
 ```
 
-Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using `physical_dimensions=[len(positions)]` per ion site. A wavepacket reflection benchmark is in {doc}`trapped_ion`.
+Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using
+`physical_dimensions=[len(positions)]` per ion site. A wavepacket reflection
+benchmark is in {doc}`trapped_ion`.
 
 ```{note}
-YAQS applies $\exp(-\mathrm{i}\,\Delta t\, H)$ during evolution. When using SI units, pass energies and times in consistent units or rescale $H/\hbar$ explicitly (see the factory docstring).
+YAQS applies $\exp(-\mathrm{i}\,\Delta t\, H)$ during evolution. When using SI
+units, pass energies and times in consistent units or rescale $H/\hbar$
+explicitly (see the factory docstring).
 ```
 
 ## Manual Hamiltonians
 
-For imported MPO cores or small-system dense operators:
+For imported MPO cores or small-system dense/sparse operators:
 
 ```python
-# MPO tensor cores (rank-4 per site, already in MPO layout)
+# MPO tensor cores (rank-4 per site, already in MPO layout) — preferred for TJM
 H = Hamiltonian(tensors=my_cores)
 
-# Dense matrix (MCWF / Lindblad when state is vector or density_matrix)
+# Dense or sparse matrix — YAQS converts to MPO or sparse as needed at run time.
+# sparse_matrix → TJM densifies; prefer tensors=/from_mpo/presets for large systems.
 H = Hamiltonian(matrix=dense_h, physical_dimension=2)
+H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ```
 
 ## Related topics

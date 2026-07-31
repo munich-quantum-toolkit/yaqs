@@ -36,7 +36,7 @@ def test_state_rejects_nonpositive_length() -> None:
 def test_state_invalid_representation() -> None:
     """State rejects unknown representation values."""
     with pytest.raises(ValueError, match=r"Invalid representation 'tjm'"):
-        State(2, representation=cast(Any, "tjm"))  # noqa: TC006
+        State(2, representation=cast(Any, "tjm"))  # ruff:ignore[runtime-cast-value]
 
 
 def test_ensure_encoded_without_argument_uses_state_representation() -> None:
@@ -105,7 +105,7 @@ def test_ensure_encoded_invalid_representation_raises() -> None:
     """Unknown representation strings raise ValueError."""
     psi = State(2, initial="zeros")
     with pytest.raises(ValueError, match=r"Invalid representation 'invalid'"):
-        psi.ensure_encoded(cast(Any, "invalid"))  # noqa: TC006
+        psi.ensure_encoded(cast(Any, "invalid"))  # ruff:ignore[runtime-cast-value]
 
 
 def test_initial_kwarg_builds_mps() -> None:

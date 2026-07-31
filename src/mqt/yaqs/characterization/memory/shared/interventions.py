@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import numpy as np
 
@@ -285,7 +285,7 @@ def normalize_style(style: str) -> InterventionStyle:
     """
     key = str(style).strip().lower()
     if key in {"haar", "clifford", "measure_prepare"}:
-        return cast("InterventionStyle", key)
+        return key
     msg = f"style must be 'haar', 'clifford', or 'measure_prepare', got {style!r}."
     raise ValueError(msg)
 

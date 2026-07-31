@@ -14,14 +14,20 @@ mystnb:
 
 # Initializing Quantum States
 
-YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.state.State)) from **how evolution runs** ([`AnalogSimParams`](mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams), Hamiltonian, noise).
+YAQS separates **what you specify** (a
+{class}`~mqt.yaqs.core.data_structures.state.State`) from **how evolution runs**
+({class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`,
+Hamiltonian, noise).
 
 | Layer       | Role                                                                                                                                                           |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
-| **`MPS`**   | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code.                   |
+| **`MPS`**   | Internal tensor network; used by the simulator when needed. Prefer {class}`~mqt.yaqs.core.data_structures.state.State` in application code.                    |
 
-**Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`Simulator.run`](mqt.yaqs.Simulator) — including in parameter loops.
+**Workflow:** build a {class}`~mqt.yaqs.core.data_structures.state.State` and a
+{class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` once (both
+materialize at construction), then pass them to
+{meth}`Simulator.run <mqt.yaqs.Simulator.run>` — including in parameter loops.
 
 ```{code-cell} ipython3
 from mqt.yaqs import State
@@ -33,9 +39,14 @@ mcwf_state = State(4, initial="zeros", representation="vector")
 
 ## `State` versus `MPS`
 
-Use `State` in [`Simulator.run`](mqt.yaqs.Simulator). Use [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
+Use `State` in {meth}`Simulator.run <mqt.yaqs.Simulator.run>`. Use
+{class}`~mqt.yaqs.core.data_structures.mps.MPS` directly only for low-level
+tensor-network code, or wrap an existing MPS with {meth}`State.from_mps`
+<mqt.yaqs.core.data_structures.state.State.from_mps>`.
 
-**Circuit simulation** requires `representation="mps"` (the preset default). `Simulator.run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
+**Circuit simulation** requires `representation="mps"` (the preset default).
+`Simulator.run` with `DigitalSimParams` rejects vector and density-matrix
+states.
 
 ## How `representation` is chosen
 
@@ -57,15 +68,19 @@ lindblad_ready = State(2, initial="zeros", representation="density_matrix")
 
 ## Preset product states
 
-Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`, `"Neel"`, `"wall"`, `"basis"`, `"random"`, etc.
+Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`,
+`"Neel"`, `"wall"`, `"basis"`, `"random"`, etc.
 
-For **MCWF** or **Lindblad**, set `representation` on the `State` and call `Simulator.run` — no extra steps:
+For **MCWF** or **Lindblad**, set `representation` on the `State` and call
+`Simulator.run` — no extra steps:
 
 ```{code-cell} ipython3
 neel_mcwf = State(4, initial="Neel", representation="vector")
 ```
 
-Product presets can evolve in dense form without ever building an MPS in memory. **Entangled** presets (e.g. `"haar-random"`) may still require an internal MPS when you choose a dense representation.
+Product presets can evolve in dense form without ever building an MPS in memory.
+**Entangled** presets (e.g. `"haar-random"`) may still require an internal MPS
+when you choose a dense representation.
 
 Reproducible `"random"` presets: pass `seed=` on `State`.
 
@@ -77,7 +92,9 @@ b = State(3, initial="random", seed=7, representation="vector")
 
 ## Manual initialization
 
-Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation is **inferred**; do not pass `representation=`. Preset-only kwargs (`initial`, `pad`, `basis_string`, `seed`) cannot be combined with manual data.
+Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
+is **inferred**; do not pass `representation=`. Preset-only kwargs (`initial`,
+`pad`, `basis_string`, `seed`) cannot be combined with manual data.
 
 ### MPS cores (`tensors=`)
 
@@ -104,11 +121,15 @@ rho = np.diag([1.0, 0.0, 0.0, 0.0]).astype(np.complex128)
 spec = State(density_matrix=rho)
 ```
 
-A `State` created only with `vector=` or `density_matrix=` cannot be used for circuit simulation; use `tensors=` or a preset with `representation="mps"` instead.
+A `State` created only with `vector=` or `density_matrix=` cannot be used for
+circuit simulation; use `tensors=` or a preset with `representation="mps"`
+instead.
 
 ## Representation and backends (analog)
 
-Set **`representation` on `State`**, not on `AnalogSimParams`. [`Simulator.run`](mqt.yaqs.Simulator) materializes the correct internal form and dispatches:
+Set **`representation` on `State`**, not on `AnalogSimParams`.
+{meth}`Simulator.run <mqt.yaqs.Simulator.run>` materializes the correct internal
+form and dispatches:
 
 | `representation`   | Backend (analog)                      |
 | ------------------ | ------------------------------------- |
@@ -166,11 +187,13 @@ params_dm = AnalogSimParams(
 result = sim.run(state_dm, H, params_dm, None)
 ```
 
-See {doc}`representation_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
+See {doc}`representation_comparison` for a side-by-side comparison of the three
+representations on the same Hamiltonian.
 
 ### Passing dense data directly
 
-If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=` — representation is inferred:
+If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or
+`density_matrix=` — representation is inferred:
 
 ```{code-cell} ipython3
 psi = np.zeros(2**L, dtype=np.complex128)
@@ -181,13 +204,22 @@ result = sim.run(state_from_vec, H, params_vec, None)
 
 ## Practical limits
 
-- **Memory**: dense `vector` scales as $2^N$; `density_matrix` as $2^{2N}$. Prefer `representation="mps"` for longer chains.
-- **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
-- **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
-- **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
-- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State). Use `.mps` for MPS runs, `.vector` for MCWF, or `.density_matrix` for Lindblad. Not supported with stochastic noise on `mps` or `vector` representations (use `density_matrix` for the exact ensemble average).
+- **Memory**: dense `vector` scales as $2^N$; `density_matrix` as $2^{2N}$.
+  Prefer `representation="mps"` for longer chains.
+- **Entangled presets**: `"haar-random"` may need an internal MPS for dense
+  representations.
+- **Circuits**: use `State(..., representation="mps")` (default); `vector=` /
+  `density_matrix=` states cannot run circuits.
+- **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires
+  each member with `representation="mps"`.
+- **`get_state`**: when supported, `result.output_state` is a
+  {class}`~mqt.yaqs.core.data_structures.state.State`. Use `.mps` for MPS runs,
+  `.vector` for MCWF, or `.density_matrix` for Lindblad. Not supported with
+  stochastic noise on `mps` or `vector` representations (use `density_matrix`
+  for the exact ensemble average).
 
-For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.
+For MPO/TJM details without `State`, see {doc}`analog_simulation` and the
+{class}`~mqt.yaqs.core.data_structures.mps.MPS` API reference.
 
 ## Related topics
 
