@@ -4,6 +4,30 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Run fixed-rate noisy Krotov as a Phase II training stage
+
+Use `benchmarks.state_preparation.phase2.NoisyKrotovCircuitBinding` and
+`execute_fixed_rate_krotov_stage` for the new benchmark-grade path. The adapter
+accepts a resolved `TrainingStageConfig`, logical parameterized circuit, target,
+and initial parameters; it intentionally accepts no final-test configuration.
+It supports all ten standard fixed-rate profiles, the frozen
+`ibm_inspired_pauli_legacy_v1` physical-noise profile, independent pathwise
+updates, separately labelled cross dense-sum updates, fixed/resampled/refreshed
+trajectory ensembles, and independently seeded checkpoint validation.
+Checkpoint validation includes iteration zero. When resuming a chunk, pass the
+previous execution's `resume_state` together with the required replay ensembles;
+it binds the target, initial state, final parameters, prior best checkpoint, and
+cumulative work so foreign or incomplete resumes are rejected.
+Cross updates expose their dense `R**2` trajectory-pair count separately because
+the strict Phase II normalized-work schema has no cross-pair counter.
+
+Use `KrotovFixedMapEnsemble` to serialize, checksum, verify, and replay exact
+trajectory maps. Its logical ensemble identifier depends only on the resolved
+random-stream seed and explicit stage/ensemble/trajectory/refresh coordinates;
+the separate content checksum also binds the stage, circuit, provider, and map
+bytes. Existing Phase I Krotov methods and their historical seed behavior are
+unchanged.
+
 ### Run Krotov state preparation through the method adapter
 
 Use `benchmarks.state_preparation.KrotovStatePreparationMethod` to construct

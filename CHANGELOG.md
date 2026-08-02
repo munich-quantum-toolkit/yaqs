@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added benchmark-grade fixed-rate noisy Krotov stages with domain-separated trajectory seeds, immutable replayable CRN ensembles, scaled standard and frozen historical noise profiles, refresh/resume schedules, checkpoint-validation selection, explicit cross-update diagnostics, and normalized work accounting ([**@MaxFroehlich1410**])
 - added versioned Phase II target-population generators and staged-training schemas with custodied manifest commitments, a pre-execution v2 split between spectrum-only manifest generation and authorized state-vector materialization, deterministic pipeline identities, checkpoint lineage, and Phase I compatibility guards ([**@MaxFroehlich1410**])
 - added a checksum-sealed Phase II state-preparation preregistration, complete screening-evidence and mechanical promotion controls, matched confirmatory contrasts, sample-size design guard, and commit-addressed legacy-evidence audit ([**@MaxFroehlich1410**])
 - added a JSON-configurable CLI with smoke, minimum, and full presets plus train-once execution, filtering, dry runs, and safe resume behavior for state-preparation benchmarks ([**@MaxFroehlich1410**])

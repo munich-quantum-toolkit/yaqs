@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import starmap
 from numbers import Integral, Real
 from types import MappingProxyType
@@ -42,6 +44,12 @@ _NORMALIZATION_ATOL = 1e-12
 STANDARD_ONE_QUBIT_GATE_STRENGTH = 6.4e-4
 STANDARD_TWO_QUBIT_GATE_STRENGTH = 5.1e-3
 STANDARD_NOISE_STRENGTH_INTERPRETATION = "per_jump_operator"
+FIXED_RATE_NOISE_DEFINITION_VERSION = "yaqs.state_preparation.noise.v1"
+HISTORICAL_FIXED_RATE_NOISE_ID = "ibm_inspired_pauli_legacy_v1"
+_LOGICAL_PARAMETERIZED_GATE_PLACEMENT = "logical_parameterized_gates"
+_HISTORICAL_ONE_QUBIT_PROCESS_STRENGTH = 1.0e-4
+_HISTORICAL_TWO_QUBIT_PROCESS_STRENGTH = 1.5e-3
+_HISTORICAL_TJM_DT = 1.0
 TWO_SITE_DEPOLARIZING_OPERATORS = (
     "XX",
     "XY",
@@ -634,15 +642,342 @@ def create_standard_noise_provider(noise_id: str) -> StandardNoiseProvider:
     return StandardNoiseProvider(get_standard_noise_definition(noise_id))
 
 
+def _validate_positive_finite_scale(value: object) -> float:
+    """Return one canonical positive finite noise-strength scale.
+
+    Returns:
+        The scale as a built-in float.
+
+    Raises:
+        TypeError: If the scale is not a real scalar or is a Boolean.
+        ValueError: If the scale is non-finite or not strictly positive.
+    """
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, Real):
+        msg = f"strength_scale must be a real scalar, got {type(value).__name__}."
+        raise TypeError(msg)
+    try:
+        scale = float(value)
+    except OverflowError as error:
+        msg = "strength_scale must be finite."
+        raise ValueError(msg) from error
+    if not math.isfinite(scale) or scale <= 0.0:
+        msg = f"strength_scale must be positive and finite, got {scale!r}."
+        raise ValueError(msg)
+    return scale
+
+
+def _provider_content_checksum(payload: Mapping[str, object]) -> str:
+    """Return a deterministic checksum for JSON-native provider metadata.
+
+    Returns:
+        A ``sha256:``-prefixed checksum.
+    """
+    serialized = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode()
+    return f"sha256:{hashlib.sha256(serialized).hexdigest()}"
+
+
+def _fresh_scaled_instruction(
+    templates: tuple[_ProcessTemplate, ...],
+    context: GateNoiseContext,
+    strength_scale: float,
+    channel_id: str,
+) -> TJMNoiseInstruction | None:
+    """Build one detached gate-local model from relative process templates.
+
+    Returns:
+        A fresh TJM instruction, or ``None`` for an excluded gate arity.
+    """
+    if not templates:
+        return None
+    processes = [
+        {
+            "name": name,
+            "sites": [context.sites[index] for index in relative_sites],
+            "strength": strength * strength_scale,
+        }
+        for name, relative_sites, strength in templates
+    ]
+    noise_model = NoiseModel(processes)
+    for process in noise_model.processes:
+        if "matrix" in process:
+            process["matrix"] = np.array(process["matrix"], dtype=np.complex128, copy=True)
+        if "factors" in process:
+            process["factors"] = tuple(
+                np.array(factor, dtype=np.complex128, copy=True) for factor in process["factors"]
+            )
+    return TJMNoiseInstruction(noise_model, channel_id=channel_id)
+
+
+@dataclass(frozen=True, slots=True)
+class ScaledStandardNoiseProvider:
+    """Immutable logical-gate provider for a scaled standard fixed-rate profile.
+
+    Scaling creates fresh gate-local models and never mutates the canonical
+    :data:`STANDARD_NOISE_REGISTRY`. The time step remains a separate stage
+    setting; this provider scales only the per-jump-operator strengths.
+
+    Attributes:
+        definition: Canonical base standard-noise definition.
+        strength_scale: Strictly positive finite multiplier for every strength.
+    """
+
+    definition: StandardNoiseDefinition
+    strength_scale: float
+
+    def __post_init__(self) -> None:
+        """Canonicalize the base definition and validate the scale.
+
+        Raises:
+            TypeError: If the base definition or scale has an invalid type.
+        """
+        if type(self.definition) is not StandardNoiseDefinition:
+            msg = f"definition must be a StandardNoiseDefinition, got {type(self.definition).__name__}."
+            raise TypeError(msg)
+        object.__setattr__(self, "definition", get_standard_noise_definition(self.definition.noise_id))
+        object.__setattr__(self, "strength_scale", _validate_positive_finite_scale(self.strength_scale))
+
+    @property
+    def base_noise_id(self) -> str:
+        """The canonical unscaled registry identifier."""
+        return self.definition.noise_id
+
+    @property
+    def noise_id(self) -> str:
+        """Alias for the canonical base registry identifier."""
+        return self.base_noise_id
+
+    @property
+    def noise_definition_version(self) -> str:
+        """The fixed-rate noise-definition version."""
+        return FIXED_RATE_NOISE_DEFINITION_VERSION
+
+    @property
+    def gate_placement(self) -> str:
+        """The benchmark representation on which this provider acts."""
+        return _LOGICAL_PARAMETERIZED_GATE_PLACEMENT
+
+    @property
+    def identity(self) -> tuple[str, str, float, str]:
+        """The complete immutable provider identity."""
+        return (
+            self.base_noise_id,
+            self.noise_definition_version,
+            self.strength_scale,
+            self.gate_placement,
+        )
+
+    def identity_payload(self) -> dict[str, object]:
+        """Return the JSON-native fields that define provider identity."""
+        return {
+            "base_noise_id": self.base_noise_id,
+            "noise_definition_version": self.noise_definition_version,
+            "strength_scale": self.strength_scale,
+            "gate_placement": self.gate_placement,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """A deterministic checksum of the provider identity."""
+        return _provider_content_checksum(self.identity_payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a detached deterministic JSON-native identity mapping."""
+        return self.identity_payload()
+
+    def __call__(
+        self,
+        context: GateNoiseContext,
+        rng: np.random.Generator,
+        /,
+    ) -> TJMNoiseInstruction | None:
+        """Build one fresh scaled gate-local TJM instruction.
+
+        Returns:
+            A fresh instruction, or ``None`` if the base profile excludes the
+            gate arity.
+
+        Raises:
+            TypeError: If ``context`` is not a gate-noise context.
+        """
+        del rng
+        if not isinstance(context, GateNoiseContext):
+            msg = f"context must be a GateNoiseContext, got {type(context).__name__}."
+            raise TypeError(msg)
+        return _fresh_scaled_instruction(
+            self.definition.process_templates(context.arity),
+            context,
+            self.strength_scale,
+            self.base_noise_id,
+        )
+
+
+def create_scaled_standard_noise_provider(
+    base_noise_id: str,
+    strength_scale: float,
+) -> ScaledStandardNoiseProvider:
+    """Create an immutable scaled provider for one standard profile.
+
+    Returns:
+        A provider bound to the canonical base definition and requested scale.
+    """
+    return ScaledStandardNoiseProvider(
+        get_standard_noise_definition(base_noise_id),
+        strength_scale,
+    )
+
+
+def _historical_process_templates(arity: int) -> tuple[_ProcessTemplate, ...]:
+    """Return the archived logical fixed-rate process templates for one gate.
+
+    Returns:
+        Ordered relative process templates for a one- or two-qubit gate.
+
+    Raises:
+        ValueError: If the gate arity is unsupported.
+    """
+    if arity not in {1, 2}:
+        msg = f"Historical fixed-rate noise supports only gate arities one and two, got {arity}."
+        raise ValueError(msg)
+    single_site = tuple(
+        (f"pauli_{label.lower()}", (relative_site,), _HISTORICAL_ONE_QUBIT_PROCESS_STRENGTH)
+        for relative_site in range(arity)
+        for label in ("X", "Y", "Z")
+    )
+    if arity == 1:
+        return single_site
+    return (
+        *single_site,
+        ("crosstalk_xx", (0, 1), _HISTORICAL_TWO_QUBIT_PROCESS_STRENGTH),
+        ("crosstalk_zz", (0, 1), _HISTORICAL_TWO_QUBIT_PROCESS_STRENGTH),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalFixedRateNoiseProvider:
+    """Frozen historical logical fixed-rate TJM simulation profile.
+
+    The identifier preserves the archived hardware-inspired label solely for
+    reproducibility. This provider represents a logical-gate TJM simulation: it
+    is neither a Ballarin channel nor evidence of IBM Heron hardware execution.
+    """
+
+    noise_id: str = field(default=HISTORICAL_FIXED_RATE_NOISE_ID, init=False)
+    noise_definition_version: str = field(default=FIXED_RATE_NOISE_DEFINITION_VERSION, init=False)
+    gate_placement: str = field(default=_LOGICAL_PARAMETERIZED_GATE_PLACEMENT, init=False)
+    tjm_dt: float = field(default=_HISTORICAL_TJM_DT, init=False)
+
+    @property
+    def identity(self) -> tuple[str, str, str, float]:
+        """The complete immutable historical profile identity."""
+        return (
+            self.noise_id,
+            self.noise_definition_version,
+            self.gate_placement,
+            self.tjm_dt,
+        )
+
+    def identity_payload(self) -> dict[str, object]:
+        """Return the JSON-native fields that define historical identity."""
+        return {
+            "noise_id": self.noise_id,
+            "noise_definition_version": self.noise_definition_version,
+            "gate_placement": self.gate_placement,
+            "tjm_dt": self.tjm_dt,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """A deterministic checksum of the full frozen profile."""
+        return _provider_content_checksum(self.to_dict())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return complete deterministic historical-profile metadata."""
+        return {
+            **self.identity_payload(),
+            "channel_semantics": "fixed_rate_logical_tjm_simulation",
+            "is_ballarin": False,
+            "is_hardware_execution": False,
+            "two_qubit_crosstalk_connectivity": "adjacent_linear_chain_only",
+            "one_qubit_gate_processes": [
+                {
+                    "name": name,
+                    "relative_sites": list(relative_sites),
+                    "strength": strength,
+                }
+                for name, relative_sites, strength in _historical_process_templates(1)
+            ],
+            "two_qubit_gate_processes": [
+                {
+                    "name": name,
+                    "relative_sites": list(relative_sites),
+                    "strength": strength,
+                }
+                for name, relative_sites, strength in _historical_process_templates(2)
+            ],
+        }
+
+    def __call__(
+        self,
+        context: GateNoiseContext,
+        rng: np.random.Generator,
+        /,
+    ) -> TJMNoiseInstruction:
+        """Build a fresh archived logical gate-local TJM instruction.
+
+        Returns:
+            A fresh model containing three processes per participating site and,
+            for two-qubit gates, the archived ``XX`` and ``ZZ`` processes.
+
+        Raises:
+            TypeError: If ``context`` is not a gate-noise context.
+        """
+        del rng
+        if not isinstance(context, GateNoiseContext):
+            msg = f"context must be a GateNoiseContext, got {type(context).__name__}."
+            raise TypeError(msg)
+        templates = _historical_process_templates(context.arity)
+        if context.arity == 2 and abs(context.sites[0] - context.sites[1]) != 1:
+            templates = tuple(template for template in templates if len(template[1]) == 1)
+        instruction = _fresh_scaled_instruction(
+            templates,
+            context,
+            1.0,
+            self.noise_id,
+        )
+        assert instruction is not None
+        return instruction
+
+
+def create_historical_fixed_rate_noise_provider() -> HistoricalFixedRateNoiseProvider:
+    """Create the frozen historical logical fixed-rate simulation provider.
+
+    Returns:
+        A stateless immutable provider for the exact archived profile.
+    """
+    return HistoricalFixedRateNoiseProvider()
+
+
 __all__ = [
+    "FIXED_RATE_NOISE_DEFINITION_VERSION",
+    "HISTORICAL_FIXED_RATE_NOISE_ID",
     "STANDARD_NOISE_REGISTRY",
     "STANDARD_NOISE_STRENGTH_INTERPRETATION",
     "STANDARD_ONE_QUBIT_GATE_STRENGTH",
     "STANDARD_TWO_QUBIT_GATE_STRENGTH",
     "TWO_SITE_DEPOLARIZING_OPERATORS",
+    "HistoricalFixedRateNoiseProvider",
     "PauliDistribution",
+    "ScaledStandardNoiseProvider",
     "StandardNoiseDefinition",
     "StandardNoiseProvider",
+    "create_historical_fixed_rate_noise_provider",
+    "create_scaled_standard_noise_provider",
     "create_standard_noise_provider",
     "get_standard_noise_definition",
     "sample_local_pauli",
