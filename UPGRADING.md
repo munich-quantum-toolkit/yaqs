@@ -4,6 +4,68 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Persist and resume Phase II staged pipelines
+
+Use `benchmarks.state_preparation.phase2.capture_resumability_fingerprint` to
+seal the starting Git commit, complete pipeline prefix, resolved dependency
+versions, tracked execution sources, lockfiles, and study inputs. Pass a
+dedicated generated-output directory separately; output paths are rejected as
+fingerprint inputs so a run does not invalidate itself as it writes evidence.
+
+Create `Phase2ArtifactStore(output_dir, pipeline, fingerprint)` for a new run
+and pass it to `Phase2PipelineExecutor`. A stage callback receives only the
+resolved stage and predecessor parameters, and each successful callback is
+persisted before the next stage begins. Reopen the same store with
+`resume=True`; it verifies the canonical stage prefix, referenced checkpoints,
+traces, metadata, fixed maps, source parameters, and provenance, then skips
+every completed stage. Existing output is never reused implicitly, and
+`overwrite=True` removes only the store's known versioned outputs.
+Mutations are serialized across processes and compare the retained manifest
+before writing. If another handle advances the store, reopen it before
+continuing instead of retrying through the stale object.
+
+Standalone WP17 execution may still use raw arrays or MPS targets and a custom
+initial state. Publishing genuine WP17 evidence into the Phase II store is the
+stricter scientific boundary: it requires the sealed objective binding to name
+the pipeline's authorized `MaterializedTarget` and the computational-zero
+initial state before any artifact is written.
+
+For a first stage using `load_checkpoint`, provide a relative external-checkpoint
+path rooted at the process's launch directory and an `ExternalCheckpointRef`
+derived from the producer result. The store verifies the source before creating
+or overwriting output, copies its exact bytes into the managed checkpoint area,
+and uses that sealed copy for all later resumes. The source may therefore move
+or disappear after initialization, and the executor always hands the selected
+validation checkpoint—not merely the producer's last iterate—to the stage.
+
+Pipeline and complete stage-prefix mismatches always reject resume. For an
+otherwise identical pipeline, runtime-fingerprint drift also rejects scientific
+resume, but exploratory work may continue by constructing a
+`NonScientificResumeOverride` for the exact stored/current fingerprint pair and
+supplying it as `resume_override`; the override is checksum sealed and retained
+in the artifact history instead of disguising the drift.
+
+After `store.pipeline_result` becomes available, construct
+`ParallelPhase2Evaluator(store, deserialize_circuit)` for final-test fan-out.
+For each attempt with pending rows, the materialization callback returns a
+`MaterializedCircuitPayload` whose deterministic bytes identify the runtime
+circuit. Those bytes are checksum verified, reconstructed through the trusted
+decoder, and persisted or matched against the existing circuit artifact before
+the attempt is committed. A later resume may rematerialize the circuit when
+rows remain pending, but successful rows are skipped. Each evaluation callback
+returns a `PipelineEvaluationMeasurement` with row-local fidelities, map
+ensembles, work, provider identity, time, and memory. Canonical JSONL is the
+authority for the derived CSV; the required checksum-sealed manifest is the
+commit baseline used to detect ledger rollback relative to the retained
+manifest on resume. Detecting a consistent rollback of the entire store would
+require an external monotonic anchor.
+
+Low-level integrations can use `StageParameterCheckpoint` and
+`create_phase2_trajectory_sidecar`/`read_phase2_trajectory_sidecar` directly.
+Both codecs use bounded deterministic NPZ envelopes and verify scientific
+metadata as well as exact bytes; do not replace them with unvalidated
+`numpy.load` calls.
+
 ### Run fixed-rate noisy Krotov as a Phase II training stage
 
 Use `benchmarks.state_preparation.phase2.NoisyKrotovCircuitBinding` and

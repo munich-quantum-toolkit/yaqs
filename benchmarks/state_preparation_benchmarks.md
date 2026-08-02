@@ -338,11 +338,12 @@ evaluation budget.
 
 ### Train/Test Separation
 
-The bundled Krotov benchmark trains each target, ansatz, initialization, and
-optimizer configuration once without noise. It then evaluates the identical
-checkpoint under every selected test-noise configuration. Test noise and test
-trajectory settings are excluded from the stable training identity, so adding
-a test cell must not retrain or alter the parameters.
+The bundled Phase I Krotov benchmark trains each target, ansatz,
+initialization, and optimizer configuration once without noise. It then
+evaluates the identical checkpoint under every selected test-noise
+configuration. Test noise and test trajectory settings are excluded from the
+stable training identity, so adding a test cell must not retrain or alter the
+parameters.
 
 `train_fidelity` describes optimization on the training objective.
 `logical_test_noiseless_fidelity` is a fresh logical-circuit evaluation of the
@@ -350,6 +351,56 @@ final checkpoint. `test_noiseless_fidelity` and `test_noisy_fidelity` use the
 actual evaluated representation: the logical circuit for noiseless and
 standard-noise rows, and the final materialized native circuit for Ballarin
 rows. No test trajectory may be reused for optimization.
+
+### Phase II Staged Training and Resumability
+
+Phase II supports ordered `optimize`, `grow`, and `prune` stages, including
+fixed-rate noisy Krotov optimization with resampled, fixed-CRN, or refreshed-CRN
+training maps. Checkpoint-validation settings and outcomes are part of the
+training protocol and may select an earlier stage iterate; final-test settings
+remain outside the training identity and are never passed to a stage callback.
+
+Construct a `Phase2ArtifactStore` from a fully resolved
+`TrainingPipelineConfig` and an explicit `ResumabilityFingerprint`, then use
+`Phase2PipelineExecutor` to execute only its unfinished suffix. A successful
+stage is committed as an immutable contiguous-prefix artifact containing the
+selected and final parameters, circuit binding and statistics, optimizer
+trace, training and validation summaries, exact fixed-map references,
+normalized work, wall time, peak memory, and checksummed provenance. On
+reopening with `resume=True`, the store verifies every ledger row and referenced
+artifact before exposing the latest selected checkpoint.
+Store mutations use a cross-process writer lock and retained-manifest
+compare-and-swap. A handle whose baseline was advanced by another writer must
+be reopened, preventing stale whole-ledger rewrites from discarding evidence.
+
+When the first stage consumes an external checkpoint, the store preflights the
+producer-backed reference before mutating output and seals the exact bytes in
+its own managed checkpoint area. Later resumes use that store-local copy even
+if the source path has moved or disappeared, and the executor supplies the
+producer's validation-selected parameters rather than its last iterate.
+
+The resumability fingerprint must enumerate the tracked execution sources,
+dependency lockfiles, sealed study inputs, dependency versions, starting Git
+commit, and complete configured stage prefix. Generated output is explicitly
+excluded, so writing checkpoints or result rows cannot invalidate the run;
+changing scientific source or sealed input does invalidate it. A pipeline or
+complete stage-prefix mismatch always rejects resume. With an otherwise
+identical pipeline, runtime-fingerprint drift may be continued only as
+explicitly labelled non-scientific work through a checksum-sealed
+`NonScientificResumeOverride` that identifies both fingerprints.
+
+After the complete training artifact exists,
+`ParallelPhase2Evaluator(store, deserialize_circuit)` materializes its selected
+final checkpoint once per pending fan-out attempt and evaluates pending
+final-test rows concurrently. The deterministic circuit bytes are checksum
+verified and reconstructed through the trusted decoder; a later resume may
+rematerialize them when rows remain pending. Canonical rows are published in
+requested configuration order, already successful rows are not replayed on
+resume, and training, checkpoint-validation, screening-selection, and
+confirmatory map roles are checked for isolation. Materialization work is
+counted once per attempt; row-specific evaluation time is counted once per row,
+and total wall time is the sum of all stage attempts, materialization attempts,
+and evaluation attempts recorded by the store.
 
 ### Native Gate-Count Rules
 
@@ -375,9 +426,9 @@ Each test trajectory is derived from the resolved test seed with stable
 `SeedSequence` domain tags, the repeated-evaluation index, and the trajectory
 index. Together with the runner's explicit seed offsets, this separates the
 initialization, optimizer, repeated-test, and test-trajectory streams. The
-public seed-domain registry also reserves a training-trajectory domain for
-methods that use noisy training; the current benchmark trains noiselessly and
-does not consume it. Results are reproducible independently of execution
+public seed-domain registry also reserves distinct training-trajectory and
+checkpoint-validation domains for Phase II noisy training. The Phase I runner
+does not consume them. Results are reproducible independently of execution
 order; do not replace the derivation with a shared mutable random generator.
 
 ## Presets and Command-Line Usage
@@ -488,3 +539,21 @@ recording `failure_phase`, exception type/message, retryability, traceback,
 and wall time. Consumers should parse the canonical JSONL through
 `read_jsonl_records` or the derived CSV through `read_csv_records` instead of
 depending on column order.
+
+Phase II deliberately uses a separate store and schemas. Its authoritative
+files include `stage_results.jsonl`, `stage_failures.jsonl`,
+`materializations.jsonl`, `materialization_attempts.jsonl`, `results.jsonl`,
+`evaluation_failures.jsonl`, and `evaluation_evidence.jsonl`; `results.csv` is a
+rebuildable view. The required checksum-sealed `manifest.json` records the last
+committed ledger prefixes, stream checksums, and artifact inventory so removal
+or ledger rollback relative to the retained manifest is detectable on resume.
+A consistent rollback of the complete store requires an external monotonic
+anchor to detect. Versioned parameter checkpoints,
+optimizer traces, stage metadata, fixed maps, deterministic circuit bytes, and
+optional trajectory-fidelity sidecars live in dedicated subdirectories. Final
+evaluation successes and failures resolve the complete pipeline result and
+runtime fingerprint through stable identifiers and checksums; stage failures
+instead resolve their exact configured and completed predecessor prefix.
+Standalone noisy-Krotov calls may use raw arrays or MPS targets, while Phase II
+artifact publication additionally requires the sealed objective to match the
+pipeline's authorized materialized target and computational-zero initial state.

@@ -26,7 +26,7 @@ from benchmarks.state_preparation.noise import (
 from benchmarks.state_preparation.phase2.noisy_krotov import (
     FixedRateNoisyKrotovStageAdapter,
     NoisyKrotovCircuitBinding,
-    NoisyKrotovResumeState,
+    NoisyKrotovObjectiveBinding,
     NoisyKrotovStageExecution,
     NoisyKrotovStageFailure,
     execute_fixed_rate_krotov_stage,
@@ -38,7 +38,6 @@ from benchmarks.state_preparation.phase2.pipeline import (
 )
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.optimization import (
-    KrotovFixedMapEnsemble,
     KrotovOptions,
     KrotovTruncation,
     ParameterizedCircuit,
@@ -48,6 +47,13 @@ from mqt.yaqs.optimization import (
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from benchmarks.state_preparation.phase2.noisy_krotov import (
+        NoisyKrotovResumeState,
+    )
+    from mqt.yaqs.optimization import (
+        KrotovFixedMapEnsemble,
+    )
 
 _TOPOLOGY_ID = "wp17_toy_d1"
 _TARGET = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
@@ -256,6 +262,27 @@ def test_zero_noise_execution_matches_phase_i_batch_krotov() -> None:
         rtol=0.0,
     )
     assert actual.training_ensembles == ()
+
+
+def test_standalone_objective_binding_round_trips_raw_and_mps_inputs() -> None:
+    """Standalone WP17 execution remains available without publication authority."""
+    stage = _stage(noise_id="noiseless", iterations=1)
+    raw_execution = _successful(stage)
+    raw_binding = raw_execution.objective_binding
+    assert raw_binding.materialized_target_identity is None
+    assert raw_binding.initial_state_policy == "computational_zero_v1"
+    assert NoisyKrotovObjectiveBinding.from_dict(raw_binding.to_dict()) == raw_binding
+
+    mps_execution = execute_fixed_rate_krotov_stage(
+        stage,
+        _binding(),
+        MPS.from_statevector(_TARGET),
+        _INITIAL_THETA,
+        initial_state=MPS(2, state="x+"),
+    )
+    assert isinstance(mps_execution, NoisyKrotovStageExecution)
+    assert mps_execution.objective_binding.materialized_target_identity is None
+    assert mps_execution.objective_binding.initial_state_policy == "custom_state_v1"
 
 
 def test_fixed_crn_is_reproducible_and_optimizer_seed_does_not_change_maps() -> None:
@@ -545,7 +572,7 @@ def test_unsupported_training_profiles_become_structured_failures_without_sampli
     stage = _stage(iterations=1)
     # Defense-in-depth test: bypass the frozen constructor to emulate a forged
     # or deserialized object that was not validated by WP16.
-    object.__setattr__(stage, "training_noise_id", BALLARIN_NOISE_ID)  # ruff: ignore[unnecessary-dunder-call]
+    object.__setattr__(stage, "training_noise_id", BALLARIN_NOISE_ID)  # noqa: PLC2801
 
     def forbidden_provider(*_args: object, **_kwargs: object) -> None:
         pytest.fail("provider construction must not be reached")

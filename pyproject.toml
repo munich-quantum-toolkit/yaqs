@@ -37,6 +37,7 @@ classifiers = [
 keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
 
 dependencies = [
+    "filelock>=3.16.1",
     "numpy>=1.23.0",
     "numpy>=1.24; python_version >= '3.11'",
     "numpy>=1.26; python_version >= '3.12'",

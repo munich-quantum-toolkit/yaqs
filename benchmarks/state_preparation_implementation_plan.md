@@ -1713,6 +1713,50 @@ The Phase II schemas from WP16 and noisy Krotov stage from WP17.
 Execute long layerwise and pruning pipelines safely without repeating completed
 stages or losing partial scientific evidence.
 
+### Implementation status
+
+**Implemented.** The Phase II package now provides bounded, checksum-verified
+parameter-checkpoint and trajectory-sidecar codecs, an atomic
+`Phase2ArtifactStore`, and a `Phase2PipelineExecutor` that commits only a
+verified contiguous stage prefix. Every stage artifact binds its source,
+selected, and final parameter states to topology, optimizer trace, map
+ensembles, work, resource measurements, provenance, and the stage-prefix
+identity; reopening verifies those cross-links before any completed stage is
+reused.
+Cross-process writer locking and a retained-manifest compare-and-swap reject
+stale handles before they can rewrite canonical evidence.
+
+Standalone WP17 calls retain raw-array and MPS target support, but publishing
+genuine WP17 evidence is stricter: the sealed objective must bind the
+pipeline's authorized materialized Phase II target and computational-zero
+initial state before any artifact is written.
+
+Producer-backed external checkpoints are verified before any output mutation,
+sealed into a deterministic managed path, and replayed from that immutable
+copy. This keeps path spelling outside scientific identity while ensuring that
+the validation-selected parameter vector—not an unselected final iterate—is
+the exact input to the resumed pipeline.
+
+Explicit `ResumabilityFingerprint` records cover the starting commit, tracked
+execution sources, lockfiles, sealed inputs, dependency versions, and complete
+configured pipeline prefix while rejecting generated output as an input.
+Pipeline and complete stage-prefix mismatches always reject resume. For an
+otherwise identical pipeline, runtime-fingerprint drift stops scientific resume
+unless a checksum-sealed `NonScientificResumeOverride` records the exact
+mismatch pair.
+
+For each pending fan-out attempt, the separate `ParallelPhase2Evaluator`
+materializes a selected pipeline checkpoint once, checksum-verifies its
+deterministic circuit bytes, reconstructs the runtime circuit through a trusted
+decoder, and evaluates pending rows concurrently. A later resume may
+rematerialize the circuit if rows remain pending, but successful rows are not
+replayed. Materialization and evaluation attempts, structured failures, fixed
+maps, optional trajectory fidelities, and derived CSV remain linked to the
+complete training artifact. The required checksum-sealed manifest records the
+committed baseline used to detect ledger rollback relative to the retained
+manifest when the store is reopened; detecting a consistent rollback of the
+complete store requires an external monotonic anchor.
+
 ### Work
 
 - Execute stages sequentially and emit an immutable artifact after every stage.
@@ -1733,9 +1777,12 @@ stages or losing partial scientific evidence.
   commit. Prefer an output root outside the source tree and explicitly exclude
   the configured output root and its generated JSONL, checkpoints, manifests,
   and sidecars from the fingerprint.
-- Reject resume when the method implementation, study protocol, stage prefix,
-  dependency versions, or tracked execution-source fingerprint differs unless
-  an explicit non-scientific override is recorded.
+- Reject resume outright when the stored and requested pipeline configuration
+  or complete stage prefix differs.
+- For an otherwise identical pipeline, reject runtime-fingerprint drift in the
+  method implementation, study protocol, dependency versions, lockfiles,
+  starting commit, or tracked execution sources unless an explicit
+  non-scientific override is recorded.
 - Support validation-based checkpoint selection without exposing final test
   trajectories.
 - Add a parallel Phase II evaluator and result store for pipeline artifacts

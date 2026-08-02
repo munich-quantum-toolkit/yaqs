@@ -17,14 +17,18 @@ randomness separate.
 # The adapter has many small private validation helpers whose return and error
 # contracts are explicit in their names and annotations. Repeating them in every
 # private docstring would obscure the public scientific contract below.
-# ruff: file-ignore[docstring-missing-returns, docstring-missing-exception]
+# The single stage-execution boundary deliberately normalizes every failure into
+# a structured record and therefore owns one large try block.
+# ruff: noqa: BLE001, DOC201, DOC501, PLW0717, TRY301
 
 from __future__ import annotations
 
 import copy
 import hashlib
 import math
+import operator
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -44,7 +48,6 @@ from benchmarks.state_preparation.noise import (
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.optimization import (
     KrotovFixedMapEnsemble,
-    KrotovMapRole,
     KrotovOptions,
     KrotovTJMOptions,
     KrotovTruncation,
@@ -54,26 +57,37 @@ from mqt.yaqs.optimization import (
     state_preparation_contribution,
     state_preparation_metrics,
 )
-from mqt.yaqs.optimization.parameterized_circuit import ParameterizedCircuit
+from mqt.yaqs.optimization.parameterized_circuit import ParameterizedCircuit, ParameterizedGate
 
 from .canonical import canonical_checksum, freeze_json_mapping, thaw_json_mapping
 from .pipeline import TrainingStageConfig
 from .targets import MaterializedTarget
-from .validation import require_checksum
+from .validation import (
+    require_checksum,
+    require_exact_keys,
+    require_float,
+    require_int,
+    require_mapping,
+    require_slug,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
     from numpy.typing import NDArray
 
-    from mqt.yaqs.optimization import GateNoiseProvider
+    from mqt.yaqs.optimization import (
+        GateNoiseProvider,
+        KrotovMapRole,
+    )
 
 
 NOISY_KROTOV_CIRCUIT_BINDING_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_circuit.v1"
 NOISY_KROTOV_CHECKPOINT_SELECTION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_checkpoint_selection.v1"
 NOISY_KROTOV_RESUME_STATE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_resume_state.v1"
-NOISY_KROTOV_TRACE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_trace.v1"
-NOISY_KROTOV_EXECUTION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_execution.v1"
+NOISY_KROTOV_TRACE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_trace.v3"
+NOISY_KROTOV_OBJECTIVE_BINDING_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_objective.v1"
+NOISY_KROTOV_EXECUTION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_execution.v4"
 NOISY_KROTOV_FAILURE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.noisy_krotov_failure.v1"
 NOISY_KROTOV_ADAPTER_VERSION = "yaqs.state_preparation.phase2.fixed_rate_noisy_krotov.v1"
 
@@ -86,6 +100,35 @@ PRIMARY_COUNTING_POLICY_ID = "native_two_qubit_gates_per_chain_edge"
 _SUPPORTED_OPTIMIZER_HYPERPARAMETERS = frozenset({"learning_rate", "schedule", "decay"})
 _SCHEDULES = frozenset({"constant", "inverse", "exp"})
 _FAILURE_PHASES = frozenset({"validation", "sampling", "optimization", "checkpoint_validation"})
+_OBJECTIVE_ID = "pure_state_infidelity_v1"
+_COMPUTATIONAL_ZERO_INITIAL_STATE_POLICY = "computational_zero_v1"
+_CUSTOM_INITIAL_STATE_POLICY = "custom_state_v1"
+_OBJECTIVE_INITIAL_STATE_POLICIES = frozenset({
+    _COMPUTATIONAL_ZERO_INITIAL_STATE_POLICY,
+    _CUSTOM_INITIAL_STATE_POLICY,
+})
+_MATERIALIZED_TARGET_IDENTITY_KEYS = frozenset({
+    "target_instance_id",
+    "target_instance_spec_checksum",
+    "population_config_checksum",
+    "target_manifest_checksum",
+    "parameter_checksum",
+    "family_id",
+    "stratum_id",
+    "qubit_count",
+    "norm",
+    "vector_checksum",
+})
+_OBJECTIVE_BINDING_KEYS = frozenset({
+    "schema_version",
+    "objective_id",
+    "target_state_checksum",
+    "initial_state_policy",
+    "initial_state_checksum",
+    "materialized_target_identity",
+    "objective_checksum",
+    "content_checksum",
+})
 
 UpdateSignalKind = Literal[
     "none",
@@ -160,15 +203,12 @@ def _statevector_checksum(value: MPS | NDArray[np.complex128], name: str) -> str
     })
 
 
-def _objective_checksum(
-    target: MPS | NDArray[np.complex128],
-    initial_state: MPS,
-) -> str:
-    """Seal the pure-state infidelity objective and its two state operands."""
+def _objective_checksum_from_state_checksums(target_state_checksum: str, initial_state_checksum: str) -> str:
+    """Seal the pure-state infidelity objective and its state checksums."""
     return canonical_checksum({
-        "initial_state_checksum": _statevector_checksum(initial_state, "initial_state"),
-        "objective_id": "pure_state_infidelity_v1",
-        "target_state_checksum": _statevector_checksum(target, "target"),
+        "initial_state_checksum": initial_state_checksum,
+        "objective_id": _OBJECTIVE_ID,
+        "target_state_checksum": target_state_checksum,
     })
 
 
@@ -244,6 +284,193 @@ def _initial_state_template(initial_state: MPS | None, num_qubits: int) -> MPS:
         msg = f"Initial MPS has {initial_state.length} qubits, expected {num_qubits}."
         raise ValueError(msg)
     return copy.deepcopy(initial_state)
+
+
+def noisy_krotov_computational_zero_state_checksum(num_qubits: int) -> str:
+    """Return the WP17 state checksum of the canonical all-zero input state.
+
+    Args:
+        num_qubits: Positive state-preparation system size.
+
+    Returns:
+        The exact statevector checksum used by the noisy-Krotov objective.
+    """
+    qubits = _require_builtin_int(num_qubits, "num_qubits", minimum=1)
+    return _statevector_checksum(MPS(qubits), "computational_zero_state")
+
+
+def _validated_materialized_target_identity(
+    value: object,
+    *,
+    target_state_checksum: str,
+) -> Mapping[str, object]:
+    """Validate and freeze an authorized Phase II target identity."""
+    identity = freeze_json_mapping(value, "materialized_target_identity")
+    require_exact_keys(identity, _MATERIALIZED_TARGET_IDENTITY_KEYS, "materialized_target_identity")
+    require_slug(identity["target_instance_id"], "materialized_target_identity.target_instance_id")
+    for name in (
+        "target_instance_spec_checksum",
+        "population_config_checksum",
+        "target_manifest_checksum",
+        "parameter_checksum",
+        "vector_checksum",
+    ):
+        require_checksum(identity[name], f"materialized_target_identity.{name}")
+    require_slug(identity["family_id"], "materialized_target_identity.family_id")
+    require_slug(identity["stratum_id"], "materialized_target_identity.stratum_id")
+    qubit_count = require_int(identity["qubit_count"], "materialized_target_identity.qubit_count", minimum=1)
+    norm = require_float(identity["norm"], "materialized_target_identity.norm", minimum=0.0)
+    if not math.isclose(norm, 1.0, rel_tol=0.0, abs_tol=1e-12):
+        msg = "materialized_target_identity.norm must equal one."
+        raise ValueError(msg)
+    vector_checksum = cast("str", identity["vector_checksum"])
+    expected_state_checksum = canonical_checksum({
+        "amplitude_count": 2**qubit_count,
+        "data_sha256": vector_checksum.removeprefix("sha256:"),
+        "dtype": "<c16",
+    })
+    if expected_state_checksum != target_state_checksum:
+        msg = "Materialized target vector identity does not reproduce target_state_checksum."
+        raise ValueError(msg)
+    return identity
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class NoisyKrotovObjectiveBinding:
+    """Sealed pure-state objective operands and optional authorized target identity."""
+
+    target_state_checksum: str
+    initial_state_policy: str
+    initial_state_checksum: str
+    materialized_target_identity: Mapping[str, object] | None
+    objective_id: str = field(default=_OBJECTIVE_ID, init=False)
+    schema_version: str = field(default=NOISY_KROTOV_OBJECTIVE_BINDING_SCHEMA_VERSION, init=False)
+
+    def __init__(
+        self,
+        *,
+        target_state_checksum: str,
+        initial_state_policy: str,
+        initial_state_checksum: str,
+        materialized_target_identity: Mapping[str, object] | None,
+    ) -> None:
+        """Validate checksums, initial-state semantics, and target provenance."""
+        target_checksum = require_checksum(target_state_checksum, "target_state_checksum")
+        initial_checksum = require_checksum(initial_state_checksum, "initial_state_checksum")
+        if initial_state_policy not in _OBJECTIVE_INITIAL_STATE_POLICIES:
+            msg = f"initial_state_policy must be one of {sorted(_OBJECTIVE_INITIAL_STATE_POLICIES)!r}."
+            raise ValueError(msg)
+        identity = (
+            None
+            if materialized_target_identity is None
+            else _validated_materialized_target_identity(
+                materialized_target_identity,
+                target_state_checksum=target_checksum,
+            )
+        )
+        object.__setattr__(self, "target_state_checksum", target_checksum)
+        object.__setattr__(self, "initial_state_policy", initial_state_policy)
+        object.__setattr__(self, "initial_state_checksum", initial_checksum)
+        object.__setattr__(self, "materialized_target_identity", identity)
+        object.__setattr__(self, "objective_id", _OBJECTIVE_ID)
+        object.__setattr__(self, "schema_version", NOISY_KROTOV_OBJECTIVE_BINDING_SCHEMA_VERSION)
+
+    @classmethod
+    def from_inputs(
+        cls,
+        target: MaterializedTarget | MPS | NDArray[np.complex128],
+        initial_state: MPS | None,
+        *,
+        num_qubits: int,
+    ) -> NoisyKrotovObjectiveBinding:
+        """Construct the exact binding used by one WP17 execution.
+
+        Args:
+            target: Authorized Phase II target or standalone target state.
+            initial_state: Optional explicit input state; ``None`` means all-zero.
+            num_qubits: Exact circuit width.
+
+        Returns:
+            A checksum-sealed objective binding.
+        """
+        qubits = _require_builtin_int(num_qubits, "num_qubits", minimum=1)
+        resolved_target = _resolved_target(target, num_qubits=qubits)
+        resolved_initial = _initial_state_template(initial_state, qubits)
+        initial_checksum = _statevector_checksum(resolved_initial, "initial_state")
+        zero_checksum = noisy_krotov_computational_zero_state_checksum(qubits)
+        return cls(
+            target_state_checksum=_statevector_checksum(resolved_target, "target"),
+            initial_state_policy=(
+                _COMPUTATIONAL_ZERO_INITIAL_STATE_POLICY
+                if initial_checksum == zero_checksum
+                else _CUSTOM_INITIAL_STATE_POLICY
+            ),
+            initial_state_checksum=initial_checksum,
+            materialized_target_identity=(target.identity_dict() if isinstance(target, MaterializedTarget) else None),
+        )
+
+    @property
+    def objective_checksum(self) -> str:
+        """Checksum of the exact objective and both state operands."""
+        return _objective_checksum_from_state_checksums(
+            self.target_state_checksum,
+            self.initial_state_checksum,
+        )
+
+    def _content_dict(self) -> dict[str, object]:
+        """Return every checksum-covered objective-binding field."""
+        return {
+            "schema_version": self.schema_version,
+            "objective_id": self.objective_id,
+            "target_state_checksum": self.target_state_checksum,
+            "initial_state_policy": self.initial_state_policy,
+            "initial_state_checksum": self.initial_state_checksum,
+            "materialized_target_identity": (
+                None
+                if self.materialized_target_identity is None
+                else thaw_json_mapping(self.materialized_target_identity)
+            ),
+            "objective_checksum": self.objective_checksum,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum sealing objective semantics and authorized target identity."""
+        return canonical_checksum(self._content_dict())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the complete checksum-sealed objective-binding document."""
+        return {**self._content_dict(), "content_checksum": self.content_checksum}
+
+    @classmethod
+    def from_dict(cls, value: object) -> NoisyKrotovObjectiveBinding:
+        """Decode and exactly verify a serialized objective-binding document."""
+        document = freeze_json_mapping(require_mapping(value, "objective_binding"), "objective_binding")
+        require_exact_keys(document, _OBJECTIVE_BINDING_KEYS, "objective_binding")
+        if document["schema_version"] != NOISY_KROTOV_OBJECTIVE_BINDING_SCHEMA_VERSION:
+            msg = "objective_binding uses an unsupported schema version."
+            raise ValueError(msg)
+        if document["objective_id"] != _OBJECTIVE_ID:
+            msg = f"objective_binding.objective_id must be {_OBJECTIVE_ID!r}."
+            raise ValueError(msg)
+        raw_identity = document["materialized_target_identity"]
+        if raw_identity is not None and not isinstance(raw_identity, Mapping):
+            msg = "objective_binding.materialized_target_identity must be a mapping or None."
+            raise TypeError(msg)
+        binding = cls(
+            target_state_checksum=cast("str", document["target_state_checksum"]),
+            initial_state_policy=cast("str", document["initial_state_policy"]),
+            initial_state_checksum=cast("str", document["initial_state_checksum"]),
+            materialized_target_identity=cast("Mapping[str, object] | None", raw_identity),
+        )
+        if (
+            document["objective_checksum"] != binding.objective_checksum
+            or document["content_checksum"] != binding.content_checksum
+            or canonical_checksum(thaw_json_mapping(document)) != canonical_checksum(binding.to_dict())
+        ):
+            msg = "objective_binding does not reconstruct its exact sealed objective semantics."
+            raise ValueError(msg)
+        return binding
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -397,6 +624,155 @@ class NoisyKrotovCircuitBinding:
         return {**payload, "content_checksum": self.content_checksum}
 
 
+def decode_noisy_krotov_circuit_binding_document(value: object) -> NoisyKrotovCircuitBinding:
+    """Reconstruct and exactly verify a serialized noisy-Krotov circuit binding."""
+    document = freeze_json_mapping(value, "circuit_binding_document")
+    expected_keys = {
+        "schema_version",
+        "topology_id",
+        "placement",
+        "compiler_policy_id",
+        "connectivity",
+        "routing_policy_id",
+        "counting_policy_id",
+        "num_qubits",
+        "num_params",
+        "noisy_gate_indices",
+        "gates",
+        "content_checksum",
+    }
+    if set(document) != expected_keys:
+        msg = "circuit_binding_document fields do not match the exact WP17 schema."
+        raise ValueError(msg)
+    if document["schema_version"] != NOISY_KROTOV_CIRCUIT_BINDING_SCHEMA_VERSION:
+        msg = "circuit_binding_document uses an unsupported schema version."
+        raise ValueError(msg)
+    gates_value = document["gates"]
+    noisy_indices = document["noisy_gate_indices"]
+    if type(gates_value) is not tuple or type(noisy_indices) is not tuple:
+        msg = "circuit binding gates and noisy_gate_indices must be serialized sequences."
+        raise TypeError(msg)
+    num_qubits = _require_builtin_int(document["num_qubits"], "circuit_binding_document.num_qubits", minimum=1)
+    num_params = _require_builtin_int(document["num_params"], "circuit_binding_document.num_params")
+    gate_keys = {
+        "name",
+        "sites",
+        "param_index",
+        "angle_scale",
+        "angle_offset",
+        "fixed_params",
+        "logical_gate_id",
+        "native_gate_id",
+        "noise_enabled",
+    }
+    gates: list[ParameterizedGate] = []
+    for index, raw_gate in enumerate(gates_value):
+        if not isinstance(raw_gate, Mapping) or set(raw_gate) != gate_keys:
+            msg = f"circuit_binding_document.gates[{index}] fields do not match the exact WP17 schema."
+            raise ValueError(msg)
+        gate_document = cast("Mapping[str, object]", raw_gate)
+        sites = gate_document["sites"]
+        fixed_params = gate_document["fixed_params"]
+        if type(sites) is not tuple or type(fixed_params) is not tuple:
+            msg = f"circuit_binding_document.gates[{index}] sites and fixed_params must be sequences."
+            raise TypeError(msg)
+        if not all(type(site) is int for site in sites):
+            msg = f"circuit_binding_document.gates[{index}].sites must contain built-in integers."
+            raise TypeError(msg)
+        normalized_sites = cast("tuple[int, ...]", sites)
+        if len(set(normalized_sites)) != len(normalized_sites) or any(
+            site < 0 or site >= num_qubits for site in normalized_sites
+        ):
+            msg = f"circuit_binding_document.gates[{index}].sites are invalid for the declared qubit count."
+            raise ValueError(msg)
+        param_index = gate_document["param_index"]
+        if param_index is not None and type(param_index) is not int:
+            msg = f"circuit_binding_document.gates[{index}].param_index must be an integer or None."
+            raise TypeError(msg)
+        if param_index is not None and (param_index < 0 or param_index >= num_params):
+            msg = f"circuit_binding_document.gates[{index}].param_index is outside the parameter vector."
+            raise ValueError(msg)
+        name = gate_document["name"]
+        if type(name) is not str or not name:
+            msg = f"circuit_binding_document.gates[{index}].name must be nonempty text."
+            raise TypeError(msg)
+        logical_gate_id = gate_document["logical_gate_id"]
+        native_gate_id = gate_document["native_gate_id"]
+        for field_name, field_value in (
+            ("logical_gate_id", logical_gate_id),
+            ("native_gate_id", native_gate_id),
+        ):
+            if field_value is not None and type(field_value) not in {int, str}:
+                msg = f"circuit_binding_document.gates[{index}].{field_name} must be an integer, string, or None."
+                raise TypeError(msg)
+        noise_enabled = gate_document["noise_enabled"]
+        if type(noise_enabled) is not bool:
+            msg = f"circuit_binding_document.gates[{index}].noise_enabled must be a bool."
+            raise TypeError(msg)
+        angle_scale = _require_finite_float(
+            gate_document["angle_scale"],
+            f"circuit_binding_document.gates[{index}].angle_scale",
+        )
+        angle_offset = _require_finite_float(
+            gate_document["angle_offset"],
+            f"circuit_binding_document.gates[{index}].angle_offset",
+        )
+        normalized_fixed_params = tuple(
+            _require_finite_float(item, f"circuit_binding_document.gates[{index}].fixed_params")
+            for item in fixed_params
+        )
+        gates.append(
+            ParameterizedGate(
+                name=name,
+                sites=normalized_sites,
+                param_index=param_index,
+                angle_scale=angle_scale,
+                angle_offset=angle_offset,
+                fixed_params=normalized_fixed_params,
+                logical_gate_id=cast("int | str | None", logical_gate_id),
+                native_gate_id=cast("int | str | None", native_gate_id),
+                noise_enabled=noise_enabled,
+            )
+        )
+    if not all(type(index) is int for index in noisy_indices):
+        msg = "circuit_binding_document.noisy_gate_indices must contain built-in integers."
+        raise TypeError(msg)
+    circuit = ParameterizedCircuit(
+        num_qubits,
+        gates,
+        num_params=num_params,
+    )
+    zero_theta = np.zeros(circuit.num_params, dtype=np.float64)
+    for index, gate in enumerate(circuit.gates):
+        try:
+            matrix, _sites, _angle = circuit.gate_matrix_and_angle(gate, zero_theta)
+        except (AttributeError, TypeError, ValueError) as error:
+            msg = f"circuit_binding_document.gates[{index}] cannot reconstruct its gate matrix: {error}."
+            raise ValueError(msg) from error
+        expected_dimension = 2 ** len(gate.sites)
+        if matrix.shape != (expected_dimension, expected_dimension):
+            msg = f"circuit_binding_document.gates[{index}] matrix arity does not match its sites."
+            raise ValueError(msg)
+    binding = NoisyKrotovCircuitBinding(
+        circuit,
+        cast("str", document["topology_id"]),
+        placement=cast("str", document["placement"]),
+        compiler_policy_id=cast("str", document["compiler_policy_id"]),
+        connectivity=cast("str", document["connectivity"]),
+        routing_policy_id=cast("str", document["routing_policy_id"]),
+        counting_policy_id=cast("str", document["counting_policy_id"]),
+    )
+    supplied_checksum = require_checksum(document["content_checksum"], "content_checksum")
+    if (
+        tuple(noisy_indices) != binding.noisy_gate_indices
+        or supplied_checksum != binding.content_checksum
+        or canonical_checksum(thaw_json_mapping(document)) != canonical_checksum(binding.to_dict())
+    ):
+        msg = "circuit_binding_document does not reconstruct the exact sealed WP17 circuit binding."
+        raise ValueError(msg)
+    return binding
+
+
 @dataclass(frozen=True, slots=True)
 class KrotovStageTranslation:
     """Exact translation of one WP16 stage into Krotov execution objects."""
@@ -472,6 +848,7 @@ class NoisyKrotovIterationRecord:
 
     local_iteration: int
     global_iteration: int
+    parameter_checksum: str
     learning_rate: float
     monitoring_loss: float
     monitoring_fidelity: float
@@ -488,6 +865,8 @@ class NoisyKrotovIterationRecord:
     training_ensemble_checksum: str | None
     checkpoint_validation_ensemble_checksum: str | None
     cumulative_work: KrotovWorkLedger
+    training_ensemble_sampled: bool = False
+    checkpoint_validation_ensemble_sampled: bool = False
     cross_trajectory_pairings: int = 0
     cumulative_cross_trajectory_pairings: int = 0
     schema_version: str = field(default=NOISY_KROTOV_TRACE_SCHEMA_VERSION, init=False)
@@ -496,12 +875,15 @@ class NoisyKrotovIterationRecord:
         """Validate trace semantics, including cross/gradient separation."""
         _require_builtin_int(self.local_iteration, "local_iteration")
         _require_builtin_int(self.global_iteration, "global_iteration")
+        object.__setattr__(self, "parameter_checksum", require_checksum(self.parameter_checksum, "parameter_checksum"))
         _require_finite_float(self.learning_rate, "learning_rate")
         loss = _require_finite_float(self.monitoring_loss, "monitoring_loss")
         fidelity = _require_finite_float(self.monitoring_fidelity, "monitoring_fidelity")
         if not 0.0 <= loss <= 1.0 + 1e-10 or not -1e-10 <= fidelity <= 1.0 + 1e-10:
             msg = "Monitoring loss and fidelity must be physical probabilities."
             raise ValueError(msg)
+        object.__setattr__(self, "monitoring_loss", min(1.0, max(0.0, loss)))
+        object.__setattr__(self, "monitoring_fidelity", min(1.0, max(0.0, fidelity)))
         if self.checkpoint_validation_fidelity is not None:
             validation = _require_finite_float(
                 self.checkpoint_validation_fidelity,
@@ -510,6 +892,21 @@ class NoisyKrotovIterationRecord:
             if not -1e-10 <= validation <= 1.0 + 1e-10:
                 msg = "checkpoint_validation_fidelity must lie in [0, 1]."
                 raise ValueError(msg)
+            object.__setattr__(
+                self,
+                "checkpoint_validation_fidelity",
+                min(1.0, max(0.0, validation)),
+            )
+        for name in ("training_ensemble_sampled", "checkpoint_validation_ensemble_sampled"):
+            if type(getattr(self, name)) is not bool:
+                msg = f"{name} must be a bool."
+                raise TypeError(msg)
+        if self.training_ensemble_sampled and self.training_ensemble_checksum is None:
+            msg = "A sampled training ensemble requires its checksum."
+            raise ValueError(msg)
+        if self.checkpoint_validation_ensemble_sampled and self.checkpoint_validation_ensemble_checksum is None:
+            msg = "A sampled checkpoint-validation ensemble requires its checksum."
+            raise ValueError(msg)
         if self.update_signal_kind not in {
             "none",
             "independent_pathwise_gradient",
@@ -571,6 +968,7 @@ class NoisyKrotovIterationRecord:
             "schema_version": self.schema_version,
             "local_iteration": self.local_iteration,
             "global_iteration": self.global_iteration,
+            "parameter_checksum": self.parameter_checksum,
             "learning_rate": self.learning_rate,
             "monitoring_loss": self.monitoring_loss,
             "monitoring_fidelity": self.monitoring_fidelity,
@@ -587,6 +985,8 @@ class NoisyKrotovIterationRecord:
             "training_ensemble_checksum": self.training_ensemble_checksum,
             "checkpoint_validation_ensemble_checksum": self.checkpoint_validation_ensemble_checksum,
             "cumulative_work": self.cumulative_work.to_dict(),
+            "training_ensemble_sampled": self.training_ensemble_sampled,
+            "checkpoint_validation_ensemble_sampled": self.checkpoint_validation_ensemble_sampled,
             "cross_trajectory_pairings": self.cross_trajectory_pairings,
             "cumulative_cross_trajectory_pairings": self.cumulative_cross_trajectory_pairings,
         }
@@ -631,6 +1031,7 @@ class NoisyKrotovCheckpointSelection:
         if not -1e-10 <= fidelity <= 1.0 + 1e-10:
             msg = "validation_fidelity must lie in [0, 1]."
             raise ValueError(msg)
+        fidelity = min(1.0, max(0.0, fidelity))
         if not isinstance(theta, np.ndarray):
             msg = "theta must be a NumPy array."
             raise TypeError(msg)
@@ -787,6 +1188,255 @@ class NoisyKrotovResumeState:
         return {**payload, "content_checksum": self.content_checksum}
 
 
+def validate_noisy_krotov_execution_trace(
+    *,
+    stage: TrainingStageConfig,
+    circuit_binding_document: Mapping[str, object],
+    provider_checksum: str | None,
+    trace: Sequence[NoisyKrotovIterationRecord],
+    training_ensembles: Sequence[KrotovFixedMapEnsemble],
+    validation_ensembles: Sequence[KrotovFixedMapEnsemble],
+    normalized_work: KrotovWorkLedger,
+    input_resume_state: NoisyKrotovResumeState | None,
+) -> None:
+    """Recompute exact adapter work, map use, and validation cadence."""
+    reconstructed_binding = decode_noisy_krotov_circuit_binding_document(circuit_binding_document)
+    binding_document = freeze_json_mapping(reconstructed_binding.to_dict(), "circuit_binding_document")
+    training_translation = translate_fixed_rate_krotov_stage(stage, reconstructed_binding)
+    if provider_checksum != training_translation.provider_checksum:
+        msg = "Execution provider checksum does not match the stage-derived training-noise provider."
+        raise ValueError(msg)
+    validation_provider_checksum = None
+    if stage.checkpoint_validation.enabled:
+        validation_provider_checksum = _validation_translation(
+            stage,
+            reconstructed_binding,
+            training_translation,
+        ).provider_checksum
+    offset = trace[0].global_iteration
+    if tuple(row.local_iteration for row in trace) != tuple(range(len(trace))) or tuple(
+        row.global_iteration for row in trace
+    ) != tuple(range(offset, offset + len(trace))):
+        msg = "Trace iterations must form one contiguous local and stage-global execution chunk."
+        raise ValueError(msg)
+    if trace[-1].global_iteration > stage.iteration_budget:
+        msg = "Trace progress exceeds the configured stage budget."
+        raise ValueError(msg)
+    gates = binding_document["gates"]
+    if type(gates) is not tuple:
+        msg = "circuit_binding_document.gates must be a serialized sequence."
+        raise TypeError(msg)
+    gate_count = len(gates)
+    trainable_gate_count = sum(cast("Mapping[str, object]", gate).get("param_index") is not None for gate in gates)
+    expected_work = KrotovWorkLedger() if input_resume_state is None else input_resume_state.cumulative_work
+    expected_pairings = 0 if input_resume_state is None else input_resume_state.cumulative_cross_trajectory_pairings
+    training_by_checksum = {ensemble.content_checksum: ensemble for ensemble in training_ensembles}
+    validation_by_checksum = {ensemble.content_checksum: ensemble for ensemble in validation_ensembles}
+    if len(training_by_checksum) != len(training_ensembles) or len(validation_by_checksum) != len(validation_ensembles):
+        msg = "Execution fixed-map collections must not repeat ensemble content."
+        raise ValueError(msg)
+    seen_training: set[str] = set()
+    seen_validation: set[str] = set()
+    noisy_training = stage.training_noise_id != NOISELESS_NOISE_ID
+    validation_count = 0 if not stage.checkpoint_validation.enabled else stage.checkpoint_validation.trajectory_count
+    validation_call_index = (
+        0
+        if input_resume_state is None or not stage.checkpoint_validation.enabled
+        else offset // cast("int", stage.checkpoint_validation.cadence) + 1
+    )
+    for index, row in enumerate(trace):
+        if row.trajectory_count != stage.trajectory_count:
+            msg = f"Trace row {index} does not use the configured training trajectory count."
+            raise ValueError(msg)
+        training_checksum = row.training_ensemble_checksum
+        if (row.training_ensemble_id is None) != (training_checksum is None):
+            msg = "Training ensemble identity and checksum must be present together."
+            raise ValueError(msg)
+        if noisy_training:
+            ensemble = None if training_checksum is None else training_by_checksum.get(training_checksum)
+            if ensemble is None or ensemble.ensemble_id != row.training_ensemble_id:
+                msg = f"Trace row {index} does not reference an exact training ensemble."
+                raise ValueError(msg)
+            if row.nonidentity_events != ensemble.nonidentity_event_count:
+                msg = f"Trace row {index} does not match its training-ensemble event count."
+                raise ValueError(msg)
+            training_coordinate = offset if index == 0 else row.global_iteration - 1
+            expected_ensemble_index, expected_refresh_index, expected_window_start = _schedule_point(
+                stage.sampling_policy,
+                stage.crn_refresh_interval,
+                training_coordinate,
+            )
+            if (
+                ensemble.role != "training_trajectory"
+                or ensemble.stage_index != stage.stage_index
+                or ensemble.stage_id != stage.stage_id
+                or ensemble.stage_configuration_checksum != stage.configuration_checksum
+                or ensemble.circuit_checksum != binding_document["content_checksum"]
+                or ensemble.provider_checksum != provider_checksum
+                or ensemble.trajectory_count != stage.trajectory_count
+                or ensemble.gate_count != gate_count
+                or ensemble.ensemble_index != expected_ensemble_index
+                or ensemble.refresh_index != expected_refresh_index
+                or ensemble.global_iteration_start != expected_window_start
+            ):
+                msg = f"Trace row {index} training ensemble does not match its exact schedule coordinate."
+                raise ValueError(msg)
+            if row.training_ensemble_sampled:
+                if training_checksum in seen_training or training_coordinate != expected_window_start:
+                    msg = "A training ensemble cannot be sampled after its first use."
+                    raise ValueError(msg)
+                expected_work = expected_work.plus(
+                    training_trajectories=stage.trajectory_count,
+                    trajectory_gate_applications=stage.trajectory_count * gate_count,
+                )
+            seen_training.add(cast("str", training_checksum))
+        elif training_checksum is not None or row.training_ensemble_sampled or row.nonidentity_events != 0:
+            msg = "Noiseless training cannot claim a training map, sampling, or noise events."
+            raise ValueError(msg)
+
+        training_calls = 1 if index == 0 else 2
+        if noisy_training:
+            expected_work = expected_work.plus(
+                objective_evaluations=training_calls,
+                gradient_evaluations=(0 if index == 0 or stage.trajectory_update == "cross" else 1),
+                training_trajectories=training_calls * stage.trajectory_count,
+                trajectory_gate_applications=training_calls * stage.trajectory_count * gate_count,
+            )
+        else:
+            expected_work = expected_work.plus(
+                objective_evaluations=training_calls,
+                gradient_evaluations=(0 if index == 0 else 1),
+            )
+
+        row_pairings = (
+            stage.trajectory_count**2 * trainable_gate_count if index > 0 and stage.trajectory_update == "cross" else 0
+        )
+        expected_pairings += row_pairings
+        if (
+            row.cross_trajectory_pairings != row_pairings
+            or row.cumulative_cross_trajectory_pairings != expected_pairings
+        ):
+            msg = f"Trace row {index} has incorrect dense cross-trajectory work."
+            raise ValueError(msg)
+        expected_kind: UpdateSignalKind = (
+            "none"
+            if index == 0
+            else (
+                "cross_dense_sum_update"
+                if stage.trajectory_update == "cross"
+                else (
+                    "independent_pathwise_gradient"
+                    if stage.max_bond_dimension is None and not stage.svd_threshold
+                    else "independent_pathwise_update"
+                )
+            )
+        )
+        if row.update_signal_kind != expected_kind:
+            msg = f"Trace row {index} update kind does not match the configured optimizer path."
+            raise ValueError(msg)
+        if index == 0:
+            if row.update_signal or row.learning_rate or row.update_norm:
+                msg = "Initial trace rows require an empty zero-rate, zero-norm update."
+                raise ValueError(msg)
+        else:
+            if len(row.update_signal) != stage.output_parameter_count:
+                msg = f"Trace row {index} update signal does not match the output parameter count."
+                raise ValueError(msg)
+            base_rate = _require_finite_float(
+                stage.optimizer_hyperparameters["learning_rate"],
+                "optimizer_hyperparameters.learning_rate",
+                positive=True,
+            )
+            schedule = stage.optimizer_hyperparameters.get("schedule", "constant")
+            decay = _require_finite_float(
+                stage.optimizer_hyperparameters.get("decay", 0.0),
+                "optimizer_hyperparameters.decay",
+            )
+            global_update_index = row.global_iteration - 1
+            if schedule == "constant":
+                expected_rate = base_rate
+            elif schedule == "inverse":
+                expected_rate = base_rate / (1.0 + decay * global_update_index)
+            else:
+                expected_rate = base_rate * float(np.exp(-decay * global_update_index))
+            if not math.isclose(row.learning_rate, expected_rate, rel_tol=1e-12, abs_tol=1e-12):
+                msg = f"Trace row {index} learning rate does not match the configured schedule."
+                raise ValueError(msg)
+            if not math.isclose(
+                row.update_norm,
+                abs(expected_rate) * row.update_signal_norm,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                msg = f"Trace row {index} update norm does not match its rate and update signal."
+                raise ValueError(msg)
+
+        validation_checksum = row.checkpoint_validation_ensemble_checksum
+        cadence = stage.checkpoint_validation.cadence
+        should_validate = stage.checkpoint_validation.enabled and (
+            (index == 0 and offset == 0)
+            or (
+                index > 0
+                and (row.global_iteration == stage.iteration_budget or row.global_iteration % cast("int", cadence) == 0)
+            )
+        )
+        if should_validate != (row.checkpoint_validation_fidelity is not None):
+            msg = f"Trace row {index} does not implement the checkpoint-validation cadence."
+            raise ValueError(msg)
+        if should_validate:
+            ensemble = None if validation_checksum is None else validation_by_checksum.get(validation_checksum)
+            if ensemble is None:
+                msg = f"Trace row {index} does not reference an exact validation ensemble."
+                raise ValueError(msg)
+            expected_ensemble_index, expected_refresh_index, expected_window_start = _schedule_point(
+                stage.checkpoint_validation.sampling_policy,
+                stage.checkpoint_validation.ensemble_refresh_interval,
+                validation_call_index,
+            )
+            if (
+                ensemble.role != "checkpoint_validation"
+                or ensemble.stage_index != stage.stage_index
+                or ensemble.stage_id != stage.stage_id
+                or ensemble.stage_configuration_checksum != stage.configuration_checksum
+                or ensemble.circuit_checksum != binding_document["content_checksum"]
+                or ensemble.provider_checksum != validation_provider_checksum
+                or ensemble.trajectory_count != validation_count
+                or ensemble.gate_count != gate_count
+                or ensemble.ensemble_index != expected_ensemble_index
+                or ensemble.refresh_index != expected_refresh_index
+                or ensemble.global_iteration_start != expected_window_start
+            ):
+                msg = f"Trace row {index} validation ensemble does not match its exact call schedule."
+                raise ValueError(msg)
+            if row.checkpoint_validation_ensemble_sampled:
+                if validation_checksum in seen_validation or validation_call_index != expected_window_start:
+                    msg = "A validation ensemble cannot be sampled after its first use."
+                    raise ValueError(msg)
+                expected_work = expected_work.plus(
+                    checkpoint_validation_trajectories=validation_count,
+                    trajectory_gate_applications=validation_count * gate_count,
+                )
+            seen_validation.add(cast("str", validation_checksum))
+            expected_work = expected_work.plus(
+                objective_evaluations=1,
+                checkpoint_validation_trajectories=validation_count,
+                trajectory_gate_applications=validation_count * gate_count,
+            )
+            validation_call_index += 1
+        elif validation_checksum is not None or row.checkpoint_validation_ensemble_sampled:
+            msg = "A non-validation trace row cannot claim a validation map or sampling."
+            raise ValueError(msg)
+        if row.cumulative_work != expected_work:
+            msg = f"Trace row {index} cumulative work is not implied by its recorded operations."
+            raise ValueError(msg)
+    if expected_work != normalized_work:
+        msg = "normalized_work is not the exact trace-derived final work ledger."
+        raise ValueError(msg)
+    if seen_training != set(training_by_checksum) or seen_validation != set(validation_by_checksum):
+        msg = "Trace does not account for every execution fixed-map ensemble."
+        raise ValueError(msg)
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class NoisyKrotovStageExecution:
     """Immutable successful in-memory result of a WP17 stage.
@@ -801,6 +1451,8 @@ class NoisyKrotovStageExecution:
     circuit_binding_checksum: str
     provider_checksum: str | None
     objective_checksum: str
+    objective_binding: NoisyKrotovObjectiveBinding
+    circuit_binding_document: Mapping[str, object]
     initial_parameter_checksum: str
     final_parameter_checksum: str
     selected_parameter_checksum: str
@@ -810,9 +1462,11 @@ class NoisyKrotovStageExecution:
     training_ensembles: tuple[KrotovFixedMapEnsemble, ...]
     checkpoint_validation_ensembles: tuple[KrotovFixedMapEnsemble, ...]
     normalized_work: Mapping[str, object]
+    input_resume_state_checksum: str | None
     _initial_theta_bytes: bytes = field(repr=False)
     _final_theta_bytes: bytes = field(repr=False)
     _selected_theta_bytes: bytes = field(repr=False)
+    _input_resume_state: NoisyKrotovResumeState | None = field(repr=False)
     schema_version: str = field(default=NOISY_KROTOV_EXECUTION_SCHEMA_VERSION, init=False)
 
     def __init__(
@@ -820,8 +1474,9 @@ class NoisyKrotovStageExecution:
         *,
         stage: TrainingStageConfig,
         circuit_binding_checksum: str,
+        circuit_binding_document: Mapping[str, object],
         provider_checksum: str | None,
-        objective_checksum: str,
+        objective_binding: NoisyKrotovObjectiveBinding,
         initial_theta: NDArray[np.float64],
         final_theta: NDArray[np.float64],
         selected_theta: NDArray[np.float64],
@@ -831,6 +1486,7 @@ class NoisyKrotovStageExecution:
         training_ensembles: Sequence[KrotovFixedMapEnsemble],
         checkpoint_validation_ensembles: Sequence[KrotovFixedMapEnsemble],
         normalized_work: KrotovWorkLedger,
+        input_resume_state: NoisyKrotovResumeState | None = None,
     ) -> None:
         """Freeze detached arrays, trace, ensembles, and work."""
         initial = np.asarray(initial_theta, dtype=np.float64)
@@ -842,9 +1498,27 @@ class NoisyKrotovStageExecution:
         object.__setattr__(self, "stage_index", stage.stage_index)
         object.__setattr__(self, "stage_id", stage.stage_id)
         object.__setattr__(self, "stage_configuration_checksum", stage.configuration_checksum)
-        object.__setattr__(self, "circuit_binding_checksum", circuit_binding_checksum)
+        binding_checksum = require_checksum(circuit_binding_checksum, "circuit_binding_checksum")
+        reconstructed_binding = decode_noisy_krotov_circuit_binding_document(circuit_binding_document)
+        binding_document = freeze_json_mapping(reconstructed_binding.to_dict(), "circuit_binding_document")
+        if reconstructed_binding.content_checksum != binding_checksum:
+            msg = "circuit_binding_document does not reproduce circuit_binding_checksum."
+            raise ValueError(msg)
+        if (
+            binding_document.get("topology_id") != stage.output_topology_id
+            or binding_document.get("num_params") != stage.output_parameter_count
+        ):
+            msg = "circuit_binding_document does not match the stage output topology."
+            raise ValueError(msg)
+        object.__setattr__(self, "circuit_binding_checksum", binding_checksum)
+        object.__setattr__(self, "circuit_binding_document", binding_document)
         object.__setattr__(self, "provider_checksum", provider_checksum)
-        object.__setattr__(self, "objective_checksum", require_checksum(objective_checksum, "objective_checksum"))
+        if not isinstance(objective_binding, NoisyKrotovObjectiveBinding):
+            msg = "objective_binding must be a NoisyKrotovObjectiveBinding."
+            raise TypeError(msg)
+        objective_checksum = objective_binding.objective_checksum
+        object.__setattr__(self, "objective_checksum", objective_checksum)
+        object.__setattr__(self, "objective_binding", objective_binding)
         object.__setattr__(self, "initial_parameter_checksum", _vector_checksum(initial))
         object.__setattr__(self, "final_parameter_checksum", _vector_checksum(final))
         object.__setattr__(self, "selected_parameter_checksum", _vector_checksum(selected))
@@ -857,23 +1531,157 @@ class NoisyKrotovStageExecution:
             if not -1e-10 <= selected_checkpoint_validation_fidelity <= 1.0 + 1e-10:
                 msg = "selected_checkpoint_validation_fidelity must lie in [0, 1]."
                 raise ValueError(msg)
+            selected_checkpoint_validation_fidelity = min(
+                1.0,
+                max(0.0, selected_checkpoint_validation_fidelity),
+            )
         object.__setattr__(
             self,
             "selected_checkpoint_validation_fidelity",
             selected_checkpoint_validation_fidelity,
         )
-        object.__setattr__(self, "trace", tuple(trace))
-        object.__setattr__(self, "training_ensembles", tuple(training_ensembles))
+        trace_rows = tuple(trace)
+        if not trace_rows or not all(isinstance(row, NoisyKrotovIterationRecord) for row in trace_rows):
+            msg = "trace must contain only NoisyKrotovIterationRecord values."
+            raise TypeError(msg)
+        if trace_rows[0].parameter_checksum != _vector_checksum(initial) or trace_rows[
+            -1
+        ].parameter_checksum != _vector_checksum(final):
+            msg = "Trace endpoint parameter checksums do not match initial_theta and final_theta."
+            raise ValueError(msg)
+        offset = trace_rows[0].global_iteration
+        if offset == 0:
+            if input_resume_state is not None:
+                msg = "An initial execution chunk cannot carry an input resume state."
+                raise ValueError(msg)
+            inherited = None
+        else:
+            if not isinstance(input_resume_state, NoisyKrotovResumeState):
+                msg = "A resumed execution chunk requires its verified input resume state."
+                raise ValueError(msg)
+            expected_resume_provenance = (
+                stage.configuration_checksum,
+                binding_checksum,
+                provider_checksum,
+                objective_checksum,
+            )
+            actual_resume_provenance = (
+                input_resume_state.stage_configuration_checksum,
+                input_resume_state.circuit_binding_checksum,
+                input_resume_state.provider_checksum,
+                input_resume_state.objective_checksum,
+            )
+            if (
+                actual_resume_provenance != expected_resume_provenance
+                or input_resume_state.completed_global_iteration != offset
+                or input_resume_state.final_parameter_checksum != _vector_checksum(initial)
+            ):
+                msg = "Input resume state does not bind the resumed execution boundary."
+                raise ValueError(msg)
+            inherited = input_resume_state.checkpoint_selection
+        selected_rows = tuple(row for row in trace_rows if row.global_iteration == selected_global_iteration)
+        if selected_rows:
+            if len(selected_rows) != 1 or selected_rows[0].parameter_checksum != _vector_checksum(selected):
+                msg = "Trace does not uniquely bind the current selected checkpoint."
+                raise ValueError(msg)
+        else:
+            if not isinstance(inherited, NoisyKrotovCheckpointSelection):
+                msg = "A selected checkpoint predating this trace requires its verified inherited selection."
+                raise ValueError(msg)
+            expected_provenance = (
+                stage.configuration_checksum,
+                binding_checksum,
+                provider_checksum,
+                objective_checksum,
+            )
+            actual_provenance = (
+                inherited.stage_configuration_checksum,
+                inherited.circuit_binding_checksum,
+                inherited.provider_checksum,
+                inherited.objective_checksum,
+            )
+            if (
+                inherited.global_iteration >= trace_rows[0].global_iteration
+                or actual_provenance != expected_provenance
+                or inherited.global_iteration != selected_global_iteration
+                or inherited.validation_fidelity != selected_checkpoint_validation_fidelity
+                or inherited.parameter_checksum != _vector_checksum(selected)
+            ):
+                msg = "Inherited checkpoint selection does not bind the selected stage state."
+                raise ValueError(msg)
+        validation_candidates = tuple(
+            (
+                row.checkpoint_validation_fidelity,
+                row.global_iteration,
+                row.parameter_checksum,
+            )
+            for row in trace_rows
+            if row.checkpoint_validation_fidelity is not None
+        ) + (
+            ()
+            if inherited is None
+            else (
+                (
+                    inherited.validation_fidelity,
+                    inherited.global_iteration,
+                    inherited.parameter_checksum,
+                ),
+            )
+        )
+        if stage.checkpoint_validation.enabled:
+            if selected_checkpoint_validation_fidelity is None or not validation_candidates:
+                msg = "Checkpoint validation requires trace-backed or inherited selection evidence."
+                raise ValueError(msg)
+            best_fidelity = max(item[0] for item in validation_candidates)
+            best_candidates = tuple(item for item in validation_candidates if item[0] == best_fidelity)
+            winner = (
+                min(best_candidates, key=operator.itemgetter(1))
+                if stage.checkpoint_validation.tie_breaker == "earliest_iteration"
+                else max(best_candidates, key=operator.itemgetter(1))
+            )
+            if winner != (
+                selected_checkpoint_validation_fidelity,
+                selected_global_iteration,
+                _vector_checksum(selected),
+            ):
+                msg = "Selected checkpoint does not implement validation winner and tie-break semantics."
+                raise ValueError(msg)
+        elif inherited is not None or selected_checkpoint_validation_fidelity is not None:
+            msg = "A stage without checkpoint validation cannot carry checkpoint-selection evidence."
+            raise ValueError(msg)
+        training_maps = tuple(training_ensembles)
+        validation_maps = tuple(checkpoint_validation_ensembles)
+        if not all(isinstance(item, KrotovFixedMapEnsemble) for item in (*training_maps, *validation_maps)):
+            msg = "Execution map collections must contain only KrotovFixedMapEnsemble values."
+            raise TypeError(msg)
+        validate_noisy_krotov_execution_trace(
+            stage=stage,
+            circuit_binding_document=binding_document,
+            provider_checksum=provider_checksum,
+            trace=trace_rows,
+            training_ensembles=training_maps,
+            validation_ensembles=validation_maps,
+            normalized_work=normalized_work,
+            input_resume_state=input_resume_state,
+        )
+        object.__setattr__(self, "trace", trace_rows)
+        object.__setattr__(self, "training_ensembles", training_maps)
         object.__setattr__(
             self,
             "checkpoint_validation_ensembles",
-            tuple(checkpoint_validation_ensembles),
+            validation_maps,
         )
         object.__setattr__(
             self,
             "normalized_work",
             freeze_json_mapping(normalized_work.to_dict(), "normalized_work"),
         )
+        object.__setattr__(
+            self,
+            "input_resume_state_checksum",
+            None if input_resume_state is None else input_resume_state.content_checksum,
+        )
+        object.__setattr__(self, "_input_resume_state", input_resume_state)
         object.__setattr__(self, "_initial_theta_bytes", _vector_bytes(initial))
         object.__setattr__(self, "_final_theta_bytes", _vector_bytes(final))
         object.__setattr__(self, "_selected_theta_bytes", _vector_bytes(selected))
@@ -951,6 +1759,7 @@ class NoisyKrotovStageExecution:
             "circuit_binding_checksum": self.circuit_binding_checksum,
             "provider_checksum": self.provider_checksum,
             "objective_checksum": self.objective_checksum,
+            "objective_binding_checksum": self.objective_binding.content_checksum,
             "initial_parameter_checksum": self.initial_parameter_checksum,
             "final_parameter_checksum": self.final_parameter_checksum,
             "selected_parameter_checksum": self.selected_parameter_checksum,
@@ -960,6 +1769,7 @@ class NoisyKrotovStageExecution:
             "training_ensemble_checksums": list(self.training_ensemble_checksums),
             "checkpoint_validation_ensemble_checksums": list(self.checkpoint_validation_ensemble_checksums),
             "normalized_work": thaw_json_mapping(self.normalized_work),
+            "input_resume_state_checksum": self.input_resume_state_checksum,
         }
 
     @property
@@ -1469,6 +2279,7 @@ def _replace_validation(
     *,
     fidelity: float,
     ensemble_checksum: str,
+    ensemble_sampled: bool,
     work: KrotovWorkLedger,
 ) -> NoisyKrotovIterationRecord:
     """Attach one checkpoint-validation observation to a trace row."""
@@ -1476,6 +2287,7 @@ def _replace_validation(
         row,
         checkpoint_validation_fidelity=fidelity,
         checkpoint_validation_ensemble_checksum=ensemble_checksum,
+        checkpoint_validation_ensemble_sampled=ensemble_sampled,
         cumulative_work=work,
     )
 
@@ -1514,23 +2326,28 @@ class FixedRateNoisyKrotovStageAdapter:
         phase: FailurePhase = "validation"
         # One catch boundary is intentional: structured failures are the public
         # adapter contract, and this function performs no external mutation.
-        try:  # ruff: ignore[too-many-statements-in-try-clause]
+        try:
             translation = translate_fixed_rate_krotov_stage(stage, circuit_binding)
             circuit = circuit_binding.circuit
             theta = _validated_theta(initial_theta, expected_count=stage.output_parameter_count)
             initial_theta_copy = theta.copy()
             resolved_target = _resolved_target(target, num_qubits=circuit.num_qubits)
             state = _initial_state_template(initial_state, circuit.num_qubits)
-            objective_checksum = _objective_checksum(resolved_target, state)
+            objective_binding = NoisyKrotovObjectiveBinding.from_inputs(
+                target,
+                initial_state,
+                num_qubits=circuit.num_qubits,
+            )
+            objective_checksum = objective_binding.objective_checksum
             offset = _require_builtin_int(global_iteration_offset, "global_iteration_offset")
             if offset > stage.iteration_budget:
                 msg = "global_iteration_offset cannot exceed the stage iteration budget."
-                raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                raise ValueError(msg)
             remaining = stage.iteration_budget - offset
             count = remaining if iteration_count is None else _require_builtin_int(iteration_count, "iteration_count")
             if count < 1 or count > remaining:
                 msg = "iteration_count must be positive and cannot exceed the remaining stage budget."
-                raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                raise ValueError(msg)
 
             validation_config = stage.checkpoint_validation
             selected_theta = theta.copy()
@@ -1540,11 +2357,11 @@ class FixedRateNoisyKrotovStageAdapter:
             if offset == 0:
                 if resume_state is not None:
                     msg = "An initial stage chunk cannot accept a resume state."
-                    raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                    raise ValueError(msg)
             else:
                 if resume_state is None:
                     msg = "A resumed stage requires its provenance-bound prior state."
-                    raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                    raise ValueError(msg)
                 resumed_selection, selected_fidelity, selected_global_iteration = _verify_resume_state(
                     resume_state,
                     stage=stage,
@@ -1578,6 +2395,7 @@ class FixedRateNoisyKrotovStageAdapter:
             trainable_gate_count = sum(gate.is_trainable for gate in circuit.gates)
 
             current_ensemble: KrotovFixedMapEnsemble | None = None
+            current_ensemble_sampled = False
             if translation.tjm_options is None:
                 initial_loss, initial_fidelity = state_preparation_metrics(
                     circuit,
@@ -1606,7 +2424,7 @@ class FixedRateNoisyKrotovStageAdapter:
                     and (ensemble_index, refresh_index) not in training_cache
                 ):
                     msg = "A mid-window resumed CRN stage requires its caller-supplied active replay ensemble."
-                    raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                    raise ValueError(msg)
                 current_ensemble, sampled = _sample_or_replay(
                     cache=training_cache,
                     ordered=used_training,
@@ -1622,6 +2440,7 @@ class FixedRateNoisyKrotovStageAdapter:
                     refresh_index=refresh_index,
                     global_iteration_start=window_start,
                 )
+                current_ensemble_sampled = sampled
                 if sampled:
                     work = _noisy_work(
                         work,
@@ -1651,6 +2470,7 @@ class FixedRateNoisyKrotovStageAdapter:
             initial_row = NoisyKrotovIterationRecord(
                 local_iteration=0,
                 global_iteration=offset,
+                parameter_checksum=_vector_checksum(theta),
                 learning_rate=0.0,
                 monitoring_loss=initial_loss,
                 monitoring_fidelity=initial_fidelity,
@@ -1667,6 +2487,7 @@ class FixedRateNoisyKrotovStageAdapter:
                 training_ensemble_checksum=(None if current_ensemble is None else current_ensemble.content_checksum),
                 checkpoint_validation_ensemble_checksum=None,
                 cumulative_work=work,
+                training_ensemble_sampled=current_ensemble_sampled,
                 cumulative_cross_trajectory_pairings=cumulative_cross_pairings,
             )
             if validation_config.enabled and offset == 0:
@@ -1722,10 +2543,11 @@ class FixedRateNoisyKrotovStageAdapter:
                     initial_row,
                     fidelity=validation_fidelity,
                     ensemble_checksum=validation_ensemble.content_checksum,
+                    ensemble_sampled=sampled,
                     work=work,
                 )
                 selected_theta = theta.copy()
-                selected_fidelity = validation_fidelity
+                selected_fidelity = cast("float", initial_row.checkpoint_validation_fidelity)
                 selected_global_iteration = 0
                 validation_call_index += 1
             trace_rows.append(initial_row)
@@ -1735,6 +2557,7 @@ class FixedRateNoisyKrotovStageAdapter:
                 global_update_index = offset + local_update_index
                 step = _learning_rate(translation, global_update_index)
                 ensemble = None
+                ensemble_sampled = False
                 if translation.tjm_options is not None:
                     ensemble_index, refresh_index, window_start = _schedule_point(
                         stage.sampling_policy,
@@ -1756,6 +2579,7 @@ class FixedRateNoisyKrotovStageAdapter:
                         refresh_index=refresh_index,
                         global_iteration_start=window_start,
                     )
+                    ensemble_sampled = sampled
                     if sampled:
                         work = _noisy_work(
                             work,
@@ -1850,6 +2674,7 @@ class FixedRateNoisyKrotovStageAdapter:
                 row = NoisyKrotovIterationRecord(
                     local_iteration=local_update_index + 1,
                     global_iteration=completed_global_iteration,
+                    parameter_checksum=_vector_checksum(theta),
                     learning_rate=step,
                     monitoring_loss=monitoring_loss,
                     monitoring_fidelity=monitoring_fidelity,
@@ -1866,6 +2691,7 @@ class FixedRateNoisyKrotovStageAdapter:
                     training_ensemble_checksum=(None if ensemble is None else ensemble.content_checksum),
                     checkpoint_validation_ensemble_checksum=None,
                     cumulative_work=work,
+                    training_ensemble_sampled=ensemble_sampled,
                     cross_trajectory_pairings=cross_pairings,
                     cumulative_cross_trajectory_pairings=cumulative_cross_pairings,
                 )
@@ -1896,7 +2722,7 @@ class FixedRateNoisyKrotovStageAdapter:
                             "A resumed checkpoint-validation CRN window requires its caller-supplied "
                             "active replay ensemble."
                         )
-                        raise ValueError(msg)  # ruff: ignore[raise-within-try]
+                        raise ValueError(msg)
                     validation_ensemble, sampled = _sample_or_replay(
                         cache=validation_cache,
                         ordered=used_validation,
@@ -1942,13 +2768,16 @@ class FixedRateNoisyKrotovStageAdapter:
                         row,
                         fidelity=validation_fidelity,
                         ensemble_checksum=validation_ensemble.content_checksum,
+                        ensemble_sampled=sampled,
                         work=work,
                     )
-                    if validation_fidelity > selected_fidelity or (
-                        validation_fidelity == selected_fidelity and validation_config.tie_breaker == "latest_iteration"
+                    normalized_validation_fidelity = cast("float", row.checkpoint_validation_fidelity)
+                    if normalized_validation_fidelity > selected_fidelity or (
+                        normalized_validation_fidelity == selected_fidelity
+                        and validation_config.tie_breaker == "latest_iteration"
                     ):
                         selected_theta = theta.copy()
-                        selected_fidelity = validation_fidelity
+                        selected_fidelity = normalized_validation_fidelity
                         selected_global_iteration = completed_global_iteration
                     validation_call_index += 1
                 trace_rows.append(row)
@@ -1960,8 +2789,9 @@ class FixedRateNoisyKrotovStageAdapter:
             return NoisyKrotovStageExecution(
                 stage=stage,
                 circuit_binding_checksum=circuit_binding.content_checksum,
+                circuit_binding_document=circuit_binding.to_dict(),
                 provider_checksum=translation.provider_checksum,
-                objective_checksum=objective_checksum,
+                objective_binding=objective_binding,
                 initial_theta=initial_theta_copy,
                 final_theta=theta,
                 selected_theta=selected_theta,
@@ -1973,8 +2803,9 @@ class FixedRateNoisyKrotovStageAdapter:
                 training_ensembles=used_training,
                 checkpoint_validation_ensembles=used_validation,
                 normalized_work=work,
+                input_resume_state=resume_state,
             )
-        except Exception as error:  # ruff: ignore[blind-except] - failures are the public stage contract
+        except Exception as error:
             return NoisyKrotovStageFailure(
                 stage_index=getattr(stage, "stage_index", 0),
                 stage_id=getattr(stage, "stage_id", "invalid_stage"),
@@ -2085,6 +2916,7 @@ __all__ = [
     "NOISY_KROTOV_CIRCUIT_BINDING_SCHEMA_VERSION",
     "NOISY_KROTOV_EXECUTION_SCHEMA_VERSION",
     "NOISY_KROTOV_FAILURE_SCHEMA_VERSION",
+    "NOISY_KROTOV_OBJECTIVE_BINDING_SCHEMA_VERSION",
     "NOISY_KROTOV_RESUME_STATE_SCHEMA_VERSION",
     "NOISY_KROTOV_TRACE_SCHEMA_VERSION",
     "PRIMARY_COMPILER_POLICY_ID",
@@ -2097,9 +2929,13 @@ __all__ = [
     "NoisyKrotovCheckpointSelection",
     "NoisyKrotovCircuitBinding",
     "NoisyKrotovIterationRecord",
+    "NoisyKrotovObjectiveBinding",
     "NoisyKrotovResumeState",
     "NoisyKrotovStageExecution",
     "NoisyKrotovStageFailure",
+    "decode_noisy_krotov_circuit_binding_document",
     "execute_fixed_rate_krotov_stage",
+    "noisy_krotov_computational_zero_state_checksum",
     "translate_fixed_rate_krotov_stage",
+    "validate_noisy_krotov_execution_trace",
 ]
