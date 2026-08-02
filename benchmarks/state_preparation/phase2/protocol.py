@@ -71,7 +71,7 @@ PRIMARY_FAMILY_STRATA = {
 
 # This literal is the runtime root of trust for the checked-in preregistration.
 # It is updated only when the governing protocol is deliberately resealed.
-TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM = "sha256:f87aeef22069fbf01c1c5f6957a629f9599e08c0c61e1b0976f85c3151a6ab3f"
+TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM = "sha256:fa8a4efac484e5b426a76cea15b727becb04fc65814312aec0d8649668054b50"
 
 _PREREGISTRATION_KEYS = frozenset({
     "schema_version",
@@ -128,6 +128,19 @@ _TARGET_POPULATION_KEYS = frozenset({
     "role_allocation_policy",
 })
 _TARGET_FAMILY_KEYS = frozenset({"family_id", "parameter_distribution", "strata"})
+_TARGET_NUMERIC_POLICY_KEYS = frozenset({
+    "authorized_state_solver",
+    "basis_bit_order",
+    "complex_precision",
+    "generation_numpy_version",
+    "global_phase_rule",
+    "manifest_spectrum_solver",
+    "real_precision",
+    "spectrum_agreement_atol",
+    "spectrum_agreement_rtol",
+    "standard_normal_api",
+    "uniform_interval",
+})
 _DATA_ROLE_KEYS = frozenset({
     "roles",
     "target_instance_domains",
@@ -556,7 +569,13 @@ def _validate_target_population(value: object) -> tuple[Mapping[str, object], tu
     """
     policy = freeze_json_mapping(value, "target_population_policy")
     require_exact_keys(policy, _TARGET_POPULATION_KEYS, "target_population_policy")
-    require_slug(policy["generator_schema_version"], "target_population_policy.generator_schema_version")
+    generator_schema = require_slug(
+        policy["generator_schema_version"],
+        "target_population_policy.generator_schema_version",
+    )
+    if generator_schema != "yaqs.state_preparation.phase2.targets.v2":
+        msg = "target_population_policy.generator_schema_version must be the corrected targets.v2 policy."
+        raise ValueError(msg)
     families = _sequence_of_mappings(policy["families"], "target_population_policy.families")
     family_ids: list[str] = []
     for index, family in enumerate(families):
@@ -582,6 +601,13 @@ def _validate_target_population(value: object) -> tuple[Mapping[str, object], tu
     if actual_strata != PRIMARY_FAMILY_STRATA:
         msg = "Target-family strata do not match the frozen primary allocation."
         raise ValueError(msg)
+    tfim_distribution = cast(
+        "Mapping[str, object]",
+        next(family for family in families if family["family_id"] == "tfim_ground_state")["parameter_distribution"],
+    )
+    if "eigensolver" in tfim_distribution:
+        msg = "The corrected target policy must not retain the ambiguous TFIM eigensolver field."
+        raise ValueError(msg)
     primary_qubits = cast("Sequence[object]", policy["primary_qubit_counts"])
     secondary_qubits = cast("Sequence[object]", policy["secondary_qubit_counts"])
     primary_values = tuple(require_int(item, "primary_qubit_counts item", minimum=2) for item in primary_qubits)
@@ -596,7 +622,39 @@ def _validate_target_population(value: object) -> tuple[Mapping[str, object], tu
         msg = "target_population_policy.instance_id_policy is not the frozen v1 policy."
         raise ValueError(msg)
     freeze_json_mapping(policy["rng_policy"], "target_population_policy.rng_policy")
-    freeze_json_mapping(policy["numeric_policy"], "target_population_policy.numeric_policy")
+    numeric_policy = freeze_json_mapping(
+        policy["numeric_policy"],
+        "target_population_policy.numeric_policy",
+    )
+    require_exact_keys(
+        numeric_policy,
+        _TARGET_NUMERIC_POLICY_KEYS,
+        "target_population_policy.numeric_policy",
+    )
+    expected_numeric_text = {
+        "authorized_state_solver": "numpy_linalg_eigh_dense_hermitian",
+        "basis_bit_order": "little_endian_site_i_is_bit_i",
+        "complex_precision": "complex128",
+        "generation_numpy_version": "2.4.6",
+        "global_phase_rule": "largest_magnitude_lowest_index_component_real_nonnegative",
+        "manifest_spectrum_solver": "numpy_linalg_eigvalsh_dense_hermitian",
+        "real_precision": "float64",
+        "standard_normal_api": "Generator.standard_normal",
+        "uniform_interval": "half_open",
+    }
+    for field_name, expected_value in expected_numeric_text.items():
+        if numeric_policy[field_name] != expected_value:
+            msg = f"target_population_policy.numeric_policy.{field_name} differs from the corrected policy."
+            raise ValueError(msg)
+    for field_name in ("spectrum_agreement_rtol", "spectrum_agreement_atol"):
+        tolerance = require_float(
+            numeric_policy[field_name],
+            f"target_population_policy.numeric_policy.{field_name}",
+            minimum=0.0,
+        )
+        if not math.isclose(tolerance, 1e-13, rel_tol=0.0, abs_tol=0.0):
+            msg = f"target_population_policy.numeric_policy.{field_name} must be exactly 1e-13."
+            raise ValueError(msg)
     freeze_json_mapping(
         policy["role_allocation_policy"],
         "target_population_policy.role_allocation_policy",

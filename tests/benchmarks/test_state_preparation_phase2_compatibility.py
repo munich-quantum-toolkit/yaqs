@@ -29,6 +29,7 @@ from benchmarks.state_preparation import (
     load_target_collection,
     state_preparation_training_id,
 )
+from benchmarks.state_preparation import phase2 as phase2_api
 from benchmarks.state_preparation.runner import (
     RUNNER_CONFIGURATION_FORMAT,
     build_benchmark_matrix,
@@ -36,6 +37,27 @@ from benchmarks.state_preparation.runner import (
     resolve_options,
 )
 from benchmarks.state_preparation.schema import RUN_IDENTITY_VERSION
+
+
+def test_phase2_public_api_exports_wp16_records() -> None:
+    """The Phase II package exposes the versioned WP16 construction API."""
+    expected = {
+        "ExternalCheckpointRef",
+        "Phase2TargetRef",
+        "PipelineBenchmarkFailure",
+        "PipelineBenchmarkResult",
+        "PipelineEvaluationConfig",
+        "TargetPopulationConfig",
+        "TargetPopulationManifest",
+        "TrainingPipelineConfig",
+        "TrainingPipelineTemplate",
+        "TrainingStageConfig",
+        "create_target_population_manifest",
+        "validate_screening_resolution",
+    }
+    assert expected <= set(phase2_api.__all__)
+    assert len(phase2_api.__all__) == len(set(phase2_api.__all__))
+    assert all(getattr(phase2_api, name) is not None for name in expected)
 
 
 def test_phase1_schema_and_method_identities_remain_literal_v1_values() -> None:
@@ -125,6 +147,14 @@ def test_phase1_representative_run_and_training_ids_remain_frozen() -> None:
     assert state_preparation_training_id(method, last_noisy_fanout) == state_preparation_training_id(
         method,
         noiseless,
+    )
+    assert len(noiseless.to_json()) == 1336
+    assert hashlib.sha256(noiseless.to_json().encode()).hexdigest() == (
+        "ee253930bc4299e989b57bee3e59b7eaec6c08f90627251c1b08562c79b9366a"
+    )
+    assert len(last_noisy_fanout.to_json()) == 1359
+    assert hashlib.sha256(last_noisy_fanout.to_json().encode()).hexdigest() == (
+        "fecea1ee279d273f6f3f81e85bfee5a1148bd19204d1a78c7381221feaecaa7d"
     )
 
 

@@ -539,7 +539,7 @@ def test_checked_in_preregistration_freezes_scientific_and_rng_decisions(
     assert (
         preregistration.content_checksum
         == TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM
-        == "sha256:f87aeef22069fbf01c1c5f6957a629f9599e08c0c61e1b0976f85c3151a6ab3f"
+        == "sha256:fa8a4efac484e5b426a76cea15b727becb04fc65814312aec0d8649668054b50"
     )
     assert preregistration.phase_i_baseline_commit == "fcf0a65f0f9d2c6d2c50131f100ab530e6ceab11"
     assert preregistration.implementation_plan_commit == "3c74e22cba0301f7d44c6472f6cf65bd5a7e43da"

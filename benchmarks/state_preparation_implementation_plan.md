@@ -1462,7 +1462,8 @@ The Phase II target-population configuration must freeze:
 - qubit-count strata, instance count per family and stratum, and instance seed
   domain;
 - endianness, global-phase convention, floating-point precision, eigensolver
-  policy, and generator version; and
+  policy, and generator version, including a spectrum-only manifest solver, an
+  authorized state-vector solver, and their exact agreement tolerances; and
 - externally custodied manifest, authorized materialization, and checksum
   policies.
 
@@ -1476,6 +1477,15 @@ never be reused as if a new seed made them independent; their Phase II family
 definitions must sample the sealed physical parameters. The canonical 18 Phase
 I fixtures and the five legacy reproduction fixtures remain in separate
 immutable namespaces.
+
+Before any Phase II target manifest or benchmark data are generated, WP16
+corrects the initially ambiguous TFIM `eigensolver` seal. Target-generator
+v2 uses dense-Hermitian `numpy.linalg.eigvalsh` only to seal manifest spectra
+and rejection decisions, reserves dense-Hermitian `numpy.linalg.eigh` for
+authorized state-vector materialization, and freezes both relative and absolute
+cross-solver agreement tolerances at `1e-13`. The corrected preregistration,
+target-policy checksum, and generator version replace the unexecuted v1 target
+policy; no v1 Phase II target data may be generated or promoted.
 
 Each stage configuration must resolve and validate:
 
@@ -1555,6 +1565,8 @@ repetition. Output path spelling is never part of a scientific identity.
 - Unique instance identifiers across development, screening-selection, and
   confirmatory populations.
 - Blinded-manifest generation without state-vector materialization.
+- Rejection of any target-vector eigensolver or phase-normalization call during
+  blinded-manifest generation and before confirmatory authorization.
 - Manifest/vector/checksum agreement after authorized materialization.
 - Rejection of Phase I or legacy identifiers in a Phase II holdout manifest.
 - JSON and CSV round-trips with stable ordering.
