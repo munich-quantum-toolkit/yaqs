@@ -137,7 +137,7 @@ result = checker.check(qasm_source_a, qasm_source_b)
 ```
 
 OpenQASM 3 requires the optional package `qiskit-qasm3-import`
-(`pip install mqt-yaqs[qasm3]`). The same path and string forms work with
+(`uv pip install mqt-yaqs[qasm3]`). The same path and string forms work with
 {meth}`~mqt.yaqs.Simulator.run` for circuit simulation.
 
 ## Example: compare original and transpiled circuits

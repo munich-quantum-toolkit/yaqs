@@ -26,7 +26,7 @@ For expectation-value simulation and mid-circuit observables, see
 You can pass an OpenQASM file path or raw OpenQASM string to
 {meth}`~mqt.yaqs.Simulator.run` instead of building a
 {class}`qiskit.circuit.QuantumCircuit` in Python (OpenQASM 3 requires
-`pip install mqt-yaqs[qasm3]`).
+`uv pip install mqt-yaqs[qasm3]`).
 
 ## 1. Circuit
 
