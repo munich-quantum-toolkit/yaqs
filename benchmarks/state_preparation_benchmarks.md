@@ -402,6 +402,82 @@ counted once per attempt; row-specific evaluation time is counted once per row,
 and total wall time is the sum of all stage attempts, materialization attempts,
 and evaluation attempts recorded by the store.
 
+### Phase II Layerwise Noisy Fine-Tuning
+
+WP19 defines two deliberately distinct bottom-up BMPD profiles. The historical
+`layerwise_bmpd_crn_legacy_v1` profile is an isolated q8 reproduction: it grows
+depths `1 -> 2 -> 3 -> 4`, performs 100 noiseless Krotov updates at every depth,
+copies each trained prefix, initializes only the appended tail, and performs a
+200-update noisy fine-tune with three fixed cross-trajectory CRN paths. Its
+logical TJM simulation profile is `ibm_inspired_pauli_legacy_v1`; the name is
+hardware-inspired provenance and does not indicate IBM hardware execution.
+The profile is fixed brickwall growth and must not be labelled ADAPT-VQE.
+
+The legacy initialization seeds are `20 * target_seed` at depth one and
+`20 * target_seed + depth` for appended depths. All noiseless stages reuse
+`30 * target_seed`; final optimization and fixed training maps use
+`40 * target_seed`. The historical fixed-map seed formula is
+`1_000_003 * (40 * target_seed) + trajectory_index`. The 500-trajectory
+evaluation uses effective seeds `0` through `499`. These compatibility rules
+are reserved for the five legacy targets and cannot be selected by a Phase II
+screening or confirmation pipeline.
+
+The archived fixed-CRN training path sampled normalized trajectories but
+stored compact Pauli maps whose replay did not normalize after each gate; WP19
+preserves that behavior only for the legacy fine-tuning stage. The historical
+`use_crn=False` evaluation instead scored the normalized sampled trajectories,
+so its seed-compatible map replay keeps normalization enabled. Seed derivation
+and compact-replay policy are separate controls to prevent this legacy behavior
+from leaking into corrected methods that use the same noise condition.
+
+The target collection for seeds `100`, `200`, `300`, `400`, and `500` contains
+WP19 reconstructed references, not archived state vectors. The original source
+did not retain target vectors, coupling/field draws, eigensolver outputs, or a
+complete runtime fingerprint. The sealed collection therefore stores null
+archived checksums, the commit-addressed generator semantics, current
+NumPy/SciPy/BLAS/LAPACK/platform provenance, and explicit missing-provenance
+notes. Fresh regeneration is compared after global-phase alignment with the
+declared `1e-10` absolute and relative tolerances.
+
+The publication profile `layerwise_bmpd_crn_v2` retains the depth and update
+budgets but uses the standard `depolarizing_1s_all` condition, independent
+trajectory updates, hash-derived disjoint seed domains, and separate fixed CRN
+ensembles for training and checkpoint validation. Validation candidates are
+iteration zero, every ten updates, and the final update; the highest validation
+mean wins, with exact ties resolved to the earliest iteration. Training and
+validation trajectory counts have no defaults and must be supplied from frozen
+pilot evidence before screening. Final-test trajectories never select a
+checkpoint.
+
+The opt-in historical job is intentionally outside ordinary CI because it runs
+five q8 pipelines and 500 evaluation trajectories per target. Its canonical
+comparison report is computed only from emitted evaluation rows or retained
+training/orchestration failures and links each value to the archived CSV audit;
+missing or discrepant rows remain visible and archived values are never copied
+into computed fields.
+
+One exclusive output-root lock covers preparation through final report
+publication. A launch manifest seals the exact tracked implementation,
+lockfiles, and study inputs; the runner rechecks it before every target and
+again before publication. Each outcome carries its target-specific WP18
+runtime fingerprint, while the report checksum-binds the shared manifest and
+thread-pinned runtime, preventing a five-row result from mixing scientific
+source snapshots.
+
+Run the pinned reproduction explicitly from the repository root:
+
+```console
+uv run python -m benchmarks.state_preparation.phase2.run_historical_reproduction \
+  --output-root output/wp19_historical_reproduction \
+  --execute-expensive
+```
+
+Use `--resume` to verify and continue that same artifact root after an
+interruption. Use `--overwrite` only to replace the runner's managed artifacts;
+the two modes are mutually exclusive. Exit status `0` means reproduced within
+tolerance, `1` means a complete scientific discrepancy, and `2` means at least
+one target, setup step, or job-level check failed.
+
 ### Native Gate-Count Rules
 
 Noiseless and standard-noise rows report gate counts and depth for the logical

@@ -17,7 +17,9 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.optimization import (
+    CompositeGateNoiseInstruction,
     GateNoiseContext,
     KrotovFixedMapEnsemble,
     KrotovMapSchedule,
@@ -28,6 +30,7 @@ from mqt.yaqs.optimization import (
     ParameterizedCircuit,
     ParameterizedGate,
     RandomUnitaryInstruction,
+    TJMNoiseInstruction,
     derive_krotov_trajectory_seed,
     sample_krotov_fixed_map_ensemble,
 )
@@ -357,6 +360,47 @@ def test_sampling_uses_forward_path_once_per_trajectory_and_replays_without_prov
     replayed = ensemble.replay_maps()
     assert len(calls) == 3
     assert all(np.array_equal(maps[0].operators[0][0], _X) for maps in replayed)
+
+
+def test_legacy_compact_sampling_rejects_intermediate_normalization_checkpoints() -> None:
+    """The archived compact-map convention cannot flatten composite checkpoints."""
+    model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 2.0}])
+
+    def provider(
+        context: GateNoiseContext,
+        rng: np.random.Generator,
+    ) -> CompositeGateNoiseInstruction:
+        del rng
+        return CompositeGateNoiseInstruction((
+            TJMNoiseInstruction(model, channel_id="tjm"),
+            RandomUnitaryInstruction(
+                operators=(LocalOperator(_Z, context.sites, label="Z"),),
+                channel_id="unitary",
+            ),
+        ))
+
+    circuit = ParameterizedCircuit(1, [ParameterizedGate("ry", (0,), param_index=0)])
+    with pytest.raises(ValueError, match="requires no normalization checkpoints"):
+        sample_krotov_fixed_map_ensemble(
+            circuit,
+            np.array([0.2]),
+            MPS(1),
+            KrotovTruncation(),
+            provider,
+            KrotovTJMOptions(),
+            role="training_trajectory",
+            resolved_seed=23,
+            stage_index=1,
+            stage_id="legacy_noisy_finetune",
+            stage_configuration_checksum=_CHECKSUM_A,
+            circuit_checksum=_CHECKSUM_B,
+            provider_checksum=_CHECKSUM_C,
+            ensemble_index=0,
+            refresh_index=0,
+            global_iteration_start=0,
+            legacy_linear_seed=True,
+            legacy_compact_replay=True,
+        )
 
 
 def test_sampling_is_execution_order_reproducible_and_ignores_tjm_seed() -> None:

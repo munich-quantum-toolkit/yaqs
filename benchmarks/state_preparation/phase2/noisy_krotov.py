@@ -60,6 +60,7 @@ from mqt.yaqs.optimization import (
 from mqt.yaqs.optimization.parameterized_circuit import ParameterizedCircuit, ParameterizedGate
 
 from .canonical import canonical_checksum, freeze_json_mapping, thaw_json_mapping
+from .legacy_targets import LegacyMaterializedTarget
 from .pipeline import TrainingStageConfig
 from .targets import MaterializedTarget
 from .validation import (
@@ -97,10 +98,21 @@ PRIMARY_CONNECTIVITY = "linear_chain"
 PRIMARY_ROUTING_POLICY_ID = "identity_no_swap"
 PRIMARY_COUNTING_POLICY_ID = "native_two_qubit_gates_per_chain_edge"
 
-_SUPPORTED_OPTIMIZER_HYPERPARAMETERS = frozenset({"learning_rate", "schedule", "decay"})
+_SUPPORTED_OPTIMIZER_HYPERPARAMETERS = frozenset({
+    "learning_rate",
+    "schedule",
+    "decay",
+    "initialization_rng",
+    "initialization_scale",
+})
 _SCHEDULES = frozenset({"constant", "inverse", "exp"})
+_INITIALIZATION_RNGS = frozenset({
+    "numpy_pcg64_standard_normal_v1",
+    "numpy_randomstate_standard_normal_v1",
+})
 _FAILURE_PHASES = frozenset({"validation", "sampling", "optimization", "checkpoint_validation"})
 _OBJECTIVE_ID = "pure_state_infidelity_v1"
+_LEGACY_LAYERWISE_COMPATIBILITY_METHOD_ID = "layerwise_bmpd_crn_legacy_v1"
 _COMPUTATIONAL_ZERO_INITIAL_STATE_POLICY = "computational_zero_v1"
 _CUSTOM_INITIAL_STATE_POLICY = "custom_state_v1"
 _OBJECTIVE_INITIAL_STATE_POLICIES = frozenset({
@@ -239,7 +251,7 @@ def _validated_theta(
 
 
 def _resolved_target(
-    target: MaterializedTarget | MPS | NDArray[np.complex128],
+    target: MaterializedTarget | LegacyMaterializedTarget | MPS | NDArray[np.complex128],
     *,
     num_qubits: int,
 ) -> MPS | NDArray[np.complex128]:
@@ -249,7 +261,7 @@ def _resolved_target(
         TypeError: If the target has an unsupported type.
         ValueError: If target size, shape, finiteness, or norm is invalid.
     """
-    if isinstance(target, MaterializedTarget):
+    if isinstance(target, (MaterializedTarget, LegacyMaterializedTarget)):
         if target.qubit_count != num_qubits:
             msg = f"Materialized target has {target.qubit_count} qubits, expected {num_qubits}."
             raise ValueError(msg)
@@ -260,7 +272,7 @@ def _resolved_target(
             raise ValueError(msg)
         return copy.deepcopy(target)
     if not isinstance(target, np.ndarray):
-        msg = "target must be a MaterializedTarget, MPS, or complex NumPy statevector."
+        msg = "target must be a typed materialized target, MPS, or complex NumPy statevector."
         raise TypeError(msg)
     vector = np.asarray(target, dtype=np.complex128)
     if vector.shape != (2**num_qubits,) or not np.all(np.isfinite(vector)):
@@ -378,7 +390,7 @@ class NoisyKrotovObjectiveBinding:
     @classmethod
     def from_inputs(
         cls,
-        target: MaterializedTarget | MPS | NDArray[np.complex128],
+        target: MaterializedTarget | LegacyMaterializedTarget | MPS | NDArray[np.complex128],
         initial_state: MPS | None,
         *,
         num_qubits: int,
@@ -406,7 +418,9 @@ class NoisyKrotovObjectiveBinding:
                 else _CUSTOM_INITIAL_STATE_POLICY
             ),
             initial_state_checksum=initial_checksum,
-            materialized_target_identity=(target.identity_dict() if isinstance(target, MaterializedTarget) else None),
+            materialized_target_identity=(
+                target.identity_dict() if isinstance(target, (MaterializedTarget, LegacyMaterializedTarget)) else None
+            ),
         )
 
     @property
@@ -1901,6 +1915,19 @@ def translate_fixed_rate_krotov_stage(
     if unknown:
         msg = f"Unsupported Krotov optimizer hyperparameters: {sorted(unknown)!r}."
         raise ValueError(msg)
+    initialization_rng = hyperparameters.get("initialization_rng")
+    initialization_scale = hyperparameters.get("initialization_scale")
+    if (initialization_rng is None) != (initialization_scale is None):
+        msg = "initialization_rng and initialization_scale must be supplied together."
+        raise ValueError(msg)
+    if initialization_rng is not None:
+        if type(initialization_rng) is not str or initialization_rng not in _INITIALIZATION_RNGS:
+            msg = f"initialization_rng must be one of {sorted(_INITIALIZATION_RNGS)!r}."
+            raise ValueError(msg)
+        _require_finite_float(initialization_scale, "initialization_scale", positive=True)
+        if stage.parameter_transfer_rule not in {"initialize_random_normal", "append_random_normal"}:
+            msg = "Initialization metadata is valid only for normal random parameter transfer."
+            raise ValueError(msg)
     if "learning_rate" not in hyperparameters:
         msg = "Krotov stages require an explicit learning_rate hyperparameter."
         raise ValueError(msg)
@@ -2209,6 +2236,7 @@ def _sample_or_replay(
     ensemble_index: int,
     refresh_index: int,
     global_iteration_start: int,
+    legacy_reproduction: bool,
 ) -> tuple[KrotovFixedMapEnsemble, bool]:
     """Return a verified cached ensemble or sample it exactly once."""
     key = (ensemble_index, refresh_index)
@@ -2248,6 +2276,8 @@ def _sample_or_replay(
         ensemble_index=ensemble_index,
         refresh_index=refresh_index,
         global_iteration_start=global_iteration_start,
+        legacy_linear_seed=legacy_reproduction,
+        legacy_compact_replay=legacy_reproduction and role == "training_trajectory",
     )
     cache[key] = ensemble
     ordered.append(ensemble)
@@ -2302,7 +2332,7 @@ class FixedRateNoisyKrotovStageAdapter:
     def execute(
         stage: TrainingStageConfig,
         circuit_binding: NoisyKrotovCircuitBinding,
-        target: MaterializedTarget | MPS | NDArray[np.complex128],
+        target: MaterializedTarget | LegacyMaterializedTarget | MPS | NDArray[np.complex128],
         initial_theta: NDArray[np.float64],
         *,
         initial_state: MPS | None = None,
@@ -2311,6 +2341,7 @@ class FixedRateNoisyKrotovStageAdapter:
         replay_training_ensembles: Sequence[KrotovFixedMapEnsemble] = (),
         replay_validation_ensembles: Sequence[KrotovFixedMapEnsemble] = (),
         resume_state: NoisyKrotovResumeState | None = None,
+        compatibility_method_id: str | None = None,
     ) -> NoisyKrotovStageExecution | NoisyKrotovStageFailure:
         """Execute a stage, converting any failure into a structured record.
 
@@ -2321,13 +2352,35 @@ class FixedRateNoisyKrotovStageAdapter:
         ``global_iteration_offset`` is stage-global across resume chunks, not a
         cumulative index across different pipeline stages. Every resumed run
         must carry its provenance-bound prior state and cumulative work.
+
+        ``compatibility_method_id`` is an identity-bearing opt-in for the
+        archived WP19 sampler arithmetic. Leaving it unset preserves the modern
+        hash-derived seeds and normalized provider maps, including when a stage
+        deliberately uses the historical noise profile.
         """
         work = KrotovWorkLedger()
         phase: FailurePhase = "validation"
         # One catch boundary is intentional: structured failures are the public
         # adapter contract, and this function performs no external mutation.
         try:
+            if compatibility_method_id is not None and (
+                type(compatibility_method_id) is not str
+                or compatibility_method_id != _LEGACY_LAYERWISE_COMPATIBILITY_METHOD_ID
+            ):
+                msg = "compatibility_method_id must identify the isolated WP19 legacy method or be None."
+                raise ValueError(msg)
+            legacy_reproduction = compatibility_method_id == _LEGACY_LAYERWISE_COMPATIBILITY_METHOD_ID
+            if legacy_reproduction and not isinstance(target, LegacyMaterializedTarget):
+                msg = "The WP19 legacy compatibility method requires a LegacyMaterializedTarget."
+                raise ValueError(msg)
             translation = translate_fixed_rate_krotov_stage(stage, circuit_binding)
+            if (
+                legacy_reproduction
+                and translation.tjm_options is not None
+                and getattr(translation.noise_provider, "noise_id", None) != HISTORICAL_FIXED_RATE_NOISE_ID
+            ):
+                msg = "The noisy WP19 legacy compatibility method requires the historical fixed-rate provider."
+                raise ValueError(msg)
             circuit = circuit_binding.circuit
             theta = _validated_theta(initial_theta, expected_count=stage.output_parameter_count)
             initial_theta_copy = theta.copy()
@@ -2439,6 +2492,7 @@ class FixedRateNoisyKrotovStageAdapter:
                     ensemble_index=ensemble_index,
                     refresh_index=refresh_index,
                     global_iteration_start=window_start,
+                    legacy_reproduction=legacy_reproduction,
                 )
                 current_ensemble_sampled = sampled
                 if sampled:
@@ -2512,6 +2566,7 @@ class FixedRateNoisyKrotovStageAdapter:
                     ensemble_index=validation_ensemble_index,
                     refresh_index=validation_refresh_index,
                     global_iteration_start=validation_window_start,
+                    legacy_reproduction=legacy_reproduction,
                 )
                 if sampled:
                     work = _noisy_work(
@@ -2578,6 +2633,7 @@ class FixedRateNoisyKrotovStageAdapter:
                         ensemble_index=ensemble_index,
                         refresh_index=refresh_index,
                         global_iteration_start=window_start,
+                        legacy_reproduction=legacy_reproduction,
                     )
                     ensemble_sampled = sampled
                     if sampled:
@@ -2737,6 +2793,7 @@ class FixedRateNoisyKrotovStageAdapter:
                         ensemble_index=validation_ensemble_index,
                         refresh_index=validation_refresh_index,
                         global_iteration_start=validation_window_start,
+                        legacy_reproduction=legacy_reproduction,
                     )
                     if sampled:
                         work = _noisy_work(
@@ -2879,7 +2936,7 @@ def _validation_translation(
 def execute_fixed_rate_krotov_stage(
     stage: TrainingStageConfig,
     circuit_binding: NoisyKrotovCircuitBinding,
-    target: MaterializedTarget | MPS | NDArray[np.complex128],
+    target: MaterializedTarget | LegacyMaterializedTarget | MPS | NDArray[np.complex128],
     initial_theta: NDArray[np.float64],
     *,
     initial_state: MPS | None = None,
@@ -2888,8 +2945,12 @@ def execute_fixed_rate_krotov_stage(
     replay_training_ensembles: Sequence[KrotovFixedMapEnsemble] = (),
     replay_validation_ensembles: Sequence[KrotovFixedMapEnsemble] = (),
     resume_state: NoisyKrotovResumeState | None = None,
+    compatibility_method_id: str | None = None,
 ) -> NoisyKrotovStageExecution | NoisyKrotovStageFailure:
     """Execute one WP17 stage with the default stateless adapter.
+
+    The optional compatibility method identity is reserved for the WP19 legacy
+    stage runner. Direct callers retain modern sampling semantics by default.
 
     Returns:
         A successful immutable execution or a structured failure.
@@ -2905,6 +2966,7 @@ def execute_fixed_rate_krotov_stage(
         replay_training_ensembles=replay_training_ensembles,
         replay_validation_ensembles=replay_validation_ensembles,
         resume_state=resume_state,
+        compatibility_method_id=compatibility_method_id,
     )
 
 

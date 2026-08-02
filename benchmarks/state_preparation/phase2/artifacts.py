@@ -55,6 +55,7 @@ from .canonical import (
     thaw_json_mapping,
     verify_sealed_mapping,
 )
+from .legacy_targets import load_legacy_target_collection
 from .noisy_krotov import (
     NOISY_KROTOV_ADAPTER_VERSION,
     NOISY_KROTOV_EXECUTION_SCHEMA_VERSION,
@@ -3491,22 +3492,47 @@ class Phase2ArtifactStore:
             raise ValueError(msg)
         target_ref = self.pipeline.target_ref
         target_identity = binding.materialized_target_identity
-        if self.pipeline.target_namespace != "phase2" or target_ref is None or target_identity is None:
+        if self.pipeline.target_namespace == "legacy_reproduction":
+            if target_ref is not None or target_identity is None:
+                msg = "Published WP19 legacy evidence requires a sealed reconstructed target identity."
+                raise ValueError(msg)
+            try:
+                trusted_target = load_legacy_target_collection().target(self.pipeline.target_instance_id)
+            except KeyError as error:
+                msg = "WP19 legacy evidence does not identify a target in the trusted sealed collection."
+                raise ValueError(msg) from error
+            expected_pipeline_identity = {
+                "target_instance_id": self.pipeline.target_instance_id,
+                "target_instance_spec_checksum": self.pipeline.target_instance_spec_checksum,
+                "target_manifest_checksum": self.pipeline.target_population_manifest_checksum,
+                "family_id": self.pipeline.target_family_id,
+                "stratum_id": self.pipeline.target_stratum_id,
+                "qubit_count": self.pipeline.qubit_count,
+            }
+            trusted_identity = trusted_target.identity_dict()
+            if any(trusted_identity[name] != value for name, value in expected_pipeline_identity.items()):
+                msg = "WP19 trusted legacy target identity does not match the configured pipeline target."
+                raise ValueError(msg)
+            if thaw_json_mapping(target_identity) != trusted_identity:
+                msg = "WP19 objective identity does not exactly match the trusted sealed legacy target."
+                raise ValueError(msg)
+        elif self.pipeline.target_namespace != "phase2" or target_ref is None or target_identity is None:
             msg = "Published WP17 evidence requires an authorized materialized Phase II target."
             raise ValueError(msg)
-        expected_target_identity = {
-            "target_instance_id": self.pipeline.target_instance_id,
-            "target_instance_spec_checksum": self.pipeline.target_instance_spec_checksum,
-            "population_config_checksum": target_ref.population_config_checksum,
-            "target_manifest_checksum": self.pipeline.target_population_manifest_checksum,
-            "parameter_checksum": canonical_checksum(target_ref.target_spec.parameters),
-            "family_id": self.pipeline.target_family_id,
-            "stratum_id": self.pipeline.target_stratum_id,
-            "qubit_count": self.pipeline.qubit_count,
-        }
-        if any(target_identity[name] != value for name, value in expected_target_identity.items()):
-            msg = "WP17 materialized target identity does not match the configured pipeline target."
-            raise ValueError(msg)
+        elif self.pipeline.target_namespace == "phase2":
+            expected_target_identity = {
+                "target_instance_id": self.pipeline.target_instance_id,
+                "target_instance_spec_checksum": self.pipeline.target_instance_spec_checksum,
+                "population_config_checksum": target_ref.population_config_checksum,
+                "target_manifest_checksum": self.pipeline.target_population_manifest_checksum,
+                "parameter_checksum": canonical_checksum(target_ref.target_spec.parameters),
+                "family_id": self.pipeline.target_family_id,
+                "stratum_id": self.pipeline.target_stratum_id,
+                "qubit_count": self.pipeline.qubit_count,
+            }
+            if any(target_identity[name] != value for name, value in expected_target_identity.items()):
+                msg = "WP17 materialized target identity does not match the configured pipeline target."
+                raise ValueError(msg)
         expected_initial_checksum = noisy_krotov_computational_zero_state_checksum(self.pipeline.qubit_count)
         if (
             binding.initial_state_policy != "computational_zero_v1"

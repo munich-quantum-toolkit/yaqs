@@ -4,6 +4,60 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Run bottom-up layerwise BMPD with noisy fine-tuning
+
+Use `build_layerwise_bmpd_crn_legacy_v1_template` only for the isolated
+historical reproduction. It fixes q8 depths 1 through 4, four 100-iteration
+noiseless growth stages, RandomState initialization, the historical reused
+optimizer seeds, and a 200-iteration three-trajectory cross-CRN fine-tune under
+`ibm_inspired_pauli_legacy_v1`. `resolve_layerwise_bmpd_crn_legacy_v1_pipeline`
+binds one of the five legacy target seeds and `LayerwiseBMPDStageRunner` executes
+the resulting stages through the Phase II artifact path.
+
+The checked-in `legacy_tfim_targets_v1.json` vectors are WP19 reconstructions,
+not recovered archived vectors. Load them with `load_legacy_target_collection`;
+the records preserve the exact historical generator and current reconstruction
+runtime, disclose missing archival provenance, and validate a fresh eigensolver
+run phase-invariantly at the declared tolerance.
+
+For new experiments, use `build_layerwise_bmpd_crn_v2_template` and supply both
+training and checkpoint-validation trajectory counts explicitly from frozen
+pilot evidence. The corrected profile uses standard fixed-rate noise,
+independent updates, disjoint derived streams, a separately fixed validation
+ensemble, checkpoints at iteration zero/every ten/final, and earliest-iteration
+tie breaking. A changed count, refresh policy, update rule, cadence, or depth
+schedule is a different configuration and must not retain the v2 identity.
+
+`derive_legacy_krotov_trajectory_seed` and the sampler's
+`legacy_linear_seed=True` option exist solely for this reproduction. New code
+must keep the default hash-derived trajectory seeds.
+
+Legacy seed arithmetic and legacy compact-map replay are separate policies.
+Only the historical fixed-CRN fine-tuning stage replays compact Pauli maps
+without per-gate normalization; the historical independent evaluation retains
+normalized trajectories, and corrected methods remain on the modern replay
+path even if they use the same noise condition.
+
+The five-target q8 job is deliberately opt-in and can be started from the
+repository root:
+
+```console
+uv run python -m benchmarks.state_preparation.phase2.run_historical_reproduction \
+  --output-root output/wp19_historical_reproduction \
+  --execute-expensive
+```
+
+Add `--resume` after an interruption; `--overwrite` instead replaces only its
+managed artifacts. The command exits with status `0` only when all five rows
+reproduce within tolerance, `1` for a complete but discrepant comparison, and
+`2` for a target, setup, or job-level failure.
+
+The job holds one output-root lock for its complete lifetime and seals one
+launch manifest containing the exact tracked implementation, lockfile, and
+study-input bytes. It rechecks that snapshot before every target and before
+publishing the report; every row records its target-specific WP18 runtime
+fingerprint, and the report binds both the source manifest and runtime.
+
 ### Persist and resume Phase II staged pipelines
 
 Use `benchmarks.state_preparation.phase2.capture_resumability_fingerprint` to

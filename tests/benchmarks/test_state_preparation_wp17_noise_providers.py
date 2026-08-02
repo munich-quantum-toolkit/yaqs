@@ -257,7 +257,7 @@ def test_historical_profile_metadata_is_exact_and_disclaims_hardware() -> None:
     assert metadata["is_hardware_execution"] is False
     assert provider.noise_id != BALLARIN_NOISE_ID
     assert repeated.content_checksum == provider.content_checksum
-    assert provider.content_checksum == "sha256:6c10d1fdd11f57a546529b70343fe5aaf8441446e9b2e0e8c637f7d38aecf3de"
+    assert provider.content_checksum == "sha256:c3e342a18498a2ea506ce1773a738e2a5111a4e8fb9143ebaca4e91e960d0dde"
     assert metadata["two_qubit_crosstalk_connectivity"] == "adjacent_linear_chain_only"
     assert json.loads(json.dumps(metadata, sort_keys=True)) == metadata
 
@@ -268,20 +268,20 @@ def test_historical_profile_metadata_is_exact_and_disclaims_hardware() -> None:
         (
             _ONE_QUBIT_CONTEXT,
             [
-                ("pauli_x", (4,), 1.0e-4),
-                ("pauli_y", (4,), 1.0e-4),
-                ("pauli_z", (4,), 1.0e-4),
+                ("pauli_x", (4,), 3.0e-4 / 3.0),
+                ("pauli_y", (4,), 3.0e-4 / 3.0),
+                ("pauli_z", (4,), 3.0e-4 / 3.0),
             ],
         ),
         (
             _ADJACENT_TWO_QUBIT_CONTEXT,
             [
-                ("pauli_x", (1,), 1.0e-4),
-                ("pauli_y", (1,), 1.0e-4),
-                ("pauli_z", (1,), 1.0e-4),
-                ("pauli_x", (2,), 1.0e-4),
-                ("pauli_y", (2,), 1.0e-4),
-                ("pauli_z", (2,), 1.0e-4),
+                ("pauli_x", (1,), 3.0e-4 / 3.0),
+                ("pauli_y", (1,), 3.0e-4 / 3.0),
+                ("pauli_z", (1,), 3.0e-4 / 3.0),
+                ("pauli_x", (2,), 3.0e-4 / 3.0),
+                ("pauli_y", (2,), 3.0e-4 / 3.0),
+                ("pauli_z", (2,), 3.0e-4 / 3.0),
                 ("crosstalk_xx", (1, 2), 1.5e-3),
                 ("crosstalk_zz", (1, 2), 1.5e-3),
             ],

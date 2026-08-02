@@ -124,6 +124,15 @@ TARGET_SCOPE_IDS = (
 LEGACY_REPRODUCTION_TARGET_IDS = tuple(f"legacy_tfim_seed_{seed}" for seed in (100, 200, 300, 400, 500))
 PHASE1_FIXTURE_MANIFEST_CHECKSUM = "sha256:49948fe4e63f652169c603e5e03f32f8a66ad70daa25091ee7cdf83644287d11"
 LEGACY_REPRODUCTION_MANIFEST_CHECKSUM = "sha256:a294080bf54a62b2bad0df85faa2f75ade5098b6a9afd84dc81fbb29bafdda1c"
+LEGACY_LAYERWISE_SEED_BINDINGS = (
+    "legacy_layerwise_depth1_initialization",
+    "legacy_layerwise_depth2_initialization",
+    "legacy_layerwise_depth3_initialization",
+    "legacy_layerwise_depth4_initialization",
+    "legacy_layerwise_growth_optimizer",
+    "legacy_layerwise_final_optimizer",
+    "legacy_layerwise_fixed_crn",
+)
 SEED_DOMAIN_ROLES = (
     "initialization",
     "optimizer_ordering",
@@ -186,6 +195,7 @@ _LEGACY_METHOD_IDS = frozenset({
     "standard_vqa",
     "topdown_magnitude_pruning_legacy_v1",
 })
+_LEGACY_LAYERWISE_SEED_BINDING_SET = frozenset(LEGACY_LAYERWISE_SEED_BINDINGS)
 
 _CHECKPOINT_VALIDATION_KEYS = frozenset({
     "schema_version",
@@ -1378,6 +1388,31 @@ def _derive_resolved_seed(
     return int.from_bytes(hashlib.sha256(payload).digest()[:8], byteorder="big")
 
 
+def _derive_legacy_layerwise_seed(*, optimization_seed: int, binding: str) -> int:
+    """Reproduce the archived target-seed arithmetic for one legacy stream.
+
+    The historical experiment used the target seed as its only outer random
+    identifier.  This deliberately isolated rule must not be used by corrected
+    Phase II methods, whose streams remain hash-derived and domain separated.
+    """
+    seed = cast("int", _require_seed(optimization_seed, "optimization_seed", allow_none=False))
+    formulas = {
+        "legacy_layerwise_depth1_initialization": 20 * seed,
+        "legacy_layerwise_depth2_initialization": 20 * seed + 2,
+        "legacy_layerwise_depth3_initialization": 20 * seed + 3,
+        "legacy_layerwise_depth4_initialization": 20 * seed + 4,
+        "legacy_layerwise_growth_optimizer": 30 * seed,
+        "legacy_layerwise_final_optimizer": 40 * seed,
+        "legacy_layerwise_fixed_crn": 40 * seed,
+    }
+    try:
+        resolved = formulas[binding]
+    except KeyError as error:
+        msg = f"Unknown historical layerwise seed binding {binding!r}."
+        raise ValueError(msg) from error
+    return cast("int", _require_seed(resolved, f"resolved seed for {binding}", allow_none=False))
+
+
 @dataclass(frozen=True, slots=True)
 class TrainingStageTemplate:
     """Target-independent stage policy with symbolic random-stream bindings."""
@@ -1540,6 +1575,13 @@ class TrainingStageTemplate:
             if binding_value is None:
                 values[role] = None
                 continue
+            binding = cast("str", binding_value)
+            if binding in _LEGACY_LAYERWISE_SEED_BINDING_SET:
+                values[role] = _derive_legacy_layerwise_seed(
+                    optimization_seed=outer,
+                    binding=binding,
+                )
+                continue
             domain_role = {
                 "initialization": "initialization",
                 "optimizer": "optimizer_ordering",
@@ -1549,7 +1591,7 @@ class TrainingStageTemplate:
             values[role] = _derive_resolved_seed(
                 optimization_seed=outer,
                 domain_id=cast("str", domains[domain_role]),
-                binding=cast("str", binding_value),
+                binding=binding,
                 resolution_context_checksum=context_checksum,
             )
         return values
@@ -1837,6 +1879,53 @@ class TrainingPipelineTemplate:
             ):
                 msg = "Template stage topology and parameter chains must be contiguous."
                 raise ValueError(msg)
+        reserved_bindings = {
+            binding
+            for stage in stages
+            for binding in stage.seed_bindings.values()
+            if binding in _LEGACY_LAYERWISE_SEED_BINDING_SET
+        }
+        if self.method_id == "layerwise_bmpd_crn_legacy_v1":
+            expected_bindings = (
+                {
+                    "initialization": LEGACY_LAYERWISE_SEED_BINDINGS[0],
+                    "optimizer": LEGACY_LAYERWISE_SEED_BINDINGS[4],
+                    "training": None,
+                    "checkpoint_validation": None,
+                },
+                {
+                    "initialization": LEGACY_LAYERWISE_SEED_BINDINGS[1],
+                    "optimizer": LEGACY_LAYERWISE_SEED_BINDINGS[4],
+                    "training": None,
+                    "checkpoint_validation": None,
+                },
+                {
+                    "initialization": LEGACY_LAYERWISE_SEED_BINDINGS[2],
+                    "optimizer": LEGACY_LAYERWISE_SEED_BINDINGS[4],
+                    "training": None,
+                    "checkpoint_validation": None,
+                },
+                {
+                    "initialization": LEGACY_LAYERWISE_SEED_BINDINGS[3],
+                    "optimizer": LEGACY_LAYERWISE_SEED_BINDINGS[4],
+                    "training": None,
+                    "checkpoint_validation": None,
+                },
+                {
+                    "initialization": None,
+                    "optimizer": LEGACY_LAYERWISE_SEED_BINDINGS[5],
+                    "training": LEGACY_LAYERWISE_SEED_BINDINGS[6],
+                    "checkpoint_validation": None,
+                },
+            )
+            if len(stages) != len(expected_bindings) or any(
+                dict(stage.seed_bindings) != expected for stage, expected in zip(stages, expected_bindings, strict=True)
+            ):
+                msg = "The historical layerwise method requires its exact five-stage legacy seed policy."
+                raise ValueError(msg)
+        elif reserved_bindings:
+            msg = "Historical layerwise seed bindings are reserved for layerwise_bmpd_crn_legacy_v1."
+            raise ValueError(msg)
         object.__setattr__(self, "stages", stages)
         object.__setattr__(self, "seed_domains", _validate_seed_domains(self.seed_domains))
         object.__setattr__(
@@ -2316,7 +2405,31 @@ class TrainingPipelineConfig:
             )
             if seed is not None
         ]
-        if len(runtime_seeds) != len(set(runtime_seeds)):
+        if self.method_id == "layerwise_bmpd_crn_legacy_v1":
+            try:
+                historical_target_seed = int(target_id.removeprefix("legacy_tfim_seed_"))
+            except ValueError as error:
+                msg = "Historical layerwise target identifiers must end in their decimal target seed."
+                raise ValueError(msg) from error
+            if optimization_seed != historical_target_seed:
+                msg = "Historical layerwise reproduction uses the target seed as its exact outer seed."
+                raise ValueError(msg)
+            expected_runtime_seeds = [
+                20 * historical_target_seed,
+                30 * historical_target_seed,
+                20 * historical_target_seed + 2,
+                30 * historical_target_seed,
+                20 * historical_target_seed + 3,
+                30 * historical_target_seed,
+                20 * historical_target_seed + 4,
+                30 * historical_target_seed,
+                40 * historical_target_seed,
+                40 * historical_target_seed,
+            ]
+            if runtime_seeds != expected_runtime_seeds:
+                msg = "Resolved historical layerwise seeds differ from the archived target-seed arithmetic."
+                raise ValueError(msg)
+        elif len(runtime_seeds) != len(set(runtime_seeds)):
             msg = "Resolved initialization, optimizer, training, and validation seeds must be distinct."
             raise ValueError(msg)
         object.__setattr__(self, "target_instance_id", target_id)
@@ -4225,6 +4338,7 @@ __all__ = [
     "EVALUATION_ROW_ID_PREFIX",
     "EXTERNAL_CHECKPOINT_REF_SCHEMA_VERSION",
     "FAILURE_PHASES",
+    "LEGACY_LAYERWISE_SEED_BINDINGS",
     "LEGACY_REPRODUCTION_MANIFEST_CHECKSUM",
     "LEGACY_REPRODUCTION_TARGET_IDS",
     "MATERIALIZED_CIRCUIT_ID_PREFIX",

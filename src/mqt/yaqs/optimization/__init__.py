@@ -57,6 +57,7 @@ from .krotov import (
 from .krotov_ensembles import (
     KROTOV_FIXED_MAP_ENSEMBLE_IDENTITY_VERSION,
     KROTOV_FIXED_MAP_ENSEMBLE_SCHEMA_VERSION,
+    KROTOV_LEGACY_TRAJECTORY_SEED_DERIVATION_VERSION,
     KROTOV_MAP_ROLES,
     KROTOV_MAP_SAMPLING_POLICIES,
     KROTOV_TRAJECTORY_RNG_ALGORITHM,
@@ -67,6 +68,7 @@ from .krotov_ensembles import (
     KrotovMapSchedule,
     KrotovMapSchedulePoint,
     derive_krotov_trajectory_seed,
+    derive_legacy_krotov_trajectory_seed,
     sample_krotov_fixed_map_ensemble,
 )
 from .parameterized_circuit import (
@@ -80,6 +82,7 @@ from .parameterized_circuit import (
 __all__ = [
     "KROTOV_FIXED_MAP_ENSEMBLE_IDENTITY_VERSION",
     "KROTOV_FIXED_MAP_ENSEMBLE_SCHEMA_VERSION",
+    "KROTOV_LEGACY_TRAJECTORY_SEED_DERIVATION_VERSION",
     "KROTOV_MAP_ROLES",
     "KROTOV_MAP_SAMPLING_POLICIES",
     "KROTOV_TRAJECTORY_RNG_ALGORITHM",
@@ -109,6 +112,7 @@ __all__ = [
     "create_brickwall_matrix_product_disentangler_parameterized_circuit",
     "create_sequential_matrix_product_disentangler_parameterized_circuit",
     "derive_krotov_trajectory_seed",
+    "derive_legacy_krotov_trajectory_seed",
     "empirical_loss",
     "forward_tjm_trajectory",
     "noisy_sample_contribution",

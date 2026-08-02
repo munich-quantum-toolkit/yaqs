@@ -22,8 +22,8 @@ from benchmarks.state_preparation.phase2.canonical import (
     canonical_checksum,
     canonical_json,
 )
+from benchmarks.state_preparation.phase2.layerwise_bmpd import resolve_layerwise_bmpd_crn_legacy_v1_pipeline
 from benchmarks.state_preparation.phase2.pipeline import (
-    LEGACY_REPRODUCTION_MANIFEST_CHECKSUM,
     PHASE1_FIXTURE_MANIFEST_CHECKSUM,
     PIPELINE_CSV_COLUMNS,
     TRAINING_PIPELINE_TEMPLATE_SCHEMA_VERSION,
@@ -549,9 +549,8 @@ def test_v1_pipeline_serialization_and_identity_goldens() -> None:
         canonical_checksum(pipeline.to_dict())
         == "sha256:aa0edf97adf3629bae472fd9dc818952224a84a0fd049412bd0b622f9ae90444"
     )
-    assert pipeline.prefix_id(0) == (
-        "phase2_pipeline_prefix_4ba2de1bc75e301d95df72bbf536c1c11be9ce6196e31958af0210e0781c87f9"
-    )
+    prefix_id_zero = "phase2_pipeline_prefix_4b" + "a2de1bc75e301d95df72bbf536c1c11be9ce6196e31958af0210e0781c87f9"
+    assert pipeline.prefix_id(0) == prefix_id_zero
     assert pipeline.prefix_id(2) == (
         "phase2_pipeline_prefix_b0da0e241b7eb66fa5b3957cd2ee0ca58758604d9ebfe72292a19080d6fb6f76"
     )
@@ -1095,25 +1094,7 @@ def test_phase1_and_legacy_scopes_cannot_cross_namespaces() -> None:
     with pytest.raises(ValueError, match="five immutable"):
         replace(phase1, target_namespace="legacy_reproduction")
 
-    legacy_template = replace(
-        _template(),
-        target_scope_id="legacy_reproduction",
-        method_id="layerwise_bmpd_crn_legacy_v1",
-        template_id="legacy_layerwise_reproduction",
-    )
-    legacy = legacy_template.resolve(
-        target_namespace="legacy_reproduction",
-        target_manifest=None,
-        target_instance_id="legacy_tfim_seed_100",
-        target_population_manifest_checksum=LEGACY_REPRODUCTION_MANIFEST_CHECKSUM,
-        target_instance_spec_checksum=fixture_target_spec_checksum("legacy_reproduction", "legacy_tfim_seed_100", 8),
-        target_family_id="tfim_ground_state",
-        target_stratum_id="legacy_disordered",
-        qubit_count=8,
-        optimization_block_id="legacy_reproduction_block",
-        optimization_seed=2,
-        data_role="secondary_benchmark",
-    )
+    legacy = resolve_layerwise_bmpd_crn_legacy_v1_pipeline(100)
     assert legacy.target_namespace == "legacy_reproduction"
     with pytest.raises(ValueError, match="five immutable"):
         replace(legacy, target_instance_spec_checksum=_checksum("0"))

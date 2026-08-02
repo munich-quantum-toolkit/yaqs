@@ -1828,6 +1828,43 @@ Reproduce the highest mean among the three methods in the archived shared
 five-target CSV protocol under its exact historical semantics, then provide a
 corrected publication-grade version of the same method.
 
+### Implementation status
+
+**Implemented.** WP19 now provides the exact five-stage
+`layerwise_bmpd_crn_legacy_v1` compatibility profile and the separately
+identified `layerwise_bmpd_crn_v2` profile. The legacy path preserves the
+audited RandomState initialization, prefix growth, reused `30 * target_seed`
+optimizer stream, `40 * target_seed` final optimizer/fixed-CRN stream, cross
+update, historical fixed-rate logical TJM profile, and evaluation seed range
+`0` through `499`. The corrected path requires pilot-frozen training and
+checkpoint-validation counts explicitly and uses independent updates, standard
+noise, disjoint derived streams, a separately fixed validation ensemble,
+iteration-zero/every-ten/final validation, and earliest-iteration tie breaking.
+Legacy fixed-CRN training also preserves the archived compact Pauli-map replay
+without per-gate replay normalization, while independent evaluation retains
+the normalized sampled-trajectory behavior; these policies are separately
+identified and cannot be selected by the noise profile alone.
+
+The five checked-in q8 target vectors are explicitly labelled WP19
+reconstructed references because the audit established that no archived target
+vectors, generator draws, eigensolver outputs, or exact historical runtime were
+retained. Their sealed collection records the commit-addressed generator,
+RandomState draw order, dense eigensolver convention, current reconstruction
+runtime, null archived-vector checksums, and missing provenance; regeneration
+is compared phase-invariantly at the declared tolerance.
+
+An explicit opt-in pinned job executes all five rows through the WP18 store
+under one output-root lock and one checksum-sealed launch snapshot of tracked
+implementation, lockfile, and study-input bytes. It revalidates that snapshot
+between targets and before publication, then builds a report that binds the
+shared manifest/runtime and every row's target-specific WP18 fingerprint.
+Ordinary CI covers schemas, identity isolation, target regeneration, transfer
+continuity, seed/noise semantics, v2 selection policy, artifact binding, and
+report arithmetic without running the expensive q8 optimization. This
+implementation does not claim a new numerical reproduction until that opt-in
+job has completed; any resulting difference is retained as a discrepancy
+rather than replaced by the archived CSV value.
+
 ### Historical fixtures and profile
 
 - Add a separate legacy target collection containing the five eight-qubit
@@ -1841,10 +1878,11 @@ corrected publication-grade version of the same method.
   - the historical lack of an explicit global-phase convention; and
   - stored couplings, fields, energy, NumPy/SciPy versions, BLAS/LAPACK build
     provenance, platform, and archived state checksum.
-- Preserve archived vectors as the legacy reference. Validate regenerated
-  vectors phase-invariantly within a declared tolerance rather than requiring
-  bitwise eigensolver portability. A corrected fixture may canonicalize global
-  phase, but the faithful legacy path must not pretend that convention existed.
+- Because the audit found that archived vectors were not retained, store
+  explicitly labelled WP19 reconstructed references with null archived-vector
+  checksums. Validate fresh regeneration phase-invariantly within a declared
+  tolerance rather than requiring bitwise eigensolver portability, and never
+  pretend that the historical path imposed a global-phase convention.
 - Freeze a profile named `ibm_inspired_pauli_legacy_v1`, not `IBM`:
   - local `X`, `Y`, and `Z` processes, each with strength `3e-4 / 3`;
   - nearest-neighbor `XX` and `ZZ` processes, each with strength `3e-3 / 2`;

@@ -24,7 +24,7 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from numbers import Integral, Real
 from typing import TYPE_CHECKING, Literal, NoReturn, cast
 
@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 KROTOV_FIXED_MAP_ENSEMBLE_SCHEMA_VERSION = "mqt.yaqs.optimization.krotov_fixed_map_ensemble.v1"
 KROTOV_FIXED_MAP_ENSEMBLE_IDENTITY_VERSION = "mqt.yaqs.optimization.krotov_fixed_map_identity.v1"
 KROTOV_TRAJECTORY_SEED_DERIVATION_VERSION = "mqt.yaqs.optimization.krotov_trajectory_seed.v1"
+KROTOV_LEGACY_TRAJECTORY_SEED_DERIVATION_VERSION = "mqt.yaqs.optimization.krotov_legacy_linear_trajectory_seed.v1"
 KROTOV_TRAJECTORY_RNG_ALGORITHM = "numpy.random.Generator(PCG64(SeedSequence(uint64)))"
 
 KrotovMapRole = Literal[
@@ -707,6 +708,33 @@ def derive_krotov_trajectory_seed(
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 
+def derive_legacy_krotov_trajectory_seed(
+    *,
+    optimizer_iteration_seed: int,
+    trajectory_index: int,
+    base_seed: int = 0,
+) -> int:
+    """Reproduce the pre-Phase-II linear circuit-TJM trajectory seed.
+
+    This function exists only for isolated historical reproduction. Corrected
+    methods use :func:`derive_krotov_trajectory_seed`.
+
+    Args:
+        optimizer_iteration_seed: Historical Krotov ``options.seed`` value at
+            which the fixed CRN ensemble was sampled.
+        trajectory_index: Zero-based trajectory position.
+        base_seed: Historical ``KrotovTJMOptions.random_seed`` value.
+
+    Returns:
+        The exact legacy seed ``base + 1_000_003 * iteration + trajectory``.
+    """
+    iteration = _require_uint64(optimizer_iteration_seed, "optimizer_iteration_seed")
+    trajectory = _require_uint64(trajectory_index, "trajectory_index")
+    base = _require_uint64(base_seed, "base_seed")
+    resolved = base + 1_000_003 * iteration + trajectory
+    return _require_uint64(resolved, "legacy trajectory seed")
+
+
 @dataclass(frozen=True, slots=True)
 class KrotovMapSchedulePoint:
     """Resolved fixed-map coordinates for one optimizer iteration."""
@@ -1189,6 +1217,39 @@ def _object_without_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str,
     return result
 
 
+def _legacy_compact_replay_maps(
+    noise_maps: Sequence[KrotovNoiseMap],
+    *,
+    trajectory_index: int,
+) -> list[KrotovNoiseMap]:
+    """Restore the archived compact-Pauli replay normalization metadata.
+
+    The pre-Phase-II global ``NoiseModel`` sampler normalized its live forward
+    state after every Pauli outcome, but omitted that normalization from the
+    compact map persisted for CRN replay.  The historical provider sampler adds
+    the modern final-normalization marker, so the isolated legacy boundary must
+    remove it before sealing the ensemble.
+
+    Returns:
+        Fresh maps preserving every operator and diagnostic except ``normalized``.
+
+    Raises:
+        ValueError: If a map contains intermediate normalization checkpoints,
+            which cannot be represented by the archived compact-map convention.
+    """
+    compact_maps: list[KrotovNoiseMap] = []
+    for gate_index, noise_map in enumerate(noise_maps):
+        if noise_map.normalization_checkpoints:
+            msg = (
+                "Legacy compact-map compatibility requires no normalization checkpoints, "
+                f"but trajectory {trajectory_index}, gate {gate_index} has "
+                f"{noise_map.normalization_checkpoints!r}."
+            )
+            raise ValueError(msg)
+        compact_maps.append(replace(noise_map, normalized=False))
+    return compact_maps
+
+
 def sample_krotov_fixed_map_ensemble(
     circuit: ParameterizedCircuit,
     theta: NDArray[np.float64],
@@ -1207,6 +1268,8 @@ def sample_krotov_fixed_map_ensemble(
     ensemble_index: int,
     refresh_index: int,
     global_iteration_start: int,
+    legacy_linear_seed: bool = False,
+    legacy_compact_replay: bool = False,
 ) -> KrotovFixedMapEnsemble:
     """Sample and seal one deterministic provider-backed fixed-map ensemble.
 
@@ -1231,6 +1294,11 @@ def sample_krotov_fixed_map_ensemble(
         ensemble_index: Schedule-derived ensemble index.
         refresh_index: Schedule-derived refresh index.
         global_iteration_start: First global iteration using this ensemble.
+        legacy_linear_seed: Reproduce the archived linear seed formula. This is
+            reserved for the isolated WP19 legacy-reproduction profile.
+        legacy_compact_replay: Persist the archived CRN training maps without
+            the provider's modern final-normalization marker. Historical direct
+            evaluation leaves this false because it used normalized live paths.
 
     Returns:
         A defensively immutable, serializable fixed-map ensemble.
@@ -1251,6 +1319,15 @@ def sample_krotov_fixed_map_ensemble(
     if not callable(noise_provider):
         msg = "noise_provider must be callable."
         raise TypeError(msg)
+    if type(legacy_linear_seed) is not bool:
+        msg = "legacy_linear_seed must be a bool."
+        raise TypeError(msg)
+    if type(legacy_compact_replay) is not bool:
+        msg = "legacy_compact_replay must be a bool."
+        raise TypeError(msg)
+    if legacy_compact_replay and not legacy_linear_seed:
+        msg = "legacy_compact_replay requires legacy_linear_seed=True."
+        raise ValueError(msg)
     if any(gate.data_map is not None for gate in circuit.gates):
         msg = "Fixed state-preparation ensembles do not support sample-dependent gate data maps."
         raise ValueError(msg)
@@ -1293,13 +1370,20 @@ def sample_krotov_fixed_map_ensemble(
     base_state = copy.deepcopy(initial_state) if initial_state is not None else MPS(circuit.num_qubits)
     trajectory_maps: list[list[KrotovNoiseMap]] = []
     for trajectory_index in range(tjm_options.num_trajectories):
-        seed = derive_krotov_trajectory_seed(
-            role=validated_role,
-            resolved_seed=validated_seed,
-            stage_index=validated_stage_index,
-            ensemble_index=validated_ensemble_index,
-            trajectory_index=trajectory_index,
-            refresh_index=validated_refresh_index,
+        seed = (
+            derive_legacy_krotov_trajectory_seed(
+                optimizer_iteration_seed=validated_seed,
+                trajectory_index=trajectory_index,
+            )
+            if legacy_linear_seed
+            else derive_krotov_trajectory_seed(
+                role=validated_role,
+                resolved_seed=validated_seed,
+                stage_index=validated_stage_index,
+                ensemble_index=validated_ensemble_index,
+                trajectory_index=trajectory_index,
+                refresh_index=validated_refresh_index,
+            )
         )
         rng = np.random.Generator(np.random.PCG64(np.random.SeedSequence(seed)))
         trajectory = forward_tjm_trajectory(
@@ -1313,7 +1397,14 @@ def sample_krotov_fixed_map_ensemble(
             rng,
             noise_provider=noise_provider,
         )
-        trajectory_maps.append(trajectory.noise_maps)
+        trajectory_maps.append(
+            _legacy_compact_replay_maps(
+                trajectory.noise_maps,
+                trajectory_index=trajectory_index,
+            )
+            if legacy_compact_replay
+            else trajectory.noise_maps
+        )
 
     return KrotovFixedMapEnsemble(
         role=validated_role,
@@ -1333,6 +1424,7 @@ def sample_krotov_fixed_map_ensemble(
 __all__ = [
     "KROTOV_FIXED_MAP_ENSEMBLE_IDENTITY_VERSION",
     "KROTOV_FIXED_MAP_ENSEMBLE_SCHEMA_VERSION",
+    "KROTOV_LEGACY_TRAJECTORY_SEED_DERIVATION_VERSION",
     "KROTOV_MAP_ROLES",
     "KROTOV_MAP_SAMPLING_POLICIES",
     "KROTOV_TRAJECTORY_RNG_ALGORITHM",
@@ -1343,5 +1435,6 @@ __all__ = [
     "KrotovMapSchedule",
     "KrotovMapSchedulePoint",
     "derive_krotov_trajectory_seed",
+    "derive_legacy_krotov_trajectory_seed",
     "sample_krotov_fixed_map_ensemble",
 ]
