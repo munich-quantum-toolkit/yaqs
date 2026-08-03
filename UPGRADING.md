@@ -4,6 +4,28 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Execute WP22 schedules with exact restart state
+
+WP22C compiles an `ExecutableScopedBinding`, its exact strategy schedule, and
+the job optimization seed into a checksum-sealed update program. Initialize
+that program with the matching typed Krotov, parameter-shift Adam, SPSA, or
+operator-growth payload, then execute it with the corresponding repository
+scheduled-update adapter. Arbitrary optimizer mappings and same-family
+hyperparameter substitutions are no longer accepted.
+
+Training callbacks receive only the training projection of an update policy;
+checkpoint membership appears after the update in a separate validation
+request, and final-test evidence has no engine input. Persist
+`ScheduledExecutionSnapshot.to_json()` for interruption-safe restart. On
+resume, every historical request, result, optimizer transition, work quote,
+validation boundary, and receipt predecessor is revalidated before a new
+numerical callback runs. Selected checkpoints contain recoverable parameters,
+and multistart evidence is complete by construction.
+
+WP22C does not materialize targets or claim pilot/screening evidence. Target
+authorization, source fingerprints, raw trajectory/map custody, and the
+repository-owned production executor remain WP22D and WP22E responsibilities.
+
 ### Resolve width-complete WP22 implementations
 
 WP22B adds a fail-closed repository implementation catalog for the tiny-budget
@@ -17,8 +39,8 @@ existing identities. Pass `qubit_count=12` only for the secondary pilot
 projection: its circuit topology and parameter counts are width-derived while
 the layer schedule, gate ordering, optimizer settings, and treatment semantics
 remain unchanged. q12 entries stay descriptive-only and cannot resolve for
-screening, promotion, or confirmation. WP22C through WP22F remain responsible
-for scheduled execution, custody, production evidence, and the final seal.
+screening, promotion, or confirmation. WP22D through WP22F remain responsible
+for custody, production evidence, and the final seal.
 
 The `energy_adapt_vqe` smoke route checks only the existing target-bound
 analytic TFIM implementation, with zero noisy training trajectories. It is

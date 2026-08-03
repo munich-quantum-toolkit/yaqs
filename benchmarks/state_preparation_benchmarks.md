@@ -598,8 +598,15 @@ provides the width-complete repository implementation catalog: q6 identities
 remain frozen, q12 pilot circuits are derived without retuning, every smoke and
 screen entry resolves a concrete repository runner adapter, and dormant
 confirmation reuses a screened q6 configuration. Exact schedule execution and
-restart, evidence custody, screening, final sealing, and primary analysis remain
-the explicit responsibilities of WP22C through WP22F.
+restart are implemented by WP22C: programs retain the full executable binding,
+compile every optimizer-update membership, expose validation only after an
+update, preserve typed optimizer state across phase boundaries, and revalidate
+the complete receipt/work chain before resume. Recoverable validation
+checkpoints and complete multistart evidence use no final-test input.
+
+WP22C creates no numerical study evidence. Target custody, execution-source
+fingerprints, raw map and trajectory artifacts, screening, final sealing, and
+primary analysis remain the explicit responsibilities of WP22D through WP22F.
 
 The TFIM-only `energy_adapt_vqe` smoke cell is an analytic API preflight with
 zero noisy training trajectories. It is not evidence for the preregistered

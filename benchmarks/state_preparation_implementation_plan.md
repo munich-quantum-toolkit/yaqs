@@ -2436,7 +2436,7 @@ free-form callback argument.
 
 ### WP22B: Width-complete repository implementation catalog
 
-**Status: implemented and awaiting package review.**
+**Status: implemented.**
 
 The implementation preserves the literal q6 template identities while adding
 non-retuned q12 projections, width-aware direct-control execution, and a
@@ -2477,7 +2477,19 @@ Provide repository-owned binding catalogs for:
 
 ### WP22C: Schedule-aware optimizer engine and exact restart
 
-**Status: not implemented; depends on WP22A and WP22B.**
+**Status: implemented.**
+
+The implementation closes each scientific program over its complete
+`ExecutableScopedBinding`, compiles all schedule memberships, and keeps
+checkpoint-validation fields out of the pre-update training interface. Typed
+Krotov, parameter-shift Adam, SPSA, and operator-growth payloads retain every
+restart field and are checked against the binding-owned dimension,
+initialization, hyperparameters, parameter-shift scales, cross-trajectory
+mode, and growth specification. Post-update validation is sealed to a
+recoverable parameter artifact, complete multistart selection, and exact
+request/result/work receipt chain. Resume revalidates that chain and the
+prospective job-wide compute cap before invoking a numerical callback. Target
+and raw numerical-evidence custody remain assigned to WP22D and WP22E.
 
 Compile each binding, schedule, and job seed set into a checksum-sealed
 `ScheduledExecutionProgram` with one `ScheduledUpdatePolicy` per optimizer
