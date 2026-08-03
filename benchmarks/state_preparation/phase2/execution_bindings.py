@@ -17,7 +17,7 @@ and are therefore safe to inspect before target materialization.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, cast
 
 from .canonical import (
@@ -57,7 +57,7 @@ from .operator_growth import (
     OperatorPoolSpec,
     build_tfim_real_operator_pool,
 )
-from .pipeline import TrainingPipelineTemplate, TrainingStageTemplate
+from .pipeline import TrainingPipelineTemplate
 from .topdown_pruning import TOPDOWN_DEFAULT_DEEP_DEPTH, build_topdown_impact_iterative_template
 from .training_schedules import (
     CheckpointValidationPolicy,
@@ -561,20 +561,27 @@ def _canonical_production_pipeline(
     Raises:
         ValueError: If the method or requested secondary projection is unsupported.
     """
+    if scope == "secondary_q12" and publication_method_id not in PILOT_METHOD_IDS:
+        msg = "Only pilot methods have a canonical secondary-q12 projection."
+        raise ValueError(msg)
+    qubit_count = 12 if scope == "secondary_q12" else 6
     if publication_method_id == "layerwise_bmpd_crn_v2":
         template = build_layerwise_bmpd_crn_v2_template(
             training_trajectory_count=PRODUCTION_TRAINING_TRAJECTORY_COUNT,
             checkpoint_validation_trajectory_count=CHECKPOINT_VALIDATION_TRAJECTORY_COUNT,
+            qubit_count=qubit_count,
         )
     elif publication_method_id == "layerwise_bmpd_noiseless":
         template = build_layerwise_bmpd_noiseless_template(
             checkpoint_validation_trajectory_count=CHECKPOINT_VALIDATION_TRAJECTORY_COUNT,
+            qubit_count=qubit_count,
         )
     elif publication_method_id == "fixed_depth_bmpd_crn":
         template = build_fixed_depth_bmpd_crn_template(
             iteration_budget=PRODUCTION_UPDATE_COUNT,
             training_trajectory_count=PRODUCTION_TRAINING_TRAJECTORY_COUNT,
             checkpoint_validation_trajectory_count=CHECKPOINT_VALIDATION_TRAJECTORY_COUNT,
+            qubit_count=qubit_count,
         )
     elif publication_method_id == "layerwise_bmpd_resampled":
         template = build_layerwise_bmpd_resampled_template(
@@ -606,28 +613,7 @@ def _canonical_production_pipeline(
     else:
         msg = "Publication method has no canonical production pipeline."
         raise ValueError(msg)
-    if scope == "primary_q6":
-        return template
-    if publication_method_id not in PILOT_METHOD_IDS:
-        msg = "Only pilot methods have a canonical secondary-q12 projection."
-        raise ValueError(msg)
-    stages: list[TrainingStageTemplate] = []
-    for stage in template.stages:
-        policy = dict(stage.stage_policy)
-        output_depth = int(cast("str", policy["output_topology_id"]).rsplit("_d", maxsplit=1)[1])
-        policy["output_topology_id"] = bmpd_topology_id(12, output_depth)
-        policy["output_parameter_count"] = bmpd_parameter_count(12, output_depth)
-        if policy["input_topology_id"] is not None:
-            input_depth = int(cast("str", policy["input_topology_id"]).rsplit("_d", maxsplit=1)[1])
-            policy["input_topology_id"] = bmpd_topology_id(12, input_depth)
-            policy["input_parameter_count"] = bmpd_parameter_count(12, input_depth)
-        stages.append(TrainingStageTemplate(stage_policy=policy, seed_bindings=stage.seed_bindings))
-    return replace(
-        template,
-        template_id=f"{template.template_id}_q12_projection",
-        target_scope_id="secondary_q12",
-        stages=tuple(stages),
-    )
+    return template
 
 
 def _canonical_smoke_pipeline(implementation_method_id: str) -> TrainingPipelineTemplate:
@@ -1129,8 +1115,8 @@ class EnergyAdaptSmokeSpec:
         if not isinstance(self.effective_limits, SmokeExecutionLimits):
             msg = "effective_limits must be SmokeExecutionLimits."
             raise TypeError(msg)
-        if self.effective_limits.training_trajectory_count != 1:
-            msg = "Energy ADAPT smoke requires exactly one matched-noise training trajectory."
+        if self.effective_limits.training_trajectory_count != 0:
+            msg = "Energy ADAPT smoke is analytic and requires zero training trajectories."
             raise ValueError(msg)
         if self.effective_limits.outer_evaluation_trajectory_count != self.outer_evaluation_policy.trajectory_count:
             msg = "Energy ADAPT smoke outer evaluation and effective limits disagree."
@@ -1158,7 +1144,7 @@ class EnergyAdaptSmokeSpec:
                 adam_epsilon=1e-8,
             ),
             outer_evaluation_policy=FreshEvaluationPolicy.smoke(trajectory_count),
-            effective_limits=SmokeExecutionLimits(trajectory_count),
+            effective_limits=SmokeExecutionLimits(trajectory_count, training_trajectory_count=0),
         )
 
     def _payload(self) -> dict[str, object]:
@@ -2072,7 +2058,8 @@ class ScopedImplementationBinding:
             msg = "training-smoke uses its separate tiny-budget evaluation policy."
             raise ValueError(msg)
         if preset == "training-smoke":
-            expected_smoke_training_count = 0 if method == "layerwise_bmpd_noiseless" else 1
+            smoke_noiseless = method in {"layerwise_bmpd_noiseless", "energy_adapt_vqe"}
+            expected_smoke_training_count = 0 if smoke_noiseless else 1
             expected_smoke_sampling = (
                 "resampled" if method in {"layerwise_bmpd_resampled", "spsa_layerwise"} else "fixed_crn"
             )
@@ -2111,7 +2098,7 @@ class ScopedImplementationBinding:
                 or self.strategy_schedule.sampling_policy.kind != expected_smoke_sampling
                 or self.strategy_schedule.multistart != LimitedMultistartPlan(1, 1)
                 or self.strategy_schedule.checkpoint_validation != CheckpointValidationPolicy(patience=None)
-                or (not exact_noiseless if method == "layerwise_bmpd_noiseless" else not exact_primary_noise)
+                or (not exact_noiseless if smoke_noiseless else not exact_primary_noise)
             ):
                 msg = (
                     "training-smoke is a one-update structural preflight only; WP22B owns executable runtime "

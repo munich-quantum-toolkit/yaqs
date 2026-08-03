@@ -2797,23 +2797,28 @@ def build_parameter_shift_adam_layerwise_template(
     *,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = 6,
     learning_rate: float = 0.01,
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
 ) -> TrainingPipelineTemplate:
-    """Build the preregistered layerwise exact parameter-shift Adam pipeline."""
+    """Build the q6 or q12 layerwise parameter-shift Adam pipeline."""
     from .layerwise_bmpd import build_layerwise_bmpd_crn_v2_template  # noqa: PLC0415
 
     reference = build_layerwise_bmpd_crn_v2_template(
         training_trajectory_count=training_trajectory_count,
         checkpoint_validation_trajectory_count=checkpoint_validation_trajectory_count,
+        qubit_count=qubit_count,
     )
+    q12 = qubit_count == 12
     return _competitor_pipeline_template(
         reference,
         optimizer_id="parameter_shift_adam",
         method_id=PARAMETER_SHIFT_ADAM_LAYERWISE_METHOD_ID,
-        template_id="parameter_shift_adam_layerwise_default",
+        template_id=(
+            "parameter_shift_adam_layerwise_default_q12_projection" if q12 else "parameter_shift_adam_layerwise_default"
+        ),
         binding_prefix="parameter_shift_adam_layerwise",
         optimizer_hyperparameters=_adam_hyperparameters(
             training_trajectory_count,
@@ -2829,24 +2834,27 @@ def build_spsa_layerwise_template(
     *,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = 6,
     a: float = 0.1,
     stability_constant: float = 10.0,
     alpha: float = 0.602,
     c: float = 0.1,
     gamma: float = 0.101,
 ) -> TrainingPipelineTemplate:
-    """Build the preregistered layerwise fresh-objective SPSA pipeline."""
+    """Build the q6 or q12 layerwise fresh-objective SPSA pipeline."""
     from .layerwise_bmpd import build_layerwise_bmpd_crn_v2_template  # noqa: PLC0415
 
     reference = build_layerwise_bmpd_crn_v2_template(
         training_trajectory_count=training_trajectory_count,
         checkpoint_validation_trajectory_count=checkpoint_validation_trajectory_count,
+        qubit_count=qubit_count,
     )
+    q12 = qubit_count == 12
     return _competitor_pipeline_template(
         reference,
         optimizer_id="spsa",
         method_id=SPSA_LAYERWISE_METHOD_ID,
-        template_id="spsa_layerwise_default",
+        template_id="spsa_layerwise_default_q12_projection" if q12 else "spsa_layerwise_default",
         binding_prefix="spsa_layerwise",
         optimizer_hyperparameters=_spsa_hyperparameters(
             training_trajectory_count,
@@ -2864,24 +2872,31 @@ def build_parameter_shift_adam_fixed_template(
     iteration_budget: int,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = 6,
     learning_rate: float = 0.01,
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
 ) -> TrainingPipelineTemplate:
-    """Build the distinct exploratory fixed-depth parameter-shift Adam pipeline."""
+    """Build the q6 or q12 exploratory fixed-depth parameter-shift Adam pipeline."""
     from .fair_controls import build_fixed_depth_bmpd_crn_template  # noqa: PLC0415
 
     reference = build_fixed_depth_bmpd_crn_template(
         iteration_budget=iteration_budget,
         training_trajectory_count=training_trajectory_count,
         checkpoint_validation_trajectory_count=checkpoint_validation_trajectory_count,
+        qubit_count=qubit_count,
     )
+    q12 = qubit_count == 12
     return _competitor_pipeline_template(
         reference,
         optimizer_id="parameter_shift_adam",
         method_id=PARAMETER_SHIFT_ADAM_FIXED_METHOD_ID,
-        template_id=f"parameter_shift_adam_fixed_b{iteration_budget}",
+        template_id=(
+            f"parameter_shift_adam_fixed_b{iteration_budget}_q12_projection"
+            if q12
+            else f"parameter_shift_adam_fixed_b{iteration_budget}"
+        ),
         binding_prefix="parameter_shift_adam_fixed",
         optimizer_hyperparameters=_adam_hyperparameters(
             training_trajectory_count,
@@ -2898,25 +2913,28 @@ def build_spsa_fixed_template(
     iteration_budget: int,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = 6,
     a: float = 0.1,
     stability_constant: float = 10.0,
     alpha: float = 0.602,
     c: float = 0.1,
     gamma: float = 0.101,
 ) -> TrainingPipelineTemplate:
-    """Build the distinct exploratory fixed-depth fresh-objective SPSA pipeline."""
+    """Build the q6 or q12 exploratory fixed-depth fresh-objective SPSA pipeline."""
     from .fair_controls import build_fixed_depth_bmpd_crn_template  # noqa: PLC0415
 
     reference = build_fixed_depth_bmpd_crn_template(
         iteration_budget=iteration_budget,
         training_trajectory_count=training_trajectory_count,
         checkpoint_validation_trajectory_count=checkpoint_validation_trajectory_count,
+        qubit_count=qubit_count,
     )
+    q12 = qubit_count == 12
     return _competitor_pipeline_template(
         reference,
         optimizer_id="spsa",
         method_id=SPSA_FIXED_METHOD_ID,
-        template_id=f"spsa_fixed_b{iteration_budget}",
+        template_id=(f"spsa_fixed_b{iteration_budget}_q12_projection" if q12 else f"spsa_fixed_b{iteration_budget}"),
         binding_prefix="spsa_fixed",
         optimizer_hyperparameters=_spsa_hyperparameters(
             training_trajectory_count,

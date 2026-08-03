@@ -325,17 +325,21 @@ def build_layerwise_bmpd_crn_v2_template(
     *,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = 6,
 ) -> TrainingPipelineTemplate:
-    """Build the corrected q6 profile with explicit pilot-frozen counts.
+    """Build the corrected q6 or secondary-q12 layerwise profile.
 
     No default counts are provided because WP22 must freeze them from pilot
-    evidence before screening.
+    evidence before screening. The q12 projection retains every q6 treatment,
+    stage, gate-ordering, and optimizer choice while deriving width-dependent
+    topology and parameter counts from the circuit implementation.
 
     Returns:
         The corrected publication-profile pipeline template.
 
     Raises:
-        ValueError: If either pilot-frozen trajectory count is invalid.
+        ValueError: If either pilot-frozen trajectory count or the requested
+            publication width is invalid.
     """
     for value, name in (
         (training_trajectory_count, "training_trajectory_count"),
@@ -344,10 +348,13 @@ def build_layerwise_bmpd_crn_v2_template(
         if type(value) is not int or value < 1:
             msg = f"{name} must be a positive integer frozen by the pilot."
             raise ValueError(msg)
+    if type(qubit_count) is not int or qubit_count not in {6, 12}:
+        msg = "qubit_count must be exactly 6 or 12 for the corrected publication profile."
+        raise ValueError(msg)
     stages = tuple(
         _stage_template(
             index=index,
-            qubit_count=6,
+            qubit_count=qubit_count,
             depth=depth,
             input_depth=(None if index == 0 else depth - 1),
             initialization_rng=_CORRECTED_RNG,
@@ -365,7 +372,7 @@ def build_layerwise_bmpd_crn_v2_template(
     )
     final = _stage_template(
         index=4,
-        qubit_count=6,
+        qubit_count=qubit_count,
         depth=4,
         input_depth=4,
         initialization_rng=None,
@@ -379,10 +386,11 @@ def build_layerwise_bmpd_crn_v2_template(
         validation_binding="layerwise_v2_fixed_crn_validation",
         legacy=False,
     )
+    q12 = qubit_count == 12
     return TrainingPipelineTemplate(
-        template_id="layerwise_bmpd_crn_v2_default",
+        template_id="layerwise_bmpd_crn_v2_default_q12_projection" if q12 else "layerwise_bmpd_crn_v2_default",
         preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
-        target_scope_id="primary_q6",
+        target_scope_id="secondary_q12" if q12 else "primary_q6",
         ansatz_family="bmpd_brickwall",
         method_id=LAYERWISE_BMPD_CRN_V2_METHOD_ID,
         method_version=LAYERWISE_BMPD_PROFILE_VERSION,

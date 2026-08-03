@@ -14,6 +14,10 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
+from benchmarks.state_preparation.phase2.binding_catalog import (
+    ExecutableScopedBinding,
+    RepositoryBindingCatalog,
+)
 from benchmarks.state_preparation.phase2.canonical import canonical_checksum
 from benchmarks.state_preparation.phase2.competitor_optimizers import (
     build_parameter_shift_adam_layerwise_template,
@@ -59,6 +63,10 @@ from benchmarks.state_preparation.phase2.fair_controls import (
     build_layerwise_bmpd_noiseless_template,
     build_layerwise_bmpd_resampled_template,
 )
+from benchmarks.state_preparation.phase2.implementation_catalog import (
+    RepositoryImplementationCatalog,
+    RepositoryRunnerAdapter,
+)
 from benchmarks.state_preparation.phase2.layerwise_bmpd import (
     bmpd_parameter_count,
     bmpd_topology_id,
@@ -87,7 +95,7 @@ if TYPE_CHECKING:
 
 def _schedule(method_id: str, scope: TargetScope, preset: Preset) -> TrainingStrategySchedule:
     """Return one complete 200-update production schedule."""
-    noisy = method_id != "layerwise_bmpd_noiseless"
+    noisy = method_id not in {"layerwise_bmpd_noiseless", "energy_adapt_vqe"}
     if preset != "training-smoke":
         schedule_id = (
             "direct_noiseless_control"
@@ -104,7 +112,7 @@ def _schedule(method_id: str, scope: TargetScope, preset: Preset) -> TrainingStr
     update_count = 1
     trajectory_count = 1 if noisy else 0
     return TrainingStrategySchedule(
-        schedule_id=f"{preset}_{method_id}_{scope}",
+        schedule_id=f"training_smoke_{method_id}_{scope}",
         noise_continuation=NoiseStrengthContinuation(
             start_update=0,
             end_update=update_count - 1,
@@ -359,6 +367,15 @@ def _profile(bindings: tuple[ScopedImplementationBinding, ...]) -> TrainingExecu
         implementation_plan_commit=FROZEN_IMPLEMENTATION_PLAN_COMMIT,
         operational_protocol_amendment=OperationalProtocolAmendment.frozen(),
         bindings=bindings,
+    )
+
+
+@pytest.fixture(scope="module")
+def implementation_catalog() -> RepositoryImplementationCatalog:
+    """Return the exact WP22B catalog matching the WP22A test profiles."""
+    return RepositoryImplementationCatalog.frozen(
+        screening_outer_trajectory_count=256,
+        smoke_evaluation_trajectory_count=2,
     )
 
 
@@ -914,10 +931,10 @@ def test_smoke_wrappers_truthfully_freeze_effective_limits_and_runtime_boundary(
         )
     energy = _binding("energy_adapt_vqe", "primary_q6", preset="training-smoke")
     energy_payload = cast("EnergyAdaptSmokeSpec", energy.implementation_artifact.implementation_payload)
-    with pytest.raises(ValueError, match="exactly one matched-noise"):
+    with pytest.raises(ValueError, match="zero training trajectories"):
         replace(
             energy_payload,
-            effective_limits=SmokeExecutionLimits(2, training_trajectory_count=0),
+            effective_limits=SmokeExecutionLimits(2, training_trajectory_count=1),
         )
 
     for payload in (noisy_payload, noiseless_payload, operator_payload, energy_payload):
@@ -1017,3 +1034,159 @@ def test_smoke_cannot_substitute_raw_production_payloads_and_public_api_is_compl
         "PipelineSmokeSpec",
         "OperatorGrowthSmokeSpec",
     } <= set(execution_bindings_public_api)
+
+
+def test_executable_binding_catalog_closes_pilot_q6_q12_and_roundtrips(
+    implementation_catalog: RepositoryImplementationCatalog,
+) -> None:
+    """Every paired pilot treatment closes to one independently resolved runner."""
+    profile = _profile(_pilot_bindings())
+    catalog = RepositoryBindingCatalog.from_profile(profile, implementation_catalog)
+
+    assert len(catalog.bindings) == 2 * len(PILOT_METHOD_IDS)
+    for method_id in PILOT_METHOD_IDS:
+        q6_binding = next(
+            binding
+            for binding in profile.bindings
+            if binding.publication_method_id == method_id and binding.target_scope_id == "primary_q6"
+        )
+        q6 = catalog.resolve("paper-pilot", q6_binding.publication_candidate_checksum, "primary_q6")
+        q12 = catalog.resolve("paper-pilot", q6_binding.publication_candidate_checksum, "secondary_q12")
+
+        assert q6.implementation_entry is implementation_catalog.resolve("paper-pilot", method_id, "primary_q6")
+        assert q12.implementation_entry is implementation_catalog.resolve("paper-pilot", method_id, "secondary_q12")
+        assert q6.resolve_callable() is q6.implementation_entry.resolve_callable()
+        assert q12.resolve_callable() is q12.implementation_entry.resolve_callable()
+        assert q12.binding.treatment_projection.primary_q6_implementation_checksum == (
+            q6.binding.implementation_checksum
+        )
+        assert not q12.binding.treatment_projection.promotion_eligible
+
+    assert ExecutableScopedBinding.from_json(catalog.bindings[0].to_json()) == catalog.bindings[0]
+    assert RepositoryBindingCatalog.from_json(catalog.to_json()) == catalog
+
+
+def test_executable_binding_catalog_accepts_complete_smoke_and_screen_profiles(
+    implementation_catalog: RepositoryImplementationCatalog,
+) -> None:
+    """Smoke and screen close exactly while analytic energy smoke stays non-promotional."""
+    smoke_profile = _profile(_smoke_bindings())
+    smoke = RepositoryBindingCatalog.from_profile(smoke_profile, implementation_catalog)
+    screen_bindings = tuple(
+        _binding(
+            method_id,
+            "primary_q6",
+            preset="paper-screen",
+            normalized_compute_cap=1_000.0,
+        )
+        for method_id in SCREEN_METHOD_IDS
+    )
+    screen = RepositoryBindingCatalog.from_profile(
+        _profile(screen_bindings),
+        implementation_catalog,
+    )
+
+    assert len(smoke.bindings) == len(SMOKE_METHOD_IDS)
+    assert len(screen.bindings) == len(SCREEN_METHOD_IDS)
+    assert all(link.binding.target_scope_id == "primary_q6" for link in screen.bindings)
+    energy_binding = next(
+        binding for binding in smoke_profile.bindings if binding.publication_method_id == "energy_adapt_vqe"
+    )
+    energy = smoke.resolve(
+        "training-smoke",
+        energy_binding.publication_candidate_checksum,
+        "primary_q6",
+    )
+    energy_payload = cast("EnergyAdaptSmokeSpec", energy.binding.implementation_artifact.implementation_payload)
+    assert energy_payload.effective_limits.training_trajectory_count == 0
+    assert energy.binding.execution_budget.maximum_training_trajectory_count == 0
+    assert not energy.binding.treatment_projection.screening_eligible
+    assert not energy.binding.treatment_projection.promotion_eligible
+    assert energy.smoke_runtime_program() == energy.implementation_entry.smoke_runtime_program()
+
+    with pytest.raises(KeyError, match="No executable scoped binding"):
+        screen.resolve(
+            "paper-confirm",
+            screen.bindings[0].binding.publication_candidate_checksum,
+            "primary_q6",
+        )
+    tampered = screen.to_dict()
+    tampered["paper_confirm_execution_authorized"] = True
+    tampered_without_checksum = {key: value for key, value in tampered.items() if key != "content_checksum"}
+    tampered["content_checksum"] = canonical_checksum(tampered_without_checksum)
+    with pytest.raises(ValueError, match="confirmation authorization"):
+        RepositoryBindingCatalog.from_dict(tampered)
+
+
+def test_executable_binding_catalog_rejects_missing_duplicate_foreign_and_payload_drift(
+    implementation_catalog: RepositoryImplementationCatalog,
+) -> None:
+    """Catalog closure fails before execution for incomplete or forged profile links."""
+    pilot = RepositoryBindingCatalog.from_profile(
+        _profile(_pilot_bindings()),
+        implementation_catalog,
+    )
+    with pytest.raises(ValueError, match="exactly and in order"):
+        replace(pilot, bindings=pilot.bindings[:-1])
+    with pytest.raises(ValueError, match="must be unique"):
+        replace(pilot, bindings=(*pilot.bindings[:-1], pilot.bindings[0]))
+
+    smoke = RepositoryBindingCatalog.from_profile(
+        _profile(_smoke_bindings()),
+        implementation_catalog,
+    )
+    with pytest.raises(ValueError, match="exactly and in order"):
+        replace(pilot, bindings=(smoke.bindings[0], *pilot.bindings[1:]))
+
+    base = _binding("layerwise_bmpd_crn_v2", "primary_q6", preset="training-smoke")
+    changed_schedule = replace(
+        base.strategy_schedule,
+        schedule_id="training_smoke_layerwise_bmpd_crn_v2_primary_q6_drift",
+    )
+    with pytest.raises(ValueError, match="exact same strategy schedule"):
+        ExecutableScopedBinding.close(
+            _replace_binding_schedule(base, changed_schedule),
+            implementation_catalog.resolve(
+                "training-smoke",
+                "layerwise_bmpd_crn_v2",
+                "primary_q6",
+            ),
+        )
+
+    payload = cast("PipelineSmokeSpec", base.implementation_artifact.implementation_payload)
+    changed_payload = PipelineSmokeSpec.frozen(payload.structural_template_reference, 3)
+    changed_artifact = replace(base.implementation_artifact, implementation_payload=changed_payload)
+    changed_binding = replace(
+        base,
+        implementation_artifact=changed_artifact,
+        controlled_stage=ControlledTrainingStage.complete_schedule(
+            base.strategy_schedule,
+            changed_artifact,
+        ),
+        evaluation_policies=(FreshEvaluationPolicy.smoke(3),),
+        treatment_projection=replace(
+            base.treatment_projection,
+            primary_q6_implementation_checksum=changed_artifact.content_checksum,
+        ),
+    )
+    canonical_entry = implementation_catalog.resolve(
+        "training-smoke",
+        "layerwise_bmpd_crn_v2",
+        "primary_q6",
+    )
+    with pytest.raises(ValueError, match="exact same typed payload"):
+        ExecutableScopedBinding.close(changed_binding, canonical_entry)
+
+    wrong_adapter = RepositoryRunnerAdapter.for_artifact(
+        implementation_catalog.resolve(
+            "training-smoke",
+            "fixed_depth_bmpd_crn",
+            "primary_q6",
+        ).implementation_artifact
+    )
+    with pytest.raises(ValueError, match="re-derived"):
+        ExecutableScopedBinding(
+            binding=base,
+            implementation_entry=canonical_entry,
+            runner_adapter=wrong_adapter,
+        )

@@ -2391,7 +2391,7 @@ promotion evidence.
 
 ### WP22A: Execution-protocol closure and typed bindings
 
-**Status: implemented and awaiting package review.**
+**Status: implemented.**
 
 The implementation provides the checked-in operational amendment, the frozen
 training-policy universe, deterministic membership schemas, a sealed
@@ -2436,7 +2436,17 @@ free-form callback argument.
 
 ### WP22B: Width-complete repository implementation catalog
 
-**Status: not implemented; depends on WP22A.**
+**Status: implemented and awaiting package review.**
+
+The implementation preserves the literal q6 template identities while adding
+non-retuned q12 projections, width-aware direct-control execution, and a
+fail-closed repository catalog whose entries resolve concrete runner adapters.
+The catalog contains the exact smoke, pilot, and screening universes; dormant
+confirmation reuses an eligible q6 screening entry and creates no new
+configuration. The tenth, TFIM-only Energy-ADAPT smoke route is explicitly an
+analytic API preflight: the preregistered noisy Energy-ADAPT treatment remains
+unsupported and cannot enter pilot, screening, promotion, or evidence. WP22B
+produces no pilot, screening, or confirmation result.
 
 Generalize the q6-only layerwise, noiseless, fixed-depth, Adam, and SPSA
 builders and the fixed-depth runner where required. q6 behavior and checksums

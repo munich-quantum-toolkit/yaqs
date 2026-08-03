@@ -226,8 +226,9 @@ def _layerwise_variant(
 def build_layerwise_bmpd_noiseless_template(
     *,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = WP20_PRIMARY_QUBIT_COUNT,
 ) -> TrainingPipelineTemplate:
-    """Build the exact noiseless-treatment match for corrected layerwise v2.
+    """Build the exact q6 or q12 noiseless match for layerwise v2.
 
     The final stage retains 200 Krotov updates and the same separately fixed
     noisy checkpoint-validation ensemble.  Only the final training treatment
@@ -244,6 +245,7 @@ def build_layerwise_bmpd_noiseless_template(
     reference = build_layerwise_bmpd_crn_v2_template(
         training_trajectory_count=1,
         checkpoint_validation_trajectory_count=validation_count,
+        qubit_count=qubit_count,
     )
     final = _clone_stage(
         reference.stages[-1],
@@ -258,10 +260,11 @@ def build_layerwise_bmpd_noiseless_template(
         },
         binding_updates={"training": None},
     )
+    q12 = qubit_count == 12
     return TrainingPipelineTemplate(
-        template_id="layerwise_bmpd_noiseless_default",
+        template_id=("layerwise_bmpd_noiseless_default_q12_projection" if q12 else "layerwise_bmpd_noiseless_default"),
         preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
-        target_scope_id="primary_q6",
+        target_scope_id="secondary_q12" if q12 else "primary_q6",
         ansatz_family="bmpd_brickwall",
         method_id=LAYERWISE_BMPD_NOISELESS_METHOD_ID,
         method_version=LAYERWISE_BMPD_PROFILE_VERSION,
@@ -339,6 +342,7 @@ def _direct_stage(
     *,
     stage_id: str,
     depth: int,
+    qubit_count: int = WP20_PRIMARY_QUBIT_COUNT,
     iteration_budget: int,
     initialization_scale: float,
     learning_rate: float,
@@ -347,10 +351,10 @@ def _direct_stage(
     checkpoint_validation_policy: dict[str, object] | None = None,
     binding_prefix: str,
 ) -> TrainingStageTemplate:
-    """Build one full-depth direct-training stage.
+    """Build one full-depth direct-training stage at the requested width.
 
     Returns:
-        A validated q6 stage with explicit initialization and optimizer work.
+        A validated stage with explicit initialization and optimizer work.
 
     Raises:
         ValueError: If counts or noisy-trajectory semantics are invalid.
@@ -373,9 +377,9 @@ def _direct_stage(
             "stage_id": stage_id,
             "stage_kind": "optimize",
             "input_topology_id": None,
-            "output_topology_id": bmpd_topology_id(WP20_PRIMARY_QUBIT_COUNT, depth_value),
+            "output_topology_id": bmpd_topology_id(qubit_count, depth_value),
             "input_parameter_count": 0,
-            "output_parameter_count": bmpd_parameter_count(WP20_PRIMARY_QUBIT_COUNT, depth_value),
+            "output_parameter_count": bmpd_parameter_count(qubit_count, depth_value),
             "parameter_transfer_rule": "initialize_random_normal",
             "optimizer_id": "krotov",
             "optimizer_hyperparameters": {
@@ -416,8 +420,9 @@ def build_fixed_depth_bmpd_crn_template(
     iteration_budget: int,
     training_trajectory_count: int,
     checkpoint_validation_trajectory_count: int,
+    qubit_count: int = WP20_PRIMARY_QUBIT_COUNT,
 ) -> TrainingPipelineTemplate:
-    """Build direct depth-four noisy Krotov training with independent fixed CRN.
+    """Build q6 or q12 direct depth-four Krotov training with fixed CRN.
 
     The optimizer budget is mandatory because WP20 does not silently decide
     whether a direct method receives 200 updates or the layerwise method's 600
@@ -435,12 +440,14 @@ def build_fixed_depth_bmpd_crn_template(
     reference = build_layerwise_bmpd_crn_v2_template(
         training_trajectory_count=training_count,
         checkpoint_validation_trajectory_count=validation_count,
+        qubit_count=qubit_count,
     )
     validation = dict(cast("dict[str, object]", reference.stages[-1].stage_policy["checkpoint_validation_policy"]))
     validation["cadence"] = min(budget, cast("int", validation["cadence"]))
     stage = _direct_stage(
         stage_id="direct_depth4_noisy_training",
         depth=WP20_PRIMARY_BMPD_DEPTH,
+        qubit_count=qubit_count,
         iteration_budget=budget,
         initialization_scale=LAYERWISE_BMPD_INITIAL_SCALE,
         learning_rate=0.2,
@@ -449,10 +456,11 @@ def build_fixed_depth_bmpd_crn_template(
         checkpoint_validation_policy=validation,
         binding_prefix="fixed_depth_bmpd_crn",
     )
+    q12 = qubit_count == 12
     return TrainingPipelineTemplate(
-        template_id=f"fixed_depth_bmpd_crn_b{budget}",
+        template_id=(f"fixed_depth_bmpd_crn_b{budget}_q12_projection" if q12 else f"fixed_depth_bmpd_crn_b{budget}"),
         preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
-        target_scope_id="primary_q6",
+        target_scope_id="secondary_q12" if q12 else "primary_q6",
         ansatz_family="bmpd_brickwall",
         method_id=FIXED_DEPTH_BMPD_CRN_METHOD_ID,
         method_version=WP20_CONTROL_PROFILE_VERSION,
@@ -464,7 +472,7 @@ def build_fixed_depth_bmpd_crn_template(
 
 
 def _fixed_depth_target_identity(target: object) -> Mapping[str, object]:
-    """Return the identity of one authorized primary Phase-II target.
+    """Return the identity of one authorized q6 or secondary-q12 target.
 
     Returns:
         The immutable target agreement-ledger fields.
@@ -480,7 +488,7 @@ def _fixed_depth_target_identity(target: object) -> Mapping[str, object]:
 
 @dataclass(frozen=True, slots=True)
 class FixedDepthBMPDStageRunner:
-    """Bind the primary direct depth-four BMPD control to the WP17 adapter."""
+    """Bind a q6 or secondary-q12 direct BMPD control to the WP17 adapter."""
 
     pipeline: TrainingPipelineConfig
     target: MaterializedTarget
@@ -491,7 +499,7 @@ class FixedDepthBMPDStageRunner:
         Raises:
             TypeError: If the pipeline or target has the wrong record type.
             ValueError: If the resolved control differs from the registered
-                q6 depth-four independent fixed-CRN treatment.
+                q6/q12 depth-four independent fixed-CRN treatment.
         """
         if not isinstance(self.pipeline, TrainingPipelineConfig):
             msg = "pipeline must be a TrainingPipelineConfig."
@@ -499,15 +507,16 @@ class FixedDepthBMPDStageRunner:
         if self.pipeline.method_id != FIXED_DEPTH_BMPD_CRN_METHOD_ID:
             msg = "FixedDepthBMPDStageRunner accepts only the registered fixed-depth BMPD method."
             raise ValueError(msg)
+        expected_scope = {6: "primary_q6", 12: "secondary_q12"}.get(self.pipeline.qubit_count)
         if (
             self.pipeline.method_version != WP20_CONTROL_PROFILE_VERSION
-            or self.pipeline.template.target_scope_id != "primary_q6"
+            or self.pipeline.template.target_scope_id != expected_scope
             or self.pipeline.ansatz_family != "bmpd_brickwall"
             or self.pipeline.template.resource_stratum_id != "primary_cap_12"
-            or self.pipeline.qubit_count != WP20_PRIMARY_QUBIT_COUNT
+            or expected_scope is None
             or len(self.pipeline.stages) != 1
         ):
-            msg = "The registered fixed-depth BMPD control requires one q6 training stage."
+            msg = "The registered fixed-depth BMPD control requires one q6 or secondary-q12 training stage."
             raise ValueError(msg)
         identity = _fixed_depth_target_identity(self.target)
         expected = {
@@ -524,6 +533,26 @@ class FixedDepthBMPDStageRunner:
         stage = self.pipeline.stages[0]
         self._binding(stage)
         validation = stage.checkpoint_validation
+        exact_smoke_validation = (
+            self.pipeline.template.template_id == "wp22b_smoke_runtime_fixed_depth_bmpd_crn"
+            and self.pipeline.qubit_count == 6
+            and self.pipeline.data_role == "development"
+            and stage.iteration_budget == 1
+            and stage.trajectory_count == 1
+            and not validation.enabled
+            and validation == CheckpointValidationConfig.disabled()
+        )
+        exact_production_validation = (
+            validation.enabled
+            and validation.noise_id == _STANDARD_NOISE_ID
+            and validation.noise_definition_version == FIXED_RATE_NOISE_DEFINITION_VERSION
+            and _is_exact_one(validation.noise_strength_scale)
+            and _is_exact_one(validation.tjm_dt)
+            and validation.sampling_policy == "crn_fixed"
+            and validation.ensemble_refresh_interval is None
+            and validation.selection_rule == "best_validation_fidelity"
+            and validation.tie_breaker == "earliest_iteration"
+        )
         expected_treatment = (
             stage.stage_index == 0
             and stage.stage_kind == "optimize"
@@ -546,15 +575,7 @@ class FixedDepthBMPDStageRunner:
             and stage.trajectory_update == "independent"
             and stage.sampling_policy == "crn_fixed"
             and stage.crn_refresh_interval is None
-            and validation.enabled
-            and validation.noise_id == _STANDARD_NOISE_ID
-            and validation.noise_definition_version == FIXED_RATE_NOISE_DEFINITION_VERSION
-            and _is_exact_one(validation.noise_strength_scale)
-            and _is_exact_one(validation.tjm_dt)
-            and validation.sampling_policy == "crn_fixed"
-            and validation.ensemble_refresh_interval is None
-            and validation.selection_rule == "best_validation_fidelity"
-            and validation.tie_breaker == "earliest_iteration"
+            and (exact_production_validation or exact_smoke_validation)
         )
         if not expected_treatment:
             msg = "Resolved fixed-depth stage differs from the registered direct independent fixed-CRN treatment."
@@ -564,7 +585,7 @@ class FixedDepthBMPDStageRunner:
         """Build the circuit named by one exact fixed-depth stage.
 
         Returns:
-            The q6 depth-four circuit and frozen WP17 policy binding.
+            The width-matched depth-four circuit and frozen WP17 policy binding.
 
         Raises:
             ValueError: If topology width, depth, or parameter count differs
@@ -577,7 +598,8 @@ class FixedDepthBMPDStageRunner:
         qubits = int(match.group("qubits"))
         depth = int(match.group("depth"))
         if qubits != self.pipeline.qubit_count or depth != WP20_PRIMARY_BMPD_DEPTH:
-            msg = "The registered fixed-depth control requires the q6 depth-four BMPD topology."
+            width_label = f"q{self.pipeline.qubit_count}"
+            msg = f"The registered fixed-depth control requires the {width_label} depth-four BMPD topology."
             raise ValueError(msg)
         binding = create_bmpd_circuit_binding(qubits, depth)
         if (

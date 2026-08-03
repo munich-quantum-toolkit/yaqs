@@ -593,10 +593,18 @@ pathwise update vectors; q12 fixes 256 fresh trajectories and no gradient
 diagnostic. q12 is secondary descriptive evidence only. The first q6 screen is
 the nonadaptive nine-method, 48-target, three-seed population of 1,296 cells.
 
-WP22A generates no pilot, screening, promotion, or confirmation result. Real
-q6/q12 implementation catalogs, one-update runner coverage, exact schedule
-execution and restart, evidence custody, screening, final sealing, and primary
-analysis remain the explicit responsibilities of WP22B through WP22F.
+WP22A generates no pilot, screening, promotion, or confirmation result. WP22B
+provides the width-complete repository implementation catalog: q6 identities
+remain frozen, q12 pilot circuits are derived without retuning, every smoke and
+screen entry resolves a concrete repository runner adapter, and dormant
+confirmation reuses a screened q6 configuration. Exact schedule execution and
+restart, evidence custody, screening, final sealing, and primary analysis remain
+the explicit responsibilities of WP22C through WP22F.
+
+The TFIM-only `energy_adapt_vqe` smoke cell is an analytic API preflight with
+zero noisy training trajectories. It is not evidence for the preregistered
+noisy Energy-ADAPT treatment, which remains unsupported, and it is excluded
+from the pilot, family-wide screen, promotion, and confirmation catalogs.
 
 ### Native Gate-Count Rules
 

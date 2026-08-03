@@ -4,6 +4,28 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Resolve width-complete WP22 implementations
+
+WP22B adds a fail-closed repository implementation catalog for the tiny-budget
+smoke universe, the exact paired q6/q12 pilot, the nine-method q6 screen, and
+dormant q6 confirmation. Catalog resolution returns a typed implementation
+artifact together with its concrete repository runner adapter; confirmation
+reuses the already screened configuration and cannot introduce a new treatment.
+
+The q6 layerwise, noiseless, fixed-depth, Adam, and SPSA defaults retain their
+existing identities. Pass `qubit_count=12` only for the secondary pilot
+projection: its circuit topology and parameter counts are width-derived while
+the layer schedule, gate ordering, optimizer settings, and treatment semantics
+remain unchanged. q12 entries stay descriptive-only and cannot resolve for
+screening, promotion, or confirmation. WP22C through WP22F remain responsible
+for scheduled execution, custody, production evidence, and the final seal.
+
+The `energy_adapt_vqe` smoke route checks only the existing target-bound
+analytic TFIM implementation, with zero noisy training trajectories. It is
+non-promotional and cannot be used as evidence for the preregistered noisy
+Energy-ADAPT candidate; that treatment remains unsupported unless a separately
+reviewed noisy energy executor is added later.
+
 ### Freeze the prospective WP22 execution protocol
 
 WP22A adds strict, checksum-bearing records for noisy-training schedules,
