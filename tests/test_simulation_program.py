@@ -221,3 +221,77 @@ def test_order_two_single_step_program_returns_propagated_state() -> None:
 
     assert result.output_state is not None
     np.testing.assert_allclose(np.abs(result.output_state.mps.to_vec()), np.array([1.0, 0.0, 0.0, 0.0]))
+
+
+def _run_spin_echo(*, coupling: float, include_pulse: bool) -> tuple[float, float]:
+    """Run a two-spin echo.
+
+    Returns:
+        Final-state fidelity and transverse magnetization.
+    """
+    length = 2
+    half_duration = 0.4
+    hamiltonian = Hamiltonian.heisenberg(length, Jx=0.0, Jy=0.0, Jz=coupling, h=1.1)
+    observables = [Observable("x", site) for site in range(length)]
+    segments: list[AnalogSegment | DigitalSegment] = [
+        AnalogSegment(
+            hamiltonian,
+            sim_params=AnalogSimParams(
+                observables=observables,
+                elapsed_time=half_duration,
+                dt=0.05,
+                max_bond_dim=8,
+                svd_threshold=1e-12,
+                order=2,
+            ),
+        )
+    ]
+    if include_pulse:
+        pulse = QuantumCircuit(length)
+        pulse.x(range(length))
+        segments.append(DigitalSegment(pulse))
+    segments.append(
+        AnalogSegment(
+            hamiltonian,
+            sim_params=AnalogSimParams(
+                observables=observables,
+                elapsed_time=half_duration,
+                dt=0.05,
+                max_bond_dim=8,
+                svd_threshold=1e-12,
+                order=2,
+            ),
+        )
+    )
+    if include_pulse:
+        segments.append(DigitalSegment(pulse))
+
+    initial_state = State(length, initial="x+")
+    initial_vector = initial_state.mps.to_vec().copy()
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_state,
+        SimulationProgram(segments, get_state=True),
+    )
+
+    assert result.output_state is not None
+    final_vector = result.output_state.mps.to_vec()
+    fidelity = float(np.abs(np.vdot(initial_vector, final_vector)) ** 2)
+    final_analog_result = next(
+        segment for segment in reversed(result.segment_results) if segment.segment_type == "analog"
+    )
+    transverse_magnetization = float(np.mean([values[-1].real for values in final_analog_result.expectation_values]))
+    return fidelity, transverse_magnetization
+
+
+def test_spin_echo_refocuses_field_but_not_interactions() -> None:
+    """A digital echo pulse refocuses fields while leaving interaction dynamics."""
+    echo_fidelity, echo_magnetization = _run_spin_echo(coupling=0.0, include_pulse=True)
+    no_pulse_fidelity, no_pulse_magnetization = _run_spin_echo(coupling=0.0, include_pulse=False)
+    interacting_fidelity, interacting_magnetization = _run_spin_echo(coupling=0.7, include_pulse=True)
+
+    assert echo_fidelity == pytest.approx(1.0, abs=1e-10)
+    assert echo_magnetization == pytest.approx(1.0, abs=1e-10)
+    assert no_pulse_fidelity < 0.2
+    assert no_pulse_magnetization < 0.0
+    assert interacting_fidelity < 0.8
+    assert interacting_magnetization < 0.5

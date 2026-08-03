@@ -255,6 +255,8 @@ print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 
 ## 6. Related topics
 
+- {doc}`composable_simulation` — alternate digital interventions with analog
+  evolution
 - {doc}`circuit_shots` — computational-basis shot histograms with
   {class}`~mqt.yaqs.DigitalSimParams`
 - {doc}`custom_gates` — custom unitaries and gate translation

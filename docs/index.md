@@ -55,6 +55,7 @@ flowchart LR
 | I want to…                                                                 | Read                                                                        |
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Run my first simulation in under a minute                                  | {doc}`examples/quickstart`                                                  |
+| Compose analog evolution with digital interventions                        | {doc}`examples/composable_simulation`                                       |
 | Configure truncation, presets, and trajectories                            | {doc}`examples/simulation_parameters`                                       |
 | Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
 | Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
@@ -86,6 +87,7 @@ examples/quickstart
 examples/state_initialization
 examples/simulator_initialization
 examples/simulation_parameters
+examples/composable_simulation
 ```
 
 ```{toctree}
