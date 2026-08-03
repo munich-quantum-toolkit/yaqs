@@ -459,6 +459,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
 
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+    *,
+    copy_initial_state: bool = True,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
@@ -476,6 +478,7 @@ def digital_tjm(
             - Noise model, or ``None``
             - Digital simulation parameters
             - Quantum circuit
+        copy_initial_state: Whether to deep-copy the input MPS before execution.
 
     Returns:
         ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
@@ -485,7 +488,7 @@ def digital_tjm(
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
 
-    state = copy.deepcopy(initial_state)
+    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     dag = circuit_to_dag(circuit)
     diagnostics: NDArray[np.float64] | None = None
     results: NDArray[np.float64] | None = None

@@ -1501,12 +1501,14 @@ def test_no_output_error() -> None:
     with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         sim.run(state, H, sim_params_analog)
 
-    # 2. DigitalSimParams (No observables, get_state=False) rejected at construction
+    # 2. DigitalSimParams (No observables, get_state=False) rejected by standalone run
+    sim_params_digital = DigitalSimParams(
+        observables=[],
+        get_state=False,
+    )
+    circuit = QuantumCircuit(num_qubits)
     with pytest.raises(ValueError, match=r"No output specified: set observables, shots, and/or get_state."):
-        DigitalSimParams(
-            observables=[],
-            get_state=False,
-        )
+        sim.run(state, circuit, sim_params_digital)
 
 
 def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:

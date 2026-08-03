@@ -471,7 +471,10 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
     Configures MPS circuit simulation. Outputs are selected by which fields are set:
     non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
-    counts, and ``get_state`` yields the final state. At least one of these must be set.
+    counts, and ``get_state`` yields the final state. A standalone
+    :meth:`~mqt.yaqs.Simulator.run` requires at least one of these outputs, while an
+    output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
+    state propagation is itself meaningful there.
     Observables and shots may be requested together; shots sample bitstrings from amplitudes
     and do not projectively measure the configured observables.
 
@@ -562,8 +565,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
         Raises:
-            ValueError: If no output is specified, ``sample_layers`` is set without observables,
-                or ``shots`` is not a positive integer when provided.
+            ValueError: If ``sample_layers`` is set without observables, or ``shots``
+                is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -582,10 +585,6 @@ class DigitalSimParams(_ObservableOrderingMixin):
         if sample_layers and not obs_list:
             msg = "sample_layers requires a non-empty observables list."
             raise ValueError(msg)
-        if not obs_list and shots is None and not get_state:
-            msg = "No output specified: set observables, shots, and/or get_state."
-            raise ValueError(msg)
-
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = trunc_mode

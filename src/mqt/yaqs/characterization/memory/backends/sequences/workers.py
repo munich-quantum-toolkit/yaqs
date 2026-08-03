@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
+from mqt.yaqs.core.time_utils import exact_time_grid
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.intervention_steps import apply_intervention_to_backend
@@ -45,26 +46,13 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
     Returns:
         A 1D float array suitable for ``AnalogSimParams.times``.
 
-    Raises:
-        ValueError: If ``duration`` is not a positive integer multiple of ``dt``.
     """
     dt_f = float(dt)
     dur_f = float(duration)
-    if abs(dur_f) < 1e-15:
-        key = (dt_f, 0.0)
-        out = times_cache.get(key)
-        if out is None:
-            out = np.array([0.0], dtype=np.float64)
-            times_cache[key] = out
-        return out
-    n_steps = round(dur_f / dt_f)
-    if n_steps < 1 or abs(n_steps * dt_f - dur_f) > 1e-9 * max(1.0, dur_f):
-        msg = f"duration={dur_f} must be a positive integer multiple of dt={dt_f}."
-        raise ValueError(msg)
     key = (dt_f, dur_f)
     out = times_cache.get(key)
     if out is None:
-        out = np.linspace(0.0, dur_f, n_steps + 1)
+        out = exact_time_grid(dur_f, dt_f, allow_zero=True)
         times_cache[key] = out
     return out
 

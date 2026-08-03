@@ -158,6 +158,8 @@ def _diagnostic_num_columns(sim_params: AnalogSimParams) -> int:
 
 def analog_tjm_2(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+    *,
+    copy_initial_state: bool = True,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a two-site evolution scheme.
 
@@ -172,6 +174,7 @@ def analog_tjm_2(
             - NoiseModel | None: The noise model to be applied (if any).
             - AnalogSimParams: Simulation parameters (including time step, SVD threshold, etc.).
             - MPO: The Hamiltonian operator represented as an MPO.
+        copy_initial_state: Whether to deep-copy the input MPS before evolution.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -181,7 +184,7 @@ def analog_tjm_2(
 
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
-    state = copy.deepcopy(initial_state)
+    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
@@ -196,7 +199,7 @@ def analog_tjm_2(
         state.evaluate_observables(sim_params, results, 0)
 
     phi = initialize(state, noise_model, sim_params, rng=rng)
-    if sim_params.sample_timesteps:
+    if sim_params.sample_timesteps or len(sim_params.times) == 2:
         sampled_state = sample(
             phi, hamiltonian, noise_model, sim_params, results, j=1, rng=rng, diagnostics=diagnostics
         )
@@ -217,6 +220,8 @@ def analog_tjm_2(
 
 def analog_tjm_1(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+    *,
+    copy_initial_state: bool = True,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a one-site evolution scheme.
 
@@ -230,6 +235,7 @@ def analog_tjm_1(
             - NoiseModel | None: The noise model to be applied (if any).
             - AnalogSimParams: Simulation parameters including the time step and measurement settings.
             - MPO: The Hamiltonian operator represented as an MPO.
+        copy_initial_state: Whether to deep-copy the input MPS before evolution.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -239,7 +245,7 @@ def analog_tjm_1(
 
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
-    state = copy.deepcopy(initial_state)
+    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
 

@@ -438,7 +438,10 @@ def _evolve_backend_state(
     step_params_tjm = copy.copy(step_params)
     step_params_tjm.get_state = True
     backend = analog_tjm_1 if step_params_tjm.order == 1 else analog_tjm_2
-    _, _, out = backend((traj_idx, state, noise_model, step_params_tjm, operator))
+    _, _, out = backend(
+        (traj_idx, state, noise_model, step_params_tjm, operator),
+        copy_initial_state=False,
+    )
     if out is None:
         msg = "TJM backend returned None state."
         raise RuntimeError(msg)

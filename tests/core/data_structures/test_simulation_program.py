@@ -16,10 +16,10 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs import (
-    AnalogSimParams,
     AnalogSegment,
-    DigitalSimParams,
+    AnalogSimParams,
     DigitalSegment,
+    DigitalSimParams,
     Hamiltonian,
     NoiseModel,
     SimulationProgram,

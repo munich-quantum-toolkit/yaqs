@@ -18,7 +18,7 @@ read-only configuration; the simulator never mutates the objects passed to
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -167,6 +167,8 @@ class Result:
     :attr:`trajectories` hold the corresponding data in lock-step by index.
     For MPS-backed analog and digital runs with observables, :attr:`runtime_cost`,
     :attr:`max_bond`, and :attr:`total_bond` are populated automatically.
+    Nested program results use :attr:`segment_index`, :attr:`segment_type`, and
+    :attr:`time_offset` to identify their position and analog-time boundary.
     """
 
     sim_params: AnalogSimParams | DigitalSimParams | None = None
@@ -184,3 +186,6 @@ class Result:
     measurements: list[dict[int, int] | None] = field(default_factory=list)
     counts: dict[int, int] | None = None
     segment_results: list[Result] = field(default_factory=list)
+    segment_index: int | None = None
+    segment_type: Literal["analog", "digital"] | None = None
+    time_offset: float | None = None

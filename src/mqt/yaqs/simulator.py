@@ -18,7 +18,8 @@ retry policy), while the physics inputs are passed to :meth:`Simulator.run` as a
 :class:`~mqt.yaqs.core.data_structures.state.State` and either a
 :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (analog) or a
 :class:`~qiskit.circuit.QuantumCircuit` (digital) together with a simulation
-parameter object. Depending on the type of simulation parameters provided
+parameter object, or as an ordered :class:`~mqt.yaqs.SimulationProgram`.
+Depending on the input type
 (``AnalogSimParams`` or ``DigitalSimParams``), the simulation is
 dispatched to the appropriate backend:
 
@@ -56,6 +57,7 @@ import copy
 # ---------------------------------------------------------------------------
 from concurrent.futures import CancelledError
 from dataclasses import replace
+from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -111,6 +113,13 @@ from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
     _prepare_observable_ordering,
+)
+from .core.data_structures.simulation_program import (
+    SimulationProgram,
+    _compile_program,
+    _CompiledAnalogInstruction,
+    _CompiledDigitalInstruction,
+    _ProgramExecutionContext,
 )
 from .core.data_structures.state import State
 from .core.parallel_utils import (
@@ -551,8 +560,8 @@ class Simulator:
     def run(
         self,
         initial_state: State | list[State],
-        operator: Hamiltonian | QuantumCircuit | str | Path,
-        sim_params: AnalogSimParams | DigitalSimParams,
+        operator: Hamiltonian | QuantumCircuit | SimulationProgram | str | Path,
+        sim_params: AnalogSimParams | DigitalSimParams | None = None,
         noise_model: NoiseModel | None = None,
     ) -> Result:
         """Execute the common simulation routine for Hamiltonian (analog) and circuit simulations.
@@ -569,9 +578,10 @@ class Simulator:
                 or a list of states for deterministic analog unitary ensemble evolution
                 (``AnalogSimParams`` only).
             operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
-                simulations, or a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
-                ``Path`` to a ``.qasm`` file for circuit simulations.
-            sim_params: Simulation parameters specifying the simulation mode and settings.
+                simulations; a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
+                ``Path`` for digital simulation; or a :class:`~mqt.yaqs.SimulationProgram`.
+            sim_params: Simulation parameters specifying a standalone simulation's mode
+                and settings. Must be omitted for a ``SimulationProgram``.
             noise_model: The noise model to apply. If provided, it is sampled once at the
                 beginning of the run to generate a concrete noise realization (static disorder).
                 The sampled noise model is stored on the returned :class:`~mqt.yaqs.Result`.
@@ -583,9 +593,28 @@ class Simulator:
 
         Raises:
             ValueError: If no output is specified (neither observables, shots, nor ``get_state``).
-            TypeError: If the provided ``initial_state`` type is incompatible with the
-                selected simulation mode.
+            TypeError: If ``sim_params`` is missing for a standalone run, supplied for a
+                program, or the initial state is incompatible with the selected mode.
         """
+        if isinstance(operator, SimulationProgram):
+            if sim_params is not None:
+                msg = "sim_params must be None when operator is a SimulationProgram."
+                raise TypeError(msg)
+            if noise_model is not None:
+                msg = "noise_model must be None for noiseless SimulationProgram execution."
+                raise ValueError(msg)
+            if not isinstance(initial_state, State):
+                msg = "SimulationProgram execution requires a single State initial_state."
+                raise TypeError(msg)
+            return self._run_program(initial_state, operator)
+
+        if sim_params is None:
+            msg = "Standalone simulation requires AnalogSimParams or DigitalSimParams."
+            raise TypeError(msg)
+        if not isinstance(sim_params, (AnalogSimParams, DigitalSimParams)):
+            msg = f"sim_params must be AnalogSimParams or DigitalSimParams, got {type(sim_params).__name__}."
+            raise TypeError(msg)
+
         if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
             operator = load_circuit(operator)
 
@@ -606,6 +635,14 @@ class Simulator:
             and not sim_params.multi_time_observables
         ):
             msg = "No output specified: either observables or get_state must be set."
+            raise ValueError(msg)
+        if (
+            isinstance(sim_params, DigitalSimParams)
+            and not sim_params.get_state
+            and not sim_params.observables
+            and sim_params.shots is None
+        ):
+            msg = "No output specified: set observables, shots, and/or get_state."
             raise ValueError(msg)
 
         if isinstance(sim_params, AnalogSimParams):
@@ -629,6 +666,176 @@ class Simulator:
             self._run_circuit(initial_state, operator, sim_params, noise_model, result)
 
         return result
+
+    # -----------------------------------------------------------------------
+    # Noiseless composable program execution
+    # -----------------------------------------------------------------------
+    def _run_program(self, initial_state: State, program: SimulationProgram) -> Result:
+        """Compile and execute a noiseless program on one owned MPS.
+
+        Args:
+            initial_state: User-owned initial MPS state, preserved by the executor.
+            program: Ordered public program specification.
+
+        Returns:
+            An outer result containing one result per segment in program order.
+
+        Raises:
+            TypeError: If compilation produces an unknown instruction type.
+        """
+        compiled = _compile_program(program, initial_state)
+        context = _ProgramExecutionContext(
+            current_state=copy.deepcopy(initial_state.mps),
+            state_signature=compiled.state_signature,
+        )
+
+        for instruction in compiled.instructions:
+            if isinstance(instruction, _CompiledAnalogInstruction):
+                context.current_state, segment_result = self._run_program_analog(context.current_state, instruction)
+                context.absolute_time = instruction.time_offset + float(instruction.sim_params.elapsed_time)
+            elif isinstance(instruction, _CompiledDigitalInstruction):
+                context.current_state, segment_result = self._run_program_digital(context.current_state, instruction)
+            else:
+                msg = f"Unknown instruction type {type(instruction).__name__} in compiled program."
+                raise TypeError(msg)
+            context.segment_results.append(segment_result)
+
+        result = Result(segment_results=context.segment_results)
+        if compiled.get_state:
+            result.output_state = State.from_mps(context.current_state)
+        return result
+
+    @staticmethod
+    def _run_program_analog(
+        current_mps: MPS,
+        instruction: _CompiledAnalogInstruction,
+    ) -> tuple[MPS, Result]:
+        """Execute one compiled noiseless analog instruction.
+
+        Args:
+            current_mps: Execution-owned current state.
+            instruction: Validated analog instruction.
+
+        Returns:
+            The next owned MPS and the segment-scoped result.
+
+        Raises:
+            RuntimeError: If the backend fails to return the propagated state.
+        """
+        sim_params = instruction.sim_params
+        worker_params = cast("AnalogSimParams", _worker_sim_params(instruction.execution_params))
+        segment_result = Result(
+            sim_params=sim_params,
+            segment_index=instruction.index,
+            segment_type="analog",
+            time_offset=instruction.time_offset,
+        )
+        _prepare_result_observables(segment_result, sim_params, num_traj=1)
+        segment_result.times = np.asarray(instruction.execution_params.times, dtype=np.float64)
+
+        backend = analog_tjm_1 if worker_params.order == 1 else analog_tjm_2
+        traj_data, traj_diag, final_mps = call_serial_capped(
+            partial(backend, copy_initial_state=False),
+            (0, current_mps, None, worker_params, instruction.hamiltonian),
+            n_threads=available_cpus(),
+        )
+        _store_observable_trajectory(segment_result, sim_params, traj_index=0, sorted_traj_data=traj_data)
+        segment_result.runtime_cost, segment_result.max_bond, segment_result.total_bond = aggregate_diagnostics(
+            traj_diag[:, np.newaxis, :]
+        )
+        aggregate_trajectories(segment_result)
+        if final_mps is None:
+            msg = f"Analog program segment {instruction.index} did not return its propagated state."
+            raise RuntimeError(msg)
+        if sim_params.get_state:
+            segment_result.output_state = State.from_mps(copy.deepcopy(final_mps))
+        return final_mps, segment_result
+
+    @staticmethod
+    def _run_program_digital(
+        current_mps: MPS,
+        instruction: _CompiledDigitalInstruction,
+    ) -> tuple[MPS, Result]:
+        """Execute one compiled noiseless digital instruction.
+
+        Args:
+            current_mps: Execution-owned current state.
+            instruction: Validated digital instruction.
+
+        Returns:
+            The next owned MPS and the segment-scoped result.
+
+        Raises:
+            RuntimeError: If the backend fails to return the propagated state.
+        """
+        sim_params = instruction.sim_params
+        wants_observables = bool(sim_params.observables)
+        wants_shots = sim_params.shots is not None
+        shots_only = wants_shots and not wants_observables
+        effective_mid_measurements = sim_params.num_mid_measurements
+        if sim_params.sample_layers:
+            dag = circuit_to_dag(instruction.circuit)
+            effective_mid_measurements = sum(
+                1
+                for node in dag.op_nodes()
+                if node.op.name == "barrier"
+                and str(getattr(node.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
+            )
+
+        segment_result = Result(
+            sim_params=sim_params,
+            segment_index=instruction.index,
+            segment_type="digital",
+            time_offset=instruction.time_offset,
+        )
+        if wants_observables:
+            _prepare_result_observables(
+                segment_result,
+                sim_params,
+                num_traj=1,
+                num_mid_measurements=effective_mid_measurements,
+            )
+            worker_params = cast("DigitalSimParams", _worker_sim_params(instruction.execution_params))
+            if worker_params.sample_layers:
+                worker_params.num_mid_measurements = effective_mid_measurements
+        else:
+            worker_params = copy.deepcopy(instruction.execution_params)
+
+        if wants_shots:
+            segment_result.measurements = [None]
+            assert sim_params.shots is not None
+            WORKER_CTX["per_call_shots"] = sim_params.shots
+
+        try:
+            traj_data, traj_diag, shot_counts, final_mps = call_serial_capped(
+                partial(digital_tjm, copy_initial_state=False),
+                (0, current_mps, None, worker_params, instruction.circuit),
+                n_threads=available_cpus(),
+            )
+        finally:
+            WORKER_CTX.pop("per_call_shots", None)
+
+        if traj_data is not None and wants_observables:
+            _store_observable_trajectory(
+                segment_result,
+                sim_params,
+                traj_index=0,
+                sorted_traj_data=traj_data,
+            )
+            aggregate_trajectories(segment_result)
+        if traj_diag is not None and not shots_only:
+            segment_result.runtime_cost, segment_result.max_bond, segment_result.total_bond = aggregate_diagnostics(
+                traj_diag[:, np.newaxis, :]
+            )
+        if shot_counts is not None:
+            segment_result.measurements[0] = shot_counts
+            aggregate_counts(segment_result)
+        if final_mps is None:
+            msg = f"Digital program segment {instruction.index} did not return its propagated state."
+            raise RuntimeError(msg)
+        if sim_params.get_state:
+            segment_result.output_state = State.from_mps(copy.deepcopy(final_mps))
+        return final_mps, segment_result
 
     # -----------------------------------------------------------------------
     # Analog (Hamiltonian) simulation -- primary YAQS simulation mode
