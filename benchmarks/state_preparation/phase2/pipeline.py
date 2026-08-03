@@ -26,7 +26,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal, NoReturn, cast
+from typing import Literal, NoReturn, Protocol, cast
 
 from benchmarks.state_preparation.constants import (
     BALLARIN_NOISE_ID,
@@ -154,6 +154,17 @@ DataRole = Literal[
     "confirmatory",
 ]
 
+
+class _WP21PruningStageSpec(Protocol):
+    """Fields consumed from the independently validated pruning-stage schema."""
+
+    scoring_objective_kind: str
+    removal_schedule: str
+    removal_count: int | None
+    removal_fraction: float | None
+    relax_after_round: bool
+
+
 _UINT64_MAX = 2**64 - 1
 _IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _PHASE2_TARGET_PATTERN = re.compile(r"^phase2_target_[0-9a-f]{64}$")
@@ -177,12 +188,23 @@ _METHOD_FAMILY_BY_METHOD_ID = {
     "spsa_fixed": "spsa_fixed",
     "adapt_style_state_preparation": "adapt_style_state_preparation",
     "impact_pruning_crn": "impact_pruning",
+    "topdown_random": "topdown_pruning",
+    "topdown_magnitude": "topdown_pruning",
+    "topdown_impact_one_shot": "topdown_pruning",
+    "topdown_impact_iterative": "topdown_pruning",
     "energy_adapt_vqe": "energy_adapt_vqe",
     "layerwise_bmpd_crn_legacy_v1": "layerwise_bmpd_legacy",
     "standard_vqa": "standard_vqa",
     "topdown_magnitude_pruning_legacy_v1": "topdown_magnitude_pruning_legacy",
     "krotov": "krotov",
 }
+_WP21_PRUNING_RULE_BY_METHOD_ID = {
+    "topdown_random": "random",
+    "topdown_magnitude": "magnitude",
+    "topdown_impact_one_shot": "impact_one_shot",
+    "topdown_impact_iterative": "impact_iterative",
+}
+_WP21_METHOD_ID_BY_PRUNING_RULE = {rule: method for method, rule in _WP21_PRUNING_RULE_BY_METHOD_ID.items()}
 _PHASE1_FIXTURE_METADATA = {
     "gaussian_mu0p5_sigma0p1": ("gaussian_amplitude", "interior"),
     "tfim_ferro": ("tfim_ground_state", "ferromagnetic"),
@@ -952,13 +974,28 @@ class TrainingStageConfig:
         optimizer_seed = _require_seed(self.optimizer_seed, "optimizer_seed")
         iteration_budget = require_int(self.iteration_budget, "iteration_budget", minimum=0)
         random_pruning = self.stage_kind == "prune" and self.pruning_rule == "random"
+        pruning_stage_spec: _WP21PruningStageSpec | None = None
         if optimizer_id == "none":
-            if iteration_budget != 0 or hyperparameters or random_pruning != (optimizer_seed is not None):
+            if iteration_budget != 0 or random_pruning != (optimizer_seed is not None):
                 msg = (
-                    "optimizer_id 'none' requires zero iterations and empty hyperparameters; "
+                    "optimizer_id 'none' requires zero iterations; "
                     "an optimizer-ordering seed is present exactly for random pruning."
                 )
                 raise ValueError(msg)
+            if hyperparameters:
+                if self.stage_kind != "prune":
+                    msg = "Only a WP21 pruning transform may attach policy data to optimizer_id 'none'."
+                    raise ValueError(msg)
+                policy_method = _WP21_METHOD_ID_BY_PRUNING_RULE.get(self.pruning_rule)
+                if policy_method is None:
+                    msg = "A WP21 pruning policy requires one of the four registered top-down pruning rules."
+                    raise ValueError(msg)
+                pruning_stage_spec = _validate_wp21_pruning_stage_policy(
+                    hyperparameters,
+                    method_id=policy_method,
+                    score_rule=self.pruning_rule,
+                    random_seed=optimizer_seed,
+                )
         elif iteration_budget == 0 or optimizer_seed is None:
             msg = "An active optimizer requires a positive iteration budget and optimizer seed."
             raise ValueError(msg)
@@ -1019,6 +1056,9 @@ class TrainingStageConfig:
                 "a CheckpointValidationConfig",
                 self.checkpoint_validation,
             )
+        if pruning_stage_spec is not None and self.checkpoint_validation.enabled:
+            msg = "A WP21 pruning transform cannot perform checkpoint validation."
+            raise ValueError(msg)
         if self.checkpoint_validation.cadence is not None and self.checkpoint_validation.cadence > iteration_budget:
             msg = "Checkpoint-validation cadence cannot exceed the stage iteration budget."
             raise ValueError(msg)
@@ -1045,6 +1085,27 @@ class TrainingStageConfig:
                     "and a smaller distinct topology."
                 )
                 raise ValueError(msg)
+            if pruning_stage_spec is not None:
+                expected_threshold = (
+                    float(cast("int", pruning_stage_spec.removal_count))
+                    if pruning_stage_spec.removal_schedule == "fixed_count"
+                    else pruning_stage_spec.removal_fraction
+                )
+                if pruning_threshold != expected_threshold:
+                    msg = "pruning_threshold must exactly match the WP21 removal schedule."
+                    raise ValueError(msg)
+                fixed_map_score = pruning_stage_spec.scoring_objective_kind == "fixed_map_sample_average_fidelity"
+                if fixed_map_score and (
+                    noiseless
+                    or self.sampling_policy != "crn_fixed"
+                    or self.trajectory_update != "independent"
+                    or training_seed is None
+                ):
+                    msg = "Fixed-map impact scoring requires noisy independent CRN-fixed sampling and a training seed."
+                    raise ValueError(msg)
+                if not fixed_map_score and not noiseless:
+                    msg = "Only fixed-map impact scoring may activate pruning-stage noise or a training seed."
+                    raise ValueError(msg)
         elif self.pruning_rule != "none" or pruning_threshold is not None:
             msg = "Non-pruning stages cannot specify a pruning rule or threshold."
             raise ValueError(msg)
@@ -1347,6 +1408,31 @@ def _method_family(method_id: object) -> str:
     except KeyError as error:
         msg = f"method_id {normalized!r} has no frozen Phase II comparison-family mapping."
         raise ValueError(msg) from error
+
+
+def _validate_wp21_pruning_stage_policy(
+    value: Mapping[str, object],
+    *,
+    method_id: str,
+    score_rule: str,
+    random_seed: int | None,
+) -> _WP21PruningStageSpec:
+    """Validate one embedded WP21 pruning policy without an import cycle."""
+    # ``pruning`` imports pipeline records for its executable adapter.  Keeping
+    # this import at the validation boundary lets both modules remain usable
+    # during module initialization while still making the pruning schema the
+    # single authority for the opaque optimizer-hyperparameter payload.
+    from .pruning import PruningStageSpec  # noqa: PLC0415
+
+    return cast(
+        "_WP21PruningStageSpec",
+        PruningStageSpec.from_mapping(
+            value,
+            method_id=method_id,
+            score_rule=score_rule,
+            random_seed=random_seed,
+        ),
+    )
 
 
 def fixture_target_spec_checksum(
@@ -1883,6 +1969,63 @@ class TrainingPipelineTemplate:
             ):
                 msg = "Template stage topology and parameter chains must be contiguous."
                 raise ValueError(msg)
+        pruning_stages = tuple(stage for stage in stages if stage.stage_policy["stage_kind"] == "prune")
+        wp21_rule = _WP21_PRUNING_RULE_BY_METHOD_ID.get(self.method_id)
+        policy_pruning_stages = tuple(
+            stage
+            for stage in pruning_stages
+            if cast("Mapping[str, object]", stage.stage_policy["optimizer_hyperparameters"])
+        )
+        if wp21_rule is not None:
+            iterative = self.method_id == "topdown_impact_iterative"
+            valid_count = (
+                len(pruning_stages) >= 2 and len(policy_pruning_stages) == len(pruning_stages)
+                if iterative
+                else len(pruning_stages) == len(policy_pruning_stages) == 1
+            )
+            if not valid_count:
+                qualifier = "at least two" if iterative else "exactly one"
+                msg = f"A WP21 top-down method requires {qualifier} schema-validated pruning transform(s)."
+                raise ValueError(msg)
+            if any(stage.stage_policy["pruning_rule"] != wp21_rule for stage in policy_pruning_stages):
+                msg = "The pipeline method_id must agree with its WP21 pruning policy and rule."
+                raise ValueError(msg)
+            if iterative:
+                pruning_indices = tuple(stage.stage_index for stage in policy_pruning_stages)
+                for first_index, second_index in itertools.pairwise(pruning_indices):
+                    first_policy = cast(
+                        "Mapping[str, object]",
+                        stages[first_index].stage_policy["optimizer_hyperparameters"],
+                    )
+                    relaxation = stages[first_index + 1] if first_index + 1 < len(stages) else None
+                    if (
+                        second_index != first_index + 2
+                        or first_policy["relax_after_round"] is not True
+                        or relaxation is None
+                        or relaxation.stage_policy["stage_kind"] != "optimize"
+                        or relaxation.stage_policy["optimizer_id"] == "none"
+                        or not relaxation.stage_id.startswith("relax_round_")
+                    ):
+                        msg = "Iterative impact-pruning rounds must alternate with active relaxation stages."
+                        raise ValueError(msg)
+                terminal_index = pruning_indices[-1]
+                terminal_policy = cast(
+                    "Mapping[str, object]",
+                    stages[terminal_index].stage_policy["optimizer_hyperparameters"],
+                )
+                terminal_successor = stages[terminal_index + 1] if terminal_index + 1 < len(stages) else None
+                has_terminal_relaxation = (
+                    terminal_successor is not None
+                    and terminal_successor.stage_policy["stage_kind"] == "optimize"
+                    and terminal_successor.stage_policy["optimizer_id"] != "none"
+                    and terminal_successor.stage_id.startswith("relax_round_")
+                )
+                if (terminal_policy["relax_after_round"] is True) != has_terminal_relaxation:
+                    msg = "A terminal iterative pruning relaxation must be declared by relax_after_round."
+                    raise ValueError(msg)
+        elif policy_pruning_stages:
+            msg = "Embedded WP21 pruning policies are reserved for top-down pruning pipeline methods."
+            raise ValueError(msg)
         reserved_bindings = {
             binding
             for stage in stages

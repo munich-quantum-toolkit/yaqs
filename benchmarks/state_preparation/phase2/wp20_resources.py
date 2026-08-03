@@ -85,6 +85,13 @@ _KNOWN_NOISELESS_TRAINING_METHOD_IDS = frozenset({
     "unpruned_deep_bmpd",
 })
 
+_OPTIONALLY_NOISY_TRAINING_METHOD_IDS = frozenset({
+    "topdown_random",
+    "topdown_magnitude",
+    "topdown_impact_one_shot",
+    "topdown_impact_iterative",
+})
+
 
 def _require_identifier(value: object, name: str) -> int | str:
     """Validate a stable integer or string gate identifier."""
@@ -1679,7 +1686,16 @@ class TrainingRandomnessStageEvidence:
             if self.stage.training_seed is None:
                 msg = "Noisy stage randomness requires its resolved training seed."
                 raise ValueError(msg)
-            if self.stage.sampling_policy == "crn_fixed":
+            noisy_pruning_score = self.stage.stage_kind == "prune" and self.stage.pruning_rule in {
+                "impact_one_shot",
+                "impact_iterative",
+            }
+            if noisy_pruning_score:
+                if self.stage.sampling_policy != "crn_fixed":
+                    msg = "Noisy impact scoring requires one fixed per-round CRN ensemble."
+                    raise ValueError(msg)
+                expected_count = 1
+            elif self.stage.sampling_policy == "crn_fixed":
                 expected_count = 1
             elif self.stage.sampling_policy == "resampled":
                 expected_count = self.stage.iteration_budget
@@ -2026,7 +2042,9 @@ class TrainingRandomnessRecord:
                 msg = "A method cannot reuse one training root seed across stages."
                 raise ValueError(msg)
             noise_active = any(item.stage.trajectory_count > 0 for item in stages)
-            if not noise_active and method not in _KNOWN_NOISELESS_TRAINING_METHOD_IDS:
+            if not noise_active and method not in (
+                _KNOWN_NOISELESS_TRAINING_METHOD_IDS | _OPTIONALLY_NOISY_TRAINING_METHOD_IDS
+            ):
                 msg = f"Method {method!r} is not a registered noiseless-training control."
                 raise ValueError(msg)
             if method in _KNOWN_NOISELESS_TRAINING_METHOD_IDS and noise_active:
@@ -2142,6 +2160,8 @@ class TrainingRandomnessRecord:
             execution_checksum = item.training_summary.get("adapter_execution_checksum")
             if execution_checksum is None:
                 execution_checksum = item.training_summary.get("competitor_execution_checksum")
+            if execution_checksum is None:
+                execution_checksum = item.training_summary.get("pruning_execution_checksum")
             if execution_checksum is None:
                 msg = "Every randomized training stage requires a sealed optimizer execution checksum."
                 raise ValueError(msg)

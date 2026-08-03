@@ -117,8 +117,10 @@ PHASE2_STAGE_FAILURE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.stage_failu
 PHASE2_MATERIALIZATION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.materialized_circuit.v1"
 PHASE2_MATERIALIZATION_ATTEMPT_SCHEMA_VERSION = "yaqs.state_preparation.phase2.materialization_attempt.v1"
 PHASE2_EVALUATION_EVIDENCE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.evaluation_evidence.v1"
-PHASE2_STAGE_METADATA_SCHEMA_VERSION = "yaqs.state_preparation.phase2.stage_metadata.v2"
+PHASE2_STAGE_METADATA_SCHEMA_VERSION = "yaqs.state_preparation.phase2.stage_metadata.v3"
 PHASE2_TRACE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.optimizer_trace.v1"
+
+_PHASE2_STAGE_METADATA_SCHEMA_VERSION_V2 = "yaqs.state_preparation.phase2.stage_metadata.v2"
 
 PIPELINE_CONFIG_NAME = "pipeline.json"
 RESUMABILITY_FINGERPRINT_NAME = "resumability.json"
@@ -275,6 +277,7 @@ _STAGE_METADATA_KEYS = frozenset({
     "pipeline_prefix_id",
     "stage_configuration_checksum",
     "circuit_binding_checksum",
+    "map_circuit_binding_checksum",
     "provider_checksum",
     "objective_checksum",
     "objective_binding",
@@ -294,6 +297,7 @@ _STAGE_METADATA_KEYS = frozenset({
     "runtime_fingerprint_checksum",
     "content_checksum",
 })
+_STAGE_METADATA_V2_KEYS = _STAGE_METADATA_KEYS - {"map_circuit_binding_checksum"}
 _MANIFEST_KEYS = frozenset({
     "manifest_format",
     "pipeline_training_id",
@@ -407,6 +411,39 @@ def validate_materialized_circuit_payload(payload: object) -> bytes:
     return payload
 
 
+def _verify_stage_metadata_document(document: object) -> Mapping[str, object]:
+    """Verify v2/v3 stage metadata and expose the v3 map-binding view.
+
+    WP18/WP20 v2 sidecars predate the distinct input-circuit binding needed by
+    WP21 impact scoring.  Every pre-WP21 fixed map was bound to the stage's
+    output circuit, so that value is a lossless deterministic compatibility
+    projection.  The stored v2 bytes remain immutable and are verified before
+    the projection is added in memory.
+    """
+    mapping = require_mapping(document, "stage metadata artifact")
+    schema_version = mapping.get("schema_version")
+    if schema_version == _PHASE2_STAGE_METADATA_SCHEMA_VERSION_V2:
+        verified = verify_sealed_mapping(
+            mapping,
+            expected_keys=_STAGE_METADATA_V2_KEYS,
+            name="stage metadata artifact",
+        )
+        projected = thaw_json_mapping(verified)
+        projected["map_circuit_binding_checksum"] = verified["circuit_binding_checksum"]
+        return freeze_json_mapping(projected, "compatible stage metadata artifact")
+    if schema_version == PHASE2_STAGE_METADATA_SCHEMA_VERSION:
+        return verify_sealed_mapping(
+            mapping,
+            expected_keys=_STAGE_METADATA_KEYS,
+            name="stage metadata artifact",
+        )
+    msg = (
+        "stage metadata artifact schema_version must be "
+        f"{_PHASE2_STAGE_METADATA_SCHEMA_VERSION_V2!r} or {PHASE2_STAGE_METADATA_SCHEMA_VERSION!r}."
+    )
+    raise ValueError(msg)
+
+
 def _empty_work() -> dict[str, int]:
     """Return a new zero-valued normalized-work ledger."""
     return {
@@ -450,10 +487,31 @@ def _map_schedule_coordinates(
     raise ValueError(msg)
 
 
+def _stage_training_map_point_count(stage: TrainingStageConfig) -> int:
+    """Return the number of objective-sampling points consumed by one stage.
+
+    Optimizers sample once per configured iteration.  A noisy impact-pruning
+    transform instead has a zero optimizer-iteration budget but still samples
+    exactly one frozen CRN ensemble to score the pre-pruning circuit.
+    """
+    if (
+        stage.stage_kind == "prune"
+        and stage.pruning_rule in {"impact_one_shot", "impact_iterative"}
+        and stage.training_noise_id != NOISELESS_NOISE_ID
+    ):
+        return 1
+    return stage.iteration_budget
+
+
+def _is_wp21_pruning_stage(stage: TrainingStageConfig) -> bool:
+    """Return whether a stage carries a schema-validated WP21 pruning policy."""
+    return stage.stage_kind == "prune" and stage.optimizer_id == "none" and bool(stage.optimizer_hyperparameters)
+
+
 def _validate_stage_map_schedule(
     *,
     stage: TrainingStageConfig,
-    circuit_binding_checksum: str | None,
+    map_circuit_binding_checksum: str | None,
     provider_checksum: str | None,
     checkpoint_validation_provider_checksum: str | None,
     training_ensembles: Sequence[KrotovFixedMapEnsemble],
@@ -475,7 +533,7 @@ def _validate_stage_map_schedule(
             _map_schedule_coordinates(
                 stage.sampling_policy,
                 stage.crn_refresh_interval,
-                stage.iteration_budget,
+                _stage_training_map_point_count(stage),
             ),
             stage.training_seed,
             stage.trajectory_count,
@@ -506,7 +564,7 @@ def _validate_stage_map_schedule(
             or item.stage_index != stage.stage_index
             or item.stage_id != stage.stage_id
             or item.stage_configuration_checksum != stage.configuration_checksum
-            or item.circuit_checksum != circuit_binding_checksum
+            or item.circuit_checksum != map_circuit_binding_checksum
             or item.provider_checksum != role_provider_checksum
             for item in maps
         ):
@@ -785,10 +843,12 @@ def _stage_execution_checksum(training_summary: Mapping[str, object]) -> str | N
     """Return the unique optimizer execution checksum carried by a stage summary."""
     adapter = training_summary.get("adapter_execution_checksum")
     competitor = training_summary.get("competitor_execution_checksum")
-    if adapter is not None and competitor is not None:
-        msg = "A stage cannot claim both Krotov-adapter and competitor execution evidence."
+    pruning = training_summary.get("pruning_execution_checksum")
+    values = tuple(value for value in (adapter, competitor, pruning) if value is not None)
+    if len(values) > 1:
+        msg = "A stage cannot claim multiple Krotov, competitor, or pruning execution types."
         raise ValueError(msg)
-    value = adapter if adapter is not None else competitor
+    value = None if not values else values[0]
     return None if value is None else require_checksum(value, "stage_execution_checksum")
 
 
@@ -849,6 +909,7 @@ class StageExecutionEvidence:
     completed_global_iteration: int
     selected_checkpoint_validation_fidelity: float | None
     circuit_binding_checksum: str | None
+    map_circuit_binding_checksum: str | None
     provider_checksum: str | None
     checkpoint_validation_provider_checksum: str | None
     objective_checksum: str | None
@@ -879,6 +940,7 @@ class StageExecutionEvidence:
         completed_global_iteration: int,
         selected_checkpoint_validation_fidelity: float | None,
         circuit_binding_checksum: str | None,
+        map_circuit_binding_checksum: str | None = None,
         provider_checksum: str | None,
         objective_checksum: str | None,
         trace: Sequence[Mapping[str, object]],
@@ -958,6 +1020,7 @@ class StageExecutionEvidence:
                 raise ValueError(msg)
         for name, checksum in (
             ("circuit_binding_checksum", circuit_binding_checksum),
+            ("map_circuit_binding_checksum", map_circuit_binding_checksum),
             ("provider_checksum", provider_checksum),
             ("objective_checksum", objective_checksum),
         ):
@@ -970,6 +1033,9 @@ class StageExecutionEvidence:
             circuit_topology,
             stage=stage,
             circuit_binding_checksum=circuit_binding_checksum,
+        )
+        map_binding_checksum = (
+            circuit_binding_checksum if map_circuit_binding_checksum is None else map_circuit_binding_checksum
         )
         trace_rows = tuple(freeze_json_mapping(row, f"trace[{index}]") for index, row in enumerate(trace))
         training_maps = tuple(training_ensembles)
@@ -989,11 +1055,11 @@ class StageExecutionEvidence:
         }) != len(all_maps):
             msg = "A stage cannot reuse a fixed-map identity or checksum across evidence roles."
             raise ValueError(msg)
-        if all_maps and circuit_binding_checksum is None:
+        if all_maps and map_binding_checksum is None:
             msg = "Fixed-map evidence requires an exact circuit binding checksum."
             raise ValueError(msg)
-        if any(item.circuit_checksum != circuit_binding_checksum for item in all_maps):
-            msg = "Fixed-map evidence does not match the stage circuit binding."
+        if any(item.circuit_checksum != map_binding_checksum for item in all_maps):
+            msg = "Fixed-map evidence does not match the stage map-circuit binding."
             raise ValueError(msg)
         if training_maps and provider_checksum is None:
             msg = "Training fixed maps require an exact training provider checksum."
@@ -1010,7 +1076,7 @@ class StageExecutionEvidence:
         )
         _validate_stage_map_schedule(
             stage=stage,
-            circuit_binding_checksum=circuit_binding_checksum,
+            map_circuit_binding_checksum=map_binding_checksum,
             provider_checksum=provider_checksum,
             checkpoint_validation_provider_checksum=checkpoint_validation_provider_checksum,
             training_ensembles=training_maps,
@@ -1049,12 +1115,34 @@ class StageExecutionEvidence:
             raise ValueError(msg)
         adapter_checksum = training.get("adapter_execution_checksum")
         competitor_checksum = training.get("competitor_execution_checksum")
+        pruning_checksum = training.get("pruning_execution_checksum")
+        pruning_document = training.get("pruning_execution_document")
         _stage_execution_checksum(training)
         if (stage.optimizer_id == "krotov") != (adapter_checksum is not None):
             msg = "optimizer_id='krotov' requires exact WP17 adapter execution evidence, exclusively."
             raise ValueError(msg)
         if (stage.optimizer_id in {"parameter_shift_adam", "spsa"}) != (competitor_checksum is not None):
             msg = "WP20 Adam/SPSA stages require exact competitor execution evidence, exclusively."
+            raise ValueError(msg)
+        if (pruning_checksum is None) != (pruning_document is None):
+            msg = "WP21 pruning execution checksum and document must be present together."
+            raise ValueError(msg)
+        if _is_wp21_pruning_stage(stage) != (pruning_checksum is not None):
+            msg = "A schema-validated WP21 pruning policy requires exact pruning execution evidence, exclusively."
+            raise ValueError(msg)
+        if pruning_checksum is not None and (
+            stage.stage_kind != "prune"
+            or stage.pruning_rule not in {"random", "magnitude", "impact_one_shot", "impact_iterative"}
+            or stage.optimizer_id != "none"
+        ):
+            msg = "WP21 pruning execution evidence requires a supported optimizer-free pruning stage."
+            raise ValueError(msg)
+        impact_pruning_execution = pruning_checksum is not None and stage.pruning_rule in {
+            "impact_one_shot",
+            "impact_iterative",
+        }
+        if not impact_pruning_execution and map_binding_checksum != circuit_binding_checksum:
+            msg = "Non-impact stages must bind fixed maps to their output circuit."
             raise ValueError(msg)
         optimized_execution = adapter_checksum is not None or competitor_checksum is not None
         if optimized_execution:
@@ -1068,8 +1156,19 @@ class StageExecutionEvidence:
             if objective_binding.objective_checksum != objective_checksum:
                 msg = "Optimizer objective binding does not reproduce objective_checksum."
                 raise ValueError(msg)
+        elif pruning_checksum is not None:
+            if impact_pruning_execution:
+                if objective_checksum is None or not isinstance(objective_binding, NoisyKrotovObjectiveBinding):
+                    msg = "WP21 impact pruning requires a sealed target-objective binding."
+                    raise ValueError(msg)
+                if objective_binding.objective_checksum != objective_checksum:
+                    msg = "Impact-pruning objective binding does not reproduce objective_checksum."
+                    raise ValueError(msg)
+            elif objective_checksum is not None or objective_binding is not None:
+                msg = "Random and magnitude pruning cannot claim target-objective provenance."
+                raise ValueError(msg)
         elif objective_binding is not None:
-            msg = "Only genuine WP17/WP20 optimizer evidence may carry an objective binding."
+            msg = "Only genuine WP17/WP20 optimization or WP21 impact pruning may carry an objective binding."
             raise ValueError(msg)
         optimizer = None if optimizer_state is None else freeze_json_mapping(optimizer_state, "optimizer_state")
         if adapter_checksum is not None:
@@ -1178,6 +1277,36 @@ class StageExecutionEvidence:
             if training != frozen_expected_training or validation != frozen_expected_validation:
                 msg = "WP20 stage summaries are not exactly implied by the sealed competitor execution."
                 raise ValueError(msg)
+        elif pruning_checksum is not None:
+            if validation is not None or validation_maps or optimizer is not None:
+                msg = "WP21 pruning execution cannot carry checkpoint validation or optimizer state."
+                raise ValueError(msg)
+            if cumulative_cross_trajectory_pairings != 0:
+                msg = "WP21 pruning evidence cannot claim Krotov cross-trajectory pairings."
+                raise ValueError(msg)
+            from .topdown_pruning import validate_topdown_pruning_stage_evidence  # noqa: PLC0415
+
+            expected_training_summary = validate_topdown_pruning_stage_evidence(
+                stage,
+                execution_document=cast("Mapping[str, object]", pruning_document),
+                source_parameter_checksum=(None if source is None else _vector_checksum(source)),
+                initial_parameter_checksum=_vector_checksum(initial),
+                final_parameter_checksum=_vector_checksum(final),
+                selected_parameter_checksum=_vector_checksum(selected),
+                circuit_binding_checksum=cast("str", circuit_binding_checksum),
+                map_circuit_binding_checksum=cast("str", map_binding_checksum),
+                provider_checksum=provider_checksum,
+                objective_checksum=objective_checksum,
+                objective_binding_checksum=(None if objective_binding is None else objective_binding.content_checksum),
+                trace=trace_rows,
+                training_ensembles=training_maps,
+                normalized_work=work,
+                circuit_topology=topology_mapping,
+                circuit_statistics=statistics_mapping,
+            )
+            if training != freeze_json_mapping(expected_training_summary, "expected_pruning_training_summary"):
+                msg = "WP21 stage summary is not exactly implied by the sealed pruning execution."
+                raise ValueError(msg)
         object.__setattr__(self, "stage", stage)
         object.__setattr__(
             self,
@@ -1191,6 +1320,7 @@ class StageExecutionEvidence:
         object.__setattr__(self, "completed_global_iteration", completed_iteration)
         object.__setattr__(self, "selected_checkpoint_validation_fidelity", fidelity)
         object.__setattr__(self, "circuit_binding_checksum", circuit_binding_checksum)
+        object.__setattr__(self, "map_circuit_binding_checksum", map_binding_checksum)
         object.__setattr__(self, "provider_checksum", provider_checksum)
         object.__setattr__(
             self,
@@ -3102,16 +3232,13 @@ class Phase2ArtifactStore:
                 maximum_size=_MAX_STAGE_METADATA_SIZE,
             )
             try:
-                metadata = verify_sealed_mapping(
-                    load_canonical_json_object(metadata_payload.decode("utf-8")),
-                    expected_keys=_STAGE_METADATA_KEYS,
-                    name="stage metadata artifact",
-                )
+                metadata = _verify_stage_metadata_document(load_canonical_json_object(metadata_payload.decode("utf-8")))
             except (UnicodeDecodeError, TypeError, ValueError) as error:
                 msg = f"Stage metadata {result.diagnostic_sidecar_path!r} is invalid: {error}."
                 raise Phase2ArtifactVerificationError(msg) from error
             if (
-                metadata["schema_version"] != PHASE2_STAGE_METADATA_SCHEMA_VERSION
+                metadata["schema_version"]
+                not in {_PHASE2_STAGE_METADATA_SCHEMA_VERSION_V2, PHASE2_STAGE_METADATA_SCHEMA_VERSION}
                 or metadata["pipeline_training_id"] != result.pipeline_training_id
                 or metadata["pipeline_prefix_id"] != result.pipeline_prefix_id
                 or metadata["stage_configuration_checksum"] != result.stage_configuration_checksum
@@ -3147,23 +3274,101 @@ class Phase2ArtifactStore:
                     msg = "Stage metadata does not identify the verified external source parameters."
                     raise Phase2ArtifactVerificationError(msg)
             stage = self.pipeline.stages[result.stage_index]
-            if stage.optimizer_id != "none":
+            source_checkpoint = (
+                self.load_stage_checkpoint(result.stage_index - 1)
+                if result.stage_index > 0
+                else (self.load_external_checkpoint() if stage.input_checkpoint_checksum is not None else None)
+            )
+            if stage.parameter_transfer_rule in {"copy", "load_checkpoint"} and (
+                source_checkpoint is None
+                or source_checkpoint.circuit_binding_checksum is None
+                or metadata["circuit_binding_checksum"] != source_checkpoint.circuit_binding_checksum
+            ):
+                msg = "A copy or loaded-checkpoint stage must preserve its exact source circuit binding."
+                raise Phase2ArtifactVerificationError(msg)
+            adapter_checksum = result.training_summary.get("adapter_execution_checksum")
+            competitor_checksum = result.training_summary.get("competitor_execution_checksum")
+            pruning_checksum = result.training_summary.get("pruning_execution_checksum")
+            pruning_document = result.training_summary.get("pruning_execution_document")
+            try:
+                _stage_execution_checksum(result.training_summary)
+                map_circuit_binding_checksum = require_checksum(
+                    metadata["map_circuit_binding_checksum"],
+                    "map_circuit_binding_checksum",
+                )
+            except (TypeError, ValueError) as error:
+                msg = f"Stage execution identity does not verify: {error}."
+                raise Phase2ArtifactVerificationError(msg) from error
+            impact_pruning_execution = pruning_checksum is not None and stage.pruning_rule in {
+                "impact_one_shot",
+                "impact_iterative",
+            }
+            if not impact_pruning_execution and map_circuit_binding_checksum != metadata["circuit_binding_checksum"]:
+                msg = "Non-impact stage metadata must bind maps to its output circuit."
+                raise Phase2ArtifactVerificationError(msg)
+            if stage.optimizer_id != "none" or impact_pruning_execution:
                 optimized_objective_checksums.add(
                     require_checksum(metadata["objective_checksum"], "objective_checksum")
                 )
-            adapter_checksum = result.training_summary.get("adapter_execution_checksum")
-            competitor_checksum = result.training_summary.get("competitor_execution_checksum")
             checkpoint_is_resumable = checkpoint.resume_state_checksum is not None
             if adapter_checksum is not None and not checkpoint_is_resumable:
                 msg = "WP17 Krotov adapter evidence requires a resumable noisy-Krotov checkpoint."
                 raise Phase2ArtifactVerificationError(msg)
             if adapter_checksum is None and checkpoint_is_resumable:
-                msg = "WP20 competitor and generic-transform evidence requires a non-resumable checkpoint."
+                msg = (
+                    "WP20/WP21 competitor, pruning, and generic-transform evidence requires a non-resumable checkpoint."
+                )
                 raise Phase2ArtifactVerificationError(msg)
+            if (pruning_checksum is None) != (pruning_document is None):
+                msg = "WP21 pruning execution checksum and document must be persisted together."
+                raise Phase2ArtifactVerificationError(msg)
+            if _is_wp21_pruning_stage(stage) != (pruning_checksum is not None):
+                msg = "A schema-validated WP21 pruning policy requires exact pruning execution evidence."
+                raise Phase2ArtifactVerificationError(msg)
+            if pruning_checksum is not None and (
+                stage.stage_kind != "prune"
+                or stage.pruning_rule not in {"random", "magnitude", "impact_one_shot", "impact_iterative"}
+                or stage.optimizer_id != "none"
+            ):
+                msg = "WP21 execution evidence does not identify a supported pruning stage."
+                raise Phase2ArtifactVerificationError(msg)
+            expected_pruning_round_index: int | None = None
+            if pruning_checksum is not None:
+                assert source_checkpoint is not None
+                expected_pruning_round_index = sum(
+                    candidate.stage_kind == "prune" for candidate in self.pipeline.stages[: result.stage_index]
+                )
+                try:
+                    from .topdown_pruning import TopDownPruningStageExecution  # noqa: PLC0415
+
+                    pruning_execution = TopDownPruningStageExecution.from_dict(pruning_document)
+                except (TypeError, ValueError) as error:
+                    msg = f"WP21 pruning execution does not reconstruct: {error}."
+                    raise Phase2ArtifactVerificationError(msg) from error
+                if (
+                    source_checkpoint.circuit_binding_checksum is None
+                    or pruning_execution.round.input_circuit_binding.content_checksum
+                    != source_checkpoint.circuit_binding_checksum
+                    or pruning_execution.round.round_index != expected_pruning_round_index
+                ):
+                    msg = "WP21 pruning does not bind the exact predecessor circuit and ordered round."
+                    raise Phase2ArtifactVerificationError(msg)
+                if (
+                    impact_pruning_execution
+                    and map_circuit_binding_checksum != source_checkpoint.circuit_binding_checksum
+                ):
+                    msg = "Impact-pruning metadata does not bind maps to the pre-pruning input circuit."
+                    raise Phase2ArtifactVerificationError(msg)
             objective_binding: NoisyKrotovObjectiveBinding | None = None
-            if adapter_checksum is None and competitor_checksum is None:
+            objective_bound_execution = (
+                adapter_checksum is not None or competitor_checksum is not None or impact_pruning_execution
+            )
+            if not objective_bound_execution:
                 if metadata["objective_binding"] is not None:
-                    msg = "Only genuine WP17/WP20 evidence may persist an objective binding."
+                    msg = "Only genuine WP17/WP20 or WP21 impact evidence may persist an objective binding."
+                    raise Phase2ArtifactVerificationError(msg)
+                if pruning_checksum is not None and metadata["objective_checksum"] is not None:
+                    msg = "Random and magnitude pruning cannot persist target-objective provenance."
                     raise Phase2ArtifactVerificationError(msg)
             else:
                 try:
@@ -3229,7 +3434,7 @@ class Phase2ArtifactStore:
                     ensemble.stage_configuration_checksum != result.stage_configuration_checksum
                     or ensemble.stage_index != result.stage_index
                     or ensemble.stage_id != result.stage_id
-                    or ensemble.circuit_checksum != metadata["circuit_binding_checksum"]
+                    or ensemble.circuit_checksum != metadata["map_circuit_binding_checksum"]
                 ):
                     msg = "Fixed-map artifact does not bind the stage that references it."
                     raise Phase2ArtifactVerificationError(msg)
@@ -3239,7 +3444,10 @@ class Phase2ArtifactStore:
             try:
                 _validate_stage_map_schedule(
                     stage=stage,
-                    circuit_binding_checksum=cast("str | None", metadata["circuit_binding_checksum"]),
+                    map_circuit_binding_checksum=cast(
+                        "str | None",
+                        metadata["map_circuit_binding_checksum"],
+                    ),
                     provider_checksum=cast("str | None", metadata["provider_checksum"]),
                     checkpoint_validation_provider_checksum=cast(
                         "str | None",
@@ -3400,6 +3608,67 @@ class Phase2ArtifactStore:
                     or result.checkpoint_validation_summary != frozen_expected_validation
                 ):
                     msg = "WP20 stage summaries are not exactly implied by the sealed competitor execution."
+                    raise Phase2ArtifactVerificationError(msg)
+            elif pruning_checksum is not None:
+                if (
+                    result.checkpoint_validation_summary is not None
+                    or validation_maps
+                    or trace_mapping["optimizer_state"] is not None
+                ):
+                    msg = "WP21 pruning execution cannot persist checkpoint validation or optimizer state."
+                    raise Phase2ArtifactVerificationError(msg)
+                if (
+                    require_int(
+                        metadata["cumulative_cross_trajectory_pairings"],
+                        "cumulative_cross_trajectory_pairings",
+                    )
+                    != 0
+                ):
+                    msg = "WP21 pruning evidence cannot claim Krotov cross-trajectory pairings."
+                    raise Phase2ArtifactVerificationError(msg)
+                try:
+                    from .topdown_pruning import (  # noqa: PLC0415
+                        validate_topdown_pruning_stage_evidence,
+                    )
+
+                    expected_training_summary = validate_topdown_pruning_stage_evidence(
+                        stage,
+                        execution_document=cast("Mapping[str, object]", pruning_document),
+                        source_parameter_checksum=cast(
+                            "str | None",
+                            metadata["source_parameter_checksum"],
+                        ),
+                        initial_parameter_checksum=require_checksum(
+                            metadata["initial_parameter_checksum"],
+                            "initial_parameter_checksum",
+                        ),
+                        final_parameter_checksum=checkpoint.final_parameter_checksum,
+                        selected_parameter_checksum=checkpoint.selected_parameter_checksum,
+                        circuit_binding_checksum=require_checksum(
+                            metadata["circuit_binding_checksum"],
+                            "circuit_binding_checksum",
+                        ),
+                        map_circuit_binding_checksum=map_circuit_binding_checksum,
+                        provider_checksum=cast("str | None", metadata["provider_checksum"]),
+                        objective_checksum=cast("str | None", metadata["objective_checksum"]),
+                        objective_binding_checksum=(
+                            None if objective_binding is None else objective_binding.content_checksum
+                        ),
+                        trace=cast("Sequence[Mapping[str, object]]", trace_mapping["trace"]),
+                        training_ensembles=training_maps,
+                        normalized_work=result.normalized_work,
+                        circuit_topology=cast("Mapping[str, object]", metadata["circuit_topology"]),
+                        circuit_statistics=cast("Mapping[str, object]", metadata["circuit_statistics"]),
+                        expected_round_index=expected_pruning_round_index,
+                    )
+                except (TypeError, ValueError) as error:
+                    msg = f"WP21 pruning stage does not verify: {error}."
+                    raise Phase2ArtifactVerificationError(msg) from error
+                if result.training_summary != freeze_json_mapping(
+                    expected_training_summary,
+                    "expected_pruning_training_summary",
+                ):
+                    msg = "WP21 stage summary is not exactly implied by the sealed pruning execution."
                     raise Phase2ArtifactVerificationError(msg)
 
         if len(optimized_objective_checksums) > 1:
@@ -3689,7 +3958,7 @@ class Phase2ArtifactStore:
     ) -> None:
         """Require genuine optimizer evidence to use this pipeline's authorized objective."""
         if not isinstance(binding, NoisyKrotovObjectiveBinding):
-            msg = "Genuine WP17/WP20 evidence requires a sealed objective binding."
+            msg = "Genuine WP17/WP20 optimization and WP21 impact pruning require a sealed objective binding."
             raise TypeError(msg)
         if objective_checksum is None or binding.objective_checksum != objective_checksum:
             msg = "Optimizer objective binding does not reproduce the stage objective checksum."
@@ -3721,7 +3990,7 @@ class Phase2ArtifactStore:
                 msg = "WP19 objective identity does not exactly match the trusted sealed legacy target."
                 raise ValueError(msg)
         elif self.pipeline.target_namespace != "phase2" or target_ref is None or target_identity is None:
-            msg = "Published optimizer evidence requires an authorized materialized Phase II target."
+            msg = "Published target-bound evidence requires an authorized materialized Phase II target."
             raise ValueError(msg)
         elif self.pipeline.target_namespace == "phase2":
             expected_target_identity = {
@@ -3735,7 +4004,7 @@ class Phase2ArtifactStore:
                 "qubit_count": self.pipeline.qubit_count,
             }
             if any(target_identity[name] != value for name, value in expected_target_identity.items()):
-                msg = "WP17 materialized target identity does not match the configured pipeline target."
+                msg = "Materialized target identity does not match the configured pipeline target."
                 raise ValueError(msg)
         expected_initial_checksum = noisy_krotov_computational_zero_state_checksum(self.pipeline.qubit_count)
         if (
@@ -3888,21 +4157,59 @@ class Phase2ArtifactStore:
         if evidence.stage != stage:
             msg = "Stage evidence is not the next configured pipeline stage."
             raise ValueError(msg)
+        source_checkpoint: StageParameterCheckpoint | None = None
         if next_index == 0:
             if stage.input_checkpoint_checksum is None and evidence.source_parameter_checksum is not None:
                 msg = "An initialized first stage cannot claim predecessor parameters."
                 raise ValueError(msg)
             if stage.input_checkpoint_checksum is not None:
                 external_checkpoint = self.load_external_checkpoint()
+                source_checkpoint = external_checkpoint
                 if evidence.source_parameter_checksum != external_checkpoint.selected_parameter_checksum:
                     msg = "Stage evidence does not consume the verified external checkpoint parameters."
                     raise ValueError(msg)
         else:
             predecessor_checkpoint = self.load_stage_checkpoint(next_index - 1)
+            source_checkpoint = predecessor_checkpoint
             if evidence.source_parameter_checksum != predecessor_checkpoint.selected_parameter_checksum:
                 msg = "Stage evidence does not consume the verified predecessor's selected parameters."
                 raise ValueError(msg)
-        if _stage_execution_checksum(evidence.training_summary) is not None:
+        if stage.parameter_transfer_rule in {"copy", "load_checkpoint"} and (
+            source_checkpoint is None
+            or source_checkpoint.circuit_binding_checksum is None
+            or evidence.circuit_binding_checksum != source_checkpoint.circuit_binding_checksum
+        ):
+            msg = "A copy or loaded-checkpoint stage must preserve its exact source circuit binding."
+            raise ValueError(msg)
+        pruning_checksum = evidence.training_summary.get("pruning_execution_checksum")
+        if pruning_checksum is not None:
+            pruning_document = evidence.training_summary.get("pruning_execution_document")
+            try:
+                from .topdown_pruning import TopDownPruningStageExecution  # noqa: PLC0415
+
+                pruning_execution = TopDownPruningStageExecution.from_dict(pruning_document)
+            except (TypeError, ValueError) as error:
+                msg = f"WP21 pruning execution does not reconstruct: {error}."
+                raise ValueError(msg) from error
+            expected_round_index = sum(
+                candidate.stage_kind == "prune" for candidate in self.pipeline.stages[:next_index]
+            )
+            if (
+                source_checkpoint is None
+                or source_checkpoint.circuit_binding_checksum is None
+                or pruning_execution.round.input_circuit_binding.content_checksum
+                != source_checkpoint.circuit_binding_checksum
+                or pruning_execution.round.round_index != expected_round_index
+            ):
+                msg = "WP21 pruning must bind the exact predecessor circuit and ordered round."
+                raise ValueError(msg)
+            if (
+                stage.pruning_rule in {"impact_one_shot", "impact_iterative"}
+                and evidence.map_circuit_binding_checksum != source_checkpoint.circuit_binding_checksum
+            ):
+                msg = "Impact-pruning maps must bind the exact pre-pruning input checkpoint circuit."
+                raise ValueError(msg)
+        if evidence.objective_binding is not None:
             self._validate_optimizer_objective_binding(
                 evidence.objective_binding,
                 objective_checksum=evidence.objective_checksum,
@@ -3935,7 +4242,7 @@ class Phase2ArtifactStore:
         training_coordinates = _map_schedule_coordinates(
             stage.sampling_policy,
             stage.crn_refresh_interval,
-            stage.iteration_budget,
+            _stage_training_map_point_count(stage),
         )
         validation_coordinates: tuple[tuple[int, int, int], ...] = ()
         if stage.checkpoint_validation.enabled:
@@ -3976,7 +4283,7 @@ class Phase2ArtifactStore:
                 or item.stage_index != stage.stage_index
                 or item.stage_id != stage.stage_id
                 or item.stage_configuration_checksum != stage.configuration_checksum
-                or item.circuit_checksum != evidence.circuit_binding_checksum
+                or item.circuit_checksum != evidence.map_circuit_binding_checksum
                 or item.provider_checksum != provider_checksum
                 for item in maps
             ):
@@ -3995,6 +4302,7 @@ class Phase2ArtifactStore:
             "pipeline_prefix_id": prefix_id,
             "stage_configuration_checksum": stage.configuration_checksum,
             "circuit_binding_checksum": evidence.circuit_binding_checksum,
+            "map_circuit_binding_checksum": evidence.map_circuit_binding_checksum,
             "provider_checksum": evidence.provider_checksum,
             "checkpoint_validation_provider_checksum": evidence.checkpoint_validation_provider_checksum,
             "objective_checksum": evidence.objective_checksum,

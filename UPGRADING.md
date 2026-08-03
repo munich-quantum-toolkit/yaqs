@@ -4,6 +4,38 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Run reproducible top-down pruning pipelines
+
+Use the WP21 top-down pipeline builders for `topdown_random`,
+`topdown_magnitude`, `topdown_impact_one_shot`, and
+`topdown_impact_iterative`. Impact scores use the generalized
+gate-occurrence parameter-shift derivative, so parameters shared by several
+gate occurrences are differentiated as the sum of the occurrence shifts.
+Primary native two-qubit budget claims prune compiler-derived entangler groups,
+then deterministically remap retained parameters and resolve equal scores by the
+sealed tie rule.
+
+Every impact-scoring round binds its exact objective, pre-pruning circuit, and
+fixed trajectory maps. Iterative impact pipelines alternate one pruning round
+with a relaxation stage and require at least two pruning rounds, so the
+iterative identity cannot collapse to a one-shot treatment. Those stage
+boundaries can be verified and resumed through the Phase II artifact store.
+Because recompilation can produce non-monotonic native counts, select only
+observed reachable strata at or below the cap; an unavailable stratum produces
+typed infeasibility evidence instead of an invented exact resource match.
+
+New stage metadata uses the v3 schema to distinguish the circuit sampled for
+fixed maps from the stage output circuit. Existing checksum-sealed v2 metadata
+remains verifiable and reopenable without rewriting its stored bytes.
+
+Noisy fine-tuning is an optional stage after pruning, not part of the pruning
+method identity, and final testing always uses fresh streams separated from
+training, scoring, relaxation, and checkpoint selection. These pipelines are
+not reconstructions of the historical one-shot magnitude-pruned CSV: that
+archive remains historical evidence with its original semantics. WP22 owns the
+common training runner, artifact-level pilot orchestration, screening, and
+final seal; WP21 alone makes no numerical or promotion claim.
+
 ### Compare noisy fine-tuning with fair Phase II controls
 
 Use the builders in `benchmarks.state_preparation.phase2.fair_controls` to

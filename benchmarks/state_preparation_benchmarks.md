@@ -531,6 +531,39 @@ initialization, optimizer, training-trajectory, or checkpoint-selection
 randomness. Final-test streams are coupled event by event only when their
 complete evaluation protocols and stable native-event signatures align.
 
+### Phase II Top-Down Pruning Competitors
+
+WP21 provides first-class `topdown_random`, `topdown_magnitude`,
+`topdown_impact_one_shot`, and `topdown_impact_iterative` pipelines. Magnitude
+and one-shot impact score the frozen starting circuit once, while iterative
+impact requires at least two pruning rounds and alternates them with explicit
+relaxation stages. Impact uses the generalized gate-occurrence parameter-shift
+derivative: a parameter shared by multiple gates receives the sum of the
+occurrence-level derivatives before the score `|theta_i dF/dtheta_i|` is
+formed.
+
+Primary native two-qubit resource claims remove compiler-derived entangler
+groups, including their routed native consequences, instead of treating a
+logical parameter as a native gate. Score ties, group order, and retained
+parameter remapping are deterministic, and retained gates preserve their
+original semantics. Each scoring round seals the exact objective, input-circuit
+binding, and sampled-map provenance; iterative pruning and relaxation are
+separate artifact stages, providing verification and resume boundaries.
+
+Every compiled round contributes only an observed reachable native-resource
+stratum. If no attempted circuit lies at or below a requested cap, the pipeline
+returns a typed infeasible result; it never reports an unobserved exact match.
+The same fixed-rate noisy fine-tuning used by the bottom-up method may be added
+after pruning, but it is a pipeline-stage choice rather than a pruning identity.
+Final tests use fresh streams isolated from pruning scores, relaxation,
+fine-tuning, and checkpoint selection.
+
+These competitors are distinct from the archived one-shot magnitude-pruned
+CSV, which remains historical evidence and does not define current production
+behavior. WP22 owns the common training runner, pilot orchestration, screening,
+and final seal. WP21 therefore records method and resource evidence, not a
+numerical paper result or promotion decision.
+
 ### Native Gate-Count Rules
 
 Noiseless and standard-noise rows report gate counts and depth for the logical

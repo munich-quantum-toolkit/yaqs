@@ -2108,6 +2108,27 @@ The staged artifact engine from WP18 and native resource rules sealed in WP15.
 Turn the manuscript's intended top-down methods into first-class pipelines and
 separate the effects of pruning score, iteration, and noisy fine-tuning.
 
+### Implementation status
+
+**Implemented.** WP21 provides first-class `topdown_random`,
+`topdown_magnitude`, `topdown_impact_one_shot`, and
+`topdown_impact_iterative` pipelines. Impact scoring uses a generalized
+gate-occurrence parameter shift for parameters shared by several gates, and
+primary native-budget claims remove compiler-derived entangler groups.
+Deterministic score ties and retained-parameter remapping preserve gate
+semantics. Every scoring round seals its objective, pre-pruning circuit, and
+sampled-map provenance; iterative impact alternates pruning and relaxation at
+artifact-verifiable resume boundaries and requires at least two pruning rounds.
+
+Compiled rounds expose only observed reachable native-resource strata and
+return typed infeasibility when no stage meets a requested cap. Optional
+fixed-rate noisy fine-tuning is a separate pipeline stage, and final testing
+uses fresh randomness isolated from scoring, relaxation, fine-tuning, and
+checkpoint selection. These methods are distinct from the archived one-shot
+magnitude-pruned CSV and make no numerical result claim. WP22 owns the common
+training runner and artifact-level pilot, screening, and final-seal
+orchestration.
+
 ### Methods
 
 Implement:
