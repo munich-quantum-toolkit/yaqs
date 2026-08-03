@@ -163,6 +163,25 @@ def test_result_is_pickleable() -> None:
     np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))
 
 
+def test_result_supports_ordered_nested_segment_results() -> None:
+    """An outer program result reuses Result for ordered segment outputs."""
+    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
+    digital_params = DigitalSimParams(get_state=True)
+    outer = Result(
+        segment_results=[
+            Result(sim_params=analog_params),
+            Result(sim_params=digital_params),
+        ]
+    )
+
+    restored = pickle.loads(pickle.dumps(outer))  # ruff:ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sim_params is None
+    assert len(restored.segment_results) == 2
+    assert isinstance(restored.segment_results[0].sim_params, AnalogSimParams)
+    assert isinstance(restored.segment_results[1].sim_params, DigitalSimParams)
+
+
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
     """aggregate_counts must sum every non-None measurement, even after a None entry.
 
