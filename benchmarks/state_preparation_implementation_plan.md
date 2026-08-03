@@ -1969,6 +1969,37 @@ parameter-transfer behavior may reuse the tested implementation from WP19.
 Determine whether noisy fine-tuning, layerwise growth, CRN, or the Krotov update
 itself creates the observed advantage.
 
+### Implementation status
+
+**Implemented.** WP20 now provides first-class templates for the matched
+noiseless, fixed-depth noisy, independent fixed-CRN, independently resampled,
+modern cross-CRN, Phase-I-fixture, and unpruned-depth controls. The direct
+q6/depth-four and modern layerwise primary controls have target-bound runners;
+Phase-I-fixture and unpruned descriptors remain explicitly secondary and are
+blocked from sealed promotion roles. The exact WP19 legacy profile remains the
+separate historical cross-CRN reproduction control. Exact parameter-shift Adam
+and fresh-objective SPSA use distinct fixed and layerwise identities,
+authorized-target objectives, complete parameter traces, domain-separated
+requests, atomic work-budget stopping, and optimizer-specific,
+checksum-validated Phase II stage evidence rather than fabricated Krotov resume
+states.
+
+The promotion-capable family-wide operator-growth comparator uses a
+target-bound standard fixed-rate noisy evaluator and records the exact projector
+objective, pool, growth specification, requests, and trajectory provenance.
+Its circuit and resources are mechanically reconstructed and verified from
+that evidence rather than accepted as independently persisted claims. Its
+analytic entry point is explicitly promotion-ineligible. Target-bound genuine
+energy ADAPT-VQE accepts authorized TFIM specifications only and rejects
+non-TFIM targets; the generic reference-only `energy_adapt_vqe` returns a
+zero-work structural not-applicable result for non-TFIM families. Shared native
+compilation/counting records, detailed work ledgers, reachable resource strata,
+deterministic Pareto frontiers, method-wide random-stream isolation, and
+full-protocol event-level test coupling make unequal work or resource gaps
+explicit. WP22 owns the common runner/artifact wrapper for the standalone
+operator-growth result before screening; WP20 does not claim a winning method
+before the WP22-WP24 locked runs.
+
 ### Required controls
 
 Implement first-class pipelines for:
@@ -1978,7 +2009,9 @@ Implement first-class pipelines for:
 - bottom-up layerwise BMPD without noisy fine-tuning;
 - bottom-up layerwise BMPD with independent fixed-CRN fine-tuning;
 - bottom-up layerwise BMPD with independent resampling;
-- bottom-up layerwise BMPD with historical cross-CRN fine-tuning; and
+- bottom-up layerwise BMPD with modern cross-CRN fine-tuning, plus the exact
+  WP19 historical cross-CRN profile as a separately labelled reproduction
+  comparator; and
 - an unpruned deep circuit evaluated at matched and unmatched native budgets.
 
 ### Familiar competitor methods
@@ -1987,8 +2020,10 @@ Add adapters for:
 
 - parameter-shift Adam on the same fixed and layerwise ansatz;
 - SPSA on the same fresh noisy objective;
-- `adapt_style_state_preparation`, using a projector/fidelity cost and a frozen
-  operator pool for target families without a Hamiltonian objective; and
+- `run_standard_fixed_rate_noisy_operator_growth`, using a target-bound noisy
+  projector/fidelity cost and a frozen operator pool for target families
+  without a Hamiltonian objective, with `adapt_style_state_preparation`
+  retained only as an analytic, promotion-ineligible reference; and
 - genuine energy-based ADAPT-VQE on the TFIM subset only, using the frozen TFIM
   Hamiltonian, operator pool, gradient-selection rule, reoptimization rule, and
   stopping criterion.
@@ -1996,11 +2031,14 @@ Add adapters for:
 Each operator-growth pool must state its one- and two-qubit generators, site
 ordering, duplicate policy, symmetry restrictions, cost function, and native
 compilation. Fidelity/projector-based growth must never use the ADAPT-VQE label.
-`adapt_style_state_preparation` is the family-wide operator-growth comparator.
-Genuine energy-based ADAPT-VQE is a TFIM-subset exploratory analysis and is
-ineligible for family-wide promotion unless a separate TFIM-only estimand and
-promotion rule were sealed initially. Structurally inapplicable non-TFIM cells
-are recorded as not applicable and are not counted as optimizer failures.
+`run_standard_fixed_rate_noisy_operator_growth` is the family-wide
+operator-growth comparator; `adapt_style_state_preparation` is an analytic
+reference only. Genuine energy-based ADAPT-VQE is a TFIM-subset exploratory
+analysis and is ineligible for family-wide promotion unless a separate
+TFIM-only estimand and promotion rule were sealed initially. The target-bound
+entry point rejects non-TFIM targets, while generic reference-only
+`energy_adapt_vqe` records structurally inapplicable non-TFIM cells as not
+applicable rather than optimizer failures.
 
 ### Resource matching
 
@@ -2014,7 +2052,13 @@ For every method report:
 - objective and gradient calls;
 - cross-trajectory pairings, whose work scales as `R**2`;
 - wall time; and
-- peak memory.
+- the `tracemalloc` Python-allocation peak.
+
+WP20 records the algorithmic ledger for standalone operator-growth results but
+does not invent runtime measurements for them. WP22 must attach wall time and
+the `tracemalloc` Python-allocation peak through the common runner/artifact
+wrapper before those methods enter screening; these fields are not claims about
+process-wide peak memory.
 
 Run both:
 
@@ -2041,10 +2085,11 @@ promoted method and two or three primary comparators.
 - Equal-budget stopping.
 - Same native compilation and counting rules across methods.
 - No parameter-count-as-gate-count substitution.
-- Pairing by target and optimization-seed block without sharing training
-  randomness.
-- Event-level test coupling used only where stable native gate identifiers
-  align; otherwise independent Monte Carlo streams are recorded explicitly.
+- Pairing by target and optimization-seed block without sharing initialization,
+  optimizer, training-trajectory, or checkpoint-selection randomness.
+- Event-level test coupling used only where complete final-test protocols and
+  stable native gate identifiers align; otherwise independent Monte Carlo
+  streams are recorded explicitly.
 - Complete work-ledger accounting.
 
 ### Acceptance criteria
@@ -2455,9 +2500,10 @@ Phase II is complete when:
 - all multi-stage checkpoints and resumes are checksum- and
   provenance-verified, and generated outputs do not invalidate their own
   source fingerprint;
-- `adapt_style_state_preparation`, TFIM-only genuine ADAPT-VQE, Adam, SPSA,
-  and fixed-depth controls follow the shared resource ledger and native
-  counting rules;
+- target-bound noisy projector-cost operator growth, TFIM-only genuine
+  ADAPT-VQE, Adam, SPSA, and fixed-depth controls follow the shared resource
+  ledger and native counting rules, while `adapt_style_state_preparation`
+  remains an analytic reference only;
 - iterative impact-pruning rows come from the actual iterative impact method;
 - native-budget claims use reachable compiled strata and preserve structured
   infeasible-budget outcomes;

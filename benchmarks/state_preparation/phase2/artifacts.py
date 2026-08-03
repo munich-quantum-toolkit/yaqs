@@ -450,6 +450,70 @@ def _map_schedule_coordinates(
     raise ValueError(msg)
 
 
+def _validate_stage_map_schedule(
+    *,
+    stage: TrainingStageConfig,
+    circuit_binding_checksum: str | None,
+    provider_checksum: str | None,
+    checkpoint_validation_provider_checksum: str | None,
+    training_ensembles: Sequence[KrotovFixedMapEnsemble],
+    validation_ensembles: Sequence[KrotovFixedMapEnsemble],
+) -> None:
+    """Require exact, role-separated fixed maps for both stage schedules."""
+    validation_coordinates: tuple[tuple[int, int, int], ...] = ()
+    if stage.checkpoint_validation.enabled:
+        validation_calls = 1 + math.ceil(stage.iteration_budget / cast("int", stage.checkpoint_validation.cadence))
+        validation_coordinates = _map_schedule_coordinates(
+            stage.checkpoint_validation.sampling_policy,
+            stage.checkpoint_validation.ensemble_refresh_interval,
+            validation_calls,
+        )
+    schedules = (
+        (
+            tuple(training_ensembles),
+            "training_trajectory",
+            _map_schedule_coordinates(
+                stage.sampling_policy,
+                stage.crn_refresh_interval,
+                stage.iteration_budget,
+            ),
+            stage.training_seed,
+            stage.trajectory_count,
+            provider_checksum,
+        ),
+        (
+            tuple(validation_ensembles),
+            "checkpoint_validation",
+            validation_coordinates,
+            stage.checkpoint_validation.seed,
+            stage.checkpoint_validation.trajectory_count,
+            checkpoint_validation_provider_checksum,
+        ),
+    )
+    for maps, role, coordinates, seed, trajectory_count, role_provider_checksum in schedules:
+        if bool(coordinates) != (role_provider_checksum is not None):
+            msg = f"{role} provider provenance must be present exactly for a sampled fixed-map schedule."
+            raise ValueError(msg)
+        if tuple((item.ensemble_index, item.refresh_index, item.global_iteration_start) for item in maps) != (
+            coordinates
+        ):
+            msg = f"{role} fixed maps do not match the configured sampling schedule."
+            raise ValueError(msg)
+        if any(
+            item.role != role
+            or item.resolved_seed != seed
+            or item.trajectory_count != trajectory_count
+            or item.stage_index != stage.stage_index
+            or item.stage_id != stage.stage_id
+            or item.stage_configuration_checksum != stage.configuration_checksum
+            or item.circuit_checksum != circuit_binding_checksum
+            or item.provider_checksum != role_provider_checksum
+            for item in maps
+        ):
+            msg = f"{role} fixed maps do not bind the exact configured stage context."
+            raise ValueError(msg)
+
+
 def _immutable_vector(value: object, name: str) -> NDArray[np.float64]:
     """Validate and detach one finite parameter vector."""
     try:
@@ -717,6 +781,17 @@ def _noisy_execution_summaries(
     return training_summary, validation_summary
 
 
+def _stage_execution_checksum(training_summary: Mapping[str, object]) -> str | None:
+    """Return the unique optimizer execution checksum carried by a stage summary."""
+    adapter = training_summary.get("adapter_execution_checksum")
+    competitor = training_summary.get("competitor_execution_checksum")
+    if adapter is not None and competitor is not None:
+        msg = "A stage cannot claim both Krotov-adapter and competitor execution evidence."
+        raise ValueError(msg)
+    value = adapter if adapter is not None else competitor
+    return None if value is None else require_checksum(value, "stage_execution_checksum")
+
+
 @dataclass(frozen=True, slots=True)
 class FixedMapArtifactRef:
     """Filesystem and scientific identity of one persisted fixed-map ensemble."""
@@ -930,6 +1005,17 @@ class StageExecutionEvidence:
         if len(validation_provider_checksums) > 1:
             msg = "Checkpoint-validation fixed maps must share one provider checksum."
             raise ValueError(msg)
+        checkpoint_validation_provider_checksum = (
+            None if not validation_provider_checksums else next(iter(validation_provider_checksums))
+        )
+        _validate_stage_map_schedule(
+            stage=stage,
+            circuit_binding_checksum=circuit_binding_checksum,
+            provider_checksum=provider_checksum,
+            checkpoint_validation_provider_checksum=checkpoint_validation_provider_checksum,
+            training_ensembles=training_maps,
+            validation_ensembles=validation_maps,
+        )
         work = freeze_json_mapping(_sum_work([normalized_work]), "normalized_work")
         training = freeze_json_mapping(training_summary, "training_summary")
         if not training:
@@ -962,21 +1048,35 @@ class StageExecutionEvidence:
             msg = "circuit_statistics must identify the configured output topology and parameter count."
             raise ValueError(msg)
         adapter_checksum = training.get("adapter_execution_checksum")
+        competitor_checksum = training.get("competitor_execution_checksum")
+        _stage_execution_checksum(training)
         if (stage.optimizer_id == "krotov") != (adapter_checksum is not None):
             msg = "optimizer_id='krotov' requires exact WP17 adapter execution evidence, exclusively."
             raise ValueError(msg)
-        if adapter_checksum is not None:
-            expected_adapter_checksum = require_checksum(adapter_checksum, "adapter_execution_checksum")
+        if (stage.optimizer_id in {"parameter_shift_adam", "spsa"}) != (competitor_checksum is not None):
+            msg = "WP20 Adam/SPSA stages require exact competitor execution evidence, exclusively."
+            raise ValueError(msg)
+        optimized_execution = adapter_checksum is not None or competitor_checksum is not None
+        if optimized_execution:
             if (
                 circuit_binding_checksum is None
                 or objective_checksum is None
                 or not isinstance(objective_binding, NoisyKrotovObjectiveBinding)
             ):
-                msg = "WP17 adapter evidence requires circuit and sealed objective provenance."
+                msg = "WP17/WP20 optimizer evidence requires circuit and sealed objective provenance."
                 raise ValueError(msg)
             if objective_binding.objective_checksum != objective_checksum:
-                msg = "WP17 objective binding does not reproduce objective_checksum."
+                msg = "Optimizer objective binding does not reproduce objective_checksum."
                 raise ValueError(msg)
+        elif objective_binding is not None:
+            msg = "Only genuine WP17/WP20 optimizer evidence may carry an objective binding."
+            raise ValueError(msg)
+        optimizer = None if optimizer_state is None else freeze_json_mapping(optimizer_state, "optimizer_state")
+        if adapter_checksum is not None:
+            expected_adapter_checksum = require_checksum(adapter_checksum, "adapter_execution_checksum")
+            assert circuit_binding_checksum is not None
+            assert objective_checksum is not None
+            assert objective_binding is not None
             noisy_trace = _validate_noisy_trace_semantics(
                 stage=stage,
                 trace=trace_rows,
@@ -1029,10 +1129,55 @@ class StageExecutionEvidence:
             if validation != expected_validation_summary:
                 msg = "WP17 validation summary is not exactly implied by the trace and fixed maps."
                 raise ValueError(msg)
-        elif objective_binding is not None:
-            msg = "Only genuine WP17 adapter evidence may carry an objective binding."
-            raise ValueError(msg)
-        optimizer = None if optimizer_state is None else freeze_json_mapping(optimizer_state, "optimizer_state")
+        elif competitor_checksum is not None:
+            if cumulative_cross_trajectory_pairings != 0:
+                msg = "WP20 Adam/SPSA evidence cannot claim Krotov cross-trajectory pairings."
+                raise ValueError(msg)
+            assert circuit_binding_checksum is not None
+            assert objective_checksum is not None
+            assert objective_binding is not None
+            from .competitor_optimizers import validate_competitor_stage_evidence  # noqa: PLC0415
+
+            expected_training_summary, expected_validation_summary = validate_competitor_stage_evidence(
+                stage=stage,
+                execution_document=cast(
+                    "Mapping[str, object]",
+                    training.get("competitor_execution_document"),
+                ),
+                circuit_binding_checksum=circuit_binding_checksum,
+                provider_checksum=provider_checksum,
+                checkpoint_validation_provider_checksum=checkpoint_validation_provider_checksum,
+                objective_checksum=objective_checksum,
+                objective_binding_checksum=objective_binding.content_checksum,
+                initial_parameter_checksum=_vector_checksum(initial),
+                final_parameter_checksum=_vector_checksum(final),
+                selected_parameter_checksum=_vector_checksum(selected),
+                selected_global_iteration=selected_iteration,
+                completed_global_iteration=completed_iteration,
+                selected_checkpoint_validation_fidelity=fidelity,
+                trace=trace_rows,
+                training_ensembles=training_maps,
+                checkpoint_validation_ensembles=validation_maps,
+                normalized_work=work,
+                optimizer_state=optimizer,
+                circuit_topology=topology_mapping,
+                circuit_statistics=statistics_mapping,
+            )
+            frozen_expected_training = freeze_json_mapping(
+                expected_training_summary,
+                "expected_competitor_training_summary",
+            )
+            frozen_expected_validation = (
+                None
+                if expected_validation_summary is None
+                else freeze_json_mapping(
+                    expected_validation_summary,
+                    "expected_competitor_validation_summary",
+                )
+            )
+            if training != frozen_expected_training or validation != frozen_expected_validation:
+                msg = "WP20 stage summaries are not exactly implied by the sealed competitor execution."
+                raise ValueError(msg)
         object.__setattr__(self, "stage", stage)
         object.__setattr__(
             self,
@@ -1050,7 +1195,7 @@ class StageExecutionEvidence:
         object.__setattr__(
             self,
             "checkpoint_validation_provider_checksum",
-            None if not validation_provider_checksums else next(iter(validation_provider_checksums)),
+            checkpoint_validation_provider_checksum,
         )
         object.__setattr__(self, "objective_checksum", objective_checksum)
         object.__setattr__(self, "objective_binding", objective_binding)
@@ -2991,7 +3136,7 @@ class Phase2ArtifactStore:
                 or metadata["circuit_binding_checksum"] != checkpoint.circuit_binding_checksum
                 or metadata["provider_checksum"] != checkpoint.provider_checksum
                 or metadata["objective_checksum"] != checkpoint.objective_checksum
-                or checkpoint.stage_execution_checksum != result.training_summary.get("adapter_execution_checksum")
+                or checkpoint.stage_execution_checksum != _stage_execution_checksum(result.training_summary)
                 or metadata["runtime_fingerprint_checksum"] != artifact.runtime_fingerprint_checksum
             ):
                 msg = "Stage metadata does not match its canonical checkpoint and stage row."
@@ -3007,15 +3152,23 @@ class Phase2ArtifactStore:
                     require_checksum(metadata["objective_checksum"], "objective_checksum")
                 )
             adapter_checksum = result.training_summary.get("adapter_execution_checksum")
+            competitor_checksum = result.training_summary.get("competitor_execution_checksum")
+            checkpoint_is_resumable = checkpoint.resume_state_checksum is not None
+            if adapter_checksum is not None and not checkpoint_is_resumable:
+                msg = "WP17 Krotov adapter evidence requires a resumable noisy-Krotov checkpoint."
+                raise Phase2ArtifactVerificationError(msg)
+            if adapter_checksum is None and checkpoint_is_resumable:
+                msg = "WP20 competitor and generic-transform evidence requires a non-resumable checkpoint."
+                raise Phase2ArtifactVerificationError(msg)
             objective_binding: NoisyKrotovObjectiveBinding | None = None
-            if adapter_checksum is None:
+            if adapter_checksum is None and competitor_checksum is None:
                 if metadata["objective_binding"] is not None:
-                    msg = "Only genuine WP17 evidence may persist an objective binding."
+                    msg = "Only genuine WP17/WP20 evidence may persist an objective binding."
                     raise Phase2ArtifactVerificationError(msg)
             else:
                 try:
                     objective_binding = NoisyKrotovObjectiveBinding.from_dict(metadata["objective_binding"])
-                    self._validate_wp17_objective_binding(
+                    self._validate_optimizer_objective_binding(
                         objective_binding,
                         objective_checksum=cast("str | None", metadata["objective_checksum"]),
                     )
@@ -3083,47 +3236,21 @@ class Phase2ArtifactStore:
             stage = self.pipeline.stages[result.stage_index]
             training_maps = tuple(item for item in decoded_maps if item.role == "training_trajectory")
             validation_maps = tuple(item for item in decoded_maps if item.role == "checkpoint_validation")
-            training_coordinates = _map_schedule_coordinates(
-                stage.sampling_policy,
-                stage.crn_refresh_interval,
-                stage.iteration_budget,
-            )
-            validation_coordinates: tuple[tuple[int, int, int], ...] = ()
-            if stage.checkpoint_validation.enabled:
-                validation_calls = 1 + math.ceil(
-                    stage.iteration_budget / cast("int", stage.checkpoint_validation.cadence)
+            try:
+                _validate_stage_map_schedule(
+                    stage=stage,
+                    circuit_binding_checksum=cast("str | None", metadata["circuit_binding_checksum"]),
+                    provider_checksum=cast("str | None", metadata["provider_checksum"]),
+                    checkpoint_validation_provider_checksum=cast(
+                        "str | None",
+                        metadata["checkpoint_validation_provider_checksum"],
+                    ),
+                    training_ensembles=training_maps,
+                    validation_ensembles=validation_maps,
                 )
-                validation_coordinates = _map_schedule_coordinates(
-                    stage.checkpoint_validation.sampling_policy,
-                    stage.checkpoint_validation.ensemble_refresh_interval,
-                    validation_calls,
-                )
-            for maps, coordinates, seed, count, provider_checksum in (
-                (
-                    training_maps,
-                    training_coordinates,
-                    stage.training_seed,
-                    stage.trajectory_count,
-                    metadata["provider_checksum"],
-                ),
-                (
-                    validation_maps,
-                    validation_coordinates,
-                    stage.checkpoint_validation.seed,
-                    stage.checkpoint_validation.trajectory_count,
-                    metadata["checkpoint_validation_provider_checksum"],
-                ),
-            ):
-                if tuple(
-                    (item.ensemble_index, item.refresh_index, item.global_iteration_start) for item in maps
-                ) != coordinates or any(
-                    item.resolved_seed != seed
-                    or item.trajectory_count != count
-                    or item.provider_checksum != provider_checksum
-                    for item in maps
-                ):
-                    msg = "Fixed-map artifacts do not reproduce the configured stage schedule and bindings."
-                    raise Phase2ArtifactVerificationError(msg)
+            except (TypeError, ValueError) as error:
+                msg = f"Fixed-map artifacts do not reproduce the configured stage schedule: {error}."
+                raise Phase2ArtifactVerificationError(msg) from error
             if adapter_checksum is not None:
                 assert objective_binding is not None
                 try:
@@ -3196,6 +3323,83 @@ class Phase2ArtifactStore:
                     or result.checkpoint_validation_summary != expected_validation_summary
                 ):
                     msg = "WP17 stage summaries are not exactly implied by persisted trace and checkpoints."
+                    raise Phase2ArtifactVerificationError(msg)
+            elif competitor_checksum is not None:
+                assert objective_binding is not None
+                if (
+                    require_int(
+                        metadata["cumulative_cross_trajectory_pairings"],
+                        "cumulative_cross_trajectory_pairings",
+                    )
+                    != 0
+                ):
+                    msg = "WP20 Adam/SPSA evidence cannot claim Krotov cross-trajectory pairings."
+                    raise Phase2ArtifactVerificationError(msg)
+                try:
+                    from .competitor_optimizers import (  # noqa: PLC0415
+                        validate_competitor_stage_evidence,
+                    )
+
+                    expected_training_summary, expected_validation_summary = validate_competitor_stage_evidence(
+                        stage=stage,
+                        execution_document=cast(
+                            "Mapping[str, object]",
+                            result.training_summary.get("competitor_execution_document"),
+                        ),
+                        circuit_binding_checksum=require_checksum(
+                            metadata["circuit_binding_checksum"],
+                            "circuit_binding_checksum",
+                        ),
+                        provider_checksum=cast("str | None", metadata["provider_checksum"]),
+                        checkpoint_validation_provider_checksum=cast(
+                            "str | None",
+                            metadata["checkpoint_validation_provider_checksum"],
+                        ),
+                        objective_checksum=require_checksum(
+                            metadata["objective_checksum"],
+                            "objective_checksum",
+                        ),
+                        objective_binding_checksum=objective_binding.content_checksum,
+                        initial_parameter_checksum=require_checksum(
+                            metadata["initial_parameter_checksum"],
+                            "initial_parameter_checksum",
+                        ),
+                        final_parameter_checksum=checkpoint.final_parameter_checksum,
+                        selected_parameter_checksum=checkpoint.selected_parameter_checksum,
+                        selected_global_iteration=checkpoint.selected_global_iteration,
+                        completed_global_iteration=checkpoint.completed_global_iteration,
+                        selected_checkpoint_validation_fidelity=(checkpoint.selected_checkpoint_validation_fidelity),
+                        trace=cast("Sequence[Mapping[str, object]]", trace_mapping["trace"]),
+                        training_ensembles=training_maps,
+                        checkpoint_validation_ensembles=validation_maps,
+                        normalized_work=result.normalized_work,
+                        optimizer_state=cast(
+                            "Mapping[str, object] | None",
+                            trace_mapping["optimizer_state"],
+                        ),
+                        circuit_topology=cast("Mapping[str, object]", metadata["circuit_topology"]),
+                        circuit_statistics=cast("Mapping[str, object]", metadata["circuit_statistics"]),
+                    )
+                except (TypeError, ValueError) as error:
+                    msg = f"WP20 competitor stage does not verify: {error}."
+                    raise Phase2ArtifactVerificationError(msg) from error
+                frozen_expected_training = freeze_json_mapping(
+                    expected_training_summary,
+                    "expected_competitor_training_summary",
+                )
+                frozen_expected_validation = (
+                    None
+                    if expected_validation_summary is None
+                    else freeze_json_mapping(
+                        expected_validation_summary,
+                        "expected_competitor_validation_summary",
+                    )
+                )
+                if (
+                    result.training_summary != frozen_expected_training
+                    or result.checkpoint_validation_summary != frozen_expected_validation
+                ):
+                    msg = "WP20 stage summaries are not exactly implied by the sealed competitor execution."
                     raise Phase2ArtifactVerificationError(msg)
 
         if len(optimized_objective_checksums) > 1:
@@ -3477,18 +3681,18 @@ class Phase2ArtifactStore:
             "produced_checkpoint_checksum": produced_checkpoint_checksum,
         })
 
-    def _validate_wp17_objective_binding(
+    def _validate_optimizer_objective_binding(
         self,
         binding: NoisyKrotovObjectiveBinding | None,
         *,
         objective_checksum: str | None,
     ) -> None:
-        """Require genuine WP17 evidence to use this pipeline's authorized objective."""
+        """Require genuine optimizer evidence to use this pipeline's authorized objective."""
         if not isinstance(binding, NoisyKrotovObjectiveBinding):
-            msg = "Genuine WP17 evidence requires a sealed objective binding."
+            msg = "Genuine WP17/WP20 evidence requires a sealed objective binding."
             raise TypeError(msg)
         if objective_checksum is None or binding.objective_checksum != objective_checksum:
-            msg = "WP17 objective binding does not reproduce the stage objective checksum."
+            msg = "Optimizer objective binding does not reproduce the stage objective checksum."
             raise ValueError(msg)
         target_ref = self.pipeline.target_ref
         target_identity = binding.materialized_target_identity
@@ -3517,7 +3721,7 @@ class Phase2ArtifactStore:
                 msg = "WP19 objective identity does not exactly match the trusted sealed legacy target."
                 raise ValueError(msg)
         elif self.pipeline.target_namespace != "phase2" or target_ref is None or target_identity is None:
-            msg = "Published WP17 evidence requires an authorized materialized Phase II target."
+            msg = "Published optimizer evidence requires an authorized materialized Phase II target."
             raise ValueError(msg)
         elif self.pipeline.target_namespace == "phase2":
             expected_target_identity = {
@@ -3538,13 +3742,26 @@ class Phase2ArtifactStore:
             binding.initial_state_policy != "computational_zero_v1"
             or binding.initial_state_checksum != expected_initial_checksum
         ):
-            msg = "Published WP17 evidence must use the computational-zero initial-state policy."
+            msg = "Published optimizer evidence must use the computational-zero initial-state policy."
             raise ValueError(msg)
+
+    def _validate_wp17_objective_binding(
+        self,
+        binding: NoisyKrotovObjectiveBinding | None,
+        *,
+        objective_checksum: str | None,
+    ) -> None:
+        """Retain the WP17/WP19 publication guard name for compatibility."""
+        self._validate_optimizer_objective_binding(
+            binding,
+            objective_checksum=objective_checksum,
+        )
 
     def _stage_checkpoint(self, evidence: StageExecutionEvidence) -> StageParameterCheckpoint:
         """Build a generic or resumable safe checkpoint from stage evidence."""
         resume_state = None
-        if evidence.objective_checksum is not None:
+        if evidence.training_summary.get("adapter_execution_checksum") is not None:
+            assert evidence.objective_checksum is not None
             assert evidence.circuit_binding_checksum is not None
             selection = None
             if evidence.selected_checkpoint_validation_fidelity is not None:
@@ -3594,7 +3811,10 @@ class Phase2ArtifactStore:
             circuit_binding_checksum=evidence.circuit_binding_checksum,
             provider_checksum=evidence.provider_checksum,
             objective_checksum=evidence.objective_checksum,
-            stage_execution_checksum=cast("str | None", evidence.training_summary.get("adapter_execution_checksum")),
+            stage_execution_checksum=_stage_execution_checksum(evidence.training_summary),
+            selected_checkpoint_validation_fidelity=(
+                None if resume_state is not None else evidence.selected_checkpoint_validation_fidelity
+            ),
             resume_state=resume_state,
         )
 
@@ -3682,8 +3902,8 @@ class Phase2ArtifactStore:
             if evidence.source_parameter_checksum != predecessor_checkpoint.selected_parameter_checksum:
                 msg = "Stage evidence does not consume the verified predecessor's selected parameters."
                 raise ValueError(msg)
-        if evidence.training_summary.get("adapter_execution_checksum") is not None:
-            self._validate_wp17_objective_binding(
+        if _stage_execution_checksum(evidence.training_summary) is not None:
+            self._validate_optimizer_objective_binding(
                 evidence.objective_binding,
                 objective_checksum=evidence.objective_checksum,
             )

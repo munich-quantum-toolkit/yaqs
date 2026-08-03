@@ -4,6 +4,62 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Compare noisy fine-tuning with fair Phase II controls
+
+Use the builders in `benchmarks.state_preparation.phase2.fair_controls` to
+construct the noiseless-final-stage, direct fixed-depth noisy, independent
+fixed-CRN, independently resampled, modern cross-CRN, Phase-I-fixture, and
+unpruned-depth controls. The modern cross-CRN control is distinct from the exact
+WP19 legacy cross-CRN reproduction. The matched layerwise controls preserve the
+corrected WP19 topology and stage budgets; secondary unpruned controls carry
+compiler-derived match, residual, or excess evidence and cannot be presented
+as exact resource matches when they miss the cap. Execute the registered direct
+q6/depth-four baseline with
+`FixedDepthBMPDStageRunner`; the modern layerwise controls use
+`LayerwiseBMPDStageRunner`. Phase-I-fixture and unpruned descriptors remain
+explicitly secondary inputs for the WP22 orchestration layer and cannot enter
+sealed screening or confirmation roles.
+
+`ParameterShiftAdamStageAdapter` implements an exact two-evaluation Pauli
+parameter-shift gradient followed by bias-corrected Adam, and
+`SPSAStageAdapter` implements one-based Spall schedules with a fresh paired
+Rademacher perturbation stream per update. Resolve their fixed or layerwise
+pipeline templates and run them through `BMPDCompetitorStageRunner`, whose
+`FixedRateNoisyCompetitorObjective` binds an authorized target, the standard
+noise providers, and every sampled map. Generic callbacks are retained only
+for numerical adapter tests and cannot produce publishable stage evidence.
+Completed target-bound executions convert to ordinary Phase II checkpoints
+without being mislabeled as resumable Krotov states. SPSA's iteration-zero
+monitor and first update share the first CRN window; each subsequent update
+uses its own newly sampled window.
+
+For family-wide noisy operator growth, use
+`run_standard_fixed_rate_noisy_operator_growth`; it constructs a
+`StandardFixedRateNoisyOperatorGrowthEvaluator` bound to an authorized target
+and returns a self-verifying result with the exact pool, growth policy,
+objective requests, resources, and trajectory provenance. The analytic
+`adapt_style_state_preparation` entry point is a reference calculation and is
+not promotion eligible. `target_bound_energy_adapt_vqe` derives the genuine
+TFIM Hamiltonian from an authorized TFIM target specification and rejects
+non-TFIM targets. The generic reference-only `energy_adapt_vqe` returns typed
+zero-work not-applicable evidence for non-TFIM families; the TFIM comparator
+remains ineligible for family-wide promotion. WP22 must wrap standalone
+operator-growth results in its runner/artifact orchestration before screening;
+WP20 does not fabricate a Krotov resume state for them.
+
+Use `measure_circuit_resources` and `WP20WorkLedger` for the common logical and
+Quantinuum-native counting rules and complete optimizer/trajectory work.
+`select_reachable_resource_stratum` reports residual gaps for discrete paths,
+`deterministic_pareto_frontier` constructs the frozen two-resource frontier,
+and the paired-block utilities prohibit shared initialization, optimizer,
+training-trajectory, and checkpoint-selection streams. Event-level final-test
+coupling additionally requires two complete matching `PipelineEvaluationConfig`
+protocols and full native-event alignment. Algorithmic work is stored in the
+WP20 ledger. The WP18 execution boundary attaches wall time and the
+`tracemalloc` Python-allocation peak to staged runs; standalone operator-growth
+results receive those runtime measurements only after WP22 supplies their
+runner/artifact wrapper. Neither boundary claims a process-wide memory peak.
+
 ### Run bottom-up layerwise BMPD with noisy fine-tuning
 
 Use `build_layerwise_bmpd_crn_legacy_v1_template` only for the isolated

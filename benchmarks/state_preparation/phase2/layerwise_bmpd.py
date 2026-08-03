@@ -52,6 +52,7 @@ from .pipeline import (
 )
 from .protocol import TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM
 from .targets import MaterializedTarget
+from .wp20_resources import measure_circuit_resources
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -73,6 +74,12 @@ LEGACY_EVALUATION_SEED = 0
 _NOISE_VERSION = FIXED_RATE_NOISE_DEFINITION_VERSION
 _LEGACY_RNG = "numpy_randomstate_standard_normal_v1"
 _CORRECTED_RNG = "numpy_pcg64_standard_normal_v1"
+_MODERN_LAYERWISE_METHOD_IDS = frozenset({
+    LAYERWISE_BMPD_CRN_V2_METHOD_ID,
+    "layerwise_bmpd_cross_crn",
+    "layerwise_bmpd_noiseless",
+    "layerwise_bmpd_resampled",
+})
 
 
 def bmpd_parameter_count(qubit_count: int, depth: int) -> int:
@@ -531,11 +538,8 @@ class LayerwiseBMPDStageRunner:
         if not isinstance(self.pipeline, TrainingPipelineConfig):
             msg = "pipeline must be a TrainingPipelineConfig."
             raise TypeError(msg)
-        if self.pipeline.method_id not in {
-            LAYERWISE_BMPD_CRN_LEGACY_METHOD_ID,
-            LAYERWISE_BMPD_CRN_V2_METHOD_ID,
-        }:
-            msg = "LayerwiseBMPDStageRunner accepts only the WP19 legacy or v2 method."
+        if self.pipeline.method_id not in _MODERN_LAYERWISE_METHOD_IDS | {LAYERWISE_BMPD_CRN_LEGACY_METHOD_ID}:
+            msg = "LayerwiseBMPDStageRunner accepts only the registered layerwise BMPD methods."
             raise ValueError(msg)
         identity = _target_identity(self.target)
         expected = {
@@ -598,13 +602,17 @@ class LayerwiseBMPDStageRunner:
         depth = LAYERWISE_BMPD_DEPTHS[min(stage.stage_index, len(LAYERWISE_BMPD_DEPTHS) - 1)]
         binding = create_bmpd_circuit_binding(self.pipeline.qubit_count, depth)
         circuit = binding.circuit
+        resources = measure_circuit_resources(circuit)
         return {
             "topology_id": stage.output_topology_id,
             "parameter_count": stage.output_parameter_count,
             "qubit_count": self.pipeline.qubit_count,
             "bmpd_depth": depth,
             "logical_gate_count": len(circuit.gates),
-            "logical_two_qubit_gate_count": sum(len(gate.sites) == 2 for gate in circuit.gates),
+            "logical_two_qubit_gate_count": resources.logical_two_qubit_gates,
+            "native_two_qubit_gate_count": resources.native_two_qubit_gates,
+            "native_two_qubit_gates_per_chain_edge": list(resources.native_two_qubit_gates_per_chain_edge),
+            "circuit_resource_metrics": resources.to_dict(),
         }
 
 

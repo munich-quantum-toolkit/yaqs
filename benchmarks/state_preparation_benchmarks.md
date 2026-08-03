@@ -478,6 +478,59 @@ the two modes are mutually exclusive. Exit status `0` means reproduced within
 tolerance, `1` means a complete scientific discrepancy, and `2` means at least
 one target, setup step, or job-level check failed.
 
+### Phase II Fair Controls and Familiar Competitors
+
+WP20 isolates the effects of noisy fine-tuning, layerwise growth, CRN policy,
+and optimizer choice. The control templates cover noiseless final training,
+direct fixed-depth noisy Krotov, independent fixed CRN, per-update resampling,
+modern cross CRN distinct from the exact WP19 legacy cross-CRN reproduction,
+Phase-I-style noiseless training with fresh noisy testing, and matched or
+explicitly unmatched unpruned depths. Required iteration and trajectory budgets
+are identity-bearing; compiled circuits that miss a cap retain their residual
+gap or resource excess and are never described as exact matches.
+`FixedDepthBMPDStageRunner` executes the registered direct q6/depth-four
+baseline, while `LayerwiseBMPDStageRunner` executes the matched modern
+layerwise controls. The Phase-I-fixture and unpruned-depth descriptors are
+secondary controls and are excluded from sealed promotion roles.
+
+Exact parameter-shift Adam and SPSA use the same fixed or layerwise BMPD
+ansatz. Parameter-shift pairs share their declared objective stream and use the
+Pauli two-evaluation rule; SPSA uses a fresh paired objective and Rademacher
+direction at every update. Both methods record every objective and gradient
+call, circuit evaluation, trajectory-gate application, validation trajectory,
+and stopping decision. Their Phase II checkpoints carry optimizer-specific
+execution evidence and are not represented as resumable Krotov states.
+Publishable runs use `BMPDCompetitorStageRunner` and its authorized-target
+`FixedRateNoisyCompetitorObjective`; arbitrary callbacks cannot cross the
+artifact boundary. The SPSA iteration-zero monitor shares the first update's
+CRN window, and every later update receives a distinct resampled window.
+
+`run_standard_fixed_rate_noisy_operator_growth` is the promotion-capable
+family-wide operator-growth comparator and minimizes pure-state projector
+infidelity with a frozen ordered pool and target-bound fixed-rate TJM
+evaluator. The analytic `adapt_style_state_preparation` entry point is only a
+non-promotion reference and is not ADAPT-VQE. The separate
+`target_bound_energy_adapt_vqe` method derives the frozen TFIM Hamiltonian from
+the authorized TFIM target specification and rejects non-TFIM targets. The
+generic reference-only `energy_adapt_vqe` returns structural not-applicable
+outcomes for non-TFIM cells; those outcomes are not optimizer failures. The TFIM
+analysis is not eligible for family-wide promotion. Operator-growth results are
+strict standalone WP20 evidence; WP22 supplies their pipeline runner and
+artifact-store orchestration before any screening run.
+
+All comparisons use the same logical-to-native compiler and dependency-depth
+counting. The detailed work ledger includes forward and backward evaluations,
+all trajectory roles, and cross-trajectory pairings. The WP18 execution
+boundary attaches wall time and the `tracemalloc` Python-allocation peak to
+staged runs. Standalone operator-growth results receive those runtime metrics
+only from the WP22 wrapper; neither boundary reports process-wide peak memory.
+Fixed-resource selection uses only reachable strata at or below both caps, and
+the Pareto analysis reports native two-qubit gates against normalized compute.
+Methods are paired by target and optimization-seed block without sharing
+initialization, optimizer, training-trajectory, or checkpoint-selection
+randomness. Final-test streams are coupled event by event only when their
+complete evaluation protocols and stable native-event signatures align.
+
 ### Native Gate-Count Rules
 
 Noiseless and standard-noise rows report gate counts and depth for the logical

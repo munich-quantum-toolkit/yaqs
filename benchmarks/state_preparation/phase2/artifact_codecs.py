@@ -155,6 +155,31 @@ def _vector_checksum(vector: NDArray[np.float64]) -> str:
     return artifact_checksum(_vector_bytes(vector))
 
 
+def _generic_checkpoint_selection_checksum(
+    *,
+    stage_configuration_checksum: str,
+    circuit_binding_checksum: str,
+    provider_checksum: str | None,
+    objective_checksum: str,
+    stage_execution_checksum: str | None,
+    global_iteration: int,
+    validation_fidelity: float,
+    parameter_checksum: str,
+) -> str:
+    """Seal checkpoint selection for a non-Krotov optimizer execution."""
+    return canonical_checksum({
+        "schema_version": "yaqs.state_preparation.phase2.generic_checkpoint_selection.v1",
+        "stage_configuration_checksum": stage_configuration_checksum,
+        "circuit_binding_checksum": circuit_binding_checksum,
+        "provider_checksum": provider_checksum,
+        "objective_checksum": objective_checksum,
+        "stage_execution_checksum": stage_execution_checksum,
+        "global_iteration": global_iteration,
+        "validation_fidelity": validation_fidelity,
+        "parameter_checksum": parameter_checksum,
+    })
+
+
 def _validated_vector(value: object, name: str) -> NDArray[np.float64]:
     """Validate and detach a finite one-dimensional float64 vector."""
     if not isinstance(value, np.ndarray):
@@ -347,6 +372,8 @@ class StageParameterCheckpoint:
         provider_checksum: str | None = None,
         objective_checksum: str | None = None,
         stage_execution_checksum: str | None = None,
+        selected_checkpoint_validation_fidelity: float | None = None,
+        checkpoint_selection_checksum: str | None = None,
         resume_state: NoisyKrotovResumeState | None = None,
     ) -> None:
         """Validate identities and defensively snapshot both parameter states."""
@@ -373,13 +400,22 @@ class StageParameterCheckpoint:
             msg = "objective_checksum requires a circuit binding."
             raise ValueError(msg)
         if provider is not None and objective is None:
-            msg = "provider_checksum requires complete noisy-resume provenance."
+            msg = "provider_checksum requires complete optimizer provenance."
             raise ValueError(msg)
 
         selected_checksum = _vector_checksum(selected)
         final_checksum = _vector_checksum(final)
-        validation_fidelity: float | None = None
-        selection_checksum: str | None = None
+        validation_fidelity = (
+            None
+            if selected_checkpoint_validation_fidelity is None
+            else require_float(
+                selected_checkpoint_validation_fidelity,
+                "selected_checkpoint_validation_fidelity",
+                minimum=0.0,
+                maximum=1.0,
+            )
+        )
+        selection_checksum = _optional_checksum(checkpoint_selection_checksum, "checkpoint_selection_checksum")
         resume_checksum: str | None = None
         cumulative_work: Mapping[str, int] | None = None
         cumulative_pairings: int | None = None
@@ -389,6 +425,9 @@ class StageParameterCheckpoint:
                 raise TypeError(msg)
             if circuit_checksum is None or objective is None:
                 msg = "A noisy resume state requires circuit and objective provenance."
+                raise ValueError(msg)
+            if validation_fidelity is not None or selection_checksum is not None:
+                msg = "Noisy resume checkpoint selection must be derived from resume_state."
                 raise ValueError(msg)
             expected_provenance = (stage_checksum, circuit_checksum, provider, objective)
             actual_provenance = (
@@ -424,9 +463,36 @@ class StageParameterCheckpoint:
             resume_checksum = resume_state.content_checksum
             cumulative_work = MappingProxyType(resume_state.cumulative_work.to_dict())
             cumulative_pairings = resume_state.cumulative_cross_trajectory_pairings
-        elif any(value is not None for value in (provider, objective)):
-            msg = "Provider or objective provenance requires a complete resume_state."
-            raise ValueError(msg)
+        elif objective is None:
+            if provider is not None or validation_fidelity is not None or selection_checksum is not None:
+                msg = "Generic transform checkpoints cannot carry optimizer selection provenance."
+                raise ValueError(msg)
+        else:
+            if circuit_checksum is None:
+                msg = "Generic optimizer provenance requires circuit and objective checksums."
+                raise ValueError(msg)
+            if validation_fidelity is None:
+                if selection_checksum is not None:
+                    msg = "checkpoint_selection_checksum requires validation fidelity."
+                    raise ValueError(msg)
+                if selected_iteration != completed_iteration or selected_checksum != final_checksum:
+                    msg = "A generic optimizer without validation selection must select its final state."
+                    raise ValueError(msg)
+            else:
+                expected_selection_checksum = _generic_checkpoint_selection_checksum(
+                    stage_configuration_checksum=stage_checksum,
+                    circuit_binding_checksum=circuit_checksum,
+                    provider_checksum=provider,
+                    objective_checksum=objective,
+                    stage_execution_checksum=execution_checksum,
+                    global_iteration=selected_iteration,
+                    validation_fidelity=validation_fidelity,
+                    parameter_checksum=selected_checksum,
+                )
+                if selection_checksum is not None and selection_checksum != expected_selection_checksum:
+                    msg = "Generic checkpoint-selection checksum does not match the selected state."
+                    raise ValueError(msg)
+                selection_checksum = expected_selection_checksum
 
         object.__setattr__(self, "pipeline_training_id", training_id)
         object.__setattr__(self, "pipeline_prefix_id", prefix_id)
@@ -745,18 +811,11 @@ class StageParameterCheckpoint:
             if resume_state.content_checksum != resume_checksum:
                 msg = "Noisy Krotov resume-state checksum does not match checkpoint metadata."
                 raise ValueError(msg)
-        elif any(
-            metadata[key] is not None
-            for key in (
-                "provider_checksum",
-                "objective_checksum",
-                "selected_checkpoint_validation_fidelity",
-                "checkpoint_selection_checksum",
-                "resume_cumulative_work",
-                "resume_cumulative_cross_trajectory_pairings",
-            )
+        elif (
+            metadata["resume_cumulative_work"] is not None
+            or metadata["resume_cumulative_cross_trajectory_pairings"] is not None
         ):
-            msg = "Generic checkpoint metadata contains incomplete noisy-resume fields."
+            msg = "Generic checkpoint metadata contains noisy-resume work fields."
             raise ValueError(msg)
 
         checkpoint = cls(
@@ -773,6 +832,10 @@ class StageParameterCheckpoint:
             provider_checksum=provider_checksum,
             objective_checksum=objective_checksum,
             stage_execution_checksum=cast("str | None", metadata["stage_execution_checksum"]),
+            selected_checkpoint_validation_fidelity=None if resume_state is not None else fidelity,
+            checkpoint_selection_checksum=(
+                None if resume_state is not None else cast("str | None", metadata["checkpoint_selection_checksum"])
+            ),
             resume_state=resume_state,
         )
         if canonical_json(checkpoint.metadata_dict()) != canonical_json(metadata):

@@ -21,6 +21,7 @@ import pytest
 from filelock import FileLock
 
 import benchmarks.state_preparation.phase2.artifacts as artifact_module
+from benchmarks.state_preparation.phase2.artifact_codecs import StageParameterCheckpoint
 from benchmarks.state_preparation.phase2.artifacts import (
     Phase2ArtifactStore,
     Phase2ArtifactVerificationError,
@@ -30,7 +31,9 @@ from benchmarks.state_preparation.phase2.artifacts import (
 )
 from benchmarks.state_preparation.phase2.canonical import (
     canonical_checksum,
+    canonical_json,
     load_canonical_json_object,
+    seal_mapping,
 )
 from benchmarks.state_preparation.phase2.evaluator import (
     MaterializedCircuitPayload,
@@ -1403,6 +1406,7 @@ def test_checkpoint_selection_and_identities_survive_store_reopen(tmp_path: Path
     checkpoint = store.load_stage_checkpoint(final_training_index)
     assert checkpoint.selected_global_iteration < checkpoint.completed_global_iteration
     assert checkpoint.selected_checkpoint_validation_fidelity == pytest.approx(0.91)
+    assert checkpoint.resume_state_checksum is None
     assert not np.array_equal(checkpoint.selected_theta, checkpoint.final_theta)
     expected_ids = tuple(artifact.stage_result.pipeline_prefix_id for artifact in store.stage_artifacts)
     expected_checkpoint_bytes = tuple(
@@ -1445,6 +1449,80 @@ def test_genuine_wp17_objective_binding_publishes_and_verifies_on_reopen(tmp_pat
     assert reopened.completed_stage_count == 1
     metadata_path.write_bytes(metadata_path.read_bytes() + b" ")
     with pytest.raises(Phase2ArtifactVerificationError, match="checksum mismatch"):
+        Phase2ArtifactStore(store.output_directory, pipeline, store.fingerprint, resume=True)
+
+
+def test_resealed_wp17_checkpoint_cannot_strip_its_resume_state(tmp_path: Path) -> None:
+    """A Krotov checkpoint remains algorithm-typed after every hash is resealed."""
+    pipeline = _objective_pipeline()
+    evidence = _objective_evidence(pipeline, _screening_materialized_targets()[0])
+    store = Phase2ArtifactStore(tmp_path / "stripped_wp17_resume", pipeline, _fingerprint(pipeline))
+    artifact = store.publish_stage(evidence, wall_time_seconds=1.0, peak_memory_bytes=100)
+    checkpoint = store.load_stage_checkpoint(0)
+    assert checkpoint.resume_state_checksum is not None
+
+    stripped = StageParameterCheckpoint(
+        pipeline_training_id=checkpoint.pipeline_training_id,
+        pipeline_prefix_id=checkpoint.pipeline_prefix_id,
+        stage_index=checkpoint.stage_index,
+        stage_id=checkpoint.stage_id,
+        stage_configuration_checksum=checkpoint.stage_configuration_checksum,
+        selected_theta=checkpoint.selected_theta,
+        final_theta=checkpoint.final_theta,
+        selected_global_iteration=checkpoint.selected_global_iteration,
+        completed_global_iteration=checkpoint.completed_global_iteration,
+        circuit_binding_checksum=checkpoint.circuit_binding_checksum,
+        provider_checksum=checkpoint.provider_checksum,
+        objective_checksum=checkpoint.objective_checksum,
+        stage_execution_checksum=checkpoint.stage_execution_checksum,
+        selected_checkpoint_validation_fidelity=checkpoint.selected_checkpoint_validation_fidelity,
+    )
+    assert stripped.resume_state_checksum is None
+    checkpoint_payload = stripped.to_bytes()
+    checkpoint_checksum = stripped.content_checksum
+    checkpoint_path = store.output_directory / artifact.stage_result.produced_checkpoint_path
+    checkpoint_path.write_bytes(checkpoint_payload)
+
+    result = artifact.stage_result
+    checkpoint_provenance_checksum = canonical_checksum({
+        "pipeline_prefix_id": result.pipeline_prefix_id,
+        "stage_id": result.stage_id,
+        "stage_configuration_checksum": result.stage_configuration_checksum,
+        "input_checkpoint_checksum": result.input_checkpoint_checksum,
+        "input_checkpoint_provenance_checksum": result.input_checkpoint_provenance_checksum,
+        "produced_checkpoint_checksum": checkpoint_checksum,
+    })
+    resealed_result = replace(
+        result,
+        produced_checkpoint_checksum=checkpoint_checksum,
+        checkpoint_provenance_checksum=checkpoint_provenance_checksum,
+    )
+    resealed_artifact = replace(
+        artifact,
+        stage_result=resealed_result,
+        checkpoint_file_checksum=checkpoint_checksum,
+    )
+    stage_stream_payload = f"{resealed_artifact.to_json()}\n".encode()
+    store.stage_result_stream_path.write_bytes(stage_stream_payload)
+
+    pipeline_result = store.pipeline_result
+    assert pipeline_result is not None
+    resealed_pipeline_result = replace(
+        pipeline_result,
+        stage_results=(resealed_result,),
+        final_checkpoint_checksum=checkpoint_checksum,
+        final_checkpoint_provenance_checksum=checkpoint_provenance_checksum,
+    )
+    manifest = dict(load_canonical_json_object(store.manifest_path.read_text(encoding="utf-8")))
+    manifest.pop("content_checksum")
+    manifest["completed_stage_artifact_checksums"] = [resealed_artifact.content_checksum]
+    manifest["completed_pipeline_result_checksum"] = resealed_pipeline_result.content_checksum
+    stream_checksums = dict(cast("Mapping[str, object]", manifest["canonical_stream_checksums"]))
+    stream_checksums[store.stage_result_stream_path.name] = "sha256:" + hashlib.sha256(stage_stream_payload).hexdigest()
+    manifest["canonical_stream_checksums"] = stream_checksums
+    store.manifest_path.write_text(f"{canonical_json(seal_mapping(manifest))}\n", encoding="utf-8")
+
+    with pytest.raises(Phase2ArtifactVerificationError, match="requires a resumable noisy-Krotov checkpoint"):
         Phase2ArtifactStore(store.output_directory, pipeline, store.fingerprint, resume=True)
 
 

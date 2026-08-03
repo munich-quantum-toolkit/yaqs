@@ -164,13 +164,17 @@ _PIPELINE_PREFIX_PATTERN = re.compile(r"^phase2_pipeline_prefix_[0-9a-f]{64}$")
 _MATERIALIZED_CIRCUIT_ID_PATTERN = re.compile(r"^phase2_circuit_[0-9a-f]{64}$")
 
 _METHOD_FAMILY_BY_METHOD_ID = {
+    "phase1_noiseless_checkpoint_control": "fixed_depth_bmpd",
+    "unpruned_deep_bmpd": "fixed_depth_bmpd",
     "layerwise_bmpd_crn_v2": "layerwise_bmpd",
     "layerwise_bmpd_noiseless": "layerwise_bmpd",
     "fixed_depth_bmpd_crn": "fixed_depth_bmpd",
     "layerwise_bmpd_resampled": "layerwise_bmpd",
     "layerwise_bmpd_cross_crn": "layerwise_bmpd",
     "parameter_shift_adam_layerwise": "parameter_shift_adam_layerwise",
+    "parameter_shift_adam_fixed": "parameter_shift_adam_fixed",
     "spsa_layerwise": "spsa_layerwise",
+    "spsa_fixed": "spsa_fixed",
     "adapt_style_state_preparation": "adapt_style_state_preparation",
     "impact_pruning_crn": "impact_pruning",
     "energy_adapt_vqe": "energy_adapt_vqe",
