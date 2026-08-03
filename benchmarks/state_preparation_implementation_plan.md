@@ -2212,139 +2212,399 @@ Provide safe orchestration, calibrate a feasible evidence budget, screen a
 small predeclared strategy family, and create the final confirmation seal
 without materializing confirmatory targets.
 
-### Entry point
+### Prospective replanning status
 
-Add a separate opt-in entry point:
+**Replanned before execution.** The original monolithic WP22 is decomposed into
+WP22A through WP22F below. No WP22 numerical pilot, screening, promotion, or
+final-seal evidence has been generated. The initial WP15 preregistration remains
+immutable; this reviewed plan revision is a prospective operational addendum
+that fills implementation details which the preregistration did not specify.
+The final seal must bind both documents and the commits that introduced them.
+If they ever conflict, the preregistration governs and execution aborts rather
+than weakening its protections.
+
+Each subpackage receives a separate implementation commit and review. WP22 is
+not implemented until WP22F passes. Planning-only records, callback seams, or
+synthetic fixtures do not satisfy an execution acceptance criterion.
+
+### Frozen population and method scope
+
+- `training-smoke` runs every repository implementation kind on one applicable
+  q6 development target with explicitly separate tiny-budget artifacts. It
+  includes the nine family-wide method identities and the TFIM-only exploratory
+  method, but produces no paper evidence.
+- The primary q6 pilot uses all 48 development targets, the exact ordered five
+  optimization seeds derived from the preregistration checksum, and exactly
+  three configurations: `layerwise_bmpd_crn_v2`,
+  `layerwise_bmpd_noiseless`, and `fixed_depth_bmpd_crn`. The fixed-depth method
+  is a representative candidate for variance calibration and is not thereby
+  promoted. The Cartesian population therefore contains exactly 720 jobs.
+- The secondary q12 pilot uses the same three treatment projections, five
+  optimization seeds, and the preregistered 24 targets, six per family. Its
+  target manifest retains `screening_selection/secondary_q12` custody while
+  jobs and outputs use `secondary_benchmark`. q12 observations are excluded
+  mechanically from pilot inference, sample-size calculation, screening,
+  promotion, and the final seal. The secondary population contains exactly 360
+  jobs.
+- The q6 paper screen contains exactly the nine preregistered family-wide
+  methods, 48 screening-selection targets, and three checksum-derived
+  optimization seeds: 1,296 expected method cells. The TFIM-only exploratory
+  method is reported separately and cannot enter family-wide promotion.
+- A checked-in execution profile freezes exactly one publication configuration
+  per screened method before any screening-selection result is accessed. The
+  first paper screen is nonadaptive and has no interaction configuration.
+  Continuation, rolling, mixture, and multistart experiments use development
+  targets only and cannot enter promotion. Any later interaction study requires
+  a new prospectively sealed candidate universe; screening outcomes may never
+  construct a later candidate.
+
+### Frozen schedule semantics
+
+- Training schedules execute at the optimizer-update boundary with zero-based,
+  inclusive update indices. Noise strength, trajectory count, mixture
+  allocation, and ensemble membership are resolved before the corresponding
+  update.
+- The common production budget is 200 terminal optimization updates, eight
+  noisy-training trajectories, 256 fixed checkpoint-validation trajectories,
+  and validation at update zero, every ten updates, and the terminal update.
+  Best-validation selection uses the earliest-update tie rule. Primary methods
+  do not stop early; a prospective atomic work cap may stop only before the next
+  complete update and yields structured failure evidence.
+- Krotov, Adam, and SPSA optimizer state is preserved across continuation,
+  curriculum, and CRN-refresh boundaries. A schedule may not be approximated by
+  restarting independently trained stages.
+- Direct matched-noise training uses strength `1.0` for all 200 updates.
+  Continuation uses strength zero at update zero, increases linearly to `1.0`
+  at update 49, and remains at `1.0` through update 199. The trajectory
+  curriculum uses counts two for updates 0 through 49, four for updates 50
+  through 99, and eight for updates 100 through 199.
+- Fixed CRN retains member identities; resampling creates a new ensemble every
+  update; periodic refresh changes the full ensemble when the update index is a
+  positive multiple of 20; and rolling refresh uses the same interval,
+  deterministically retains exactly one half of the previous ensemble, and
+  fills the remaining positions with new members.
+- A trajectory-count increase preserves eligible existing members and appends
+  newly derived members. A decrease uses the same checksum-ranked deterministic
+  selection rule as rolling retention. Every transition records its predecessor
+  checksum.
+- Frozen-mixture counts use largest-remainder allocation from the declared
+  component weights. Fractional ties follow component declaration order. The
+  frozen mixture is exactly one half `depolarizing_1s_all` and one half
+  `dephasing_1s_all`, both at the scheduled strength. Component means are
+  evaluated separately and combined with exact weights one half.
+  Component-local seed domains, labels, and memberships are persisted and
+  cannot change after resume.
+- Every multistart is a complete independent run with isolated initialization,
+  optimizer, and training-trajectory streams. The exploratory multistart count
+  is exactly three. Selection uses only checkpoint-validation fidelity, with
+  earliest checkpoint and then lowest start index resolving exact ties. All
+  starts count toward work, and a multistart is ineligible for promotion unless
+  its complete work fits a separately sealed cap.
+- Early stopping and checkpoint selection consume only the fixed inner
+  checkpoint-validation stream. Fresh pilot, screening, and confirmatory values
+  are unavailable to the schedule engine.
+- A resumed execution must reconstruct byte-identical update programs,
+  trajectory memberships, optimizer state, checkpoint selection, and result
+  checksums. An unsupported method/schedule composition is rejected instead of
+  being approximated.
+
+### Frozen pilot and fresh-evaluation semantics
+
+- A typed `FreshEvaluationPolicy` seals the data role, complete standard-noise
+  condition, fixed trajectory count, seed derivation, provider and map versions,
+  truncation policy, worker count, sidecar format, and failure treatment.
+- Each primary-q6 pilot job stores one ordered 1,024-trajectory fresh-evaluation
+  batch. Trajectory convergence is reported on the nested prefixes 64, 128,
+  256, 512, and 1,024; execution always generates all 1,024 trajectories, so
+  the prefixes cannot create optional stopping.
+- The q6 update-noise diagnostic is evaluated only for successful jobs at the
+  inner-validation-selected checkpoint. It stores exactly 32 independent
+  single-trajectory pathwise update vectors under the primary noise condition
+  and the `pilot_evaluation` seed domain. Evidence includes every complete
+  vector, parameter ordering, checkpoint checksum, estimator and provider
+  checksums, and all 32 seeds. It derives unbiased coordinate variances and
+  their arithmetic mean and maximum. The endpoint is named
+  `post_training_primary_noise_pathwise_update_variance`; it is descriptive,
+  cannot affect promotion or confirmation, and is not described as the exact
+  expected-channel gradient. The noiseless comparator receives the same noisy
+  diagnostic at its final parameters rather than a fabricated zero.
+- Each q12 pilot job stores 256 fresh trajectories plus runtime, work, memory,
+  resource, and failure evidence. It has no gradient diagnostic and no
+  inferential convergence endpoint.
+- The pilot-derived `SampleSizeDesign` selects the confirmatory target count,
+  allowed optimization-seed count, and fixed test-trajectory count using the
+  immutable WP15 rule. `paper-screen` copies that fixed trajectory count exactly
+  for its outer evaluation. A missing design, changed count, or adaptive
+  trajectory stopping aborts before output creation.
+- The outer trajectory count uses a bounded-data rule rather than a
+  normality-dependent variance interval. It applies the one-sided
+  standard-deviation inequality in Theorem 10 of
+  [Maurer and Pontil (2009)](https://arxiv.org/abs/0907.3740) with a union bound
+  over the planned jobs. For q6 pilot job `j`, let `s_j^2` be the unbiased
+  variance of its 1,024 fidelities and let `M = 720`. Compute
+
+  ```math
+  V_j^+ = \min\left\{\frac14,
+  \left(\sqrt{s_j^2} +
+  \sqrt{\frac{2\log(M/0.05)}{1023}}\right)^2\right\},
+  \qquad V^+ = \max_j V_j^+.
+  ```
+
+  Then set
+
+  ```math
+  N_{\mathrm{outer}} = 2^{\left\lceil\log_2\left(
+  \max\left\{256,
+  \left\lceil V^+/0.005^2\right\rceil\right\}\right)\right\rceil}.
+  ```
+
+  Counts above 16,384 are infeasible and abort before screening. The same fixed
+  count is used for every q6 screening cell and becomes the design's fixed
+  confirmatory trajectory count; there is no trajectory optional stopping.
+
+- Wall time uses a monotonic clock and memory uses the existing WP18 Python
+  allocation measurement. Neither is described as process-wide peak memory.
+
+### Frozen operator-growth policy
+
+The target-bound noisy operator-growth configuration runs only at q6. Its
+site-major `RX/RY/RZ` and edge-major `RXX/RYY/RZZ` projector pool is sampled
+without replacement and without a symmetry restriction. It minimizes
+pure-state projector infidelity, selects the largest absolute generalized
+parameter-shift score at an appended zero parameter, and resolves ties by the
+lowest pool index.
+
+The binding seals the complete pool, growth and stopping rules, Adam settings,
+preregistered primary training-noise condition, trajectory seed derivation,
+resource policy, and fresh-evaluation policy. It uses tolerance `1e-10`, at
+most 16 selected operators, native cap 12 per chain edge, 100 full-parameter
+Adam reoptimization updates after each append, learning rate `0.08`, betas
+`0.9` and `0.999`, and epsilon `1e-8`. Selection and reoptimization use one
+fixed eight-trajectory primary-noise CRN ensemble. Every completed prefix is
+evaluated on the separate fixed 256-trajectory checkpoint-validation ensemble;
+the greatest validation fidelity wins, with the earliest growth step breaking
+ties. Outer screening uses the common `N_outer` and a fresh
+`screening_selection` stream. Unsupported continuation, rolling, mixture, or
+width combinations fail explicitly. Smoke and screening artifacts have
+role-specific wrappers; only a complete q6 screening artifact may produce
+promotion evidence.
+
+### WP22A: Execution-protocol closure and typed bindings
+
+**Status: not implemented.**
+
+Add a checksum-sealed operational-protocol amendment referencing the immutable
+initial preregistration, and strict canonical artifacts for:
+
+- `FreshEvaluationPolicy` and `PilotDiagnosticPolicy`;
+- a complete `OperatorGrowthExecutionSpec`;
+- a `ScopedImplementationBinding` keyed by preset, publication-candidate
+  checksum, and target scope; and
+- a `TrainingExecutionProfile` containing the complete, unique binding and
+  policy universe for one preset.
+
+A scoped binding keeps the publication candidate identity separate from its
+actual width- and preset-specific implementation. It includes manifest and
+execution roles, the materialized implementation artifact, exact strategy
+schedule, controlled stage, resource and evaluation policies, budget profile,
+and a checksum-covered q6/q12 treatment projection. No target vector or secret
+role entropy is materialized by WP22A.
+
+#### WP22A tests and acceptance criteria
+
+- Strict JSON round trips and nested checksum-substitution rejection.
+- Exactly one binding for every `(preset, candidate, target scope)` key.
+- Distinct q6, q12, and smoke implementation checksums without changing the
+  publication candidate identity.
+- Rejection of a q12 primary role, a q12 screening/promotion binding, an
+  incomplete operator specification, or an evaluation policy without a fixed
+  count.
+- Exact enforcement of the 200-update training budget, training and validation
+  counts, diagnostic design, nonadaptive 1,296-cell screen, bounded outer-count
+  rule, and complete operator-growth policy.
+- No changes to Phase I or WP15 through WP21 identities.
+
+WP22A is complete only when every scientific choice needed by later profiles is
+represented by a typed checksum-bearing artifact rather than an identifier or
+free-form callback argument.
+
+### WP22B: Width-complete repository implementation catalog
+
+**Status: not implemented; depends on WP22A.**
+
+Generalize the q6-only layerwise, noiseless, fixed-depth, Adam, and SPSA
+builders and the fixed-depth runner where required. q6 behavior and checksums
+must remain unchanged. q12 variants use the same layer count, gate ordering,
+per-edge construction, optimizer hyperparameters, and treatment semantics
+without retuning; topology, parameter counts, compilation, and resource
+evidence are derived at q12.
+
+Provide repository-owned binding catalogs for:
+
+- tiny-budget smoke coverage of every implementation and stage-runner family;
+- the exact three q6 and q12 pilot configurations;
+- all nine q6 family-wide screening configurations; and
+- dormant confirmation resolution, which introduces no new configuration.
+
+#### WP22B tests and acceptance criteria
+
+- Every catalog entry contains an executable implementation artifact, not only
+  its checksum.
+- Real one-update/one-trajectory artifact tests cover every runner family and
+  both widths where applicable.
+- All nine family-wide methods resolve at q6; exactly the three frozen methods
+  resolve at q12.
+- Missing, duplicate, cross-preset, primary-q6-for-q12, and unsupported
+  operator-growth bindings fail before mutation.
+- q12 artifacts cannot enter primary pilot summaries, screening manifests,
+  promotion decisions, or final-seal inputs.
+
+### WP22C: Schedule-aware optimizer engine and exact restart
+
+**Status: not implemented; depends on WP22A and WP22B.**
+
+Compile each binding, schedule, and job seed set into a checksum-sealed
+`ScheduledExecutionProgram` with one `ScheduledUpdatePolicy` per optimizer
+update. Persist `ScheduledOptimizerState`, exact trajectory and mixture
+membership, validation-tracker state, and complete multistart evidence. Apply
+the schedule only to the binding's declared controlled stage; structural growth
+and pruning stages keep their own sealed semantics.
+
+#### WP22C tests and acceptance criteria
+
+- Golden update traces cover continuation, curricula, fixed CRN, resampling,
+  periodic refresh, rolling retention, frozen mixtures, phase boundaries,
+  checkpoint selection, and multistart selection.
+- Interrupted/resumed and uninterrupted executions are byte-identical.
+- Constant schedules reproduce the existing WP17 through WP21 numerical
+  behavior at fixed seeds.
+- Optimizer state cannot reset at a schedule boundary and final-test evidence is
+  inaccessible to the engine.
+- Unsupported schedules abort rather than silently changing their meaning.
+
+### WP22D: Execution context, target custody, source fingerprint, and CLI
+
+**Status: not implemented; depends on WP22A through WP22C.**
+
+Add a non-serializable `ExternalEntropyKeyring` and a typed
+`TrainingExecutionContext` containing the plan, execution profile,
+preregistration, candidates, schedules, scoped bindings, target configurations
+and manifests, authorized materializations, screening manifest and cells,
+required sample-size design, execution-source manifest, and resumability
+fingerprints. Secret entropy is excluded from JSON, checksums, representations,
+logs, errors, and outcomes.
+
+Extend each job and plan with the execution-profile, scoped-binding,
+implementation, evaluation-policy, target-configuration, and source-fingerprint
+checksums. Complete preflight verifies all of them, target authorization,
+schedule compilation, outer trajectory counts, and source bytes before the
+output root exists.
+
+Keep the separate opt-in entry point:
 
 ```bash
 uv run python -m benchmarks.state_preparation.training_runner
 ```
 
-Keeping the Phase II runner separate prevents accidental changes to Phase I
-presets and output directories.
+It supports strict JSON plus CLI assertions, dry-run, resume, overwrite,
+fail-fast, the five Phase II presets, and explicit historical reproduction. The
+ordinary path uses the repository-owned executor registry. A `factory(context)`
+extension seam is permitted for tests and external development but cannot
+replace sealed scientific artifacts in a paper preset.
 
-### Options and presets
+#### WP22D tests and acceptance criteria
 
-Support JSON configuration plus explicit options for:
+- CLI/JSON precedence, preset cardinalities, canonical ordering, and dry-run
+  no-mutation behavior.
+- Missing or wrong entropy, target config, binding, sample-size design, source
+  file, schedule, or evaluation policy fails with zero output mutation.
+- No entropy appears in plans, tracebacks, logs, or persisted artifacts.
+- q12 target custody remains `screening_selection/secondary_q12` while its jobs
+  and outputs remain `secondary_benchmark`.
+- Attempt histories are append-only; the first terminal confirmatory attempt is
+  authoritative and cannot be overwritten.
 
-- training pipeline and method;
-- stage depths and budgets;
-- training-noise identifier and strength scale;
-- trajectory update and sampling policy;
-- training and checkpoint-validation trajectory counts;
-- CRN refresh interval;
-- checkpoint-selection rule;
-- target-population manifest, checksum, and data role;
-- native and normalized-compute resource budgets;
-- preregistration path and checksum;
-- resume, overwrite, dry-run, and fail-fast; and
-- an explicit legacy-reproduction mode.
+### WP22E: Repository-owned production executors and evidence
 
-Provide:
+**Status: not implemented; depends on WP22A through WP22D.**
 
-- `training-smoke`: one bounded target, every new pipeline family, tiny stage
-  budgets, and fresh checkpoint-validation/test trajectories.
-- `historical-layerwise-reproduction`: the five frozen legacy targets and exact
-  historical pipeline.
-- `paper-pilot`: bounded runtime, memory, gradient-variance, cluster-variance,
-  and trajectory-convergence calibration.
-- `paper-screen`: the preregistered development and screening-selection matrix.
-- `paper-confirm`: a dormant, fully tested executor that reads every scientific
-  choice from a valid final seal and otherwise refuses to run.
+Implement `create_default_training_executor_registry(context)`. The Phase II
+executor resolves the scoped implementation, authorized target, artifact store,
+runner, schedule engine, circuit materializer, and fresh evaluator. It persists
+fixed maps, raw trajectory sidecars, runtime, resources, normalized work,
+failures, and source-addressed results. The operator-growth executor constructs
+the exact request from its complete spec and produces the same role-correct raw
+evidence. The historical delegate remains unchanged.
 
-### Candidate strategies
+Implement the dormant confirmation executor through the same production paths.
+It accepts only a complete `ConfirmExecutionRequest` and synthetic fixtures in
+WP22; it may not open the real held manifest.
 
-Support composable schedules for:
+#### WP22E tests and acceptance criteria
 
-- noise-strength continuation from noiseless to the target strength;
-- trajectory-count curricula;
-- periodic CRN refresh;
-- rolling ensembles that retain part of the previous CRN batch;
-- checkpoint-validation early stopping;
-- best-checkpoint-validation selection;
-- noiseless pretraining followed by noisy fine-tuning;
-- limited multi-start initialization; and
-- matched-noise versus a frozen mixture of standard training-noise profiles.
+- A real one-target CLI smoke run covers every implementation and runner family
+  without a custom factory or source edit.
+- Pilot and screening executors return typed source-addressed artifacts rather
+  than caller-supplied summary checksums.
+- Resume reopens the exact artifact and never fabricates a second authoritative
+  attempt.
+- Operator-growth smoke and screening use the same sealed numerical callbacks
+  with role-specific custody.
+- Ballarin training and unsupported method/schedule pairs fail before
+  optimization.
+- Synthetic confirmation dispatch proves the production path is complete
+  without materializing a confirmatory target.
 
-Do not combine every strategy factorially. Use the preregistered staged screen:
+### WP22F: Pilot, screening, promotion, source lock, and final seal
 
-1. select a trajectory policy;
-2. select a noise and trajectory curriculum;
-3. select a growth or pruning family; and
-4. run at most one predeclared interaction study.
+**Status: not implemented; depends on WP22A through WP22E.**
 
-### Pilot and screening protocol
+Integrate production execution with the pilot, sample-size, screening,
+promotion, result-custody, source-lock, dormant confirmation, and frozen
+primary-analysis layers:
 
-- Use development targets for optimization debugging and
-  checkpoint-validation.
-- Use mutually disjoint target instances for development,
-  screening-selection, and confirmation.
-- For each screening target, train and select checkpoints on that target using
-  inner training and checkpoint-validation trajectory streams, then rank
-  methods on independently sampled outer screening-selection trajectories for
-  the same target. No trajectory stream may cross those inner and outer roles.
-- Cover every target family at six qubits and a frozen representative subset at
-  twelve qubits across the combined development and screening-selection
-  collections.
-- Use the pilot to estimate cluster-level target, family, optimization-seed, and
-  failure-rate variability.
-- Use a cluster-aware power or precision calculation to select the
-  confirmatory target count per family, optimization-seed count, and fixed
-  per-cell test-trajectory count. Only a preregistered blinded re-estimation may
-  change the target or optimization-seed count; the trajectory count must not
-  use outcome-dependent optional stopping.
-- Use the pilot-derived, preregistered number of independent
-  initialization/training seeds per screened method cell.
-- Rank candidates on screening-selection data by the held-out
-  fidelity/native-two-qubit-gate Pareto frontier, failure probability, and
-  normalized work, never by training fidelity or a selected hero target.
-- Apply the mechanical promotion rule from
-  [WP15](#work-package-15-protocol-freeze-and-legacy-evidence-audit).
-- Promote at most one candidate. A null screen promotes
-  `layerwise_bmpd_crn_v2`.
-- De-duplicate the promoted method and comparator set. If
-  `layerwise_bmpd_crn_v2` is promoted, omit the promoted-versus-v2
-  self-contrast and use the other sealed primary contrasts.
-- Before writing the final seal, implement and test the target generator,
-  training/evaluation runner, all confirmatory methods, dormant
-  `paper-confirm` path, and frozen primary-analysis code. Create an explicit
-  tracked execution-source manifest in a clean locked checkout or container and
-  fingerprint only after that code is frozen.
-- Write the final confirmation seal containing the promoted pipeline checksum,
-  two or three primary comparators, primary noise and resource condition,
-  the externally held untouched target-manifest checksum and family counts,
-  cluster-aware sample size, fixed trajectory budget, failure rule, and
-  analysis checksum.
-- Do not load or evaluate confirmatory target vectors before the final seal is
-  complete.
+1. execute or replay the exact q6/q12 pilot profile;
+2. derive nuisance summaries and sample size from q6 raw evidence only;
+3. archive q12 solely as secondary scaling evidence;
+4. instantiate the q6 screen using the design's fixed trajectory count;
+5. execute or replay the complete 1,296-cell screening universe;
+6. reconstruct promotion only from authoritative first-attempt raw evidence;
+7. freeze execution and analysis source manifests in a clean commit; and
+8. create the final seal without opening or materializing confirmatory targets.
 
-### Tests
+Promotion follows WP15 mechanically, promotes at most one configuration, and
+falls back to `layerwise_bmpd_crn_v2`. Comparator identities are de-duplicated;
+a promoted baseline cannot create a self-contrast.
 
-- Preset cardinalities and deterministic ordering.
-- CLI and JSON precedence.
-- Dry-run output and no mutation.
-- Stage and row fan-out.
-- Resume and overwrite.
-- Development, checkpoint-validation, screening-selection, and confirmation
-  output isolation.
-- Schedule interpolation and stage-boundary behavior.
-- CRN refresh and rolling-ensemble membership.
-- Checkpoint-validation-only early stopping.
-- Deterministic candidate ranking on synthetic results.
-- Rejection of final-test fields in screening decisions.
-- Pilot-derived sample-size calculation on synthetic clustered data.
-- Final promoted configuration and confirmation-seal checksum.
-- Dormant `paper-confirm` rejection without a valid final seal.
-- Stable tracked execution-source manifest and fingerprint.
-- No Ballarin training.
-- Unchanged Phase I runner behavior.
+#### WP22F tests and acceptance criteria
 
-### Acceptance criteria
+- End-to-end fixture coverage from execution profile through pilot evidence,
+  sample-size design, screen plan, complete source records, promotion, and seal.
+- Exact raw-custody rejection of missing, duplicate, self-authenticated,
+  wrong-role, wrong-count, wrong-source, or non-first-attempt evidence.
+- q12 mutations cannot affect inference, sample size, promotion, or seal bytes.
+- Source locking covers all tracked state-preparation and YAQS execution code,
+  environment locks, operational profiles, preregistration, and primary
+  analysis.
+- Full WP15 through WP22 tests, the complete project test suite, documentation,
+  and lint pass.
 
-Historical reproduction, pilot, and screening require no source editing.
-Screening promotes at most one fully specified candidate without materializing
-confirmatory targets, and all execution and primary-analysis code is frozen
-before the immutable, pilot-feasible final confirmation seal is written.
+WP22 is complete only when historical reproduction, smoke, pilot, and screening
+need no source editing; screening promotes at most one fully specified candidate
+without materializing confirmation; and all execution and primary-analysis code
+is committed and fingerprinted before the immutable, pilot-feasible final seal
+is written.
+
+### Boundary with WP23 and WP24
+
+WP22F may create the immutable final seal and test the dormant confirmation
+executor with synthetic fixtures. WP23 alone reveals the externally custodied
+confirmatory manifest and runs the already frozen executor; it adds no training,
+evaluation, or analysis behavior.
+
+WP22 may freeze and synthetically test primary-analysis source, but it does not
+analyze real confirmatory outcomes, generate paper figures, formulate claims, or
+build the archival publication bundle. Those remain WP24.
 
 ## Work package 23: Locked confirmatory execution
 
