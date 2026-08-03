@@ -564,6 +564,40 @@ behavior. WP22 owns the common training runner, pilot orchestration, screening,
 and final seal. WP21 therefore records method and resource evidence, not a
 numerical paper result or promotion decision.
 
+### Phase II operational-protocol closure
+
+WP22A freezes the prospective study choices needed by later execution work. A
+checked-in operational amendment is independently checksum-anchored to the
+immutable WP15 preregistration and the reviewed WP22 plan. Strict canonical
+records describe fresh evaluation, the q6 pathwise-update diagnostic, bounded
+outer-trajectory sizing, q6-only projector operator growth, scoped
+publication-to-implementation bindings, budgets, and q6/q12 treatment roles.
+They contain neither target vectors nor secret role entropy.
+
+`TrainingStrategySchedule` covers direct matched-noise and noiseless controls,
+noise continuation, trajectory curricula, fixed, periodic, rolling, and
+resampled CRN policies, a frozen two-noise mixture, and three-start exploration.
+Trajectory membership and component-local seed domains are deterministic and
+checksum-linked across updates. A sealed execution-seed suite fixes every seed
+preimage and sharing scope used by smoke, pilot, screening, confirmation,
+diagnostics, stages, and schedules; persisted schedule member seeds are the
+sampler-consumed seeds. Checkpoint selection uses only the fixed inner validation
+stream; optimizer state must be preserved across schedule boundaries, and
+unsupported compositions are rejected rather than approximated.
+
+The production policy remains 200 optimizer updates, at most eight noisy
+training trajectories, 256 checkpoint-validation trajectories, and validation
+at update zero, every ten updates, and update 199. The q6 pilot policy fixes
+1,024 fresh trajectories with nested reporting prefixes and 32 independent
+pathwise update vectors; q12 fixes 256 fresh trajectories and no gradient
+diagnostic. q12 is secondary descriptive evidence only. The first q6 screen is
+the nonadaptive nine-method, 48-target, three-seed population of 1,296 cells.
+
+WP22A generates no pilot, screening, promotion, or confirmation result. Real
+q6/q12 implementation catalogs, one-update runner coverage, exact schedule
+execution and restart, evidence custody, screening, final sealing, and primary
+analysis remain the explicit responsibilities of WP22B through WP22F.
+
 ### Native Gate-Count Rules
 
 Noiseless and standard-noise rows report gate counts and depth for the logical

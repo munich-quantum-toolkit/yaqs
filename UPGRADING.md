@@ -4,6 +4,21 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Freeze the prospective WP22 execution protocol
+
+WP22A adds strict, checksum-bearing records for noisy-training schedules,
+trajectory membership, execution-seed derivation, checkpoint selection, fresh
+evaluation, pilot diagnostics, operator growth, resource budgets, and scoped
+publication-to-implementation bindings. The reviewed operational amendment is
+checked in separately and anchored to both the immutable WP15
+preregistration and the prospective WP22 implementation-plan commit.
+
+Use these records to review and seal scientific choices; they do not authorize
+a numerical paper claim. WP22B must still provide width-complete executable
+catalogs, WP22C must execute schedules with exact restart behavior, and WP22D
+through WP22F must run the pilot, screening, promotion, confirmation seal, and
+primary analysis. Phase I and WP15 through WP21 identities are unchanged.
+
 ### Run reproducible top-down pruning pipelines
 
 Use the WP21 top-down pipeline builders for `topdown_random`,

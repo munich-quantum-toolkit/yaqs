@@ -2391,7 +2391,13 @@ promotion evidence.
 
 ### WP22A: Execution-protocol closure and typed bindings
 
-**Status: not implemented.**
+**Status: implemented and awaiting package review.**
+
+The implementation provides the checked-in operational amendment, the frozen
+training-policy universe, deterministic membership schemas, a sealed
+execution-seed policy suite, exact pilot and operator-growth policies, and
+fail-closed scoped binding/profile records. It does not provide the WP22B
+executable catalogs or any WP22 numerical evidence.
 
 Add a checksum-sealed operational-protocol amendment referencing the immutable
 initial preregistration, and strict canonical artifacts for:
