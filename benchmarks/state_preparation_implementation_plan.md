@@ -2512,7 +2512,19 @@ and pruning stages keep their own sealed semantics.
 
 ### WP22D: Execution context, target custody, source fingerprint, and CLI
 
-**Status: not implemented; depends on WP22A through WP22C.**
+**Status: implemented.**
+
+The implementation adds a redacted, non-serializable external-entropy keyring
+and complete execution context, carries every profile, binding,
+implementation, schedule, evaluation, target, program, and source fingerprint
+into jobs and plans, and validates the whole plan before output mutation. The
+strict opt-in CLI supports all five presets, JSON/CLI assertions, dry-run,
+resume, overwrite, fail-fast, the source-locked `factory(context)` seam, and
+the repository-owned default registry. Exact 10-job smoke, 1,080-job paired
+q6/q12 pilot, and 1,296-job q6 screen fan-outs are enforced; q12 custody stays
+separate, attempt histories are append-only, and confirmation treats the first
+terminal attempt as authoritative. WP22E remains responsible for typed raw
+numerical artifacts and the concrete production executors.
 
 Add a non-serializable `ExternalEntropyKeyring` and a typed
 `TrainingExecutionContext` containing the plan, execution profile,

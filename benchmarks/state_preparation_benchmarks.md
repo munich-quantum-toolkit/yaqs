@@ -604,9 +604,20 @@ update, preserve typed optimizer state across phase boundaries, and revalidate
 the complete receipt/work chain before resume. Recoverable validation
 checkpoints and complete multistart evidence use no final-test input.
 
-WP22C creates no numerical study evidence. Target custody, execution-source
-fingerprints, raw map and trajectory artifacts, screening, final sealing, and
-primary analysis remain the explicit responsibilities of WP22D through WP22F.
+WP22D supplies the non-serializable execution authority and opt-in runner. It
+binds every job to the exact profile, implementation, schedule, evaluation
+policy, target configuration, scheduled program, and source fingerprint, then
+rechecks target entropy commitments, source bytes, program compilation, outer
+trajectory counts, and the complete output universe before creating output.
+The frozen fan-outs contain 10 smoke jobs, 1,080 pilot jobs (720 primary q6 and
+360 secondary q12), and 1,296 q6 screening jobs. q12 remains custodied as
+`screening_selection/secondary_q12` but executes only under the
+`secondary_benchmark` role. Confirmation outcomes are append-only and its first
+terminal attempt is authoritative.
+
+WP22C and WP22D create no numerical study evidence. Raw map and trajectory
+artifacts, production execution, screening integration, and final sealing
+remain the explicit responsibilities of WP22E and WP22F.
 
 The TFIM-only `energy_adapt_vqe` smoke cell is an analytic API preflight with
 zero noisy training trajectories. It is not evidence for the preregistered

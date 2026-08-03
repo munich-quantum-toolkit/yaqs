@@ -4,6 +4,34 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Run WP22 plans through the custodied execution context
+
+WP22D adds the opt-in `python -m benchmarks.state_preparation.training_runner`
+entry point for the five frozen Phase II presets. For smoke, pilot, and screen
+runs, provide the exact execution profile, executable binding catalog, target
+configurations and manifests, resumability fingerprints, and execution-source
+manifest. External target entropy is accepted only through repeated
+`--external-entropy-file ROLE/SCOPE=PATH` CLI arguments; it is rejected from
+JSON configuration and is never serialized into a plan, log, outcome, or
+checksum.
+
+Each scientific job now binds its execution profile, scoped and executable
+bindings, implementation, strategy schedule, evaluation policy, target
+configuration, scheduled program, and combined source fingerprint. The entire
+plan, source checkout, target authorization, schedule compilation, outer
+trajectory count, and existing output universe are preflighted before the
+output root is created. Pilot execution preserves the q12 manifest role
+`screening_selection/secondary_q12` while placing its jobs under the
+non-promotional `secondary_benchmark` output role.
+
+Ordinary execution resolves the repository-owned production registry; the
+optional `factory(context)` seam remains source-locked and is intended for
+tests or external development. Attempt outcomes are append-only. In
+confirmation, the first terminal attempt is authoritative: resume skips it and
+overwrite or a second terminal attempt is rejected. WP22D establishes custody
+and orchestration but does not create numerical paper evidence; typed raw
+artifacts and production executors remain WP22E responsibilities.
+
 ### Execute WP22 schedules with exact restart state
 
 WP22C compiles an `ExecutableScopedBinding`, its exact strategy schedule, and
@@ -22,9 +50,10 @@ validation boundary, and receipt predecessor is revalidated before a new
 numerical callback runs. Selected checkpoints contain recoverable parameters,
 and multistart evidence is complete by construction.
 
-WP22C does not materialize targets or claim pilot/screening evidence. Target
-authorization, source fingerprints, raw trajectory/map custody, and the
-repository-owned production executor remain WP22D and WP22E responsibilities.
+WP22C does not materialize targets or claim pilot/screening evidence. WP22D now
+owns target authorization, source fingerprints, and pre-mutation execution
+context validation. Raw trajectory/map custody and the repository-owned
+production executor remain WP22E responsibilities.
 
 ### Resolve width-complete WP22 implementations
 
