@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -500,6 +501,53 @@ def test_gate_cz() -> None:
         gate.set_sites(0, 1, 2)
 
 
+def test_gate_ccx() -> None:
+    """Test the CCX (Toffoli) gate from GateLibrary.
+
+    This test sets the sites for a CCX gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The generator is exact: exponentiating it reproduces the gate matrix.
+    """
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 1, 2)
+    assert gate.sites == [0, 1, 2]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+
+    base_gate = BaseGate.ccx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    generator_product = np.kron(np.kron(gate.generator[0], gate.generator[1]), gate.generator[2])
+    assert_allclose(expm(-1j * generator_product), gate.matrix, atol=1e-12)
+
+    with pytest.raises(ValueError, match="Number of sites 2 must be equal to the interaction level 3"):
+        gate.set_sites(0, 1)
+
+
+def test_gate_ccz() -> None:
+    """Test the CCZ gate from GateLibrary.
+
+    This test sets the sites for a CCZ gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The generator is exact: exponentiating it reproduces the gate matrix.
+    """
+    gate = GateLibrary.ccz()
+    gate.set_sites(1, 2, 3)
+    assert gate.sites == [1, 2, 3]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+
+    base_gate = BaseGate.ccz()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    generator_product = np.kron(np.kron(gate.generator[0], gate.generator[1]), gate.generator[2])
+    assert_allclose(expm(-1j * generator_product), gate.matrix, atol=1e-12)
+
+
 def test_gate_swap() -> None:
     """Test the SWAP gate from GateLibrary.
 
@@ -514,6 +562,26 @@ def test_gate_swap() -> None:
     assert_array_equal(gate.tensor, expected)
 
     base_gate = BaseGate.swap()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_cswap() -> None:
+    """Test the CSWAP (Fredkin) gate from GateLibrary.
+
+    This test sets the sites for a CSWAP gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The gate carries no generator (the SWAP part has no single-product generator).
+    """
+    gate = GateLibrary.cswap()
+    gate.set_sites(0, 1, 2)
+    assert gate.sites == [0, 1, 2]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+    assert not hasattr(gate, "generator")
+
+    base_gate = BaseGate.cswap()
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 

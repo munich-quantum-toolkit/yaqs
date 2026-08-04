@@ -470,6 +470,24 @@ class BaseGate:
         return CZ()
 
     @classmethod
+    def ccx(cls) -> CCX:
+        """Returns the CCX gate.
+
+        Returns:
+            An instance of the CCX gate.
+        """
+        return CCX()
+
+    @classmethod
+    def ccz(cls) -> CCZ:
+        """Returns the CCZ gate.
+
+        Returns:
+            An instance of the CCZ gate.
+        """
+        return CCZ()
+
+    @classmethod
     def cp(cls, params: list[Parameter]) -> CPhase:
         """Returns the CPhase gate.
 
@@ -489,6 +507,15 @@ class BaseGate:
             An instance of the SWAP gate.
         """
         return SWAP()
+
+    @classmethod
+    def cswap(cls) -> CSWAP:
+        """Returns the CSWAP gate.
+
+        Returns:
+            An instance of the CSWAP gate.
+        """
+        return CSWAP()
 
     @classmethod
     def rxx(cls, params: list[Parameter]) -> Rxx:
@@ -1206,6 +1233,125 @@ class CZ(BaseGate):
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
+class CCX(BaseGate):
+    """Class representing the double-controlled NOT (Toffoli, CCX) gate.
+
+    Attributes:
+        name: The name of the gate ("ccx").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        generator: The generator for the gate.
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The two control sites and the target site.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "ccx"
+
+    def __init__(self) -> None:
+        """Initializes the double-controlled NOT (CCX) gate."""
+        mat = np.array([
+            [1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 1, 0],
+        ])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+
+        Raises:
+            ValueError: If the number of sites does not match the interaction level of the gate.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+
+        self.sites = sites_list
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2, 2, 2))
+        # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - X))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+        ]
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
+
+
+class CCZ(BaseGate):
+    """Class representing the double-controlled Z (CCZ) gate.
+
+    Attributes:
+        name: The name of the gate ("ccz").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        generator: The generator for the gate.
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The two control sites and the target site.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "ccz"
+
+    def __init__(self) -> None:
+        """Initializes the double-controlled Z (CCZ) gate."""
+        mat = np.diag([1, 1, 1, 1, 1, 1, 1, -1])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+
+        Raises:
+            ValueError: If the number of sites does not match the interaction level of the gate.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+
+        self.sites = sites_list
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2, 2, 2))
+        # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - Z))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 2]], dtype=np.complex128),
+        ]
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
+
+
 class CPhase(BaseGate):
     """Class representing the controlled phase (CPhase) gate.
 
@@ -1307,6 +1453,42 @@ class SWAP(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
+
+
+class CSWAP(BaseGate):
+    """Class representing the controlled-SWAP (Fredkin, CSWAP) gate.
+
+    The SWAP part of the gate has no single-product generator, so the gate carries no
+    ``generator`` attribute and is applied via its MPO representation.
+
+    Attributes:
+        name: The name of the gate ("cswap").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The control site and the two swapped sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "cswap"
+
+    def __init__(self) -> None:
+        """Initializes the controlled-SWAP (CSWAP) gate."""
+        mat = np.array([
+            [1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1],
+        ])
+        super().__init__(mat)
 
 
 class Rxx(BaseGate):
@@ -1786,7 +1968,10 @@ class GateLibrary:
 
         cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
+        ccx: Class for the double-controlled NOT (Toffoli) gate.
+        ccz: Class for the double-controlled Z gate.
         swap: Class for the SWAP gate.
+        cswap: Class for the controlled-SWAP (Fredkin) gate.
 
         rxx: Class for two-qubit rotation about XX.
         ryy: Class for two-qubit rotation about YY.
@@ -1838,7 +2023,10 @@ class GateLibrary:
 
     cx = CX
     cz = CZ
+    ccx = CCX
+    ccz = CCZ
     swap = SWAP
+    cswap = CSWAP
 
     rxx = Rxx
     ryy = Ryy
