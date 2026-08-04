@@ -46,9 +46,10 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.optimization import (
     KrotovTJMOptions,
     KrotovTruncation,
+    NoisyStatePreparationMetrics,
     ParameterizedCircuit,
     ParameterizedGate,
-    noisy_state_preparation_metrics,
+    noisy_state_preparation_metrics_with_maps,
 )
 
 from .canonical import canonical_checksum, freeze_json_mapping
@@ -1972,6 +1973,33 @@ class NoisyOperatorGrowthObjectiveRequest:
         return request
 
 
+@dataclass(frozen=True, slots=True)
+class NoisyOperatorGrowthObjectiveEvidence:
+    """One exact operator-growth request and its single-pass noisy evidence."""
+
+    request: NoisyOperatorGrowthObjectiveRequest
+    metrics: NoisyStatePreparationMetrics
+
+    def __post_init__(self) -> None:
+        """Bind every fidelity and realized map sequence to the exact request."""
+        if not isinstance(self.request, NoisyOperatorGrowthObjectiveRequest):
+            msg = "request must be a NoisyOperatorGrowthObjectiveRequest."
+            raise TypeError(msg)
+        if not isinstance(self.metrics, NoisyStatePreparationMetrics):
+            msg = "metrics must be NoisyStatePreparationMetrics."
+            raise TypeError(msg)
+        if (
+            len(self.metrics.trajectory_fidelities) != self.request.trajectory_count
+            or len(self.metrics.realized_noise_maps) != self.request.trajectory_count
+            or any(len(maps) != self.request.logical_gate_count for maps in self.metrics.realized_noise_maps)
+        ):
+            msg = "Noisy objective evidence differs from the request's trajectory or circuit dimensions."
+            raise ValueError(msg)
+
+
+NoisyOperatorGrowthEvidenceSink = Callable[[NoisyOperatorGrowthObjectiveEvidence], None]
+
+
 class NoisyOperatorGrowthObjective(Protocol):
     """Typed callback for an externally implemented noisy trajectory objective."""
 
@@ -1994,6 +2022,7 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
     """
 
     __slots__ = (
+        "_evidence_sink",
         "_locked",
         "_next_evaluation_index",
         "noise_condition_checksum",
@@ -2032,6 +2061,7 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
         tjm_dt: float,
         trajectory_count: int,
         trajectory_seed: int,
+        evidence_sink: NoisyOperatorGrowthEvidenceSink | None = None,
     ) -> None:
         """Validate and bind one complete fixed-rate noisy objective."""
         self._locked = False
@@ -2064,7 +2094,11 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
         if seed >= 2**64:
             msg = "trajectory_seed must fit an unsigned 64-bit integer."
             raise ValueError(msg)
+        if evidence_sink is not None and not callable(evidence_sink):
+            msg = "evidence_sink must be callable or None."
+            raise TypeError(msg)
 
+        self._evidence_sink = evidence_sink
         self.target = target
         self.optimization_block_id = block_id
         self.optimization_seed = resolved_optimization_seed
@@ -2125,7 +2159,7 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
 
     @property
     def binding(self) -> StandardFixedRateOperatorGrowthEvaluatorBinding:
-        """Return the exact persisted target and runtime binding document."""
+        """The exact persisted target and runtime binding document."""
         return StandardFixedRateOperatorGrowthEvaluatorBinding.from_target(
             self.target,
             self.training_provenance,
@@ -2188,8 +2222,17 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
         if not circuit.gates:
             target = self.target.state_vector_copy()
             fidelity = float(abs(target[0]) ** 2)
+            metrics = NoisyStatePreparationMetrics(
+                loss=float(np.clip(1.0 - fidelity, 0.0, 1.0)),
+                mean_fidelity=fidelity,
+                trajectory_fidelities=(fidelity,) * self.trajectory_count,
+                realized_noise_maps=tuple(() for _ in range(self.trajectory_count)),
+            )
+            evidence = NoisyOperatorGrowthObjectiveEvidence(request, metrics)
+            if self._evidence_sink is not None:
+                self._evidence_sink(evidence)
             self._next_evaluation_index += 1
-            return float(np.clip(1.0 - fidelity, 0.0, 1.0))
+            return metrics.loss
         noisy_gate_indices = tuple(
             index for index, gate in enumerate(circuit.gates) if gate.is_trainable and gate.noise_enabled
         )
@@ -2206,7 +2249,7 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
             differentiate_jump_normalization=False,
             use_crn=False,
         )
-        loss, mean_fidelity, trajectory_fidelities = noisy_state_preparation_metrics(
+        metrics = noisy_state_preparation_metrics_with_maps(
             circuit,
             parameters,
             self.target.state_vector_copy(),
@@ -2218,15 +2261,18 @@ class StandardFixedRateNoisyOperatorGrowthEvaluator:
             noise_provider=self.provider,
         )
         if (
-            len(trajectory_fidelities) != self.trajectory_count
-            or not math.isfinite(loss)
-            or not math.isfinite(mean_fidelity)
-            or not math.isclose(loss, 1.0 - mean_fidelity, rel_tol=0.0, abs_tol=1e-12)
+            len(metrics.trajectory_fidelities) != self.trajectory_count
+            or not math.isfinite(metrics.loss)
+            or not math.isfinite(metrics.mean_fidelity)
+            or not math.isclose(metrics.loss, 1.0 - metrics.mean_fidelity, rel_tol=0.0, abs_tol=1e-12)
         ):
             msg = "Noisy state-preparation metrics returned inconsistent trajectory evidence."
             raise ValueError(msg)
+        evidence = NoisyOperatorGrowthObjectiveEvidence(request, metrics)
+        if self._evidence_sink is not None:
+            self._evidence_sink(evidence)
         self._next_evaluation_index += 1
-        return float(loss)
+        return float(metrics.loss)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3863,6 +3909,7 @@ def run_standard_fixed_rate_noisy_operator_growth(
     native_two_qubit_cap_per_edge: int | None = None,
     reoptimization_steps: int | None = None,
     learning_rate: float | None = None,
+    evidence_sink: NoisyOperatorGrowthEvidenceSink | None = None,
 ) -> OperatorGrowthResult:
     """Construct and execute a complete standard fixed-rate noisy comparator.
 
@@ -3884,6 +3931,7 @@ def run_standard_fixed_rate_noisy_operator_growth(
         native_two_qubit_cap_per_edge: Optional per-edge native RZZ cap.
         reoptimization_steps: Convenience internal-Adam step count.
         learning_rate: Convenience internal-Adam learning rate.
+        evidence_sink: Optional repository-owned observer for exact objective evidence.
 
     Returns:
         Promotion-eligible result backed by actual standard-noise trajectories.
@@ -3899,6 +3947,7 @@ def run_standard_fixed_rate_noisy_operator_growth(
         tjm_dt=tjm_dt,
         trajectory_count=trajectory_count,
         trajectory_seed=trajectory_seed,
+        evidence_sink=evidence_sink,
     )
     return noisy_adapt_style_state_preparation(
         target,
@@ -4113,7 +4162,9 @@ __all__ = [
     "CandidateGradient",
     "DeterministicReoptimizationResult",
     "DeterministicReoptimizer",
+    "NoisyOperatorGrowthEvidenceSink",
     "NoisyOperatorGrowthObjective",
+    "NoisyOperatorGrowthObjectiveEvidence",
     "NoisyOperatorGrowthObjectiveRequest",
     "OperatorGrowthApplicability",
     "OperatorGrowthObjectiveBinding",

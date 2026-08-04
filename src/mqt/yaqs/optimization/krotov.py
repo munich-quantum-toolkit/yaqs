@@ -271,6 +271,23 @@ class KrotovNoiseMap:
     normalization_checkpoints: tuple[int, ...] = ()
 
 
+@dataclass(frozen=True)
+class NoisyStatePreparationMetrics:
+    """Noisy state-preparation metrics and maps from one forward pass.
+
+    Attributes:
+        loss: Mean state-preparation infidelity.
+        mean_fidelity: Mean fidelity over the trajectory ensemble.
+        trajectory_fidelities: Fidelity of every individual trajectory.
+        realized_noise_maps: Ordered realized map sequence for every trajectory.
+    """
+
+    loss: float
+    mean_fidelity: float
+    trajectory_fidelities: tuple[float, ...]
+    realized_noise_maps: tuple[tuple[KrotovNoiseMap, ...], ...]
+
+
 @dataclass
 class KrotovTrajectory:
     """Forward storage for one fixed circuit-TJM trajectory.
@@ -1595,7 +1612,7 @@ def noisy_state_preparation_cross_contribution(
     return contribution, 1.0 - mean_fidelity, mean_fidelity, trajectories
 
 
-def noisy_state_preparation_metrics(
+def noisy_state_preparation_metrics_with_maps(
     circuit: ParameterizedCircuit,
     theta: NDArray[np.float64],
     target_state: TargetState,
@@ -1607,11 +1624,11 @@ def noisy_state_preparation_metrics(
     iteration: int = 0,
     fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
     noise_provider: GateNoiseProvider | None = None,
-) -> tuple[float, float, list[float]]:
-    """Evaluate noisy state-preparation infidelity and trajectory fidelities.
+) -> NoisyStatePreparationMetrics:
+    """Evaluate noisy metrics and retain realized maps from the same forward pass.
 
     Returns:
-        Tuple ``(loss, mean_fidelity, trajectory_fidelities)``.
+        Typed loss, mean fidelity, per-trajectory fidelities, and realized maps.
     """
     truncation = truncation if truncation is not None else KrotovTruncation()
     target = _resolve_target_state(target_state, circuit.num_qubits)
@@ -1630,7 +1647,45 @@ def noisy_state_preparation_metrics(
     )
     fidelities = [float(abs(target.scalar_product(trajectory.states[-1])) ** 2) for trajectory in trajectories]
     mean_fidelity = float(np.mean(fidelities))
-    return 1.0 - mean_fidelity, mean_fidelity, fidelities
+    return NoisyStatePreparationMetrics(
+        loss=1.0 - mean_fidelity,
+        mean_fidelity=mean_fidelity,
+        trajectory_fidelities=tuple(fidelities),
+        realized_noise_maps=tuple(tuple(trajectory.noise_maps) for trajectory in trajectories),
+    )
+
+
+def noisy_state_preparation_metrics(
+    circuit: ParameterizedCircuit,
+    theta: NDArray[np.float64],
+    target_state: TargetState,
+    noise_model: NoiseModel | None,
+    tjm_options: KrotovTJMOptions,
+    *,
+    initial_state: MPS | None = None,
+    truncation: KrotovTruncation | None = None,
+    iteration: int = 0,
+    fixed_noise_maps: list[list[KrotovNoiseMap]] | None = None,
+    noise_provider: GateNoiseProvider | None = None,
+) -> tuple[float, float, list[float]]:
+    """Evaluate noisy state-preparation infidelity and trajectory fidelities.
+
+    Returns:
+        Tuple ``(loss, mean_fidelity, trajectory_fidelities)``.
+    """
+    metrics = noisy_state_preparation_metrics_with_maps(
+        circuit,
+        theta,
+        target_state,
+        noise_model,
+        tjm_options,
+        initial_state=initial_state,
+        truncation=truncation,
+        iteration=iteration,
+        fixed_noise_maps=fixed_noise_maps,
+        noise_provider=noise_provider,
+    )
+    return metrics.loss, metrics.mean_fidelity, list(metrics.trajectory_fidelities)
 
 
 def noisy_state_preparation_loss(
@@ -2941,6 +2996,7 @@ __all__ = [
     "KrotovTJMOptions",
     "KrotovTrajectory",
     "KrotovTruncation",
+    "NoisyStatePreparationMetrics",
     "backward_costates",
     "empirical_loss",
     "forward_states",
@@ -2951,6 +3007,7 @@ __all__ = [
     "noisy_state_preparation_cross_contribution",
     "noisy_state_preparation_loss",
     "noisy_state_preparation_metrics",
+    "noisy_state_preparation_metrics_with_maps",
     "sample_contribution",
     "state_preparation_contribution",
     "state_preparation_loss",

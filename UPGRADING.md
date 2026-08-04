@@ -4,6 +4,36 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Execute WP22 jobs through source-addressed production evidence
+
+WP22E provides the repository-owned executor selected by the WP22D runner.
+Its typed API returns a `ResultArtifactRef`; the legacy orchestration adapter
+immediately reopens the reference and returns its verified checksum. Each
+append-only attempt manifest enumerates the exact schedule snapshot, fixed
+maps, fresh per-trajectory fidelities, q6 pilot diagnostic vectors, runtime
+resources, normalized work, and structured failure evidence produced by that
+job. Missing, changed, linked, swapped, or extra members are rejected when the
+result is reopened.
+
+Pilot and screening jobs now resolve their implementation, target,
+schedule, evaluator, and source fingerprint solely from the complete execution
+context. Operator-growth screening materializes the selected circuit and uses
+the exact two-prefix, 200-update schedule, selects the better independently
+validated prefix, materializes that circuit, and uses the same independent
+fresh evaluator as the pipeline methods. Each numerical trajectory produces
+its fidelity and replay map in one pass, and every result reference, terminal
+manifest, and evidence document carries the direct execution-source manifest
+checksum. Ballarin remains evaluation-only and is rejected before any training
+stage runs. Resume reopens an existing terminal attempt; it cannot fabricate a
+replacement result under the same immutable address.
+
+The confirmation registry remains dormant for real held targets during WP22.
+An explicitly request-bound `SyntheticConfirmationFixture` can exercise the
+same typed manifest path without opening a target manifest; ordinary
+confirmation dispatch fails before output mutation. WP22E creates execution
+evidence but does not derive pilot inference, screen promotion, or a final
+seal; those remain WP22F responsibilities.
+
 ### Run WP22 plans through the custodied execution context
 
 WP22D adds the opt-in `python -m benchmarks.state_preparation.training_runner`

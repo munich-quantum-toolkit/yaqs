@@ -615,9 +615,26 @@ The frozen fan-outs contain 10 smoke jobs, 1,080 pilot jobs (720 primary q6 and
 `secondary_benchmark` role. Confirmation outcomes are append-only and its first
 terminal attempt is authoritative.
 
-WP22C and WP22D create no numerical study evidence. Raw map and trajectory
-artifacts, production execution, screening integration, and final sealing
-remain the explicit responsibilities of WP22E and WP22F.
+WP22E supplies the repository-owned production registry. A context-owned job
+resolves its concrete runner, authorized target, scheduled optimizer, circuit,
+and fresh evaluator before execution. The typed executor publishes its terminal
+manifest last; that manifest enumerates exact schedule snapshots, fixed maps,
+fresh raw trajectory fidelities, q6 pathwise diagnostic vectors, resource and
+normalized-work records, and structured failures. Reopening checks every member
+and nested reference before the compatibility adapter returns the result
+reference checksum to WP22D orchestration. Operator-growth screening evaluates
+the validation-selected prefix from its exact two-prefix, 200-update schedule
+through the same fresh-evaluation policy as the pipeline families. Scheduled
+fidelities and replay maps are captured in one numerical pass, while the
+result, manifest, and numerical evidence independently retain the direct
+execution-source manifest checksum.
+
+Real confirmation remains dormant in WP22. The registered confirmation path
+accepts only an explicitly request-bound synthetic fixture and exercises the
+same immutable manifest custody without opening a held target manifest. WP22C
+and WP22D themselves create no numerical study evidence; pilot inference,
+complete screening replay, promotion, source freezing, and final sealing remain
+the explicit responsibility of WP22F.
 
 The TFIM-only `energy_adapt_vqe` smoke cell is an analytic API preflight with
 zero noisy training trajectories. It is not evidence for the preregistered

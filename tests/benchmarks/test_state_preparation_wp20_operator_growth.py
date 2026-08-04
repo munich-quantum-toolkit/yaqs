@@ -25,6 +25,7 @@ from benchmarks.state_preparation.phase2.operator_growth import (
     ENERGY_ADAPT_METHOD_ID,
     CandidateGradient,
     DeterministicReoptimizationResult,
+    NoisyOperatorGrowthObjectiveEvidence,
     NoisyOperatorGrowthObjectiveRequest,
     OperatorGrowthResult,
     OperatorGrowthSpec,
@@ -65,13 +66,37 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from mqt.yaqs.optimization import ParameterizedCircuit
+    from mqt.yaqs.optimization import KrotovNoiseMap, ParameterizedCircuit
 
 
 _I2 = np.eye(2, dtype=np.complex128)
 _OPTIMIZATION_BLOCK_ID = "operator-growth-test-block"
 _OPTIMIZATION_SEED = 17
 _RESOURCE_STRATUM_ID = "native-rzz-12"
+
+
+def _noise_map_signature(noise_map: KrotovNoiseMap) -> tuple[object, ...]:
+    """Return an exact comparable projection of one realized Krotov map.
+
+    Returns:
+        Scalar metadata and byte-exact local operators.
+    """
+    operators = noise_map.operators
+    operator_payloads = []
+    for operator, sites in operators:
+        array = np.ascontiguousarray(operator)
+        operator_payloads.append((array.dtype.str, array.shape, array.tobytes(), sites))
+    return (
+        tuple(operator_payloads),
+        noise_map.normalized,
+        noise_map.jump_process_index,
+        noise_map.channel_id,
+        noise_map.outcome_labels,
+        noise_map.source_gate_index,
+        noise_map.resolved_native_angle,
+        noise_map.is_identity,
+        noise_map.normalization_checkpoints,
+    )
 
 
 def test_target_bound_noisy_operator_growth_is_public_phase2_api() -> None:
@@ -351,7 +376,7 @@ def test_materialized_pauli_sequence_is_exact_and_has_mechanical_native_resource
 def test_noisy_projector_growth_is_the_only_promotion_eligible_execution_mode() -> None:
     """Concrete empty-circuit execution is noisy, promotable, and fully accounted."""
     target = load_legacy_target_collection().target("legacy_tfim_seed_100")
-    result = run_standard_fixed_rate_noisy_operator_growth(
+    baseline = run_standard_fixed_rate_noisy_operator_growth(
         target,
         optimization_block_id=_OPTIMIZATION_BLOCK_ID,
         optimization_seed=_OPTIMIZATION_SEED,
@@ -364,7 +389,23 @@ def test_noisy_projector_growth_is_the_only_promotion_eligible_execution_mode() 
         trajectory_seed=91,
         max_operators=0,
     )
+    observed: list[NoisyOperatorGrowthObjectiveEvidence] = []
+    result = run_standard_fixed_rate_noisy_operator_growth(
+        target,
+        optimization_block_id=_OPTIMIZATION_BLOCK_ID,
+        optimization_seed=_OPTIMIZATION_SEED,
+        resource_stratum_id=_RESOURCE_STRATUM_ID,
+        noise_id="dephasing_1s_1q",
+        noise_definition_version=FIXED_RATE_NOISE_DEFINITION_VERSION,
+        noise_strength_scale=1.0,
+        tjm_dt=1.0,
+        trajectory_count=4,
+        trajectory_seed=91,
+        max_operators=0,
+        evidence_sink=observed.append,
+    )
 
+    assert result.to_dict() == baseline.to_dict()
     assert result.selected_operator_ids == ()
     assert result.execution_mode == "noisy_training"
     assert result.promotion_eligible is True
@@ -387,11 +428,20 @@ def test_noisy_projector_growth_is_the_only_promotion_eligible_execution_mode() 
     assert result.growth_spec_checksum == result.growth_spec.content_checksum
     assert result.evaluator_binding.training_provenance == result.training_provenance
     assert OperatorGrowthResult.from_dict(result.to_dict()) == result
+    assert len(observed) == 1
+    empty_evidence = observed[0]
+    assert empty_evidence.request == result.objective_requests[0]
+    assert empty_evidence.metrics.loss == result.initial_objective
+    empty_fidelity = float(abs(target.state_vector_copy()[0]) ** 2)
+    assert empty_evidence.metrics.mean_fidelity == empty_fidelity
+    assert empty_evidence.metrics.trajectory_fidelities == (empty_fidelity,) * 4
+    assert empty_evidence.metrics.realized_noise_maps == ((),) * 4
 
 
 def test_target_bound_evaluator_executes_actual_standard_noise_with_common_seed() -> None:
     """Two identical materialized circuits receive deterministic common trajectories."""
     target = load_legacy_target_collection().target("legacy_tfim_seed_100")
+    observed: list[NoisyOperatorGrowthObjectiveEvidence] = []
     evaluator = StandardFixedRateNoisyOperatorGrowthEvaluator(
         target,
         optimization_block_id=_OPTIMIZATION_BLOCK_ID,
@@ -403,6 +453,7 @@ def test_target_bound_evaluator_executes_actual_standard_noise_with_common_seed(
         tjm_dt=0.9,
         trajectory_count=2,
         trajectory_seed=7,
+        evidence_sink=observed.append,
     )
     operator = next(
         operator
@@ -424,9 +475,30 @@ def test_target_bound_evaluator_executes_actual_standard_noise_with_common_seed(
             trajectory_ensemble_checksum=evaluator.training_provenance.trajectory_ensemble_checksum,
         )
 
-    first = evaluator(request(0), circuit)
-    second = evaluator(request(1), materialize_operator_growth_circuit(target.qubit_count, (operator,)))
+    first_request = request(0)
+    second_request = request(1)
+    first = evaluator(first_request, circuit)
+    second = evaluator(
+        second_request,
+        materialize_operator_growth_circuit(target.qubit_count, (operator,)),
+    )
     assert first == pytest.approx(second, rel=0.0, abs=0.0)
+    assert tuple(item.request for item in observed) == (first_request, second_request)
+    assert tuple(item.request.evaluation_index for item in observed) == (0, 1)
+    assert observed[0].metrics.loss == first
+    assert observed[1].metrics.loss == second
+    assert observed[0].metrics.trajectory_fidelities == observed[1].metrics.trajectory_fidelities
+    first_maps = tuple(
+        tuple(_noise_map_signature(noise_map) for noise_map in trajectory_maps)
+        for trajectory_maps in observed[0].metrics.realized_noise_maps
+    )
+    second_maps = tuple(
+        tuple(_noise_map_signature(noise_map) for noise_map in trajectory_maps)
+        for trajectory_maps in observed[1].metrics.realized_noise_maps
+    )
+    assert first_maps == second_maps
+    assert len(first_maps) == evaluator.trajectory_count
+    assert all(len(trajectory_maps) == len(circuit.gates) for trajectory_maps in first_maps)
     assert evaluator.training_provenance.provider_checksum == evaluator.provider.content_checksum
     assert evaluator.training_provenance.objective_checksum == evaluator.objective_spec.content_checksum
     wrong_operator = next(
@@ -439,6 +511,37 @@ def test_target_bound_evaluator_executes_actual_standard_noise_with_common_seed(
         )
     with pytest.raises(AttributeError, match="immutable"):
         evaluator.noise_id = "depolarizing_1s_1q"
+
+
+def test_operator_growth_evidence_sink_failure_propagates() -> None:
+    """A custody sink failure aborts the exact objective stream immediately."""
+    target = load_legacy_target_collection().target("legacy_tfim_seed_100")
+    observed: list[NoisyOperatorGrowthObjectiveEvidence] = []
+
+    def fail_sink(evidence: NoisyOperatorGrowthObjectiveEvidence) -> None:
+        observed.append(evidence)
+        msg = "operator-growth evidence persistence failed"
+        raise RuntimeError(msg)
+
+    with pytest.raises(RuntimeError, match="evidence persistence failed"):
+        run_standard_fixed_rate_noisy_operator_growth(
+            target,
+            optimization_block_id=_OPTIMIZATION_BLOCK_ID,
+            optimization_seed=_OPTIMIZATION_SEED,
+            resource_stratum_id=_RESOURCE_STRATUM_ID,
+            noise_id="dephasing_1s_1q",
+            noise_definition_version=FIXED_RATE_NOISE_DEFINITION_VERSION,
+            noise_strength_scale=1.0,
+            tjm_dt=1.0,
+            trajectory_count=3,
+            trajectory_seed=13,
+            max_operators=0,
+            evidence_sink=fail_sink,
+        )
+
+    assert len(observed) == 1
+    assert observed[0].request.evaluation_index == 0
+    assert observed[0].metrics.realized_noise_maps == ((),) * 3
 
 
 def test_noisy_growth_rejects_forged_callback_target_and_runtime_configuration() -> None:

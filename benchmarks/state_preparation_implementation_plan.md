@@ -2566,7 +2566,23 @@ replace sealed scientific artifacts in a paper preset.
 
 ### WP22E: Repository-owned production executors and evidence
 
-**Status: not implemented; depends on WP22A through WP22D.**
+**Status: implemented.**
+
+The repository-owned registry now resolves every exact context-owned pipeline
+or operator-growth job, executes the real scheduled numerical callbacks, and
+publishes append-only source-addressed results. Terminal manifests close over
+schedule snapshots, fixed-map ensembles, fresh raw trajectory sidecars, q6
+pathwise pilot diagnostics, runtime/resources, normalized work, and structured
+failures; typed reopening verifies every byte, member, alias, and nested map
+reference. Operator-growth screening executes two independently validated
+100-update prefixes, retains the full active structure, and performs its fresh
+evaluation on the validation-selected prefix. Each trajectory's fidelity and
+fixed replay map arise from one numerical pass, and the reference, manifest,
+and evidence independently close over the direct execution-source manifest.
+The default runner path covers all ten smoke families, while a request-bound
+synthetic confirmation executor tests the dormant path without opening a held
+manifest. WP22F remains responsible for pilot inference, full screening replay,
+promotion, and final sealing.
 
 Implement `create_default_training_executor_registry(context)`. The Phase II
 executor resolves the scoped implementation, authorized target, artifact store,

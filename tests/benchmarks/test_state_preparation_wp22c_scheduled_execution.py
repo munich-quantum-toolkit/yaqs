@@ -41,7 +41,12 @@ from benchmarks.state_preparation.phase2.implementation_catalog import (
     ExecutableImplementationEntry,
     RepositoryRunnerAdapter,
 )
-from benchmarks.state_preparation.phase2.operator_growth import OperatorGrowthSpec, build_projector_operator_pool
+from benchmarks.state_preparation.phase2.operator_growth import (
+    CandidateGradient,
+    OperatorGrowthSpec,
+    PoolOperator,
+    build_projector_operator_pool,
+)
 from benchmarks.state_preparation.phase2.scheduled_execution import (
     AdamOptimizerPayload,
     KrotovOptimizerPayload,
@@ -50,6 +55,13 @@ from benchmarks.state_preparation.phase2.scheduled_execution import (
     NormalizedComputeCapError,
     OperatorGrowthAdamScheduledUpdateAdapter,
     OperatorGrowthOptimizerPayload,
+    OperatorGrowthSegmentedObjectiveEvidence,
+    OperatorGrowthSegmentedObjectiveExecutor,
+    OperatorGrowthSegmentedObjectiveRequest,
+    OperatorGrowthSegmentedObjectiveResult,
+    OperatorGrowthSegmentedSnapshot,
+    OperatorGrowthSelectionRequest,
+    OperatorGrowthSelectionResult,
     OptimizerInitialization,
     ParameterShiftAdamScheduledUpdateAdapter,
     ScheduledExecutionProgram,
@@ -63,6 +75,7 @@ from benchmarks.state_preparation.phase2.scheduled_execution import (
     SPSAScheduledUpdateAdapter,
     compile_development_schedule,
     compile_frozen_schedule_trace,
+    execute_operator_growth_segmented_program,
     execute_scheduled_program,
     initialize_scheduled_execution,
 )
@@ -120,6 +133,7 @@ def _binding(
     *,
     operator_growth: bool = False,
     method_id: str = "fixed_depth_bmpd_crn",
+    operator_growth_compute_cap: float = 1.0,
 ) -> ExecutableScopedBinding:
     """Build one valid q6 pilot or operator-growth screen binding.
 
@@ -182,7 +196,9 @@ def _binding(
             maximum_training_trajectory_count=8,
             checkpoint_validation_trajectory_count=256,
             multistart_count=1,
-            normalized_compute_cap=1.0 if operator_growth else 1_000_000.0 if screen else None,
+            normalized_compute_cap=(
+                operator_growth_compute_cap if operator_growth else 1_000_000.0 if screen else None
+            ),
         ),
         resource_policy=BindingResourcePolicy(),
         treatment_projection=QubitTreatmentProjection(
@@ -898,3 +914,376 @@ def test_binding_compilation_includes_pipeline_and_operator_reoptimization() -> 
     assert operator.controlled_stage_id == "operator_growth_reoptimization"
     assert operator.to_dict()["structural_stage_semantics"] == "outside_engine_independently_sealed"
     assert "confirmatory" not in operator.to_json()
+    assert direct.checkpoint_updates == CHECKPOINT_VALIDATION_UPDATES
+    assert operator.checkpoint_updates == (99, 199)
+
+
+class _SegmentedQuadraticObjective:
+    """Deterministic operator-aware quadratic for segmented protocol tests."""
+
+    def __init__(self, program: ScheduledExecutionProgram) -> None:
+        assert program.executable_binding is not None
+        execution_spec = cast(
+            "OperatorGrowthExecutionSpec",
+            program.executable_binding.binding.operator_growth_spec,
+        )
+        self.targets = {
+            operator.operator_id: 0.01 * (index + 1) for index, operator in enumerate(execution_spec.pool.operators)
+        }
+        self.requests: list[OperatorGrowthSegmentedObjectiveRequest] = []
+
+    def __call__(
+        self,
+        request: OperatorGrowthSegmentedObjectiveRequest,
+    ) -> OperatorGrowthSegmentedObjectiveResult:
+        """Evaluate one exact request and retain it for role/membership assertions.
+
+        Returns:
+            The checksum-linked quadratic objective result.
+        """
+        self.requests.append(request)
+        objective = sum(
+            (parameter - self.targets[operator_id]) ** 2
+            for parameter, operator_id in zip(
+                request.parameters,
+                request.selected_operator_ids,
+                strict=True,
+            )
+        )
+        return OperatorGrowthSegmentedObjectiveResult.for_request(request, objective)
+
+
+class _ExactSegmentedSelection:
+    """Test structural callback implementing the frozen pool-order selection rule."""
+
+    def __init__(self, program: ScheduledExecutionProgram) -> None:
+        assert program.executable_binding is not None
+        execution_spec = cast(
+            "OperatorGrowthExecutionSpec",
+            program.executable_binding.binding.operator_growth_spec,
+        )
+        self.program = program
+        self.pool = execution_spec.pool
+        self.spec = execution_spec.growth_spec
+        self.quote_count = 0
+        self.requests: list[OperatorGrowthSelectionRequest] = []
+
+    def _metadata(
+        self,
+        request: OperatorGrowthSelectionRequest,
+    ) -> tuple[tuple[int, PoolOperator, bool], ...]:
+        """Return remaining pool records with native-cap feasibility.
+
+        Returns:
+            Ordered pool index, operator, and feasibility triples.
+        """
+        selected = set(request.selected_operator_ids)
+        edge_counts = [0] * (self.pool.num_qubits - 1)
+        by_id = {operator.operator_id: operator for operator in self.pool.operators}
+        for operator_id in request.selected_operator_ids:
+            operator = by_id[operator_id]
+            if len(operator.sites) == 2:
+                edge_counts[operator.sites[0]] += operator.native_two_qubit_gates
+        metadata: list[tuple[int, PoolOperator, bool]] = []
+        for index, operator in enumerate(self.pool.operators):
+            if operator.operator_id in selected:
+                continue
+            feasible = True
+            if len(operator.sites) == 2 and self.spec.native_two_qubit_cap_per_edge is not None:
+                feasible = (
+                    edge_counts[operator.sites[0]] + operator.native_two_qubit_gates
+                    <= self.spec.native_two_qubit_cap_per_edge
+                )
+            metadata.append((index, operator, feasible))
+        return tuple(metadata)
+
+    def quote_normalized_work(self, request: OperatorGrowthSelectionRequest) -> float:
+        """Quote every feasible shift pair and the chosen appended-zero objective.
+
+        Returns:
+            Exact normalized structural-selection work.
+        """
+        self.quote_count += 1
+        feasible = sum(item[2] for item in self._metadata(request))
+        return float((2 * feasible + 1) * 8)
+
+    def __call__(
+        self,
+        request: OperatorGrowthSelectionRequest,
+        objective_executor: OperatorGrowthSegmentedObjectiveExecutor,
+    ) -> OperatorGrowthSelectionResult:
+        """Evaluate the full candidate universe and select the largest gradient.
+
+        Returns:
+            Complete structural-selection evidence.
+        """
+        self.requests.append(request)
+        candidates: list[CandidateGradient] = []
+        evidence: list[OperatorGrowthSegmentedObjectiveEvidence] = []
+        for pool_index, operator, feasible in self._metadata(request):
+            operator_id = operator.operator_id
+            native_increment = operator.native_two_qubit_gates
+            if not feasible:
+                candidates.append(
+                    CandidateGradient(
+                        operator_id=operator_id,
+                        pool_index=pool_index,
+                        gradient=None,
+                        absolute_gradient=None,
+                        native_two_qubit_increment=native_increment,
+                        native_cap_feasible=False,
+                    )
+                )
+                continue
+            plus_request = OperatorGrowthSegmentedObjectiveRequest(
+                program_checksum=self.program.content_checksum,
+                structural_state_checksum=request.content_checksum,
+                selected_operator_ids=(*request.selected_operator_ids, operator_id),
+                prefix_index=request.prefix_index,
+                global_update=request.global_update_start,
+                local_update=0,
+                evaluation_stage="structural_selection",
+                evaluation_kind="gradient_plus",
+                parameter_index=request.prefix_index,
+                parameters=(*request.parameters, np.pi / 2.0),
+                policy=request.policy,
+            )
+            minus_request = replace(
+                plus_request,
+                evaluation_kind="gradient_minus",
+                parameters=(*request.parameters, -np.pi / 2.0),
+            )
+            plus_result = objective_executor(plus_request)
+            minus_result = objective_executor(minus_request)
+            evidence.extend((
+                OperatorGrowthSegmentedObjectiveEvidence(plus_request, plus_result),
+                OperatorGrowthSegmentedObjectiveEvidence(minus_request, minus_result),
+            ))
+            gradient = 0.5 * (plus_result.objective - minus_result.objective)
+            candidates.append(
+                CandidateGradient(
+                    operator_id=operator_id,
+                    pool_index=pool_index,
+                    gradient=gradient,
+                    absolute_gradient=abs(gradient),
+                    native_two_qubit_increment=native_increment,
+                    native_cap_feasible=True,
+                )
+            )
+        chosen = max(
+            (candidate for candidate in candidates if candidate.native_cap_feasible),
+            key=lambda candidate: cast("float", candidate.absolute_gradient),
+        )
+        baseline_request = OperatorGrowthSegmentedObjectiveRequest(
+            program_checksum=self.program.content_checksum,
+            structural_state_checksum=request.content_checksum,
+            selected_operator_ids=(*request.selected_operator_ids, chosen.operator_id),
+            prefix_index=request.prefix_index,
+            global_update=request.global_update_start,
+            local_update=0,
+            evaluation_stage="structural_selection",
+            evaluation_kind="post_update",
+            parameter_index=request.prefix_index + 1,
+            parameters=(*request.parameters, 0.0),
+            policy=request.policy,
+        )
+        baseline_result = objective_executor(baseline_request)
+        evidence.append(OperatorGrowthSegmentedObjectiveEvidence(baseline_request, baseline_result))
+        return OperatorGrowthSelectionResult(
+            request_checksum=request.content_checksum,
+            candidate_gradients=tuple(candidates),
+            selected_operator_id=chosen.operator_id,
+            selected_gradient=cast("float", chosen.gradient),
+            objective_before_reoptimization=baseline_result.objective,
+            objective_evidence=tuple(evidence),
+            normalized_work=float(len(evidence) * 8),
+        )
+
+
+class _PrefixValidation:
+    """Deterministic equal-score prefix validator exercising earliest tie-break."""
+
+    def __init__(self) -> None:
+        self.requests: list[ScheduledValidationRequest] = []
+
+    def __call__(self, request: ScheduledValidationRequest) -> ScheduledValidationResult:
+        """Return the same score for both completed prefixes.
+
+        Returns:
+            The checksum-linked validation result.
+        """
+        self.requests.append(request)
+        return ScheduledValidationResult.for_request(request, 0.75)
+
+
+class _ZeroSegmentedObjective:
+    """Degenerate objective exercising frozen two-prefix fail-closed semantics."""
+
+    def __init__(self) -> None:
+        self.requests: list[OperatorGrowthSegmentedObjectiveRequest] = []
+
+    def __call__(
+        self,
+        request: OperatorGrowthSegmentedObjectiveRequest,
+    ) -> OperatorGrowthSegmentedObjectiveResult:
+        """Return zero for every pool candidate.
+
+        Returns:
+            A checksum-linked zero objective.
+        """
+        self.requests.append(request)
+        return OperatorGrowthSegmentedObjectiveResult.for_request(request, 0.0)
+
+
+def _segmented_program(cap: float) -> ScheduledExecutionProgram:
+    """Compile the exact operator-growth program with a test compute cap.
+
+    Returns:
+        The complete q6 segmented execution program.
+    """
+    executable = _binding(operator_growth=True, operator_growth_compute_cap=cap)
+    return ScheduledExecutionProgram.compile(
+        executable,
+        executable.binding.strategy_schedule,
+        ScheduledJobSeedSet(701),
+    )
+
+
+def test_segmented_operator_growth_executes_two_exact_prefixes_and_selects_earliest_tie() -> None:
+    """Two append/reset/100-update segments retain all work and prefix validation evidence."""
+    program = _segmented_program(10_000.0)
+    objective = _SegmentedQuadraticObjective(program)
+    selector = _ExactSegmentedSelection(program)
+    validation = _PrefixValidation()
+    result = execute_operator_growth_segmented_program(
+        program,
+        OperatorGrowthSegmentedSnapshot.initialize(program),
+        selector,
+        objective,
+        validation,
+    )
+    assert result.complete
+    assert result.terminal_reason == "update_budget"
+    assert len(result.transitions) == 2
+    assert len(result.receipts) == 200
+    assert tuple(item.request.update for item in result.prefix_validations) == (99, 199)
+    assert tuple(item.request.membership.trajectory_count for item in result.prefix_validations) == (256, 256)
+    assert result.selected_prefix_index == 0
+    assert result.selected_operator_ids == result.transitions[0].selected_operator_ids
+    assert result.selected_parameters == result.prefix_validations[0].request.parameter_artifact.parameters
+    assert result.active_operator_ids == result.transitions[1].selected_operator_ids
+    assert result.receipts[100].local_update == 0
+    assert result.receipts[100].first_moment_before == (0.0, 0.0)
+    assert result.receipts[100].second_moment_before == (0.0, 0.0)
+    assert result.transitions[1].initial_parameters == (
+        *result.prefix_validations[0].request.parameter_artifact.parameters,
+        0.0,
+    )
+    assert tuple(len(item.result.candidate_gradients) for item in result.transitions) == (33, 32)
+    assert (
+        len({
+            request.policy.training_membership.member_seeds
+            for request in objective.requests
+            if request.policy.training_membership is not None
+        })
+        == 1
+    )
+    assert tuple(request.update for request in validation.requests) == (99, 199)
+    assert result.total_normalized_work == pytest.approx(7_968.0)
+    assert 'final_test_access":"forbidden' in result.to_json()
+    assert OperatorGrowthSegmentedSnapshot.from_json(result.to_json()) == result
+
+
+def test_segmented_operator_growth_restart_is_byte_identical() -> None:
+    """Canonical restart after an interior Adam update reproduces every byte."""
+    program = _segmented_program(10_000.0)
+    uninterrupted = execute_operator_growth_segmented_program(
+        program,
+        OperatorGrowthSegmentedSnapshot.initialize(program),
+        _ExactSegmentedSelection(program),
+        _SegmentedQuadraticObjective(program),
+        _PrefixValidation(),
+    )
+    partial = execute_operator_growth_segmented_program(
+        program,
+        OperatorGrowthSegmentedSnapshot.initialize(program),
+        _ExactSegmentedSelection(program),
+        _SegmentedQuadraticObjective(program),
+        _PrefixValidation(),
+        stop_after_updates=73,
+    )
+    resumed = execute_operator_growth_segmented_program(
+        program,
+        OperatorGrowthSegmentedSnapshot.from_json(partial.to_json()),
+        _ExactSegmentedSelection(program),
+        _SegmentedQuadraticObjective(program),
+        _PrefixValidation(),
+    )
+    assert resumed.to_json() == uninterrupted.to_json()
+
+
+def test_segmented_prefix_start_cap_preflight_precedes_every_numerical_callback() -> None:
+    """A cap allowing selection alone but not its first update leaves no unrecorded callback work."""
+    program = _segmented_program(559.0)
+    selector = _ExactSegmentedSelection(program)
+    objective = _SegmentedQuadraticObjective(program)
+    validation = _PrefixValidation()
+    with pytest.raises(NormalizedComputeCapError) as caught:
+        execute_operator_growth_segmented_program(
+            program,
+            OperatorGrowthSegmentedSnapshot.initialize(program),
+            selector,
+            objective,
+            validation,
+        )
+    assert caught.value.prospective_update_work == pytest.approx(560.0)
+    assert selector.quote_count == 1
+    assert selector.requests == []
+    assert objective.requests == []
+    assert validation.requests == []
+
+
+def test_segmented_prefix_validation_cap_is_checked_before_update_objectives() -> None:
+    """The mandatory 256-member validation is included before the 100th update callback."""
+    program = _segmented_program(3_191.0)
+    partial = execute_operator_growth_segmented_program(
+        program,
+        OperatorGrowthSegmentedSnapshot.initialize(program),
+        _ExactSegmentedSelection(program),
+        _SegmentedQuadraticObjective(program),
+        _PrefixValidation(),
+        stop_after_updates=99,
+    )
+    assert partial.next_global_update == 99
+    objective = _SegmentedQuadraticObjective(program)
+    validation = _PrefixValidation()
+    with pytest.raises(NormalizedComputeCapError) as caught:
+        execute_operator_growth_segmented_program(
+            program,
+            OperatorGrowthSegmentedSnapshot.from_json(partial.to_json()),
+            _ExactSegmentedSelection(program),
+            objective,
+            validation,
+        )
+    assert caught.value.completed_work == pytest.approx(2_912.0)
+    assert caught.value.prospective_update_work == pytest.approx(280.0)
+    assert objective.requests == []
+    assert validation.requests == []
+
+
+def test_segmented_schedule_fails_closed_on_structural_convergence_before_two_prefixes() -> None:
+    """The fixed 2x100 paper schedule rejects, rather than silently truncates, a zero-gradient prefix."""
+    program = _segmented_program(10_000.0)
+    initial = OperatorGrowthSegmentedSnapshot.initialize(program)
+    objective = _ZeroSegmentedObjective()
+    with pytest.raises(ValueError, match="largest-gradient"):
+        execute_operator_growth_segmented_program(
+            program,
+            initial,
+            _ExactSegmentedSelection(program),
+            objective,
+            _PrefixValidation(),
+        )
+    assert len(objective.requests) == 67
+    assert initial.next_global_update == 0
+    assert initial.transitions == ()

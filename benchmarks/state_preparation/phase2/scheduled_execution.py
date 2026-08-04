@@ -54,7 +54,7 @@ from .execution_protocol import (
     OperatorGrowthExecutionSpec,
 )
 from .implementation_catalog import PipelineSmokeRuntimeProgram
-from .operator_growth import OperatorGrowthSpec
+from .operator_growth import CandidateGradient, OperatorGrowthSpec, OperatorPoolSpec, PoolOperator
 from .pipeline import TrainingPipelineTemplate
 from .training_schedules import (
     CheckpointValidationTracker,
@@ -112,6 +112,30 @@ SCHEDULED_OPTIMIZER_STATE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.schedu
 MULTISTART_START_EVIDENCE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.multistart_start_evidence.v1"
 MULTISTART_WORK_EVIDENCE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.multistart_work_evidence.v1"
 SCHEDULED_EXECUTION_SNAPSHOT_SCHEMA_VERSION = "yaqs.state_preparation.phase2.scheduled_execution_snapshot.v1"
+OPERATOR_GROWTH_SELECTION_REQUEST_SCHEMA_VERSION = "yaqs.state_preparation.phase2.operator_growth_selection_request.v1"
+OPERATOR_GROWTH_SELECTION_RESULT_SCHEMA_VERSION = "yaqs.state_preparation.phase2.operator_growth_selection_result.v1"
+OPERATOR_GROWTH_PREFIX_TRANSITION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.operator_growth_prefix_transition.v1"
+OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_REQUEST_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.operator_growth_segmented_objective_request.v1"
+)
+OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_RESULT_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.operator_growth_segmented_objective_result.v1"
+)
+OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_EVIDENCE_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.operator_growth_segmented_objective_evidence.v1"
+)
+OPERATOR_GROWTH_SEGMENTED_UPDATE_RECEIPT_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.operator_growth_segmented_update_receipt.v1"
+)
+OPERATOR_GROWTH_PREFIX_VALIDATION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.operator_growth_prefix_validation.v1"
+OPERATOR_GROWTH_SEGMENTED_SNAPSHOT_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.operator_growth_segmented_snapshot.v1"
+)
+
+OPERATOR_GROWTH_PREFIX_UPDATE_COUNT = 100
+OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT = 200
+OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT = 8
+OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT = 256
 
 ExecutionScope = Literal["scoped_binding", "development_schedule_trace"]
 TrainingPhase = Literal["noiseless_pretrain", "noisy_finetune"]
@@ -127,6 +151,11 @@ _OPTIMIZER_KINDS = frozenset({"krotov", "parameter_shift_adam", "spsa", "operato
 _SUPPORTED_IMPLEMENTATION_KINDS = frozenset({
     "phase2_pipeline",
     "phase2_pipeline_smoke",
+    "operator_growth",
+    "operator_growth_smoke",
+    "tfim_operator_growth",
+})
+_OPERATOR_GROWTH_IMPLEMENTATION_KINDS = frozenset({
     "operator_growth",
     "operator_growth_smoke",
     "tfim_operator_growth",
@@ -184,6 +213,23 @@ def _float_tuple(value: object, name: str, *, length: int | None = None) -> tupl
     if not result:
         msg = f"{name} must be nonempty."
         raise ValueError(msg)
+    if length is not None and len(result) != length:
+        msg = f"{name} must contain exactly {length} values."
+        raise ValueError(msg)
+    return result
+
+
+def _possibly_empty_float_tuple(
+    value: object,
+    name: str,
+    *,
+    length: int | None = None,
+) -> tuple[float, ...]:
+    """Return a strict finite float tuple whose empty value is meaningful."""
+    if type(value) is not tuple:
+        msg = f"{name} must be a tuple."
+        raise TypeError(msg)
+    result = tuple(require_float(item, f"{name}[{index}]") for index, item in enumerate(value))
     if length is not None and len(result) != length:
         msg = f"{name} must contain exactly {length} values."
         raise ValueError(msg)
@@ -831,6 +877,7 @@ def _compile_update_policies(
     job_seeds: ScheduledJobSeedSet,
     start_seed_bundles: tuple[MultistartSeedBundle, ...],
     checkpoint_validation_trajectory_count: int,
+    checkpoint_updates: tuple[int, ...] = CHECKPOINT_VALIDATION_UPDATES,
 ) -> tuple[ScheduledUpdatePolicy, ...]:
     """Deterministically compile every optimizer start and update.
 
@@ -879,7 +926,7 @@ def _compile_update_policies(
                 previous_training = membership
                 previous_components = {component.noise_id: component for component in components}
                 epoch = membership.epoch
-            checkpoint_due = validation_membership is not None and update in CHECKPOINT_VALIDATION_UPDATES
+            checkpoint_due = validation_membership is not None and update in checkpoint_updates
             policies.append(
                 ScheduledUpdatePolicy(
                     schedule_checksum=schedule.content_checksum,
@@ -980,6 +1027,7 @@ class ScheduledExecutionProgram:
             job_seeds=self.job_seeds,
             start_seed_bundles=bundles,
             checkpoint_validation_trajectory_count=checkpoint_count,
+            checkpoint_updates=self.checkpoint_updates,
         )
         if policies != expected_policies:
             msg = "Scheduled update policies do not equal the deterministic compiled schedule."
@@ -1031,7 +1079,15 @@ class ScheduledExecutionProgram:
     @property
     def checkpoint_updates(self) -> tuple[int, ...]:
         """Exact checkpoint coordinates, or the empty tuple when disabled."""
-        return CHECKPOINT_VALIDATION_UPDATES if self.checkpoint_validation_trajectory_count else ()
+        if not self.checkpoint_validation_trajectory_count:
+            return ()
+        if (
+            self.executable_binding is not None
+            and self.executable_binding.binding.implementation_artifact.implementation_kind
+            in _OPERATOR_GROWTH_IMPLEMENTATION_KINDS
+        ):
+            return (99, 199)
+        return CHECKPOINT_VALIDATION_UPDATES
 
     def policy(self, start_index: int, update: int) -> ScheduledUpdatePolicy:
         """Resolve one exact update policy by optimizer coordinates.
@@ -1118,6 +1174,9 @@ class ScheduledExecutionProgram:
             job_seeds=job_seeds,
             start_seed_bundles=bundles,
             checkpoint_validation_trajectory_count=checkpoint_count,
+            checkpoint_updates=(99, 199)
+            if binding.implementation_artifact.implementation_kind in _OPERATOR_GROWTH_IMPLEMENTATION_KINDS
+            else CHECKPOINT_VALIDATION_UPDATES,
         )
         return cls(
             execution_scope="scoped_binding",
@@ -4783,13 +4842,2239 @@ def execute_scheduled_program(
     return result
 
 
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSelectionRequest:
+    """Validation-blind request to append one operator before a prefix."""
+
+    program_checksum: str
+    growth_spec_checksum: str
+    pool_checksum: str
+    prefix_index: int
+    global_update_start: int
+    selected_operator_ids: tuple[str, ...]
+    parameters: tuple[float, ...]
+    policy: ScheduledTrainingPolicy
+    previous_transition_checksum: str | None
+    schema_version: str = field(default=OPERATOR_GROWTH_SELECTION_REQUEST_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate the exact pre-prefix state and training-only membership."""
+        for name in ("program_checksum", "growth_spec_checksum", "pool_checksum"):
+            object.__setattr__(self, name, require_checksum(getattr(self, name), name))
+        prefix = require_int(self.prefix_index, "prefix_index")
+        update = require_int(self.global_update_start, "global_update_start")
+        if update != prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT:
+            msg = "Operator-growth prefix and global update coordinates disagree."
+            raise ValueError(msg)
+        operators = tuple(require_slug(item, "selected_operator_id") for item in self.selected_operator_ids)
+        if len(operators) != prefix or len(operators) != len(set(operators)):
+            msg = "Pre-prefix operator sequence must contain exactly one operator per completed prefix."
+            raise ValueError(msg)
+        parameters = _possibly_empty_float_tuple(self.parameters, "parameters", length=len(operators))
+        if not isinstance(self.policy, ScheduledTrainingPolicy):
+            msg = "policy must be a ScheduledTrainingPolicy."
+            raise TypeError(msg)
+        if (
+            self.policy.update != update
+            or self.policy.start_index != 0
+            or self.policy.trajectory_count != OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT
+            or self.policy.training_membership is None
+        ):
+            msg = "Structural selection requires the exact fixed eight-member prefix-start policy."
+            raise ValueError(msg)
+        if self.previous_transition_checksum is not None:
+            object.__setattr__(
+                self,
+                "previous_transition_checksum",
+                require_checksum(self.previous_transition_checksum, "previous_transition_checksum"),
+            )
+        if (prefix == 0) != (self.previous_transition_checksum is None):
+            msg = "Only the first structural selection may omit a predecessor transition."
+            raise ValueError(msg)
+        object.__setattr__(self, "prefix_index", prefix)
+        object.__setattr__(self, "global_update_start", update)
+        object.__setattr__(self, "selected_operator_ids", operators)
+        object.__setattr__(self, "parameters", parameters)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered selection input."""
+        return {
+            "schema_version": self.schema_version,
+            "program_checksum": self.program_checksum,
+            "growth_spec_checksum": self.growth_spec_checksum,
+            "pool_checksum": self.pool_checksum,
+            "prefix_index": self.prefix_index,
+            "global_update_start": self.global_update_start,
+            "selected_operator_ids": list(self.selected_operator_ids),
+            "parameters": list(self.parameters),
+            "policy": self.policy.to_dict(),
+            "previous_transition_checksum": self.previous_transition_checksum,
+            "accessible_data_role": "training_trajectory",
+            "validation_access": "forbidden",
+            "final_test_access": "forbidden",
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the complete structural-selection request."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSelectionRequest:
+        """Decode one strict structural-selection request.
+
+        Returns:
+            The verified request.
+        """
+        mapping = verify_sealed_mapping(
+            value,
+            expected_keys=frozenset({
+                "schema_version",
+                "program_checksum",
+                "growth_spec_checksum",
+                "pool_checksum",
+                "prefix_index",
+                "global_update_start",
+                "selected_operator_ids",
+                "parameters",
+                "policy",
+                "previous_transition_checksum",
+                "accessible_data_role",
+                "validation_access",
+                "final_test_access",
+                "content_checksum",
+            }),
+            name="operator-growth selection request",
+        )
+        if (
+            mapping["schema_version"] != OPERATOR_GROWTH_SELECTION_REQUEST_SCHEMA_VERSION
+            or mapping["accessible_data_role"] != "training_trajectory"
+            or mapping["validation_access"] != "forbidden"
+            or mapping["final_test_access"] != "forbidden"
+        ):
+            msg = "Operator-growth selection request schema or data-role isolation changed."
+            raise ValueError(msg)
+        return cls(
+            program_checksum=cast("str", mapping["program_checksum"]),
+            growth_spec_checksum=cast("str", mapping["growth_spec_checksum"]),
+            pool_checksum=cast("str", mapping["pool_checksum"]),
+            prefix_index=cast("int", mapping["prefix_index"]),
+            global_update_start=cast("int", mapping["global_update_start"]),
+            selected_operator_ids=cast("tuple[str, ...]", mapping["selected_operator_ids"]),
+            parameters=cast("tuple[float, ...]", mapping["parameters"]),
+            policy=ScheduledTrainingPolicy.from_dict(mapping["policy"]),
+            previous_transition_checksum=cast("str | None", mapping["previous_transition_checksum"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSelectionResult:
+    """Complete ordered structural-gradient evidence and selected operator."""
+
+    request_checksum: str
+    candidate_gradients: tuple[CandidateGradient, ...]
+    selected_operator_id: str
+    selected_gradient: float
+    objective_before_reoptimization: float
+    objective_evidence: tuple[OperatorGrowthSegmentedObjectiveEvidence, ...]
+    normalized_work: float
+    schema_version: str = field(default=OPERATOR_GROWTH_SELECTION_RESULT_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate complete candidate, objective, selection, and work evidence."""
+        object.__setattr__(self, "request_checksum", require_checksum(self.request_checksum, "request_checksum"))
+        candidates = tuple(self.candidate_gradients)
+        if not candidates or any(not isinstance(item, CandidateGradient) for item in candidates):
+            msg = "candidate_gradients must contain the complete nonempty CandidateGradient universe."
+            raise TypeError(msg)
+        if len({item.operator_id for item in candidates}) != len(candidates):
+            msg = "candidate_gradients must not duplicate operator identities."
+            raise ValueError(msg)
+        object.__setattr__(
+            self, "selected_operator_id", require_slug(self.selected_operator_id, "selected_operator_id")
+        )
+        gradient = require_float(self.selected_gradient, "selected_gradient")
+        selected = tuple(item for item in candidates if item.operator_id == self.selected_operator_id)
+        if len(selected) != 1 or selected[0].gradient != gradient or not selected[0].native_cap_feasible:
+            msg = "selected operator and gradient must identify one feasible candidate."
+            raise ValueError(msg)
+        evidence = tuple(self.objective_evidence)
+        if not evidence or any(not isinstance(item, OperatorGrowthSegmentedObjectiveEvidence) for item in evidence):
+            msg = "objective_evidence must contain typed segmented objective evidence."
+            raise TypeError(msg)
+        object.__setattr__(self, "candidate_gradients", candidates)
+        object.__setattr__(self, "selected_gradient", gradient)
+        object.__setattr__(
+            self,
+            "objective_before_reoptimization",
+            require_float(self.objective_before_reoptimization, "objective_before_reoptimization"),
+        )
+        object.__setattr__(self, "objective_evidence", evidence)
+        object.__setattr__(
+            self,
+            "normalized_work",
+            require_float(self.normalized_work, "normalized_work", minimum=0.0),
+        )
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered selection result field."""
+        return {
+            "schema_version": self.schema_version,
+            "request_checksum": self.request_checksum,
+            "candidate_gradients": [item.to_dict() for item in self.candidate_gradients],
+            "selected_operator_id": self.selected_operator_id,
+            "selected_gradient": self.selected_gradient,
+            "objective_before_reoptimization": self.objective_before_reoptimization,
+            "objective_evidence": [item.to_dict() for item in self.objective_evidence],
+            "normalized_work": self.normalized_work,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the selected structural extension."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSelectionResult:
+        """Decode one strict structural-selection result.
+
+        Returns:
+            The verified selection result.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "request_checksum",
+                "candidate_gradients",
+                "selected_operator_id",
+                "selected_gradient",
+                "objective_before_reoptimization",
+                "objective_evidence",
+                "normalized_work",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_SELECTION_RESULT_SCHEMA_VERSION,
+            name="operator-growth selection result",
+        )
+        raw_candidates = mapping["candidate_gradients"]
+        raw_evidence = mapping["objective_evidence"]
+        if type(raw_candidates) is not tuple or type(raw_evidence) is not tuple:
+            msg = "Serialized selection candidates and objective evidence must be JSON arrays."
+            raise TypeError(msg)
+        return cls(
+            request_checksum=cast("str", mapping["request_checksum"]),
+            candidate_gradients=tuple(CandidateGradient.from_dict(item) for item in raw_candidates),
+            selected_operator_id=cast("str", mapping["selected_operator_id"]),
+            selected_gradient=cast("float", mapping["selected_gradient"]),
+            objective_before_reoptimization=cast("float", mapping["objective_before_reoptimization"]),
+            objective_evidence=tuple(OperatorGrowthSegmentedObjectiveEvidence.from_dict(item) for item in raw_evidence),
+            normalized_work=cast("float", mapping["normalized_work"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthPrefixTransition:
+    """Checksum-sealed append transition opening one 100-update prefix."""
+
+    request: OperatorGrowthSelectionRequest
+    result: OperatorGrowthSelectionResult
+    selected_operator_ids: tuple[str, ...]
+    initial_parameters: tuple[float, ...]
+    previous_transition_checksum: str | None
+    schema_version: str = field(default=OPERATOR_GROWTH_PREFIX_TRANSITION_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Require append-only structure and exact Adam moment reset semantics."""
+        if not isinstance(self.request, OperatorGrowthSelectionRequest) or not isinstance(
+            self.result, OperatorGrowthSelectionResult
+        ):
+            msg = "Prefix transition requires typed selection request and result."
+            raise TypeError(msg)
+        expected_operators = (*self.request.selected_operator_ids, self.result.selected_operator_id)
+        expected_parameters = (*self.request.parameters, 0.0)
+        if (
+            self.result.request_checksum != self.request.content_checksum
+            or self.selected_operator_ids != expected_operators
+            or self.initial_parameters != expected_parameters
+            or self.previous_transition_checksum != self.request.previous_transition_checksum
+        ):
+            msg = "Prefix transition is not the exact append-at-zero structural extension."
+            raise ValueError(msg)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered structural transition field."""
+        return {
+            "schema_version": self.schema_version,
+            "request": self.request.to_dict(),
+            "request_checksum": self.request.content_checksum,
+            "result": self.result.to_dict(),
+            "result_checksum": self.result.content_checksum,
+            "selected_operator_ids": list(self.selected_operator_ids),
+            "initial_parameters": list(self.initial_parameters),
+            "adam_first_moment_reset": [0.0] * len(self.initial_parameters),
+            "adam_second_moment_reset": [0.0] * len(self.initial_parameters),
+            "local_update_counter_reset": 0,
+            "previous_transition_checksum": self.previous_transition_checksum,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the exact append and moment reset."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthPrefixTransition:
+        """Decode one strict structural prefix transition.
+
+        Returns:
+            The verified transition.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "request",
+                "request_checksum",
+                "result",
+                "result_checksum",
+                "selected_operator_ids",
+                "initial_parameters",
+                "adam_first_moment_reset",
+                "adam_second_moment_reset",
+                "local_update_counter_reset",
+                "previous_transition_checksum",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_PREFIX_TRANSITION_SCHEMA_VERSION,
+            name="operator-growth prefix transition",
+        )
+        transition = cls(
+            request=OperatorGrowthSelectionRequest.from_dict(mapping["request"]),
+            result=OperatorGrowthSelectionResult.from_dict(mapping["result"]),
+            selected_operator_ids=cast("tuple[str, ...]", mapping["selected_operator_ids"]),
+            initial_parameters=cast("tuple[float, ...]", mapping["initial_parameters"]),
+            previous_transition_checksum=cast("str | None", mapping["previous_transition_checksum"]),
+        )
+        zeros = (0.0,) * len(transition.initial_parameters)
+        if (
+            mapping["request_checksum"] != transition.request.content_checksum
+            or mapping["result_checksum"] != transition.result.content_checksum
+            or mapping["adam_first_moment_reset"] != zeros
+            or mapping["adam_second_moment_reset"] != zeros
+            or mapping["local_update_counter_reset"] != 0
+        ):
+            msg = "Serialized prefix transition aliases or Adam reset semantics changed."
+            raise ValueError(msg)
+        return transition
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSegmentedObjectiveRequest:
+    """Training-only objective request for one selected operator prefix."""
+
+    program_checksum: str
+    structural_state_checksum: str
+    selected_operator_ids: tuple[str, ...]
+    prefix_index: int
+    global_update: int
+    local_update: int
+    evaluation_stage: Literal["structural_selection", "prefix_reoptimization"]
+    evaluation_kind: Literal["gradient_plus", "gradient_minus", "post_update"]
+    parameter_index: int
+    parameters: tuple[float, ...]
+    policy: ScheduledTrainingPolicy
+    schema_version: str = field(default=OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_REQUEST_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate coordinates, prefix identity, membership, and role isolation."""
+        object.__setattr__(self, "program_checksum", require_checksum(self.program_checksum, "program_checksum"))
+        object.__setattr__(
+            self,
+            "structural_state_checksum",
+            require_checksum(self.structural_state_checksum, "structural_state_checksum"),
+        )
+        operators = tuple(require_slug(item, "selected_operator_id") for item in self.selected_operator_ids)
+        prefix = require_int(self.prefix_index, "prefix_index")
+        global_update = require_int(self.global_update, "global_update")
+        local_update = require_int(self.local_update, "local_update")
+        if (
+            len(operators) != prefix + 1
+            or global_update != prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT + local_update
+            or not 0 <= local_update < OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        ):
+            msg = "Segmented objective prefix and update coordinates disagree."
+            raise ValueError(msg)
+        if self.evaluation_stage not in {"structural_selection", "prefix_reoptimization"}:
+            msg = "evaluation_stage is unsupported."
+            raise ValueError(msg)
+        if self.evaluation_kind not in {"gradient_plus", "gradient_minus", "post_update"}:
+            msg = "evaluation_kind is unsupported."
+            raise ValueError(msg)
+        index = require_int(self.parameter_index, "parameter_index")
+        if index > len(operators) or (self.evaluation_kind != "post_update" and index >= len(operators)):
+            msg = "Objective parameter_index differs from its evaluation kind."
+            raise ValueError(msg)
+        parameters = _float_tuple(self.parameters, "parameters", length=len(operators))
+        if (
+            not isinstance(self.policy, ScheduledTrainingPolicy)
+            or self.policy.update != global_update
+            or self.policy.trajectory_count != OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT
+            or self.policy.training_membership is None
+        ):
+            msg = "Segmented objective requires the exact fixed eight-member scheduled policy."
+            raise ValueError(msg)
+        object.__setattr__(self, "selected_operator_ids", operators)
+        object.__setattr__(self, "prefix_index", prefix)
+        object.__setattr__(self, "global_update", global_update)
+        object.__setattr__(self, "local_update", local_update)
+        object.__setattr__(self, "parameter_index", index)
+        object.__setattr__(self, "parameters", parameters)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered objective input."""
+        return {
+            "schema_version": self.schema_version,
+            "program_checksum": self.program_checksum,
+            "structural_state_checksum": self.structural_state_checksum,
+            "selected_operator_ids": list(self.selected_operator_ids),
+            "prefix_index": self.prefix_index,
+            "global_update": self.global_update,
+            "local_update": self.local_update,
+            "evaluation_stage": self.evaluation_stage,
+            "evaluation_kind": self.evaluation_kind,
+            "parameter_index": self.parameter_index,
+            "parameters": list(self.parameters),
+            "policy": self.policy.to_dict(),
+            "accessible_data_role": "training_trajectory",
+            "validation_access": "forbidden",
+            "final_test_access": "forbidden",
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering one validation-blind objective request."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSegmentedObjectiveRequest:
+        """Decode one strict segmented objective request.
+
+        Returns:
+            The verified request.
+        """
+        mapping = verify_sealed_mapping(
+            value,
+            expected_keys=frozenset({
+                "schema_version",
+                "program_checksum",
+                "structural_state_checksum",
+                "selected_operator_ids",
+                "prefix_index",
+                "global_update",
+                "local_update",
+                "evaluation_stage",
+                "evaluation_kind",
+                "parameter_index",
+                "parameters",
+                "policy",
+                "accessible_data_role",
+                "validation_access",
+                "final_test_access",
+                "content_checksum",
+            }),
+            name="operator-growth segmented objective request",
+        )
+        if (
+            mapping["schema_version"] != OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_REQUEST_SCHEMA_VERSION
+            or mapping["accessible_data_role"] != "training_trajectory"
+            or mapping["validation_access"] != "forbidden"
+            or mapping["final_test_access"] != "forbidden"
+        ):
+            msg = "Segmented objective schema or data-role isolation changed."
+            raise ValueError(msg)
+        return cls(
+            program_checksum=cast("str", mapping["program_checksum"]),
+            structural_state_checksum=cast("str", mapping["structural_state_checksum"]),
+            selected_operator_ids=cast("tuple[str, ...]", mapping["selected_operator_ids"]),
+            prefix_index=cast("int", mapping["prefix_index"]),
+            global_update=cast("int", mapping["global_update"]),
+            local_update=cast("int", mapping["local_update"]),
+            evaluation_stage=cast(
+                'Literal["structural_selection", "prefix_reoptimization"]',
+                mapping["evaluation_stage"],
+            ),
+            evaluation_kind=cast(
+                'Literal["gradient_plus", "gradient_minus", "post_update"]', mapping["evaluation_kind"]
+            ),
+            parameter_index=cast("int", mapping["parameter_index"]),
+            parameters=cast("tuple[float, ...]", mapping["parameters"]),
+            policy=ScheduledTrainingPolicy.from_dict(mapping["policy"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSegmentedObjectiveResult:
+    """Finite training objective value bound to one exact request."""
+
+    request_checksum: str
+    objective: float
+    schema_version: str = field(default=OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_RESULT_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate exact request identity and finite objective."""
+        object.__setattr__(self, "request_checksum", require_checksum(self.request_checksum, "request_checksum"))
+        object.__setattr__(self, "objective", require_float(self.objective, "objective"))
+
+    @classmethod
+    def for_request(
+        cls,
+        request: OperatorGrowthSegmentedObjectiveRequest,
+        objective: float,
+    ) -> OperatorGrowthSegmentedObjectiveResult:
+        """Bind a finite objective to its exact request.
+
+        Returns:
+            The checksum-linked objective result.
+        """
+        return cls(request.content_checksum, objective)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered objective result field."""
+        return {
+            "schema_version": self.schema_version,
+            "request_checksum": self.request_checksum,
+            "objective": self.objective,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the exact objective result."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSegmentedObjectiveResult:
+        """Decode one strict segmented objective result.
+
+        Returns:
+            The verified result.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({"schema_version", "request_checksum", "objective", "content_checksum"}),
+            version=OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_RESULT_SCHEMA_VERSION,
+            name="operator-growth segmented objective result",
+        )
+        return cls(
+            request_checksum=cast("str", mapping["request_checksum"]),
+            objective=cast("float", mapping["objective"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSegmentedObjectiveEvidence:
+    """One checksum-linked training objective request and finite result."""
+
+    request: OperatorGrowthSegmentedObjectiveRequest
+    result: OperatorGrowthSegmentedObjectiveResult
+    schema_version: str = field(
+        default=OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_EVIDENCE_SCHEMA_VERSION,
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
+        """Require typed evidence with an exact request-result link."""
+        if not isinstance(self.request, OperatorGrowthSegmentedObjectiveRequest) or not isinstance(
+            self.result,
+            OperatorGrowthSegmentedObjectiveResult,
+        ):
+            msg = "Segmented objective evidence requires typed request and result records."
+            raise TypeError(msg)
+        if self.result.request_checksum != self.request.content_checksum:
+            msg = "Segmented objective result does not identify its exact request."
+            raise ValueError(msg)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered evidence field."""
+        return {
+            "schema_version": self.schema_version,
+            "request": self.request.to_dict(),
+            "request_checksum": self.request.content_checksum,
+            "result": self.result.to_dict(),
+            "result_checksum": self.result.content_checksum,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the exact objective evidence pair."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSegmentedObjectiveEvidence:
+        """Decode one strict objective evidence pair.
+
+        Returns:
+            The verified objective evidence.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "request",
+                "request_checksum",
+                "result",
+                "result_checksum",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_EVIDENCE_SCHEMA_VERSION,
+            name="operator-growth segmented objective evidence",
+        )
+        evidence = cls(
+            request=OperatorGrowthSegmentedObjectiveRequest.from_dict(mapping["request"]),
+            result=OperatorGrowthSegmentedObjectiveResult.from_dict(mapping["result"]),
+        )
+        if (
+            mapping["request_checksum"] != evidence.request.content_checksum
+            or mapping["result_checksum"] != evidence.result.content_checksum
+        ):
+            msg = "Serialized objective evidence checksum aliases changed."
+            raise ValueError(msg)
+        return evidence
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthPrefixValidation:
+    """Validation-only evidence emitted after one complete 100-update prefix."""
+
+    prefix_index: int
+    transition_checksum: str
+    request: ScheduledValidationRequest
+    result: ScheduledValidationResult
+    normalized_work: float
+    previous_validation_checksum: str | None
+    schema_version: str = field(default=OPERATOR_GROWTH_PREFIX_VALIDATION_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Require exact prefix coordinates, role isolation, and 256-member work."""
+        prefix = require_int(self.prefix_index, "prefix_index")
+        object.__setattr__(self, "prefix_index", prefix)
+        object.__setattr__(
+            self,
+            "transition_checksum",
+            require_checksum(self.transition_checksum, "transition_checksum"),
+        )
+        if not isinstance(self.request, ScheduledValidationRequest) or not isinstance(
+            self.result,
+            ScheduledValidationResult,
+        ):
+            msg = "Prefix validation requires typed validation request and result records."
+            raise TypeError(msg)
+        expected_update = (prefix + 1) * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1
+        if (
+            self.request.start_index != 0
+            or self.request.update != expected_update
+            or self.request.membership.trajectory_count != OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT
+            or self.result.request_checksum != self.request.content_checksum
+            or self.result.parameter_checksum != self.request.parameter_artifact.parameter_checksum
+            or self.result.membership_checksum != self.request.membership.content_checksum
+        ):
+            msg = "Prefix validation coordinates, membership, or checksum links changed."
+            raise ValueError(msg)
+        work = require_float(self.normalized_work, "normalized_work", minimum=0.0)
+        if not math.isclose(
+            work,
+            float(OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT),
+            rel_tol=0.0,
+            abs_tol=0.0,
+        ):
+            msg = "Prefix validation work must equal its exact 256-member ensemble."
+            raise ValueError(msg)
+        object.__setattr__(self, "normalized_work", work)
+        if self.previous_validation_checksum is not None:
+            object.__setattr__(
+                self,
+                "previous_validation_checksum",
+                require_checksum(self.previous_validation_checksum, "previous_validation_checksum"),
+            )
+        if (prefix == 0) != (self.previous_validation_checksum is None):
+            msg = "Only the first prefix validation may omit its predecessor."
+            raise ValueError(msg)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered prefix-validation field."""
+        return {
+            "schema_version": self.schema_version,
+            "prefix_index": self.prefix_index,
+            "transition_checksum": self.transition_checksum,
+            "request": self.request.to_dict(),
+            "request_checksum": self.request.content_checksum,
+            "result": self.result.to_dict(),
+            "result_checksum": self.result.content_checksum,
+            "normalized_work": self.normalized_work,
+            "previous_validation_checksum": self.previous_validation_checksum,
+            "selection_rule": "greatest_validation_fidelity_earliest_growth_step",
+            "final_test_access": "forbidden",
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering one completed-prefix validation."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthPrefixValidation:
+        """Decode one strict completed-prefix validation.
+
+        Returns:
+            The verified prefix validation.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "prefix_index",
+                "transition_checksum",
+                "request",
+                "request_checksum",
+                "result",
+                "result_checksum",
+                "normalized_work",
+                "previous_validation_checksum",
+                "selection_rule",
+                "final_test_access",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_PREFIX_VALIDATION_SCHEMA_VERSION,
+            name="operator-growth prefix validation",
+        )
+        if (
+            mapping["selection_rule"] != "greatest_validation_fidelity_earliest_growth_step"
+            or mapping["final_test_access"] != "forbidden"
+        ):
+            msg = "Prefix-validation selection or data-role invariant changed."
+            raise ValueError(msg)
+        validation = cls(
+            prefix_index=cast("int", mapping["prefix_index"]),
+            transition_checksum=cast("str", mapping["transition_checksum"]),
+            request=ScheduledValidationRequest.from_dict(mapping["request"]),
+            result=ScheduledValidationResult.from_dict(mapping["result"]),
+            normalized_work=cast("float", mapping["normalized_work"]),
+            previous_validation_checksum=cast("str | None", mapping["previous_validation_checksum"]),
+        )
+        if (
+            mapping["request_checksum"] != validation.request.content_checksum
+            or mapping["result_checksum"] != validation.result.content_checksum
+        ):
+            msg = "Serialized prefix-validation checksum aliases changed."
+            raise ValueError(msg)
+        return validation
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSegmentedUpdateReceipt:
+    """Exact Adam state transition and objective evidence for one global update."""
+
+    program_checksum: str
+    prefix_index: int
+    global_update: int
+    local_update: int
+    transition_checksum: str
+    selected_operator_ids: tuple[str, ...]
+    policy: ScheduledTrainingPolicy
+    parameters_before: tuple[float, ...]
+    first_moment_before: tuple[float, ...]
+    second_moment_before: tuple[float, ...]
+    gradient: tuple[float, ...]
+    parameters_after: tuple[float, ...]
+    first_moment_after: tuple[float, ...]
+    second_moment_after: tuple[float, ...]
+    best_parameters: tuple[float, ...]
+    best_objective: float
+    objective_evidence: tuple[OperatorGrowthSegmentedObjectiveEvidence, ...]
+    normalized_work: float
+    prefix_validation: OperatorGrowthPrefixValidation | None
+    previous_receipt_checksum: str | None
+    schema_version: str = field(default=OPERATOR_GROWTH_SEGMENTED_UPDATE_RECEIPT_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate coordinates, parameter-shift evidence, and complete work."""
+        object.__setattr__(self, "program_checksum", require_checksum(self.program_checksum, "program_checksum"))
+        prefix = require_int(self.prefix_index, "prefix_index")
+        global_update = require_int(self.global_update, "global_update")
+        local_update = require_int(self.local_update, "local_update")
+        if (
+            prefix not in {0, 1}
+            or global_update != prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT + local_update
+            or not 0 <= local_update < OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        ):
+            msg = "Segmented receipt prefix and update coordinates disagree."
+            raise ValueError(msg)
+        object.__setattr__(self, "prefix_index", prefix)
+        object.__setattr__(self, "global_update", global_update)
+        object.__setattr__(self, "local_update", local_update)
+        object.__setattr__(
+            self,
+            "transition_checksum",
+            require_checksum(self.transition_checksum, "transition_checksum"),
+        )
+        operators = tuple(require_slug(item, "selected_operator_id") for item in self.selected_operator_ids)
+        if len(operators) != prefix + 1 or len(operators) != len(set(operators)):
+            msg = "Segmented receipt operator sequence differs from its prefix."
+            raise ValueError(msg)
+        object.__setattr__(self, "selected_operator_ids", operators)
+        if (
+            not isinstance(self.policy, ScheduledTrainingPolicy)
+            or self.policy.start_index != 0
+            or self.policy.update != global_update
+            or self.policy.trajectory_count != OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT
+            or self.policy.training_membership is None
+        ):
+            msg = "Segmented receipt requires the exact fixed eight-member scheduled policy."
+            raise ValueError(msg)
+        vector_fields = (
+            "parameters_before",
+            "first_moment_before",
+            "second_moment_before",
+            "gradient",
+            "parameters_after",
+            "first_moment_after",
+            "second_moment_after",
+            "best_parameters",
+        )
+        for name in vector_fields:
+            object.__setattr__(self, name, _float_tuple(getattr(self, name), name, length=len(operators)))
+        object.__setattr__(self, "best_objective", require_float(self.best_objective, "best_objective"))
+        evidence = tuple(self.objective_evidence)
+        expected_count = 2 * len(operators) + 1
+        if len(evidence) != expected_count or any(
+            not isinstance(item, OperatorGrowthSegmentedObjectiveEvidence) for item in evidence
+        ):
+            msg = "Each Adam receipt requires two objectives per parameter and one post-update objective."
+            raise ValueError(msg)
+        for parameter_index in range(len(operators)):
+            plus = evidence[2 * parameter_index].request
+            minus = evidence[2 * parameter_index + 1].request
+            expected_plus = list(self.parameters_before)
+            expected_minus = list(self.parameters_before)
+            expected_plus[parameter_index] += math.pi / 2.0
+            expected_minus[parameter_index] -= math.pi / 2.0
+            if (
+                plus.evaluation_stage != "prefix_reoptimization"
+                or minus.evaluation_stage != "prefix_reoptimization"
+                or plus.evaluation_kind != "gradient_plus"
+                or minus.evaluation_kind != "gradient_minus"
+                or plus.parameter_index != parameter_index
+                or minus.parameter_index != parameter_index
+                or plus.parameters != tuple(expected_plus)
+                or minus.parameters != tuple(expected_minus)
+            ):
+                msg = "Receipt parameter-shift requests changed their exact pair ordering or angles."
+                raise ValueError(msg)
+            expected_gradient = 0.5 * (
+                evidence[2 * parameter_index].result.objective - evidence[2 * parameter_index + 1].result.objective
+            )
+            if not math.isclose(
+                self.gradient[parameter_index],
+                expected_gradient,
+                rel_tol=0.0,
+                abs_tol=1e-15,
+            ):
+                msg = "Receipt gradient differs from its retained parameter-shift objectives."
+                raise ValueError(msg)
+        monitor = evidence[-1].request
+        if (
+            monitor.evaluation_stage != "prefix_reoptimization"
+            or monitor.evaluation_kind != "post_update"
+            or monitor.parameter_index != len(operators)
+            or monitor.parameters != self.parameters_after
+        ):
+            msg = "Receipt post-update monitor differs from the persisted Adam parameters."
+            raise ValueError(msg)
+        for item in evidence:
+            request = item.request
+            if (
+                request.program_checksum != self.program_checksum
+                or request.structural_state_checksum != self.transition_checksum
+                or request.selected_operator_ids != operators
+                or request.prefix_index != prefix
+                or request.global_update != global_update
+                or request.local_update != local_update
+                or request.policy != self.policy
+            ):
+                msg = "Receipt objective evidence differs from its structural or schedule envelope."
+                raise ValueError(msg)
+        object.__setattr__(self, "objective_evidence", evidence)
+        if self.prefix_validation is not None:
+            if not isinstance(self.prefix_validation, OperatorGrowthPrefixValidation):
+                msg = "prefix_validation must be typed or None."
+                raise TypeError(msg)
+            if (
+                local_update != OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1
+                or self.prefix_validation.prefix_index != prefix
+                or self.prefix_validation.transition_checksum != self.transition_checksum
+            ):
+                msg = "Prefix validation may occur only on its completed 100th update."
+                raise ValueError(msg)
+        elif local_update == OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1:
+            msg = "Every complete 100-update prefix requires validation evidence."
+            raise ValueError(msg)
+        expected_work = float(expected_count * OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT)
+        if self.prefix_validation is not None:
+            expected_work = math.fsum((expected_work, self.prefix_validation.normalized_work))
+        work = require_float(self.normalized_work, "normalized_work", minimum=0.0)
+        if work != expected_work:
+            msg = "Segmented receipt work omits or duplicates objective or validation trajectories."
+            raise ValueError(msg)
+        object.__setattr__(self, "normalized_work", work)
+        if self.previous_receipt_checksum is not None:
+            object.__setattr__(
+                self,
+                "previous_receipt_checksum",
+                require_checksum(self.previous_receipt_checksum, "previous_receipt_checksum"),
+            )
+        if (global_update == 0) != (self.previous_receipt_checksum is None):
+            msg = "Only global update zero may begin the segmented receipt chain."
+            raise ValueError(msg)
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered segmented receipt field."""
+        return {
+            "schema_version": self.schema_version,
+            "program_checksum": self.program_checksum,
+            "prefix_index": self.prefix_index,
+            "global_update": self.global_update,
+            "local_update": self.local_update,
+            "transition_checksum": self.transition_checksum,
+            "selected_operator_ids": list(self.selected_operator_ids),
+            "policy": self.policy.to_dict(),
+            "policy_checksum": self.policy.content_checksum,
+            "parameters_before": list(self.parameters_before),
+            "first_moment_before": list(self.first_moment_before),
+            "second_moment_before": list(self.second_moment_before),
+            "gradient": list(self.gradient),
+            "parameters_after": list(self.parameters_after),
+            "first_moment_after": list(self.first_moment_after),
+            "second_moment_after": list(self.second_moment_after),
+            "best_parameters": list(self.best_parameters),
+            "best_objective": self.best_objective,
+            "objective_evidence": [item.to_dict() for item in self.objective_evidence],
+            "normalized_work": self.normalized_work,
+            "prefix_validation": (None if self.prefix_validation is None else self.prefix_validation.to_dict()),
+            "prefix_validation_checksum": (
+                None if self.prefix_validation is None else self.prefix_validation.content_checksum
+            ),
+            "previous_receipt_checksum": self.previous_receipt_checksum,
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the complete global update receipt."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSegmentedUpdateReceipt:
+        """Decode one strict segmented update receipt.
+
+        Returns:
+            The verified update receipt.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "program_checksum",
+                "prefix_index",
+                "global_update",
+                "local_update",
+                "transition_checksum",
+                "selected_operator_ids",
+                "policy",
+                "policy_checksum",
+                "parameters_before",
+                "first_moment_before",
+                "second_moment_before",
+                "gradient",
+                "parameters_after",
+                "first_moment_after",
+                "second_moment_after",
+                "best_parameters",
+                "best_objective",
+                "objective_evidence",
+                "normalized_work",
+                "prefix_validation",
+                "prefix_validation_checksum",
+                "previous_receipt_checksum",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_SEGMENTED_UPDATE_RECEIPT_SCHEMA_VERSION,
+            name="operator-growth segmented update receipt",
+        )
+        raw_evidence = mapping["objective_evidence"]
+        if type(raw_evidence) is not tuple:
+            msg = "objective_evidence must be a JSON array."
+            raise TypeError(msg)
+        raw_validation = mapping["prefix_validation"]
+        receipt = cls(
+            program_checksum=cast("str", mapping["program_checksum"]),
+            prefix_index=cast("int", mapping["prefix_index"]),
+            global_update=cast("int", mapping["global_update"]),
+            local_update=cast("int", mapping["local_update"]),
+            transition_checksum=cast("str", mapping["transition_checksum"]),
+            selected_operator_ids=cast("tuple[str, ...]", mapping["selected_operator_ids"]),
+            policy=ScheduledTrainingPolicy.from_dict(mapping["policy"]),
+            parameters_before=cast("tuple[float, ...]", mapping["parameters_before"]),
+            first_moment_before=cast("tuple[float, ...]", mapping["first_moment_before"]),
+            second_moment_before=cast("tuple[float, ...]", mapping["second_moment_before"]),
+            gradient=cast("tuple[float, ...]", mapping["gradient"]),
+            parameters_after=cast("tuple[float, ...]", mapping["parameters_after"]),
+            first_moment_after=cast("tuple[float, ...]", mapping["first_moment_after"]),
+            second_moment_after=cast("tuple[float, ...]", mapping["second_moment_after"]),
+            best_parameters=cast("tuple[float, ...]", mapping["best_parameters"]),
+            best_objective=cast("float", mapping["best_objective"]),
+            objective_evidence=tuple(OperatorGrowthSegmentedObjectiveEvidence.from_dict(item) for item in raw_evidence),
+            normalized_work=cast("float", mapping["normalized_work"]),
+            prefix_validation=(
+                None if raw_validation is None else OperatorGrowthPrefixValidation.from_dict(raw_validation)
+            ),
+            previous_receipt_checksum=cast("str | None", mapping["previous_receipt_checksum"]),
+        )
+        if mapping["policy_checksum"] != receipt.policy.content_checksum or mapping["prefix_validation_checksum"] != (
+            None if receipt.prefix_validation is None else receipt.prefix_validation.content_checksum
+        ):
+            msg = "Serialized segmented receipt checksum aliases changed."
+            raise ValueError(msg)
+        return receipt
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorGrowthSegmentedSnapshot:
+    """Authoritative restart and selected-prefix result for two growth prefixes."""
+
+    program_checksum: str
+    pool: OperatorPoolSpec
+    growth_spec: OperatorGrowthSpec
+    active_operator_ids: tuple[str, ...]
+    parameters: tuple[float, ...]
+    first_moment: tuple[float, ...]
+    second_moment: tuple[float, ...]
+    best_training_parameters: tuple[float, ...]
+    best_training_objective: float | None
+    transitions: tuple[OperatorGrowthPrefixTransition, ...]
+    receipts: tuple[OperatorGrowthSegmentedUpdateReceipt, ...]
+    prefix_validations: tuple[OperatorGrowthPrefixValidation, ...]
+    total_normalized_work: float
+    selected_prefix_index: int | None
+    selected_operator_ids: tuple[str, ...]
+    selected_parameters: tuple[float, ...]
+    selected_validation_score: float | None
+    terminal_reason: Literal["update_budget"] | None
+    schema_version: str = field(default=OPERATOR_GROWTH_SEGMENTED_SNAPSHOT_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate every chain, active state, work total, and validation selection."""
+        object.__setattr__(self, "program_checksum", require_checksum(self.program_checksum, "program_checksum"))
+        if not isinstance(self.pool, OperatorPoolSpec) or not isinstance(self.growth_spec, OperatorGrowthSpec):
+            msg = "Segmented snapshot requires exact pool and growth-spec documents."
+            raise TypeError(msg)
+        if (
+            self.growth_spec.pool_checksum != self.pool.content_checksum
+            or self.growth_spec.method_id != self.pool.method_id
+        ):
+            msg = "Segmented snapshot growth spec is not bound to its exact pool."
+            raise ValueError(msg)
+        transitions = tuple(self.transitions)
+        receipts = tuple(self.receipts)
+        validations = tuple(self.prefix_validations)
+        if any(not isinstance(item, OperatorGrowthPrefixTransition) for item in transitions):
+            msg = "transitions must contain only OperatorGrowthPrefixTransition records."
+            raise TypeError(msg)
+        if any(not isinstance(item, OperatorGrowthSegmentedUpdateReceipt) for item in receipts):
+            msg = "receipts must contain only OperatorGrowthSegmentedUpdateReceipt records."
+            raise TypeError(msg)
+        if any(not isinstance(item, OperatorGrowthPrefixValidation) for item in validations):
+            msg = "prefix_validations must contain only OperatorGrowthPrefixValidation records."
+            raise TypeError(msg)
+        if len(receipts) > OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT:
+            msg = "Segmented snapshot exceeds the exact 200-update budget."
+            raise ValueError(msg)
+        expected_transition_count = (
+            0 if not receipts else (len(receipts) - 1) // OPERATOR_GROWTH_PREFIX_UPDATE_COUNT + 1
+        )
+        if len(transitions) != expected_transition_count or len(validations) != len(receipts) // 100:
+            msg = "Transition or validation count differs from completed segmented work."
+            raise ValueError(msg)
+        previous_transition_checksum: str | None = None
+        for prefix, transition in enumerate(transitions):
+            if (
+                transition.request.prefix_index != prefix
+                or transition.request.global_update_start != prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+                or transition.previous_transition_checksum != previous_transition_checksum
+            ):
+                msg = "Structural transition chain or prefix coordinates changed."
+                raise ValueError(msg)
+            previous_transition_checksum = transition.content_checksum
+        previous_receipt_checksum: str | None = None
+        receipt_validations: list[OperatorGrowthPrefixValidation] = []
+        for update, receipt in enumerate(receipts):
+            prefix = update // OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+            if (
+                receipt.program_checksum != self.program_checksum
+                or receipt.global_update != update
+                or receipt.prefix_index != prefix
+                or receipt.local_update != update % OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+                or receipt.transition_checksum != transitions[prefix].content_checksum
+                or receipt.selected_operator_ids != transitions[prefix].selected_operator_ids
+                or receipt.previous_receipt_checksum != previous_receipt_checksum
+            ):
+                msg = "Segmented receipt chain differs from its program or structural prefix."
+                raise ValueError(msg)
+            previous_receipt_checksum = receipt.content_checksum
+            if receipt.prefix_validation is not None:
+                receipt_validations.append(receipt.prefix_validation)
+        if tuple(receipt_validations) != validations:
+            msg = "Snapshot validation aliases differ from validation-bearing receipts."
+            raise ValueError(msg)
+        previous_validation_checksum: str | None = None
+        for prefix, validation in enumerate(validations):
+            if (
+                validation.prefix_index != prefix
+                or validation.transition_checksum != transitions[prefix].content_checksum
+                or validation.previous_validation_checksum != previous_validation_checksum
+            ):
+                msg = "Completed-prefix validation chain changed."
+                raise ValueError(msg)
+            previous_validation_checksum = validation.content_checksum
+        active = tuple(require_slug(item, "active_operator_id") for item in self.active_operator_ids)
+        expected_active = () if not transitions else transitions[-1].selected_operator_ids
+        if active != expected_active:
+            msg = "Active operator sequence differs from the latest structural transition."
+            raise ValueError(msg)
+        state_length = len(active)
+        vector_fields = (
+            "parameters",
+            "first_moment",
+            "second_moment",
+            "best_training_parameters",
+        )
+        for name in vector_fields:
+            object.__setattr__(
+                self,
+                name,
+                _possibly_empty_float_tuple(getattr(self, name), name, length=state_length),
+            )
+        if receipts:
+            last = receipts[-1]
+            if (
+                self.parameters != last.parameters_after
+                or self.first_moment != last.first_moment_after
+                or self.second_moment != last.second_moment_after
+                or self.best_training_parameters != last.best_parameters
+                or self.best_training_objective != last.best_objective
+            ):
+                msg = "Snapshot active Adam state differs from its latest receipt."
+                raise ValueError(msg)
+            object.__setattr__(
+                self,
+                "best_training_objective",
+                require_float(self.best_training_objective, "best_training_objective"),
+            )
+        elif (
+            active
+            or self.parameters
+            or self.first_moment
+            or self.second_moment
+            or self.best_training_parameters
+            or self.best_training_objective is not None
+        ):
+            msg = "An update-zero segmented snapshot must contain no active optimizer state."
+            raise ValueError(msg)
+        expected_work = math.fsum(
+            [transition.result.normalized_work for transition in transitions]
+            + [receipt.normalized_work for receipt in receipts]
+        )
+        work = require_float(self.total_normalized_work, "total_normalized_work", minimum=0.0)
+        if work != expected_work:
+            msg = "Snapshot normalized work differs from all structural, training, and validation evidence."
+            raise ValueError(msg)
+        object.__setattr__(self, "total_normalized_work", work)
+        if validations:
+            expected_selected = max(
+                range(len(validations)),
+                key=lambda index: validations[index].result.score,
+            )
+            expected_selected_operators = transitions[expected_selected].selected_operator_ids
+            expected_selected_parameters = validations[expected_selected].request.parameter_artifact.parameters
+            expected_selected_score = validations[expected_selected].result.score
+        else:
+            expected_selected = None
+            expected_selected_operators = ()
+            expected_selected_parameters = ()
+            expected_selected_score = None
+        selected_ids = tuple(require_slug(item, "selected_operator_id") for item in self.selected_operator_ids)
+        selected_parameters = _possibly_empty_float_tuple(
+            self.selected_parameters,
+            "selected_parameters",
+            length=len(selected_ids),
+        )
+        if (
+            self.selected_prefix_index != expected_selected
+            or selected_ids != expected_selected_operators
+            or selected_parameters != expected_selected_parameters
+            or self.selected_validation_score != expected_selected_score
+        ):
+            msg = "Snapshot selected prefix differs from greatest validation and earliest-prefix tie-break."
+            raise ValueError(msg)
+        if self.selected_prefix_index is not None:
+            object.__setattr__(
+                self,
+                "selected_prefix_index",
+                require_int(self.selected_prefix_index, "selected_prefix_index"),
+            )
+            object.__setattr__(
+                self,
+                "selected_validation_score",
+                require_float(
+                    self.selected_validation_score,
+                    "selected_validation_score",
+                    minimum=0.0,
+                    maximum=1.0,
+                ),
+            )
+        object.__setattr__(self, "active_operator_ids", active)
+        object.__setattr__(self, "selected_operator_ids", selected_ids)
+        object.__setattr__(self, "selected_parameters", selected_parameters)
+        object.__setattr__(self, "transitions", transitions)
+        object.__setattr__(self, "receipts", receipts)
+        object.__setattr__(self, "prefix_validations", validations)
+        expected_terminal = "update_budget" if len(receipts) == OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT else None
+        if self.terminal_reason != expected_terminal:
+            msg = "Only the exact 200th global update may set update_budget termination."
+            raise ValueError(msg)
+
+    @property
+    def next_global_update(self) -> int:
+        """Next global optimizer-update coordinate."""
+        return len(self.receipts)
+
+    @property
+    def complete(self) -> bool:
+        """Whether both exact 100-update prefixes are complete."""
+        return self.terminal_reason == "update_budget"
+
+    @property
+    def selected_transition(self) -> OperatorGrowthPrefixTransition | None:
+        """The validation-selected structural prefix transition."""
+        return None if self.selected_prefix_index is None else self.transitions[self.selected_prefix_index]
+
+    @classmethod
+    def initialize(cls, program: ScheduledExecutionProgram) -> OperatorGrowthSegmentedSnapshot:
+        """Create the empty authoritative snapshot for one exact q6 program.
+
+        Returns:
+            The checksum-bound update-zero segmented snapshot.
+        """
+        execution_spec = _validate_operator_growth_segmented_program(program)
+        return cls(
+            program_checksum=program.content_checksum,
+            pool=execution_spec.pool,
+            growth_spec=execution_spec.growth_spec,
+            active_operator_ids=(),
+            parameters=(),
+            first_moment=(),
+            second_moment=(),
+            best_training_parameters=(),
+            best_training_objective=None,
+            transitions=(),
+            receipts=(),
+            prefix_validations=(),
+            total_normalized_work=0.0,
+            selected_prefix_index=None,
+            selected_operator_ids=(),
+            selected_parameters=(),
+            selected_validation_score=None,
+            terminal_reason=None,
+        )
+
+    def _payload(self) -> dict[str, object]:
+        """Return every checksum-covered snapshot field."""
+        return {
+            "schema_version": self.schema_version,
+            "program_checksum": self.program_checksum,
+            "pool": self.pool.to_dict(),
+            "pool_checksum": self.pool.content_checksum,
+            "growth_spec": self.growth_spec.to_dict(),
+            "growth_spec_checksum": self.growth_spec.content_checksum,
+            "active_operator_ids": list(self.active_operator_ids),
+            "parameters": list(self.parameters),
+            "first_moment": list(self.first_moment),
+            "second_moment": list(self.second_moment),
+            "best_training_parameters": list(self.best_training_parameters),
+            "best_training_objective": self.best_training_objective,
+            "transitions": [item.to_dict() for item in self.transitions],
+            "receipts": [item.to_dict() for item in self.receipts],
+            "prefix_validations": [item.to_dict() for item in self.prefix_validations],
+            "total_normalized_work": self.total_normalized_work,
+            "selected_prefix_index": self.selected_prefix_index,
+            "selected_operator_ids": list(self.selected_operator_ids),
+            "selected_parameters": list(self.selected_parameters),
+            "selected_validation_score": self.selected_validation_score,
+            "terminal_reason": self.terminal_reason,
+            "selection_rule": "greatest_validation_fidelity_earliest_growth_step",
+            "global_update_budget": OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT,
+            "updates_per_prefix": OPERATOR_GROWTH_PREFIX_UPDATE_COUNT,
+            "final_test_access": "forbidden",
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum covering the complete authoritative structural result."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native data."""
+        return _sealed(self._payload())
+
+    def to_json(self) -> str:
+        """Return canonical checksum-sealed restart JSON."""
+        return canonical_json(self.to_dict())
+
+    @classmethod
+    def from_dict(cls, value: object) -> OperatorGrowthSegmentedSnapshot:
+        """Decode one strict authoritative segmented snapshot.
+
+        Returns:
+            The verified snapshot.
+        """
+        mapping = _verify(
+            value,
+            keys=frozenset({
+                "schema_version",
+                "program_checksum",
+                "pool",
+                "pool_checksum",
+                "growth_spec",
+                "growth_spec_checksum",
+                "active_operator_ids",
+                "parameters",
+                "first_moment",
+                "second_moment",
+                "best_training_parameters",
+                "best_training_objective",
+                "transitions",
+                "receipts",
+                "prefix_validations",
+                "total_normalized_work",
+                "selected_prefix_index",
+                "selected_operator_ids",
+                "selected_parameters",
+                "selected_validation_score",
+                "terminal_reason",
+                "selection_rule",
+                "global_update_budget",
+                "updates_per_prefix",
+                "final_test_access",
+                "content_checksum",
+            }),
+            version=OPERATOR_GROWTH_SEGMENTED_SNAPSHOT_SCHEMA_VERSION,
+            name="operator-growth segmented snapshot",
+        )
+        if (
+            mapping["selection_rule"] != "greatest_validation_fidelity_earliest_growth_step"
+            or mapping["global_update_budget"] != OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT
+            or mapping["updates_per_prefix"] != OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+            or mapping["final_test_access"] != "forbidden"
+        ):
+            msg = "Segmented snapshot protocol invariants changed."
+            raise ValueError(msg)
+        raw_transitions = mapping["transitions"]
+        raw_receipts = mapping["receipts"]
+        raw_validations = mapping["prefix_validations"]
+        if type(raw_transitions) is not tuple or type(raw_receipts) is not tuple or type(raw_validations) is not tuple:
+            msg = "Snapshot histories must be JSON arrays."
+            raise TypeError(msg)
+        snapshot = cls(
+            program_checksum=cast("str", mapping["program_checksum"]),
+            pool=OperatorPoolSpec.from_dict(mapping["pool"]),
+            growth_spec=OperatorGrowthSpec.from_dict(mapping["growth_spec"]),
+            active_operator_ids=cast("tuple[str, ...]", mapping["active_operator_ids"]),
+            parameters=cast("tuple[float, ...]", mapping["parameters"]),
+            first_moment=cast("tuple[float, ...]", mapping["first_moment"]),
+            second_moment=cast("tuple[float, ...]", mapping["second_moment"]),
+            best_training_parameters=cast("tuple[float, ...]", mapping["best_training_parameters"]),
+            best_training_objective=cast("float | None", mapping["best_training_objective"]),
+            transitions=tuple(OperatorGrowthPrefixTransition.from_dict(item) for item in raw_transitions),
+            receipts=tuple(OperatorGrowthSegmentedUpdateReceipt.from_dict(item) for item in raw_receipts),
+            prefix_validations=tuple(OperatorGrowthPrefixValidation.from_dict(item) for item in raw_validations),
+            total_normalized_work=cast("float", mapping["total_normalized_work"]),
+            selected_prefix_index=cast("int | None", mapping["selected_prefix_index"]),
+            selected_operator_ids=cast("tuple[str, ...]", mapping["selected_operator_ids"]),
+            selected_parameters=cast("tuple[float, ...]", mapping["selected_parameters"]),
+            selected_validation_score=cast("float | None", mapping["selected_validation_score"]),
+            terminal_reason=cast('Literal["update_budget"] | None', mapping["terminal_reason"]),
+        )
+        if (
+            mapping["pool_checksum"] != snapshot.pool.content_checksum
+            or mapping["growth_spec_checksum"] != snapshot.growth_spec.content_checksum
+        ):
+            msg = "Serialized snapshot pool or growth-spec checksum alias changed."
+            raise ValueError(msg)
+        return snapshot
+
+    @classmethod
+    def from_json(cls, payload: str) -> OperatorGrowthSegmentedSnapshot:
+        """Decode canonical restart JSON.
+
+        Returns:
+            The verified segmented snapshot.
+        """
+        return cls.from_dict(load_canonical_json_object(payload))
+
+    def validate_against_program(self, program: ScheduledExecutionProgram) -> None:
+        """Replay every structural and numerical transition against its exact program."""
+        _validate_operator_growth_segmented_history(program, self)
+
+
+class OperatorGrowthSegmentedObjectiveExecutor(Protocol):
+    """Training-only numerical seam shared by selection and reoptimization."""
+
+    def __call__(
+        self,
+        request: OperatorGrowthSegmentedObjectiveRequest,
+    ) -> OperatorGrowthSegmentedObjectiveResult:
+        """Evaluate one exact fixed-CRN objective request."""
+        ...
+
+
+class OperatorGrowthStructuralSelectionExecutor(Protocol):
+    """Numerical structural-selection seam with a deterministic work quote."""
+
+    def quote_normalized_work(self, request: OperatorGrowthSelectionRequest) -> float:
+        """Quote all fixed-CRN candidate and appended-zero objectives."""
+        ...
+
+    def __call__(
+        self,
+        request: OperatorGrowthSelectionRequest,
+        objective_executor: OperatorGrowthSegmentedObjectiveExecutor,
+    ) -> OperatorGrowthSelectionResult:
+        """Return complete ordered candidate and objective evidence."""
+        ...
+
+
+def _validate_operator_growth_segmented_program(
+    program: ScheduledExecutionProgram,
+) -> OperatorGrowthExecutionSpec:
+    """Require the exact q6 scientific binding and two-prefix scheduled policy.
+
+    Returns:
+        The binding-owned exact q6 operator-growth execution specification.
+    """
+    if not isinstance(program, ScheduledExecutionProgram):
+        msg = "program must be a ScheduledExecutionProgram."
+        raise TypeError(msg)
+    if program.execution_scope != "scoped_binding" or program.executable_binding is None:
+        msg = "Segmented operator growth requires one complete scoped executable binding."
+        raise ValueError(msg)
+    binding = program.executable_binding.binding
+    payload = binding.implementation_artifact.implementation_payload
+    execution_spec = binding.operator_growth_spec
+    if (
+        binding.publication_method_id != "adapt_style_state_preparation"
+        or binding.preset != "paper-screen"
+        or binding.target_scope_id != "primary_q6"
+        or binding.qubit_count != 6
+        or binding.execution_data_role != "screening_selection"
+        or binding.implementation_artifact.implementation_kind != "operator_growth"
+        or binding.controlled_stage.implementation_stage_id != "operator_growth_reoptimization"
+        or not isinstance(execution_spec, OperatorGrowthExecutionSpec)
+        or not isinstance(payload, OperatorGrowthExecutionSpec)
+        or payload != execution_spec
+        or execution_spec.outer_evaluation_policy.purpose != "screening_outer"
+    ):
+        msg = "Segmented execution accepts only the exact primary-q6 operator-growth implementation."
+        raise ValueError(msg)
+    spec = execution_spec.growth_spec
+    if (
+        program.total_updates_per_start != OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT
+        or program.start_count != 1
+        or program.schedule.schedule_id != "direct_matched_fixed_crn"
+        or spec.reoptimization_steps != OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        or spec.max_operators < 2
+        or program.checkpoint_updates != (99, 199)
+        or program.checkpoint_validation_trajectory_count != OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT
+    ):
+        msg = "Operator-growth program differs from the exact two-prefix WP22 schedule."
+        raise ValueError(msg)
+    memberships: list[tuple[int, ...]] = []
+    for update in range(OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT):
+        policy = program.policy(0, update)
+        membership = policy.training_membership
+        if (
+            policy.trajectory_count != OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT
+            or membership is None
+            or membership.role != "training_trajectory"
+            or not math.isclose(policy.noise_strength_scale, 1.0, rel_tol=0.0, abs_tol=0.0)
+            or policy.checkpoint_due != (update in {99, 199})
+            or (policy.checkpoint_membership is not None) != (update in {99, 199})
+        ):
+            msg = "Operator-growth policies differ from fixed-eight CRN training or prefix validation."
+            raise ValueError(msg)
+        memberships.append(membership.member_seeds)
+        if policy.checkpoint_membership is not None and (
+            policy.checkpoint_membership.trajectory_count != OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT
+        ):
+            msg = "Operator-growth prefix validation must use exactly 256 trajectories."
+            raise ValueError(msg)
+    if len(set(memberships)) != 1:
+        msg = "Operator-growth training membership must remain one fixed eight-member CRN ensemble."
+        raise ValueError(msg)
+    return execution_spec
+
+
+def _operator_growth_candidate_metadata(
+    pool: OperatorPoolSpec,
+    spec: OperatorGrowthSpec,
+    selected_operator_ids: tuple[str, ...],
+) -> tuple[tuple[int, PoolOperator, bool], ...]:
+    """Return the complete remaining pool order and native-cap feasibility."""
+    selected = set(selected_operator_ids)
+    by_id = {operator.operator_id: operator for operator in pool.operators}
+    if len(selected) != len(selected_operator_ids) or any(item not in by_id for item in selected):
+        msg = "Selected structural prefix is not a unique subsequence of the exact pool."
+        raise ValueError(msg)
+    edge_counts = [0] * (pool.num_qubits - 1)
+    for operator_id in selected_operator_ids:
+        operator = by_id[operator_id]
+        if len(operator.sites) == 2:
+            edge_counts[operator.sites[0]] += operator.native_two_qubit_gates
+    result: list[tuple[int, PoolOperator, bool]] = []
+    for pool_index, operator in enumerate(pool.operators):
+        if operator.operator_id in selected:
+            continue
+        feasible = True
+        if len(operator.sites) == 2 and spec.native_two_qubit_cap_per_edge is not None:
+            feasible = (
+                edge_counts[operator.sites[0]] + operator.native_two_qubit_gates <= spec.native_two_qubit_cap_per_edge
+            )
+        result.append((pool_index, operator, feasible))
+    return tuple(result)
+
+
+def _selection_expected_work(
+    pool: OperatorPoolSpec,
+    spec: OperatorGrowthSpec,
+    request: OperatorGrowthSelectionRequest,
+) -> float:
+    """Return exact fixed-CRN work for all candidates plus appended-zero baseline."""
+    candidates = _operator_growth_candidate_metadata(pool, spec, request.selected_operator_ids)
+    feasible_count = sum(feasible for _index, _operator, feasible in candidates)
+    if not candidates or not feasible_count:
+        msg = "The exact two-prefix program requires at least one feasible remaining candidate."
+        raise ValueError(msg)
+    return float((2 * feasible_count + 1) * OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT)
+
+
+def _segmented_objective_evidence(
+    executor: OperatorGrowthSegmentedObjectiveExecutor,
+    request: OperatorGrowthSegmentedObjectiveRequest,
+) -> OperatorGrowthSegmentedObjectiveEvidence:
+    """Invoke one typed objective callback and verify its exact request link.
+
+    Returns:
+        The checksum-linked request and callback result.
+    """
+    result = executor(request)
+    if not isinstance(result, OperatorGrowthSegmentedObjectiveResult):
+        msg = "objective_executor must return OperatorGrowthSegmentedObjectiveResult."
+        raise TypeError(msg)
+    return OperatorGrowthSegmentedObjectiveEvidence(request, result)
+
+
+def _validate_selection_result(
+    program: ScheduledExecutionProgram,
+    pool: OperatorPoolSpec,
+    spec: OperatorGrowthSpec,
+    request: OperatorGrowthSelectionRequest,
+    result: OperatorGrowthSelectionResult,
+    quoted_work: float,
+) -> None:
+    """Replay full pool order, objective pairs, feasibility, and deterministic selection."""
+    if not isinstance(result, OperatorGrowthSelectionResult):
+        msg = "selection_executor must return OperatorGrowthSelectionResult."
+        raise TypeError(msg)
+    if result.request_checksum != request.content_checksum or result.normalized_work != quoted_work:
+        msg = "Structural selection result differs from its request or deterministic work quote."
+        raise ValueError(msg)
+    metadata = _operator_growth_candidate_metadata(pool, spec, request.selected_operator_ids)
+    if len(result.candidate_gradients) != len(metadata):
+        msg = "Structural selection omitted remaining pool candidates."
+        raise ValueError(msg)
+    evidence_index = 0
+    feasible_candidates: list[CandidateGradient] = []
+    parameter_index = request.prefix_index
+    for candidate, (pool_index, operator, feasible) in zip(
+        result.candidate_gradients,
+        metadata,
+        strict=True,
+    ):
+        operator_id = operator.operator_id
+        native_increment = operator.native_two_qubit_gates
+        if (
+            candidate.operator_id != operator_id
+            or candidate.pool_index != pool_index
+            or candidate.native_two_qubit_increment != native_increment
+            or candidate.native_cap_feasible != feasible
+        ):
+            msg = "Selection candidate ordering, identity, native cost, or feasibility changed."
+            raise ValueError(msg)
+        if not feasible:
+            continue
+        selected_ids = (*request.selected_operator_ids, operator_id)
+        plus_parameters = (*request.parameters, math.pi / 2.0)
+        minus_parameters = (*request.parameters, -math.pi / 2.0)
+        expected_plus = OperatorGrowthSegmentedObjectiveRequest(
+            program_checksum=program.content_checksum,
+            structural_state_checksum=request.content_checksum,
+            selected_operator_ids=selected_ids,
+            prefix_index=request.prefix_index,
+            global_update=request.global_update_start,
+            local_update=0,
+            evaluation_stage="structural_selection",
+            evaluation_kind="gradient_plus",
+            parameter_index=parameter_index,
+            parameters=plus_parameters,
+            policy=request.policy,
+        )
+        expected_minus = replace(
+            expected_plus,
+            evaluation_kind="gradient_minus",
+            parameters=minus_parameters,
+        )
+        try:
+            plus = result.objective_evidence[evidence_index]
+            minus = result.objective_evidence[evidence_index + 1]
+        except IndexError as error:
+            msg = "Selection objective evidence ended before every feasible candidate pair."
+            raise ValueError(msg) from error
+        if plus.request != expected_plus or minus.request != expected_minus:
+            msg = "Selection objective evidence changed its fixed-CRN candidate pair order."
+            raise ValueError(msg)
+        expected_gradient = 0.5 * (plus.result.objective - minus.result.objective)
+        if candidate.gradient is None or not math.isclose(
+            candidate.gradient,
+            expected_gradient,
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        ):
+            msg = "Candidate gradient differs from its retained parameter-shift objectives."
+            raise ValueError(msg)
+        feasible_candidates.append(candidate)
+        evidence_index += 2
+    chosen = max(feasible_candidates, key=lambda item: cast("float", item.absolute_gradient))
+    expected_baseline = OperatorGrowthSegmentedObjectiveRequest(
+        program_checksum=program.content_checksum,
+        structural_state_checksum=request.content_checksum,
+        selected_operator_ids=(*request.selected_operator_ids, chosen.operator_id),
+        prefix_index=request.prefix_index,
+        global_update=request.global_update_start,
+        local_update=0,
+        evaluation_stage="structural_selection",
+        evaluation_kind="post_update",
+        parameter_index=parameter_index + 1,
+        parameters=(*request.parameters, 0.0),
+        policy=request.policy,
+    )
+    if len(result.objective_evidence) != evidence_index + 1:
+        msg = "Selection objective evidence contains hidden or missing objective calls."
+        raise ValueError(msg)
+    baseline = result.objective_evidence[evidence_index]
+    if (
+        baseline.request != expected_baseline
+        or result.selected_operator_id != chosen.operator_id
+        or result.selected_gradient != chosen.gradient
+        or result.objective_before_reoptimization != baseline.result.objective
+        or cast("float", chosen.absolute_gradient) <= spec.gradient_tolerance
+    ):
+        msg = "Structural selection differs from largest-gradient, tie-break, or appended-zero rules."
+        raise ValueError(msg)
+
+
+def _segmented_checkpoint_state_checksum(
+    transition_checksum: str,
+    global_update: int,
+    parameters: tuple[float, ...],
+    first_moment: tuple[float, ...],
+    second_moment: tuple[float, ...],
+    best_objective: float,
+) -> str:
+    """Seal the optimizer state that yielded a recoverable best-prefix artifact.
+
+    Returns:
+        The canonical optimizer-state checksum.
+    """
+    return canonical_checksum({
+        "optimizer_kind": "operator_growth_adam",
+        "transition_checksum": transition_checksum,
+        "global_update": global_update,
+        "parameters": list(parameters),
+        "first_moment": list(first_moment),
+        "second_moment": list(second_moment),
+        "best_objective": best_objective,
+    })
+
+
+def _validate_operator_growth_segmented_history(
+    program: ScheduledExecutionProgram,
+    snapshot: OperatorGrowthSegmentedSnapshot,
+) -> None:
+    """Mechanically replay exact structural selection, Adam, validation, and work."""
+    if not isinstance(snapshot, OperatorGrowthSegmentedSnapshot):
+        msg = "snapshot must be an OperatorGrowthSegmentedSnapshot."
+        raise TypeError(msg)
+    execution_spec = _validate_operator_growth_segmented_program(program)
+    pool = execution_spec.pool
+    spec = execution_spec.growth_spec
+    if snapshot.program_checksum != program.content_checksum or snapshot.pool != pool or snapshot.growth_spec != spec:
+        msg = "Segmented snapshot differs from its exact program, pool, or growth spec."
+        raise ValueError(msg)
+    previous_transition_checksum: str | None = None
+    for prefix, transition in enumerate(snapshot.transitions):
+        source_parameters = (
+            () if prefix == 0 else snapshot.prefix_validations[prefix - 1].request.parameter_artifact.parameters
+        )
+        expected_request = OperatorGrowthSelectionRequest(
+            program_checksum=program.content_checksum,
+            growth_spec_checksum=spec.content_checksum,
+            pool_checksum=pool.content_checksum,
+            prefix_index=prefix,
+            global_update_start=prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT,
+            selected_operator_ids=() if prefix == 0 else snapshot.transitions[prefix - 1].selected_operator_ids,
+            parameters=source_parameters,
+            policy=ScheduledTrainingPolicy.from_compiled(
+                program.policy(0, prefix * OPERATOR_GROWTH_PREFIX_UPDATE_COUNT)
+            ),
+            previous_transition_checksum=previous_transition_checksum,
+        )
+        expected_work = _selection_expected_work(pool, spec, expected_request)
+        if transition.request != expected_request:
+            msg = "Persisted structural-selection request differs from its exact prefix source."
+            raise ValueError(msg)
+        _validate_selection_result(
+            program,
+            pool,
+            spec,
+            transition.request,
+            transition.result,
+            expected_work,
+        )
+        if transition.selected_operator_ids != (
+            *expected_request.selected_operator_ids,
+            transition.result.selected_operator_id,
+        ) or transition.initial_parameters != (*source_parameters, 0.0):
+            msg = "Persisted transition differs from append-at-zero semantics."
+            raise ValueError(msg)
+        previous_transition_checksum = transition.content_checksum
+
+    parameters: tuple[float, ...] = ()
+    first_moment: tuple[float, ...] = ()
+    second_moment: tuple[float, ...] = ()
+    best_parameters: tuple[float, ...] = ()
+    best_objective: float | None = None
+    for update, receipt in enumerate(snapshot.receipts):
+        prefix = update // OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        local = update % OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        transition = snapshot.transitions[prefix]
+        if local == 0:
+            parameters = transition.initial_parameters
+            first_moment = _zeros(len(parameters))
+            second_moment = _zeros(len(parameters))
+            best_parameters = parameters
+            best_objective = transition.result.objective_before_reoptimization
+        assert best_objective is not None
+        expected_policy = ScheduledTrainingPolicy.from_compiled(program.policy(0, update))
+        if (
+            receipt.policy != expected_policy
+            or receipt.parameters_before != parameters
+            or receipt.first_moment_before != first_moment
+            or receipt.second_moment_before != second_moment
+        ):
+            msg = "Persisted Adam receipt differs from its exact program or predecessor state."
+            raise ValueError(msg)
+        expected_first = tuple(
+            spec.adam_beta1 * moment + (1.0 - spec.adam_beta1) * gradient
+            for moment, gradient in zip(first_moment, receipt.gradient, strict=True)
+        )
+        expected_second = tuple(
+            spec.adam_beta2 * moment + (1.0 - spec.adam_beta2) * gradient * gradient
+            for moment, gradient in zip(second_moment, receipt.gradient, strict=True)
+        )
+        adam_iteration = local + 1
+        expected_parameters = tuple(
+            parameter
+            - spec.learning_rate
+            * (moment / (1.0 - spec.adam_beta1**adam_iteration))
+            / (math.sqrt(square / (1.0 - spec.adam_beta2**adam_iteration)) + spec.adam_epsilon)
+            for parameter, moment, square in zip(
+                parameters,
+                expected_first,
+                expected_second,
+                strict=True,
+            )
+        )
+        monitor_objective = receipt.objective_evidence[-1].result.objective
+        improved = monitor_objective < best_objective
+        expected_best_parameters = expected_parameters if improved else best_parameters
+        expected_best_objective = monitor_objective if improved else best_objective
+        if (
+            receipt.first_moment_after != expected_first
+            or receipt.second_moment_after != expected_second
+            or receipt.parameters_after != expected_parameters
+            or receipt.best_parameters != expected_best_parameters
+            or receipt.best_objective != expected_best_objective
+        ):
+            msg = "Persisted Adam moments, bias correction, parameters, or best state changed."
+            raise ValueError(msg)
+        if local == OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1:
+            validation = receipt.prefix_validation
+            assert validation is not None
+            policy = program.policy(0, update)
+            assert policy.checkpoint_membership is not None
+            expected_artifact = ParameterCheckpointArtifact(
+                optimizer_kind="operator_growth_adam",
+                start_index=0,
+                update=update,
+                parameters=expected_best_parameters,
+                optimizer_payload_checksum=_segmented_checkpoint_state_checksum(
+                    transition.content_checksum,
+                    update,
+                    expected_parameters,
+                    expected_first,
+                    expected_second,
+                    expected_best_objective,
+                ),
+            )
+            expected_validation_request = ScheduledValidationRequest(
+                program_checksum=program.content_checksum,
+                start_index=0,
+                update=update,
+                parameter_artifact=expected_artifact,
+                membership=policy.checkpoint_membership,
+            )
+            if validation.request != expected_validation_request:
+                msg = "Persisted prefix validation differs from its best training parameters or membership."
+                raise ValueError(msg)
+        parameters = expected_parameters
+        first_moment = expected_first
+        second_moment = expected_second
+        best_parameters = expected_best_parameters
+        best_objective = expected_best_objective
+    if snapshot.receipts and (
+        snapshot.parameters != parameters
+        or snapshot.first_moment != first_moment
+        or snapshot.second_moment != second_moment
+        or snapshot.best_training_parameters != best_parameters
+        or snapshot.best_training_objective != best_objective
+    ):
+        msg = "Snapshot endpoint differs from mechanically replayed Adam history."
+        raise ValueError(msg)
+    if program.normalized_compute_cap is not None and snapshot.total_normalized_work > program.normalized_compute_cap:
+        msg = "Persisted segmented work already exceeds the job-wide compute cap."
+        raise ValueError(msg)
+
+
+def _build_operator_growth_segmented_snapshot(
+    program: ScheduledExecutionProgram,
+    pool: OperatorPoolSpec,
+    spec: OperatorGrowthSpec,
+    transitions: tuple[OperatorGrowthPrefixTransition, ...],
+    receipts: tuple[OperatorGrowthSegmentedUpdateReceipt, ...],
+    validations: tuple[OperatorGrowthPrefixValidation, ...],
+) -> OperatorGrowthSegmentedSnapshot:
+    """Construct one immutable endpoint from complete histories.
+
+    Returns:
+        The strict authoritative endpoint snapshot.
+    """
+    if receipts:
+        last = receipts[-1]
+        active_ids = last.selected_operator_ids
+        parameters = last.parameters_after
+        first_moment = last.first_moment_after
+        second_moment = last.second_moment_after
+        best_parameters = last.best_parameters
+        best_objective: float | None = last.best_objective
+    else:
+        active_ids = ()
+        parameters = ()
+        first_moment = ()
+        second_moment = ()
+        best_parameters = ()
+        best_objective = None
+    if validations:
+        selected_prefix = max(range(len(validations)), key=lambda index: validations[index].result.score)
+        selected_ids = transitions[selected_prefix].selected_operator_ids
+        selected_parameters = validations[selected_prefix].request.parameter_artifact.parameters
+        selected_score: float | None = validations[selected_prefix].result.score
+    else:
+        selected_prefix = None
+        selected_ids = ()
+        selected_parameters = ()
+        selected_score = None
+    return OperatorGrowthSegmentedSnapshot(
+        program_checksum=program.content_checksum,
+        pool=pool,
+        growth_spec=spec,
+        active_operator_ids=active_ids,
+        parameters=parameters,
+        first_moment=first_moment,
+        second_moment=second_moment,
+        best_training_parameters=best_parameters,
+        best_training_objective=best_objective,
+        transitions=transitions,
+        receipts=receipts,
+        prefix_validations=validations,
+        total_normalized_work=math.fsum(
+            [transition.result.normalized_work for transition in transitions]
+            + [receipt.normalized_work for receipt in receipts]
+        ),
+        selected_prefix_index=selected_prefix,
+        selected_operator_ids=selected_ids,
+        selected_parameters=selected_parameters,
+        selected_validation_score=selected_score,
+        terminal_reason=("update_budget" if len(receipts) == OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT else None),
+    )
+
+
+def execute_operator_growth_segmented_program(
+    program: ScheduledExecutionProgram,
+    snapshot: OperatorGrowthSegmentedSnapshot,
+    structural_selection_executor: OperatorGrowthStructuralSelectionExecutor,
+    objective_executor: OperatorGrowthSegmentedObjectiveExecutor,
+    validation_executor: ScheduledValidationExecutor,
+    *,
+    stop_after_updates: int | None = None,
+) -> OperatorGrowthSegmentedSnapshot:
+    """Execute or resume the exact two-prefix q6 operator-growth program.
+
+    Structural selection is work-quoted and cap-checked before its callback.
+    Every complete Adam update, including a mandatory boundary validation, is
+    likewise checked against the job-wide cap before any objective callback.
+    The callback interfaces expose training or checkpoint-validation records
+    only and contain no final-test input.
+
+    Returns:
+        An interrupted or terminal checksum-sealed segmented snapshot.
+    """
+    execution_spec = _validate_operator_growth_segmented_program(program)
+    if not isinstance(snapshot, OperatorGrowthSegmentedSnapshot):
+        msg = "snapshot must be an OperatorGrowthSegmentedSnapshot."
+        raise TypeError(msg)
+    if not callable(structural_selection_executor) or not callable(
+        getattr(structural_selection_executor, "quote_normalized_work", None)
+    ):
+        msg = "structural_selection_executor must be callable and expose quote_normalized_work."
+        raise TypeError(msg)
+    if not callable(objective_executor):
+        msg = "objective_executor must be callable."
+        raise TypeError(msg)
+    if not callable(validation_executor):
+        msg = "validation_executor must be callable."
+        raise TypeError(msg)
+    snapshot.validate_against_program(program)
+    if snapshot.complete:
+        return snapshot
+    callback_limit = (
+        None if stop_after_updates is None else require_int(stop_after_updates, "stop_after_updates", minimum=1)
+    )
+    pool = execution_spec.pool
+    spec = execution_spec.growth_spec
+    transitions = list(snapshot.transitions)
+    receipts = list(snapshot.receipts)
+    validations = list(snapshot.prefix_validations)
+    current_work = snapshot.total_normalized_work
+    completed_updates = 0
+    while len(receipts) < OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT and (
+        callback_limit is None or completed_updates < callback_limit
+    ):
+        global_update = len(receipts)
+        prefix = global_update // OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        local = global_update % OPERATOR_GROWTH_PREFIX_UPDATE_COUNT
+        if local == 0:
+            source_parameters = () if prefix == 0 else validations[prefix - 1].request.parameter_artifact.parameters
+            selection_request = OperatorGrowthSelectionRequest(
+                program_checksum=program.content_checksum,
+                growth_spec_checksum=spec.content_checksum,
+                pool_checksum=pool.content_checksum,
+                prefix_index=prefix,
+                global_update_start=global_update,
+                selected_operator_ids=() if prefix == 0 else transitions[prefix - 1].selected_operator_ids,
+                parameters=source_parameters,
+                policy=ScheduledTrainingPolicy.from_compiled(program.policy(0, global_update)),
+                previous_transition_checksum=(None if not transitions else transitions[-1].content_checksum),
+            )
+            expected_selection_work = _selection_expected_work(pool, spec, selection_request)
+            quoted_selection_work = require_float(
+                structural_selection_executor.quote_normalized_work(selection_request),
+                "quoted structural-selection normalized work",
+                minimum=0.0,
+            )
+            if quoted_selection_work != expected_selection_work:
+                msg = "Structural-selection work quote differs from the complete feasible candidate universe."
+                raise ValueError(msg)
+            cap = program.normalized_compute_cap
+            first_update_work = float((2 * (prefix + 1) + 1) * OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT)
+            atomic_prefix_start_work = math.fsum((quoted_selection_work, first_update_work))
+            if cap is not None and math.fsum((current_work, atomic_prefix_start_work)) > cap:
+                raise NormalizedComputeCapError(
+                    cap=cap,
+                    completed_work=current_work,
+                    prospective_update_work=atomic_prefix_start_work,
+                )
+            selection_result = structural_selection_executor(selection_request, objective_executor)
+            _validate_selection_result(
+                program,
+                pool,
+                spec,
+                selection_request,
+                selection_result,
+                quoted_selection_work,
+            )
+            transition = OperatorGrowthPrefixTransition(
+                request=selection_request,
+                result=selection_result,
+                selected_operator_ids=(
+                    *selection_request.selected_operator_ids,
+                    selection_result.selected_operator_id,
+                ),
+                initial_parameters=(*selection_request.parameters, 0.0),
+                previous_transition_checksum=selection_request.previous_transition_checksum,
+            )
+            transitions.append(transition)
+            current_work = math.fsum((current_work, quoted_selection_work))
+            parameters = transition.initial_parameters
+            first_moment = _zeros(len(parameters))
+            second_moment = _zeros(len(parameters))
+            best_parameters = parameters
+            best_objective = selection_result.objective_before_reoptimization
+        else:
+            transition = transitions[prefix]
+            previous = receipts[-1]
+            parameters = previous.parameters_after
+            first_moment = previous.first_moment_after
+            second_moment = previous.second_moment_after
+            best_parameters = previous.best_parameters
+            best_objective = previous.best_objective
+        policy = ScheduledTrainingPolicy.from_compiled(program.policy(0, global_update))
+        training_work = float((2 * len(parameters) + 1) * OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT)
+        validation_work = (
+            float(OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT)
+            if local == OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1
+            else 0.0
+        )
+        complete_update_work = math.fsum((training_work, validation_work))
+        cap = program.normalized_compute_cap
+        if cap is not None and math.fsum((current_work, complete_update_work)) > cap:
+            raise NormalizedComputeCapError(
+                cap=cap,
+                completed_work=current_work,
+                prospective_update_work=complete_update_work,
+            )
+        evidence: list[OperatorGrowthSegmentedObjectiveEvidence] = []
+        gradient: list[float] = []
+        for parameter_index in range(len(parameters)):
+            plus_parameters = list(parameters)
+            minus_parameters = list(parameters)
+            plus_parameters[parameter_index] += math.pi / 2.0
+            minus_parameters[parameter_index] -= math.pi / 2.0
+            plus_request = OperatorGrowthSegmentedObjectiveRequest(
+                program_checksum=program.content_checksum,
+                structural_state_checksum=transition.content_checksum,
+                selected_operator_ids=transition.selected_operator_ids,
+                prefix_index=prefix,
+                global_update=global_update,
+                local_update=local,
+                evaluation_stage="prefix_reoptimization",
+                evaluation_kind="gradient_plus",
+                parameter_index=parameter_index,
+                parameters=tuple(plus_parameters),
+                policy=policy,
+            )
+            minus_request = replace(
+                plus_request,
+                evaluation_kind="gradient_minus",
+                parameters=tuple(minus_parameters),
+            )
+            plus = _segmented_objective_evidence(objective_executor, plus_request)
+            minus = _segmented_objective_evidence(objective_executor, minus_request)
+            evidence.extend((plus, minus))
+            gradient.append(0.5 * (plus.result.objective - minus.result.objective))
+        first_after = tuple(
+            spec.adam_beta1 * moment + (1.0 - spec.adam_beta1) * value
+            for moment, value in zip(first_moment, gradient, strict=True)
+        )
+        second_after = tuple(
+            spec.adam_beta2 * moment + (1.0 - spec.adam_beta2) * value * value
+            for moment, value in zip(second_moment, gradient, strict=True)
+        )
+        adam_iteration = local + 1
+        parameters_after = tuple(
+            parameter
+            - spec.learning_rate
+            * (moment / (1.0 - spec.adam_beta1**adam_iteration))
+            / (math.sqrt(square / (1.0 - spec.adam_beta2**adam_iteration)) + spec.adam_epsilon)
+            for parameter, moment, square in zip(
+                parameters,
+                first_after,
+                second_after,
+                strict=True,
+            )
+        )
+        monitor_request = OperatorGrowthSegmentedObjectiveRequest(
+            program_checksum=program.content_checksum,
+            structural_state_checksum=transition.content_checksum,
+            selected_operator_ids=transition.selected_operator_ids,
+            prefix_index=prefix,
+            global_update=global_update,
+            local_update=local,
+            evaluation_stage="prefix_reoptimization",
+            evaluation_kind="post_update",
+            parameter_index=len(parameters_after),
+            parameters=parameters_after,
+            policy=policy,
+        )
+        monitor = _segmented_objective_evidence(objective_executor, monitor_request)
+        evidence.append(monitor)
+        improved = monitor.result.objective < best_objective
+        next_best_parameters = parameters_after if improved else best_parameters
+        next_best_objective = monitor.result.objective if improved else best_objective
+        prefix_validation = None
+        if local == OPERATOR_GROWTH_PREFIX_UPDATE_COUNT - 1:
+            compiled_policy = program.policy(0, global_update)
+            assert compiled_policy.checkpoint_membership is not None
+            artifact = ParameterCheckpointArtifact(
+                optimizer_kind="operator_growth_adam",
+                start_index=0,
+                update=global_update,
+                parameters=next_best_parameters,
+                optimizer_payload_checksum=_segmented_checkpoint_state_checksum(
+                    transition.content_checksum,
+                    global_update,
+                    parameters_after,
+                    first_after,
+                    second_after,
+                    next_best_objective,
+                ),
+            )
+            validation_request = ScheduledValidationRequest(
+                program_checksum=program.content_checksum,
+                start_index=0,
+                update=global_update,
+                parameter_artifact=artifact,
+                membership=compiled_policy.checkpoint_membership,
+            )
+            validation_result = validation_executor(validation_request)
+            if not isinstance(validation_result, ScheduledValidationResult):
+                msg = "validation_executor must return ScheduledValidationResult."
+                raise TypeError(msg)
+            prefix_validation = OperatorGrowthPrefixValidation(
+                prefix_index=prefix,
+                transition_checksum=transition.content_checksum,
+                request=validation_request,
+                result=validation_result,
+                normalized_work=validation_work,
+                previous_validation_checksum=(None if not validations else validations[-1].content_checksum),
+            )
+        receipt = OperatorGrowthSegmentedUpdateReceipt(
+            program_checksum=program.content_checksum,
+            prefix_index=prefix,
+            global_update=global_update,
+            local_update=local,
+            transition_checksum=transition.content_checksum,
+            selected_operator_ids=transition.selected_operator_ids,
+            policy=policy,
+            parameters_before=parameters,
+            first_moment_before=first_moment,
+            second_moment_before=second_moment,
+            gradient=tuple(gradient),
+            parameters_after=parameters_after,
+            first_moment_after=first_after,
+            second_moment_after=second_after,
+            best_parameters=next_best_parameters,
+            best_objective=next_best_objective,
+            objective_evidence=tuple(evidence),
+            normalized_work=complete_update_work,
+            prefix_validation=prefix_validation,
+            previous_receipt_checksum=None if not receipts else receipts[-1].content_checksum,
+        )
+        receipts.append(receipt)
+        if prefix_validation is not None:
+            validations.append(prefix_validation)
+        current_work = math.fsum((current_work, complete_update_work))
+        completed_updates += 1
+    result = _build_operator_growth_segmented_snapshot(
+        program,
+        pool,
+        spec,
+        tuple(transitions),
+        tuple(receipts),
+        tuple(validations),
+    )
+    result.validate_against_program(program)
+    return result
+
+
 __all__ = [
     "ADAM_OPTIMIZER_PAYLOAD_SCHEMA_VERSION",
     "COMPONENT_TRAJECTORY_MEMBERSHIP_SCHEMA_VERSION",
     "KROTOV_OPTIMIZER_PAYLOAD_SCHEMA_VERSION",
     "MULTISTART_START_EVIDENCE_SCHEMA_VERSION",
     "MULTISTART_WORK_EVIDENCE_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT",
     "OPERATOR_GROWTH_OPTIMIZER_PAYLOAD_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_PREFIX_TRANSITION_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_PREFIX_UPDATE_COUNT",
+    "OPERATOR_GROWTH_PREFIX_VALIDATION_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_EVIDENCE_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_REQUEST_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SEGMENTED_OBJECTIVE_RESULT_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SEGMENTED_SNAPSHOT_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SEGMENTED_UPDATE_RECEIPT_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SELECTION_REQUEST_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_SELECTION_RESULT_SCHEMA_VERSION",
+    "OPERATOR_GROWTH_TRAINING_TRAJECTORY_COUNT",
+    "OPERATOR_GROWTH_VALIDATION_TRAJECTORY_COUNT",
     "OPTIMIZER_INITIALIZATION_SCHEMA_VERSION",
     "PARAMETER_CHECKPOINT_ARTIFACT_SCHEMA_VERSION",
     "SCHEDULED_EXECUTION_PROGRAM_SCHEMA_VERSION",
@@ -4821,6 +7106,17 @@ __all__ = [
     "NormalizedComputeCapError",
     "OperatorGrowthAdamScheduledUpdateAdapter",
     "OperatorGrowthOptimizerPayload",
+    "OperatorGrowthPrefixTransition",
+    "OperatorGrowthPrefixValidation",
+    "OperatorGrowthSegmentedObjectiveEvidence",
+    "OperatorGrowthSegmentedObjectiveExecutor",
+    "OperatorGrowthSegmentedObjectiveRequest",
+    "OperatorGrowthSegmentedObjectiveResult",
+    "OperatorGrowthSegmentedSnapshot",
+    "OperatorGrowthSegmentedUpdateReceipt",
+    "OperatorGrowthSelectionRequest",
+    "OperatorGrowthSelectionResult",
+    "OperatorGrowthStructuralSelectionExecutor",
     "OptimizerInitialization",
     "OptimizerKind",
     "ParameterCheckpointArtifact",
@@ -4851,6 +7147,7 @@ __all__ = [
     "TrainingPhase",
     "compile_development_schedule",
     "compile_frozen_schedule_trace",
+    "execute_operator_growth_segmented_program",
     "execute_scheduled_program",
     "initialize_scheduled_execution",
 ]
