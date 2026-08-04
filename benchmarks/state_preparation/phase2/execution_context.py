@@ -20,22 +20,40 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, NoReturn, SupportsIndex, cast
+from typing import TYPE_CHECKING, Literal, NoReturn, SupportsIndex, cast
 
-from .binding_catalog import ExecutableScopedBinding
+from .binding_catalog import ExecutableScopedBinding, RepositoryBindingCatalog
 from .canonical import canonical_checksum, canonical_json, load_canonical_json_object, verify_sealed_mapping
 from .execution_bindings import TrainingExecutionProfile
-from .protocol import InitialPreregistration, SampleSizeDesign, ScreeningCell, ScreeningManifest
+from .protocol import (
+    AnalysisSourceManifest,
+    ConfirmationAuthorization,
+    FinalConfigurationExecutionManifest,
+    FinalConfirmationSeal,
+    InitialPreregistration,
+    SampleSizeDesign,
+    ScreeningCell,
+    ScreeningManifest,
+    validate_final_configuration_execution_manifest,
+)
 from .resumability import ResumabilityFingerprint
 from .scheduled_execution import ScheduledExecutionProgram, ScheduledJobSeedSet
-from .source_lock import ExecutionSourceManifest, verify_execution_source_manifest
+from .source_lock import ExecutionSourceManifest, verify_execution_source_manifest, verify_final_seal_source_lock
 from .targets import (
+    MaterializedTarget,
     TargetMaterializationAuthorization,
     TargetPopulationConfig,
     TargetPopulationManifest,
+    materialize_target_population,
     role_master_entropy_commitment,
 )
-from .training_orchestration import TrainingJob, TrainingRunPlan
+from .training_orchestration import (
+    ConfirmExecutionRequest,
+    TrainingJob,
+    TrainingRunPlan,
+    build_paper_confirm_plan,
+    validate_confirm_execution_request,
+)
 from .validation import require_checksum, require_relative_path, require_slug
 
 if TYPE_CHECKING:
@@ -1074,6 +1092,322 @@ class TrainingExecutionContext:
         _serialization_forbidden()
 
 
+@dataclass(frozen=True, slots=True)
+class ConfirmationExecutionContext:
+    """Narrow non-serializable authority for frozen real confirmation.
+
+    The context is deliberately distinct from :class:`TrainingExecutionContext`:
+    confirmation reuses the exact promoted paper-screen implementations and
+    schedules, but it has no execution profile, screening cell, or opportunity
+    to introduce a new training or evaluation policy.  Target vectors remain
+    unmaterialized until :meth:`materialize_targets` is called by the
+    repository-owned production executor.
+    """
+
+    plan: TrainingRunPlan
+    preregistration: InitialPreregistration
+    final_seal: FinalConfirmationSeal
+    configuration_execution_manifest: FinalConfigurationExecutionManifest
+    execution_source_manifest: ExecutionSourceManifest
+    analysis_source_manifest: AnalysisSourceManifest
+    repository_binding_catalog: RepositoryBindingCatalog
+    target_configuration: TargetPopulationConfig
+    target_manifest: TargetPopulationManifest
+    confirmation_authorization: ConfirmationAuthorization = field(repr=False)
+    target_materialization_authorization: TargetMaterializationAuthorization = field(repr=False)
+    external_entropy_keyring: ExternalEntropyKeyring = field(repr=False, compare=False)
+    _selected_bindings: tuple[ExecutableScopedBinding, ...] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Close every final-seal, executable, target, and opaque authority link.
+
+        Raises:
+            TypeError: If a nested value does not use its exact protocol type.
+            ValueError: If any final-seal, catalog, target, or authorization
+                identity differs from the already sealed confirmatory design.
+        """
+        typed_values = (
+            (self.plan, TrainingRunPlan, "plan"),
+            (self.preregistration, InitialPreregistration, "preregistration"),
+            (self.final_seal, FinalConfirmationSeal, "final_seal"),
+            (
+                self.configuration_execution_manifest,
+                FinalConfigurationExecutionManifest,
+                "configuration_execution_manifest",
+            ),
+            (self.execution_source_manifest, ExecutionSourceManifest, "execution_source_manifest"),
+            (self.analysis_source_manifest, AnalysisSourceManifest, "analysis_source_manifest"),
+            (self.repository_binding_catalog, RepositoryBindingCatalog, "repository_binding_catalog"),
+            (self.target_configuration, TargetPopulationConfig, "target_configuration"),
+            (self.target_manifest, TargetPopulationManifest, "target_manifest"),
+            (self.confirmation_authorization, ConfirmationAuthorization, "confirmation_authorization"),
+            (
+                self.target_materialization_authorization,
+                TargetMaterializationAuthorization,
+                "target_materialization_authorization",
+            ),
+            (self.external_entropy_keyring, ExternalEntropyKeyring, "external_entropy_keyring"),
+        )
+        for value, expected_type, name in typed_values:
+            if not isinstance(value, expected_type):
+                msg = f"{name} must be a {expected_type.__name__}."
+                raise TypeError(msg)
+
+        seal = self.final_seal
+        plan = self.plan
+        target = self.target_manifest
+        config = self.target_configuration
+        if (
+            plan.preset != "paper-confirm"
+            or plan.preregistration_checksum != self.preregistration.content_checksum
+            or plan.final_confirmation_seal_checksum != seal.content_checksum
+            or plan.execution_source_checksum != seal.execution_source_checksum
+            or plan.target_manifest_checksums != (target.content_checksum,)
+        ):
+            msg = "Confirmation plan does not reproduce the exact final-seal and target roots."
+            raise ValueError(msg)
+        expected_plan = build_paper_confirm_plan(
+            seal=seal,
+            target_manifest=target,
+            configuration_execution_manifest=self.configuration_execution_manifest,
+        )
+        if plan != expected_plan:
+            msg = "Confirmation plan differs from the exact final-seal Cartesian request universe."
+            raise ValueError(msg)
+        validate_final_configuration_execution_manifest(seal, self.configuration_execution_manifest)
+        if (
+            self.execution_source_manifest.content_checksum != seal.execution_source_checksum
+            or self.analysis_source_manifest.content_checksum != seal.analysis_source_manifest_checksum
+            or self.analysis_source_manifest.execution_source_manifest_checksum
+            != self.execution_source_manifest.content_checksum
+        ):
+            msg = "Confirmation execution and analysis source manifests differ from the final seal."
+            raise ValueError(msg)
+        if (
+            config.data_role != "confirmatory"
+            or config.population_scope != "primary_q6"
+            or target.data_role != "confirmatory"
+            or target.population_scope != "primary_q6"
+            or target.population_config_checksum != config.content_checksum
+            or config.preregistration_checksum != self.preregistration.content_checksum
+            or target.preregistration_checksum != self.preregistration.content_checksum
+        ):
+            msg = "Confirmation target configuration and revealed manifest do not form the exact primary-q6 pair."
+            raise ValueError(msg)
+        confirmation = self.confirmation_authorization
+        materialization = self.target_materialization_authorization
+        if (
+            confirmation.preregistration_checksum != self.preregistration.content_checksum
+            or confirmation.final_seal_checksum != seal.content_checksum
+            or confirmation.target_manifest_checksum != target.content_checksum
+            or confirmation.execution_source_checksum != seal.execution_source_checksum
+            or materialization.preregistration_checksum != self.preregistration.content_checksum
+            or materialization.population_config_checksum != config.content_checksum
+            or materialization.target_manifest_checksum != target.content_checksum
+            or materialization.data_role != "confirmatory"
+        ):
+            msg = "Confirmation or target-materialization authority differs from the exact sealed target."
+            raise ValueError(msg)
+        if (
+            self.external_entropy_keyring.commitment_for("confirmatory", "primary_q6")
+            != config.role_master_entropy_commitment
+        ):
+            msg = "Confirmatory external entropy differs from its sealed target-population commitment."
+            raise ValueError(msg)
+
+        catalog = self.repository_binding_catalog
+        if (
+            catalog.profile.preset != "paper-screen"
+            or catalog.profile.preregistration_checksum != self.preregistration.content_checksum
+        ):
+            msg = "Confirmation must reuse the exact preregistration-bound paper-screen catalog."
+            raise ValueError(msg)
+        selected: list[ExecutableScopedBinding] = []
+        for execution in self.configuration_execution_manifest.entries:
+            matches = tuple(
+                link
+                for link in catalog.bindings
+                if link.binding.publication_candidate_checksum == execution.configuration_checksum
+            )
+            if len(matches) != 1:
+                msg = "A final configuration has no unique exact paper-screen executable binding."
+                raise ValueError(msg)
+            link = matches[0]
+            alias = catalog.implementation_catalog.resolve(
+                "paper-confirm",
+                execution.method_id,
+                "primary_q6",
+            )
+            if (
+                link.binding.publication_method_id != execution.method_id
+                or link.binding.target_scope_id != "primary_q6"
+                or link.binding.strategy_schedule != execution.strategy_schedule
+                or link.binding.implementation_checksum != execution.implementation_checksum
+                or link.binding.content_checksum != execution.scoped_binding_checksum
+                or link.content_checksum != execution.executable_binding_checksum
+                or link.implementation_entry != alias
+            ):
+                msg = "A final configuration differs from its exact dormant repository confirmation alias."
+                raise ValueError(msg)
+            selected.append(link)
+        object.__setattr__(self, "_selected_bindings", tuple(selected))
+
+    @property
+    def executable_bindings(self) -> tuple[ExecutableScopedBinding, ...]:
+        """Exact promoted-plus-comparator repository bindings in manifest order."""
+        return self._selected_bindings
+
+    def executable_binding(self, configuration_checksum: str) -> ExecutableScopedBinding:
+        """Resolve one exact final configuration without accepting a new route.
+
+        Returns:
+            The unique screened executable binding reused by confirmation.
+
+        Raises:
+            KeyError: If the configuration is outside the final manifest.
+        """
+        checksum = require_checksum(configuration_checksum, "configuration_checksum")
+        for binding in self.executable_bindings:
+            if binding.binding.publication_candidate_checksum == checksum:
+                return binding
+        raise KeyError(checksum)
+
+    def scheduled_program_checksum(self, request: ConfirmExecutionRequest) -> str:
+        """Recompile and return the exact program root for one owned request.
+
+        This provides the external trust anchor needed when reopening real
+        production evidence; an attempt cannot authenticate a substituted
+        snapshot merely by resealing its own internal program checksum.
+
+        Returns:
+            The exact compiled :class:`ScheduledExecutionProgram` checksum.
+
+        """
+        link = self._owned_request_binding(request)
+        execution = self.configuration_execution_manifest.entry(request.configuration_checksum)
+        return ScheduledExecutionProgram.compile(
+            link,
+            execution.strategy_schedule,
+            ScheduledJobSeedSet(request.optimization_seed),
+        ).content_checksum
+
+    def artifact_kind(self, request: ConfirmExecutionRequest) -> Literal["pipeline", "operator_growth"]:
+        """Return the exact production artifact family for one owned request.
+
+        This second external trust anchor prevents an internally resealed
+        pipeline/operator-growth substitution from authenticating itself when
+        a real confirmatory attempt is reopened.
+
+        Returns:
+            The only production artifact kind admitted by the sealed binding.
+
+        Raises:
+            ValueError: If the binding has no real production artifact family.
+        """
+        implementation_kind = self._owned_request_binding(request).binding.implementation_artifact.implementation_kind
+        if implementation_kind == "operator_growth":
+            return "operator_growth"
+        if implementation_kind == "phase2_pipeline":
+            return "pipeline"
+        msg = "Final confirmation binding uses an unsupported production artifact kind."
+        raise ValueError(msg)
+
+    def _owned_request_binding(self, request: ConfirmExecutionRequest) -> ExecutableScopedBinding:
+        """Validate request ownership and return its exact screened binding.
+
+        Returns:
+            The exact repository binding named by the context-owned request.
+
+        Raises:
+            TypeError: If ``request`` has the wrong protocol type.
+            ValueError: If it is not the exact nested request object in this plan.
+        """
+        if not isinstance(request, ConfirmExecutionRequest):
+            msg = "request must be a ConfirmExecutionRequest."
+            raise TypeError(msg)
+        if not any(job.confirm_execution_request is request for job in self.plan.jobs):
+            msg = "Confirmation resolution accepts only an exact context-owned request object."
+            raise ValueError(msg)
+        validate_confirm_execution_request(
+            request,
+            self.final_seal,
+            self.target_manifest,
+            self.configuration_execution_manifest,
+        )
+        return self.executable_binding(request.configuration_checksum)
+
+    def materialize_targets(self) -> tuple[MaterializedTarget, ...]:
+        """Materialize the revealed population through the opaque sealed authority.
+
+        Returns:
+            Immutable target vectors for the already revealed manifest.
+        """
+        entropy = self.external_entropy_keyring.entropy_for("confirmatory", "primary_q6")
+        return materialize_target_population(
+            self.target_configuration,
+            self.preregistration,
+            self.target_manifest,
+            entropy,
+            self.target_materialization_authorization,
+        ).targets
+
+    def preflight(self, repository_root: Path, output_root: Path) -> None:
+        """Recheck frozen source and output-role isolation before mutation.
+
+        Raises:
+            TypeError: If a path has the wrong type.
+            ValueError: If source bytes, repository routes, or output role
+                separation changed after the context was built.
+        """
+        if not isinstance(repository_root, Path) or not isinstance(output_root, Path):
+            msg = "repository_root and output_root must be pathlib.Path values."
+            raise TypeError(msg)
+        if output_root.is_symlink() or (output_root.exists() and not output_root.is_dir()):
+            msg = "output_root must be absent or an existing non-symlink directory."
+            raise ValueError(msg)
+        verify_final_seal_source_lock(
+            self.final_seal,
+            self.execution_source_manifest,
+            self.analysis_source_manifest,
+            repository_root,
+        )
+        validate_final_configuration_execution_manifest(
+            self.final_seal,
+            self.configuration_execution_manifest,
+        )
+        for link in self.executable_bindings:
+            link.resolve_callable()
+        roles = output_root / "roles"
+        if roles.is_symlink() or (roles.exists() and not roles.is_dir()):
+            msg = "Confirmation output roles must be absent or a non-symlink directory."
+            raise ValueError(msg)
+        if roles.exists() and any(path.name != "confirmatory" for path in roles.iterdir()):
+            msg = "Development, screening, and confirmation outputs cannot share one output root."
+            raise ValueError(msg)
+
+    def __repr__(self) -> str:
+        """Return public roots only, never external confirmatory entropy."""
+        return (
+            "ConfirmationExecutionContext("
+            f"plan_checksum={self.plan.content_checksum!r}, "
+            f"final_seal_checksum={self.final_seal.content_checksum!r}, "
+            f"target_manifest_checksum={self.target_manifest.content_checksum!r}, "
+            "external_entropy_keyring=<redacted>)"
+        )
+
+    def __getstate__(self) -> NoReturn:
+        """Reject state extraction used by serializers."""
+        _serialization_forbidden()
+
+    def __reduce__(self) -> NoReturn:
+        """Reject pickle reduction."""
+        _serialization_forbidden()
+
+    def __reduce_ex__(self, _protocol: SupportsIndex) -> NoReturn:
+        """Reject protocol-specific pickle reduction."""
+        _serialization_forbidden()
+
+
 def parse_entropy_file_specs(specifications: Sequence[str]) -> Mapping[tuple[str, str], Path]:
     """Parse CLI-only ``ROLE/SCOPE=PATH`` references without opening files.
 
@@ -1113,6 +1447,7 @@ __all__ = [
     "TRAINING_CANDIDATE_REF_SCHEMA_VERSION",
     "TRAINING_PREFLIGHT_REPORT_SCHEMA_VERSION",
     "AuthorizedTargetMaterialization",
+    "ConfirmationExecutionContext",
     "ExternalEntropyKeyring",
     "TrainingCandidateRef",
     "TrainingExecutionContext",

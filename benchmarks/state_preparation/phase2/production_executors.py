@@ -69,7 +69,7 @@ from .canonical import (
     verify_sealed_mapping,
 )
 from .competitor_optimizers import ParameterShiftAdamConfig, SPSAConfig
-from .execution_context import TrainingExecutionContext
+from .execution_context import ConfirmationExecutionContext, TrainingExecutionContext
 from .execution_protocol import FreshEvaluationPolicy, OperatorGrowthExecutionSpec
 from .implementation_catalog import (
     OperatorGrowthSmokeExecution,
@@ -132,6 +132,8 @@ from .training_orchestration import (
     JobExecutionControls,
     TrainingExecutorRegistry,
     TrainingJob,
+    confirmatory_evaluation_policy_checksum,
+    validate_confirm_execution_request,
 )
 from .training_schedules import (
     PILOT_DIAGNOSTIC_SEED_POLICY_ID,
@@ -793,6 +795,7 @@ class ProductionNumericalEvidence:
                 "training-smoke",
                 "paper-pilot",
                 "paper-screen",
+                "paper-confirm",
             }:
                 msg = "Successful production evidence requires its exact execution preset."
                 raise ValueError(msg)
@@ -2099,6 +2102,7 @@ class ResolvedProductionJob:
     scheduled_program: ScheduledExecutionProgram
     execution_source_manifest_checksum: str
     screening_cell: ScreeningCell | None
+    confirm_request: ConfirmExecutionRequest | None = None
 
     def __post_init__(self) -> None:
         """Validate the direct execution-source manifest identity."""
@@ -2107,6 +2111,48 @@ class ResolvedProductionJob:
             "execution_source_manifest_checksum",
             require_checksum(self.execution_source_manifest_checksum, "execution_source_manifest_checksum"),
         )
+        if self.confirm_request is not None:
+            if not isinstance(self.confirm_request, ConfirmExecutionRequest):
+                msg = "confirm_request must be a ConfirmExecutionRequest."
+                raise TypeError(msg)
+            if self.job.confirm_execution_request is not self.confirm_request or self.job.preset != "paper-confirm":
+                msg = "A real confirmation resolution must retain its exact context-owned nested request."
+                raise ValueError(msg)
+
+    @property
+    def evidence_identity_checksum(self) -> str:
+        """Request identity for confirmation, otherwise the enclosing job identity."""
+        if self.confirm_request is not None:
+            return self.confirm_request.content_checksum
+        return self.job.content_checksum
+
+    @property
+    def source_fingerprint_checksum(self) -> str:
+        """Frozen source identity used by terminal evidence."""
+        if self.confirm_request is not None:
+            return self.confirm_request.execution_source_checksum
+        return require_checksum(self.job.source_fingerprint_checksum, "job.source_fingerprint_checksum")
+
+    @property
+    def executable_binding_checksum(self) -> str:
+        """Exact executable binding root used by terminal evidence."""
+        if self.confirm_request is not None:
+            return self.confirm_request.executable_binding_checksum
+        return require_checksum(self.job.executable_binding_checksum, "job.executable_binding_checksum")
+
+    @property
+    def strategy_schedule_checksum(self) -> str:
+        """Exact sealed strategy schedule underlying the compiled program."""
+        if self.confirm_request is not None:
+            return self.confirm_request.hyperparameters_checksum
+        return self.job.strategy_schedule_checksum
+
+    @property
+    def evaluation_policy_checksum(self) -> str:
+        """Request-bound confirmation identity or ordinary policy checksum."""
+        if self.confirm_request is not None:
+            return confirmatory_evaluation_policy_checksum(self.confirm_request)
+        return self.evaluation_policy.content_checksum
 
 
 class ProductionExecutionAuthority:
@@ -2251,6 +2297,99 @@ class ProductionExecutionAuthority:
             program,
             self.context.execution_source_manifest.content_checksum,
             cell,
+        )
+
+
+class ProductionConfirmationAuthority:
+    """Resolve only exact context-owned real confirmatory request objects."""
+
+    def __init__(self, context: ConfirmationExecutionContext) -> None:
+        """Bind the narrow final-seal authority without materializing targets."""
+        if not isinstance(context, ConfirmationExecutionContext):
+            msg = "context must be a ConfirmationExecutionContext."
+            raise TypeError(msg)
+        self.context = context
+        self._materialized_targets: tuple[MaterializedTarget, ...] | None = None
+
+    def _targets(self) -> tuple[MaterializedTarget, ...]:
+        """Lazily materialize the externally revealed confirmatory population."""
+        if self._materialized_targets is None:
+            self._materialized_targets = self.context.materialize_targets()
+        return self._materialized_targets
+
+    def resolve(self, request: ConfirmExecutionRequest) -> ResolvedProductionJob:
+        """Close one exact nested request to frozen code, target, and policies.
+
+        Returns:
+            The repository-owned production execution closure.
+
+        Raises:
+            ValueError: If the request is not the exact object owned by the
+                complete final-seal Cartesian plan or any sealed root differs.
+        """
+        if not isinstance(request, ConfirmExecutionRequest):
+            msg = "request must be a ConfirmExecutionRequest."
+            raise TypeError(msg)
+        jobs = tuple(job for job in self.context.plan.jobs if job.confirm_execution_request is request)
+        if len(jobs) != 1:
+            msg = "Production confirmation accepts only an exact context-owned request object."
+            raise ValueError(msg)
+        job = jobs[0]
+        validate_confirm_execution_request(
+            request,
+            self.context.final_seal,
+            self.context.target_manifest,
+            self.context.configuration_execution_manifest,
+        )
+        link = self.context.executable_binding(request.configuration_checksum)
+        link.resolve_callable()
+        binding = link.binding
+        execution = self.context.configuration_execution_manifest.entry(request.configuration_checksum)
+        expected_cap = cast("float", request.primary_resource_budget["normalized_compute_cap"])
+        if (
+            binding.strategy_schedule != execution.strategy_schedule
+            or binding.execution_budget.normalized_compute_cap is None
+            or float(binding.execution_budget.normalized_compute_cap).hex() != float(expected_cap).hex()
+            or binding.resource_policy.to_dict()["cap_per_chain_edge"]
+            != request.primary_resource_budget["cap_per_chain_edge"]
+        ):
+            msg = "Confirmatory binding schedule or resource limits differ from the final request."
+            raise ValueError(msg)
+        policy = FreshEvaluationPolicy.confirmatory(request.fixed_test_trajectory_count)
+        if canonical_json(policy.noise_condition) != canonical_json(request.primary_noise_condition):
+            msg = "Confirmatory fresh-evaluation noise differs from the final request."
+            raise ValueError(msg)
+        program = ScheduledExecutionProgram.compile(
+            link,
+            execution.strategy_schedule,
+            ScheduledJobSeedSet(request.optimization_seed),
+        )
+        specs = tuple(
+            spec
+            for spec in self.context.target_manifest.instances
+            if spec.target_instance_id == request.target_instance_id
+        )
+        targets = tuple(target for target in self._targets() if target.target_instance_id == request.target_instance_id)
+        if (
+            len(specs) != 1
+            or specs[0].content_checksum != request.target_spec_checksum
+            or len(targets) != 1
+            or targets[0].target_instance_spec_checksum != request.target_spec_checksum
+        ):
+            msg = "Confirmatory request does not resolve one exact authorized target vector."
+            raise ValueError(msg)
+        return ResolvedProductionJob(
+            job=job,
+            executable_binding=link,
+            target_configuration=self.context.target_configuration,
+            target_manifest=self.context.target_manifest,
+            target_spec=specs[0],
+            target=targets[0],
+            evaluation_policy=policy,
+            scheduled_program=program,
+            execution_source_manifest_checksum=self.context.execution_source_manifest.content_checksum,
+            screening_cell=None,
+            confirm_request=request,
         )
 
 
@@ -3972,6 +4111,7 @@ def _fresh_evaluate(
 ) -> _FreshEvaluation:
     """Run the exact role-separated fresh fixed-sample evaluator."""
     policy = resolved.evaluation_policy
+    evaluation_policy_checksum = resolved.evaluation_policy_checksum
     noise = policy.noise_condition
     noise_id = cast("str", noise["noise_id"])
     strength = cast("float", noise["strength_scale"])
@@ -3996,8 +4136,8 @@ def _fresh_evaluate(
     }
     map_role = role_by_data_role[policy.data_role]
     evaluation_configuration_checksum = canonical_checksum({
-        "job_checksum": resolved.job.content_checksum,
-        "evaluation_policy_checksum": policy.content_checksum,
+        "job_checksum": resolved.evidence_identity_checksum,
+        "evaluation_policy_checksum": evaluation_policy_checksum,
         "circuit_checksum": circuit_binding.content_checksum,
         "parameter_checksum": canonical_checksum({
             "parameters": [float(value) for value in theta],
@@ -4072,8 +4212,8 @@ def _fresh_evaluate(
     sidecar = _typed_document(
         "raw_trajectory_fidelities",
         {
-            "job_checksum": resolved.job.content_checksum,
-            "evaluation_policy_checksum": policy.content_checksum,
+            "job_checksum": resolved.evidence_identity_checksum,
+            "evaluation_policy_checksum": evaluation_policy_checksum,
             "evaluation_configuration_checksum": evaluation_configuration_checksum,
             "data_role": policy.data_role,
             "seed_domain": policy.seed_domain,
@@ -4165,7 +4305,7 @@ def _pilot_diagnostic(
         use_crn=False,
     )
     stage_configuration_checksum = canonical_checksum({
-        "job_checksum": resolved.job.content_checksum,
+        "job_checksum": resolved.evidence_identity_checksum,
         "policy_checksum": policy.content_checksum,
         "checkpoint_parameter_checksum": checkpoint_parameter_checksum,
         "parameter_vector_checksum": parameter_vector_checksum,
@@ -4240,7 +4380,7 @@ def _pilot_diagnostic(
         "provider_checksum": provider_checksum,
     })
     diagnostic = PilotDiagnosticEvidence(
-        job_checksum=resolved.job.content_checksum,
+        job_checksum=resolved.evidence_identity_checksum,
         policy_checksum=policy.content_checksum,
         checkpoint_parameter_checksum=checkpoint_parameter_checksum,
         parameter_vector_checksum=parameter_vector_checksum,
@@ -4476,8 +4616,8 @@ def _runtime_resource_document(
     return _typed_document(
         "runtime_resources",
         {
-            "job_checksum": resolved.job.content_checksum,
-            "source_fingerprint_checksum": resolved.job.source_fingerprint_checksum,
+            "job_checksum": resolved.evidence_identity_checksum,
+            "source_fingerprint_checksum": resolved.source_fingerprint_checksum,
             "wall_time_seconds": require_float(wall_time_seconds, "wall_time_seconds", minimum=0.0),
             "peak_memory_bytes": require_int(peak_memory_bytes, "peak_memory_bytes"),
             "normalized_work": require_float(normalized_work, "normalized_work", minimum=0.0),
@@ -4539,23 +4679,23 @@ def _publish_attempt(
             msg = "Successful primary-q6 pilot execution requires its frozen pathwise diagnostic."
             raise ValueError(msg)
     evidence = ProductionNumericalEvidence(
-        job_checksum=job.content_checksum,
+        job_checksum=resolved.evidence_identity_checksum,
         attempt=store.attempt,
         artifact_kind=artifact_kind,
         status=status,
         execution_source_manifest_checksum=resolved.execution_source_manifest_checksum,
-        source_fingerprint_checksum=cast("str", job.source_fingerprint_checksum),
-        executable_binding_checksum=cast("str", job.executable_binding_checksum),
+        source_fingerprint_checksum=resolved.source_fingerprint_checksum,
+        executable_binding_checksum=resolved.executable_binding_checksum,
         scheduled_program_checksum=resolved.scheduled_program.content_checksum,
         target_identity=resolved.target.identity_dict(),
-        evaluation_policy_checksum=resolved.evaluation_policy.content_checksum,
+        evaluation_policy_checksum=resolved.evaluation_policy_checksum,
         structural_prefix_checksums=prefix_checksums,
         schedule_snapshot_ref=schedule_snapshot_ref,
         map_evidence_refs=map_evidence_refs,
         diagnostic_refs=diagnostic_refs,
         raw_trajectory_ref=raw_trajectory_ref,
         resource_ref=resource_ref,
-        derived_metrics=metrics,
+        derived_metrics={**metrics, "strategy_schedule_checksum": resolved.strategy_schedule_checksum},
         failure=failure,
     )
     evidence_ref = store.write_json_blob(
@@ -4567,7 +4707,7 @@ def _publish_attempt(
         artifact_kind=artifact_kind,
         status=status,
         execution_source_manifest_checksum=resolved.execution_source_manifest_checksum,
-        source_fingerprint_checksum=cast("str", job.source_fingerprint_checksum),
+        source_fingerprint_checksum=resolved.source_fingerprint_checksum,
         blobs=(*blobs, evidence_ref),
         evidence_ref=evidence_ref,
     )
@@ -4963,6 +5103,17 @@ def _artifact_kind_for_job(job: TrainingJob) -> Literal["pipeline", "operator_gr
     raise ValueError(msg)
 
 
+def _artifact_kind_for_binding(resolved: ResolvedProductionJob) -> Literal["pipeline", "operator_growth"]:
+    """Resolve a repository family from an authenticated executable binding."""
+    kind = resolved.executable_binding.binding.implementation_artifact.implementation_kind
+    if kind.startswith("phase2_pipeline"):
+        return "pipeline"
+    if kind.startswith("operator_growth"):
+        return "operator_growth"
+    msg = f"Unsupported repository-owned implementation kind {kind!r}."
+    raise ValueError(msg)
+
+
 def _failure_partial_receipts(store: ProductionAttemptStore) -> tuple[float, Mapping[str, object]]:
     """Recover conservative completed work and custody facts from closed members."""
     refs = store.written_refs
@@ -5082,7 +5233,7 @@ def _publish_failure_attempt(
     return _publish_attempt(
         store=store,
         resolved=resolved,
-        artifact_kind=_artifact_kind_for_job(resolved.job),
+        artifact_kind=_artifact_kind_for_binding(resolved),
         status="failure",
         blobs=existing_refs,
         prefix_checksums=tuple(ref.logical_checksum for ref in existing_refs if ref.role == "structural_stage"),
@@ -5188,6 +5339,84 @@ class ProductionTrainingExecutor:
         reopened = reopen_result_artifact(reference, job_directory)
         if reopened.evidence.status != "success":
             msg = "A successful production dispatch reopened a non-success terminal attempt."
+            raise ValueError(msg)
+        return reference
+
+
+class ProductionConfirmationExecutor:
+    """Final-seal-bound real executor reusing the frozen WP22 production paths."""
+
+    def __init__(self, context: ConfirmationExecutionContext) -> None:
+        """Bind the narrow non-serializable confirmation authority."""
+        self.authority = ProductionConfirmationAuthority(context)
+
+    def execute(
+        self,
+        request: ConfirmExecutionRequest,
+        job_directory: Path,
+        controls: JobExecutionControls,
+    ) -> ResultArtifactRef:
+        """Execute or reopen the authoritative first real confirmatory attempt."""
+        if not isinstance(job_directory, Path):
+            msg = "job_directory must be a pathlib.Path."
+            raise TypeError(msg)
+        if not isinstance(controls, JobExecutionControls):
+            msg = "controls must be JobExecutionControls."
+            raise TypeError(msg)
+        if controls.overwrite:
+            msg = "Real confirmation forbids overwrite; its first terminal attempt is authoritative."
+            raise ValueError(msg)
+        resolved = self.authority.resolve(request)
+        store = ProductionAttemptStore(job_directory, request.content_checksum, 1)
+        if store.terminal_manifest_exists():
+            reference = store.derive_existing_ref()
+            reopened = reopen_result_artifact(reference, job_directory)
+            if reopened.evidence.status == "failure":
+                msg = "The authoritative real confirmation attempt records structured failure."
+                raise PersistedProductionAttemptError(msg)
+            return reference
+        if store.attempt_directory_exists():
+            msg = "An incomplete authoritative real confirmation attempt already exists."
+            raise ValueError(msg)
+        state = controls.schedule_resume_state
+        if state is not None and state.prior_attempt > 0:
+            msg = "Real confirmation cannot create a later attempt after prior orchestration state."
+            raise ValueError(msg)
+
+        owns_tracing = not tracemalloc.is_tracing()
+        if owns_tracing:
+            tracemalloc.start()
+            tracemalloc.reset_peak()
+        baseline, _baseline_peak = tracemalloc.get_traced_memory()
+        started = time.perf_counter()
+        try:
+            reference = _dispatch_production_attempt(
+                resolved,
+                store,
+                _artifact_kind_for_binding(resolved),
+            )
+        except Exception as error:
+            current, peak = tracemalloc.get_traced_memory()
+            measured_peak = max(current - baseline, peak - baseline, 0)
+            try:
+                _publish_failure_attempt(
+                    resolved=resolved,
+                    store=store,
+                    error=error,
+                    elapsed_seconds=time.perf_counter() - started,
+                    peak_memory_bytes=measured_peak,
+                )
+            except Exception as custody_error:
+                raise error from custody_error
+            finally:
+                if owns_tracing:
+                    tracemalloc.stop()
+            raise
+        if owns_tracing:
+            tracemalloc.stop()
+        reopened = reopen_result_artifact(reference, job_directory)
+        if reopened.evidence.status != "success":
+            msg = "A successful real confirmation dispatch reopened a non-success terminal attempt."
             raise ValueError(msg)
         return reference
 
@@ -5301,13 +5530,7 @@ class SyntheticConfirmationExecutor:
             msg = "Synthetic confirmation cannot create a later attempt after prior orchestration state."
             raise ValueError(msg)
 
-        evaluation_policy_checksum = canonical_checksum({
-            "purpose": "confirmatory_fresh_evaluation",
-            "request_checksum": request.content_checksum,
-            "evaluation_seed": request.evaluation_seed,
-            "fixed_test_trajectory_count": request.fixed_test_trajectory_count,
-            "primary_noise_condition": dict(request.primary_noise_condition),
-        })
+        evaluation_policy_checksum = confirmatory_evaluation_policy_checksum(request)
         raw_ref = store.write_json_blob(
             "evaluation/raw_trajectory_fidelities.json",
             _typed_document(
@@ -5349,7 +5572,7 @@ class SyntheticConfirmationExecutor:
             status="success",
             execution_source_manifest_checksum=request.execution_source_checksum,
             source_fingerprint_checksum=request.execution_source_checksum,
-            executable_binding_checksum=request.configuration_checksum,
+            executable_binding_checksum=request.executable_binding_checksum,
             scheduled_program_checksum=request.hyperparameters_checksum,
             target_identity={
                 "synthetic_fixture": True,
@@ -5372,6 +5595,7 @@ class SyntheticConfirmationExecutor:
                 "evaluation_seed": request.evaluation_seed,
                 "trajectory_count": request.fixed_test_trajectory_count,
                 "synthetic_fixture_checksum": self.fixture.content_checksum,
+                "strategy_schedule_checksum": request.hyperparameters_checksum,
                 "promotion_eligible": False,
             },
             failure=None,
@@ -5415,11 +5639,33 @@ def create_synthetic_confirmation_executor(
 
 
 def create_default_training_executor_registry(
-    context: TrainingExecutionContext,
+    context: TrainingExecutionContext | ConfirmationExecutionContext,
     *,
     synthetic_confirmation_fixture: SyntheticConfirmationFixture | None = None,
 ) -> TrainingExecutorRegistry:
     """Create the repository-owned registry while preserving the legacy string ABI."""
+    if isinstance(context, ConfirmationExecutionContext):
+        if synthetic_confirmation_fixture is not None:
+            msg = "A real confirmation context cannot accept a synthetic fixture."
+            raise ValueError(msg)
+        confirmation = ProductionConfirmationExecutor(context)
+
+        def execute_real_confirmation(
+            request: ConfirmExecutionRequest,
+            directory: Path,
+            controls: JobExecutionControls,
+        ) -> str:
+            reference = confirmation.execute(request, directory, controls)
+            reopened = reopen_result_artifact(reference, directory)
+            if reopened.evidence.status != "success":
+                msg = "Real confirmation did not reopen as a successful typed attempt."
+                raise PersistedProductionAttemptError(msg)
+            return reference.content_checksum
+
+        return TrainingExecutorRegistry(confirm_executor=execute_real_confirmation)
+    if not isinstance(context, TrainingExecutionContext):
+        msg = "context must be a TrainingExecutionContext or ConfirmationExecutionContext."
+        raise TypeError(msg)
     executor = ProductionTrainingExecutor(context)
 
     def reject_unheld_confirmation(

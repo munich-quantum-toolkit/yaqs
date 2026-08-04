@@ -10,10 +10,11 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, dataclass, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import patch
 
 import pytest
 
@@ -25,7 +26,11 @@ from benchmarks.state_preparation.phase2 import (
     CandidateSummary,
     ConfirmationAuthorization,
     FinalComparatorRef,
+    FinalConfigurationExecutionManifest,
+    FinalConfigurationExecutionRef,
     FinalConfirmationSeal,
+    FinalResourceCalibrationManifest,
+    FrozenTrainingPolicyUniverse,
     InitialPreregistration,
     PrimaryContrastBinding,
     PromotionDecision,
@@ -41,6 +46,7 @@ from benchmarks.state_preparation.phase2 import (
     canonical_json,
     load_initial_preregistration,
     select_promoted_candidate,
+    validate_final_configuration_execution_manifest,
 )
 
 if TYPE_CHECKING:
@@ -438,6 +444,87 @@ def _analysis_source_manifest(
     )
 
 
+def _configuration_execution_manifest(
+    manifest: ScreeningManifest,
+    decision: PromotionDecision,
+) -> FinalConfigurationExecutionManifest:
+    """Build the exact promoted-plus-comparator execution universe.
+
+    Returns:
+        A sealed manifest with one concrete schedule and binding chain per configuration.
+    """
+    schedules = {item.schedule_id: item for item in FrozenTrainingPolicyUniverse.frozen().schedules}
+    final_candidates = {
+        decision.promoted_configuration_checksum: _candidate(manifest, decision.promoted_method_id),
+        **{
+            comparator.configuration_checksum: _candidate(manifest, comparator.method_id)
+            for comparator in _comparators(manifest)
+        },
+    }
+    entries = []
+    for candidate in final_candidates.values():
+        schedule_id = (
+            "direct_noiseless_control"
+            if candidate.method_id == "layerwise_bmpd_noiseless"
+            else "direct_matched_fixed_crn"
+            if candidate.method_id == "layerwise_bmpd_crn_v2"
+            else "resampled_each_update"
+        )
+        entries.append(
+            FinalConfigurationExecutionRef(
+                method_id=candidate.method_id,
+                configuration_schema_version=candidate.configuration_schema_version,
+                configuration_checksum=candidate.configuration_checksum,
+                strategy_schedule=schedules[schedule_id],
+                implementation_checksum=_checksum(f"implementation:{candidate.method_id}"),
+                scoped_binding_checksum=_checksum(f"scoped-binding:{candidate.configuration_checksum}"),
+                executable_binding_checksum=_checksum(f"executable-binding:{candidate.configuration_checksum}"),
+            )
+        )
+    return FinalConfigurationExecutionManifest(
+        manifest_id="phase2_final_configuration_execution_v1",
+        entries=tuple(sorted(entries, key=lambda item: (item.configuration_checksum, item.method_id))),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _TestResourceCalibration(FinalResourceCalibrationManifest):
+    """Minimal calibration used only behind an explicit protocol-test type seam."""
+
+    preregistration_checksum: str
+    execution_source_manifest_checksum: str
+    screening_manifest_checksum: str
+    normalized_compute_cap: float
+
+    @property
+    def content_checksum(self) -> str:
+        """Derived test calibration root."""
+        return canonical_checksum({
+            "preregistration_checksum": self.preregistration_checksum,
+            "execution_source_manifest_checksum": self.execution_source_manifest_checksum,
+            "screening_manifest_checksum": self.screening_manifest_checksum,
+            "normalized_compute_cap_hex": float(self.normalized_compute_cap).hex(),
+        })
+
+
+def _resource_calibration(
+    preregistration: InitialPreregistration,
+    manifest: ScreeningManifest,
+    execution_source_manifest_checksum: str,
+) -> _TestResourceCalibration:
+    """Build deterministic typed resource custody for protocol tests.
+
+    Returns:
+        The test calibration bound to the supplied prior artifacts.
+    """
+    return _TestResourceCalibration(
+        preregistration_checksum=preregistration.content_checksum,
+        execution_source_manifest_checksum=execution_source_manifest_checksum,
+        screening_manifest_checksum=manifest.content_checksum,
+        normalized_compute_cap=1_000_000.0,
+    )
+
+
 def _final_seal(
     preregistration: InitialPreregistration,
     manifest: ScreeningManifest,
@@ -450,6 +537,12 @@ def _final_seal(
         A complete valid final-confirmation seal.
     """
     analysis_source_manifest = _analysis_source_manifest(preregistration)
+    configuration_execution_manifest = _configuration_execution_manifest(manifest, decision)
+    resource_calibration = _resource_calibration(
+        preregistration,
+        manifest,
+        analysis_source_manifest.execution_source_manifest_checksum,
+    )
     return FinalConfirmationSeal(
         seal_id="phase2_confirmation_v1",
         preregistration_checksum=preregistration.content_checksum,
@@ -470,10 +563,10 @@ def _final_seal(
         primary_resource_budget={
             "metric": "native_two_qubit_gates_per_chain_edge",
             "cap_per_chain_edge": 12.0,
-            "normalized_compute_cap": 1_000_000.0,
-            "reachable_stratum_manifest_checksum": _checksum("reachable resource strata"),
+            "normalized_compute_cap": resource_calibration.normalized_compute_cap,
+            "reachable_stratum_manifest_checksum": resource_calibration.content_checksum,
         },
-        hyperparameters_checksum=_checksum("final hyperparameters"),
+        hyperparameters_checksum=configuration_execution_manifest.content_checksum,
         execution_source_checksum=(analysis_source_manifest.execution_source_manifest_checksum),
         analysis_template_checksum=preregistration.analysis_template_checksum,
         analysis_source_manifest_checksum=analysis_source_manifest.content_checksum,
@@ -491,6 +584,7 @@ def _authorize(
     final_seal: FinalConfirmationSeal,
     *,
     analysis_source_manifest: AnalysisSourceManifest | None = None,
+    override_production_calibration_type: bool = True,
 ) -> ConfirmationAuthorization:
     """Authorize using the tracked test analysis source.
 
@@ -500,7 +594,13 @@ def _authorize(
     source_manifest = (
         _analysis_source_manifest(preregistration) if analysis_source_manifest is None else analysis_source_manifest
     )
-    return authorize_confirmation(
+    configuration_execution_manifest = _configuration_execution_manifest(manifest, decision)
+    resource_calibration = _resource_calibration(
+        preregistration,
+        manifest,
+        source_manifest.execution_source_manifest_checksum,
+    )
+    arguments = (
         preregistration,
         manifest,
         evidence,
@@ -508,8 +608,17 @@ def _authorize(
         sample_size_design,
         source_manifest,
         final_seal,
+        configuration_execution_manifest,
+        resource_calibration,
         REPOSITORY_ROOT,
     )
+    if not override_production_calibration_type:
+        return authorize_confirmation(*arguments)
+    with patch(
+        "benchmarks.state_preparation.phase2.screening.ProductionResourceCalibration",
+        _TestResourceCalibration,
+    ):
+        return authorize_confirmation(*arguments)
 
 
 @pytest.fixture(scope="module")
@@ -968,6 +1077,16 @@ def test_confirmation_authorization_requires_all_independent_seals(
     final_seal: FinalConfirmationSeal,
 ) -> None:
     """Matching prior, evidence, sample, and final seals authorize confirmation."""
+    with pytest.raises(TypeError, match="exact ProductionResourceCalibration"):
+        _authorize(
+            preregistration,
+            screening_manifest,
+            screening_evidence,
+            promotion_decision,
+            sample_size_design,
+            final_seal,
+            override_production_calibration_type=False,
+        )
     authorization = _authorize(
         preregistration,
         screening_manifest,
@@ -991,6 +1110,76 @@ def test_confirmation_authorization_requires_all_independent_seals(
             _checksum("authorization source"),
             object(),
         )
+
+
+def test_final_configuration_execution_manifest_is_exact_and_tamper_evident(
+    screening_manifest: ScreeningManifest,
+    promotion_decision: PromotionDecision,
+    final_seal: FinalConfirmationSeal,
+) -> None:
+    """Schedules and the complete final configuration set are aggregate-rooted."""
+    manifest = _configuration_execution_manifest(screening_manifest, promotion_decision)
+    assert FinalConfigurationExecutionManifest.from_json(manifest.to_json()) == manifest
+    validate_final_configuration_execution_manifest(final_seal, manifest)
+
+    raw = manifest.to_dict()
+    raw_entries = cast("list[dict[str, object]]", raw["entries"])
+    raw_entries[0]["implementation_checksum"] = _checksum("tampered implementation")
+    with pytest.raises(ValueError, match="content checksum mismatch"):
+        FinalConfigurationExecutionManifest.from_dict(raw)
+
+    schedules = FrozenTrainingPolicyUniverse.frozen().schedules
+    first = manifest.entries[0]
+    alternate = next(item for item in schedules if item.content_checksum != first.strategy_schedule_checksum)
+    changed_entries = tuple(
+        replace(item, strategy_schedule=alternate)
+        if item.configuration_checksum == first.configuration_checksum
+        else item
+        for item in manifest.entries
+    )
+    changed_schedule = FinalConfigurationExecutionManifest(
+        manifest_id=manifest.manifest_id,
+        entries=changed_entries,
+    )
+    with pytest.raises(ValueError, match="hyperparameters root"):
+        validate_final_configuration_execution_manifest(final_seal, changed_schedule)
+
+    dropped = FinalConfigurationExecutionManifest(
+        manifest_id=manifest.manifest_id,
+        entries=manifest.entries[:-1],
+    )
+    resealed_drop = replace(final_seal, hyperparameters_checksum=dropped.content_checksum)
+    with pytest.raises(ValueError, match="promoted-plus-comparator set"):
+        validate_final_configuration_execution_manifest(resealed_drop, dropped)
+
+    changed_method_entries = tuple(
+        replace(item, method_id="foreign_method")
+        if item.configuration_checksum == first.configuration_checksum
+        else item
+        for item in manifest.entries
+    )
+    changed_method = FinalConfigurationExecutionManifest(
+        manifest_id=manifest.manifest_id,
+        entries=changed_method_entries,
+    )
+    resealed_method = replace(final_seal, hyperparameters_checksum=changed_method.content_checksum)
+    with pytest.raises(ValueError, match="promoted-plus-comparator set"):
+        validate_final_configuration_execution_manifest(resealed_method, changed_method)
+
+    comparator_checksum = final_seal.comparators[0].configuration_checksum
+    changed_schema_entries = tuple(
+        replace(item, configuration_schema_version="foreign_configuration_v1")
+        if item.configuration_checksum == comparator_checksum
+        else item
+        for item in manifest.entries
+    )
+    changed_schema = FinalConfigurationExecutionManifest(
+        manifest_id=manifest.manifest_id,
+        entries=changed_schema_entries,
+    )
+    resealed_schema = replace(final_seal, hyperparameters_checksum=changed_schema.content_checksum)
+    with pytest.raises(ValueError, match="configuration schema"):
+        validate_final_configuration_execution_manifest(resealed_schema, changed_schema)
 
 
 def test_confirmation_rejects_forged_high_promotion_summary(

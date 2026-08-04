@@ -147,9 +147,11 @@ def test_pilot_widths_screen_scope_and_confirmation_alias_are_exact(
     assert confirmation.implementation_artifact.content_checksum == screened.implementation_artifact.content_checksum
     assert confirmation.preset == "paper-screen"
 
-    with pytest.raises(KeyError, match="promotion-eligible q6"):
-        catalog.resolve("paper-confirm", "layerwise_bmpd_noiseless", "primary_q6")
-    with pytest.raises(KeyError, match="promotion-eligible q6"):
+    noiseless_screened = catalog.resolve("paper-screen", "layerwise_bmpd_noiseless", "primary_q6")
+    noiseless_confirmation = catalog.resolve("paper-confirm", "layerwise_bmpd_noiseless", "primary_q6")
+    assert noiseless_confirmation is noiseless_screened
+    assert noiseless_confirmation.implementation_artifact is noiseless_screened.implementation_artifact
+    with pytest.raises(KeyError, match="final-eligible q6"):
         catalog.resolve("paper-confirm", PILOT_METHOD_IDS[0], "secondary_q12")
     with pytest.raises(KeyError, match="No unique executable"):
         catalog.resolve("paper-screen", PILOT_METHOD_IDS[0], "secondary_q12")

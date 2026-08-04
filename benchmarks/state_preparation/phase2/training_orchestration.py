@@ -41,7 +41,14 @@ from .canonical import (
 from .execution_bindings import PILOT_METHOD_IDS, SCREEN_METHOD_IDS, SMOKE_METHOD_IDS
 from .layerwise_bmpd import resolve_layerwise_bmpd_crn_legacy_v1_pipeline
 from .pipeline import TrainingPipelineConfig, TrainingPipelineTemplate
-from .protocol import FinalConfirmationSeal, ScreeningCell, ScreeningManifest
+from .protocol import (
+    FinalConfigurationExecutionManifest,
+    FinalConfigurationExecutionRef,
+    FinalConfirmationSeal,
+    ScreeningCell,
+    ScreeningManifest,
+    validate_final_configuration_execution_manifest,
+)
 from .screening_design import WP22CandidateConfiguration
 from .targets import TargetInstanceSpec, TargetPopulationManifest, verify_screening_target_population
 from .training_schedules import (
@@ -66,12 +73,12 @@ from .validation import (
 )
 
 if TYPE_CHECKING:
-    from .execution_context import TrainingExecutionContext
+    from .execution_context import ConfirmationExecutionContext, TrainingExecutionContext
 
 TRAINING_JOB_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_training_job.v2"
 TRAINING_RUN_PLAN_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_training_run_plan.v2"
 TRAINING_JOB_OUTCOME_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_training_job_outcome.v1"
-CONFIRM_EXECUTION_REQUEST_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_confirm_execution_request.v1"
+CONFIRM_EXECUTION_REQUEST_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_confirm_execution_request.v2"
 
 PILOT_OPTIMIZATION_SEED_COUNT = 5
 
@@ -115,7 +122,11 @@ _CONFIRM_REQUEST_KEYS = frozenset({
     "execution_source_checksum",
     "analysis_source_manifest_checksum",
     "analysis_template_checksum",
+    "configuration_execution_manifest_checksum",
     "hyperparameters_checksum",
+    "implementation_checksum",
+    "scoped_binding_checksum",
+    "executable_binding_checksum",
     "sample_size_design_checksum",
     "failure_policy_checksum",
     "fixed_test_trajectory_count",
@@ -280,7 +291,11 @@ class ConfirmExecutionRequest:
     execution_source_checksum: str
     analysis_source_manifest_checksum: str
     analysis_template_checksum: str
+    configuration_execution_manifest_checksum: str
     hyperparameters_checksum: str
+    implementation_checksum: str
+    scoped_binding_checksum: str
+    executable_binding_checksum: str
     sample_size_design_checksum: str
     failure_policy_checksum: str
     fixed_test_trajectory_count: int
@@ -309,7 +324,11 @@ class ConfirmExecutionRequest:
             "execution_source_checksum",
             "analysis_source_manifest_checksum",
             "analysis_template_checksum",
+            "configuration_execution_manifest_checksum",
             "hyperparameters_checksum",
+            "implementation_checksum",
+            "scoped_binding_checksum",
+            "executable_binding_checksum",
             "sample_size_design_checksum",
             "failure_policy_checksum",
             "configuration_checksum",
@@ -367,7 +386,11 @@ class ConfirmExecutionRequest:
             "execution_source_checksum": self.execution_source_checksum,
             "analysis_source_manifest_checksum": self.analysis_source_manifest_checksum,
             "analysis_template_checksum": self.analysis_template_checksum,
+            "configuration_execution_manifest_checksum": self.configuration_execution_manifest_checksum,
             "hyperparameters_checksum": self.hyperparameters_checksum,
+            "implementation_checksum": self.implementation_checksum,
+            "scoped_binding_checksum": self.scoped_binding_checksum,
+            "executable_binding_checksum": self.executable_binding_checksum,
             "sample_size_design_checksum": self.sample_size_design_checksum,
             "failure_policy_checksum": self.failure_policy_checksum,
             "fixed_test_trajectory_count": self.fixed_test_trajectory_count,
@@ -421,7 +444,14 @@ class ConfirmExecutionRequest:
             execution_source_checksum=cast("str", mapping["execution_source_checksum"]),
             analysis_source_manifest_checksum=cast("str", mapping["analysis_source_manifest_checksum"]),
             analysis_template_checksum=cast("str", mapping["analysis_template_checksum"]),
+            configuration_execution_manifest_checksum=cast(
+                "str",
+                mapping["configuration_execution_manifest_checksum"],
+            ),
             hyperparameters_checksum=cast("str", mapping["hyperparameters_checksum"]),
+            implementation_checksum=cast("str", mapping["implementation_checksum"]),
+            scoped_binding_checksum=cast("str", mapping["scoped_binding_checksum"]),
+            executable_binding_checksum=cast("str", mapping["executable_binding_checksum"]),
             sample_size_design_checksum=cast("str", mapping["sample_size_design_checksum"]),
             failure_policy_checksum=cast("str", mapping["failure_policy_checksum"]),
             fixed_test_trajectory_count=cast("int", mapping["fixed_test_trajectory_count"]),
@@ -455,16 +485,42 @@ class ConfirmExecutionRequest:
         return cls.from_dict(load_canonical_json_object(payload))
 
 
+def confirmatory_evaluation_policy_checksum(request: ConfirmExecutionRequest) -> str:
+    """Bind the frozen confirmatory evaluator to one exact sealed request.
+
+    Returns:
+        The shared request-, seed-, count-, noise-, and role-bound evaluation
+        policy checksum used by synthetic and real confirmation custody.
+
+    Raises:
+        TypeError: If ``request`` is not a confirm execution request.
+    """
+    if not isinstance(request, ConfirmExecutionRequest):
+        msg = "request must be a ConfirmExecutionRequest."
+        raise TypeError(msg)
+    return canonical_checksum({
+        "purpose": "confirmatory_fresh_evaluation",
+        "request_checksum": request.content_checksum,
+        "evaluation_seed": request.evaluation_seed,
+        "fixed_test_trajectory_count": request.fixed_test_trajectory_count,
+        "primary_noise_condition": dict(request.primary_noise_condition),
+        "data_role": "confirmatory",
+        "seed_domain": "confirmatory_test",
+    })
+
+
 @dataclass(frozen=True, slots=True)
 class ConfirmExecutionContext:
     """Precomputed immutable index for efficient per-cell authentication."""
 
     seal: FinalConfirmationSeal
     target_manifest: TargetPopulationManifest
+    configuration_execution_manifest: FinalConfigurationExecutionManifest
     final_seal_checksum: str = field(init=False)
     target_manifest_checksum: str = field(init=False)
     targets_by_id: Mapping[str, TargetInstanceSpec] = field(init=False, repr=False)
     methods_by_configuration: Mapping[str, str] = field(init=False, repr=False)
+    execution_by_configuration: Mapping[str, FinalConfigurationExecutionRef] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Validate source schemas and cache their expensive roots once.
@@ -479,6 +535,7 @@ class ConfirmExecutionContext:
         if not isinstance(self.target_manifest, TargetPopulationManifest):
             msg = "target_manifest must be a TargetPopulationManifest."
             raise TypeError(msg)
+        validate_final_configuration_execution_manifest(self.seal, self.configuration_execution_manifest)
         seal_checksum = self.seal.content_checksum
         manifest_checksum = self.target_manifest.content_checksum
         if manifest_checksum != self.seal.confirmatory_target_manifest_checksum:
@@ -489,28 +546,39 @@ class ConfirmExecutionContext:
             self.seal.promoted_configuration_checksum: self.seal.promoted_method_id,
             **{item.configuration_checksum: item.method_id for item in self.seal.comparators},
         }
+        execution = {item.configuration_checksum: item for item in self.configuration_execution_manifest.entries}
+        if {checksum: item.method_id for checksum, item in execution.items()} != methods:
+            msg = "Final execution manifest method/configuration identities differ from the final seal."
+            raise ValueError(msg)
         object.__setattr__(self, "final_seal_checksum", seal_checksum)
         object.__setattr__(self, "target_manifest_checksum", manifest_checksum)
         object.__setattr__(self, "targets_by_id", MappingProxyType(targets))
         object.__setattr__(self, "methods_by_configuration", MappingProxyType(methods))
+        object.__setattr__(self, "execution_by_configuration", MappingProxyType(execution))
 
 
 def build_confirm_execution_context(
     seal: FinalConfirmationSeal,
     target_manifest: TargetPopulationManifest,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
 ) -> ConfirmExecutionContext:
     """Build one cached context for a complete confirmatory result batch.
 
     Returns:
         The immutable O(1)-lookup authentication context.
     """
-    return ConfirmExecutionContext(seal=seal, target_manifest=target_manifest)
+    return ConfirmExecutionContext(
+        seal=seal,
+        target_manifest=target_manifest,
+        configuration_execution_manifest=configuration_execution_manifest,
+    )
 
 
 def validate_confirm_execution_request(
     request: ConfirmExecutionRequest,
     context_or_seal: ConfirmExecutionContext | FinalConfirmationSeal,
     target_manifest: TargetPopulationManifest | None = None,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest | None = None,
 ) -> None:
     """Authenticate one request without rebuilding the full confirmatory plan.
 
@@ -522,15 +590,19 @@ def validate_confirm_execution_request(
         msg = "request must be a ConfirmExecutionRequest."
         raise TypeError(msg)
     if isinstance(context_or_seal, ConfirmExecutionContext):
-        if target_manifest is not None:
-            msg = "target_manifest must be omitted when a ConfirmExecutionContext is supplied."
+        if target_manifest is not None or configuration_execution_manifest is not None:
+            msg = "Target and execution manifests must be omitted with a ConfirmExecutionContext."
             raise ValueError(msg)
         context = context_or_seal
     else:
-        if target_manifest is None:
-            msg = "target_manifest is required when authenticating against a FinalConfirmationSeal."
+        if target_manifest is None or configuration_execution_manifest is None:
+            msg = "Target and final-configuration execution manifests are required with a FinalConfirmationSeal."
             raise TypeError(msg)
-        context = build_confirm_execution_context(context_or_seal, target_manifest)
+        context = build_confirm_execution_context(
+            context_or_seal,
+            target_manifest,
+            configuration_execution_manifest,
+        )
     seal = context.seal
     target = context.targets_by_id.get(request.target_instance_id)
     if target is None:
@@ -540,6 +612,7 @@ def validate_confirm_execution_request(
     if method_id is None:
         msg = "Confirm execution configuration is absent from the final seal."
         raise ValueError(msg)
+    execution = context.execution_by_configuration[request.configuration_checksum]
     if request.optimization_seed_index >= seal.optimization_seed_count:
         msg = "Confirm execution seed index exceeds the final-seal count."
         raise ValueError(msg)
@@ -551,7 +624,11 @@ def validate_confirm_execution_request(
         execution_source_checksum=seal.execution_source_checksum,
         analysis_source_manifest_checksum=seal.analysis_source_manifest_checksum,
         analysis_template_checksum=seal.analysis_template_checksum,
-        hyperparameters_checksum=seal.hyperparameters_checksum,
+        configuration_execution_manifest_checksum=context.configuration_execution_manifest.content_checksum,
+        hyperparameters_checksum=execution.strategy_schedule_checksum,
+        implementation_checksum=execution.implementation_checksum,
+        scoped_binding_checksum=execution.scoped_binding_checksum,
+        executable_binding_checksum=execution.executable_binding_checksum,
         sample_size_design_checksum=seal.sample_size_design_checksum,
         failure_policy_checksum=seal.failure_policy_checksum,
         fixed_test_trajectory_count=seal.fixed_test_trajectory_count,
@@ -725,6 +802,7 @@ class TrainingJob:
             expected = (
                 (request.method_id, self.method_id),
                 (request.configuration_checksum, self.candidate_configuration_checksum),
+                (request.implementation_checksum, self.implementation_checksum),
                 (request.hyperparameters_checksum, self.strategy_schedule_checksum),
                 (request.target_manifest_checksum, self.target_manifest_checksum),
                 (request.target_instance_id, self.target_instance_id),
@@ -955,10 +1033,10 @@ class TrainingRunPlan:
                 (
                     request.analysis_source_manifest_checksum,
                     request.analysis_template_checksum,
+                    request.configuration_execution_manifest_checksum,
                     request.fixed_test_trajectory_count,
                     canonical_checksum(request.primary_noise_condition),
                     canonical_checksum(request.primary_resource_budget),
-                    request.hyperparameters_checksum,
                     request.sample_size_design_checksum,
                     request.failure_policy_checksum,
                 )
@@ -967,6 +1045,21 @@ class TrainingRunPlan:
             if len(invariant_fields) != 1:
                 msg = "Paper-confirm jobs do not share one exact final-seal execution policy."
                 raise ValueError(msg)
+            execution_by_configuration: dict[str, tuple[str, str, str, str]] = {}
+            for request in typed_requests:
+                execution_identity = (
+                    request.implementation_checksum,
+                    request.hyperparameters_checksum,
+                    request.scoped_binding_checksum,
+                    request.executable_binding_checksum,
+                )
+                previous = execution_by_configuration.setdefault(
+                    request.configuration_checksum,
+                    execution_identity,
+                )
+                if previous != execution_identity:
+                    msg = "One confirmatory configuration cannot use multiple executable identities."
+                    raise ValueError(msg)
         elif self.final_confirmation_seal_checksum is not None:
             msg = "A final confirmation seal may be attached only to paper-confirm."
             raise ValueError(msg)
@@ -1698,6 +1791,7 @@ def build_paper_confirm_plan(
     *,
     seal: FinalConfirmationSeal,
     target_manifest: TargetPopulationManifest,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
 ) -> TrainingRunPlan:
     """Build a dormant confirmatory plan only from an authorized final seal.
 
@@ -1720,7 +1814,11 @@ def build_paper_confirm_plan(
     if target_manifest.data_role != "confirmatory":
         msg = "Revealed confirmatory target manifest does not match the final seal."
         raise ValueError(msg)
-    context = build_confirm_execution_context(seal, target_manifest)
+    context = build_confirm_execution_context(
+        seal,
+        target_manifest,
+        configuration_execution_manifest,
+    )
     actual_counts = {
         family: sum(spec.family_id == family for spec in target_manifest.instances)
         for family in seal.target_count_by_family
@@ -1728,9 +1826,9 @@ def build_paper_confirm_plan(
     if actual_counts != dict(seal.target_count_by_family):
         msg = "Revealed confirmatory family counts differ from the final seal."
         raise ValueError(msg)
-    configurations = [(seal.promoted_method_id, seal.promoted_configuration_checksum)]
-    configurations.extend((item.method_id, item.configuration_checksum) for item in seal.comparators)
-    if len({checksum for _, checksum in configurations}) != len(configurations):
+    configurations = [context.execution_by_configuration[seal.promoted_configuration_checksum]]
+    configurations.extend(context.execution_by_configuration[item.configuration_checksum] for item in seal.comparators)
+    if len({item.configuration_checksum for item in configurations}) != len(configurations):
         msg = "Final seal contains duplicate confirmatory configurations."
         raise ValueError(msg)
     jobs: list[TrainingJob] = []
@@ -1743,7 +1841,9 @@ def build_paper_confirm_plan(
                 seed_index,
             )
             block = f"confirm_{target.target_instance_id}_seed_index_{seed_index}"
-            for method_id, configuration_checksum in configurations:
+            for execution in configurations:
+                method_id = execution.method_id
+                configuration_checksum = execution.configuration_checksum
                 evaluation_seed = derive_confirmatory_evaluation_seed(
                     context.final_seal_checksum,
                     target_checksum,
@@ -1765,7 +1865,13 @@ def build_paper_confirm_plan(
                     execution_source_checksum=seal.execution_source_checksum,
                     analysis_source_manifest_checksum=seal.analysis_source_manifest_checksum,
                     analysis_template_checksum=seal.analysis_template_checksum,
-                    hyperparameters_checksum=seal.hyperparameters_checksum,
+                    configuration_execution_manifest_checksum=(
+                        context.configuration_execution_manifest.content_checksum
+                    ),
+                    hyperparameters_checksum=execution.strategy_schedule_checksum,
+                    implementation_checksum=execution.implementation_checksum,
+                    scoped_binding_checksum=execution.scoped_binding_checksum,
+                    executable_binding_checksum=execution.executable_binding_checksum,
                     sample_size_design_checksum=seal.sample_size_design_checksum,
                     failure_policy_checksum=seal.failure_policy_checksum,
                     fixed_test_trajectory_count=seal.fixed_test_trajectory_count,
@@ -1791,8 +1897,8 @@ def build_paper_confirm_plan(
                         method_id=method_id,
                         implementation_kind="sealed_configuration",
                         candidate_configuration_checksum=configuration_checksum,
-                        implementation_checksum=configuration_checksum,
-                        strategy_schedule_checksum=seal.hyperparameters_checksum,
+                        implementation_checksum=execution.implementation_checksum,
+                        strategy_schedule_checksum=execution.strategy_schedule_checksum,
                         target_manifest_checksum=context.target_manifest_checksum,
                         target_instance_id=target.target_instance_id,
                         target_spec_checksum=target_checksum,
@@ -2366,7 +2472,7 @@ def execute_training_plan(
     overwrite: bool = False,
     dry_run: bool = False,
     fail_fast: bool = False,
-    context: TrainingExecutionContext | None = None,
+    context: TrainingExecutionContext | ConfirmationExecutionContext | None = None,
     repository_root: Path | None = None,
 ) -> TrainingRunSummary:
     """Execute or dry-run a sealed plan with atomic per-job outcomes.
@@ -2388,10 +2494,13 @@ def execute_training_plan(
     dry = require_bool(dry_run, "dry_run")
     stop_early = require_bool(fail_fast, "fail_fast")
     if context is not None:
-        from .execution_context import TrainingExecutionContext  # noqa: PLC0415 - avoids a module import cycle
+        from .execution_context import (  # noqa: PLC0415 - avoids a module import cycle
+            ConfirmationExecutionContext,
+            TrainingExecutionContext,
+        )
 
-        if not isinstance(context, TrainingExecutionContext):
-            msg = "context must be a TrainingExecutionContext."
+        if not isinstance(context, (TrainingExecutionContext, ConfirmationExecutionContext)):
+            msg = "context must be a TrainingExecutionContext or ConfirmationExecutionContext."
             raise TypeError(msg)
         if context.plan != plan:
             msg = "Execution context does not contain the supplied exact plan."
@@ -2497,6 +2606,7 @@ __all__ = [
     "build_paper_pilot_plan",
     "build_paper_screen_plan",
     "build_training_smoke_plan",
+    "confirmatory_evaluation_policy_checksum",
     "derive_confirmatory_evaluation_seed",
     "derive_confirmatory_optimization_seed",
     "derive_pilot_optimization_seeds",

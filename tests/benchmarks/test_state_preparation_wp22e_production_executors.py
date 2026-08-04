@@ -217,7 +217,11 @@ def _confirm_request() -> ConfirmExecutionRequest:
         execution_source_checksum=_checksum("execution source"),
         analysis_source_manifest_checksum=_checksum("analysis source"),
         analysis_template_checksum=_checksum("analysis template"),
+        configuration_execution_manifest_checksum=_checksum("configuration execution manifest"),
         hyperparameters_checksum=_checksum("hyperparameters"),
+        implementation_checksum=_checksum("implementation"),
+        scoped_binding_checksum=_checksum("scoped binding"),
+        executable_binding_checksum=_checksum("executable binding"),
         sample_size_design_checksum=_checksum("sample size"),
         failure_policy_checksum=_checksum("failure policy"),
         fixed_test_trajectory_count=2,
@@ -1800,6 +1804,8 @@ def test_synthetic_confirmation_is_typed_first_attempt_without_target_materializ
     reopened = reopen_result_artifact(reference, directory)
     assert reference.artifact_kind == "synthetic_confirmation"
     assert reference.attempt == 1
+    assert reopened.evidence.executable_binding_checksum == request.executable_binding_checksum
+    assert reopened.evidence.scheduled_program_checksum == request.hyperparameters_checksum
     assert reopened.evidence.derived_metrics["noisy_fidelity"] == pytest.approx(0.5)
     assert reopened.raw_trajectory is not None
     raw_payload = cast("Mapping[str, object]", reopened.raw_trajectory["payload"])

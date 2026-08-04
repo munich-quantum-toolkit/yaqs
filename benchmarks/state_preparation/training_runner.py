@@ -36,6 +36,7 @@ from benchmarks.state_preparation.phase2.binding_catalog import RepositoryBindin
 from benchmarks.state_preparation.phase2.execution_bindings import TrainingExecutionProfile
 from benchmarks.state_preparation.phase2.execution_context import (
     AuthorizedTargetMaterialization,
+    ConfirmationExecutionContext,
     ExternalEntropyKeyring,
     TrainingExecutionContext,
     bind_training_plan_fingerprints,
@@ -54,14 +55,20 @@ from benchmarks.state_preparation.phase2.protocol import (
     DEFAULT_PREREGISTRATION_PATH,
     TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
     AnalysisSourceManifest,
+    FinalConfigurationExecutionManifest,
     FinalConfirmationSeal,
     InitialPreregistration,
+    PromotionDecision,
     SampleSizeDesign,
+    ScreeningEvidence,
     ScreeningManifest,
+    authorize_confirmation,
     load_initial_preregistration,
+    validate_final_configuration_execution_manifest,
 )
 from benchmarks.state_preparation.phase2.resumability import ResumabilityFingerprint
 from benchmarks.state_preparation.phase2.run_historical_reproduction import run_historical_reproduction_job
+from benchmarks.state_preparation.phase2.screening import ProductionResourceCalibration
 from benchmarks.state_preparation.phase2.screening_design import WP22CandidateConfiguration
 from benchmarks.state_preparation.phase2.source_lock import (
     ExecutionSourceManifest,
@@ -160,8 +167,14 @@ _CONFIGURATION_KEYS = frozenset({
     "schedule_paths",
     "screening_manifest",
     "screening_manifest_path",
+    "screening_evidence",
+    "screening_evidence_path",
+    "promotion_decision",
+    "promotion_decision_path",
     "final_seal",
     "final_seal_path",
+    "configuration_execution_manifest",
+    "configuration_execution_manifest_path",
     "execution_source_manifest",
     "execution_source_manifest_path",
     "analysis_source_manifest",
@@ -175,6 +188,8 @@ _CONFIGURATION_KEYS = frozenset({
     "target_configuration_paths",
     "sample_size_design",
     "sample_size_design_path",
+    "resource_calibration",
+    "resource_calibration_path",
     "resumability_fingerprint",
     "resumability_fingerprint_path",
     "resumability_fingerprint_paths",
@@ -200,7 +215,10 @@ _CONFIGURATION_ALIASES = {
     "schedule": "schedule_paths",
     "schedule_path": "schedule_paths",
     "screening_manifest": "screening_manifest_path",
+    "screening_evidence": "screening_evidence_path",
+    "promotion_decision": "promotion_decision_path",
     "final_seal": "final_seal_path",
+    "configuration_execution_manifest": "configuration_execution_manifest_path",
     "execution_source_manifest": "execution_source_manifest_path",
     "analysis_source_manifest": "analysis_source_manifest_path",
     "execution_profile": "execution_profile_path",
@@ -208,6 +226,7 @@ _CONFIGURATION_ALIASES = {
     "target_configuration": "target_configuration_paths",
     "target_configuration_path": "target_configuration_paths",
     "sample_size_design": "sample_size_design_path",
+    "resource_calibration": "resource_calibration_path",
     "resumability_fingerprint": "resumability_fingerprint_paths",
     "resumability_fingerprint_path": "resumability_fingerprint_paths",
     "pilot_optimization_seed": "pilot_optimization_seeds",
@@ -243,13 +262,17 @@ _CLI_DESTINATIONS = (
     "candidate_paths",
     "schedule_paths",
     "screening_manifest_path",
+    "screening_evidence_path",
+    "promotion_decision_path",
     "final_seal_path",
+    "configuration_execution_manifest_path",
     "execution_source_manifest_path",
     "analysis_source_manifest_path",
     "execution_profile_path",
     "binding_catalog_path",
     "target_configuration_paths",
     "sample_size_design_path",
+    "resource_calibration_path",
     "resumability_fingerprint_paths",
     "external_entropy_file_specs",
     "repository_root",
@@ -300,13 +323,17 @@ class TrainingRunnerOptions:
     candidate_paths: tuple[Path, ...]
     schedule_paths: tuple[Path, ...]
     screening_manifest_path: Path | None
+    screening_evidence_path: Path | None
+    promotion_decision_path: Path | None
     final_seal_path: Path | None
+    configuration_execution_manifest_path: Path | None
     execution_source_manifest_path: Path | None
     analysis_source_manifest_path: Path | None
     execution_profile_path: Path | None
     binding_catalog_path: Path | None
     target_configuration_paths: tuple[Path, ...]
     sample_size_design_path: Path | None
+    resource_calibration_path: Path | None
     resumability_fingerprint_paths: tuple[Path, ...]
     external_entropy_file_specs: tuple[str, ...]
     repository_root: Path
@@ -493,13 +520,21 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate", dest="candidate_paths", type=Path, action="append")
     parser.add_argument("--schedule", dest="schedule_paths", type=Path, action="append")
     parser.add_argument("--screening-manifest", dest="screening_manifest_path", type=Path)
+    parser.add_argument("--screening-evidence", dest="screening_evidence_path", type=Path)
+    parser.add_argument("--promotion-decision", dest="promotion_decision_path", type=Path)
     parser.add_argument("--final-seal", dest="final_seal_path", type=Path)
+    parser.add_argument(
+        "--configuration-execution-manifest",
+        dest="configuration_execution_manifest_path",
+        type=Path,
+    )
     parser.add_argument("--execution-source-manifest", dest="execution_source_manifest_path", type=Path)
     parser.add_argument("--analysis-source-manifest", dest="analysis_source_manifest_path", type=Path)
     parser.add_argument("--execution-profile", dest="execution_profile_path", type=Path)
     parser.add_argument("--binding-catalog", dest="binding_catalog_path", type=Path)
     parser.add_argument("--target-configuration", dest="target_configuration_paths", type=Path, action="append")
     parser.add_argument("--sample-size-design", dest="sample_size_design_path", type=Path)
+    parser.add_argument("--resource-calibration", dest="resource_calibration_path", type=Path)
     parser.add_argument(
         "--resumability-fingerprint",
         dest="resumability_fingerprint_paths",
@@ -567,13 +602,17 @@ def _preset_defaults(preset: str) -> dict[str, object]:
         "candidate_paths": [],
         "schedule_paths": [],
         "screening_manifest_path": None,
+        "screening_evidence_path": None,
+        "promotion_decision_path": None,
         "final_seal_path": None,
+        "configuration_execution_manifest_path": None,
         "execution_source_manifest_path": None,
         "analysis_source_manifest_path": None,
         "execution_profile_path": None,
         "binding_catalog_path": None,
         "target_configuration_paths": [],
         "sample_size_design_path": None,
+        "resource_calibration_path": None,
         "resumability_fingerprint_paths": [],
         "external_entropy_file_specs": [],
         "repository_root": DEFAULT_REPOSITORY_ROOT,
@@ -798,8 +837,8 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
     if historical != legacy:
         msg = "The historical preset and explicit legacy_reproduction mode must be selected together."
         raise TrainingRunnerConfigurationError(msg)
-    if expensive and not historical:
-        msg = "execute_expensive is accepted only for historical-layerwise-reproduction."
+    if expensive and preset_value not in {"historical-layerwise-reproduction", "paper-confirm"}:
+        msg = "execute_expensive is accepted only for historical reproduction or sealed confirmation."
         raise TrainingRunnerConfigurationError(msg)
     if historical and executor_factory is not None:
         msg = "executor_factory is not used by historical-layerwise-reproduction."
@@ -878,7 +917,13 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
         candidate_paths=_path_tuple(resolved["candidate_paths"], "candidate_paths"),
         schedule_paths=_path_tuple(resolved["schedule_paths"], "schedule_paths"),
         screening_manifest_path=_optional_path(resolved["screening_manifest_path"], "screening_manifest_path"),
+        screening_evidence_path=_optional_path(resolved["screening_evidence_path"], "screening_evidence_path"),
+        promotion_decision_path=_optional_path(resolved["promotion_decision_path"], "promotion_decision_path"),
         final_seal_path=_optional_path(resolved["final_seal_path"], "final_seal_path"),
+        configuration_execution_manifest_path=_optional_path(
+            resolved["configuration_execution_manifest_path"],
+            "configuration_execution_manifest_path",
+        ),
         execution_source_manifest_path=_optional_path(
             resolved["execution_source_manifest_path"],
             "execution_source_manifest_path",
@@ -894,6 +939,10 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
             "target_configuration_paths",
         ),
         sample_size_design_path=_optional_path(resolved["sample_size_design_path"], "sample_size_design_path"),
+        resource_calibration_path=_optional_path(
+            resolved["resource_calibration_path"],
+            "resource_calibration_path",
+        ),
         resumability_fingerprint_paths=_path_tuple(
             resolved["resumability_fingerprint_paths"],
             "resumability_fingerprint_paths",
@@ -947,7 +996,7 @@ def _executor_factory_source(
 def load_executor_registry(
     executor_factory: str,
     repository_root: Path,
-    context: TrainingExecutionContext,
+    context: TrainingExecutionContext | ConfirmationExecutionContext,
 ) -> TrainingExecutorRegistry:
     """Load a production executor registry through an explicit source module.
 
@@ -964,8 +1013,8 @@ def load_executor_registry(
         TrainingRunnerConfigurationError: If source resolution, import, factory
             lookup, invocation, or the returned registry is invalid.
     """
-    if not isinstance(context, TrainingExecutionContext):
-        msg = "context must be a TrainingExecutionContext."
+    if not isinstance(context, (TrainingExecutionContext, ConfirmationExecutionContext)):
+        msg = "context must be a TrainingExecutionContext or ConfirmationExecutionContext."
         raise TypeError(msg)
     try:
         verify_execution_source_manifest(context.execution_source_manifest, repository_root)
@@ -1496,6 +1545,18 @@ def _require_optional_artifact(path: Path | None, name: str) -> Path:
     return path
 
 
+def _require_confirmation_reveal_opt_in(options: TrainingRunnerOptions) -> None:
+    """Reject confirmation planning that could consume held inputs without execution consent.
+
+    Raises:
+        TrainingRunnerConfigurationError: If confirmation lacks the explicit
+            held-input/expensive-execution opt-in.
+    """
+    if not options.execute_expensive:
+        msg = "Real confirmation execution requires the additional --execute-expensive opt-in."
+        raise TrainingRunnerConfigurationError(msg)
+
+
 def _pilot_optimization_seeds(
     options: TrainingRunnerOptions,
     preregistration: InitialPreregistration,
@@ -1777,21 +1838,56 @@ def build_training_execution_context(options: TrainingRunnerOptions) -> Training
     return _load_training_execution_context(options)
 
 
-def _build_paper_confirm_plan(
-    options: TrainingRunnerOptions,
-    preregistration: InitialPreregistration,
-) -> TrainingRunPlan:
-    """Authorize confirmation before opening its target-manifest path.
+def build_confirmation_execution_context(options: TrainingRunnerOptions) -> ConfirmationExecutionContext:
+    """Build the complete source-locked authority for real confirmation.
 
     Returns:
-        The checksum-sealed confirmatory plan.
+        The narrow non-serializable confirmation execution context.
+
+    Raises:
+        TypeError: If ``options`` is not resolved runner options.
+        TrainingRunnerConfigurationError: If the preset is not paper-confirm
+            or any authorization input differs.
+    """
+    if not isinstance(options, TrainingRunnerOptions):
+        msg = "options must be TrainingRunnerOptions."
+        raise TypeError(msg)
+    if options.preset != "paper-confirm":
+        msg = "A ConfirmationExecutionContext requires the paper-confirm preset."
+        raise TrainingRunnerConfigurationError(msg)
+    _require_confirmation_reveal_opt_in(options)
+    return _load_confirmation_execution_context(options, _load_preregistration(options))
+
+
+def _load_confirmation_execution_context(
+    options: TrainingRunnerOptions,
+    preregistration: InitialPreregistration,
+) -> ConfirmationExecutionContext:
+    """Authorize and close real confirmation before opening its target path.
+
+    Returns:
+        The non-serializable source- and final-seal-bound execution context.
 
     Raises:
         TrainingRunnerConfigurationError: If custody, source-lock, artifact, or
             assertion verification fails.
     """
+    _require_confirmation_reveal_opt_in(options)
+    if any((
+        options.execution_profile_path is not None,
+        options.resumability_fingerprint_paths,
+        options.pipeline_path is not None,
+        options.candidate_paths,
+        options.schedule_paths,
+    )):
+        msg = "paper-confirm cannot accept an execution profile, resumability state, or caller-selected code."
+        raise TrainingRunnerConfigurationError(msg)
     _require_paths(options.target_manifest_paths, "paper-confirm", count=1)
     final_path = _require_optional_artifact(options.final_seal_path, "--final-seal")
+    configuration_execution_path = _require_optional_artifact(
+        options.configuration_execution_manifest_path,
+        "--configuration-execution-manifest",
+    )
     execution_path = _require_optional_artifact(
         options.execution_source_manifest_path,
         "--execution-source-manifest",
@@ -1803,6 +1899,14 @@ def _build_paper_confirm_plan(
     final_seal = cast(
         "FinalConfirmationSeal",
         _decode_artifact(final_path, "final confirmation seal", FinalConfirmationSeal.from_json),
+    )
+    configuration_execution_manifest = cast(
+        "FinalConfigurationExecutionManifest",
+        _decode_artifact(
+            configuration_execution_path,
+            "final configuration execution manifest",
+            FinalConfigurationExecutionManifest.from_json,
+        ),
     )
     execution_manifest = cast(
         "ExecutionSourceManifest",
@@ -1830,7 +1934,133 @@ def _build_paper_confirm_plan(
     except (OSError, TypeError, ValueError) as error:
         msg = f"Final confirmation source custody is invalid: {error}."
         raise TrainingRunnerConfigurationError(msg) from error
-    _verify_confirm_executor_factory_source(options, execution_manifest)
+    try:
+        validate_final_configuration_execution_manifest(final_seal, configuration_execution_manifest)
+    except (TypeError, ValueError) as error:
+        msg = f"Final configuration execution custody is invalid: {error}."
+        raise TrainingRunnerConfigurationError(msg) from error
+    if options.executor_factory is not None:
+        msg = "paper-confirm uses only the repository-owned default executor registry."
+        raise TrainingRunnerConfigurationError(msg)
+    screening_path = _require_optional_artifact(options.screening_manifest_path, "--screening-manifest")
+    screening_evidence_path = _require_optional_artifact(
+        options.screening_evidence_path,
+        "--screening-evidence",
+    )
+    promotion_path = _require_optional_artifact(options.promotion_decision_path, "--promotion-decision")
+    sample_size_path = _require_optional_artifact(options.sample_size_design_path, "--sample-size-design")
+    calibration_path = _require_optional_artifact(
+        options.resource_calibration_path,
+        "--resource-calibration",
+    )
+    catalog_path = _require_optional_artifact(options.binding_catalog_path, "--binding-catalog")
+    _require_paths(options.target_configuration_paths, "--target-configuration", count=1)
+    screening_manifest = cast(
+        "ScreeningManifest",
+        _decode_artifact(screening_path, "screening manifest", ScreeningManifest.from_json),
+    )
+    screening_evidence = cast(
+        "ScreeningEvidence",
+        _decode_artifact(screening_evidence_path, "screening evidence", ScreeningEvidence.from_json),
+    )
+    promotion_decision = cast(
+        "PromotionDecision",
+        _decode_artifact(promotion_path, "promotion decision", PromotionDecision.from_json),
+    )
+    sample_size_design = cast(
+        "SampleSizeDesign",
+        _decode_artifact(sample_size_path, "sample-size design", SampleSizeDesign.from_json),
+    )
+    resource_calibration = cast(
+        "ProductionResourceCalibration",
+        _decode_artifact(
+            calibration_path,
+            "production resource calibration",
+            ProductionResourceCalibration.from_json,
+        ),
+    )
+    catalog = cast(
+        "RepositoryBindingCatalog",
+        _decode_artifact(catalog_path, "repository binding catalog", RepositoryBindingCatalog.from_json),
+    )
+    try:
+        confirmation_authorization = authorize_confirmation(
+            preregistration,
+            screening_manifest,
+            screening_evidence,
+            promotion_decision,
+            sample_size_design,
+            analysis_manifest,
+            final_seal,
+            configuration_execution_manifest,
+            resource_calibration,
+            options.repository_root,
+        )
+    except (OSError, TypeError, ValueError) as error:
+        msg = f"Final confirmation authorization is invalid: {error}."
+        raise TrainingRunnerConfigurationError(msg) from error
+
+    if (
+        catalog.profile.preset != "paper-screen"
+        or catalog.profile.preregistration_checksum != preregistration.content_checksum
+    ):
+        msg = "paper-confirm requires the exact preregistration-bound paper-screen binding catalog."
+        raise TrainingRunnerConfigurationError(msg)
+    for execution in configuration_execution_manifest.entries:
+        matches = tuple(
+            link
+            for link in catalog.bindings
+            if link.binding.publication_candidate_checksum == execution.configuration_checksum
+        )
+        try:
+            alias = catalog.implementation_catalog.resolve("paper-confirm", execution.method_id, "primary_q6")
+        except (KeyError, TypeError, ValueError):
+            msg = "A final configuration lacks its dormant repository confirmation alias."
+            raise TrainingRunnerConfigurationError(msg) from None
+        if len(matches) != 1:
+            msg = "A final configuration lacks one exact paper-screen executable binding."
+            raise TrainingRunnerConfigurationError(msg)
+        link = matches[0]
+        if (
+            link.binding.publication_method_id != execution.method_id
+            or link.binding.strategy_schedule != execution.strategy_schedule
+            or link.binding.implementation_checksum != execution.implementation_checksum
+            or link.binding.content_checksum != execution.scoped_binding_checksum
+            or link.content_checksum != execution.executable_binding_checksum
+            or link.implementation_entry != alias
+        ):
+            msg = "A final configuration differs from its exact dormant repository confirmation alias."
+            raise TrainingRunnerConfigurationError(msg)
+
+    target_configuration = cast(
+        "TargetPopulationConfig",
+        _decode_artifact(
+            options.target_configuration_paths[0],
+            "target-population configuration",
+            TargetPopulationConfig.from_json,
+        ),
+    )
+    try:
+        entropy_files = parse_entropy_file_specs(options.external_entropy_file_specs)
+    except (TypeError, ValueError):
+        msg = "Confirmatory external entropy file references are invalid."
+        raise TrainingRunnerConfigurationError(msg) from None
+    if set(entropy_files) != {("confirmatory", "primary_q6")}:
+        msg = "paper-confirm requires exactly the confirmatory/primary_q6 external entropy slot."
+        raise TrainingRunnerConfigurationError(msg)
+    try:
+        keyring = ExternalEntropyKeyring.from_files(entropy_files)
+    except (OSError, TypeError, ValueError):
+        msg = "Confirmatory external entropy is unavailable or invalid."
+        raise TrainingRunnerConfigurationError(msg) from None
+    if (
+        target_configuration.data_role != "confirmatory"
+        or target_configuration.population_scope != "primary_q6"
+        or target_configuration.preregistration_checksum != preregistration.content_checksum
+        or keyring.commitment_for("confirmatory", "primary_q6") != target_configuration.role_master_entropy_commitment
+    ):
+        msg = "Confirmatory target configuration or external entropy commitment is invalid."
+        raise TrainingRunnerConfigurationError(msg)
 
     # This is deliberately the first operation that opens the confirmatory target path.
     targets = _load_targets(options)
@@ -1838,16 +2068,42 @@ def _build_paper_confirm_plan(
     if target_manifest.content_checksum != final_seal.confirmatory_target_manifest_checksum:
         msg = "Revealed confirmatory target manifest differs from the final seal."
         raise TrainingRunnerConfigurationError(msg)
-    pipeline = None if options.pipeline_path is None else _load_pipeline(options.pipeline_path)
-    candidates = _load_candidates(options)
-    schedules = _load_schedules(options)
-    _require_schedule_bindings(candidates, schedules)
-    _validate_pipeline_candidate_binding(pipeline, candidates)
-    _validate_pipeline_assertions(options, pipeline)
-    _validate_schedule_assertions(options, schedules, pipeline_present=pipeline is not None)
-    _validate_method_assertion(options, pipeline, candidates, final_seal)
+    try:
+        materialization_authorization = authorize_target_materialization(
+            preregistration,
+            target_configuration,
+            target_manifest,
+            keyring.entropy_for("confirmatory", "primary_q6"),
+            confirmation_authorization,
+        )
+    except (OSError, TypeError, ValueError):
+        msg = "Revealed confirmatory target materialization authorization is invalid."
+        raise TrainingRunnerConfigurationError(msg) from None
+    _validate_method_assertion(options, None, (), final_seal)
     _validate_resource_assertions(options, preregistration, final_seal)
-    return build_paper_confirm_plan(seal=final_seal, target_manifest=target_manifest)
+    plan = build_paper_confirm_plan(
+        seal=final_seal,
+        target_manifest=target_manifest,
+        configuration_execution_manifest=configuration_execution_manifest,
+    )
+    try:
+        return ConfirmationExecutionContext(
+            plan=plan,
+            preregistration=preregistration,
+            final_seal=final_seal,
+            configuration_execution_manifest=configuration_execution_manifest,
+            execution_source_manifest=execution_manifest,
+            analysis_source_manifest=analysis_manifest,
+            repository_binding_catalog=catalog,
+            target_configuration=target_configuration,
+            target_manifest=target_manifest,
+            confirmation_authorization=confirmation_authorization,
+            target_materialization_authorization=materialization_authorization,
+            external_entropy_keyring=keyring,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        msg = "Real confirmation context failed complete final-seal binding validation."
+        raise TrainingRunnerConfigurationError(msg) from None
 
 
 def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
@@ -1864,19 +2120,20 @@ def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
     if not isinstance(options, TrainingRunnerOptions):
         msg = "options must be TrainingRunnerOptions."
         raise TypeError(msg)
+    if options.preset == "paper-confirm":
+        _require_confirmation_reveal_opt_in(options)
     preregistration = _load_preregistration(options)
     if options.preset == "paper-confirm":
         if any((
             options.execution_profile_path is not None,
-            options.binding_catalog_path is not None,
-            options.target_configuration_paths,
-            options.sample_size_design_path is not None,
             options.resumability_fingerprint_paths,
-            options.external_entropy_file_specs,
+            options.pipeline_path is not None,
+            options.candidate_paths,
+            options.schedule_paths,
         )):
-            msg = "paper-confirm execution context remains seal-derived and cannot accept WP22D profile inputs."
+            msg = "paper-confirm cannot accept an execution profile, resumability state, or caller-selected code."
             raise TrainingRunnerConfigurationError(msg)
-        return _build_paper_confirm_plan(options, preregistration)
+        return _load_confirmation_execution_context(options, preregistration).plan
     _validate_resource_assertions(options, preregistration, None)
     if options.preset == "historical-layerwise-reproduction":
         scientific_artifacts = any((
@@ -1885,15 +2142,19 @@ def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
             options.schedule_paths,
             options.target_manifest_paths,
             options.screening_manifest_path is not None,
+            options.screening_evidence_path is not None,
+            options.promotion_decision_path is not None,
             options.execution_profile_path is not None,
             options.binding_catalog_path is not None,
             options.target_configuration_paths,
             options.sample_size_design_path is not None,
+            options.resource_calibration_path is not None,
             options.resumability_fingerprint_paths,
             options.external_entropy_file_specs,
             options.execution_source_manifest_path is not None,
             options.analysis_source_manifest_path is not None,
             options.final_seal_path is not None,
+            options.configuration_execution_manifest_path is not None,
         ))
         if scientific_artifacts:
             msg = "Historical reproduction reads only the exact frozen WP19 pipeline and targets."
@@ -1902,8 +2163,15 @@ def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
             msg = "fail_fast is not part of the exact WP19 historical delegate."
             raise TrainingRunnerConfigurationError(msg)
         return build_historical_reproduction_plan(preregistration_checksum=preregistration.content_checksum)
-    if options.final_seal_path is not None or options.analysis_source_manifest_path is not None:
-        msg = "Final-seal and analysis-source artifacts are accepted only by paper-confirm."
+    if (
+        options.final_seal_path is not None
+        or options.configuration_execution_manifest_path is not None
+        or options.analysis_source_manifest_path is not None
+        or options.screening_evidence_path is not None
+        or options.promotion_decision_path is not None
+        or options.resource_calibration_path is not None
+    ):
+        msg = "Final authorization artifacts require paper-confirm."
         raise TrainingRunnerConfigurationError(msg)
     if options.preset in {"training-smoke", "paper-pilot", "paper-screen"}:
         return build_training_execution_context(options).plan
@@ -1915,17 +2183,23 @@ def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
 build_run_plan = build_training_plan
 
 
-def _preflight_context_plan(options: TrainingRunnerOptions, context: TrainingExecutionContext) -> None:
+def _preflight_context_plan(
+    options: TrainingRunnerOptions,
+    context: TrainingExecutionContext | ConfirmationExecutionContext,
+) -> None:
     """Validate the complete context and output universe without dispatch."""
 
     def unreachable_executor(*_arguments: object) -> str:
         msg = "Dry preflight attempted to dispatch an executor."
         raise RuntimeError(msg)
 
+    preflight_executor: TrainingJobExecutor | TrainingExecutorRegistry = unreachable_executor
+    if isinstance(context, ConfirmationExecutionContext):
+        preflight_executor = TrainingExecutorRegistry(confirm_executor=unreachable_executor)
     execute_training_plan(
         context.plan,
         options.output_dir,
-        unreachable_executor,
+        preflight_executor,
         resume=options.resume,
         overwrite=options.overwrite,
         dry_run=True,
@@ -1938,7 +2212,7 @@ def _preflight_context_plan(options: TrainingRunnerOptions, context: TrainingExe
 def run(
     options: TrainingRunnerOptions,
     *,
-    context: TrainingExecutionContext | None = None,
+    context: TrainingExecutionContext | ConfirmationExecutionContext | None = None,
     executor: TrainingJobExecutor | TrainingExecutorRegistry | None = None,
     historical_runner: Callable[..., object] = run_historical_reproduction_job,
 ) -> TrainingRunPlan | TrainingRunSummary | object:
@@ -1952,15 +2226,22 @@ def run(
         TrainingRunnerConfigurationError: If execution authority, artifacts,
             controls, or executor selection is invalid.
     """
-    if context is not None and not isinstance(context, TrainingExecutionContext):
-        msg = "context must be a TrainingExecutionContext."
+    if context is not None and not isinstance(context, (TrainingExecutionContext, ConfirmationExecutionContext)):
+        msg = "context must be a TrainingExecutionContext or ConfirmationExecutionContext."
         raise TypeError(msg)
+    if options.preset == "paper-confirm" and (context is not None or executor is not None):
+        msg = "paper-confirm forbids programmatic context or executor injection; use the sealed CLI artifacts."
+        raise TrainingRunnerConfigurationError(msg)
+    if options.preset == "paper-confirm":
+        _require_confirmation_reveal_opt_in(options)
     if executor is not None and options.executor_factory is not None:
         msg = "Select either the configured executor_factory or a programmatically injected executor, not both."
         raise TrainingRunnerConfigurationError(msg)
     selected_context = context
     if selected_context is None and options.preset in {"training-smoke", "paper-pilot", "paper-screen"}:
         selected_context = build_training_execution_context(options)
+    elif selected_context is None and options.preset == "paper-confirm":
+        selected_context = _load_confirmation_execution_context(options, _load_preregistration(options))
     if selected_context is None:
         plan = build_training_plan(options)
     else:
@@ -1993,7 +2274,7 @@ def run(
     selected_executor = executor
     if selected_executor is None and options.executor_factory is not None:
         if selected_context is None:
-            msg = "An executor factory requires a complete TrainingExecutionContext."
+            msg = "An executor factory requires a complete execution context."
             raise TrainingRunnerConfigurationError(msg)
         selected_executor = load_executor_registry(
             options.executor_factory,
@@ -2002,7 +2283,7 @@ def run(
         )
     if selected_executor is None:
         if selected_context is None:
-            msg = "Ordinary WP22 execution requires a complete TrainingExecutionContext."
+            msg = "Repository execution requires a complete source-locked execution context."
             raise TrainingRunnerConfigurationError(msg)
         selected_executor = load_executor_registry(
             DEFAULT_EXECUTOR_FACTORY,
@@ -2055,7 +2336,7 @@ def main(
     *,
     stdout: IO[str] = sys.stdout,
     stderr: IO[str] = sys.stderr,
-    context: TrainingExecutionContext | None = None,
+    context: TrainingExecutionContext | ConfirmationExecutionContext | None = None,
     executor: TrainingJobExecutor | TrainingExecutorRegistry | None = None,
 ) -> int:
     """Run the opt-in WP22 CLI and return a process exit status.
@@ -2081,6 +2362,7 @@ __all__ = [
     "RunnerConfigurationError",
     "TrainingRunnerConfigurationError",
     "TrainingRunnerOptions",
+    "build_confirmation_execution_context",
     "build_run_plan",
     "build_training_execution_context",
     "build_training_plan",

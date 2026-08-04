@@ -1110,6 +1110,15 @@ def test_executable_binding_catalog_accepts_complete_smoke_and_screen_profiles(
             screen.bindings[0].binding.publication_candidate_checksum,
             "primary_q6",
         )
+    assert screen.implementation_catalog.resolve(
+        "paper-confirm",
+        "layerwise_bmpd_noiseless",
+        "primary_q6",
+    ) is screen.implementation_catalog.resolve(
+        "paper-screen",
+        "layerwise_bmpd_noiseless",
+        "primary_q6",
+    )
     tampered = screen.to_dict()
     tampered["paper_confirm_execution_authorized"] = True
     tampered_without_checksum = {key: value for key, value in tampered.items() if key != "content_checksum"}

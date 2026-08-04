@@ -2613,7 +2613,7 @@ WP22; it may not open the real held manifest.
 
 ### WP22F: Pilot, screening, promotion, source lock, and final seal
 
-**Status: not implemented; depends on WP22A through WP22E.**
+**Status: implemented; depends on WP22A through WP22E.**
 
 Integrate production execution with the pilot, sample-size, screening,
 promotion, result-custody, source-lock, dormant confirmation, and frozen
@@ -2645,6 +2645,15 @@ a promoted baseline cannot create a self-contrast.
 - Full WP15 through WP22 tests, the complete project test suite, documentation,
   and lint pass.
 
+The implementation reopens the authoritative production attempts, derives q6
+pilot inference and the q6-calibrated compute cap, replays all 1,296 screening
+cells, and mechanically rebuilds promotion before sealing. A separate aggregate
+manifest binds every final configuration to its exact screened schedule,
+implementation, scoped binding, and executable binding while preserving the
+preregistered final-confirmation schema v1. Confirmation requests use schema v2
+to carry both that aggregate root and the exact configuration-specific
+execution identity.
+
 WP22 is complete only when historical reproduction, smoke, pilot, and screening
 need no source editing; screening promotes at most one fully specified candidate
 without materializing confirmation; and all execution and primary-analysis code
@@ -2653,10 +2662,11 @@ is written.
 
 ### Boundary with WP23 and WP24
 
-WP22F may create the immutable final seal and test the dormant confirmation
-executor with synthetic fixtures. WP23 alone reveals the externally custodied
-confirmatory manifest and runs the already frozen executor; it adds no training,
-evaluation, or analysis behavior.
+WP22F may create the immutable final seal and test confirmation custody with
+synthetic fixtures or stop the real, source-locked route before numerical
+training. It may not expose the held confirmatory population. WP23 alone reveals
+the externally custodied confirmatory manifest and runs the already frozen
+executor; it adds no training, evaluation, or analysis behavior.
 
 WP22 may freeze and synthetically test primary-analysis source, but it does not
 analyze real confirmatory outcomes, generate paper figures, formulate claims, or

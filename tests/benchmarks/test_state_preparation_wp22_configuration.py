@@ -142,13 +142,17 @@ def test_cli_overrides_json_and_every_wp22_option_is_resolved(tmp_path: Path) ->
             "candidate_paths": ["file-candidate.json"],
             "schedule_paths": ["file-schedule.json"],
             "screening_manifest_path": "file-screen.json",
+            "screening_evidence_path": "file-screen-evidence.json",
+            "promotion_decision_path": "file-promotion.json",
             "final_seal_path": "file-seal.json",
+            "configuration_execution_manifest_path": "file-configuration-execution.json",
             "execution_source_manifest_path": "file-execution.json",
             "analysis_source_manifest_path": "file-analysis.json",
             "execution_profile_path": "file-profile.json",
             "binding_catalog_path": "file-binding-catalog.json",
             "target_configuration_paths": ["file-target-config.json"],
             "sample_size_design_path": "file-sample-size.json",
+            "resource_calibration_path": "file-resource-calibration.json",
             "resumability_fingerprint_paths": ["file-fingerprint.json"],
             "repository_root": "file-repository",
             "pilot_optimization_seeds": [3],
@@ -216,8 +220,14 @@ def test_cli_overrides_json_and_every_wp22_option_is_resolved(tmp_path: Path) ->
             "cli-schedule.json",
             "--screening-manifest",
             "cli-screen.json",
+            "--screening-evidence",
+            "cli-screen-evidence.json",
+            "--promotion-decision",
+            "cli-promotion.json",
             "--final-seal",
             "cli-seal.json",
+            "--configuration-execution-manifest",
+            "cli-configuration-execution.json",
             "--execution-source-manifest",
             "cli-execution.json",
             "--analysis-source-manifest",
@@ -230,6 +240,8 @@ def test_cli_overrides_json_and_every_wp22_option_is_resolved(tmp_path: Path) ->
             "cli-target-config.json",
             "--sample-size-design",
             "cli-sample-size.json",
+            "--resource-calibration",
+            "cli-resource-calibration.json",
             "--resumability-fingerprint",
             "cli-fingerprint.json",
             "--external-entropy-file",
@@ -278,13 +290,17 @@ def test_cli_overrides_json_and_every_wp22_option_is_resolved(tmp_path: Path) ->
     assert options.candidate_paths == (Path("cli-candidate.json"),)
     assert options.schedule_paths == (Path("cli-schedule.json"),)
     assert options.screening_manifest_path == Path("cli-screen.json")
+    assert options.screening_evidence_path == Path("cli-screen-evidence.json")
+    assert options.promotion_decision_path == Path("cli-promotion.json")
     assert options.final_seal_path == Path("cli-seal.json")
+    assert options.configuration_execution_manifest_path == Path("cli-configuration-execution.json")
     assert options.execution_source_manifest_path == Path("cli-execution.json")
     assert options.analysis_source_manifest_path == Path("cli-analysis.json")
     assert options.execution_profile_path == Path("cli-profile.json")
     assert options.binding_catalog_path == Path("cli-binding-catalog.json")
     assert options.target_configuration_paths == (Path("cli-target-config.json"),)
     assert options.sample_size_design_path == Path("cli-sample-size.json")
+    assert options.resource_calibration_path == Path("cli-resource-calibration.json")
     assert options.resumability_fingerprint_paths == (Path("cli-fingerprint.json"),)
     assert options.external_entropy_file_specs == ("development/primary_q6=development.key",)
     assert options.repository_root == Path("cli-repository")
@@ -660,7 +676,7 @@ def test_paper_confirm_missing_seal_never_loads_target_manifest(
             "paper-confirm",
             "--target-manifest",
             "custodied-target.json",
-            "--dry-run",
+            "--execute-expensive",
         ])
     )
 
@@ -670,6 +686,35 @@ def test_paper_confirm_missing_seal_never_loads_target_manifest(
 
     monkeypatch.setattr(training_runner, "_load_targets", forbidden_target_load)
     with pytest.raises(TrainingRunnerConfigurationError, match="final-seal"):
+        training_runner.build_training_plan(options)
+
+
+def test_paper_confirm_missing_configuration_execution_manifest_never_loads_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-configuration execution root is mandatory before held-target access."""
+    options = resolve_options(
+        parse_arguments([
+            "--preset",
+            "paper-confirm",
+            "--target-manifest",
+            "custodied-target.json",
+            "--final-seal",
+            "seal.json",
+            "--execution-source-manifest",
+            "execution.json",
+            "--analysis-source-manifest",
+            "analysis.json",
+            "--execute-expensive",
+        ])
+    )
+
+    def forbidden_target_load(_options: object) -> object:
+        """Fail if the custody boundary is violated."""
+        pytest.fail("confirmatory target was accessed without its exact execution manifest")
+
+    monkeypatch.setattr(training_runner, "_load_targets", forbidden_target_load)
+    with pytest.raises(TrainingRunnerConfigurationError, match="configuration-execution-manifest"):
         training_runner.build_training_plan(options)
 
 
@@ -700,11 +745,13 @@ def test_paper_confirm_verifies_source_lock_before_target_access(
             "custodied-target.json",
             "--final-seal",
             "seal.json",
+            "--configuration-execution-manifest",
+            "configuration-execution.json",
             "--execution-source-manifest",
             "execution.json",
             "--analysis-source-manifest",
             "analysis.json",
-            "--dry-run",
+            "--execute-expensive",
         ])
     )
     decoded: list[str] = []
@@ -718,6 +765,7 @@ def test_paper_confirm_verifies_source_lock_before_target_access(
         decoded.append(name)
         return {
             "final confirmation seal": seal,
+            "final configuration execution manifest": object(),
             "execution-source manifest": object(),
             "analysis-source manifest": object(),
         }[name]
@@ -741,13 +789,18 @@ def test_paper_confirm_verifies_source_lock_before_target_access(
 
     with pytest.raises(TrainingRunnerConfigurationError, match="source custody"):
         training_runner.build_training_plan(options)
-    assert decoded == ["final confirmation seal", "execution-source manifest", "analysis-source manifest"]
+    assert decoded == [
+        "final confirmation seal",
+        "final configuration execution manifest",
+        "execution-source manifest",
+        "analysis-source manifest",
+    ]
 
 
 def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A dynamically selected confirm executor must be in the verified source lock."""
+    """Confirmation rejects every caller-selected executor before target access."""
     options = resolve_options(
         parse_arguments([
             "--preset",
@@ -756,13 +809,15 @@ def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
             "custodied-target.json",
             "--final-seal",
             "seal.json",
+            "--configuration-execution-manifest",
+            "configuration-execution.json",
             "--execution-source-manifest",
             "execution.json",
             "--analysis-source-manifest",
             "analysis.json",
             "--executor-factory",
             "rogue.executors:build_registry",
-            "--dry-run",
+            "--execute-expensive",
         ])
     )
     seal = SimpleNamespace(
@@ -777,6 +832,7 @@ def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
         """Return typed-enough custody records for the ordering seam."""
         return {
             "final confirmation seal": seal,
+            "final configuration execution manifest": object(),
             "execution-source manifest": execution_manifest,
             "analysis-source manifest": object(),
         }[name]
@@ -789,12 +845,97 @@ def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
     monkeypatch.setattr(training_runner, "verify_final_seal_source_lock", lambda *_arguments: None)
     monkeypatch.setattr(
         training_runner,
-        "_executor_factory_source",
-        lambda *_arguments: ("rogue.py", Path("/repository/rogue.py")),
+        "validate_final_configuration_execution_manifest",
+        lambda *_arguments: None,
     )
     monkeypatch.setattr(training_runner, "_load_targets", forbidden_target_load)
 
-    with pytest.raises(TrainingRunnerConfigurationError, match="not an execution_source"):
+    with pytest.raises(TrainingRunnerConfigurationError, match="repository-owned default executor registry"):
+        training_runner.build_training_plan(options)
+
+
+def test_paper_confirm_authorizes_final_artifacts_before_target_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rejected final authorization cannot open the revealed target path."""
+    options = resolve_options(
+        parse_arguments([
+            "--preset",
+            "paper-confirm",
+            "--target-manifest",
+            "custodied-target.json",
+            "--target-configuration",
+            "confirmatory-target-config.json",
+            "--external-entropy-file",
+            "confirmatory/primary_q6=confirmatory.key",
+            "--screening-manifest",
+            "screening.json",
+            "--screening-evidence",
+            "screening-evidence.json",
+            "--promotion-decision",
+            "promotion.json",
+            "--sample-size-design",
+            "sample-size.json",
+            "--resource-calibration",
+            "resource-calibration.json",
+            "--binding-catalog",
+            "binding-catalog.json",
+            "--final-seal",
+            "seal.json",
+            "--configuration-execution-manifest",
+            "configuration-execution.json",
+            "--execution-source-manifest",
+            "execution.json",
+            "--analysis-source-manifest",
+            "analysis.json",
+            "--execute-expensive",
+        ])
+    )
+    seal = SimpleNamespace(
+        preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
+        confirmatory_target_manifest_checksum=_CHECKSUM_A,
+    )
+    decoded = {
+        "final confirmation seal": seal,
+        "final configuration execution manifest": object(),
+        "execution-source manifest": object(),
+        "analysis-source manifest": object(),
+        "screening manifest": object(),
+        "screening evidence": object(),
+        "promotion decision": object(),
+        "sample-size design": object(),
+        "production resource calibration": object(),
+        "repository binding catalog": object(),
+    }
+
+    def fake_decode(_path: Path, name: str, _decoder: object) -> object:
+        """Return typed-enough records up to the opaque authorization call."""
+        return decoded[name]
+
+    def reject_authorization(*_arguments: object) -> object:
+        """Reject the final artifact universe before target access.
+
+        Raises:
+            ValueError: Always, to simulate an invalid promotion/calibration root.
+        """
+        msg = "promotion or calibration mismatch"
+        raise ValueError(msg)
+
+    def forbidden_target_load(_options: object) -> object:
+        """Fail if the target is accessed before final authorization."""
+        pytest.fail("confirmatory target was accessed before final authorization")
+
+    monkeypatch.setattr(training_runner, "_decode_artifact", fake_decode)
+    monkeypatch.setattr(training_runner, "verify_final_seal_source_lock", lambda *_arguments: None)
+    monkeypatch.setattr(
+        training_runner,
+        "validate_final_configuration_execution_manifest",
+        lambda *_arguments: None,
+    )
+    monkeypatch.setattr(training_runner, "authorize_confirmation", reject_authorization)
+    monkeypatch.setattr(training_runner, "_load_targets", forbidden_target_load)
+
+    with pytest.raises(TrainingRunnerConfigurationError, match="Final confirmation authorization"):
         training_runner.build_training_plan(options)
 
 

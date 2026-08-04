@@ -23,6 +23,8 @@ from benchmarks.state_preparation.phase2.layerwise_bmpd import build_layerwise_b
 from benchmarks.state_preparation.phase2.protocol import (
     PRIMARY_TARGET_FAMILIES,
     FinalComparatorRef,
+    FinalConfigurationExecutionManifest,
+    FinalConfigurationExecutionRef,
     FinalConfirmationSeal,
     InitialPreregistration,
     PrimaryContrastBinding,
@@ -51,7 +53,6 @@ from benchmarks.state_preparation.phase2.training_orchestration import (
     TrainingJob,
     TrainingJobOutcome,
     TrainingRunPlan,
-    TrainingRunSummary,
     build_confirm_execution_context,
     build_historical_reproduction_plan,
     build_paper_confirm_plan,
@@ -667,17 +668,54 @@ def test_pilot_screen_and_historical_cardinalities_are_deterministic(
 def _final_seal(
     preregistration: InitialPreregistration,
     target_manifest: TargetPopulationManifest,
-) -> FinalConfirmationSeal:
+) -> tuple[FinalConfirmationSeal, FinalConfigurationExecutionManifest]:
     """Build a strict synthetic seal bound to an actual target manifest.
 
     Returns:
-        The checksum-sealed confirmatory design.
+        The checksum-sealed confirmatory design and its executable configuration manifest.
     """
     promoted = _checksum("promoted")
     v2 = _checksum("v2")
     noiseless = _checksum("noiseless")
     matching = _checksum("matching confirm")
-    return FinalConfirmationSeal(
+    execution_manifest = FinalConfigurationExecutionManifest(
+        manifest_id="wp22_runner_final_configuration_execution",
+        entries=tuple(
+            sorted(
+                (
+                    FinalConfigurationExecutionRef(
+                        method_id="spsa_layerwise",
+                        configuration_schema_version="test_configuration.v1",
+                        configuration_checksum=promoted,
+                        strategy_schedule=_strategy_schedule("spsa_layerwise"),
+                        implementation_checksum=_checksum("implementation promoted"),
+                        scoped_binding_checksum=_checksum("scoped promoted"),
+                        executable_binding_checksum=_checksum("executable promoted"),
+                    ),
+                    FinalConfigurationExecutionRef(
+                        method_id="layerwise_bmpd_crn_v2",
+                        configuration_schema_version="test_configuration.v1",
+                        configuration_checksum=v2,
+                        strategy_schedule=_strategy_schedule("layerwise_bmpd_crn_v2"),
+                        implementation_checksum=_checksum("implementation v2"),
+                        scoped_binding_checksum=_checksum("scoped v2"),
+                        executable_binding_checksum=_checksum("executable v2"),
+                    ),
+                    FinalConfigurationExecutionRef(
+                        method_id="layerwise_bmpd_noiseless",
+                        configuration_schema_version="test_configuration.v1",
+                        configuration_checksum=noiseless,
+                        strategy_schedule=_strategy_schedule("layerwise_bmpd_noiseless", noisy=False),
+                        implementation_checksum=_checksum("implementation noiseless"),
+                        scoped_binding_checksum=_checksum("scoped noiseless"),
+                        executable_binding_checksum=_checksum("executable noiseless"),
+                    ),
+                ),
+                key=lambda item: (item.configuration_checksum, item.method_id),
+            )
+        ),
+    )
+    seal = FinalConfirmationSeal(
         seal_id="wp22-runner-confirm-test",
         preregistration_checksum=preregistration.content_checksum,
         promotion_decision_checksum=_checksum("promotion"),
@@ -728,18 +766,18 @@ def _final_seal(
             "normalized_compute_cap": 1_000_000.0,
             "reachable_stratum_manifest_checksum": _checksum("reachable"),
         },
-        hyperparameters_checksum=_checksum("hyperparameters"),
+        hyperparameters_checksum=execution_manifest.content_checksum,
         execution_source_checksum=_checksum("source"),
         analysis_template_checksum=preregistration.analysis_template_checksum,
         analysis_source_manifest_checksum=_checksum("analysis source"),
         sample_size_design_checksum=_checksum("sample size"),
         failure_policy_checksum=preregistration.failure_policy_checksum,
     )
+    return seal, execution_manifest
 
 
 def test_confirm_plan_uses_only_sealed_configurations_and_counts(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     preregistration: InitialPreregistration,
 ) -> None:
     """The dormant confirm path expands only the target and method roots in its seal."""
@@ -750,14 +788,31 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
         confirmatory_target_count_by_family=dict.fromkeys(PRIMARY_TARGET_FAMILIES, 24),
     )
     manifest = create_target_population_manifest(config, preregistration, _CONFIRMATORY_MASTER)
-    seal = _final_seal(preregistration, manifest)
-    plan = build_paper_confirm_plan(seal=seal, target_manifest=manifest)
+    seal, execution_manifest = _final_seal(preregistration, manifest)
+    plan = build_paper_confirm_plan(
+        seal=seal,
+        target_manifest=manifest,
+        configuration_execution_manifest=execution_manifest,
+    )
     assert len(plan.jobs) == 24 * 4 * 3 * 3
     assert {job.candidate_configuration_checksum for job in plan.jobs} == {
         seal.promoted_configuration_checksum,
         *(item.configuration_checksum for item in seal.comparators),
     }
     assert {job.implementation_kind for job in plan.jobs} == {"sealed_configuration"}
+    execution_by_configuration = {item.configuration_checksum: item for item in execution_manifest.entries}
+    for sealed_job in plan.jobs:
+        execution = execution_by_configuration[sealed_job.candidate_configuration_checksum]
+        assert sealed_job.implementation_checksum == execution.implementation_checksum
+        assert sealed_job.strategy_schedule_checksum == execution.strategy_schedule_checksum
+        sealed_request = sealed_job.confirm_execution_request
+        assert sealed_request is not None
+        assert sealed_request.configuration_execution_manifest_checksum == execution_manifest.content_checksum
+        assert sealed_request.hyperparameters_checksum == execution.strategy_schedule_checksum
+        assert sealed_request.implementation_checksum == execution.implementation_checksum
+        assert sealed_request.scoped_binding_checksum == execution.scoped_binding_checksum
+        assert sealed_request.executable_binding_checksum == execution.executable_binding_checksum
+        assert sealed_request.hyperparameters_checksum != seal.hyperparameters_checksum
     assert plan.final_confirmation_seal_checksum == seal.content_checksum
     assert plan.execution_source_checksum == seal.execution_source_checksum
     request = plan.jobs[0].confirm_execution_request
@@ -768,8 +823,30 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
     assert request.primary_resource_budget == seal.primary_resource_budget
     assert request.analysis_template_checksum == seal.analysis_template_checksum
     assert request.analysis_source_manifest_checksum == seal.analysis_source_manifest_checksum
-    context = build_confirm_execution_context(seal, manifest)
+    context = build_confirm_execution_context(seal, manifest, execution_manifest)
     validate_confirm_execution_request(request, context)
+    for field_name in (
+        "configuration_execution_manifest_checksum",
+        "implementation_checksum",
+        "hyperparameters_checksum",
+        "scoped_binding_checksum",
+        "executable_binding_checksum",
+    ):
+        with pytest.raises(ValueError, match="exact final-seal cell"):
+            validate_confirm_execution_request(
+                replace(request, **{field_name: _checksum(f"changed {field_name}")}),
+                context,
+            )
+    changed_entry = replace(
+        execution_manifest.entries[0],
+        implementation_checksum=_checksum("changed final implementation"),
+    )
+    changed_execution_manifest = FinalConfigurationExecutionManifest(
+        manifest_id=execution_manifest.manifest_id,
+        entries=(changed_entry, *execution_manifest.entries[1:]),
+    )
+    with pytest.raises(ValueError, match="hyperparameters root"):
+        build_confirm_execution_context(seal, manifest, changed_execution_manifest)
 
     job = plan.jobs[0]
     single = TrainingRunPlan(
@@ -859,19 +936,24 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
             "externally-custodied.json",
             "--final-seal",
             "seal.json",
+            "--configuration-execution-manifest",
+            "execution-configurations.json",
             "--execution-source-manifest",
             "execution.json",
             "--analysis-source-manifest",
             "analysis.json",
+            "--execute-expensive",
             "--output",
             str(cli_output),
         ])
     )
-    monkeypatch.setattr(training_cli, "build_training_plan", lambda _options: single)
-    cli_summary = training_cli.run(
-        cli_options,
-        executor=TrainingExecutorRegistry(confirm_executor=confirm_executor),
-    )
-    assert isinstance(cli_summary, TrainingRunSummary)
-    assert cli_summary.succeeded == 1
-    assert received == [request, request]
+    with pytest.raises(
+        training_cli.TrainingRunnerConfigurationError,
+        match="programmatic context or executor injection",
+    ):
+        training_cli.run(
+            cli_options,
+            executor=TrainingExecutorRegistry(confirm_executor=confirm_executor),
+        )
+    assert not cli_output.exists()
+    assert received == [request]

@@ -109,7 +109,11 @@ RunnerFamily = Literal[
 ]
 
 _CATALOG_PRESETS = frozenset({"training-smoke", "paper-pilot", "paper-screen"})
-_CONFIRMATION_METHOD_IDS = frozenset(SCREEN_METHOD_IDS) - {"layerwise_bmpd_noiseless"}
+# Confirmation may promote only an eligible noisy screen method, but every
+# valid final seal also carries the exact screened matched-noiseless control.
+# The dormant alias therefore has to cover the complete final-configuration
+# method universe, not just the promotion-eligible subset.
+_CONFIRMATION_METHOD_IDS = frozenset(SCREEN_METHOD_IDS)
 _RUNNER_FAMILY_BY_METHOD: dict[str, RunnerFamily] = {
     "layerwise_bmpd_crn_v2": "layerwise_bmpd_stage",
     "layerwise_bmpd_noiseless": "layerwise_bmpd_stage",
@@ -1640,7 +1644,7 @@ class RepositoryImplementationCatalog:
             raise ValueError(msg)
         resolved_preset = "paper-screen" if preset == "paper-confirm" else preset
         if preset == "paper-confirm" and (target_scope_id != "primary_q6" or method not in _CONFIRMATION_METHOD_IDS):
-            msg = "Dormant confirmation aliases only promotion-eligible q6 screen configurations."
+            msg = "Dormant confirmation aliases only final-eligible q6 screen configurations."
             raise KeyError(msg)
         if resolved_preset not in _CATALOG_PRESETS:
             msg = "Preset has no WP22B repository implementation catalog."

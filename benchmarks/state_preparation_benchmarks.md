@@ -629,10 +629,27 @@ fidelities and replay maps are captured in one numerical pass, while the
 result, manifest, and numerical evidence independently retain the direct
 execution-source manifest checksum.
 
-Real confirmation remains dormant in WP22. The registered confirmation path
-accepts only an explicitly request-bound synthetic fixture and exercises the
-same immutable manifest custody without opening a held target manifest. WP22C
-and WP22D themselves create no numerical study evidence; pilot inference,
+WP22F reopens the complete first-attempt pilot and screening evidence rather
+than accepting caller-authored scientific rows. q6 pilot evidence alone drives
+the nuisance summary, sample-size calculation, and maximum-successful-work
+compute cap; q12 stays a secondary scaling archive. The final-seal factory
+replays the full 1,296-cell promotion universe, verifies execution and analysis
+source locks, and binds every promoted or comparator configuration to its exact
+screened schedule, implementation, scoped binding, and executable binding in a
+separate aggregate manifest addressed by the unchanged confirmation-seal v1
+field set. Frozen primary analysis reconstructs cell means from raw
+confirmatory trajectory custody and applies the preregistered ITT, pairing,
+multiplicity, and failure rules without accepting caller-authored estimates.
+
+Real confirmation remains operationally dormant in WP22, but its frozen
+production route is complete: the runner derives a non-serializable authority
+only from the final seal, source manifests, screening and calibration custody,
+the exact repository binding catalog, and externally held target artifacts.
+Programmatic executor or context injection is rejected. A separately marked
+request-bound synthetic fixture exercises immutable confirmation custody
+without opening the held target; WP23 reveals that target and runs the already
+frozen real executor. WP22C and WP22D themselves create no numerical study
+evidence; pilot inference,
 complete screening replay, promotion, source freezing, and final sealing remain
 the explicit responsibility of WP22F.
 

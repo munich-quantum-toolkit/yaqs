@@ -4,6 +4,42 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Seal WP22 pilot and screening evidence before confirmation
+
+WP22F replaces caller-authored pilot summaries, screening rows, resource roots,
+and final hyperparameter checksums with production-custody-derived artifacts.
+Final sealing requires complete first-attempt pilot and screening custody, the
+mechanically reproduced promotion decision and sample-size design, the exact
+execution and analysis source manifests, and a typed final-configuration
+execution manifest. The normalized compute cap is the maximum verified
+successful q6 pilot work; q12 remains a secondary scaling archive and cannot
+change inference or final-seal bytes.
+
+`paper-confirm` now builds its non-serializable execution authority exclusively
+from the sealed CLI artifacts. In addition to the preregistration, revealed
+target configuration and manifest, and external confirmatory entropy, callers
+must supply the screening manifest and evidence, promotion decision,
+sample-size design, production resource calibration, final seal, final
+configuration-execution manifest, execution and analysis source manifests, and
+the exact repository binding catalog. Programmatic context, executor, execution
+profile, candidate, and schedule injection is rejected; real dispatch also
+requires `--execute-expensive`.
+
+The existing
+`FinalConfirmationSeal.hyperparameters_checksum` remains part of confirmation
+seal schema v1 but now addresses that aggregate manifest. Each
+`ConfirmExecutionRequest` uses schema v2 and separately carries the aggregate
+root plus the exact per-configuration implementation, schedule, scoped binding,
+and executable binding. Legacy request-v1 artifacts must be regenerated from
+the final seal, revealed target manifest, and sealed configuration-execution
+manifest rather than rewritten in place.
+
+Primary-analysis result artifacts now use schema v3. They can only be issued by
+reopening every authoritative first confirmatory attempt through the exact
+confirmation execution context; success and failure receipts are both retained
+and checksum-bound. Detached caller-authored result artifacts and legacy
+analysis-result schemas must be regenerated from production custody.
+
 ### Execute WP22 jobs through source-addressed production evidence
 
 WP22E provides the repository-owned executor selected by the WP22D runner.
@@ -117,10 +153,11 @@ checked in separately and anchored to both the immutable WP15
 preregistration and the prospective WP22 implementation-plan commit.
 
 Use these records to review and seal scientific choices; they do not authorize
-a numerical paper claim. WP22B must still provide width-complete executable
-catalogs, WP22C must execute schedules with exact restart behavior, and WP22D
-through WP22F must run the pilot, screening, promotion, confirmation seal, and
-primary analysis. Phase I and WP15 through WP21 identities are unchanged.
+a numerical paper claim. WP22B provides width-complete executable catalogs,
+WP22C executes schedules with exact restart behavior, and WP22D through WP22F
+run the pilot, screening, and promotion, create the confirmation seal, and
+freeze and test the primary-analysis code. Real confirmatory analysis remains
+part of WP24. Phase I and WP15 through WP21 identities are unchanged.
 
 ### Run reproducible top-down pruning pipelines
 

@@ -13,6 +13,7 @@ import hashlib
 import math
 import shutil
 import subprocess
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from .canonical import (
     thaw_json_mapping,
     verify_sealed_mapping,
 )
+from .training_schedules import TrainingStrategySchedule
 from .validation import (
     require_bool,
     require_checksum,
@@ -51,6 +53,10 @@ PROMOTION_DECISION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.promotion_dec
 SAMPLE_SIZE_DESIGN_SCHEMA_VERSION = "yaqs.state_preparation.phase2.sample_size_design.v1"
 ANALYSIS_SOURCE_MANIFEST_SCHEMA_VERSION = "yaqs.state_preparation.phase2.analysis_source_manifest.v1"
 CONFIRMATION_SEAL_SCHEMA_VERSION = "yaqs.state_preparation.phase2.confirmation_seal.v1"
+FINAL_CONFIGURATION_EXECUTION_REF_SCHEMA_VERSION = "yaqs.state_preparation.phase2.final_configuration_execution_ref.v1"
+FINAL_CONFIGURATION_EXECUTION_MANIFEST_SCHEMA_VERSION = (
+    "yaqs.state_preparation.phase2.final_configuration_execution_manifest.v1"
+)
 
 DEFAULT_PREREGISTRATION_PATH = Path(__file__).with_name("data") / "initial_preregistration_v1.json"
 
@@ -331,6 +337,25 @@ _PRIMARY_CONTRAST_BINDING_KEYS = frozenset({
     "control_configuration_checksum",
     "paired_block_policy_checksum",
     "matching_projection_checksum",
+})
+_FINAL_CONFIGURATION_EXECUTION_REF_KEYS = frozenset({
+    "schema_version",
+    "method_id",
+    "configuration_schema_version",
+    "configuration_checksum",
+    "strategy_schedule",
+    "strategy_schedule_checksum",
+    "implementation_checksum",
+    "scoped_binding_checksum",
+    "executable_binding_checksum",
+    "content_checksum",
+})
+_FINAL_CONFIGURATION_EXECUTION_MANIFEST_KEYS = frozenset({
+    "schema_version",
+    "manifest_id",
+    "entries",
+    "entry_count",
+    "content_checksum",
 })
 _RESOURCE_BUDGET_KEYS = frozenset({
     "metric",
@@ -2543,6 +2568,249 @@ class PrimaryContrastBinding:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class FinalConfigurationExecutionRef:
+    """Exact screened execution identity for one final configuration."""
+
+    method_id: str
+    configuration_schema_version: str
+    configuration_checksum: str
+    strategy_schedule: TrainingStrategySchedule
+    implementation_checksum: str
+    scoped_binding_checksum: str
+    executable_binding_checksum: str
+    schema_version: str = field(default=FINAL_CONFIGURATION_EXECUTION_REF_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate the complete configuration-to-executable identity chain.
+
+        Raises:
+            TypeError: If the embedded schedule has the wrong typed schema.
+        """
+        object.__setattr__(self, "method_id", require_slug(self.method_id, "method_id"))
+        object.__setattr__(
+            self,
+            "configuration_schema_version",
+            require_slug(self.configuration_schema_version, "configuration_schema_version"),
+        )
+        for name in (
+            "configuration_checksum",
+            "implementation_checksum",
+            "scoped_binding_checksum",
+            "executable_binding_checksum",
+        ):
+            object.__setattr__(self, name, require_checksum(getattr(self, name), name))
+        if not isinstance(self.strategy_schedule, TrainingStrategySchedule):
+            msg = "strategy_schedule must be a TrainingStrategySchedule."
+            raise TypeError(msg)
+
+    @property
+    def strategy_schedule_checksum(self) -> str:
+        """Checksum of the embedded exact configuration-specific schedule."""
+        return self.strategy_schedule.content_checksum
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum of the complete final execution reference."""
+        return canonical_checksum(self._content_dict())
+
+    def _content_dict(self) -> dict[str, object]:
+        """Return every configuration-specific executable field."""
+        return {
+            "schema_version": self.schema_version,
+            "method_id": self.method_id,
+            "configuration_schema_version": self.configuration_schema_version,
+            "configuration_checksum": self.configuration_checksum,
+            "strategy_schedule": self.strategy_schedule.to_dict(),
+            "strategy_schedule_checksum": self.strategy_schedule_checksum,
+            "implementation_checksum": self.implementation_checksum,
+            "scoped_binding_checksum": self.scoped_binding_checksum,
+            "executable_binding_checksum": self.executable_binding_checksum,
+        }
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the checksum-sealed JSON-native execution reference."""
+        return {**self._content_dict(), "content_checksum": self.content_checksum}
+
+    @classmethod
+    def from_dict(cls, data: object) -> FinalConfigurationExecutionRef:
+        """Decode and verify one final configuration execution reference.
+
+        Returns:
+            The validated exact execution reference.
+
+        Raises:
+            ValueError: If the schema or a derived checksum differs.
+        """
+        mapping = verify_sealed_mapping(
+            data,
+            expected_keys=_FINAL_CONFIGURATION_EXECUTION_REF_KEYS,
+            name="final configuration execution reference",
+        )
+        if mapping["schema_version"] != FINAL_CONFIGURATION_EXECUTION_REF_SCHEMA_VERSION:
+            msg = "Final configuration execution reference uses an unsupported schema version."
+            raise ValueError(msg)
+        reference = cls(
+            method_id=cast("str", mapping["method_id"]),
+            configuration_schema_version=cast("str", mapping["configuration_schema_version"]),
+            configuration_checksum=cast("str", mapping["configuration_checksum"]),
+            strategy_schedule=TrainingStrategySchedule.from_dict(mapping["strategy_schedule"]),
+            implementation_checksum=cast("str", mapping["implementation_checksum"]),
+            scoped_binding_checksum=cast("str", mapping["scoped_binding_checksum"]),
+            executable_binding_checksum=cast("str", mapping["executable_binding_checksum"]),
+        )
+        if mapping["strategy_schedule_checksum"] != reference.strategy_schedule_checksum:
+            msg = "Final configuration schedule checksum is not derived from its embedded schedule."
+            raise ValueError(msg)
+        if mapping["content_checksum"] != reference.content_checksum:
+            msg = "Final configuration execution reference checksum changed during normalization."
+            raise ValueError(msg)
+        return reference
+
+
+@dataclass(frozen=True, slots=True)
+class FinalConfigurationExecutionManifest:
+    """Aggregate root of every configuration-specific final execution identity."""
+
+    manifest_id: str
+    entries: tuple[FinalConfigurationExecutionRef, ...]
+    schema_version: str = field(default=FINAL_CONFIGURATION_EXECUTION_MANIFEST_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Require a canonical, unique, nonempty final configuration universe.
+
+        Raises:
+            TypeError: If entries do not use the exact reference schema.
+            ValueError: If ordering or any required identity is duplicated.
+        """
+        object.__setattr__(self, "manifest_id", require_slug(self.manifest_id, "manifest_id"))
+        entries = tuple(self.entries)
+        if not entries or not all(isinstance(item, FinalConfigurationExecutionRef) for item in entries):
+            msg = "entries must contain FinalConfigurationExecutionRef values."
+            raise TypeError(msg)
+        expected_order = tuple(sorted(entries, key=lambda item: (item.configuration_checksum, item.method_id)))
+        if entries != expected_order:
+            msg = "Final configuration execution entries must use canonical configuration order."
+            raise ValueError(msg)
+        method_ids = tuple(item.method_id for item in entries)
+        configuration_checksums = tuple(item.configuration_checksum for item in entries)
+        scoped_checksums = tuple(item.scoped_binding_checksum for item in entries)
+        executable_checksums = tuple(item.executable_binding_checksum for item in entries)
+        if (
+            len(method_ids) != len(set(method_ids))
+            or len(configuration_checksums) != len(set(configuration_checksums))
+            or len(scoped_checksums) != len(set(scoped_checksums))
+            or len(executable_checksums) != len(set(executable_checksums))
+        ):
+            msg = "Final configuration execution entries must have unique method, configuration, and bindings."
+            raise ValueError(msg)
+        object.__setattr__(self, "entries", entries)
+
+    @property
+    def content_checksum(self) -> str:
+        """Aggregate root stored in ``FinalConfirmationSeal.hyperparameters_checksum``."""
+        return canonical_checksum(self._content_dict())
+
+    def _content_dict(self) -> dict[str, object]:
+        """Return the exact ordered executable configuration universe."""
+        return {
+            "schema_version": self.schema_version,
+            "manifest_id": self.manifest_id,
+            "entries": [item.to_dict() for item in self.entries],
+            "entry_count": len(self.entries),
+        }
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the checksum-sealed JSON-native execution manifest."""
+        return {**self._content_dict(), "content_checksum": self.content_checksum}
+
+    def to_json(self) -> str:
+        """Return canonical checksum-sealed execution-manifest JSON."""
+        return canonical_json(self.to_dict())
+
+    @classmethod
+    def from_dict(cls, data: object) -> FinalConfigurationExecutionManifest:
+        """Decode and verify the final configuration execution manifest.
+
+        Returns:
+            The validated exact final execution universe.
+
+        Raises:
+            TypeError: If serialized entries do not form a sequence.
+            ValueError: If the schema, count, or a derived checksum differs.
+        """
+        mapping = verify_sealed_mapping(
+            data,
+            expected_keys=_FINAL_CONFIGURATION_EXECUTION_MANIFEST_KEYS,
+            name="final configuration execution manifest",
+        )
+        if mapping["schema_version"] != FINAL_CONFIGURATION_EXECUTION_MANIFEST_SCHEMA_VERSION:
+            msg = "Final configuration execution manifest uses an unsupported schema version."
+            raise ValueError(msg)
+        raw_entries = mapping["entries"]
+        if isinstance(raw_entries, (str, bytes)) or not isinstance(raw_entries, Sequence):
+            msg = "Final configuration execution entries must be a sequence."
+            raise TypeError(msg)
+        manifest = cls(
+            manifest_id=cast("str", mapping["manifest_id"]),
+            entries=tuple(FinalConfigurationExecutionRef.from_dict(item) for item in raw_entries),
+        )
+        if mapping["entry_count"] != len(manifest.entries):
+            msg = "Final configuration execution entry_count is not derived from its entries."
+            raise ValueError(msg)
+        if mapping["content_checksum"] != manifest.content_checksum:
+            msg = "Final configuration execution manifest checksum changed during normalization."
+            raise ValueError(msg)
+        return manifest
+
+    @classmethod
+    def from_json(cls, payload: str) -> FinalConfigurationExecutionManifest:
+        """Decode canonical final configuration execution-manifest JSON.
+
+        Returns:
+            The validated exact final execution universe.
+        """
+        return cls.from_dict(load_canonical_json_object(payload))
+
+    def entry(self, configuration_checksum: str) -> FinalConfigurationExecutionRef:
+        """Return the exact execution reference for one final configuration.
+
+        Returns:
+            The unique configuration-specific execution reference.
+
+        Raises:
+            KeyError: If the configuration is absent from the final universe.
+        """
+        checksum = require_checksum(configuration_checksum, "configuration_checksum")
+        for item in self.entries:
+            if item.configuration_checksum == checksum:
+                return item
+        raise KeyError(checksum)
+
+
+class FinalResourceCalibrationManifest(ABC):
+    """Protocol-owned base for a typed production resource calibration.
+
+    Concrete custody-aware implementations live downstream of this foundational
+    protocol module.  Inheriting from this base does not confer authority:
+    confirmation authorization accepts only the exact repository-owned
+    :class:`~benchmarks.state_preparation.phase2.screening.ProductionResourceCalibration`
+    type, whose constructor revalidates the complete pilot and screening
+    projection universes.
+    """
+
+    preregistration_checksum: str
+    execution_source_manifest_checksum: str
+    screening_manifest_checksum: str
+    normalized_compute_cap: float
+
+    @property
+    @abstractmethod
+    def content_checksum(self) -> str:
+        """Checksum of the complete typed resource calibration."""
+        raise NotImplementedError
+
+
 def _validate_comparators(value: object) -> tuple[FinalComparatorRef, ...]:
     """Validate a de-duplicated typed primary comparator set.
 
@@ -3307,6 +3575,42 @@ class FinalConfirmationSeal:
         return cls.from_dict(load_canonical_json_object(payload))
 
 
+def validate_final_configuration_execution_manifest(
+    seal: FinalConfirmationSeal,
+    manifest: FinalConfigurationExecutionManifest,
+) -> None:
+    """Authenticate the exact executable configuration set against a final seal.
+
+    Raises:
+        TypeError: If either artifact has the wrong typed schema.
+        ValueError: If the manifest root, method/configuration set, or comparator schema differs.
+    """
+    if not isinstance(seal, FinalConfirmationSeal):
+        msg = "seal must be a FinalConfirmationSeal."
+        raise TypeError(msg)
+    if not isinstance(manifest, FinalConfigurationExecutionManifest):
+        msg = "manifest must be a FinalConfigurationExecutionManifest."
+        raise TypeError(msg)
+    if manifest.content_checksum != seal.hyperparameters_checksum:
+        msg = "Final configuration execution manifest does not reproduce the seal hyperparameters root."
+        raise ValueError(msg)
+    expected_methods = {
+        seal.promoted_configuration_checksum: seal.promoted_method_id,
+        **{item.configuration_checksum: item.method_id for item in seal.comparators},
+    }
+    actual_methods = {item.configuration_checksum: item.method_id for item in manifest.entries}
+    if actual_methods != expected_methods:
+        msg = "Final configuration execution manifest differs from the exact promoted-plus-comparator set."
+        raise ValueError(msg)
+    schema_by_configuration = {
+        item.configuration_checksum: item.configuration_schema_version for item in manifest.entries
+    }
+    for comparator in seal.comparators:
+        if schema_by_configuration[comparator.configuration_checksum] != comparator.configuration_schema_version:
+            msg = "Final comparator configuration schema differs from its execution manifest reference."
+            raise ValueError(msg)
+
+
 @dataclass(frozen=True, slots=True)
 class ConfirmationAuthorization:
     """Opaque in-process guard proving that all confirmation seals agree."""
@@ -3336,6 +3640,8 @@ def authorize_confirmation(
     sample_size_design: SampleSizeDesign,
     analysis_source_manifest: AnalysisSourceManifest,
     final_seal: FinalConfirmationSeal,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
+    resource_calibration: FinalResourceCalibrationManifest,
     repository_root: Path,
 ) -> ConfirmationAuthorization:
     """Authorize post-seal confirmatory target materialization.
@@ -3351,10 +3657,12 @@ def authorize_confirmation(
         sample_size_design: Pilot-derived confirmatory sample-size design.
         analysis_source_manifest: Commit-addressed executable primary-analysis source.
         final_seal: Pilot- and screening-instantiated confirmation design.
+        configuration_execution_manifest: Exact per-configuration executable identities.
+        resource_calibration: Typed pilot/screen production resource calibration.
         repository_root: Git worktree containing the sealed analysis source commit.
 
     Returns:
-        An opaque authorization token for the future WP16 materializer.
+        An opaque authorization token for the source-locked WP23 materializer.
 
     Raises:
         TypeError: If a supplied object has the wrong record type.
@@ -3383,6 +3691,19 @@ def authorize_confirmation(
         raise TypeError(msg)
     if not isinstance(final_seal, FinalConfirmationSeal):
         msg = "final_seal must be a FinalConfirmationSeal."
+        raise TypeError(msg)
+    if not isinstance(configuration_execution_manifest, FinalConfigurationExecutionManifest):
+        msg = "configuration_execution_manifest must be a FinalConfigurationExecutionManifest."
+        raise TypeError(msg)
+    # Imported here because the concrete custody implementation depends on the
+    # foundational protocol records in this module.  An open ABC check is not
+    # sufficient at this boundary: a caller-authored subclass could otherwise
+    # echo the known seal roots without carrying the required 720 pilot and
+    # 1,296 screening projections.
+    from .screening import ProductionResourceCalibration  # noqa: PLC0415
+
+    if type(resource_calibration) is not ProductionResourceCalibration:
+        msg = "resource_calibration must be the exact ProductionResourceCalibration type."
         raise TypeError(msg)
     if not isinstance(repository_root, Path):
         msg = "repository_root must be a pathlib.Path."
@@ -3597,6 +3918,31 @@ def authorize_confirmation(
     ):
         msg = "Final seal denormalized sample sizes differ from the sealed sample-size design."
         raise ValueError(msg)
+    validate_final_configuration_execution_manifest(final_seal, configuration_execution_manifest)
+    for execution in configuration_execution_manifest.entries:
+        candidate = candidate_by_checksum.get(execution.configuration_checksum)
+        if candidate is None or candidate.method_id != execution.method_id:
+            msg = f"Final execution {execution.configuration_checksum!r} is not the exact screened configuration."
+            raise ValueError(msg)
+        if candidate.configuration_schema_version != execution.configuration_schema_version:
+            msg = f"Final execution {execution.configuration_checksum!r} uses a changed configuration schema."
+            raise ValueError(msg)
+    calibration_cap = require_float(
+        resource_calibration.normalized_compute_cap,
+        "resource_calibration.normalized_compute_cap",
+        minimum=0.0,
+    )
+    if (
+        resource_calibration.preregistration_checksum != preregistration.content_checksum
+        or resource_calibration.screening_manifest_checksum != manifest.content_checksum
+        or resource_calibration.execution_source_manifest_checksum != final_seal.execution_source_checksum
+        or resource_calibration.content_checksum
+        != final_seal.primary_resource_budget["reachable_stratum_manifest_checksum"]
+        or float(calibration_cap).hex()
+        != float(cast("float", final_seal.primary_resource_budget["normalized_compute_cap"])).hex()
+    ):
+        msg = "Final resource budget is not the exact typed pilot/screen production calibration."
+        raise ValueError(msg)
     return ConfirmationAuthorization(
         preregistration_checksum=preregistration.content_checksum,
         final_seal_checksum=final_seal.content_checksum,
@@ -3633,6 +3979,8 @@ __all__ = [
     "CONFIRMATION_SEAL_SCHEMA_VERSION",
     "DATA_ROLES",
     "DEFAULT_PREREGISTRATION_PATH",
+    "FINAL_CONFIGURATION_EXECUTION_MANIFEST_SCHEMA_VERSION",
+    "FINAL_CONFIGURATION_EXECUTION_REF_SCHEMA_VERSION",
     "PREREGISTRATION_SCHEMA_VERSION",
     "PRIMARY_FAMILY_STRATA",
     "PRIMARY_TARGET_FAMILIES",
@@ -3647,7 +3995,10 @@ __all__ = [
     "CandidateSummary",
     "ConfirmationAuthorization",
     "FinalComparatorRef",
+    "FinalConfigurationExecutionManifest",
+    "FinalConfigurationExecutionRef",
     "FinalConfirmationSeal",
+    "FinalResourceCalibrationManifest",
     "InitialPreregistration",
     "PrimaryContrastBinding",
     "PromotionDecision",
@@ -3661,5 +4012,6 @@ __all__ = [
     "authorize_confirmation",
     "load_initial_preregistration",
     "select_promoted_candidate",
+    "validate_final_configuration_execution_manifest",
     "verify_analysis_source_files",
 ]

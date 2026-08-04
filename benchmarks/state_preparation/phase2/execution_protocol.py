@@ -617,6 +617,25 @@ class FreshEvaluationPolicy:
             reporting_prefixes=(trajectory_count,),
         )
 
+    @classmethod
+    def confirmatory(cls, trajectory_count: int) -> FreshEvaluationPolicy:
+        """Build the frozen q6 confirmatory fixed-sample policy.
+
+        Returns:
+            A role-separated primary-q6 policy with the already sealed fixed
+            trajectory count.
+        """
+        return cls(
+            policy_id="primary_q6_confirmatory_fresh_evaluation",
+            purpose="confirmatory_fresh_evaluation",
+            target_scope="primary_q6",
+            qubit_count=6,
+            data_role="confirmatory",
+            seed_domain="confirmatory_test",
+            trajectory_count=trajectory_count,
+            reporting_prefixes=(trajectory_count,),
+        )
+
     def _content_dict(self) -> dict[str, object]:
         """Return every checksum-covered fresh-evaluation choice."""
         return {
