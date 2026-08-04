@@ -59,19 +59,14 @@ def test_noise_model_creation() -> None:
     assert model.processes[1]["matrix"].shape == (2, 2)
 
 
-def test_noise_model_assertion() -> None:
-    """Test that NoiseModel raises an AssertionError when a process dict is missing required fields.
-
-    This test constructs a process list where one entry is missing the 'strength' field,
-    which should cause the NoiseModel initialization to fail.
-    """
-    # Missing 'strength' in the second dict
+def test_noise_model_missing_strength() -> None:
+    """Test that NoiseModel raises ValueError when a process dict is missing required fields."""
     processes: list[dict[str, Any]] = [
         {"name": "lowering", "sites": [0], "strength": 0.1},
         {"name": "pauli_z", "sites": [1]},  # Missing strength
     ]
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="strength"):
         _ = NoiseModel(processes)
 
 
@@ -179,21 +174,9 @@ def test_longrange_two_site_factors_explicit() -> None:
 
 
 def test_longrange_unknown_label_without_factors_raises() -> None:
-    """Test that unknown long-range labels without 'factors' raise.
-
-    If the name is not 'longrange_crosstalk_{ab}' and no factors are provided,
-    initialization must fail to avoid guessing operators.
-
-    Raises:
-        AssertionError: If the model accepts an unknown long-range label without factors.
-    """
-    try:
-        # Name is not a recognized non-adjacent 'crosstalk_{ab}' and no factors provided
+    """Unknown long-range labels without 'factors' raise ValueError."""
+    with pytest.raises(ValueError, match="factors"):
         _ = NoiseModel([{"name": "foo_bar", "sites": [0, 2], "strength": 0.1}])
-    except AssertionError:
-        return
-    msg = "Expected AssertionError for unknown long-range label without factors."
-    raise AssertionError(msg)
 
 
 def test_noise_distribution_integration() -> None:
@@ -397,7 +380,7 @@ def test_mixed_static_and_distribution() -> None:
 
 
 def test_invalid_distribution_type() -> None:
-    """Test that invalid distribution types raise ValueError."""
+    """Test that invalid distribution types raise ValueError at construction."""
     processes = [
         {
             "name": "pauli_x",
@@ -405,9 +388,8 @@ def test_invalid_distribution_type() -> None:
             "strength": {"distribution": "unknown", "mean": 0.5, "std": 0.1},
         }
     ]
-    nm = NoiseModel(processes)
     with pytest.raises(ValueError, match="Unsupported distribution type: unknown"):
-        nm.sample()
+        _ = NoiseModel(processes)
 
 
 def test_independent_site_sampling() -> None:
@@ -465,7 +447,7 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
 
 
 def test_missing_distribution_key() -> None:
-    """Test that missing 'distribution' key raises ValueError."""
+    """Test that missing 'distribution' key raises ValueError at construction."""
     processes = [
         {
             "name": "pauli_x",
@@ -473,6 +455,82 @@ def test_missing_distribution_key() -> None:
             "strength": {"mean": 0.5, "std": 0.1},  # Missing distribution key
         }
     ]
-    nm = NoiseModel(processes)
     with pytest.raises(ValueError, match="Noise strength dict must contain 'distribution' key"):
-        nm.sample()
+        _ = NoiseModel(processes)
+
+
+def test_tuple_sites_normalized() -> None:
+    """Tuple site sequences are accepted and normalized like lists."""
+    nm = NoiseModel([{"name": "crosstalk_xy", "sites": (1, 0), "strength": 0.1}])
+    assert nm.processes[0]["sites"] == [0, 1]
+    assert nm.processes[0]["matrix"].shape == (4, 4)
+
+
+def test_negative_strength_rejected() -> None:
+    """Fixed negative rates are rejected; negative matrix elements remain valid."""
+    with pytest.raises(ValueError, match="nonnegative"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": -0.1}])
+
+    sigma = np.array([[0.0, -1.0], [0.0, 0.0]], dtype=complex)
+    nm = NoiseModel([{"name": "custom", "sites": [0], "strength": 0.1, "matrix": sigma}])
+    assert nm.processes[0]["matrix"][0, 1] == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_nonfinite_strength_rejected(bad: float) -> None:
+    """Non-finite fixed strengths are rejected."""
+    with pytest.raises(ValueError, match="finite"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": bad}])
+
+
+def test_bool_sites_and_strength_rejected() -> None:
+    """Booleans are rejected for sites and strengths."""
+    with pytest.raises(TypeError, match="booleans"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [True], "strength": 0.1}])
+    with pytest.raises(TypeError, match="booleans"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": True}])
+
+
+def test_duplicate_and_empty_sites_rejected() -> None:
+    """Duplicate and empty site lists are rejected."""
+    with pytest.raises(ValueError, match="distinct"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [1, 1], "strength": 0.1}])
+    with pytest.raises(ValueError, match="exactly 1 or 2"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [], "strength": 0.1}])
+
+
+def test_reversed_custom_matrix_rejected() -> None:
+    """Reversed sites with a custom full matrix are rejected."""
+    mat = np.kron(PauliX.matrix, PauliZ.matrix)
+    with pytest.raises(ValueError, match="ascending site order"):
+        _ = NoiseModel([{"name": "custom", "sites": [1, 0], "strength": 0.1, "matrix": mat}])
+
+
+def test_unknown_operator_name_raises() -> None:
+    """Unknown library names raise ValueError listing supported operators."""
+    with pytest.raises(ValueError, match="Unknown noise operator"):
+        _ = NoiseModel([{"name": "not_an_operator", "sites": [0], "strength": 0.1}])
+
+
+def test_negative_distribution_std_rejected() -> None:
+    """Distribution std must be nonnegative at construction."""
+    with pytest.raises(ValueError, match="std must be nonnegative"):
+        _ = NoiseModel([
+            {
+                "name": "pauli_x",
+                "sites": [0],
+                "strength": {"distribution": "normal", "mean": 0.1, "std": -0.1},
+            }
+        ])
+
+
+def test_scheduled_jump_non_adjacent_rejected() -> None:
+    """Non-adjacent scheduled jumps fail at construction."""
+    with pytest.raises(ValueError, match="non-adjacent"):
+        _ = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0, 2], "name": "x"}])
+
+
+def test_scheduled_jump_bool_time_rejected() -> None:
+    """Boolean scheduled-jump times are rejected."""
+    with pytest.raises(TypeError, match="booleans"):
+        _ = NoiseModel(scheduled_jumps=[{"time": True, "sites": [0], "name": "x"}])

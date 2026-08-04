@@ -21,6 +21,7 @@ import numpy as np
 import opt_einsum as oe
 
 from .. import linalg
+from ..data_structures.noise_model import is_pauli
 from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
     from ..methods.decompositions import TruncMode
+
+__all__ = ["apply_dissipation", "is_adjacent", "is_longrange", "is_pauli"]
 
 
 def is_adjacent(proc: dict[str, Any]) -> bool:
@@ -43,27 +46,6 @@ def is_longrange(proc: dict[str, Any]) -> bool:
     """Return True if the two-site process is long-range (non-neighbor)."""
     s = proc["sites"]
     return bool(abs(s[1] - s[0]) > 1)
-
-
-def is_pauli(proc: dict[str, Any]) -> bool:
-    """Return True if the process is a Pauli process."""
-    return bool(
-        proc["name"]
-        in {
-            "pauli_x",
-            "pauli_y",
-            "pauli_z",
-            "crosstalk_xx",
-            "crosstalk_yy",
-            "crosstalk_zz",
-            "crosstalk_xy",
-            "crosstalk_yx",
-            "crosstalk_zy",
-            "crosstalk_zx",
-            "crosstalk_yz",
-            "crosstalk_xz",
-        }
-    )
 
 
 def apply_dissipation(

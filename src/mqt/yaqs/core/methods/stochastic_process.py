@@ -89,6 +89,9 @@ def create_probability_distribution(
         A tuple ``(ordered_processes, probabilities)`` where ``ordered_processes`` are
         the applicable jump processes in site-sweep order and ``probabilities`` are
         the corresponding normalized jump probabilities.
+
+    Raises:
+        ValueError: If a non-Pauli long-range two-site process is present.
     """
     if noise_model is None or not noise_model.processes:
         return [], []
@@ -149,6 +152,12 @@ def create_probability_distribution(
                         dp_m = dt * gamma * jumped_state.norm(site)
                         ordered_processes.append(process)
                         dp_m_list.append(float(dp_m.real))
+                    else:
+                        msg = (
+                            "Non-Pauli long-range two-site jumps are not supported "
+                            f"(process '{process['name']}' on sites {process['sites']})."
+                        )
+                        raise ValueError(msg)
 
     # Normalize the probabilities
     dp: float = float(np.sum(dp_m_list))

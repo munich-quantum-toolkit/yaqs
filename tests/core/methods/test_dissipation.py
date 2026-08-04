@@ -15,7 +15,8 @@ import pytest
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.dissipation import apply_dissipation, is_adjacent, is_longrange
+from mqt.yaqs.core.libraries.noise_library import PauliX, PauliZ
+from mqt.yaqs.core.methods.dissipation import apply_dissipation, is_adjacent, is_longrange, is_pauli
 
 rng = np.random.default_rng()
 
@@ -161,3 +162,47 @@ def test_apply_dissipation_longrange_non_pauli_raises() -> None:
 
     with pytest.raises(NotImplementedError, match="Long-range processes"):
         apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)
+
+
+def test_is_pauli_structure_phased_vs_scaled() -> None:
+    """Unit-modulus phased Paulis count; scaled Paulis do not."""
+    phased = NoiseModel([
+        {"name": "custom", "sites": [0], "strength": 0.1, "matrix": 1j * PauliX.matrix},
+    ]).processes[0]
+    scaled = NoiseModel([
+        {"name": "custom", "sites": [0], "strength": 0.1, "matrix": 2.0 * PauliX.matrix},
+    ]).processes[0]
+    longrange = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.1},
+    ]).processes[0]
+    adjacent = NoiseModel([
+        {"name": "crosstalk_xz", "sites": [0, 1], "strength": 0.1},
+    ]).processes[0]
+    scaled_kron = NoiseModel([
+        {
+            "name": "custom",
+            "sites": [0, 1],
+            "strength": 0.1,
+            "matrix": 2.0 * np.kron(PauliX.matrix, PauliZ.matrix),
+        },
+    ]).processes[0]
+
+    assert is_pauli(phased) is True
+    assert is_pauli(scaled) is False
+    assert is_pauli(longrange) is True
+    assert is_pauli(adjacent) is True
+    assert is_pauli(scaled_kron) is False
+
+
+def test_apply_dissipation_longrange_crosstalk_xy() -> None:
+    """Documented longrange_crosstalk_xy uses the Pauli dissipator shortcut."""
+    state = MPS(3, state="zeros")
+    before = [t.copy() for t in state.tensors]
+    noise_model = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.2},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)
+    assert state.orthogonality_center == 0
+    # Scalar Pauli dissipator scales tensors; state remains product-like.
+    assert any(not np.allclose(a, b) for a, b in zip(before, state.tensors, strict=True))

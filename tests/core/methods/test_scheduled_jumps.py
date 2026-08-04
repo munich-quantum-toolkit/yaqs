@@ -162,11 +162,7 @@ def test_apply_scheduled_jumps_no_op_when_missing() -> None:
 
 
 def test_apply_scheduled_jumps_non_adjacent_raises() -> None:
-    """Scheduled two-site jumps must act on nearest neighbors."""
-    state = MPS(3, state="zeros")
+    """Scheduled two-site jumps must act on nearest neighbors (construction-time)."""
     scheduled_jumps = [{"time": 1.0, "sites": [0, 2], "name": "crosstalk_xx"}]
-    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
-    sim_params = AnalogSimParams(dt=0.1, get_state=True)
-
     with pytest.raises(ValueError, match="non-adjacent"):
-        apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
+        _ = NoiseModel(scheduled_jumps=scheduled_jumps)

@@ -369,10 +369,7 @@ def test_stochastic_process_empty_probabilities_after_jump() -> None:
     """A triggered jump with no applicable processes recenters at site 0 without applying a jump."""
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.99
-    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
-    noise_model = NoiseModel([
-        {"name": "custom_lr", "sites": [0, 2], "strength": 1000.0, "factors": (lowering, lowering)},
-    ])
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
@@ -388,13 +385,17 @@ def test_stochastic_process_empty_probabilities_after_jump() -> None:
             _ = (size, p)
             return 0
 
-    new_state = stochastic_process(
-        state_copy,
-        noise_model,
-        0.1,
-        sim_params,
-        rng=cast("np.random.Generator", _JumpButNoProcessRng()),
-    )
+    with patch(
+        "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
+        return_value=([], []),
+    ):
+        new_state = stochastic_process(
+            state_copy,
+            noise_model,
+            0.1,
+            sim_params,
+            rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+        )
     assert new_state.orthogonality_center == 0
 
 
@@ -403,10 +404,7 @@ def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.99
     state.set_center(None)
-    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
-    noise_model = NoiseModel([
-        {"name": "custom_lr", "sites": [0, 2], "strength": 1000.0, "factors": (lowering, lowering)},
-    ])
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
     class _JumpButNoProcessRng:
@@ -419,12 +417,58 @@ def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
             _ = (size, p)
             return 0
 
+    with patch(
+        "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
+        return_value=([], []),
+    ):
+        new_state = stochastic_process(
+            state,
+            noise_model,
+            0.1,
+            sim_params,
+            rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+        )
+    assert new_state.orthogonality_center == 0
+
+
+def test_create_probability_distribution_non_pauli_longrange_raises() -> None:
+    """Non-Pauli long-range processes raise instead of being omitted from the jump PDF."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
+    noise_model = NoiseModel([
+        {"name": "custom_lr", "sites": [0, 2], "strength": 0.1, "factors": (lowering, lowering)},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    with pytest.raises(ValueError, match="Non-Pauli long-range"):
+        create_probability_distribution(state, noise_model, 0.1, sim_params)
+
+
+def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
+    """Documented longrange_crosstalk_xy is treated as Pauli and can jump."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    noise_model = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 1000.0},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    state_copy = copy.deepcopy(state)
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
     new_state = stochastic_process(
-        state,
+        state_copy,
         noise_model,
         0.1,
         sim_params,
-        rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+        rng=cast("np.random.Generator", _AlwaysJumpRng()),
     )
     assert new_state.orthogonality_center == 0
 

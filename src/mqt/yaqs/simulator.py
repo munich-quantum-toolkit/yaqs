@@ -99,6 +99,7 @@ from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
+from .core.data_structures.noise_model import validate_noise_model_for_run
 from .core.data_structures.result import (
     Result,
     aggregate_counts,
@@ -673,6 +674,15 @@ class Simulator:
             for spec in initial_state_list:
                 spec.ensure_encoded("mps")
                 _validate_state_hamiltonian_pairing(spec, operator)
+            if noise_model is not None:
+                validate_noise_model_for_run(
+                    noise_model,
+                    length=operator.length,
+                    physical_dimensions=(initial_state_list[0].physical_dimensions if initial_state_list else None),
+                    representation="mps",
+                    is_ensemble=True,
+                    sim_params=sim_params,
+                )
             self._run_ensemble(
                 [spec.mps for spec in initial_state_list],
                 operator.mpo,
@@ -686,6 +696,14 @@ class Simulator:
         mps = _materialized_mps(initial_state)
         state_rep = initial_state.representation
         _validate_state_hamiltonian_pairing(initial_state, operator)
+        if noise_model is not None:
+            validate_noise_model_for_run(
+                noise_model,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+                representation=state_rep,
+                sim_params=sim_params,
+            )
         mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
         backend: Callable[..., tuple[NDArray[np.float64], Any, Any]]
@@ -1012,6 +1030,15 @@ class Simulator:
         if mps.length != operator.num_qubits:
             msg = "State and circuit qubit counts do not match."
             raise ValueError(msg)
+
+        if noise_model is not None:
+            validate_noise_model_for_run(
+                noise_model,
+                length=mps.length,
+                physical_dimensions=mps.physical_dimensions,
+                representation="mps",
+                is_digital=True,
+            )
 
         self._run_digital_sim(mps, operator, sim_params, noise_model, result)
 

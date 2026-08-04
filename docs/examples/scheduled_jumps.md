@@ -24,8 +24,12 @@ In this example, we simulate a 10-site Ising chain and apply a scheduled Pauli-X
 flip to a specific site at $t=1.0$.
 
 ```{important}
-Scheduled jump times must lie on the simulation time grid: choose `time` as a
-multiple of `dt` (for example `dt=0.1` → `0.0, 0.1, 0.2, …`).
+Scheduled jumps are supported only for **single-`State` analog MPS TJM**. They
+are rejected for MCWF, Lindblad, digital circuits, and `list[State]` unitary
+ensembles. Jump times must lie on the simulation time grid (`sim_params.times`;
+choose `time` as a multiple of `dt`). Two-site scheduled jumps must be
+nearest-neighbor. On a matching timestep, scheduled jumps replace the ordinary
+stochastic jump channel for that step (dissipation still runs).
 ```
 
 ## 1. Setup

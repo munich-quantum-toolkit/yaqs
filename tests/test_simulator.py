@@ -1731,3 +1731,85 @@ def test_simulator_run_qasm_path_and_string_observables_match(tmp_path: Path) ->
     path_result = Simulator(parallel=False, show_progress=False).run(state, qasm_path, sim_params)
     string_result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
     np.testing.assert_array_equal(path_result.expectation_values[0], string_result.expectation_values[0])
+
+
+def test_scheduled_jumps_rejected_for_mcwf_and_lindblad() -> None:
+    """Scheduled jumps are unsupported outside single-State analog MPS TJM."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.1,
+        num_traj=1,
+    )
+    for representation in ("vector", "density_matrix"):
+        state = State(2, representation=representation)
+        with pytest.raises(ValueError, match="scheduled_jumps"):
+            Simulator(show_progress=False).run(state, hamiltonian, sim_params, noise)
+
+
+def test_scheduled_jumps_rejected_for_ensemble() -> None:
+    """list[State] unitary ensemble rejects scheduled jumps."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.1,
+        num_traj=1,
+    )
+    states = [State(2), State(2)]
+    with pytest.raises(ValueError, match="scheduled_jumps"):
+        Simulator(show_progress=False).run(states, hamiltonian, sim_params, noise)
+
+
+def test_scheduled_jump_off_grid_rejected() -> None:
+    """Scheduled jump times must lie on sim_params.times."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.05, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.2,
+        num_traj=1,
+    )
+    with pytest.raises(ValueError, match="time grid"):
+        Simulator(show_progress=False).run(State(2), hamiltonian, sim_params, noise)
+
+
+def test_digital_rejects_nonadjacent_noise_matching_and_nonmatching() -> None:
+    """Digital TJM rejects non-adjacent factorized noise even if a gate shares endpoints."""
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 2)  # matching endpoints for sites [0, 2]
+    noise_match = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.01},
+    ])
+    noise_other = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.01},
+    ])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=8)
+    with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
+        Simulator(show_progress=False).run(State(3), circuit, sim_params, noise_match)
+
+    circuit2 = QuantumCircuit(3)
+    circuit2.cx(0, 1)  # non-matching endpoints
+    with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
+        Simulator(show_progress=False).run(State(3), circuit2, sim_params, noise_other)
+
+
+def test_analog_longrange_crosstalk_xy_mps_runs() -> None:
+    """Documented longrange_crosstalk_xy works on analog MPS TJM."""
+    hamiltonian = Hamiltonian.ising(3, J=1.0, g=0.5)
+    noise = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.05},
+    ])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.2,
+        num_traj=2,
+        random_seed=0,
+    )
+    result = Simulator(show_progress=False).run(State(3), hamiltonian, sim_params, noise)
+    assert result.expectation_values[0].shape[0] >= 1
