@@ -10,10 +10,11 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import KW_ONLY, dataclass
 from typing import TYPE_CHECKING
 
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 
 from ..time_utils import exact_time_grid
 from .hamiltonian import Hamiltonian
@@ -23,11 +24,7 @@ from .simulation_parameters import AnalogSimParams, DigitalSimParams
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from numpy.random import Generator
-
     from .mpo import MPO
-    from .mps import MPS
-    from .result import Result
     from .state import State
 
 __all__ = ["AnalogSegment", "DigitalSegment", "SimulationProgram"]
@@ -41,8 +38,9 @@ class AnalogSegment:
         hamiltonian: Hamiltonian evolved during this segment.
         sim_params: Analog simulation parameters for the segment. If omitted,
             program execution supplies its documented internal defaults.
-        noise_model: Optional segment noise model. Noisy program execution is
-            not currently supported.
+        noise_model: Optional segment noise model. ``None`` inherits the
+            program-wide model supplied to :meth:`~mqt.yaqs.Simulator.run`; an
+            explicit empty model disables noise for this segment.
 
     Raises:
         TypeError: If an argument does not have the corresponding analog type.
@@ -78,8 +76,9 @@ class DigitalSegment:
         circuit: Qiskit circuit executed during this segment.
         sim_params: Digital simulation parameters for the segment. If omitted,
             program execution supplies its documented internal defaults.
-        noise_model: Optional segment noise model. Noisy program execution is
-            not currently supported.
+        noise_model: Optional segment noise model. ``None`` inherits the
+            program-wide model supplied to :meth:`~mqt.yaqs.Simulator.run`; an
+            explicit empty model disables noise for this segment.
 
     Raises:
         TypeError: If an argument does not have the corresponding digital type.
@@ -194,6 +193,7 @@ class _CompiledAnalogInstruction:
     hamiltonian: MPO
     sim_params: AnalogSimParams
     execution_params: AnalogSimParams
+    noise_model: NoiseModel | None
     time_offset: float
 
 
@@ -205,6 +205,7 @@ class _CompiledDigitalInstruction:
     circuit: QuantumCircuit
     sim_params: DigitalSimParams
     execution_params: DigitalSimParams
+    noise_model: NoiseModel | None
     time_offset: float
 
 
@@ -218,41 +219,33 @@ class _CompiledProgram:
     instructions: tuple[_CompiledInstruction, ...]
     state_signature: _StateSignature
     get_state: bool
+    num_traj: int | None
+    random_seed: int | None
+    num_traj_conflict: bool
+    random_seed_conflict: bool
+    default_noise_model: NoiseModel | None
 
 
-@dataclass
-class _ProgramExecutionContext:
-    """Mutable state shared by instructions during one program execution.
-
-    The current state and signature are replaceable so a future validated
-    state-space transition does not require changing the instruction loop.
-    ``rng``, ``noise_model``, and ``artifacts`` reserve future noisy-execution
-    and transition seams without exposing them in the public program specification.
-    """
-
-    current_state: MPS
-    state_signature: _StateSignature
-    absolute_time: float = 0.0
-    segment_results: list[Result] = field(default_factory=list)
-    rng: Generator | None = None
-    noise_model: NoiseModel | None = None
-    artifacts: dict[str, object] = field(default_factory=dict)
-
-
-def _compile_program(program: SimulationProgram, initial_state: State) -> _CompiledProgram:
-    """Validate and compile a program for noiseless MPS execution.
+def _compile_program(
+    program: SimulationProgram,
+    initial_state: State,
+    default_noise_model: NoiseModel | None = None,
+) -> _CompiledProgram:
+    """Validate and compile a program for MPS execution.
 
     Args:
         program: Public ordered program specification.
         initial_state: State used to validate the program-wide state signature.
+        default_noise_model: Run-level model inherited by segments whose model
+            is ``None``.
 
     Returns:
         A private immutable sequence of executable instructions.
 
     Raises:
         TypeError: If a program contains an unknown segment type.
-        ValueError: If the state, dimensions, segment noise, lengths, or analog
-            time grids are not currently supported by program execution.
+        ValueError: If the state, dimensions, lengths, trajectory settings, or
+            analog time grids are not supported by program execution.
     """
     if initial_state.representation != "mps":
         msg = "SimulationProgram execution currently requires State.representation='mps'."
@@ -266,10 +259,25 @@ def _compile_program(program: SimulationProgram, initial_state: State) -> _Compi
     instructions: list[_CompiledInstruction] = []
     time_offset = 0.0
 
+    explicit_num_traj = {segment.sim_params.num_traj for segment in program.segments if segment.sim_params is not None}
+    num_traj_conflict = len(explicit_num_traj) > 1
+    if len(explicit_num_traj) == 1:
+        num_traj = explicit_num_traj.pop()
+    elif explicit_num_traj:
+        num_traj = None
+    else:
+        num_traj = AnalogSimParams().num_traj
+
+    explicit_seeds = {
+        segment.sim_params.random_seed
+        for segment in program.segments
+        if segment.sim_params is not None and segment.sim_params.random_seed is not None
+    }
+    random_seed_conflict = len(explicit_seeds) > 1
+    random_seed = explicit_seeds.pop() if len(explicit_seeds) == 1 else None
+
     for index, segment in enumerate(program.segments):
-        if segment.noise_model is not None:
-            msg = f"segments[{index}].noise_model must be None for noiseless program execution."
-            raise ValueError(msg)
+        resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model
 
         if isinstance(segment, AnalogSegment):
             if segment.hamiltonian.length != signature.length:
@@ -291,6 +299,11 @@ def _compile_program(program: SimulationProgram, initial_state: State) -> _Compi
             execution_params = copy.deepcopy(sim_params)
             execution_params.times = exact_time_grid(sim_params.elapsed_time, sim_params.dt)
             execution_params.get_state = True
+            if num_traj is not None:
+                execution_params.num_traj = num_traj
+            if not random_seed_conflict:
+                execution_params.random_seed = random_seed
+            execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
             segment.hamiltonian.ensure_mpo()
             instructions.append(
                 _CompiledAnalogInstruction(
@@ -298,6 +311,7 @@ def _compile_program(program: SimulationProgram, initial_state: State) -> _Compi
                     hamiltonian=segment.hamiltonian.mpo,
                     sim_params=sim_params,
                     execution_params=execution_params,
+                    noise_model=resolved_noise_model,
                     time_offset=time_offset,
                 )
             )
@@ -313,12 +327,26 @@ def _compile_program(program: SimulationProgram, initial_state: State) -> _Compi
             sim_params = segment.sim_params if segment.sim_params is not None else DigitalSimParams()
             execution_params = copy.deepcopy(sim_params)
             execution_params.get_state = True
+            if num_traj is not None:
+                execution_params.num_traj = num_traj
+            if not random_seed_conflict:
+                execution_params.random_seed = random_seed
+            execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+            if execution_params.sample_layers:
+                dag = circuit_to_dag(segment.circuit)
+                execution_params.num_mid_measurements = sum(
+                    1
+                    for node in dag.op_nodes()
+                    if node.op.name == "barrier"
+                    and str(getattr(node.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
+                )
             instructions.append(
                 _CompiledDigitalInstruction(
                     index=index,
                     circuit=segment.circuit,
                     sim_params=sim_params,
                     execution_params=execution_params,
+                    noise_model=resolved_noise_model,
                     time_offset=time_offset,
                 )
             )
@@ -326,4 +354,13 @@ def _compile_program(program: SimulationProgram, initial_state: State) -> _Compi
             msg = f"segments[{index}] must be AnalogSegment or DigitalSegment, got {type(segment).__name__}."
             raise TypeError(msg)
 
-    return _CompiledProgram(tuple(instructions), signature, program.get_state)
+    return _CompiledProgram(
+        tuple(instructions),
+        signature,
+        program.get_state,
+        num_traj,
+        random_seed,
+        num_traj_conflict,
+        random_seed_conflict,
+        default_noise_model,
+    )

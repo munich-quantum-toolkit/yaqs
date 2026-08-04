@@ -17,9 +17,9 @@ mystnb:
 Ramsey and Hahn-echo experiments alternate short control operations with
 continuous evolution. They are a natural use case for
 {class}`~mqt.yaqs.SimulationProgram`: digital segments prepare, refocus, and
-read out the spins, while analog segments describe their evolution between
-those operations. YAQS transfers one evolving state through the complete
-sequence, so users do not need to extract and resubmit intermediate states.
+read out the spins, while analog segments describe their evolution between those
+operations. YAQS transfers one evolving state through the complete sequence, so
+users do not need to extract and resubmit intermediate states.
 
 This example compares free induction under a static $Z$ detuning with a Hahn
 echo. The echo has an exact physical expectation: an ideal $X$ pulse reverses
@@ -50,9 +50,9 @@ analysis = QuantumCircuit(length)
 analysis.h(range(length))
 ```
 
-These operations remain ordinary Qiskit circuits inside `DigitalSegment`.
-Names such as “preparation” and “echo pulse” belong to this experiment; YAQS's
-core interface only needs to distinguish digital and analog simulation.
+These operations remain ordinary Qiskit circuits inside `DigitalSegment`. Names
+such as “preparation” and “echo pulse” belong to this experiment; YAQS's core
+interface only needs to distinguish digital and analog simulation.
 
 ## 2. Configure analog evolution and observations
 
@@ -93,9 +93,9 @@ def detuning_hamiltonian(*, coupling: float = 0.0) -> Hamiltonian:
 
 ## 3. Compose free-induction and echo programs
 
-Both programs use the same preparation, analog Hamiltonian, evolution time,
-and readout. Their only physical difference is whether the echo and frame
-correction pulses are present.
+Both programs use the same preparation, analog Hamiltonian, evolution time, and
+readout. Their only physical difference is whether the echo and frame correction
+pulses are present.
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSegment, DigitalSegment, SimulationProgram
@@ -124,17 +124,15 @@ def coherence_program(*, include_echo: bool, coupling: float = 0.0) -> Simulatio
 The final correction deliberately reuses the same digital operation as the
 central pulse. For $U_\delta(\tau)=\exp(-i\tau\delta Z)$,
 
-$$
-X U_\delta(\tau) X U_\delta(\tau) = I,
-$$
+$$ X U_\delta(\tau) X U_\delta(\tau) = I, $$
 
 because $XZX=-Z$. The cancellation holds for every static detuning $\delta$.
 
 ## 4. Run the experiment
 
 We run the refocused program, its no-pulse control, and an interacting control.
-The $ZZ$ interaction in the final program is not reversed by a global $X$
-pulse, because $(X\otimes X)(Z\otimes Z)(X\otimes X)=Z\otimes Z$.
+The $ZZ$ interaction in the final program is not reversed by a global $X$ pulse,
+because $(X\otimes X)(Z\otimes Z)(X\otimes X)=Z\otimes Z$.
 
 ```{code-cell} ipython3
 import numpy as np
@@ -164,8 +162,8 @@ individual segment requests `get_state`. The program-level flag retains the
 final state as `result.output_state`; setting it to `False` would hide that
 state without interrupting handoff.
 
-The complete noninteracting echo returns the initial state and produces unit
-$Z$ readout after the analysis gates:
+The complete noninteracting echo returns the initial state and produces unit $Z$
+readout after the analysis gates:
 
 ```{code-cell} ipython3
 echo_final_vector = echo_result.output_state.mps.to_vec()
@@ -182,8 +180,8 @@ np.testing.assert_allclose(echo_readout, 1.0, atol=1e-10)
 
 Results remain in program order at `result.segment_results[i]`. Each analog
 result has a local time axis beginning at zero and a `time_offset` locating it
-within the full sequence. Digital operations are instantaneous in this model
-and therefore advance no physical time.
+within the full sequence. Digital operations are instantaneous in this model and
+therefore advance no physical time.
 
 ```{code-cell} ipython3
 def transverse_magnetization_trace(program_result):
@@ -206,8 +204,8 @@ def transverse_magnetization_trace(program_result):
 ```
 
 The first sample of the second analog segment duplicates the preceding physical
-time. The helper removes that duplicate when constructing a display trace;
-the segment-scoped results remain the authoritative, lossless output.
+time. The helper removes that duplicate when constructing a display trace; the
+segment-scoped results remain the authoritative, lossless output.
 
 ```{code-cell} ipython3
 ---
@@ -238,34 +236,32 @@ Only the noninteracting echo returns to unit transverse magnetization. The
 no-pulse trace continues its detuning-induced rotation, while the interacting
 trace shows dynamics that the global pulse cannot refocus.
 
-## 6. From static detuning to correlated noise
+## 6. Adding an existing Markovian noise model
 
-This noiseless example is also the template for a noisy Hahn-echo experiment.
-A quasi-static noise model should sample one detuning per trajectory and retain
-that same realization across both analog segments. The echo then cancels every
-trajectory before ensemble averaging, so increasing the trajectory count makes
-the estimated operation converge to identity.
+`Simulator.run` also accepts an existing `NoiseModel` for a complete program.
+Each stochastic trajectory carries one state and one random-number stream across
+every analog and digital segment before results are averaged. Segment-level
+models override the run-level default; an explicit empty `NoiseModel()` disables
+noise for that segment.
 
-That behavior is different from ordinary Markovian dephasing. An ideal echo can
-refocus coherent or sufficiently slow correlated $Z$ fluctuations, but it
-cannot reverse an irreversible Markovian decay envelope. Sampling error also
-does not change the underlying refocusing; more trajectories only improve the
-estimate.
+The existing `pauli_z` process represents Markovian Lindblad dephasing. An ideal
+echo still refocuses the coherent static detuning used above, but it cannot
+reverse this irreversible decay envelope. Signed quasi-static Hamiltonian
+detuning is not an existing `NoiseModel` process and should not be encoded as a
+non-negative Lindblad rate.
 
-Noisy whole-program trajectories are not yet supported by this interface. When
-they are added, noise history and random-number state must remain continuous
-across segment boundaries. Resampling the detuning independently for the two
-halves would describe a different physical process and would destroy the exact
-cancellation.
+Noisy MPS programs return ensemble observables and diagnostics rather than an
+arbitrary single trajectory state. Accordingly, program or segment `get_state`
+requests are rejected when stochastic processes are active.
 
 ## Current boundaries
 
-Composable programs currently execute noiseless, static-Hamiltonian segments
-on qubit MPS states. Noise across a complete trajectory, heterogeneous local
-dimensions, compact long schedules, and parameter-scheduled Hamiltonians are
-not yet supported. The segment specification and private compiled execution
-path allow those capabilities to be added without changing the ordered user
-workflow shown above.
+Composable programs currently execute static-Hamiltonian segments on qubit MPS
+states, with optional existing Markovian noise spanning the complete trajectory.
+Heterogeneous local dimensions, compact long schedules, and parameter-scheduled
+Hamiltonians are not yet supported. The segment specification and private
+compiled execution path allow those capabilities to be added without changing
+the ordered user workflow shown above.
 
 ## Related topics
 

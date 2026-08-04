@@ -461,6 +461,7 @@ def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
     *,
     copy_initial_state: bool = True,
+    rng: np.random.Generator | None = None,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
@@ -479,6 +480,8 @@ def digital_tjm(
             - Digital simulation parameters
             - Quantum circuit
         copy_initial_state: Whether to deep-copy the input MPS before execution.
+        rng: Optional externally managed trajectory RNG. When omitted, the
+            standalone trajectory seed behavior is preserved.
 
     Returns:
         ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
@@ -510,7 +513,8 @@ def digital_tjm(
         else:
             results = np.zeros((n_obs, 1))
 
-    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    if rng is None:
+        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     col_idx = 0
     while dag.op_nodes():
@@ -546,7 +550,8 @@ def digital_tjm(
     final = state if sim_params.get_state else None
 
     if shots_only:
-        per_call = 1 if noisy else _per_call_shots(sim_params, traj_idx)
+        has_explicit_shot_plan = "per_call_shots" in WORKER_CTX or "shot_distribution" in WORKER_CTX
+        per_call = _per_call_shots(sim_params, traj_idx) if has_explicit_shot_plan or not noisy else 1
         counts = state.measure_shots(per_call) if per_call > 0 else {}
         return None, None, counts, final
 

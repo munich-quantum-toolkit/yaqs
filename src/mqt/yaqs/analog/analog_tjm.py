@@ -160,6 +160,7 @@ def analog_tjm_2(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
     *,
     copy_initial_state: bool = True,
+    rng: np.random.Generator | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a two-site evolution scheme.
 
@@ -175,6 +176,8 @@ def analog_tjm_2(
             - AnalogSimParams: Simulation parameters (including time step, SVD threshold, etc.).
             - MPO: The Hamiltonian operator represented as an MPO.
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
+        rng: Optional externally managed trajectory RNG. When omitted, the
+            standalone trajectory seed behavior is preserved.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -182,7 +185,8 @@ def analog_tjm_2(
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
-    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    if rng is None:
+        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
@@ -222,6 +226,7 @@ def analog_tjm_1(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
     *,
     copy_initial_state: bool = True,
+    rng: np.random.Generator | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a one-site evolution scheme.
 
@@ -236,6 +241,8 @@ def analog_tjm_1(
             - AnalogSimParams: Simulation parameters including the time step and measurement settings.
             - MPO: The Hamiltonian operator represented as an MPO.
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
+        rng: Optional externally managed trajectory RNG. When omitted, the
+            standalone trajectory seed behavior is preserved.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -243,7 +250,8 @@ def analog_tjm_1(
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
-    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    if rng is None:
+        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
