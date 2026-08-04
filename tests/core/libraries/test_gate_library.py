@@ -47,6 +47,30 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+def _mpo_train_to_matrix(mpo_tensors: list[NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Contract a list of MPO tensors with leg order (phys_out, phys_in, bond_left, bond_right) to a dense matrix.
+
+    Returns:
+        The dense matrix represented by the MPO tensors.
+    """
+    accumulated = mpo_tensors[0]
+    for tensor in mpo_tensors[1:]:
+        accumulated = np.einsum("abcd,efdg->aebfcg", accumulated, tensor)
+        shape = accumulated.shape
+        accumulated = accumulated.reshape(shape[0] * shape[1], shape[2] * shape[3], shape[4], shape[5])
+    assert accumulated.shape[2] == 1
+    assert accumulated.shape[3] == 1
+    return accumulated[:, :, 0, 0]
+
+
+def _haar_unitary(dim: int, rng: np.random.Generator) -> NDArray[np.complex128]:
+    """Return a Haar-random unitary of the given dimension."""
+    z = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    q, r = np.linalg.qr(z)
+    phases = np.diagonal(r) / np.abs(np.diagonal(r))
+    return np.asarray(q * phases, dtype=np.complex128)
+
+
 def test_split_tensor_valid_shape() -> None:
     """Test that split_tensor correctly splits a tensor of shape (2,2,2,2) into two tensors.
 
@@ -121,21 +145,95 @@ def test_extend_gate_with_identity() -> None:
 def test_extend_gate_reverse_order() -> None:
     """Test that extend_gate correctly handles reverse ordering of sites.
 
-    This test applies extend_gate with sites provided in reverse order, reverses the resulting MPO tensors,
-    and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
+    This test applies extend_gate to a non-symmetric gate with sites provided in reverse order and
+    verifies that the contracted MPO equals the gate with its site axes exchanged, i.e. the gate
+    acting with its first declared site on the higher chain site.
     """
-    tensor = np.eye(4, dtype=np.complex128).reshape(2, 2, 2, 2)
-    mpo_forward_tensors = extend_gate(tensor, [0, 1])
-    mpo_reverse_tensors = extend_gate(tensor, [1, 0])
+    cx_tensor = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=np.complex128).reshape(
+        2, 2, 2, 2
+    )
+    mpo_forward_tensors = extend_gate(cx_tensor, [0, 1])
+    mpo_reverse_tensors = extend_gate(cx_tensor, [1, 0])
 
-    mpo_forward = MPO()
-    mpo_reverse = MPO()
-    mpo_forward.custom(mpo_forward_tensors, transpose=False)
-    mpo_reverse.custom(mpo_reverse_tensors, transpose=False)
+    expected_forward = cx_tensor.reshape(4, 4)
+    expected_reverse = np.transpose(cx_tensor, (1, 0, 3, 2)).reshape(4, 4)
+    assert_allclose(_mpo_train_to_matrix(mpo_forward_tensors), expected_forward, atol=1e-12)
+    assert_allclose(_mpo_train_to_matrix(mpo_reverse_tensors), expected_reverse, atol=1e-12)
 
-    mpo_reverse.tensors.reverse()
-    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):
-        assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
+
+def test_split_tensor_three_site() -> None:
+    """Test that split_tensor splits a three-qubit gate tensor into three site tensors.
+
+    The Toffoli tensor is split into three tensors with internal bond dimensions (2, 2), and
+    contracting the tensors back yields the original matrix.
+    """
+    toffoli = np.eye(8, dtype=np.complex128)
+    toffoli[6:8, 6:8] = np.array([[0, 1], [1, 0]])
+    tensors = split_tensor(toffoli.reshape((2,) * 6))
+
+    assert isinstance(tensors, list)
+    assert len(tensors) == 3
+    assert tensors[0].shape == (2, 2, 1, 2)
+    assert tensors[1].shape == (2, 2, 2, 2)
+    assert tensors[2].shape == (2, 2, 2, 1)
+    assert_allclose(_mpo_train_to_matrix(tensors), toffoli, atol=1e-12)
+
+
+def test_split_tensor_three_site_round_trip() -> None:
+    """Test that a Haar-random three-qubit gate tensor is reproduced by contracting its split."""
+    unitary = _haar_unitary(8, np.random.default_rng(42))
+    tensors = split_tensor(unitary.reshape((2,) * 6))
+    assert len(tensors) == 3
+    assert_allclose(_mpo_train_to_matrix(tensors), unitary, atol=1e-12)
+
+
+def test_extend_gate_three_site_with_identity() -> None:
+    """Test extend_gate for a three-qubit gate with gaps between the sites.
+
+    A three-qubit gate on sites (0, 2, 4) yields five MPO tensors with bond-diagonal identity
+    tensors at the two interior positions.
+    """
+    unitary = _haar_unitary(8, np.random.default_rng(7))
+    mpo_tensors = extend_gate(unitary.reshape((2,) * 6), [0, 2, 4])
+    assert len(mpo_tensors) == 5
+
+    for position in (1, 3):
+        identity_tensor = mpo_tensors[position]
+        prev_bond = mpo_tensors[position - 1].shape[3]
+        assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
+        for i in range(prev_bond):
+            assert_array_equal(identity_tensor[:, :, i, i], np.eye(2))
+
+
+def test_extend_gate_site_permutation() -> None:
+    """Test extend_gate for a three-qubit gate with sites given in permuted order.
+
+    The contracted MPO must equal the gate with its axes permuted to ascending site order.
+    """
+    unitary = _haar_unitary(8, np.random.default_rng(11))
+    tensor = unitary.reshape((2,) * 6)
+    sites = [2, 0, 1]
+
+    mpo_tensors = extend_gate(tensor, sites)
+    assert len(mpo_tensors) == 3
+
+    order = list(np.argsort(sites))
+    expected = np.transpose(tensor, [*order, *[3 + idx for idx in order]]).reshape(8, 8)
+    assert_allclose(_mpo_train_to_matrix(mpo_tensors), expected, atol=1e-12)
+
+
+def test_set_sites_three_qubit() -> None:
+    """Test that BaseGate.set_sites builds the tensor and MPO tensors for a three-qubit gate."""
+    gate = BaseGate(_haar_unitary(8, np.random.default_rng(3)))
+    assert gate.interaction == 3
+
+    gate.set_sites(1, 2, 3)
+    assert gate.sites == [1, 2, 3]
+    assert gate.tensor.shape == (2,) * 6
+    assert len(gate.mpo_tensors) == 3
+
+    with pytest.raises(ValueError, match="Number of sites 2 must be equal to the interaction level 3"):
+        gate.set_sites(0, 1)
 
 
 def test_gate_x() -> None:

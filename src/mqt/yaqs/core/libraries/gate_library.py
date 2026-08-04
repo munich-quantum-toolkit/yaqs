@@ -27,40 +27,40 @@ if TYPE_CHECKING:
 
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
-    """Splits a two-qubit tensor into two tensors using Singular Value Decomposition (SVD).
+    """Splits a multi-qubit gate tensor into one tensor per site using Singular Value Decomposition (SVD).
 
     Args:
-        tensor: A 4-dimensional tensor with shape (2, 2, 2, 2).
+        tensor: A gate tensor of shape ``(2,) * (2 * n)`` for ``n >= 2`` sites, with index
+            order ``(out_1, ..., out_n, in_1, ..., in_n)``.
 
     Returns:
-        list[NDArray[np.complex128]]: A list containing two tensors resulting from the split.
-            - The first tensor has shape (2, 2, bond_dimension, 1).
-            - The second tensor has shape (2, 2, bond_dimension, 1).
+        list[NDArray[np.complex128]]: A list containing one tensor per site resulting from the split.
+            Each tensor has shape (2, 2, bond_left, bond_right); the outer bonds are 1.
     """
-    assert tensor.shape == (2, 2, 2, 2)
+    num_sites = tensor.ndim // 2
+    assert num_sites >= 2
+    assert tensor.shape == (2,) * (2 * num_sites)
 
-    # Splits two-qubit matrix
-    matrix = np.transpose(tensor, (0, 2, 1, 3))
-    dims = matrix.shape
-    matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
-    u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
-    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
-    s_list = s_list[:keep]
-    u_mat = u_mat[:, :keep]
-    v_mat = v_mat[:keep, :]
+    # Group the output and input leg of each site: (out_1, in_1, ..., out_n, in_n)
+    matrix = np.transpose(tensor, [axis for site in range(num_sites) for axis in (site, num_sites + site)])
 
-    tensor1 = u_mat
-    tensor2 = np.diag(s_list) @ v_mat
+    # Split site by site with SVDs, carrying the singular values to the right
+    tensors = []
+    left_bond = 1
+    remaining = np.reshape(matrix, (left_bond * 4, 4 ** (num_sites - 1)))
+    for _ in range(num_sites - 1):
+        u_mat, s_list, v_mat = linalg.svd(remaining, full_matrices=False)
+        keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+        s_list = s_list[:keep]
+        u_mat = u_mat[:, :keep]
+        v_mat = v_mat[:keep, :]
+        tensors.append(np.transpose(np.reshape(u_mat, (left_bond, 2, 2, keep)), (1, 2, 0, 3)))
+        left_bond = keep
+        remaining = np.reshape(np.diag(s_list) @ v_mat, (left_bond * 4, remaining.shape[1] // 4))
 
-    # Reshape into physical dimensions and bond dimension
-    tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
-    tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
-    tensor2 = np.transpose(tensor2, (1, 2, 0))
-
-    # Add dummy dimension to boundaries
-    tensor1 = np.expand_dims(tensor1, axis=2)
-    tensor2 = np.expand_dims(tensor2, axis=3)
-    return [tensor1, tensor2]
+    last_tensor = np.transpose(np.reshape(remaining, (left_bond, 2, 2)), (1, 2, 0))
+    tensors.append(np.expand_dims(last_tensor, axis=3))
+    return tensors
 
 
 def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArray[np.complex128]]:
@@ -77,44 +77,29 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
         MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
 
     Notes:
-        - The function handles cases where the input tensor is split into either 2 or 3 tensors.
-        - Identity tensors are inserted between the specified sites.
-        - If the sites are provided in reverse order, the resulting MPO tensors are reversed and
-          transposed accordingly.
+        - The gate axes are permuted to ascending site order before the split, so the sites may
+          be given in any order; the returned tensors are ordered by ascending site index.
+        - Identity tensors are inserted between non-adjacent sites.
     """
+    num_sites = len(sites)
+    order = sorted(range(num_sites), key=lambda idx: sites[idx])
+    if order != list(range(num_sites)):
+        # Permute the gate axes from the declared site order to ascending site order.
+        tensor = np.transpose(tensor, [*order, *[num_sites + idx for idx in order]])
+    sorted_sites = sorted(sites)
+
     tensors = split_tensor(tensor)
-    if len(tensors) == 2:
-        # Adds identity tensors between sites
-        mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0] - sites[1]) - 1):
+
+    # Adds identity tensors between sites
+    mpo_tensors = [tensors[0]]
+    for idx in range(1, num_sites):
+        for _ in range(sorted_sites[idx] - sorted_sites[idx - 1] - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
             identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
             for i in range(previous_right_bond):
                 identity_tensor[:, :, i, i] = np.identity(2)
             mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[1])
-
-        if sites[1] < sites[0]:
-            mpo_tensors.reverse()
-            for idx in range(len(mpo_tensors)):
-                mpo_tensors[idx] = np.transpose(mpo_tensors[idx], (0, 1, 3, 2))
-
-    elif len(tensors) == 3:
-        mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0] - sites[1]) - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
-            mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[1])
-        for _ in range(np.abs(sites[1] - sites[2]) - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
-            mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[2])
+        mpo_tensors.append(tensors[idx])
 
     return mpo_tensors
 
@@ -192,8 +177,8 @@ class BaseGate:
 
         # store as the proper type
         self.sites = sites_list
-        if self.interaction == 2:
-            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        if self.interaction >= 2:
+            self.tensor = np.reshape(self.matrix, (2,) * (2 * self.interaction))
             self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
     def __add__(self, other: BaseGate) -> BaseGate:
