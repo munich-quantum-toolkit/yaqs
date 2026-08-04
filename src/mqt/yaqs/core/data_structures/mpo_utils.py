@@ -168,7 +168,8 @@ def get_support_mpo(
     """MPO tensors for the gate support ``[first_site, last_site]`` in library order.
 
     Args:
-        gate: Two-qubit gate with optional cached ``mpo_tensors``.
+        gate: Gate with optional cached ``mpo_tensors``; the ``extend_gate`` fallback applies to
+            two-qubit gates.
         first_site: First site of the support interval (inclusive).
         last_site: Last site of the support interval (inclusive).
 

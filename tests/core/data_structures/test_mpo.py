@@ -1046,6 +1046,62 @@ def test_multiply_mps_length_mismatch_raises() -> None:
         gate_mpo.multiply(state, compress=False)
 
 
+def _embed_gate_matrix(gate_matrix: np.ndarray, gate_sites: list[int], chain_length: int) -> np.ndarray:
+    """Embed a gate matrix in declared-site order into a dense chain operator.
+
+    Args:
+        gate_matrix: Gate matrix whose qubit axes follow ``gate_sites`` order (site-0-MSB layout).
+        gate_sites: Chain sites the gate acts on, in the gate's declared order.
+        chain_length: Total number of chain sites.
+
+    Returns:
+        Dense operator on the full chain with site 0 as the most significant bit.
+    """
+    num_gate_sites = len(gate_sites)
+    order = sorted(range(num_gate_sites), key=lambda idx: gate_sites[idx])
+    tensor = gate_matrix.reshape((2,) * (2 * num_gate_sites))
+    tensor = np.transpose(tensor, [*order, *[num_gate_sites + idx for idx in order]])
+    matrix = tensor.reshape(2**num_gate_sites, 2**num_gate_sites)
+    ascending_sites = sorted(gate_sites)
+
+    dim = 2**chain_length
+    embedded = np.zeros((dim, dim), dtype=complex)
+    for row in range(dim):
+        row_bits = [(row >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+        for col in range(dim):
+            col_bits = [(col >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+            if any(row_bits[k] != col_bits[k] for k in range(chain_length) if k not in ascending_sites):
+                continue
+            gate_row = 0
+            gate_col = 0
+            for k in ascending_sites:
+                gate_row = (gate_row << 1) | row_bits[k]
+                gate_col = (gate_col << 1) | col_bits[k]
+            embedded[row, col] = matrix[gate_row, gate_col]
+    return embedded
+
+
+def test_from_gate_three_qubit_matches_dense() -> None:
+    """``from_gate`` embeds a three-qubit gate with identity padding inside and outside the support."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 2, 3)
+    gate_mpo = MPO.from_gate(gate, 5)
+    assert gate_mpo.length == 5
+
+    expected = _embed_gate_matrix(gate.matrix, [0, 2, 3], 5)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_from_gate_three_qubit_permuted_sites() -> None:
+    """``from_gate`` handles a three-qubit gate whose sites are given in permuted order."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(3, 0, 2)
+    gate_mpo = MPO.from_gate(gate, 4)
+
+    expected = _embed_gate_matrix(gate.matrix, [3, 0, 2], 4)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), expected, atol=1e-12)
+
+
 def test_multiply_invalid_target_type_raises() -> None:
     """``multiply`` rejects non-MPS/MPO targets."""
     mpo = MPO.identity(2)

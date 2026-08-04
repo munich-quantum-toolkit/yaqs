@@ -242,19 +242,27 @@ def test_process_layer_rejects_mid_circuit_measure() -> None:
         process_layer(dag)
 
 
-def test_process_layer_unsupported_gate() -> None:
-    """Test that process_layer raises an exception when encountering an unsupported gate.
+def test_process_layer_multi_qubit_gates() -> None:
+    """Test that process_layer groups gates on three or more qubits by their lowest qubit index.
 
-    This test creates a 3-qubit circuit with a CCX gate, which is not supported by process_layer.
-    It verifies that an exception is raised.
+    This test creates a circuit with two CCX gates acting on disjoint qubits in the same layer
+    and verifies that they are grouped into the even and odd lists by the parity of their lowest
+    qubit index, ordered by that index.
     """
-    qc = QuantumCircuit(3)
+    qc = QuantumCircuit(8)
+    qc.ccx(3, 5, 7)
     qc.ccx(0, 1, 2)
 
     dag = circuit_to_dag(qc)
+    single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
-    with pytest.raises(NotImplementedError):
-        process_layer(dag)
+    assert single_qubit_nodes == []
+    assert measure_barriers == []
+    assert len(even_nodes) == 1
+    assert len(odd_nodes) == 1
+    assert even_nodes[0].op.name == "ccx"
+    assert {dag.find_bit(qubit).index for qubit in even_nodes[0].qargs} == {0, 1, 2}
+    assert {dag.find_bit(qubit).index for qubit in odd_nodes[0].qargs} == {3, 5, 7}
 
 
 # --- apply_single_qubit_gate ---
@@ -305,6 +313,27 @@ def test_construct_generator_mpo() -> None:
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
     for i in range(length):
         if i not in {1, 3}:
+            np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
+
+
+def test_construct_generator_mpo_three_qubit() -> None:
+    """Test the construction of a generator MPO from a three-qubit gate with permuted sites.
+
+    This test retrieves a CCX gate from the GateLibrary, sets its sites in permuted order, and
+    verifies that each generator factor is placed on its declared site and that all other tensors
+    are the identity.
+    """
+    gate = GateLibrary.ccx()
+    gate.set_sites(4, 1, 3)
+    length = 6
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    assert first_site == 1
+    assert last_site == 4
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[4], (2, 3, 0, 1))), np.complex128(gate.generator[0]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[1], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[2]))
+    for i in range(length):
+        if i not in {1, 3, 4}:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
 

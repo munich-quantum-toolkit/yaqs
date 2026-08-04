@@ -1029,7 +1029,7 @@ class MPO:
 
     @classmethod
     def from_gate(cls, gate: BaseGate, chain_length: int) -> MPO:
-        """Build an MPO for a two-qubit gate on a chain.
+        """Build an MPO for a gate on two or more qubits on a chain.
 
         When ``chain_length`` equals the gate support size, the MPO contains only the
         extended gate tensors. When ``chain_length`` is larger, identity MPO sites are
@@ -1039,24 +1039,25 @@ class MPO:
         already populated for the gate support.
 
         Args:
-            gate: Two-qubit gate with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
+            gate: Gate on two or more qubits with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
             chain_length: Total number of MPO sites (support length or full MPS length).
 
         Returns:
             MPO ready for :meth:`multiply` on an MPS or another MPO.
 
         Raises:
-            ValueError: If the gate is not two-qubit or ``chain_length`` is too small.
+            ValueError: If the gate acts on fewer than two qubits, the number of sites does not
+                match the interaction level, or ``chain_length`` is too small.
         """
-        if gate.interaction != 2:
-            msg = f"from_gate requires a two-qubit gate, got interaction {gate.interaction}."
+        if gate.interaction < 2:
+            msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
             raise ValueError(msg)
-        if len(gate.sites) != 2:
-            msg = f"from_gate requires exactly two sites, got {len(gate.sites)}."
+        if len(gate.sites) != gate.interaction:
+            msg = f"from_gate requires {gate.interaction} sites, got {len(gate.sites)}."
             raise ValueError(msg)
 
-        first_site = min(gate.sites[0], gate.sites[1])
-        last_site = max(gate.sites[0], gate.sites[1])
+        first_site = min(gate.sites)
+        last_site = max(gate.sites)
         support_len = last_site - first_site + 1
         if chain_length < support_len:
             msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
