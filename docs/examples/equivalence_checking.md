@@ -63,8 +63,10 @@ for some global phase $\phi$, within `fidelity`. On the **matrix** path, only
 measurements raise an error. Barriers are ignored on the matrix path. The
 **MPO** backend walks circuit DAGs directly (measurements and barriers are
 skipped during zone extraction); mid-circuit measurements are not supported for
-unitary equivalence on either backend. See
-{cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
+unitary equivalence on either backend. Gates on more than two qubits (for
+example `ccx`) are supported on the matrix backend only; the MPO backend rejects
+them with a `ValueError`. See {cite:p}`sander2025_EquivalenceChecking` for the
+underlying MPO method.
 
 `check` returns a dictionary:
 

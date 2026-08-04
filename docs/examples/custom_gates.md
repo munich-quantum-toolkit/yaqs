@@ -14,8 +14,8 @@ each DAG operation into an internal gate, then applies that gate during
 **circuit simulation** or **equivalence checking**.
 
 This page explains that pipeline, how built-in and custom gates are translated,
-and how to supply an analytic **generator** when you want long-range two-qubit
-gates to use the TDVP window path.
+and how to supply an analytic **generator** when you want long-range and
+multi-qubit gates to use the TDVP window path.
 
 ## How YAQS handles gates end-to-end
 
@@ -40,10 +40,10 @@ Each {class}`~mqt.yaqs.core.libraries.gate_library.BaseGate` carries:
 | Field         | Role                                                                                                                                                                    |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `matrix`      | Dense unitary as a `2^n × 2^n` complex matrix (`n` = number of qubits the gate acts on).                                                                                |
-| `tensor`      | Tensor layout used in MPS/MPO contractions (for two-qubit gates: shape `(2, 2, 2, 2)` after `set_sites`).                                                               |
+| `tensor`      | Tensor layout used in MPS/MPO contractions (shape `(2,) * (2 * interaction)` after `set_sites` for gates on two or more qubits).                                        |
 | `interaction` | Number of qubits (`1`, `2`, …); inferred from `matrix` size (`dim = 2**interaction`).                                                                                   |
 | `sites`       | MPS site indices the gate acts on, set via `set_sites(...)`.                                                                                                            |
-| `generator`   | Optional. For **two-qubit** built-ins that support TDVP: a list of two `2×2` local operators used to build a generator MPO. Not set by plain `GateLibrary.custom(...)`. |
+| `generator`   | Optional. For built-ins that support TDVP: a list with one `2×2` local operator per qubit used to build a generator MPO. Not set by plain `GateLibrary.custom(...)`.    |
 | `name`        | Qiskit operation name or `"custom"`.                                                                                                                                    |
 
 Built-in gates (`cx`, `h`, `rxx`, …) are classes on
@@ -68,14 +68,15 @@ For each operation node:
 3. **Known Qiskit names** (for example `h`, `cx`, `u3`, `u1`, `swap`, `rxx`) map
    to hardcoded {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`
    classes via `getattr(GateLibrary, name)`.
-4. **Any other one- or two-qubit unitary** falls back to the **matrix path**:
-   Qiskit's `to_matrix()` / {class}`qiskit.quantum_info.Operator` data is
-   wrapped as `GateLibrary.custom(matrix)` with the Qiskit `op.name` preserved.
+4. **Any other unitary** falls back to the **matrix path**: Qiskit's
+   `to_matrix()` / {class}`qiskit.quantum_info.Operator` data is wrapped as
+   `GateLibrary.custom(matrix)` with the Qiskit `op.name` preserved.
 
 ```{note}
-**Three-qubit and larger gates** (including Toffoli / CCX) are not supported by
-the Qiskit translation layer. Only one- and two-qubit unitaries are accepted on
-the matrix fallback path.
+**Three-qubit and larger gates** translate natively: `ccx` (Toffoli), `ccz`, and
+`cswap` are hardcoded {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`
+classes, and any other multi-qubit unitary is accepted on the matrix fallback
+path. See {doc}`multi_qubit_gates` for a runnable example.
 ```
 
 Symbolic parameters must be bound before translation; unbound
@@ -97,6 +98,9 @@ Symbolic parameters must be bound before translation; unbound
     only when the gate has a `generator`; otherwise the MPO path is used.
   - **`full-tdvp`** — 2TDVP on every two-qubit gate that has a `generator`;
     generator-less gates fall back to TEBD (NN) or MPO (long-range).
+- **Gates on three or more qubits** — in the TDVP modes, gates with a
+  `generator` (`ccx`, `ccz`) use the generator MPO and TDVP window; all other
+  cases, including `gate_mode="swaps"`, use the extended gate MPO.
 
 **Measurements** are handled differently from unitary conversion:
 
@@ -113,9 +117,10 @@ Plain `barrier` instructions are dropped in simulation except barriers labelled
 {class}`~mqt.yaqs.EquivalenceChecker` compares two circuits by forming
 $W = U_2^\dagger U_1$ and testing whether $W$ is identity-like up to global
 phase. Custom and QASM-defined gates use the same translation path as
-simulation; unknown one- and two-qubit unitaries work via matrix fallback. See
+simulation; unknown unitaries work via matrix fallback. Gates on more than two
+qubits require `representation="matrix"`; the MPO backend rejects them. See
 {doc}`equivalence_checking` for backend choice (`representation="mpo"`
-recommended).
+recommended for one- and two-qubit circuits at scale).
 
 ---
 
@@ -151,10 +156,9 @@ retain the **user-defined gate names**.
 YAQS does not maintain a separate registry of QASM gate definitions. Each DAG
 node is translated by name: if the name matches a
 {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary` entry, the hardcoded
-class is used; otherwise, for one- and two-qubit gates, YAQS builds a
-matrix-backed gate from Qiskit's unitary representation (matrix fallback). You
-do not need to inline or transpile custom gates to a fixed basis set before
-simulation or equivalence checking.
+class is used; otherwise YAQS builds a matrix-backed gate from Qiskit's unitary
+representation (matrix fallback). You do not need to inline or transpile custom
+gates to a fixed basis set before simulation or equivalence checking.
 
 ```python
 from mqt.yaqs import EquivalenceChecker, Simulator, State, DigitalSimParams
@@ -180,9 +184,8 @@ Simulator(show_progress=False).run(state, qasm, DigitalSimParams(shots=128, max_
 ```
 
 The same rules apply to **legacy or backend-specific Qiskit gate names** that
-are not in the hardcoded alias list: if Qiskit can supply a unitary matrix and
-the gate acts on at most two qubits, translation succeeds via matrix fallback.
-Names that already have
+are not in the hardcoded alias list: if Qiskit can supply a unitary matrix,
+translation succeeds via matrix fallback. Names that already have
 {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary` aliases (including
 common single-qubit parameterizations) continue to use the built-in
 implementations.
@@ -196,6 +199,7 @@ or `"full-tdvp"`:
 | -------------------------------- | --------------------------------------------- |
 | Nearest-neighbor (\|i − j\| = 1) | TEBD/SVD                                      |
 | Long-range (\|i − j\| > 1)       | Extended gate MPO (same as `gate_mode="mpo"`) |
+| Three or more qubits             | Extended gate MPO (same as `gate_mode="mpo"`) |
 
 This is intentional: 2TDVP requires a split local generator; a bare unitary
 matrix does not provide one. Use `gate_mode="mpo"` if you want consistent
@@ -231,22 +235,23 @@ for built-in gates.
 
 Built-in gates subclass {class}`~mqt.yaqs.core.libraries.gate_library.BaseGate`
 and often override `set_sites` to set `tensor`, optional `mpo_tensors`, and—for
-TDVP-capable two-qubit gates—`generator`. See
-{class}`~mqt.yaqs.core.libraries.gate_library.CX` in
-{mod}`~mqt.yaqs.core.libraries.gate_library` for a reference implementation.
+TDVP-capable gates—`generator`. See
+{class}`~mqt.yaqs.core.libraries.gate_library.CX` and
+{class}`~mqt.yaqs.core.libraries.gate_library.CCX` in
+{mod}`~mqt.yaqs.core.libraries.gate_library` for reference implementations.
 
 ---
 
 ## Generators and the TDVP path
 
-Some two-qubit {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary` gates
-(`cx`, `cz`, `cp`, `rxx`, `ryy`, `rzz`, …) define a **`generator`**: a list of
-two `2×2` complex matrices `[G_a, G_b]`, one per qubit, ordered by
-**increasing site index** after `set_sites`.
+Some {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary` gates (`cx`,
+`cz`, `cp`, `rxx`, `ryy`, `rzz`, `ccx`, `ccz`, …) define a **`generator`**: a
+list with one `2×2` complex matrix per qubit, ordered as the gate's declared
+`sites`.
 
-{func}`~mqt.yaqs.digital.digital_tjm.construct_generator_mpo` embeds these local
-operators on the gate support and places identity `2×2` blocks elsewhere,
-producing an MPO that represents the sum generator on the full chain.
+{func}`~mqt.yaqs.digital.digital_tjm.construct_generator_mpo` places each local
+operator on its declared site and identity `2×2` blocks elsewhere, producing an
+MPO that represents the product generator on the full chain.
 {func}`~mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tdvp` then runs
 **two-site TDVP** (`tdvp_mode="2site"`) on a window around the gate for a total
 evolution time of **1** (split across `tdvp_sweeps` substeps on
@@ -269,8 +274,9 @@ application therefore does not activate unless you add one yourself.
 
 ### Attaching a generator to a custom gate
 
-Advanced use: if you know a two-local generator decomposition compatible with
-YAQS digital TDVP, you can assign it after `set_sites`:
+Advanced use: if you know a product-form generator decomposition compatible with
+YAQS digital TDVP, you can assign it after `set_sites` (one `2×2` factor per
+site, in the declared site order):
 
 ```python
 import numpy as np
@@ -286,17 +292,17 @@ gate.generator = [G_i, G_j]
 ```
 
 ```{warning}
-YAQS does not verify that `exp(-i (G_i ⊗ I + I ⊗ G_j))` at evolution time `1`
-reproduces `unitary`. Deriving consistent local generators is the caller's
-responsibility; use built-in gates as templates. Reversed qubit order is handled
-internally when building the generator MPO, but the local matrices must match
-the **increasing site index** convention used in
-{func}`~mqt.yaqs.digital.digital_tjm.construct_generator_mpo`.
+YAQS does not verify that `exp(-i (G_i ⊗ G_j))` at evolution time `1` reproduces
+`unitary`. Deriving consistent local generators is the caller's responsibility;
+use built-in gates as templates. Each factor is paired with the site declared at
+the same position in `sites`;
+{func}`~mqt.yaqs.digital.digital_tjm.construct_generator_mpo` places the factors
+by site.
 ```
 
-Generators apply only to **two-qubit** digital gates. Single-qubit custom gates
-always use direct MPS contraction; there is no single-qubit TDVP gate path in
-circuit simulation.
+Generators apply to digital gates on **two or more qubits**. Single-qubit custom
+gates always use direct MPS contraction; there is no single-qubit TDVP gate path
+in circuit simulation.
 
 ---
 
@@ -308,7 +314,8 @@ circuit simulation.
 | Qiskit `UnitaryGate` / QASM custom         | No                     | MPO fallback                         | Supported (matrix fallback) |
 | `GateLibrary.custom(matrix)`               | No (unless you set it) | MPO fallback                         | Supported                   |
 | `GateLibrary.custom` + manual `.generator` | Yes (if you set it)    | 2TDVP window                         | Supported                   |
-| 3+ qubit Qiskit gates                      | —                      | Not translated                       | Not supported               |
+| Built-in `ccx`, `ccz`                      | Yes (in `set_sites`)   | 2TDVP window                         | Matrix backend only         |
+| `cswap`, 3+ qubit unitaries                | No                     | MPO fallback                         | Matrix backend only         |
 
 ### Rejected Qiskit instructions (translation)
 
@@ -324,6 +331,7 @@ circuit simulation.
 ## Related topics
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
+- {doc}`multi_qubit_gates` — runnable Toffoli example and bond-budget comparison
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
 - {doc}`circuit_observables` — running circuits with
   {class}`~mqt.yaqs.Simulator`

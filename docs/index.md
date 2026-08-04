@@ -74,6 +74,7 @@ flowchart LR
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
+| Simulate Toffoli and other multi-qubit gates natively                      | {doc}`examples/multi_qubit_gates`                                           |
 
 ```{toctree}
 :caption: Getting started
@@ -132,6 +133,7 @@ examples/digital_twin
 examples/circuit_observables
 examples/circuit_shots
 examples/custom_gates
+examples/multi_qubit_gates
 examples/equivalence_checking
 ```
 
