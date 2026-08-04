@@ -24,7 +24,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
-from .dag_utils import convert_dag_to_tensor_algorithm
+from .dag_utils import _convert_matrix_layout, convert_dag_to_tensor_algorithm
 from .scheduler_utils import partition_disjoint_gate_batches
 
 if TYPE_CHECKING:
@@ -205,11 +205,16 @@ def apply_gate_left(
     if gate.interaction == 2:
         return apply_2q_left(op, gate.tensor, gate.sites[0], gate.sites[1], num_qubits, dagger=dagger)
 
-    local = gate.matrix
+    # ``gate.matrix`` is stored in YAQS site-ordered layout; ``embed_unitary`` expects
+    # Qiskit little-endian ordering. The layout map is an involution. The tensorized
+    # backend maps chain site ``k`` to Qiskit qubit ``num_qubits - 1 - k``, so the site
+    # indices are mirrored to stay consistent with the one- and two-qubit branches.
+    local = _convert_matrix_layout(gate.matrix)
     if dagger:
         local = local.conj().T
     op_mat = op.reshape(2**num_qubits, 2**num_qubits)
-    full = embed_unitary(local, gate.sites, num_qubits)
+    mirrored_sites = [num_qubits - 1 - site for site in gate.sites]
+    full = embed_unitary(local, mirrored_sites, num_qubits)
     return (full @ op_mat).reshape((2,) * (2 * num_qubits))
 
 

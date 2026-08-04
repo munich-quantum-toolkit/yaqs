@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
@@ -352,6 +352,28 @@ def test_global_phase_equivalence(representation: str) -> None:
     result = checker.check(qc1, qc2)
     assert result["equivalent"] is True
     assert result["representation"] == representation
+
+
+def test_mpo_backend_rejects_multi_qubit_gates() -> None:
+    """The MPO backend rejects circuits containing gates on more than two qubits."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+
+    checker = EquivalenceChecker(representation="mpo")
+    with pytest.raises(ValueError, match="more than two qubits"):
+        checker.check(qc, qc)
+
+
+def test_matrix_backend_supports_multi_qubit_gates() -> None:
+    """The matrix backend checks equivalence of circuits containing three-qubit gates."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    decomposed = transpile(qc, basis_gates=["cx", "u"], optimization_level=0)
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qc, decomposed)
+    assert result["equivalent"] is True
+    assert result["representation"] == "matrix"
 
 
 def test_auto_representation_selects_by_qubit_count() -> None:

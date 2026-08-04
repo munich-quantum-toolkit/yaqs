@@ -64,6 +64,8 @@ from tests.core.methods.tdvp.conftest import (
 from tests.digital.conftest import _physical_second_schmidt, _run_digital_observables_noiseless
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
@@ -1994,6 +1996,148 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     )
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
     assert result.expectation_values[0] is not None
+
+
+def _ccx_circuit() -> QuantumCircuit:
+    """Return a three-qubit circuit whose CCX gate acts nontrivially on the state.
+
+    The target qubit is rotated away from the ``X`` eigenbasis so the Toffoli is not a no-op.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.h(1)
+    qc.ry(0.9, 2)
+    qc.ccx(0, 1, 2)
+    qc.rz(0.3, 0)
+    qc.cx(0, 1)
+    return qc
+
+
+def _ccx_long_range_circuit() -> QuantumCircuit:
+    """Return a five-qubit circuit with a long-range CCX gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(5)
+    qc.h(0)
+    qc.ry(0.7, 1)
+    qc.h(2)
+    qc.ry(0.4, 3)
+    qc.ry(0.9, 4)
+    qc.ccx(0, 2, 4)
+    return qc
+
+
+def _ccz_circuit() -> QuantumCircuit:
+    """Return a four-qubit circuit with a long-range CCZ gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(4)
+    for qubit in range(4):
+        qc.h(qubit)
+    qc.ccz(0, 1, 3)
+    qc.cx(1, 2)
+    return qc
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_ccx_statevector_vs_qiskit(gate_mode: GateMode) -> None:
+    """A circuit with a CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccx_long_range_statevector() -> None:
+    """A long-range CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_long_range_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccz_statevector_mpo() -> None:
+    """A CCZ gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccz_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_cswap_statevector(gate_mode: GateMode) -> None:
+    """A CSWAP gate applied through the gate-MPO path should match the Qiskit statevector."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.x(1)
+    qc.ry(0.5, 2)
+    qc.cswap(0, 1, 2)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("circuit_factory", "gate_mode"),
+    [
+        (_ccx_long_range_circuit, "tdvp"),
+        (_ccz_circuit, "full-tdvp"),
+    ],
+)
+def test_multi_qubit_generator_window_converges(
+    circuit_factory: Callable[[], QuantumCircuit],
+    gate_mode: GateMode,
+) -> None:
+    """The generator-window path converges with the number of TDVP substeps.
+
+    The single-substep result carries the state-dependent time-discretization error of the
+    windowed 2TDVP update, so the fidelity is asserted against a floor rather than machine
+    precision; increasing ``tdvp_sweeps`` reduces the error.
+    """
+    qc = circuit_factory()
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    vec_single = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=1)
+    assert isinstance(vec_single, np.ndarray)
+    fidelity_single = _fidelity(ref, vec_single)
+    assert fidelity_single >= 0.9
+
+    vec_many = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=16)
+    assert isinstance(vec_many, np.ndarray)
+    fidelity_many = _fidelity(ref, vec_many)
+    assert fidelity_many >= 0.995
+    assert 1.0 - fidelity_many <= 1.0 - fidelity_single
+
+
+def test_noisy_ccx_smoke() -> None:
+    """Noisy digital simulation still runs with a CCX gate in the circuit."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    state = State(3, initial="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="tdvp",
+        num_traj=4,
+        random_seed=0,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert np.all(np.isfinite(expectation))
 
 
 def test_bell_state_sanity() -> None:

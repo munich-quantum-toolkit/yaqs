@@ -15,9 +15,9 @@ using their DAG representations. It provides utilities to:
 - Determine the maximum distance (in terms of qubit indices) of multi-qubit gates.
 - Select starting points for gate application based on a checkerboard pattern.
 
-Qiskit instructions whose ``op.name`` matches one of the 28 entries in
+Qiskit instructions whose ``op.name`` matches one of the 31 entries in
 :data:`SUPPORTED_QISKIT_GATE_NAMES` are translated via hardcoded ``GateLibrary``
-classes. All other one- and two-qubit unitary gates fall back to matrix-backed
+classes. All other unitary gates fall back to matrix-backed
 :class:`~mqt.yaqs.core.libraries.gate_library.BaseGate` instances.
 """
 
@@ -49,7 +49,10 @@ _ZONE_SKIP_INSTRUCTIONS = frozenset({"measure", "barrier"})
 _REJECTED_INSTRUCTIONS = frozenset({"reset", "delay", "store", "measure"})
 # Qiskit ``op.name`` values resolved through ``getattr(GateLibrary, name)``.
 SUPPORTED_QISKIT_GATE_NAMES: tuple[str, ...] = (
+    "ccx",
+    "ccz",
     "cp",
+    "cswap",
     "cx",
     "cz",
     "h",
@@ -89,16 +92,21 @@ _CONTROL_FLOW_INSTRUCTIONS = frozenset({
 
 
 def _convert_matrix_layout(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Convert a Qiskit two-qubit unitary matrix into YAQS gate storage order.
+    """Convert a Qiskit unitary matrix into YAQS gate storage order.
+
+    The map reverses the qubit axis order within the output and the input index group.
+    It is an involution: applying it twice returns the input.
 
     Args:
-        matrix: Dense ``4 x 4`` unitary in Qiskit little-endian ordering.
+        matrix: Dense ``2**n x 2**n`` unitary in Qiskit little-endian ordering.
 
     Returns:
-        Matrix that reshapes to the YAQS two-qubit gate tensor convention.
+        Matrix that reshapes to the YAQS gate tensor convention.
     """
-    tensor = np.reshape(matrix, (2, 2, 2, 2)).transpose(1, 0, 3, 2)
-    return np.asarray(tensor.reshape(4, 4), dtype=np.complex128)
+    num_qubits = int(np.log2(matrix.shape[0]))
+    permutation = (*reversed(range(num_qubits)), *reversed(range(num_qubits, 2 * num_qubits)))
+    tensor = np.reshape(matrix, (2,) * (2 * num_qubits)).transpose(permutation)
+    return np.asarray(tensor.reshape(matrix.shape), dtype=np.complex128)
 
 
 def _get_qubit_indices(dag: DAGCircuit | None, node: DAGOpNode) -> list[int]:
@@ -238,7 +246,7 @@ def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate
         msg = f"Cannot translate Qiskit gate '{name}': operator is not unitary."
         raise ValueError(msg)
 
-    if len(sites) == 2:
+    if len(sites) >= 2:
         matrix = _convert_matrix_layout(matrix)
 
     gate = GateLibrary.custom(matrix)
@@ -268,11 +276,6 @@ def _translate_node(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
         raise ValueError(msg)
 
     sites = _get_qubit_indices(dag, node)
-    num_qubits = len(sites)
-    if num_qubits > 2:
-        msg = f"Cannot translate Qiskit instruction '{name}': {num_qubits}-qubit gates are not supported yet."
-        raise ValueError(msg)
-
     if name not in SUPPORTED_QISKIT_GATE_NAMES:
         return _translate_matrix(node.op, name=name, sites=sites)
 
@@ -293,10 +296,10 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     For each node, it retrieves the corresponding gate class from the GateLibrary, initializes it, sets any
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
-    Unknown one- and two-qubit unitary Qiskit gates are converted from their matrix representation.
-    Three-qubit and larger instructions (including Toffoli/CCX) raise ``ValueError``. ``barrier`` nodes
-    are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops, and control-flow
-    instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for hardcoded gate names.
+    Unknown unitary Qiskit gates of any width are converted from their matrix representation.
+    ``barrier`` nodes are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops,
+    and control-flow instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for
+    hardcoded gate names.
 
     Note:
         This conversion path rejects ``measure`` because it builds a unitary gate list. Circuit

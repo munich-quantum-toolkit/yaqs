@@ -217,7 +217,8 @@ class EquivalenceChecker:
             Backend-specific keys are ``None`` when the other backend ran.
 
         Raises:
-            ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
+            ValueError: If the circuits have different numbers of qubits, contain mid-circuit
+                measurements, or contain gates on more than two qubits on the MPO backend.
         """
         circuit1 = load_circuit(circuit1)
         circuit2 = load_circuit(circuit2)
@@ -227,6 +228,15 @@ class EquivalenceChecker:
             raise ValueError(msg)
 
         backend = self._resolve_representation(circuit1.num_qubits)
+        if backend == "mpo" and any(
+            instruction.operation.num_qubits > 2 and instruction.operation.name not in {"barrier", "measure"}
+            for instruction in (*circuit1.data, *circuit2.data)
+        ):
+            msg = (
+                "representation='mpo' does not support gates acting on more than two qubits; "
+                "use representation='matrix'."
+            )
+            raise ValueError(msg)
         start_time = time.time()
 
         if backend == "matrix":

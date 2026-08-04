@@ -17,6 +17,7 @@ ranges for gate application.
 from __future__ import annotations
 
 import copy
+from itertools import permutations
 from typing import Literal
 from unittest.mock import patch
 
@@ -61,7 +62,7 @@ from tests.digital.conftest import _run_digital_observables_noiseless
 
 def test_supported_qiskit_gate_names_exact() -> None:
     """The documented Qiskit gate-name list must match ``GateLibrary`` exactly."""
-    assert len(SUPPORTED_QISKIT_GATE_NAMES) == 28
+    assert len(SUPPORTED_QISKIT_GATE_NAMES) == 31
     for name in SUPPORTED_QISKIT_GATE_NAMES:
         assert hasattr(GateLibrary, name), f"GateLibrary missing hardcoded alias '{name}'"
         assert getattr(GateLibrary, name) is not GateLibrary.custom
@@ -351,6 +352,81 @@ def test_fixed_nonsymmetric_two_qubit_unitary_qarg_ordering(
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
 
 
+def test_ccx_translates_to_gate_library_class() -> None:
+    """CCX nodes should translate to the hardcoded ``GateLibrary.ccx`` class with a generator."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    assert gate.name == "ccx"
+    assert gate.interaction == 3
+    assert gate.sites == [0, 1, 2]
+    assert len(gate.generator) == 3
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_cswap_translates_without_generator() -> None:
+    """CSWAP nodes should translate to the hardcoded ``GateLibrary.cswap`` class without a generator."""
+    qc = QuantumCircuit(3)
+    qc.cswap(0, 1, 2)
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    assert gate.name == "cswap"
+    assert gate.interaction == 3
+    assert gate.sites == [0, 1, 2]
+    assert not hasattr(gate, "generator")
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_custom_three_qubit_unitary_gate_translation() -> None:
+    """Unknown 3-qubit UnitaryGate nodes should build tensor/MPO data via the matrix fallback."""
+    unitary = _haar_unitary(8, np.random.default_rng(4))
+    qc = QuantumCircuit(3)
+    qc.append(UnitaryGate(unitary), [0, 1, 2])
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    assert gate.name == "unitary"
+    assert gate.interaction == 3
+    assert gate.sites == [0, 1, 2]
+    assert gate.tensor.shape == (2,) * 6
+    assert len(gate.mpo_tensors) == 3
+    assert not hasattr(gate, "generator")
+
+
+def test_custom_three_qubit_unitary_reversed_qargs() -> None:
+    """Fully reversed three-qubit qargs should store the Qiskit operator matrix for those sites."""
+    unitary = _haar_unitary(8, np.random.default_rng(5))
+    qc = QuantumCircuit(3)
+    qc.append(UnitaryGate(unitary), [2, 1, 0])
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    expected_op = Operator(qc).data
+
+    assert gate.sites == [2, 1, 0]
+    assert_allclose(gate.matrix, expected_op, atol=1e-12)
+
+
+# Fixed Haar-random 3-qubit unitary (seed 43); not symmetric under qubit interchange.
+_FIXED_NONSYMMETRIC_3Q = _haar_unitary(8, np.random.default_rng(43))
+
+
+@pytest.mark.parametrize("qargs", list(permutations((0, 1, 2))))
+def test_fixed_nonsymmetric_three_qubit_unitary_qarg_ordering(qargs: tuple[int, int, int]) -> None:
+    """A fixed non-symmetric three-qubit unitary should match Qiskit for every qarg ordering."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.append(UnitaryGate(_FIXED_NONSYMMETRIC_3Q), list(qargs))
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
 class _CustomNamedUnitary(Gate):
     """Qiskit gate whose ``name`` collides with a non-alias ``GateLibrary`` attribute."""
 
@@ -490,6 +566,55 @@ def test_generator_less_lr_custom_gate_routes_mpo() -> None:
         apply_two_qubit_gate(out, node, params)
         mock_mpo.assert_called_once()
         mock_tdvp.assert_not_called()
+        mock_tebd.assert_not_called()
+
+
+@pytest.mark.parametrize("qargs", [(0, 1, 2), (0, 2, 4)])
+@pytest.mark.parametrize("gate_kind", ["ccx", "unitary"])
+@pytest.mark.parametrize("gate_mode", ["mpo", "tdvp", "full-tdvp", "swaps"])
+def test_multi_qubit_gate_routing(
+    gate_mode: Literal["mpo", "tdvp", "full-tdvp", "swaps"],
+    gate_kind: Literal["ccx", "unitary"],
+    qargs: tuple[int, int, int],
+) -> None:
+    """Gates on three or more qubits route to the TDVP window or the gate-MPO path, never TEBD.
+
+    The TDVP modes use the generator window for gates with a generator (``ccx``); all other
+    combinations, including ``gate_mode="swaps"`` and matrix-backed gates, use the gate-MPO path.
+    """
+    length = 5
+    qc = QuantumCircuit(length)
+    if gate_kind == "ccx":
+        qc.ccx(*qargs)
+    else:
+        qc.append(UnitaryGate(_FIXED_NONSYMMETRIC_3Q), list(qargs))
+    dag = circuit_to_dag(qc)
+    node = dag.op_nodes()[0]
+
+    out = copy.deepcopy(State(length, initial="zeros").mps)
+    params = DigitalSimParams(
+        get_state=True,
+        gate_mode=gate_mode,
+        preset="exact",
+        svd_threshold=1e-12,
+        tdvp_sweeps=1,
+    )
+
+    expect_tdvp = gate_mode in {"tdvp", "full-tdvp"} and gate_kind == "ccx"
+    with (
+        patch("mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tebd") as mock_tebd,
+        patch("mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tdvp") as mock_tdvp,
+        patch("mqt.yaqs.digital.digital_tjm.apply_long_range_gate_mpo") as mock_mpo,
+    ):
+        mock_tdvp.return_value = (min(qargs), max(qargs))
+        mock_mpo.return_value = (min(qargs), max(qargs))
+        apply_two_qubit_gate(out, node, params)
+        if expect_tdvp:
+            mock_tdvp.assert_called_once()
+            mock_mpo.assert_not_called()
+        else:
+            mock_mpo.assert_called_once()
+            mock_tdvp.assert_not_called()
         mock_tebd.assert_not_called()
 
 

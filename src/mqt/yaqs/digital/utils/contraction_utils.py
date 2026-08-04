@@ -45,7 +45,7 @@ def apply_gate(
     *,
     conjugate: bool = False,
 ) -> NDArray[np.complex128]:
-    """Apply a single-, two-, or multi-qubit gate from a GateLibrary object to a local tensor `theta`.
+    """Apply a one- or two-qubit gate from a GateLibrary object to a local tensor `theta`.
 
     Depending on the gate's interaction type and the dimensionality of `theta`, this function contracts the gate's
     tensor with `theta` according to a predefined pattern. If `conjugate` is True, the gate tensor is conjugated before
