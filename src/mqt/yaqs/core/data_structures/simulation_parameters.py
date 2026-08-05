@@ -183,9 +183,12 @@ def _validate_analog_time_grid(
 
     evolved_time = n_steps * dt_f
     residual = abs(elapsed_f - evolved_time)
-    rounding_tolerance = 0.5 * (elapsed_ulp + n_steps * dt_ulp + math.ulp(evolved_time))
-    precision_is_ambiguous = rounding_tolerance >= 0.5 * dt_f and residual > 0.0
-    if n_steps <= 0 or precision_is_ambiguous or residual > rounding_tolerance:
+    ulp_tolerance = 0.5 * (elapsed_ulp + n_steps * dt_ulp + math.ulp(evolved_time))
+    # An ULP can be a material fraction of a subnormal ``dt``. Never let the
+    # representation allowance exceed a tiny, dimensionless fraction of one step.
+    step_fraction_tolerance = 1e-9 * dt_f
+    rounding_tolerance = min(ulp_tolerance, step_fraction_tolerance)
+    if n_steps <= 0 or residual > rounding_tolerance:
         msg = (
             f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
             f"got elapsed_time/dt = {n_float} (nearest integer {n_steps}, time residual {residual})."
