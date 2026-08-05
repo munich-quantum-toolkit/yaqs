@@ -91,7 +91,7 @@ _CONTROL_FLOW_INSTRUCTIONS = frozenset({
 })
 
 
-def _convert_matrix_layout(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
+def convert_matrix_layout(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Convert a Qiskit unitary matrix into YAQS gate storage order.
 
     The map reverses the qubit axis order within the output and the input index group.
@@ -223,6 +223,11 @@ def _reject_unsupported(node: DAGOpNode) -> None:
         raise ValueError(msg)
 
 
+# Bound on the dense matrix fallback: a ``2**n x 2**n`` complex128 matrix reaches
+# 1 MB at n = 8 and grows by a factor of 16 per added qubit.
+_MAX_MATRIX_FALLBACK_QUBITS = 8
+
+
 def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate:
     """Build a YAQS gate from a Qiskit operation matrix.
 
@@ -235,10 +240,18 @@ def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate
         Matrix-backed YAQS gate without an analytic generator.
 
     Raises:
-        ValueError: If parameters are unbound or the operator is not unitary.
+        ValueError: If parameters are unbound, the gate is too wide for the matrix
+            fallback, or the operator is not unitary.
     """
     if _has_unbound_params(op):
         msg = f"Cannot translate Qiskit gate '{name}': unbound parameters; bind parameters before simulation."
+        raise ValueError(msg)
+
+    if len(sites) > _MAX_MATRIX_FALLBACK_QUBITS:
+        msg = (
+            f"Cannot translate Qiskit gate '{name}': the matrix fallback supports at most "
+            f"{_MAX_MATRIX_FALLBACK_QUBITS} qubits, got {len(sites)}; decompose the instruction before simulation."
+        )
         raise ValueError(msg)
 
     matrix = _extract_matrix(op, name=name)
@@ -247,7 +260,7 @@ def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate
         raise ValueError(msg)
 
     if len(sites) >= 2:
-        matrix = _convert_matrix_layout(matrix)
+        matrix = convert_matrix_layout(matrix)
 
     gate = GateLibrary.custom(matrix)
     gate.name = name
@@ -296,7 +309,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     For each node, it retrieves the corresponding gate class from the GateLibrary, initializes it, sets any
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
-    Unknown unitary Qiskit gates of any width are converted from their matrix representation.
+    Unknown unitary Qiskit gates on up to eight qubits are converted from their matrix representation.
     ``barrier`` nodes are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops,
     and control-flow instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for
     hardcoded gate names.

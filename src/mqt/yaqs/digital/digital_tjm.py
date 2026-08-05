@@ -411,11 +411,15 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    if gate_mode not in {"tdvp", "full-tdvp", "swaps", "mpo"}:
+        msg = f"Unknown gate_mode: {gate_mode!r}"
+        raise ValueError(msg)
+
     # Matrix-backed custom gates have no ``generator`` and bypass the TDVP window
     # path in ``tdvp`` / ``full-tdvp`` modes (TEBD for NN, MPO for LR).
     has_generator = getattr(gate, "generator", None) is not None
 
-    if gate.interaction > 2 and gate_mode in {"tdvp", "full-tdvp", "swaps", "mpo"}:
+    if gate.interaction > 2:
         if gate_mode in {"tdvp", "full-tdvp"} and has_generator:
             return apply_two_qubit_gate_tdvp(state, gate, sim_params)
         return apply_long_range_gate_mpo(state, gate, sim_params)
@@ -440,13 +444,10 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
             return apply_two_qubit_gate_tdvp(state, gate, sim_params)
         return apply_long_range_gate_mpo(state, gate, sim_params)
 
-    if gate_mode == "mpo":
-        if is_nearest_neighbor:
-            return apply_two_qubit_gate_tebd(state, gate, sim_params)
-        return apply_long_range_gate_mpo(state, gate, sim_params)
-
-    msg = f"Unknown gate_mode: {gate_mode!r}"
-    raise ValueError(msg)
+    # The remaining mode is mpo: TEBD for nearest neighbors, gate MPO otherwise.
+    if is_nearest_neighbor:
+        return apply_two_qubit_gate_tebd(state, gate, sim_params)
+    return apply_long_range_gate_mpo(state, gate, sim_params)
 
 
 def digital_tjm(

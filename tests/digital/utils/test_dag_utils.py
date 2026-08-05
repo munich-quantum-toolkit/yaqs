@@ -186,6 +186,16 @@ def test_unbound_parameterized_gate_raises() -> None:
         convert_dag_to_tensor_algorithm(node)
 
 
+def test_wide_matrix_fallback_gate_raises() -> None:
+    """Matrix-fallback gates wider than the documented maximum should be rejected."""
+    qc = QuantumCircuit(9)
+    qc.mcx(list(range(8)), 8)
+    dag = circuit_to_dag(qc)
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(dag)
+
+
 def test_unsupported_reset_instruction_raises() -> None:
     """Reset instructions should be rejected with a clear error."""
     qc = QuantumCircuit(1)

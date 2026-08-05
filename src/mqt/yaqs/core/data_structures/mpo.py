@@ -1047,7 +1047,8 @@ class MPO:
 
         Raises:
             ValueError: If the gate acts on fewer than two qubits, the number of sites does not
-                match the interaction level, or ``chain_length`` is too small.
+                match the interaction level, ``chain_length`` is too small, or the sites lie
+                outside the chain.
         """
         if gate.interaction < 2:
             msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
@@ -1061,6 +1062,9 @@ class MPO:
         support_len = last_site - first_site + 1
         if chain_length < support_len:
             msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
+            raise ValueError(msg)
+        if chain_length > support_len and (first_site < 0 or last_site >= chain_length):
+            msg = f"gate sites {gate.sites} are outside the chain of length {chain_length}."
             raise ValueError(msg)
 
         support = get_support_mpo(gate, first_site=first_site, last_site=last_site)

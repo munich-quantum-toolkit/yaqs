@@ -24,7 +24,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
-from .dag_utils import _convert_matrix_layout, convert_dag_to_tensor_algorithm
+from .dag_utils import convert_dag_to_tensor_algorithm, convert_matrix_layout
 from .scheduler_utils import partition_disjoint_gate_batches
 
 if TYPE_CHECKING:
@@ -209,7 +209,7 @@ def apply_gate_left(
     # Qiskit little-endian ordering. The layout map is an involution. The tensorized
     # backend maps chain site ``k`` to Qiskit qubit ``num_qubits - 1 - k``, so the site
     # indices are mirrored to stay consistent with the one- and two-qubit branches.
-    local = _convert_matrix_layout(gate.matrix)
+    local = convert_matrix_layout(gate.matrix)
     if dagger:
         local = local.conj().T
     op_mat = op.reshape(2**num_qubits, 2**num_qubits)

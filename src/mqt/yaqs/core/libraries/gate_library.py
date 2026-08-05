@@ -1267,34 +1267,18 @@ class CCX(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites for the gate and assigns the product-form generator.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
-
-        Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
         """
-        sites_list = []
-        for s in sites:
-            if isinstance(s, int):
-                sites_list.append(s)
-            else:
-                sites_list.extend(s)
-
-        if len(sites_list) != self.interaction:
-            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
-            raise ValueError(msg)
-
-        self.sites = sites_list
-        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2, 2, 2))
+        super().set_sites(*sites)
         # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - X))
         self.generator = [
             (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
             np.array([[0, 0], [0, 1]], dtype=np.complex128),
             np.array([[1, -1], [-1, 1]], dtype=np.complex128),
         ]
-        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class CCZ(BaseGate):
@@ -1322,34 +1306,18 @@ class CCZ(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites for the gate and assigns the product-form generator.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
-
-        Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
         """
-        sites_list = []
-        for s in sites:
-            if isinstance(s, int):
-                sites_list.append(s)
-            else:
-                sites_list.extend(s)
-
-        if len(sites_list) != self.interaction:
-            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
-            raise ValueError(msg)
-
-        self.sites = sites_list
-        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2, 2, 2))
+        super().set_sites(*sites)
         # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - Z))
         self.generator = [
             (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
             np.array([[0, 0], [0, 1]], dtype=np.complex128),
             np.array([[0, 0], [0, 2]], dtype=np.complex128),
         ]
-        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class CPhase(BaseGate):

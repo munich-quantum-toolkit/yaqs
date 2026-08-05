@@ -75,8 +75,8 @@ For each operation node:
 ```{note}
 **Three-qubit and larger gates** translate natively: `ccx` (Toffoli), `ccz`, and
 `cswap` are hardcoded {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`
-classes, and any other multi-qubit unitary is accepted on the matrix fallback
-path.
+classes, and any other multi-qubit unitary on up to eight qubits is accepted on
+the matrix fallback path.
 ```
 
 Symbolic parameters must be bound before translation; unbound
