@@ -1211,10 +1211,10 @@ class CZ(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        # Generator: π/4 * ((I - Z) ⊗ (I - X))
+        # Generator: π/4 * ((I - Z) ⊗ (I - Z))
         self.generator = [
             (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
-            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 2]], dtype=np.complex128),
         ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
@@ -1273,7 +1273,11 @@ class CPhase(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+        # Generator: -θ * (P1 ⊗ P1)
+        self.generator = [
+            -self.theta * np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+        ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
