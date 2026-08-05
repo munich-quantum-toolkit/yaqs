@@ -273,7 +273,7 @@ Train a causal surrogate with
 {class}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`, then predict the
 probe-qubit state after one or more control legs. Pass an explicit per-leg list
 to compare different sequences on the same trained model. Surrogate training
-requires PyTorch (`pip install mqt.yaqs[torch]`).
+requires PyTorch (`uv pip install mqt.yaqs[torch]`).
 
 ```{code-cell} ipython3
 rho0 = np.eye(2, dtype=np.complex128) / 2.0

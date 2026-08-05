@@ -19,7 +19,7 @@ For control sequences beyond what you can simulate exhaustively, train a
 {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` returns the
 **reduced density matrix of the probe qubit** after a control sequence.
 
-Surrogate training requires PyTorch (`pip install mqt.yaqs[torch]`). Over
+Surrogate training requires PyTorch (`uv pip install mqt.yaqs[torch]`). Over
 **short temporal horizons** (few intervention steps), compare surrogate rollouts
 to Hamiltonian training targets and to exact **dense** or
 **MPO process tensors** built with

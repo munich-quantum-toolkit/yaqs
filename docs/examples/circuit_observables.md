@@ -226,7 +226,7 @@ qasm_result = sim.run(
 )
 ```
 
-OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`.
+OpenQASM 3 requires `uv pip install mqt-yaqs[qasm3]`.
 {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms;
 see {doc}`equivalence_checking`.
 
