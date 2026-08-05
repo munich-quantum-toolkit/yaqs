@@ -76,7 +76,7 @@ For each operation node:
 **Three-qubit and larger gates** translate natively: `ccx` (Toffoli), `ccz`, and
 `cswap` are hardcoded {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`
 classes, and any other multi-qubit unitary is accepted on the matrix fallback
-path. See {doc}`multi_qubit_gates` for a runnable example.
+path.
 ```
 
 Symbolic parameters must be bound before translation; unbound
@@ -331,7 +331,6 @@ in circuit simulation.
 ## Related topics
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
-- {doc}`multi_qubit_gates` — runnable Toffoli example and bond-budget comparison
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
 - {doc}`circuit_observables` — running circuits with
   {class}`~mqt.yaqs.Simulator`

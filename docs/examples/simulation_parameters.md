@@ -253,8 +253,7 @@ gate translation and custom-gate workflow.
 
 Gates on three or more qubits have no TEBD path: in the TDVP modes, gates with a
 product-form generator (`ccx`, `ccz`) use the generator MPO and TDVP window; all
-other cases, including `gate_mode="swaps"`, use the extended gate MPO. See
-{doc}`multi_qubit_gates` for a runnable example.
+other cases, including `gate_mode="swaps"`, use the extended gate MPO.
 
 Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window
 via `evolve_window`.
