@@ -296,6 +296,25 @@ def test_equivalence_checker_rejects_mid_circuit_measurements() -> None:
         _issue_checker(representation="matrix").check(qc1, qc2)
 
 
+def test_matrix_backend_descending_cx_equivalence() -> None:
+    """The matrix backend accepts the H-conjugation identity for a descending cx.
+
+    ``(H ⊗ H) · cx(1, 2) · (H ⊗ H)`` equals ``cx(2, 1)``; both backends must agree.
+    """
+    qa = QuantumCircuit(3)
+    qa.cx(2, 1)
+
+    qb = QuantumCircuit(3)
+    qb.h(1)
+    qb.h(2)
+    qb.cx(1, 2)
+    qb.h(1)
+    qb.h(2)
+
+    assert EquivalenceChecker(representation="matrix").check(qa, qb)["equivalent"] is True
+    assert EquivalenceChecker(representation="mpo").check(qa, qb)["equivalent"] is True
+
+
 def test_equivalence_checker_matrix_backend_strips_measurements_once() -> None:
     """The matrix backend should strip final measurements only inside ``compose_operator_tensor``."""
     qc1 = QuantumCircuit(1, 1)
