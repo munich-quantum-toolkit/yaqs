@@ -173,6 +173,43 @@ def aggregate_counts(result: Result) -> None:
     result.counts = dict(sorted(counts.items()))
 
 
+def _segment_times(
+    segment: Result,
+    value_count: int,
+    *,
+    is_digital: bool,
+    is_program_result: bool,
+    segment_label: int,
+) -> NDArray[np.float64]:
+    """Build one segment's physical-time coordinates.
+
+    Returns:
+        The segment coordinates on the physical program timeline.
+
+    Raises:
+        ValueError: If required time metadata is missing or malformed.
+    """
+    if is_digital:
+        if is_program_result and segment.time_offset is None:
+            msg = f"Digital segment {segment_label} has no time_offset."
+            raise ValueError(msg)
+        offset = segment.time_offset if segment.time_offset is not None else 0.0
+        return np.full(value_count, offset, dtype=np.float64)
+
+    if segment.times is None:
+        msg = f"Analog segment {segment_label} has no time data."
+        raise ValueError(msg)
+    if is_program_result and segment.time_offset is None:
+        msg = f"Analog segment {segment_label} has no time_offset."
+        raise ValueError(msg)
+    times = np.asarray(segment.times, dtype=np.float64)
+    if times.ndim != 1 or len(times) != value_count:
+        msg = f"Observable in analog segment {segment_label} is not a scalar time series aligned with times."
+        raise ValueError(msg)
+    offset = segment.time_offset if segment.time_offset is not None else 0.0
+    return np.asarray(times + offset, dtype=np.float64)
+
+
 def _segment_trace(
     segment: Result,
     observable: Observable,
@@ -218,25 +255,13 @@ def _segment_trace(
         msg = f"Observable in {segment_kind} segment {segment_label} is not a scalar series."
         raise ValueError(msg)
 
-    if is_digital:
-        if is_program_result and segment.time_offset is None:
-            msg = f"Digital segment {segment_label} has no time_offset."
-            raise ValueError(msg)
-        offset = segment.time_offset if segment.time_offset is not None else 0.0
-        times = np.full(len(values), offset, dtype=np.float64)
-    else:
-        if segment.times is None:
-            msg = f"Analog segment {segment_label} has no time data."
-            raise ValueError(msg)
-        if is_program_result and segment.time_offset is None:
-            msg = f"Analog segment {segment_label} has no time_offset."
-            raise ValueError(msg)
-        times = np.asarray(segment.times, dtype=np.float64)
-        if times.ndim != 1 or len(times) != len(values):
-            msg = f"Observable in analog segment {segment_label} is not a scalar time series aligned with times."
-            raise ValueError(msg)
-        offset = segment.time_offset if segment.time_offset is not None else 0.0
-        times = np.asarray(times + offset, dtype=np.float64)
+    times = _segment_times(
+        segment,
+        len(values),
+        is_digital=is_digital,
+        is_program_result=is_program_result,
+        segment_label=segment_label,
+    )
 
     return times, np.asarray(np.real(values), dtype=np.float64)
 

@@ -416,6 +416,40 @@ def test_observable_trace_rejects_invalid_argument_and_program_offset() -> None:
 @pytest.mark.parametrize(
     ("segment", "message"),
     [
+        (Result(), "has no valid segment_type"),
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                expectation_values=[np.array([1.0])],
+                segment_type="analog",
+                time_offset=0.0,
+            ),
+            "has no time data",
+        ),
+    ],
+)
+def test_observable_trace_rejects_invalid_program_segment_metadata(segment: Result, message: str) -> None:
+    """Program traces require typed segments and time data for analog intervals."""
+    with pytest.raises(ValueError, match=message):
+        Result(segment_results=[segment]).observable_trace(Observable("z", 0))
+
+
+def test_observable_trace_rejects_program_without_requested_data() -> None:
+    """A program containing only unobserved digital segments has no requested trace."""
+    segment = Result(
+        observables=[Observable("x", 0)],
+        expectation_values=[np.array([0.0])],
+        segment_type="digital",
+        time_offset=0.0,
+    )
+
+    with pytest.raises(ValueError, match="no observable trace data"):
+        Result(segment_results=[segment]).observable_trace(Observable("z", 0))
+
+
+@pytest.mark.parametrize(
+    ("segment", "message"),
+    [
         (
             Result(
                 observables=[Observable("z", 0)],

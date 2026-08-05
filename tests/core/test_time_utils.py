@@ -32,3 +32,10 @@ def test_exact_time_grid_validates_duration_and_step() -> None:
     with pytest.raises(ValueError, match="duration must be positive"):
         exact_time_grid(0.0, 0.1)
     np.testing.assert_array_equal(exact_time_grid(0.0, 0.1, allow_zero=True), np.array([0.0]))
+
+
+@pytest.mark.parametrize("duration", [-0.1, np.nan, np.inf])
+def test_exact_time_grid_rejects_negative_or_nonfinite_duration(duration: float) -> None:
+    """Durations must be finite and non-negative before zero handling."""
+    with pytest.raises(ValueError, match="duration must be a non-negative finite value"):
+        exact_time_grid(duration, 0.1)

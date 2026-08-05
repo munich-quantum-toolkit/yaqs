@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,9 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.simulation_program import (
+    _compile_program,  # ruff: ignore[import-private-name]  # validate private compiler invariant
+)
 
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGOpNode
@@ -272,6 +276,60 @@ def test_program_compilation_rejects_unsupported_inputs(
     """Compilation reports unsupported states and segments before execution."""
     with pytest.raises(ValueError, match=message):
         Simulator(parallel=False, show_progress=False).run(state, program)
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        (AnalogSimParams(order=3), "order must be 1 or 2"),
+        (
+            AnalogSimParams(multi_time_observables=[(Observable("z", 0), Observable("z", 0))]),
+            "multi_time_observables are not supported",
+        ),
+    ],
+)
+def test_program_compilation_rejects_unsupported_analog_parameters(
+    params: AnalogSimParams,
+    message: str,
+) -> None:
+    """Program compilation rejects standalone-only analog configuration."""
+    program = SimulationProgram([AnalogSegment(_zero_hamiltonian(2), sim_params=params)])
+
+    with pytest.raises(ValueError, match=message):
+        Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+
+def test_program_executor_rejects_corrupted_private_instructions() -> None:
+    """The private executor reports an instruction outside the compiler's closed union."""
+    state = State(2, initial="zeros")
+    program = SimulationProgram([DigitalSegment(QuantumCircuit(2))])
+    compiled = _compile_program(program, state)
+    corrupted = replace(compiled, instructions=(object(),))
+
+    with pytest.raises(TypeError, match="Unknown instruction type object"):
+        simulator_module._execute_program_trajectory(0, state.mps, corrupted, 1)  # ruff: ignore[private-member-access]
+
+    invalid_segment = SimpleNamespace(sim_params=None, noise_model=None)
+    object.__setattr__(  # ruff: ignore[unnecessary-dunder-call]  # deliberately corrupt frozen invariant
+        program, "segments", (invalid_segment,)
+    )
+    with pytest.raises(TypeError, match=r"segments\[0\].*got SimpleNamespace"):
+        _compile_program(program, state)
+
+
+def test_program_executor_requires_propagated_segment_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A backend that omits state handoff fails at the segment boundary."""
+    state = State(2, initial="zeros")
+    program = SimulationProgram([AnalogSegment(_zero_hamiltonian(2))])
+    compiled = _compile_program(program, state)
+
+    def omit_state(_args: object, **_kwargs: object) -> tuple[None, None, None]:
+        return None, None, None
+
+    monkeypatch.setattr(simulator_module, "analog_tjm_1", omit_state)
+
+    with pytest.raises(RuntimeError, match="did not return its propagated state"):
+        simulator_module._execute_program_trajectory(0, state.mps, compiled, 1)  # ruff: ignore[private-member-access]
 
 
 def test_order_two_single_step_program_returns_propagated_state() -> None:

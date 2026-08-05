@@ -88,6 +88,11 @@ def test_segments_reject_wrong_noise_model_type() -> None:
             Hamiltonian.ising(2, J=1.0, g=0.5),
             noise_model=object(),  # ty: ignore[invalid-argument-type]  # exercise runtime validation
         )
+    with pytest.raises(TypeError, match="noise_model must be NoiseModel"):
+        DigitalSegment(
+            QuantumCircuit(2),
+            noise_model=object(),  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+        )
 
 
 def test_program_preserves_order_and_defensively_copies_input() -> None:
