@@ -125,7 +125,8 @@ def create_probability_distribution(
         the corresponding normalized jump probabilities.
 
     Raises:
-        ValueError: If a non-Pauli long-range two-site process is present.
+        NotImplementedError: If a non-Pauli long-range two-site process is present.
+        ValueError: If jump probability weights are zero or non-finite.
     """
     if noise_model is None or not noise_model.processes:
         return [], []
@@ -173,7 +174,7 @@ def create_probability_distribution(
                             "Non-Pauli long-range two-site jumps are not supported "
                             f"(process '{process['name']}' on sites {process['sites']})."
                         )
-                        raise ValueError(msg)
+                        raise NotImplementedError(msg)
 
     # Normalize the probabilities
     dp: float = float(np.sum(dp_m_list))

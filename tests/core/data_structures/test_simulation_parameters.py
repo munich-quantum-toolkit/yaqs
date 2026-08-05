@@ -168,6 +168,14 @@ def test_analog_simparams_times_no_float_overshoot() -> None:
     assert params.times[-1] == pytest.approx(params.elapsed_time)
 
 
+def test_analog_simparams_zero_elapsed_time() -> None:
+    """``elapsed_time=0`` with a valid ``dt`` yields a single-point grid at ``t=0``."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.0, dt=0.1)
+    assert params.elapsed_time == pytest.approx(0.0)
+    assert params.dt == pytest.approx(0.1)
+    np.testing.assert_allclose(params.times, [0.0])
+
+
 @pytest.mark.parametrize(
     ("elapsed_time", "dt"),
     [

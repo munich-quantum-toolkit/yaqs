@@ -33,6 +33,26 @@ if TYPE_CHECKING:
 rng = np.random.default_rng()
 
 
+def _always_jump_rng() -> np.random.Generator:
+    """RNG stub that always triggers a jump and selects process index 0.
+
+    Returns:
+        A minimal RNG-like object for ``stochastic_process`` jump tests.
+    """
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    return cast("np.random.Generator", _AlwaysJumpRng())
+
+
 def crandn(
     size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
 ) -> NDArray[np.complex128]:
@@ -184,34 +204,12 @@ def test_stochastic_process_jump() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _AlwaysJumpRng:
-        """Minimal RNG stub that always triggers a jump and picks process index 0."""
-
-        @staticmethod
-        def random() -> float:
-            """Return 0 so ``rng.random() >= dp`` never skips the jump branch.
-
-            Returns:
-                Always 0.0.
-            """
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            """Always select the first process in ``noise_model.processes``.
-
-            Returns:
-                Process index 0.
-            """
-            _ = (size, p)
-            return 0
-
     new_state = stochastic_process(
         state_copy,
         noise_model,
         dt,
         sim_params,
-        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+        rng=_always_jump_rng(),
     )
     # Should still be the same type
     assert isinstance(new_state, MPS)
@@ -475,18 +473,6 @@ def test_stochastic_process_empty_probabilities_after_jump() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _JumpButNoProcessRng:
-        """RNG stub that always triggers a jump."""
-
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     with patch(
         "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
         return_value=([], []),
@@ -496,7 +482,7 @@ def test_stochastic_process_empty_probabilities_after_jump() -> None:
             noise_model,
             0.1,
             sim_params,
-            rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+            rng=_always_jump_rng(),
         )
     assert new_state.orthogonality_center == 0
 
@@ -509,16 +495,6 @@ def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
-    class _JumpButNoProcessRng:
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     with patch(
         "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
         return_value=([], []),
@@ -528,7 +504,7 @@ def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
             noise_model,
             0.1,
             sim_params,
-            rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+            rng=_always_jump_rng(),
         )
     assert new_state.orthogonality_center == 0
 
@@ -541,7 +517,7 @@ def test_create_probability_distribution_non_pauli_longrange_raises() -> None:
         {"name": "custom_lr", "sites": [0, 2], "strength": 0.1, "factors": (lowering, lowering)},
     ])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    with pytest.raises(ValueError, match="Non-Pauli long-range"):
+    with pytest.raises(NotImplementedError, match="Non-Pauli long-range"):
         create_probability_distribution(state, noise_model, 0.1, sim_params)
 
 
@@ -555,22 +531,12 @@ def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _AlwaysJumpRng:
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     new_state = stochastic_process(
         state_copy,
         noise_model,
         0.1,
         sim_params,
-        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+        rng=_always_jump_rng(),
     )
     assert new_state.orthogonality_center == 0
 
@@ -586,22 +552,12 @@ def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _AlwaysJumpRng:
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     new_state = stochastic_process(
         state_copy,
         noise_model,
         0.1,
         sim_params,
-        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+        rng=_always_jump_rng(),
     )
     assert new_state.orthogonality_center == 0
     assert any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
@@ -617,22 +573,12 @@ def test_stochastic_process_longrange_pauli_jump() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _AlwaysJumpRng:
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     new_state = stochastic_process(
         state_copy,
         noise_model,
         0.1,
         sim_params,
-        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+        rng=_always_jump_rng(),
     )
     assert new_state.orthogonality_center == 0
 
@@ -649,16 +595,6 @@ def test_stochastic_process_non_adjacent_non_pauli_jump_raises() -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
 
-    class _AlwaysJumpRng:
-        @staticmethod
-        def random() -> float:
-            return 0.0
-
-        @staticmethod
-        def choice(size: int, p: list[float]) -> int:
-            _ = (size, p)
-            return 0
-
     with (
         patch(
             "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
@@ -671,5 +607,5 @@ def test_stochastic_process_non_adjacent_non_pauli_jump_raises() -> None:
             noise_model,
             0.1,
             sim_params,
-            rng=cast("np.random.Generator", _AlwaysJumpRng()),
+            rng=_always_jump_rng(),
         )

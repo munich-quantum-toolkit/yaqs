@@ -243,9 +243,10 @@ def test_apply_dissipation_independent_of_noncommuting_order() -> None:
     assert diff == pytest.approx(0.0, abs=1e-12)
 
     # Match a single local expm of the summed generator (not sequential expm products).
+    # Site 1 remains |0>; contract both tensors for a gauge-independent comparison.
     generator = gamma_a * a + gamma_b * b
-    expected = linalg.expm(-0.5 * dt * generator) @ amp
-    got = state_fwd.tensors[0][:, 0, 0]
+    expected = np.kron(linalg.expm(-0.5 * dt * generator) @ amp, np.array([1.0, 0.0], dtype=np.complex128))
+    got = np.einsum("alr,brc->ab", state_fwd.tensors[0], state_fwd.tensors[1]).reshape(-1)
     np.testing.assert_allclose(got, expected, atol=1e-12)
 
 

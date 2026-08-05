@@ -92,54 +92,69 @@ def apply_dissipation(
     else:
         state.set_canonical_form(state.length - 1, decomposition="SVD")
 
+    # Index processes once; cache Pauli flags for reuse in the site sweep.
+    one_site_by_site: list[list[int]] = [[] for _ in range(state.length)]
+    two_site_by_right: list[list[int]] = [[] for _ in range(state.length)]
+    processes = noise_model.processes
+    pauli_flags = [is_pauli(process) for process in processes]
+    for idx, process in enumerate(processes):
+        sites = process["sites"]
+        if len(sites) == 1:
+            one_site_by_site[sites[0]].append(idx)
+        elif len(sites) == 2:
+            two_site_by_right[sites[1]].append(idx)
+
     for i in reversed(range(state.length)):
         # 1. One-site dissipators on site i: expm(-0.5 dt * sum_k gamma_k L_k^dagger L_k)
-        one_site = [
-            process for process in noise_model.processes if len(process["sites"]) == 1 and process["sites"][0] == i
-        ]
-        if one_site:
+        one_idxs = one_site_by_site[i]
+        if one_idxs:
             dim = state.physical_dimensions[i]
             generator = np.zeros((dim, dim), dtype=np.complex128)
-            for process in one_site:
+            all_pauli = True
+            for idx in one_idxs:
+                process = processes[idx]
                 gamma = process["strength"]
-                if is_pauli(process):
+                if pauli_flags[idx]:
                     generator += gamma * np.eye(dim, dtype=np.complex128)
                 else:
+                    all_pauli = False
                     jump_op_mat = process["matrix"]
                     generator += gamma * (np.conj(jump_op_mat).T @ jump_op_mat)
-            if all(is_pauli(process) for process in one_site):
+            if all_pauli:
                 state.tensors[i] *= np.exp(-0.5 * dt * float(np.real(generator[0, 0])))
             else:
                 dissipative_op = linalg.expm(-0.5 * dt * generator)
                 state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
-        processes_here = [
-            process for process in noise_model.processes if len(process["sites"]) == 2 and process["sites"][1] == i
-        ]
-        # 2. Two-site dissipators on (i-1, i): sum generators, one expm (Pauli long-range: scalar)
-        if i != 0 and processes_here:
-            longrange_procs = [process for process in processes_here if is_longrange(process)]
-            adjacent_procs = [process for process in processes_here if not is_longrange(process)]
+        # 2. Two-site dissipators ending at i: sum generators, one expm (Pauli long-range: scalar)
+        two_idxs = two_site_by_right[i]
+        if i != 0 and two_idxs:
+            longrange_idxs = [idx for idx in two_idxs if is_longrange(processes[idx])]
+            adjacent_idxs = [idx for idx in two_idxs if not is_longrange(processes[idx])]
 
-            for process in longrange_procs:
-                if not is_pauli(process):
+            for idx in longrange_idxs:
+                process = processes[idx]
+                if not pauli_flags[idx]:
                     msg = "Non-Pauli Long-range processes are not implemented yet"
                     raise NotImplementedError(msg)
                 state.tensors[i] *= np.exp(-0.5 * dt * process["strength"])
 
-            if adjacent_procs:
+            if adjacent_idxs:
                 dim_left = state.physical_dimensions[i - 1]
                 dim_right = state.physical_dimensions[i]
                 dim = dim_left * dim_right
                 generator = np.zeros((dim, dim), dtype=np.complex128)
-                for process in adjacent_procs:
+                all_pauli = True
+                for idx in adjacent_idxs:
+                    process = processes[idx]
                     gamma = process["strength"]
-                    if is_pauli(process):
+                    if pauli_flags[idx]:
                         generator += gamma * np.eye(dim, dtype=np.complex128)
                     else:
+                        all_pauli = False
                         jump_op_mat = process["matrix"]
                         generator += gamma * (np.conj(jump_op_mat).T @ jump_op_mat)
-                if all(is_pauli(process) for process in adjacent_procs):
+                if all_pauli:
                     state.tensors[i] *= np.exp(-0.5 * dt * float(np.real(generator[0, 0])))
                 else:
                     dissipative_op = linalg.expm(-0.5 * dt * generator)

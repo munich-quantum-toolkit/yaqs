@@ -463,7 +463,9 @@ def test_tuple_sites_normalized() -> None:
     """Tuple site sequences are accepted and normalized like lists."""
     nm = NoiseModel([{"name": "crosstalk_xy", "sites": (1, 0), "strength": 0.1}])
     assert nm.processes[0]["sites"] == [0, 1]
-    assert nm.processes[0]["matrix"].shape == (4, 4)
+    # Caller order (1, 0) with xy means X on site 1 and Y on site 0 -> Y⊗X on [0, 1].
+    expected = np.kron(NoiseModel.get_operator("y"), NoiseModel.get_operator("x"))
+    np.testing.assert_allclose(nm.processes[0]["matrix"], expected)
 
 
 def test_negative_strength_rejected() -> None:

@@ -29,8 +29,11 @@ Scheduled jumps are supported only for **single-`State` analog MPS TJM** with
 for ``order=2``, MCWF, Lindblad, digital circuits, and `list[State]` unitary
 ensembles. Jump times must lie on the simulation time grid (`sim_params.times`;
 choose `time` as a multiple of `dt`). Two-site scheduled jumps must be
-nearest-neighbor. On a matching timestep, scheduled jumps replace the ordinary
-stochastic jump channel for that step (dissipation still runs).
+nearest-neighbor. A jump at ``time=0.0`` is applied to the initial state
+**before** dissipation and the first measurement, so the recorded initial
+observable (and ``get_state``) already include it. For interior timesteps, on a
+matching grid point scheduled jumps replace the ordinary stochastic jump channel
+for that step (dissipation still runs).
 ```
 
 ## 1. Setup

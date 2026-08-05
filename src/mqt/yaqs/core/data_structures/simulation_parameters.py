@@ -146,7 +146,9 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
         raise ValueError(msg)
 
     n_steps = round(n_float)
-    if n_steps > np.iinfo(np.intp).max - 1:
+    # Bound by a float64 times-grid allocation: nbytes must fit in a platform size index.
+    max_steps = np.iinfo(np.intp).max // np.dtype(np.float64).itemsize - 1
+    if n_steps > max_steps:
         msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
         raise ValueError(msg)
 

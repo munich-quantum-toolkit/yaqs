@@ -2039,20 +2039,17 @@ def test_digital_rejects_nonadjacent_noise_matching_and_nonmatching() -> None:
     """Digital TJM rejects non-adjacent factorized noise even if a gate shares endpoints."""
     circuit = QuantumCircuit(3)
     circuit.cx(0, 2)  # matching endpoints for sites [0, 2]
-    noise_match = NoiseModel([
-        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.01},
-    ])
-    noise_other = NoiseModel([
+    noise = NoiseModel([
         {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.01},
     ])
     sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=8)
     with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
-        Simulator(show_progress=False).run(State(3), circuit, sim_params, noise_match)
+        Simulator(show_progress=False).run(State(3), circuit, sim_params, noise)
 
     circuit2 = QuantumCircuit(3)
     circuit2.cx(0, 1)  # non-matching endpoints
     with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
-        Simulator(show_progress=False).run(State(3), circuit2, sim_params, noise_other)
+        Simulator(show_progress=False).run(State(3), circuit2, sim_params, noise)
 
 
 def test_analog_longrange_crosstalk_xy_mps_runs() -> None:

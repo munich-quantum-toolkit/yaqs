@@ -269,14 +269,16 @@ def _rho_vec_at_elapsed_time(ctx: LindbladContext) -> NDArray[np.complex128]:
         return ctx.rho_initial.copy()
 
     dt = sim_params.dt
-    n_full = int(target_t // dt)
+    # Match AnalogSimParams: round the validated elapsed_time/dt ratio so grid
+    # endpoints leave only floating-point dust in the remainder.
+    n_full = round(target_t / dt)
     remainder = target_t - n_full * dt
 
     if ctx.step_propagator is not None:
         rho_vec = ctx.rho_initial.copy()
         for _ in range(n_full):
             rho_vec = ctx.step_propagator @ rho_vec
-        if remainder > 1e-12:
+        if abs(remainder) > 1e-12:
             liouvillian = _build_liouvillian_superoperator(dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
             rho_vec = linalg.expm(liouvillian * remainder) @ rho_vec
         return rho_vec
