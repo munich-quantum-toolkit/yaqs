@@ -398,6 +398,7 @@ def _evolve_backend_state(
     solver: str,
     traj_idx: int = 0,
     static_ctx: MCWFContext | None = None,
+    rng: np.random.Generator | None = None,
 ) -> MPS | NDArray[np.complex128]:
     """Evolve a backend state forward in time by one segment.
 
@@ -409,6 +410,7 @@ def _evolve_backend_state(
         solver: Backend solver name.
         traj_idx: MCWF trajectory index (used for deterministic seeding in the backend).
         static_ctx: Optional preprocessed MCWF context.
+        rng: Optional trajectory RNG reused across consecutive TJM segments.
 
     Returns:
         Updated backend state after evolution.
@@ -441,6 +443,7 @@ def _evolve_backend_state(
     _, _, out = backend(
         (traj_idx, state, noise_model, step_params_tjm, operator),
         copy_initial_state=False,
+        rng=rng,
     )
     if out is None:
         msg = "TJM backend returned None state."

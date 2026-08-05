@@ -55,7 +55,6 @@ flowchart LR
 | I want to…                                                                 | Read                                                                        |
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Run my first simulation in under a minute                                  | {doc}`examples/quickstart`                                                  |
-| Compose analog evolution with digital interventions                        | {doc}`examples/composable_simulation`                                       |
 | Configure truncation, presets, and trajectories                            | {doc}`examples/simulation_parameters`                                       |
 | Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
 | Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
@@ -73,6 +72,7 @@ flowchart LR
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
 | Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
+| Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
 
@@ -87,7 +87,6 @@ examples/quickstart
 examples/state_initialization
 examples/simulator_initialization
 examples/simulation_parameters
-examples/composable_simulation
 ```
 
 ```{toctree}
@@ -135,6 +134,15 @@ examples/circuit_observables
 examples/circuit_shots
 examples/custom_gates
 examples/equivalence_checking
+```
+
+```{toctree}
+:caption: Digital–analog simulation
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
+examples/digital_analog_simulation
 ```
 
 ```{toctree}

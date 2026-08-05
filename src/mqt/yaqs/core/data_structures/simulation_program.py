@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Composable analog and digital simulation program specifications."""
+"""Analog and digital simulation program specifications."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ import copy
 from dataclasses import KW_ONLY, dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
 from qiskit.circuit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
 
+from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ..time_utils import exact_time_grid
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
@@ -115,30 +116,40 @@ class SimulationProgram:
 
     Args:
         segments: Non-empty iterable of analog and digital segment specifications.
+        num_traj: Program-wide trajectory count for stochastic execution. If
+            supplied, it overrides values resolved on segment simulation
+            parameters. If omitted, execution uses the shared segment value;
+            supplied segment values must agree. As in standalone digital
+            simulation, a noisy program with shots but no observables instead
+            executes one complete-program trajectory per requested shot.
         get_state: Whether program execution should retain the final state in the
             outer :class:`~mqt.yaqs.Result`.
 
     Raises:
         TypeError: If ``segments`` is not iterable, contains an unsupported item,
-            or ``get_state`` is not a Boolean.
-        ValueError: If ``segments`` is empty.
+            ``num_traj`` is not an integer or ``None``, or ``get_state`` is not a
+            Boolean.
+        ValueError: If ``segments`` is empty or ``num_traj`` is less than one.
     """
 
     segments: tuple[AnalogSegment | DigitalSegment, ...]
+    num_traj: int | None
     get_state: bool
 
     def __init__(
         self,
         segments: Iterable[AnalogSegment | DigitalSegment],
         *,
+        num_traj: int | None = None,
         get_state: bool = False,
     ) -> None:
         """Initialize and validate an immutable ordered program.
 
         Raises:
-            TypeError: If the segment collection, an item, or ``get_state`` has
-                the wrong type.
-            ValueError: If the program has no segments.
+            TypeError: If the segment collection, an item, ``num_traj``, or
+                ``get_state`` has the wrong type.
+            ValueError: If the program has no segments or ``num_traj`` is less
+                than one.
         """
         if isinstance(segments, (str, bytes)):
             msg = "segments must be an iterable of AnalogSegment or DigitalSegment."
@@ -156,11 +167,18 @@ class SimulationProgram:
             if not isinstance(segment, (AnalogSegment, DigitalSegment)):
                 msg = f"segments[{index}] must be AnalogSegment or DigitalSegment, got {type(segment).__name__}."
                 raise TypeError(msg)
+        if num_traj is not None and (isinstance(num_traj, bool) or not isinstance(num_traj, int)):
+            msg = f"num_traj must be int or None, got {type(num_traj).__name__}."
+            raise TypeError(msg)
+        if num_traj is not None and num_traj < 1:
+            msg = f"num_traj must be at least 1, got {num_traj}."
+            raise ValueError(msg)
         if not isinstance(get_state, bool):
             msg = f"get_state must be bool, got {type(get_state).__name__}."
             raise TypeError(msg)
 
         object.__setattr__(self, "segments", normalized_segments)
+        object.__setattr__(self, "num_traj", num_traj)
         object.__setattr__(self, "get_state", get_state)
 
     def __iter__(self) -> Iterator[AnalogSegment | DigitalSegment]:
@@ -203,6 +221,7 @@ class _CompiledDigitalInstruction:
 
     index: int
     circuit: QuantumCircuit
+    compiled_circuit: _CompiledCircuit
     sim_params: DigitalSimParams
     execution_params: DigitalSimParams
     noise_model: NoiseModel | None
@@ -224,6 +243,53 @@ class _CompiledProgram:
     num_traj_conflict: bool
     random_seed_conflict: bool
     default_noise_model: NoiseModel | None
+
+
+def _validate_noise_layout(
+    noise_model: NoiseModel | None,
+    physical_dimensions: tuple[int, ...],
+    *,
+    segment_index: int,
+) -> None:
+    """Validate noise target indices and operator dimensions during compilation.
+
+    Raises:
+        ValueError: If a target is invalid or an operator does not match its local dimensions.
+    """
+    if noise_model is None:
+        return
+    entries = [*noise_model.processes, *noise_model.scheduled_jumps]
+    for entry in entries:
+        sites = tuple(entry["sites"])
+        if not sites or any(
+            not isinstance(site, int) or site < 0 or site >= len(physical_dimensions) for site in sites
+        ):
+            msg = f"segments[{segment_index}] noise process has invalid target sites {list(sites)}."
+            raise ValueError(msg)
+        factors = entry.get("factors")
+        if factors is not None:
+            if len(factors) != len(sites):
+                msg = f"segments[{segment_index}] noise process has {len(factors)} factors for {len(sites)} sites."
+                raise ValueError(msg)
+            for site, factor in zip(sites, factors, strict=True):
+                expected = physical_dimensions[site]
+                if np.shape(factor) != (expected, expected):
+                    msg = (
+                        f"segments[{segment_index}] noise operator on site {site} has shape "
+                        f"{np.shape(factor)}, expected ({expected}, {expected})."
+                    )
+                    raise ValueError(msg)
+            continue
+        matrix = entry.get("matrix")
+        if matrix is None:
+            continue
+        expected = int(np.prod([physical_dimensions[site] for site in sites]))
+        if np.shape(matrix) != (expected, expected):
+            msg = (
+                f"segments[{segment_index}] noise operator on sites {list(sites)} has shape "
+                f"{np.shape(matrix)}, expected ({expected}, {expected})."
+            )
+            raise ValueError(msg)
 
 
 def _compile_program(
@@ -251,22 +317,23 @@ def _compile_program(
         msg = "SimulationProgram execution currently requires State.representation='mps'."
         raise ValueError(msg)
     physical_dimensions = tuple(initial_state.mps.physical_dimensions)
-    if any(dimension != 2 for dimension in physical_dimensions):
-        msg = "SimulationProgram execution currently supports qubit physical dimensions only."
-        raise ValueError(msg)
-
     signature = _StateSignature("mps", initial_state.length, physical_dimensions)
     instructions: list[_CompiledInstruction] = []
     time_offset = 0.0
 
-    explicit_num_traj = {segment.sim_params.num_traj for segment in program.segments if segment.sim_params is not None}
-    num_traj_conflict = len(explicit_num_traj) > 1
-    if len(explicit_num_traj) == 1:
-        num_traj = explicit_num_traj.pop()
-    elif explicit_num_traj:
+    segment_num_traj = {segment.sim_params.num_traj for segment in program.segments if segment.sim_params is not None}
+    if program.num_traj is not None:
+        num_traj = program.num_traj
+        num_traj_conflict = False
+    elif len(segment_num_traj) == 1:
+        num_traj = segment_num_traj.pop()
+        num_traj_conflict = False
+    elif segment_num_traj:
         num_traj = None
+        num_traj_conflict = True
     else:
         num_traj = AnalogSimParams().num_traj
+        num_traj_conflict = False
 
     explicit_seeds = {
         segment.sim_params.random_seed
@@ -278,6 +345,13 @@ def _compile_program(
 
     for index, segment in enumerate(program.segments):
         resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model
+        if resolved_noise_model is not None and resolved_noise_model.scheduled_jumps:
+            msg = (
+                f"segments[{index}] uses scheduled_jumps, which are not supported in SimulationProgram execution; "
+                "their timing semantics across segment-local clocks are not yet defined."
+            )
+            raise ValueError(msg)
+        _validate_noise_layout(resolved_noise_model, signature.physical_dimensions, segment_index=index)
 
         if isinstance(segment, AnalogSegment):
             if segment.hamiltonian.length != signature.length:
@@ -285,9 +359,6 @@ def _compile_program(
                     f"segments[{index}] Hamiltonian.length={segment.hamiltonian.length} "
                     f"does not match State.length={signature.length}."
                 )
-                raise ValueError(msg)
-            if segment.hamiltonian.physical_dimension != 2:
-                msg = f"segments[{index}] Hamiltonian must currently use physical_dimension=2."
                 raise ValueError(msg)
             sim_params = segment.sim_params if segment.sim_params is not None else AnalogSimParams()
             if sim_params.order not in {1, 2}:
@@ -305,6 +376,15 @@ def _compile_program(
                 execution_params.random_seed = random_seed
             execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
             segment.hamiltonian.ensure_mpo()
+            for site, (tensor, dimension) in enumerate(
+                zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
+            ):
+                if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
+                    msg = (
+                        f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
+                        f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
+                    )
+                    raise ValueError(msg)
             instructions.append(
                 _CompiledAnalogInstruction(
                     index=index,
@@ -332,18 +412,18 @@ def _compile_program(
             if not random_seed_conflict:
                 execution_params.random_seed = random_seed
             execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+            compiled_circuit = _compile_circuit(
+                segment.circuit,
+                signature.physical_dimensions,
+                gate_mode=execution_params.gate_mode,
+            )
             if execution_params.sample_layers:
-                dag = circuit_to_dag(segment.circuit)
-                execution_params.num_mid_measurements = sum(
-                    1
-                    for node in dag.op_nodes()
-                    if node.op.name == "barrier"
-                    and str(getattr(node.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
-                )
+                execution_params.num_mid_measurements = compiled_circuit.num_mid_measurements
             instructions.append(
                 _CompiledDigitalInstruction(
                     index=index,
                     circuit=segment.circuit,
+                    compiled_circuit=compiled_circuit,
                     sim_params=sim_params,
                     execution_params=execution_params,
                     noise_model=resolved_noise_model,

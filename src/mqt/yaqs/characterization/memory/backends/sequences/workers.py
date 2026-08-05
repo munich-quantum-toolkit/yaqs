@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
+from mqt.yaqs.core.random_utils import make_trajectory_rng
 from mqt.yaqs.core.time_utils import exact_time_grid
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
@@ -329,6 +330,7 @@ def _simulate_seq_core(
 
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
+    rng = make_trajectory_rng(trajectory_idx, base_seed=sim_params.random_seed)
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
@@ -361,6 +363,7 @@ def _simulate_seq_core(
         solver,
         traj_idx=trajectory_idx,
         static_ctx=mcwf_ctxs[0],
+        rng=rng,
     )
 
     break_step: int | None = None
@@ -391,6 +394,7 @@ def _simulate_seq_core(
             solver,
             traj_idx=trajectory_idx,
             static_ctx=mcwf_ctxs[step_idx + 1],
+            rng=rng,
         )
         num_evolutions_in_loop += 1
 
@@ -530,6 +534,7 @@ def _seq_record_worker(
         raise ValueError(msg)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
+    rng = make_trajectory_rng(trajectory_idx, base_seed=sim_params.random_seed)
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
@@ -566,6 +571,7 @@ def _seq_record_worker(
         solver,
         traj_idx=trajectory_idx,
         static_ctx=mcwf_ctxs[0],
+        rng=rng,
     )
 
     rho0_raw = extract_site0_rho(state)
@@ -601,6 +607,7 @@ def _seq_record_worker(
             solver,
             traj_idx=trajectory_idx,
             static_ctx=mcwf_ctxs[step_idx + 1],
+            rng=rng,
         )
 
         rho_step = extract_site0_rho(state)

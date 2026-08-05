@@ -80,6 +80,15 @@ def test_get_support_mpo_reextends_when_cache_length_mismatches() -> None:
     assert len(wide) == 3
 
 
+def test_get_support_mpo_rejects_wrong_homogeneous_dimension_count() -> None:
+    """All-qubit metadata must still describe every site in the gate support."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 2)
+
+    with pytest.raises(ValueError, match="Expected 3 physical dimensions"):
+        get_support_mpo(gate, first_site=0, last_site=2, physical_dimensions=[2, 2])
+
+
 def test_get_support_mpo_calls_extend_gate_without_cache() -> None:
     """Gates without ``mpo_tensors`` build support tensors via ``extend_gate``."""
     gate = GateLibrary.cx()

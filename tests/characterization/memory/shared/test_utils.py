@@ -14,6 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import mqt.yaqs.characterization.memory.shared.utils as utils_module
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
     _apply_cut_preparation_step,
@@ -92,6 +93,32 @@ def test_evolve_backend_state_tjm_does_not_mutate_caller_params() -> None:
     assert isinstance(state, MPS)
     _evolve_backend_state(state, op, None, params, solver="TJM")
     assert getattr(params, "get_state", False) is False
+
+
+def test_evolve_backend_state_forwards_shared_tjm_rng(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Characterization can reuse one TJM stream across bounded evolutions."""
+    received_rng: np.random.Generator | None = None
+
+    def fake_backend(
+        args: tuple[object, ...],
+        *,
+        copy_initial_state: bool,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[None, None, object]:
+        nonlocal received_rng
+        received_rng = rng
+        assert copy_initial_state is False
+        return None, None, args[1]
+
+    monkeypatch.setattr(utils_module, "analog_tjm_1", fake_backend)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.05, elapsed_time=0.05, order=1)
+    state = _initialize_backend_state(op, solver="TJM")
+    rng = np.random.default_rng(17)
+
+    _evolve_backend_state(state, op, None, params, solver="TJM", rng=rng)
+
+    assert received_rng is rng
 
 
 def test_resolve_characterizer_representation_branches() -> None:

@@ -315,6 +315,7 @@ def _execute_program_trajectory(
                     ),
                     copy_initial_state=False,
                     rng=rng,
+                    compiled_circuit=instruction.compiled_circuit,
                 )
             finally:
                 if shots is not None:
@@ -792,7 +793,7 @@ class Simulator:
         return result
 
     # -----------------------------------------------------------------------
-    # Composable program execution
+    # SimulationProgram execution
     # -----------------------------------------------------------------------
     def _run_program(
         self,
@@ -836,7 +837,13 @@ class Simulator:
             if compiled.num_traj is None:  # pragma: no cover - guarded by conflict validation
                 msg = "Noisy SimulationProgram has no resolved trajectory count."
                 raise RuntimeError(msg)
-            effective_num_traj = compiled.num_traj
+            has_observables = any(instruction.sim_params.observables for instruction in compiled.instructions)
+            shot_budgets = [
+                instruction.sim_params.shots
+                for instruction in compiled.instructions
+                if isinstance(instruction, _CompiledDigitalInstruction) and instruction.sim_params.shots is not None
+            ]
+            effective_num_traj = max(shot_budgets) if shot_budgets and not has_observables else compiled.num_traj
         else:
             effective_num_traj = 1
 

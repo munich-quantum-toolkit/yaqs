@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for composable analog and digital program specifications."""
+"""Tests for analog and digital program specifications."""
 
 from __future__ import annotations
 
@@ -96,12 +96,13 @@ def test_program_preserves_order_and_defensively_copies_input() -> None:
     digital = DigitalSegment(QuantumCircuit(2))
     source = [analog, digital]
 
-    program = SimulationProgram(source, get_state=True)
+    program = SimulationProgram(source, num_traj=17, get_state=True)
     source.reverse()
 
     assert program.segments == (analog, digital)
     assert list(program) == [analog, digital]
     assert len(program) == 2
+    assert program.num_traj == 17
     assert program.get_state
     with pytest.raises(FrozenInstanceError):
         program.get_state = False  # ty: ignore[invalid-assignment]  # exercise frozen dataclass
@@ -128,6 +129,22 @@ def test_program_rejects_non_boolean_get_state() -> None:
         )
 
 
+@pytest.mark.parametrize("num_traj", [True, 1.5, "2"])
+def test_program_rejects_non_integer_num_traj(num_traj: object) -> None:
+    """The program-wide trajectory count does not accept integer-like values."""
+    with pytest.raises(TypeError, match="num_traj must be int or None"):
+        SimulationProgram(
+            [DigitalSegment(QuantumCircuit(2))],
+            num_traj=num_traj,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+        )
+
+
+def test_program_rejects_non_positive_num_traj() -> None:
+    """A stochastic ensemble must contain at least one trajectory."""
+    with pytest.raises(ValueError, match="num_traj must be at least 1"):
+        SimulationProgram([DigitalSegment(QuantumCircuit(2))], num_traj=0)
+
+
 def test_program_specification_is_pickleable() -> None:
     """A mixed program specification round-trips for future worker execution."""
     program = SimulationProgram(
@@ -138,6 +155,7 @@ def test_program_specification_is_pickleable() -> None:
                 sim_params=AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True),
             ),
         ],
+        num_traj=7,
         get_state=True,
     )
 
@@ -146,4 +164,5 @@ def test_program_specification_is_pickleable() -> None:
     assert len(restored) == 2
     assert isinstance(restored.segments[0], DigitalSegment)
     assert isinstance(restored.segments[1], AnalogSegment)
+    assert restored.num_traj == 7
     assert restored.get_state

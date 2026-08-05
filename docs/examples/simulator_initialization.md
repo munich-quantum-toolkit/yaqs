@@ -264,6 +264,19 @@ on them safely. The full set is:
 | `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                     |
 | `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                              |
 
+`result.observable_trace(observable)` returns newly allocated expectation-value
+and physical-time arrays for a standalone result or a digital–analog program.
+Analog samples use their local time grids and program offsets. Observations
+recorded inside a digital segment all use that segment's physical-time offset,
+so coincident times preserve checkpoint order around instantaneous operations. A
+standalone digital result consequently returns time zero for every checkpoint;
+use a circuit-specific coordinate such as `np.arange(len(values))` when plotting
+against circuit progress instead of physical time.
+
+For noisy programs, `SimulationProgram.num_traj` controls observable ensembles.
+A program that requests shots but no observables follows standalone digital
+semantics and executes one complete-program stochastic trajectory per shot.
+
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and
 resume analysis from disk:
 

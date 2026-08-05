@@ -188,6 +188,13 @@ ax.set_title(r"Mid-circuit $\langle Z \rangle$ under damping")
 fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 ```
 
+The checkpoint index is a circuit-analysis coordinate rather than physical time.
+Accordingly, `layer_result.observable_trace(observable)` would assign time zero
+to every checkpoint of this standalone digital result. In a digital–analog
+`SimulationProgram`, the same accessor instead inserts recorded digital
+checkpoints at their segment's physical-time offset, preserving their order as
+coincident samples.
+
 ## 4. OpenQASM inputs
 
 Pass an OpenQASM 2 source string (or file path) directly to
@@ -255,8 +262,8 @@ print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 
 ## 6. Related topics
 
-- {doc}`composable_simulation` — alternate digital interventions with analog
-  evolution
+- {doc}`digital_analog_simulation` — combine digital operations with analog
+  evolution in one program
 - {doc}`circuit_shots` — computational-basis shot histograms with
   {class}`~mqt.yaqs.DigitalSimParams`
 - {doc}`custom_gates` — custom unitaries and gate translation

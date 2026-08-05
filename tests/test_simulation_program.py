@@ -5,10 +5,13 @@
 #
 # Licensed under the MIT License
 
-"""Integration tests for composable simulation programs."""
+"""Integration tests for analog and digital simulation programs."""
 
 from __future__ import annotations
 
+import contextlib
+import copy
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -17,6 +20,7 @@ from qiskit.circuit import QuantumCircuit
 
 import mqt.yaqs.analog.analog_tjm as analog_module
 import mqt.yaqs.digital.digital_tjm as digital_module
+import mqt.yaqs.simulator as simulator_module
 from mqt.yaqs import (
     AnalogSegment,
     AnalogSimParams,
@@ -29,9 +33,15 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
+from mqt.yaqs.core.data_structures.mpo import MPO
 
 if TYPE_CHECKING:
+    from qiskit.dagcircuit import DAGOpNode
+
     from mqt.yaqs.core.data_structures.mps import MPS
+    from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
+    from mqt.yaqs.digital.digital_tjm import _CompiledCircuit
 
 
 def _zero_hamiltonian(length: int) -> Hamiltonian:
@@ -97,6 +107,58 @@ def test_mixed_program_matches_manual_state_handoff() -> None:
     analog_times = result.segment_results[1].times
     assert analog_times is not None
     np.testing.assert_allclose(analog_times, np.array([0.0, 0.1]))
+
+
+def test_observable_trace_preserves_boundary_values_around_digital_pulse() -> None:
+    """Equal boundary times retain analog and digital samples around an instantaneous gate."""
+    observable = Observable("z", 0)
+    params = AnalogSimParams(
+        observables=[observable],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=True,
+    )
+    pulse = QuantumCircuit(1)
+    pulse.x(0)
+    pulse_params = DigitalSimParams(observables=[observable], sample_layers=True)
+    program = SimulationProgram([
+        AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+        DigitalSegment(pulse, sim_params=pulse_params),
+        AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+    ])
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+    times, values = result.observable_trace(observable)
+
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.1, 0.1, 0.1, 0.2]))
+    np.testing.assert_allclose(values, np.array([1.0, 1.0, 1.0, -1.0, -1.0, -1.0]), atol=1e-10)
+
+
+def test_observable_trace_preserves_boundary_values_between_adjacent_analog_segments() -> None:
+    """Adjacent analog grids remain lossless even without an intervention."""
+    observable = Observable("z", 0)
+    first_params = AnalogSimParams(
+        observables=[observable],
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+    )
+    second_params = AnalogSimParams(
+        observables=[observable],
+        elapsed_time=0.2,
+        dt=0.2,
+        sample_timesteps=True,
+    )
+    program = SimulationProgram([
+        AnalogSegment(_zero_hamiltonian(1), sim_params=first_params),
+        AnalogSegment(_zero_hamiltonian(1), sim_params=second_params),
+    ])
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+    times, values = result.observable_trace(observable)
+
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.2, 0.2, 0.4]))
+    np.testing.assert_allclose(values, np.ones(5), atol=1e-10)
 
 
 def test_program_resolves_omitted_segment_parameters() -> None:
@@ -178,7 +240,7 @@ def test_program_call_contract_is_distinct_from_standalone_run() -> None:
         (
             State(2, initial="zeros", physical_dimensions=3),
             SimulationProgram([AnalogSegment(Hamiltonian.ising(2, J=0.0, g=0.0))]),
-            "qubit physical dimensions only",
+            "Hamiltonian MPO site 0 has physical legs",
         ),
         (
             State(2, initial="zeros"),
@@ -240,11 +302,14 @@ def test_program_noise_default_and_empty_segment_override() -> None:
             "strength": {"distribution": "normal", "mean": 0.2, "std": 0.01},
         }
     ])
-    program = SimulationProgram([
-        AnalogSegment(_zero_hamiltonian(2), sim_params=params),
-        DigitalSegment(QuantumCircuit(2), noise_model=disabled_noise),
-        AnalogSegment(_zero_hamiltonian(2), sim_params=params),
-    ])
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(2), sim_params=params),
+            DigitalSegment(QuantumCircuit(2), noise_model=disabled_noise),
+            AnalogSegment(_zero_hamiltonian(2), sim_params=params),
+        ],
+        num_traj=3,
+    )
 
     result = Simulator(parallel=False, show_progress=False).run(
         State(2, initial="zeros"),
@@ -267,11 +332,11 @@ def test_program_noise_default_and_empty_segment_override() -> None:
 
 
 def test_noisy_program_preserves_digital_shot_budget() -> None:
-    """Shot allocation remains global when the program trajectory count is larger."""
+    """A noisy shots-only program executes one full trajectory per requested shot."""
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
     params = DigitalSimParams(shots=3, num_traj=5, random_seed=23)
-    program = SimulationProgram([DigitalSegment(circuit, sim_params=params)])
+    program = SimulationProgram([DigitalSegment(circuit, sim_params=params)], num_traj=5)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
 
     result = Simulator(parallel=False, show_progress=False).run(
@@ -281,7 +346,33 @@ def test_noisy_program_preserves_digital_shot_budget() -> None:
     )
 
     segment_result = result.segment_results[0]
+    assert len(segment_result.measurements) == 3
+    assert segment_result.counts is not None
+    assert sum(segment_result.counts.values()) == 3
+
+
+def test_noisy_program_uses_num_traj_when_observables_and_shots_are_combined() -> None:
+    """Observable ensembles retain the program count and share the total shot budget."""
+    params = DigitalSimParams(
+        observables=[Observable("z", 0)],
+        shots=3,
+        num_traj=5,
+        random_seed=23,
+    )
+    program = SimulationProgram(
+        [DigitalSegment(QuantumCircuit(2), sim_params=params)],
+        num_traj=5,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    segment_result = result.segment_results[0]
     assert len(segment_result.measurements) == 5
+    assert segment_result.trajectories[0].shape[0] == 5
     assert segment_result.counts is not None
     assert sum(segment_result.counts.values()) == 3
 
@@ -318,11 +409,14 @@ def test_program_threads_one_rng_stream_across_analog_and_digital_segments(
     digital_params = DigitalSimParams(num_traj=2)
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
-    program = SimulationProgram([
-        AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
-        DigitalSegment(circuit, sim_params=digital_params),
-        AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
-    ])
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
+            DigitalSegment(circuit, sim_params=digital_params),
+            AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
+        ],
+        num_traj=2,
+    )
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
 
     Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program, noise_model=noise_model)
@@ -351,11 +445,14 @@ def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:
     digital_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=4)
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
-    program = SimulationProgram([
-        AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
-        DigitalSegment(circuit, sim_params=digital_params),
-        AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
-    ])
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
+            DigitalSegment(circuit, sim_params=digital_params),
+            AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
+        ],
+        num_traj=4,
+    )
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.3}])
     result = Simulator(parallel=parallel, max_workers=2, show_progress=False).run(
         State(2, initial="zeros"),
@@ -378,7 +475,7 @@ def test_seeded_noisy_program_matches_in_serial_and_parallel() -> None:
 def test_noisy_program_rejects_requested_trajectory_state() -> None:
     """A stochastic ensemble has no single representative output state."""
     params = AnalogSimParams(elapsed_time=0.1, dt=0.1, num_traj=2, get_state=True)
-    program = SimulationProgram([AnalogSegment(_zero_hamiltonian(2), sim_params=params)])
+    program = SimulationProgram([AnalogSegment(_zero_hamiltonian(2), sim_params=params)], num_traj=2)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
 
     with pytest.raises(ValueError, match="Cannot return state from a noisy SimulationProgram"):
@@ -409,6 +506,310 @@ def test_program_rejects_conflicting_trajectory_configuration() -> None:
 
     noiseless = simulator.run(State(2, initial="zeros"), different_counts)
     assert len(noiseless.segment_results) == 2
+
+
+def test_program_num_traj_overrides_segment_defaults() -> None:
+    """The program count wins without mutating lower-level parameter objects."""
+    analog_params = AnalogSimParams(observables=[Observable("z", 0)])
+    digital_params = DigitalSimParams(shots=3, preset="fast")
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(2), sim_params=analog_params),
+            DigitalSegment(QuantumCircuit(2), sim_params=digital_params),
+        ],
+        num_traj=4,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert result.segment_results[0].trajectories[0].shape[0] == 4
+    assert len(result.segment_results[1].measurements) == 4
+    assert analog_params.num_traj == 256
+    assert digital_params.num_traj == 128
+
+
+def test_program_infers_agreeing_segment_num_traj() -> None:
+    """Agreeing segment counts configure the whole trajectory ensemble when needed."""
+    params = AnalogSimParams(observables=[Observable("z", 0)], num_traj=2)
+    program = SimulationProgram([AnalogSegment(_zero_hamiltonian(2), sim_params=params)])
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert result.segment_results[0].trajectories[0].shape[0] == 2
+
+
+def test_program_rejects_scheduled_jumps_until_program_time_semantics_are_defined() -> None:
+    """Segment-local clocks must not silently repeat run-level scheduled jumps."""
+    scheduled = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "pauli_x"}])
+    program = SimulationProgram([
+        AnalogSegment(_zero_hamiltonian(1)),
+        AnalogSegment(_zero_hamiltonian(1)),
+    ])
+
+    with pytest.raises(ValueError, match=r"scheduled_jumps.*not supported"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            program,
+            noise_model=scheduled,
+        )
+
+
+def test_noiseless_program_ignores_trajectory_configuration_without_warning() -> None:
+    """Trajectory precedence is irrelevant to noiseless execution."""
+    params = AnalogSimParams(observables=[Observable("z", 0)], num_traj=2)
+    program = SimulationProgram(
+        [AnalogSegment(_zero_hamiltonian(2), sim_params=params)],
+        num_traj=4,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+    assert result.segment_results[0].trajectories[0].shape[0] == 1
+
+
+def _heterogeneous_zero_hamiltonian(physical_dimensions: list[int]) -> Hamiltonian:
+    """Return a zero MPO with physical legs matching a heterogeneous layout."""
+    tensors = [np.zeros((dimension, dimension, 1, 1), dtype=np.complex128) for dimension in physical_dimensions]
+    mpo = MPO()
+    mpo.custom(tensors, transpose=False)
+    return Hamiltonian.from_mpo(mpo)
+
+
+def test_heterogeneous_program_preserves_idle_spectator() -> None:
+    """Analog evolution and qubit gates preserve an idle non-qubit site."""
+    dimensions = [2, 2, 3]
+    circuit = QuantumCircuit(3)
+    circuit.x(0)
+    circuit.cx(0, 1)
+    program = SimulationProgram(
+        [
+            AnalogSegment(
+                _heterogeneous_zero_hamiltonian(dimensions),
+                sim_params=AnalogSimParams(elapsed_time=0.1, dt=0.1),
+            ),
+            DigitalSegment(circuit),
+        ],
+        get_state=True,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(3, initial="zeros", physical_dimensions=dimensions),
+        program,
+    )
+
+    assert result.output_state is not None
+    assert result.output_state.mps.physical_dimensions == dimensions
+    assert result.output_state.mps.project_onto_bitstring("110") == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "tdvp", "full-tdvp"])
+def test_long_range_qubit_gate_crosses_non_qubit_spectator(gate_mode: GateMode) -> None:
+    """Supported non-SWAP modes derive spectator identities from the MPS layout."""
+    dimensions = [2, 3, 2]
+    circuit = QuantumCircuit(3)
+    circuit.x(0)
+    circuit.cx(0, 2)
+    params = DigitalSimParams(gate_mode=gate_mode, max_bond_dim=8, svd_threshold=1e-12)
+    program = SimulationProgram([DigitalSegment(circuit, sim_params=params)], get_state=True)
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(3, initial="zeros", physical_dimensions=dimensions),
+        program,
+    )
+
+    assert result.output_state is not None
+    assert result.output_state.mps.physical_dimensions == dimensions
+    assert result.output_state.mps.project_onto_bitstring("101") == pytest.approx(1.0, abs=1e-8)
+
+
+def test_heterogeneous_program_rejects_incompatible_gate_target_and_swap_route() -> None:
+    """Compilation reports incompatible targets and heterogeneous SWAP routing."""
+    target_circuit = QuantumCircuit(3)
+    target_circuit.x(2)
+    with pytest.raises(ValueError, match="targets site 2 with physical dimension 3"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros", physical_dimensions=[2, 2, 3]),
+            SimulationProgram([DigitalSegment(target_circuit)]),
+        )
+
+    routed_circuit = QuantumCircuit(3)
+    routed_circuit.cx(0, 2)
+    with pytest.raises(ValueError, match=r"cannot route.*non-qubit spectator"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros", physical_dimensions=[2, 3, 2]),
+            SimulationProgram([DigitalSegment(routed_circuit, sim_params=DigitalSimParams(gate_mode="swaps"))]),
+        )
+
+
+def test_program_translates_digital_gates_once_for_all_trajectories(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Circuit-to-gate translation is shared rather than repeated per trajectory."""
+    calls = 0
+    original_convert = digital_module.convert_dag_to_tensor_algorithm
+
+    def counted_convert(node: DAGOpNode) -> list[BaseGate]:
+        nonlocal calls
+        calls += 1
+        return original_convert(node)
+
+    monkeypatch.setattr(digital_module, "convert_dag_to_tensor_algorithm", counted_convert)
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=4, random_seed=19)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"),
+        SimulationProgram([DigitalSegment(circuit, sim_params=params)], num_traj=4),
+        noise_model=noise_model,
+    )
+
+    assert calls == 1
+
+
+def test_compiled_gates_are_executor_owned_and_never_mutated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repeated trajectory execution leaves executor-owned compiled gates unchanged."""
+    compiled_ids: list[int] = []
+    original_digital_tjm = simulator_module.digital_tjm
+
+    def fingerprint(compiled: _CompiledCircuit) -> tuple[object, ...]:
+        """Return mutation-sensitive metadata for every gate in a compiled circuit."""
+
+        def arrays(gate: BaseGate) -> tuple[bytes, ...]:
+            values = [gate.matrix, gate.tensor]
+            generator = getattr(gate, "generator", None)
+            if isinstance(generator, np.ndarray):
+                values.append(generator)
+            elif generator is not None:
+                values.extend(generator)
+            with contextlib.suppress(AttributeError):
+                values.extend(gate.mpo_tensors)
+            return tuple(np.asarray(value).tobytes() for value in values)
+
+        return tuple(
+            (id(gate), tuple(gate.sites), arrays(gate))
+            for layer in compiled.layers
+            for gate in (*layer.single_qubit_gates, *layer.even_two_qubit_gates, *layer.odd_two_qubit_gates)
+        )
+
+    def recording_digital_tjm(
+        args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+        *,
+        copy_initial_state: bool = True,
+        rng: np.random.Generator | None = None,
+        compiled_circuit: _CompiledCircuit | None = None,
+    ) -> tuple[np.ndarray | None, np.ndarray | None, dict[int, int] | None, MPS | None]:
+        assert compiled_circuit is not None
+        before = fingerprint(compiled_circuit)
+        result = original_digital_tjm(
+            args,
+            copy_initial_state=copy_initial_state,
+            rng=rng,
+            compiled_circuit=compiled_circuit,
+        )
+        assert fingerprint(compiled_circuit) == before
+        compiled_ids.append(id(compiled_circuit))
+        return result
+
+    monkeypatch.setattr(simulator_module, "digital_tjm", recording_digital_tjm)
+    circuit = QuantumCircuit(3)
+    circuit.x(0)
+    circuit.cx(0, 2)
+    params = DigitalSimParams(
+        observables=[Observable("z", 0)],
+        num_traj=2,
+        random_seed=41,
+        gate_mode="mpo",
+        max_bond_dim=8,
+        svd_threshold=1e-12,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(3, initial="zeros"),
+        SimulationProgram([DigitalSegment(circuit, sim_params=params)], num_traj=2),
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert len(compiled_ids) == 2
+    assert len(set(compiled_ids)) == 1
+
+
+def test_program_makes_one_owned_state_copy_not_per_segment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A noiseless program copies its MPS once, not at each segment boundary."""
+    copied_mps = 0
+    original_deepcopy = copy.deepcopy
+
+    def counted_deepcopy(value: object) -> object:
+        nonlocal copied_mps
+        if isinstance(value, digital_module.MPS):
+            copied_mps += 1
+        return original_deepcopy(value)
+
+    monkeypatch.setattr(simulator_module, "copy", SimpleNamespace(copy=copy.copy, deepcopy=counted_deepcopy))
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    params = DigitalSimParams(observables=[Observable("z", 0)])
+    program = SimulationProgram([
+        DigitalSegment(circuit, sim_params=params),
+        AnalogSegment(
+            _zero_hamiltonian(2),
+            sim_params=AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.1, dt=0.1),
+        ),
+    ])
+
+    Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+    assert copied_mps == 1
+
+
+def test_noisy_digital_then_analog_program_preserves_reverse_order() -> None:
+    """Whole-trajectory execution also supports digital-to-analog ordering."""
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    circuit.cx(0, 1)
+    params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=4,
+        random_seed=13,
+    )
+    program = SimulationProgram(
+        [
+            DigitalSegment(circuit, sim_params=DigitalSimParams(num_traj=4)),
+            AnalogSegment(_zero_hamiltonian(2), sim_params=params),
+        ],
+        num_traj=4,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert [segment.segment_type for segment in result.segment_results] == ["digital", "analog"]
+    assert result.segment_results[1].expectation_values[0][-1] == pytest.approx(-1.0)
+
+
+def test_program_rejects_noise_operator_incompatible_with_non_qubit_site() -> None:
+    """Noise layout errors are reported before a trajectory enters tensor code."""
+    circuit = QuantumCircuit(3)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [2], "strength": 0.1}])
+
+    with pytest.raises(ValueError, match=r"noise operator on sites \[2\].*expected \(3, 3\)"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros", physical_dimensions=[2, 2, 3]),
+            SimulationProgram([DigitalSegment(circuit)]),
+            noise_model=noise_model,
+        )
 
 
 def _run_spin_echo(*, coupling: float, include_pulse: bool) -> tuple[float, float]:
@@ -483,3 +884,42 @@ def test_spin_echo_refocuses_field_but_not_interactions() -> None:
     assert no_pulse_magnetization < 0.0
     assert interacting_fidelity < 0.8
     assert interacting_magnetization < 0.5
+
+
+def _run_noisy_spin_echo(*, include_pulse: bool) -> float:
+    """Return final transverse magnetization under existing Markovian dephasing."""
+    length = 2
+    hamiltonian = Hamiltonian.heisenberg(length, Jx=0.0, Jy=0.0, Jz=0.0, h=1.1)
+    params = AnalogSimParams(
+        observables=[Observable("x", site) for site in range(length)],
+        elapsed_time=0.4,
+        dt=0.05,
+        num_traj=128,
+        random_seed=2026,
+        order=1,
+    )
+    segments: list[AnalogSegment | DigitalSegment] = [AnalogSegment(hamiltonian, sim_params=params)]
+    if include_pulse:
+        pulse = QuantumCircuit(length)
+        pulse.x(range(length))
+        segments.append(DigitalSegment(pulse))
+    segments.append(AnalogSegment(hamiltonian, sim_params=params))
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [site], "strength": 0.35} for site in range(length)])
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(length, initial="x+"),
+        SimulationProgram(segments, num_traj=128),
+        noise_model=noise_model,
+    )
+    final_analog = result.segment_results[-1]
+    return float(np.mean([values[-1].real for values in final_analog.expectation_values]))
+
+
+def test_hahn_echo_refocuses_detuning_but_not_markovian_dephasing() -> None:
+    """The pulse restores phase while the existing Lindblad envelope remains."""
+    echo_magnetization = _run_noisy_spin_echo(include_pulse=True)
+    no_pulse_magnetization = _run_noisy_spin_echo(include_pulse=False)
+
+    assert 0.3 < echo_magnetization < 0.9
+    assert no_pulse_magnetization < 0.2
+    assert echo_magnetization > no_pulse_magnetization + 0.3
