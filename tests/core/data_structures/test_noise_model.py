@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel, is_pauli
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
@@ -534,3 +534,73 @@ def test_scheduled_jump_bool_time_rejected() -> None:
     """Boolean scheduled-jump times are rejected."""
     with pytest.raises(TypeError, match="booleans"):
         _ = NoiseModel(scheduled_jumps=[{"time": True, "sites": [0], "name": "x"}])
+
+
+def test_explicit_crosstalk_matrix_not_overwritten() -> None:
+    """Explicit matrix overrides take precedence over crosstalk name synthesis."""
+    custom = np.diag([1.0, 2.0, 3.0, 4.0]).astype(complex)
+    nm = NoiseModel([
+        {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.1, "matrix": custom},
+    ])
+    assert _allclose(nm.processes[0]["matrix"], custom)
+    assert not _allclose(nm.processes[0]["matrix"], np.kron(PauliX.matrix, PauliY.matrix))
+
+
+def test_matrix_and_factors_together_rejected() -> None:
+    """Specifying both matrix and factors is ambiguous."""
+    with pytest.raises(ValueError, match="both 'matrix' and 'factors'"):
+        _ = NoiseModel([
+            {
+                "name": "custom",
+                "sites": [0, 2],
+                "strength": 0.1,
+                "matrix": np.eye(4, dtype=complex),
+                "factors": (PauliX.matrix, PauliY.matrix),
+            }
+        ])
+
+
+def test_factors_none_rejected() -> None:
+    """Explicit factors=None is a construction error."""
+    with pytest.raises(ValueError, match="not None"):
+        _ = NoiseModel([
+            {"name": "custom", "sites": [0, 2], "strength": 0.1, "factors": None},
+        ])
+
+
+def test_unknown_distribution_key_rejected() -> None:
+    """Misspelled distribution keys such as stdev are rejected."""
+    with pytest.raises(ValueError, match="Unknown distribution keys"):
+        _ = NoiseModel([
+            {
+                "name": "pauli_x",
+                "sites": [0],
+                "strength": {"distribution": "normal", "mean": 0.1, "stdev": 0.1},
+            }
+        ])
+
+
+def test_get_operator_returns_copy() -> None:
+    """Library operator lookups return owned copies."""
+    op = NoiseModel.get_operator("pauli_x")
+    op[0, 0] = 99.0
+    op2 = NoiseModel.get_operator("pauli_x")
+    assert op2[0, 0] == pytest.approx(0.0)
+
+
+def test_scheduled_jump_factors_rejected() -> None:
+    """Scheduled jumps reject a factors key at construction."""
+    with pytest.raises(ValueError, match="do not accept 'factors'"):
+        _ = NoiseModel(
+            scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x", "factors": None}],
+        )
+
+
+def test_asymmetric_pauli_perturbation_not_shortcut() -> None:
+    """Small relative perturbations must not select the Pauli dissipator shortcut."""
+    perturbed = PauliX.matrix.astype(complex).copy()
+    perturbed[0, 1] += 5e-6
+    proc = NoiseModel([
+        {"name": "almost_x", "sites": [0], "strength": 0.1, "matrix": perturbed},
+    ]).processes[0]
+    assert is_pauli(proc) is False

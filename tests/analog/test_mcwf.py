@@ -88,8 +88,8 @@ def test_mcwf_unitary_rabi() -> None:
 
     hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=-1.0)
 
-    t_max = 2.0 * np.pi
     dt = 0.01
+    t_max = round(2.0 * np.pi / dt) * dt
     obs = Observable("z", sites=[0])
 
     sim_params = AnalogSimParams(

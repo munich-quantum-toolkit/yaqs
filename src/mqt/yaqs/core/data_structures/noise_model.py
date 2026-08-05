@@ -85,6 +85,7 @@ _LIBRARY_CLASSES: dict[str, type] = {
 _CROSSTALK_RE = re.compile(r"^crosstalk_[xyz]{2}$")
 _LONGRANGE_CROSSTALK_RE = re.compile(r"^longrange_crosstalk_[xyz]{2}$")
 _SUPPORTED_DISTRIBUTIONS = frozenset({"normal", "lognormal", "truncated_normal"})
+_DISTRIBUTION_KEYS = frozenset({"distribution", "mean", "std"})
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,10 @@ def _validate_finite_real(value: object, label: str) -> float:
 def _validate_strength(strength: object) -> float | dict[str, Any]:
     if isinstance(strength, dict):
         strength_dict = cast("dict[str, Any]", strength)
+        unknown = set(strength_dict) - _DISTRIBUTION_KEYS
+        if unknown:
+            msg = f"Unknown distribution keys: {sorted(unknown)}. Supported keys: {sorted(_DISTRIBUTION_KEYS)}."
+            raise ValueError(msg)
         if "distribution" not in strength_dict:
             msg = "Noise strength dict must contain 'distribution' key."
             raise ValueError(msg)
@@ -184,7 +189,7 @@ def _validate_strength(strength: object) -> float | dict[str, Any]:
 
 def _as_square_matrix(value: object, label: str) -> NDArray[np.complex128]:
     try:
-        array = np.asarray(value, dtype=np.complex128)
+        array = np.array(value, dtype=np.complex128, copy=True)
     except (TypeError, ValueError) as exc:
         msg = f"{label} must be a numeric array."
         raise TypeError(msg) from exc
@@ -292,6 +297,9 @@ class NoiseModel:
                 raise ValueError(msg)
 
         jump_dict = dict(original)
+        if "factors" in jump_dict:
+            msg = "Scheduled jumps do not accept 'factors'; use 'matrix' for custom operators."
+            raise ValueError(msg)
         jump_dict["name"] = _validate_name(jump_dict["name"], "Scheduled jump")
         jump_dict["time"] = _validate_finite_real(jump_dict["time"], "Scheduled jump time")
         sites = _normalize_sites(jump_dict["sites"], "Scheduled jump")
@@ -332,7 +340,14 @@ class NoiseModel:
         sites_raw = proc["sites"]
         sites = _normalize_sites(sites_raw, "Process")
         user_matrix = "matrix" in source
+        factors_provided = "factors" in source
         user_factors = source.get("factors")
+        if factors_provided and user_factors is None:
+            msg = "Process 'factors' must be a sequence of exactly two square matrices, not None."
+            raise ValueError(msg)
+        if user_matrix and factors_provided:
+            msg = "Process cannot specify both 'matrix' and 'factors'."
+            raise ValueError(msg)
 
         if len(sites) == 2:
             sorted_sites = sorted(sites)
@@ -349,26 +364,21 @@ class NoiseModel:
             suffix = _crosstalk_suffix(name)
 
             if is_adjacent:
-                if user_factors is not None and not user_matrix:
+                if factors_provided:
                     msg = "Adjacent two-site processes use 'matrix', not 'factors'."
                     raise ValueError(msg)
-                if suffix is not None and name.startswith("longrange_"):
-                    # longrange_* on adjacent sites still builds a kron matrix.
-                    a, b = suffix[0], suffix[1]
-                    proc["matrix"] = np.kron(PAULI_MAP[a], PAULI_MAP[b])
-                    proc.pop("factors", None)
+                if user_matrix:
+                    proc["matrix"] = _as_square_matrix(proc["matrix"], "Process matrix")
                 elif suffix is not None:
                     a, b = suffix[0], suffix[1]
-                    proc["matrix"] = np.kron(PAULI_MAP[a], PAULI_MAP[b])
-                    proc.pop("factors", None)
-                elif user_matrix:
-                    proc["matrix"] = _as_square_matrix(proc["matrix"], "Process matrix")
+                    proc["matrix"] = np.array(np.kron(PAULI_MAP[a], PAULI_MAP[b]), copy=True)
                 else:
                     proc["matrix"] = NoiseModel.get_operator(name)
+                proc.pop("factors", None)
                 return proc
 
             # Non-adjacent: factors path
-            if user_matrix and user_factors is None:
+            if user_matrix:
                 msg = (
                     "Non-adjacent two-site processes require 'factors' "
                     "(a full 'matrix' embedding is not accepted here)."
@@ -377,7 +387,10 @@ class NoiseModel:
             if suffix is not None:
                 if user_factors is None:
                     a, b = suffix[0], suffix[1]
-                    proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
+                    proc["factors"] = (
+                        np.array(PAULI_MAP[a], copy=True),
+                        np.array(PAULI_MAP[b], copy=True),
+                    )
                 else:
                     factors = _validate_factors(user_factors)
                     if swapped:
@@ -401,7 +414,7 @@ class NoiseModel:
 
         # One-site
         proc["sites"] = sites
-        if user_factors is not None:
+        if factors_provided:
             msg = "One-site processes do not accept 'factors'."
             raise ValueError(msg)
         if user_matrix:
@@ -494,16 +507,16 @@ class NoiseModel:
             ValueError: If ``name`` is not a supported operator name.
         """
         if name in PAULI_MAP:
-            return PAULI_MAP[name]
+            return np.array(PAULI_MAP[name], copy=True)
         suffix = _crosstalk_suffix(name)
         if suffix is not None:
-            return np.kron(PAULI_MAP[suffix[0]], PAULI_MAP[suffix[1]])
+            return np.array(np.kron(PAULI_MAP[suffix[0]], PAULI_MAP[suffix[1]]), copy=True)
         operator_class = _LIBRARY_CLASSES.get(name)
         if operator_class is None:
             msg = f"Unknown noise operator '{name}'. {_supported_operator_message()}"
             raise ValueError(msg)
         operator: BaseGate = operator_class()
-        return operator.matrix
+        return np.array(operator.matrix, dtype=np.complex128, copy=True)
 
 
 def _validate_factors(factors: object) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -527,11 +540,11 @@ def _matches_up_to_unit_phase(mat: NDArray[np.complex128], reference: NDArray[np
     ref_val = reference[idx]
     mat_val = mat[idx]
     if abs(ref_val) < 1e-14 or abs(mat_val) < 1e-14:
-        return bool(np.allclose(mat, reference, atol=1e-10))
+        return bool(np.allclose(mat, reference, atol=1e-10, rtol=0.0))
     phase = mat_val / ref_val
-    if not np.isclose(abs(phase), 1.0, atol=1e-10):
+    if not np.isclose(abs(phase), 1.0, atol=1e-10, rtol=0.0):
         return False
-    return bool(np.allclose(mat, phase * reference, atol=1e-10))
+    return bool(np.allclose(mat, phase * reference, atol=1e-10, rtol=0.0))
 
 
 def _is_unit_phase_pauli(mat: NDArray[np.complex128]) -> bool:
@@ -655,6 +668,13 @@ def validate_noise_model_for_run(
         raise ValueError(msg)
     if sim_params is None:
         msg = "AnalogSimParams are required to validate scheduled_jumps against the time grid."
+        raise ValueError(msg)
+    if sim_params.order != 1:
+        msg = (
+            "scheduled_jumps are only supported for AnalogSimParams(order=1); "
+            f"got order={sim_params.order}. Order-2 TJM applies deterministic jumps "
+            "inconsistently on the sampling versus trajectory MPS."
+        )
         raise ValueError(msg)
 
     times = np.asarray(sim_params.times, dtype=float)

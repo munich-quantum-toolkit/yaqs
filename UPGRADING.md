@@ -6,6 +6,27 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: analog durations must contain a whole number of fixed time steps
+
+`AnalogSimParams` now requires a finite, positive `dt` and a finite,
+non-negative `elapsed_time` that is an integer multiple of `dt`. Analog backends
+execute only full `dt` steps; rejecting fractional grids prevents the reported
+final timestamp from disagreeing with the physically evolved duration.
+
+Choose an integer step count and derive the duration from it:
+
+```python
+from mqt.yaqs import AnalogSimParams
+
+num_steps = 3
+dt = 0.1
+params = AnalogSimParams(elapsed_time=num_steps * dt, dt=dt)
+```
+
+Calls such as `AnalogSimParams(elapsed_time=0.25, dt=0.1)` now raise a
+`ValueError`. Use a divisible step size or duration instead; fractional final
+steps are not supported.
+
 ### Breaking: unified circuit parameters as `DigitalSimParams`
 
 Circuit simulation now uses a single {class}`~mqt.yaqs.DigitalSimParams` type.

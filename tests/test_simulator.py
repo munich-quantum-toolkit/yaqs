@@ -19,6 +19,7 @@ qubit counts.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -39,8 +40,10 @@ from mqt.yaqs import (
     State,
     simulator,
 )
+from mqt.yaqs.analog.analog_tjm import analog_tjm_2
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
+from mqt.yaqs.core.random_utils import make_sample_rng
 from tests.conftest import (
     LARGE_QASM2_STRING,
     SAMPLE_QASM3_STRING,
@@ -185,11 +188,11 @@ def test_analog_simulation() -> None:
     result = Simulator(show_progress=False).run(initial_state, H, sim_params, noise_model)
 
     expected_z = [
-        0.6939175883763173,
-        0.8723190598293048,
-        0.8774367798552517,
-        0.8642160639619357,
-        0.6873260499377838,
+        0.748947146695782,
+        0.8720515025769692,
+        0.8652609567462763,
+        0.8673233347433466,
+        0.6872036335377433,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
@@ -237,11 +240,11 @@ def test_analog_simulation_parallel_off() -> None:
     result = Simulator(parallel=False, show_progress=False).run(initial_state, H, sim_params, noise_model)
 
     expected_z = [
-        0.6939175883763173,
-        0.8723190598293048,
-        0.8774367798552517,
-        0.8642160639619357,
-        0.6873260499377838,
+        0.748947146695782,
+        0.8720515025769692,
+        0.8652609567462763,
+        0.8673233347433466,
+        0.6872036335377433,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
@@ -429,13 +432,13 @@ def test_density_matrix_non_qubit_physical_dimension() -> None:
 
 
 def test_density_matrix_get_state_at_elapsed_time() -> None:
-    """get_state returns rho at elapsed_time, not the overshot final grid point."""
+    """get_state returns rho at elapsed_time, matching the fixed-dt final grid point."""
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
     hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
     gamma = 1.0
-    elapsed_time = 0.25
+    elapsed_time = 0.3
     noise_model = NoiseModel(
         processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
     )
@@ -446,6 +449,7 @@ def test_density_matrix_get_state_at_elapsed_time() -> None:
         get_state=True,
         sample_timesteps=False,
     )
+    assert sim_params.times[-1] == pytest.approx(elapsed_time)
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
     assert result.output_state is not None
     rho = result.output_state.density_matrix
@@ -454,7 +458,6 @@ def test_density_matrix_get_state_at_elapsed_time() -> None:
         dtype=np.complex128,
     )
     np.testing.assert_allclose(rho, expected, atol=1e-4)
-    assert not np.isclose(rho[1, 1].real, np.exp(-gamma * sim_params.times[-1]), atol=1e-3)
 
 
 def test_density_matrix_get_state_preserves_metadata() -> None:
@@ -535,11 +538,11 @@ def test_digital_observables() -> None:
     result = Simulator(show_progress=False).run(state, circuit, sim_params, noise_model)
 
     expected_z = [
-        0.6731226288088834,
-        0.8628191799824898,
-        0.8686777017191668,
-        0.862819175965271,
-        0.6731226287649416,
+        0.6733214071546825,
+        0.8502664720526317,
+        0.8709639049732125,
+        0.8628627940961556,
+        0.6730350827430835,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
@@ -605,11 +608,11 @@ def test_digital_observables_parallel_off() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, noise_model)
 
     expected_z = [
-        0.6731226288088834,
-        0.8628191799824898,
-        0.8686777017191668,
-        0.862819175965271,
-        0.6731226287649416,
+        0.6733214071546825,
+        0.8502664720526317,
+        0.8709639049732125,
+        0.8628627940961556,
+        0.6730350827430835,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
@@ -1776,6 +1779,260 @@ def test_scheduled_jump_off_grid_rejected() -> None:
     )
     with pytest.raises(ValueError, match="time grid"):
         Simulator(show_progress=False).run(State(2), hamiltonian, sim_params, noise)
+
+
+def test_scheduled_jumps_rejected_for_order_2() -> None:
+    """Scheduled jumps with order=2 are rejected (incorrect dual application)."""
+    hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.3,
+        num_traj=1,
+        order=2,
+    )
+    with pytest.raises(ValueError, match="order=1"):
+        Simulator(show_progress=False).run(State(1), hamiltonian, sim_params, noise)
+
+
+def test_scheduled_jump_at_t0_order_1_flips_z() -> None:
+    """Order-1 scheduled X jump at t=0 is applied before the initial sample."""
+    hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.3,
+        num_traj=1,
+        order=1,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(State(1, initial="zeros"), hamiltonian, sim_params, noise)
+    z = np.asarray(result.expectation_values[0], dtype=float)
+    np.testing.assert_allclose(z, -1.0, atol=1e-10)
+    # Observables and final state agree after the t=0 jump.
+    assert result.output_state is not None
+    final_z = float(result.output_state.mps.expect(Observable(Z(), 0)))
+    assert final_z == pytest.approx(-1.0)
+
+
+def test_scheduled_jump_at_t0_final_only_elapsed_zero() -> None:
+    """Final-only elapsed_time=0 still records observables after a t=0 scheduled jump."""
+    hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.0,
+        num_traj=1,
+        order=1,
+        sample_timesteps=False,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(State(1, initial="zeros"), hamiltonian, sim_params, noise)
+    z = float(np.asarray(result.expectation_values[0], dtype=complex).reshape(-1)[0].real)
+    assert result.output_state is not None
+    final_z = float(result.output_state.mps.expect(Observable(Z(), 0)))
+    assert z == pytest.approx(-1.0)
+    assert final_z == pytest.approx(-1.0)
+    assert z == pytest.approx(final_z)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "sample_timesteps"),
+    [
+        (0.0, True),
+        (0.0, False),
+        (0.1, False),
+    ],
+)
+def test_order_2_short_runs_return_observables_and_state(elapsed_time: float, *, sample_timesteps: bool) -> None:
+    """Order-2 TJM handles elapsed_time in {0, dt} without IndexError or empty results."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=elapsed_time,
+        num_traj=1,
+        order=2,
+        sample_timesteps=sample_timesteps,
+        get_state=True,
+        random_seed=0,
+    )
+    result = Simulator(show_progress=False).run(State(2, initial="zeros"), hamiltonian, sim_params)
+    z = np.asarray(result.expectation_values[0], dtype=complex).reshape(-1)
+    assert result.output_state is not None
+    assert np.isfinite(z.real).all()
+    # |0> has Z=+1 at t=0; short unitary evolution keeps |Z| near 1.
+    assert np.all(np.abs(z.real) > 0.5)
+
+    if elapsed_time == pytest.approx(0.1) and not sample_timesteps:
+        sampled = Simulator(show_progress=False).run(
+            State(2, initial="zeros"),
+            hamiltonian,
+            AnalogSimParams(
+                observables=[Observable(Z(), 0)],
+                dt=0.1,
+                elapsed_time=0.1,
+                num_traj=1,
+                order=2,
+                sample_timesteps=True,
+                get_state=True,
+                random_seed=0,
+            ),
+        )
+        z_sampled_final = float(np.asarray(sampled.expectation_values[0], dtype=complex).reshape(-1)[-1].real)
+        assert float(z.real[0]) == pytest.approx(z_sampled_final, abs=1e-10)
+
+
+def test_order_2_zero_duration_final_only_skips_noise() -> None:
+    """Final-only elapsed_time=0 must not apply F0 noise before measuring."""
+    hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
+    # Lowering on |+>: unwanted F0 half-step dissipation shifts Z away from 0 (~0.025).
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 1.0}])
+    sampled = Simulator(show_progress=False).run(
+        State(1, initial="x+"),
+        hamiltonian,
+        AnalogSimParams(
+            observables=[Observable(Z(), 0)],
+            dt=0.1,
+            elapsed_time=0.0,
+            num_traj=1,
+            order=2,
+            sample_timesteps=True,
+            random_seed=0,
+        ),
+        noise,
+    )
+    final_only = Simulator(show_progress=False).run(
+        State(1, initial="x+"),
+        hamiltonian,
+        AnalogSimParams(
+            observables=[Observable(Z(), 0)],
+            dt=0.1,
+            elapsed_time=0.0,
+            num_traj=1,
+            order=2,
+            sample_timesteps=False,
+            random_seed=0,
+        ),
+        noise,
+    )
+    z_sampled = float(np.asarray(sampled.expectation_values[0], dtype=complex).reshape(-1)[0].real)
+    z_final = float(np.asarray(final_only.expectation_values[0], dtype=complex).reshape(-1)[0].real)
+    assert z_sampled == pytest.approx(0.0, abs=1e-10)
+    assert z_final == pytest.approx(0.0, abs=1e-10)
+    assert z_final == pytest.approx(z_sampled, abs=1e-10)
+
+
+def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
+    """Each measurement copy must get a fresh sample RNG keyed by timestep index."""
+    hamiltonian = MPO.from_matrix(np.zeros((2, 2), dtype=complex), d=2)
+    noise = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 1.0}])
+    state = State(1, initial="x+").ensure_encoded("mps").mps
+    # Intended three-point grid [0, dt, 2*dt]; sample calls at indices 1 and 2.
+    dt = 0.1
+    elapsed_time = 0.2
+
+    class _ScriptedRng:
+        """Deterministic jump draws: ``random()`` then optional ``choice()``."""
+
+        def __init__(self, randoms: list[float], choices: list[int] | None = None) -> None:
+            self._randoms = list(randoms)
+            self._choices = list(choices or [])
+            self._ri = 0
+            self._ci = 0
+
+        def random(self) -> float:
+            value = self._randoms[self._ri]
+            self._ri += 1
+            return value
+
+        def choice(self, a: int, p: list[float] | None = None) -> int:
+            _ = (a, p)
+            value = self._choices[self._ci] if self._ci < len(self._choices) else 0
+            self._ci += 1
+            return value
+
+    def _run(*, sample_timesteps: bool) -> list[int]:
+        timesteps: list[int] = []
+
+        def _tracking_sample_rng(traj_idx: int, *, base_seed: int | None, timestep: int) -> np.random.Generator:
+            timesteps.append(timestep)
+            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
+
+        sim_params = AnalogSimParams(
+            observables=[Observable(X(), 0)],
+            dt=dt,
+            elapsed_time=elapsed_time,
+            num_traj=1,
+            order=2,
+            sample_timesteps=sample_timesteps,
+            random_seed=0,
+        )
+        assert np.allclose(sim_params.times, [0.0, 0.1, 0.2])
+        with patch("mqt.yaqs.analog.analog_tjm.make_sample_rng", side_effect=_tracking_sample_rng):
+            analog_tjm_2((0, state, noise, sim_params, hamiltonian))
+        return timesteps
+
+    sampled_steps = _run(sample_timesteps=True)
+    final_steps = _run(sample_timesteps=False)
+    assert sampled_steps == [1, 2]
+    assert final_steps == [2]
+
+    # Shared sequential RNG: first sample consumes the jump draw; final sample then skips.
+    # Final-only starts at the same script and jumps. Outcomes must differ.
+    def _shared_factory(randoms: list[float], choices: list[int]) -> object:
+        shared = _ScriptedRng(randoms, choices)
+
+        def _factory(traj_idx: int, *, base_seed: int | None, timestep: int) -> _ScriptedRng:
+            _ = (traj_idx, base_seed, timestep)
+            return shared
+
+        return _factory
+
+    with patch(
+        "mqt.yaqs.analog.analog_tjm.make_sample_rng",
+        side_effect=_shared_factory([0.0, 0.999], [0]),
+    ):
+        sampled_bug = analog_tjm_2((
+            0,
+            state,
+            noise,
+            AnalogSimParams(
+                observables=[Observable(X(), 0)],
+                dt=dt,
+                elapsed_time=elapsed_time,
+                num_traj=1,
+                order=2,
+                sample_timesteps=True,
+                random_seed=0,
+            ),
+            hamiltonian,
+        ))
+    with patch(
+        "mqt.yaqs.analog.analog_tjm.make_sample_rng",
+        side_effect=_shared_factory([0.0, 0.999], [0]),
+    ):
+        final_bug = analog_tjm_2((
+            0,
+            state,
+            noise,
+            AnalogSimParams(
+                observables=[Observable(X(), 0)],
+                dt=dt,
+                elapsed_time=elapsed_time,
+                num_traj=1,
+                order=2,
+                sample_timesteps=False,
+                random_seed=0,
+            ),
+            hamiltonian,
+        ))
+    x_sampled = float(np.asarray(sampled_bug[0][0], dtype=complex).reshape(-1)[-1].real)
+    x_final = float(np.asarray(final_bug[0][0], dtype=complex).reshape(-1)[0].real)
+    assert x_sampled != pytest.approx(x_final, abs=1e-12)
 
 
 def test_digital_rejects_nonadjacent_noise_matching_and_nonmatching() -> None:

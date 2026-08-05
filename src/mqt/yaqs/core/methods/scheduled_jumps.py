@@ -41,7 +41,7 @@ def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -
     if noise_model is None or not noise_model.scheduled_jumps:
         return False
 
-    return any(np.isclose(jump["time"], time, atol=dt * 1e-3) for jump in noise_model.scheduled_jumps)
+    return any(np.isclose(jump["time"], time, atol=dt * 1e-3, rtol=0.0) for jump in noise_model.scheduled_jumps)
 
 
 def apply_scheduled_jumps(
@@ -67,8 +67,10 @@ def apply_scheduled_jumps(
     if noise_model is None or not noise_model.scheduled_jumps:
         return state
 
+    applied = False
     for jump in noise_model.scheduled_jumps:
-        if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3):
+        if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3, rtol=0.0):
+            applied = True
             sites = jump["sites"]
             jump_op = jump["matrix"]
 
@@ -98,5 +100,15 @@ def apply_scheduled_jumps(
                 state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
                 state.update_center_after_split(i, j, "right")
 
+    if not applied:
+        return state
+
+    post_norm = float(state.norm())
+    if not np.isfinite(post_norm) or post_norm <= 0.0:
+        msg = (
+            "Scheduled jump produced a zero or non-finite state norm "
+            f"(norm={post_norm}). The jump operator annihilates the current state."
+        )
+        raise ValueError(msg)
     state.normalize("B")
     return state

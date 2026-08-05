@@ -14,11 +14,13 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import numpy as np
+import opt_einsum as oe
 import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from mqt.yaqs.core.methods.decompositions import merge_two_site
 from mqt.yaqs.core.methods.stochastic_process import (
     calculate_stochastic_factor,
     create_probability_distribution,
@@ -53,18 +55,25 @@ def crandn(
     return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
 
 
-def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
+def random_mps(
+    shapes: list[tuple[int, int, int]],
+    *,
+    normalize: bool = True,
+    seed: np.random.Generator | int | None = None,
+) -> MPS:
     """Create a random MPS with the given shapes.
 
     Args:
         shapes (List[Tuple[int, int, int]]): The shapes of the tensors in the
             MPS.
         normalize (bool): Whether to normalize the MPS.
+        seed: Optional seed or generator for reproducible tensors.
 
     Returns:
         MPS: The random MPS.
     """
-    tensors = [crandn(shape) for shape in shapes]
+    rng = np.random.default_rng(seed)
+    tensors = [crandn(shape, seed=rng) for shape in shapes]
     mps = MPS(len(shapes), tensors=tensors)
     if normalize:
         mps.normalize()
@@ -252,6 +261,99 @@ def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
     assert len(ordered_processes) == 1
     assert len(probabilities) == 1
     assert np.isclose(sum(probabilities), 1.0)
+
+
+def test_adjacent_non_pauli_pdf_matches_exact_weights() -> None:
+    """Equal-rate X@0 and 2I@[0,1] yield PDF weights proportional to operator norms."""
+    # Product |0>: ||X|0>||^2 = 1, ||(2I)|00>||^2 = 4 → weights 1:4 → [0.2, 0.8]
+    state = MPS(2, state="zeros")
+    two_i = 2.0 * np.eye(4, dtype=np.complex128)
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 1.0},
+        {"name": "scaled_i", "sites": [0, 1], "strength": 1.0, "matrix": two_i},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    _procs, probabilities = create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
+    assert len(probabilities) == 2
+    np.testing.assert_allclose(probabilities, [0.2, 0.8], atol=1e-10)
+
+
+def test_adjacent_pdf_independent_of_max_bond_dim() -> None:
+    """PDF weights use the untruncated post-jump block, not a truncated split."""
+    # Both operators map |00> with ||L|psi>||^2 = 1, but only the Bell channel needs chi>1.
+    # Truncating before the norm would bias the PDF to [2/3, 1/3].
+    xx = np.kron(np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])).astype(np.complex128)
+    bell_create = np.zeros((4, 4), dtype=np.complex128)
+    bell_create[:, 0] = [1 / np.sqrt(2), 0, 0, 1 / np.sqrt(2)]
+    bell_create[:, 1] = [0, 1, 0, 0]
+    bell_create[:, 2] = [0, 0, 1, 0]
+    bell_create[:, 3] = [1 / np.sqrt(2), 0, 0, -1 / np.sqrt(2)]
+    state = MPS(2, state="zeros")
+    noise_model = NoiseModel([
+        {"name": "xx", "sites": [0, 1], "strength": 1.0, "matrix": xx},
+        {"name": "bell", "sites": [0, 1], "strength": 1.0, "matrix": bell_create},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0, max_bond_dim=1)
+    _procs, probabilities = create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
+    np.testing.assert_allclose(probabilities, [0.5, 0.5], atol=1e-10)
+
+
+def test_adjacent_pdf_unknown_gauge_uses_global_norm() -> None:
+    """With a genuinely noncanonical MPS, adjacent PDF weights match global post-jump norms."""
+    # Random tensors + non-unitary bond gauge (not merely canonical + set_center(None)).
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)], normalize=False, seed=20260804)
+    gauge = np.array([[1.5, 0.4], [0.0, 0.7]], dtype=np.complex128)
+    state.tensors[0] = np.einsum("ijk,kl->ijl", state.tensors[0], gauge)
+    state.tensors[1] = np.einsum("ij,jkl->ikl", np.linalg.inv(gauge), state.tensors[1])
+    state.set_center(None)
+    assert state.orthogonality_center is None
+
+    two_i = 2.0 * np.eye(4, dtype=np.complex128)
+    # Local Frobenius shortcuts disagree with the global norm under this gauge.
+    global_norm = float(state.norm())
+    local_t0 = float(np.vdot(state.tensors[0], state.tensors[0]).real)
+    merged_2i = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
+    assert not np.isclose(local_t0, global_norm, atol=1e-8)
+    assert not np.isclose(float(np.vdot(merged_2i, merged_2i).real), 4.0 * global_norm, atol=1e-8)
+
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 1.0},
+        {"name": "scaled_i", "sites": [0, 1], "strength": 1.0, "matrix": two_i},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    tensors_before = [t.copy() for t in state.tensors]
+    _procs, probabilities = create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
+    # Pauli unitary: weight ∝ ||ψ||^2; 2I: weight ∝ 4||ψ||^2 → [0.2, 0.8] via global norms.
+    np.testing.assert_allclose(probabilities, [0.2, 0.8], atol=1e-10)
+    assert state.orthogonality_center is None
+    for before, after in zip(tensors_before, state.tensors, strict=True):
+        np.testing.assert_array_equal(before, after)
+
+
+def test_zero_probability_weight_raises() -> None:
+    """Non-finite/zero total jump weight raises a clear ValueError."""
+    state = MPS(1, state="zeros")
+    # Dissipate then jump with enormous rate so post-jump norms underflow.
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 2000.0}])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    # Apply a strong dissipator-like shrink so stochastic factor triggers with empty weights.
+    state.tensors[0] *= 0.0
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
+
+
+@pytest.mark.parametrize("bad", [np.nan, 1e200])
+def test_nonfinite_probability_weight_raises(bad: float) -> None:
+    """NaN and overflow (true Inf norm) jump weights raise the non-finite guard."""
+    state = MPS(1, state="zeros")
+    state.tensors[0] = state.tensors[0].astype(np.complex128)
+    state.tensors[0][:] = 0.0
+    state.tensors[0][0, 0, 0] = bad
+    # All-Inf tensors yield NaN via 0*Inf in contractions; 1e200 overflows to a true Inf norm.
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1.0}])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
 
 
 def test_stochastic_process_jump_independent_of_process_order() -> None:

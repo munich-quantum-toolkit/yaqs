@@ -64,7 +64,7 @@ psi0 = State(L, initial="haar-random", pad=2)
 
 primer_params = AnalogSimParams(
     observables=[Observable("z", mid)],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -118,7 +118,7 @@ sx_mid = Observable("x", mid)
 
 single_state_params = AnalogSimParams(
     observables=[],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -167,7 +167,7 @@ ensemble_states = [State(L, initial="haar-random", pad=2) for _ in range(num_sta
 
 ensemble_params = AnalogSimParams(
     observables=[],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -244,7 +244,7 @@ def current_observables(length: int, j_coupling: float) -> list[Observable]:
 Ltr = 6
 Jxx = 1.0
 deltas = [0.1, 0.5, 1.5]
-t_final = 5.0
+t_final = 5.1
 dt = 0.15
 n_transport_states = 4
 

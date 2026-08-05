@@ -124,6 +124,7 @@ from .core.parallel_utils import (
     merge_execution_config,
     run_backend_parallel,
 )
+from .core.random_utils import make_disorder_rng
 from .digital.digital_tjm import digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 
@@ -596,7 +597,7 @@ class Simulator:
 
         if noise_model is not None:
             sample_seed = getattr(sim_params, "random_seed", None)
-            noise_model = noise_model.sample(rng=sample_seed)
+            noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=sample_seed))
 
         result = Result(sim_params=sim_params, noise_model=noise_model)
 

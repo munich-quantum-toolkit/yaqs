@@ -39,6 +39,26 @@ def test_has_scheduled_jump() -> None:
     # Case 5: No match
     assert not has_scheduled_jump(noise_model, 2.0, 0.1)
 
+    # Case 6: rtol=0 — neighbors within relative tolerance but outside atol must not match
+    large_dt = 0.001
+    large_jumps = NoiseModel(scheduled_jumps=[{"time": 100.0, "sites": [0], "name": "x"}])
+    assert has_scheduled_jump(large_jumps, 100.0, large_dt)
+    assert not has_scheduled_jump(large_jumps, 99.999, large_dt)
+    assert not has_scheduled_jump(large_jumps, 100.001, large_dt)
+
+
+def test_apply_scheduled_jumps_large_time_uses_rtol_zero() -> None:
+    """``apply_scheduled_jumps`` must not match large times via relative tolerance alone."""
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 100.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(dt=0.001, get_state=True)
+
+    # Near 100 but outside atol=dt*1e-3; with rtol>0 this would incorrectly match.
+    unchanged = apply_scheduled_jumps(MPS(1, state="zeros"), noise_model, 99.999, sim_params)
+    assert np.isclose(unchanged.expect(Observable(Z(), sites=0)), 1.0)
+
+    flipped = apply_scheduled_jumps(MPS(1, state="zeros"), noise_model, 100.0, sim_params)
+    assert np.isclose(flipped.expect(Observable(Z(), sites=0)), -1.0)
+
 
 def test_apply_scheduled_jumps_single_site() -> None:
     """Tests applying a single-site scheduled jump."""
@@ -66,29 +86,36 @@ def test_apply_scheduled_jumps_single_site() -> None:
 def test_apply_scheduled_jumps_custom_matrix() -> None:
     """Tests applying a single-site scheduled jump with an explicit matrix."""
     length = 2
-    state = MPS(length, state="zeros")  # |00>
-    state.normalize("B")
-
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
     scheduled_jumps = [{"time": 1.0, "sites": [0], "name": "custom_lower", "matrix": sigma_minus}]
     noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
-
     sim_params = AnalogSimParams(dt=0.1, get_state=True)
 
-    # |00> -> sigma_- |00> = 0; normalization leaves |00>
-    new_state = apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
-
-    z_obs0 = Observable(Z(), sites=0)
-    z_obs1 = Observable(Z(), sites=1)
-
-    assert np.isclose(new_state.expect(z_obs0), 1.0)
-    assert np.isclose(new_state.expect(z_obs1), 1.0)
+    # |00> -> sigma_- |00> = 0: raise instead of fabricating a normalized state
+    state = MPS(length, state="zeros")
+    state.normalize("B")
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
     # |10> relaxes to |00> under sigma_-
     state_excited = MPS(length, state="basis", basis_string="10")
     state_excited.normalize("B")
     relaxed = apply_scheduled_jumps(state_excited, noise_model, 1.0, sim_params)
     assert np.isclose(relaxed.expect(Observable(Z(), sites=0)), 1.0)
+
+
+@pytest.mark.parametrize("bad", [np.nan, 1e200])
+def test_apply_scheduled_jumps_nonfinite_norm_raises(bad: float) -> None:
+    """NaN and overflow (true Inf norm) post-jump norms raise instead of normalizing."""
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+    state = MPS(1, state="zeros")
+    state.tensors[0] = state.tensors[0].astype(np.complex128)
+    state.tensors[0][:] = 0.0
+    state.tensors[0][0, 0, 0] = bad
+    # All-Inf tensors yield NaN via 0*Inf in contractions; 1e200 overflows to a true Inf norm.
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
 
 def test_apply_scheduled_jumps_two_site() -> None:
@@ -159,6 +186,19 @@ def test_apply_scheduled_jumps_no_op_when_missing() -> None:
     unchanged = apply_scheduled_jumps(state, None, 1.0, sim_params)
 
     assert unchanged is state
+
+
+def test_apply_scheduled_jumps_no_match_leaves_zero_state() -> None:
+    """A time mismatch must not normalize or reject an unchanged zero-norm state."""
+    state = MPS(1, state="zeros")
+    state.tensors[0] *= 0.0
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    out = apply_scheduled_jumps(state, noise_model, time=0.0, sim_params=sim_params)
+
+    assert out is state
+    assert float(out.norm()) == pytest.approx(0.0)
 
 
 def test_apply_scheduled_jumps_non_adjacent_raises() -> None:

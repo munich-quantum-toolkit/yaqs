@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from mqt.yaqs.core import linalg
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -206,3 +207,88 @@ def test_apply_dissipation_longrange_crosstalk_xy() -> None:
     assert state.orthogonality_center == 0
     # Scalar Pauli dissipator scales tensors; state remains product-like.
     assert any(not np.allclose(a, b) for a, b in zip(before, state.tensors, strict=True))
+
+
+def test_apply_dissipation_independent_of_noncommuting_order() -> None:
+    """Same-site channels with noncommuting L†L use one expm of the summed generator."""
+    lowering = np.array([[0, 1], [0, 0]], dtype=np.complex128)  # L†L = |1><1|
+    mixed = np.array([[0, 1], [1, 1]], dtype=np.complex128)  # L†L = [[1,1],[1,2]]
+    a = np.conj(lowering).T @ lowering
+    b = np.conj(mixed).T @ mixed
+    assert not np.allclose(a @ b, b @ a)
+
+    gamma_a, gamma_b, dt = 0.4, 0.3, 0.2
+    procs_fwd = [
+        {"name": "a", "sites": [0], "strength": gamma_a, "matrix": lowering},
+        {"name": "b", "sites": [0], "strength": gamma_b, "matrix": mixed},
+    ]
+    procs_rev = [procs_fwd[1], procs_fwd[0]]
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    amp = np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=np.complex128)
+
+    def _state() -> MPS:
+        s = MPS(2, state="zeros")
+        s.tensors[0] = s.tensors[0].astype(np.complex128)
+        s.tensors[0][0, 0, 0] = amp[0]
+        s.tensors[0][1, 0, 0] = amp[1]
+        return s
+
+    state_fwd = _state()
+    state_rev = _state()
+    apply_dissipation(state_fwd, NoiseModel(procs_fwd), dt=dt, sim_params=sim_params)
+    apply_dissipation(state_rev, NoiseModel(procs_rev), dt=dt, sim_params=sim_params)
+
+    diff = sum(np.linalg.norm(x - y) for x, y in zip(state_fwd.tensors, state_rev.tensors, strict=True))
+    assert diff == pytest.approx(0.0, abs=1e-12)
+
+    # Match a single local expm of the summed generator (not sequential expm products).
+    generator = gamma_a * a + gamma_b * b
+    expected = linalg.expm(-0.5 * dt * generator) @ amp
+    got = state_fwd.tensors[0][:, 0, 0]
+    np.testing.assert_allclose(got, expected, atol=1e-12)
+
+
+def test_apply_dissipation_adjacent_independent_of_noncommuting_order() -> None:
+    """Adjacent channels with noncommuting L†L use one expm of the summed generator."""
+    lowering = np.array([[0, 1], [0, 0]], dtype=np.complex128)
+    mixed = np.array([[0, 1], [1, 1]], dtype=np.complex128)
+    la = np.kron(lowering, np.eye(2, dtype=np.complex128))
+    lb = np.kron(mixed, np.eye(2, dtype=np.complex128))
+    a = np.conj(la).T @ la
+    b = np.conj(lb).T @ lb
+    assert not np.allclose(a @ b, b @ a)
+
+    gamma_a, gamma_b, dt = 0.4, 0.3, 0.2
+    procs_fwd = [
+        {"name": "a", "sites": [0, 1], "strength": gamma_a, "matrix": la},
+        {"name": "b", "sites": [0, 1], "strength": gamma_b, "matrix": lb},
+    ]
+    procs_rev = [procs_fwd[1], procs_fwd[0]]
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0, max_bond_dim=16, svd_threshold=1e-14)
+
+    amp = np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=np.complex128)
+    vec = np.kron(amp, amp)
+
+    def _state() -> MPS:
+        s = MPS(2, state="zeros")
+        s.tensors[0] = s.tensors[0].astype(np.complex128)
+        s.tensors[1] = s.tensors[1].astype(np.complex128)
+        s.tensors[0][0, 0, 0] = amp[0]
+        s.tensors[0][1, 0, 0] = amp[1]
+        s.tensors[1][0, 0, 0] = amp[0]
+        s.tensors[1][1, 0, 0] = amp[1]
+        return s
+
+    state_fwd = _state()
+    state_rev = _state()
+    apply_dissipation(state_fwd, NoiseModel(procs_fwd), dt=dt, sim_params=sim_params)
+    apply_dissipation(state_rev, NoiseModel(procs_rev), dt=dt, sim_params=sim_params)
+
+    diff = sum(np.linalg.norm(x - y) for x, y in zip(state_fwd.tensors, state_rev.tensors, strict=True))
+    assert diff == pytest.approx(0.0, abs=1e-10)
+
+    generator = gamma_a * a + gamma_b * b
+    expected = linalg.expm(-0.5 * dt * generator) @ vec
+    got = np.einsum("alr,brc->ab", state_fwd.tensors[0], state_fwd.tensors[1]).reshape(-1)
+    np.testing.assert_allclose(got, expected, atol=1e-10)

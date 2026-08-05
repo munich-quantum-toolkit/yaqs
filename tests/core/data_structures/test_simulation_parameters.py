@@ -156,9 +156,94 @@ def test_analog_simparams_basic() -> None:
     assert params.elapsed_time == elapsed_time
     assert params.dt == dt
     expected_times = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    assert np.allclose(params.times, expected_times), "Times array should match numpy.arange(0, elapsed_time+dt, dt)."
+    assert np.allclose(params.times, expected_times), "Times array should sample 0..elapsed_time in steps of dt."
     assert params.sample_timesteps is True
     assert params.num_traj == 50
+
+
+def test_analog_simparams_times_no_float_overshoot() -> None:
+    """``elapsed_time=0.2, dt=0.1`` must yield ``[0, 0.1, 0.2]``, not an extra 0.3."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.2, dt=0.1)
+    np.testing.assert_allclose(params.times, [0.0, 0.1, 0.2])
+    assert params.times[-1] == pytest.approx(params.elapsed_time)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt"),
+    [
+        (0.15, 0.1),
+        (0.25, 0.1),
+        (5e-13, 1e-12),
+        (1.5e-12, 1e-12),
+        (1.0, 1e9),
+        (np.float32(0.3), np.float32(0.1)),
+        (np.float16(10), np.float16(0.1)),
+        (np.float16(6.04), np.float16(0.1)),
+        (np.float32(500_000.25), np.float32(1.0)),
+    ],
+)
+def test_analog_simparams_rejects_nonintegral_duration(elapsed_time: float, dt: float) -> None:
+    """Non-integral ``elapsed_time/dt`` must raise rather than mislabel the final time."""
+    with pytest.raises(ValueError, match="integer multiple"):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt", "num_steps"),
+    [(np.float64(0.3), np.float64(0.1), 3), (np.float32(0.25), np.float32(0.125), 2)],
+)
+def test_analog_simparams_accepts_numpy_float_rounding_dust(
+    elapsed_time: np.floating[Any], dt: np.floating[Any], num_steps: int
+) -> None:
+    """Integral grids represented by lower-precision NumPy floats remain valid."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+    assert len(params.times) == num_steps + 1
+    assert params.times[-1] == pytest.approx(float(elapsed_time), rel=0.0, abs=0.0)
+
+
+def test_analog_simparams_rejects_lossy_integer_conversion() -> None:
+    """Integer divisibility is checked before values can lose precision as floats."""
+    with pytest.raises(ValueError, match="exactly representable"):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=2**53 + 1, dt=2**53)
+
+
+def test_analog_simparams_uses_exact_integer_divisibility() -> None:
+    """Exactly representable integers are divided before float multiplication can hide a remainder."""
+    elapsed_time = 2**53
+    dt = (2**53 + 1) // 3
+    with pytest.raises(ValueError, match="integer remainder"):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt", "match"),
+    [
+        (-0.1, 0.1, "non-negative"),
+        (0.1, 0.0, "positive"),
+        (0.1, -0.1, "positive"),
+        (float("nan"), 0.1, "finite"),
+        (float("inf"), 0.1, "finite"),
+        (0.1, float("nan"), "finite"),
+        (0.1, float("inf"), "finite"),
+        (1e308, 1e-308, "elapsed_time / dt must be finite"),
+    ],
+)
+def test_analog_simparams_rejects_invalid_time_parameters(elapsed_time: float, dt: float, match: str) -> None:
+    """Non-finite, zero, or negative time parameters raise clear ValueErrors."""
+    with pytest.raises(ValueError, match=match):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+
+@pytest.mark.parametrize(("elapsed_time", "dt"), [(True, 0.1), (0.1, False), ("0.1", 0.1), (0.1, None)])
+def test_analog_simparams_rejects_non_numeric_time_parameters(elapsed_time: object, dt: object) -> None:
+    """Booleans and non-numeric time parameters raise clear TypeErrors."""
+    with pytest.raises(TypeError, match="real number"):
+        AnalogSimParams(
+            observables=[Observable(X(), 0)],
+            elapsed_time=cast("Any", elapsed_time),
+            dt=cast("Any", dt),
+        )
 
 
 def test_analog_simparams_defaults() -> None:
@@ -174,7 +259,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.elapsed_time == pytest.approx(0.1)
     assert params.dt == pytest.approx(0.1)
     assert params.sample_timesteps is True
-    # times should be np.arange(0, elapsed_time+dt, dt)
+    # times should be 0..elapsed_time inclusive with spacing dt
     assert np.isclose(params.times[-1], 0.1)
     balanced = SIMULATION_PRESETS["balanced"]
     assert params.preset == "balanced"

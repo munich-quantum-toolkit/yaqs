@@ -247,7 +247,11 @@ def _measure_rho(
 
 
 def _rho_vec_at_elapsed_time(ctx: LindbladContext) -> NDArray[np.complex128]:
-    """Evolve ``vec(rho)`` to ``sim_params.elapsed_time`` (not ``times[-1]``).
+    """Evolve ``vec(rho)`` to ``sim_params.elapsed_time``.
+
+    ``AnalogSimParams`` requires ``elapsed_time`` to be an integer multiple of ``dt``, so
+    this matches the fixed-``dt`` grid endpoint. A tiny remainder path is kept only as a
+    numerical guard.
 
     Args:
         ctx: Preprocessed Lindblad context.

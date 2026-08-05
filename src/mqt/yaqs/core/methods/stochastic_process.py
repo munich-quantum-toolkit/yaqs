@@ -51,6 +51,39 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     return np.asarray(1 - state.norm(0), dtype=np.float64)
 
 
+def _adjacent_jump_weight(
+    state: MPS,
+    site: int,
+    jump_op: NDArray[np.complex128],
+    sim_params: AnalogSimParams | DigitalSimParams,
+) -> float:
+    """Return ``||L|psi>||^2`` for an adjacent two-site jump without truncating.
+
+    When the MPS is mixed-canonical at ``site``, the Frobenius weight of the
+    untruncated post-jump block equals the global squared norm. With unknown gauge,
+    an untruncated split is written and the global norm is used. Truncation for
+    bond-dimension control belongs in the jump-application path, not PDF weights.
+    """
+    merged = merge_two_site(state.tensors[site], state.tensors[site + 1])
+    merged = oe.contract("ab, bcd->acd", jump_op, merged)
+    if state.orthogonality_center is not None:
+        return float(np.vdot(merged, merged).real)
+
+    jumped_state = copy.deepcopy(state)
+    tensor_left_new, tensor_right_new = split_two_site(
+        merged,
+        [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
+        svd_distribution="right",
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        threshold=0.0,
+        max_bond_dim=None,
+    )
+    jumped_state.tensors[site] = tensor_left_new
+    jumped_state.tensors[site + 1] = tensor_right_new
+    jumped_state.set_center(None)
+    return float(jumped_state.norm())
+
+
 def create_probability_distribution(
     state: MPS,
     noise_model: NoiseModel | None,
@@ -68,8 +101,9 @@ def create_probability_distribution(
       probability (proportional to the time step, jump strength, and post-jump
       norm at that site), and records the operator and site.
     - For each 2-site jump operator acting on the current site and its right
-      neighbor, it merges the two tensors, applies the operator, splits the
-      result, computes the probability, and records the operator and the site
+      neighbor, it merges the two tensors, applies the operator, and computes
+      the probability from the untruncated post-jump block (truncation is
+      deferred until a channel is selected), then records the operator and site
       pair.
 
     After all possible jumps are considered, the per-process probabilities are
@@ -130,26 +164,8 @@ def create_probability_distribution(
 
                     elif process["sites"][1] == site + 1:
                         gamma = process["strength"]
-                        jump_op = process["matrix"]
-                        jumped_state = copy.deepcopy(state)
-                        # merge the tensors at site and site+1
-                        tensor_left = jumped_state.tensors[site]
-                        tensor_right = jumped_state.tensors[site + 1]
-                        merged = merge_two_site(tensor_left, tensor_right)
-                        # apply the 2-site jump operator
-                        merged = oe.contract("ab, bcd->acd", jump_op, merged)
-                        # split the tensor (always contract singular values right for probabilities)
-                        tensor_left_new, tensor_right_new = split_two_site(
-                            merged,
-                            [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
-                            svd_distribution="right",
-                            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-                            threshold=sim_params.svd_threshold,
-                            max_bond_dim=sim_params.max_bond_dim,
-                        )
-                        jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
-                        # compute the norm at `site` from the updated post-jump tensors
-                        dp_m = dt * gamma * jumped_state.norm(site)
+                        weight = _adjacent_jump_weight(state, site, process["matrix"], sim_params)
+                        dp_m = dt * gamma * weight
                         ordered_processes.append(process)
                         dp_m_list.append(float(dp_m.real))
                     else:
@@ -161,6 +177,13 @@ def create_probability_distribution(
 
     # Normalize the probabilities
     dp: float = float(np.sum(dp_m_list))
+    if not np.isfinite(dp) or dp <= 0.0:
+        msg = (
+            "Jump probability weights are zero or non-finite. "
+            "Reduce process strengths and/or the timestep dt so that "
+            "dt * strength * ||L|psi>||^2 remains representable."
+        )
+        raise ValueError(msg)
     return ordered_processes, [val / dp for val in dp_m_list]
 
 

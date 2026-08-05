@@ -18,6 +18,7 @@ dimension limits, and thresholds. Simulation outputs are stored on
 from __future__ import annotations
 
 import copy
+import math
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, TypedDict
 
@@ -26,6 +27,8 @@ import numpy as np
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from numpy.typing import ArrayLike
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
@@ -90,6 +93,105 @@ def _validate_random_seed(random_seed: int | None) -> None:
     if random_seed < 0:
         msg = f"random_seed must be non-negative, got {random_seed}."
         raise ValueError(msg)
+
+
+def _validate_analog_time_grid(
+    elapsed_time: float | np.floating[Any] | np.integer[Any],
+    dt: float | np.floating[Any] | np.integer[Any],
+) -> int:
+    """Validate analog time parameters and return the integer number of steps.
+
+    Backends evolve every interval with the full ``dt``, so ``elapsed_time`` must be an
+    integer multiple of ``dt`` (within a precision-aware tolerance on their dimensionless
+    ratio). Relabeling the final timestamp without a fractional step would otherwise
+    disagree with the evolution.
+
+    Args:
+        elapsed_time: Total simulation time (must be finite and ``>= 0``).
+        dt: Fixed time step (must be finite and ``> 0``).
+
+    Returns:
+        Non-negative integer step count ``n`` such that ``times = dt * arange(n + 1)``.
+
+    Raises:
+        TypeError: If ``elapsed_time`` or ``dt`` is a bool or non-numeric.
+        ValueError: If values are non-finite, ``dt <= 0``, ``elapsed_time < 0``, or
+            ``elapsed_time`` is not an integer multiple of ``dt``.
+    """
+    if isinstance(elapsed_time, bool) or not isinstance(elapsed_time, (int, float, np.floating, np.integer)):
+        msg = f"elapsed_time must be a real number, got {type(elapsed_time).__name__}."
+        raise TypeError(msg)
+    if isinstance(dt, bool) or not isinstance(dt, (int, float, np.floating, np.integer)):
+        msg = f"dt must be a real number, got {type(dt).__name__}."
+        raise TypeError(msg)
+
+    try:
+        elapsed_f = float(elapsed_time)
+        dt_f = float(dt)
+    except OverflowError as exc:
+        msg = "elapsed_time and dt must be representable as finite floats."
+        raise ValueError(msg) from exc
+
+    for name, value, value_f in (("elapsed_time", elapsed_time, elapsed_f), ("dt", dt, dt_f)):
+        if isinstance(value, (int, np.integer)) and int(value_f) != int(value):
+            msg = f"{name} must be exactly representable as a float, got {value!r}."
+            raise ValueError(msg)
+    if not np.isfinite(elapsed_f):
+        msg = f"elapsed_time must be finite, got {elapsed_time!r}."
+        raise ValueError(msg)
+    if not np.isfinite(dt_f):
+        msg = f"dt must be finite, got {dt!r}."
+        raise ValueError(msg)
+    if dt_f <= 0.0:
+        msg = f"dt must be positive, got {dt_f}."
+        raise ValueError(msg)
+    if elapsed_f < 0.0:
+        msg = f"elapsed_time must be non-negative, got {elapsed_f}."
+        raise ValueError(msg)
+    if not elapsed_f > 0.0:
+        return 0
+
+    if isinstance(elapsed_time, (int, np.integer)) and isinstance(dt, (int, np.integer)):
+        n_steps, remainder = divmod(int(elapsed_time), int(dt))
+        if remainder != 0:
+            msg = (
+                f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
+                f"got integer remainder {remainder}."
+            )
+            raise ValueError(msg)
+        if n_steps > np.iinfo(np.intp).max - 1:
+            msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
+            raise ValueError(msg)
+        return n_steps
+
+    n_float = elapsed_f / dt_f
+    if not np.isfinite(n_float):
+        msg = f"elapsed_time / dt must be finite, got {n_float}."
+        raise ValueError(msg)
+
+    n_steps = round(n_float)
+    if n_steps > np.iinfo(np.intp).max - 1:
+        msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
+        raise ValueError(msg)
+
+    # Bound only float64 representation dust from the two stored values and the
+    # ``n_steps * dt`` multiplication. Lower-precision NumPy inputs are converted to
+    # their exact float64 values; accepting additional source-dtype uncertainty would
+    # let the reported endpoint differ materially from the duration evolved by backends.
+    elapsed_ulp = 0.0 if isinstance(elapsed_time, (int, np.integer)) else math.ulp(elapsed_f)
+    dt_ulp = 0.0 if isinstance(dt, (int, np.integer)) else math.ulp(dt_f)
+
+    evolved_time = n_steps * dt_f
+    residual = abs(elapsed_f - evolved_time)
+    rounding_tolerance = 0.5 * (elapsed_ulp + n_steps * dt_ulp + math.ulp(evolved_time))
+    precision_is_ambiguous = rounding_tolerance >= 0.5 * dt_f and residual > 0.0
+    if n_steps <= 0 or precision_is_ambiguous or residual > rounding_tolerance:
+        msg = (
+            f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
+            f"got elapsed_time/dt = {n_float} (nearest integer {n_steps}, time residual {residual})."
+        )
+        raise ValueError(msg)
+    return n_steps
 
 
 def _validate_gate_mode(mode: GateMode) -> GateMode:
@@ -350,9 +452,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
             from the current :attr:`observables` list).
         observable_sorted_indices: Maps each user-list index to the corresponding row in
             sorted worker buffers (computed from the current :attr:`observables` list).
-        elapsed_time: Total simulation time.
-        dt: Simulation time step.
-        times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
+        elapsed_time: Total simulation time (finite, ``>= 0``); must be an integer multiple of ``dt``.
+        dt: Fixed simulation time step (finite, ``> 0``).
+        times: Array of sampled times ``dt * arange(n + 1)`` from ``0`` to ``elapsed_time`` inclusive.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
@@ -383,8 +485,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
     def __init__(
         self,
         observables: list[Observable] | None = None,
-        elapsed_time: float = 0.1,
-        dt: float = 0.1,
+        elapsed_time: float | np.floating[Any] | np.integer[Any] = 0.1,
+        dt: float | np.floating[Any] | np.integer[Any] = 0.1,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
         trunc_mode: str = "discarded_weight",
@@ -407,8 +509,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
 
         Args:
             observables: List of observables to measure during the simulation.
-            elapsed_time: Total simulation time.
-            dt: Time step interval.
+            elapsed_time: Total simulation time (finite, ``>= 0``). Must be an integer
+                multiple of ``dt`` because backends evolve with fixed ``dt``.
+            dt: Fixed time step interval (finite, ``> 0``).
             num_traj: Number of simulation samples.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
@@ -444,9 +547,15 @@ class AnalogSimParams(_ObservableOrderingMixin):
         )
         self.observables = obs_list
 
-        self.elapsed_time = elapsed_time
-        self.dt = dt
-        self.times = np.arange(0, elapsed_time + dt, dt)
+        n_steps = _validate_analog_time_grid(elapsed_time, dt)
+        self.elapsed_time = float(elapsed_time)
+        self.dt = float(dt)
+        # Fixed-dt grid: backends evolve ``n_steps`` intervals of ``dt``. Pin the final
+        # stamp to ``elapsed_time`` only after the integer-multiple check (avoids float dust
+        # such as ``0.1 * 3 != 0.3`` without mislabeling non-integral durations).
+        self.times = self.dt * np.arange(n_steps + 1, dtype=np.float64)
+        if n_steps > 0:
+            self.times[-1] = self.elapsed_time
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])

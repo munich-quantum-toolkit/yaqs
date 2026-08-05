@@ -174,7 +174,10 @@ _trunc_summary(shot_params)
 
 Besides the preset (and any overrides), you typically set the time grid
 (`elapsed_time`, `dt`), observables, and whether to record intermediate times
-(`sample_timesteps`).
+(`sample_timesteps`). Analog backends use a fixed step size, so `dt` must be
+positive and `elapsed_time` must be a non-negative integer multiple of `dt`.
+Non-integral grids raise a `ValueError`; choose the step count first and set
+`elapsed_time = num_steps * dt` when constructing a grid programmatically.
 
 ```{code-cell} ipython3
 L = 4
