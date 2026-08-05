@@ -358,6 +358,54 @@ class NoiseModel:
         return proc
 
     @staticmethod
+    def _normalize_non_adjacent_two_site_process(
+        proc: dict[str, Any],
+        name: str,
+        *,
+        user_matrix: bool,
+        user_factors: object,
+        swapped: bool,
+    ) -> dict[str, Any]:
+        """Normalize a long-range two-site process onto per-site factors.
+
+        Args:
+            proc: Process dict being normalized (``sites`` already sorted).
+            name: Validated process name.
+            user_matrix: Whether the caller supplied a full ``matrix``.
+            user_factors: Caller-supplied ``factors``, or ``None`` if omitted.
+            swapped: Whether the original site order was descending.
+
+        Returns:
+            The updated process dict with ``factors`` set and ``matrix`` removed.
+
+        Raises:
+            ValueError: If a full matrix is supplied, factors are missing for a
+                non-crosstalk name, or supplied factors fail validation.
+        """
+        if user_matrix:
+            msg = "Non-adjacent two-site processes require 'factors' (a full 'matrix' embedding is not accepted here)."
+            raise ValueError(msg)
+
+        suffix = _crosstalk_suffix(name)
+        if user_factors is None:
+            if suffix is None:
+                msg = (
+                    "Non-adjacent 2-site processes must specify 'factors' unless named "
+                    "crosstalk_[xyz]{2} or longrange_crosstalk_[xyz]{2}."
+                )
+                raise ValueError(msg)
+            a, b = _crosstalk_pauli_letters(suffix, swapped=swapped)
+            proc["factors"] = (
+                np.array(PAULI_MAP[a], copy=True),
+                np.array(PAULI_MAP[b], copy=True),
+            )
+        else:
+            proc["factors"] = _factors_for_sorted_sites(user_factors, swapped=swapped)
+
+        proc.pop("matrix", None)
+        return proc
+
+    @staticmethod
     def _normalize_two_site_process(
         proc: dict[str, Any],
         sites: list[int],
@@ -377,53 +425,27 @@ class NoiseModel:
             raise ValueError(msg)
         proc["sites"] = sorted_sites
         i, j = sorted_sites
-        is_adjacent = abs(j - i) == 1
-        suffix = _crosstalk_suffix(name)
-
-        if is_adjacent:
-            if factors_provided:
-                msg = "Adjacent two-site processes use 'matrix', not 'factors'."
-                raise ValueError(msg)
-            if user_matrix:
-                proc["matrix"] = _as_square_matrix(proc["matrix"], "Process matrix")
-            elif suffix is not None:
-                a, b = _crosstalk_pauli_letters(suffix, swapped=swapped)
-                proc["matrix"] = np.array(np.kron(PAULI_MAP[a], PAULI_MAP[b]), copy=True)
-            else:
-                proc["matrix"] = NoiseModel.get_operator(name)
-            proc.pop("factors", None)
-            return proc
-
-        # Non-adjacent: factors path
-        if user_matrix:
-            msg = "Non-adjacent two-site processes require 'factors' (a full 'matrix' embedding is not accepted here)."
-            raise ValueError(msg)
-        if suffix is not None:
-            if user_factors is None:
-                a, b = _crosstalk_pauli_letters(suffix, swapped=swapped)
-                proc["factors"] = (
-                    np.array(PAULI_MAP[a], copy=True),
-                    np.array(PAULI_MAP[b], copy=True),
-                )
-            else:
-                factors = _validate_factors(user_factors)
-                if swapped:
-                    factors = (factors[1], factors[0])
-                proc["factors"] = factors
-            proc.pop("matrix", None)
-            return proc
-
-        if user_factors is None:
-            msg = (
-                "Non-adjacent 2-site processes must specify 'factors' unless named "
-                "crosstalk_[xyz]{2} or longrange_crosstalk_[xyz]{2}."
+        if abs(j - i) != 1:
+            return NoiseModel._normalize_non_adjacent_two_site_process(
+                proc,
+                name,
+                user_matrix=user_matrix,
+                user_factors=user_factors,
+                swapped=swapped,
             )
+
+        if factors_provided:
+            msg = "Adjacent two-site processes use 'matrix', not 'factors'."
             raise ValueError(msg)
-        factors = _validate_factors(user_factors)
-        if swapped:
-            factors = (factors[1], factors[0])
-        proc["factors"] = factors
-        proc.pop("matrix", None)
+        suffix = _crosstalk_suffix(name)
+        if user_matrix:
+            proc["matrix"] = _as_square_matrix(proc["matrix"], "Process matrix")
+        elif suffix is not None:
+            a, b = _crosstalk_pauli_letters(suffix, swapped=swapped)
+            proc["matrix"] = np.array(np.kron(PAULI_MAP[a], PAULI_MAP[b]), copy=True)
+        else:
+            proc["matrix"] = NoiseModel.get_operator(name)
+        proc.pop("factors", None)
         return proc
 
     @staticmethod
@@ -569,6 +591,26 @@ def _validate_factors(factors: object) -> tuple[NDArray[np.complex128], NDArray[
         raise ValueError(msg)
     left = _as_square_matrix(factors[0], "Process factor[0]")
     right = _as_square_matrix(factors[1], "Process factor[1]")
+    return left, right
+
+
+def _factors_for_sorted_sites(
+    factors: object,
+    *,
+    swapped: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Validate factors and reorder them to match ascending site indices.
+
+    Args:
+        factors: Caller-supplied pair of square factor matrices.
+        swapped: Whether the original site order was descending.
+
+    Returns:
+        Factor matrices ordered for the sorted ``sites`` list.
+    """
+    left, right = _validate_factors(factors)
+    if swapped:
+        return right, left
     return left, right
 
 
