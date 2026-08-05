@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -525,6 +526,58 @@ def test_gate_constructor() -> None:
     # Test for non-square matrix
     with pytest.raises(ValueError, match="Matrix must be square"):
         BaseGate(non_square_matrix)
+
+
+def _generator_gate_names() -> list[str]:
+    """Names of GateLibrary classes that define a product-form generator.
+
+    Returns:
+        The gate names, discovered dynamically so newly added gates are covered.
+    """
+    names = []
+    for name in sorted(dir(GateLibrary)):
+        cls = getattr(GateLibrary, name)
+        if not isinstance(cls, type) or not issubclass(cls, BaseGate):
+            continue
+        for args in ((), ([0.7],)):
+            try:
+                gate = cls(*args)
+                break
+            except (TypeError, ValueError, AttributeError, IndexError):
+                continue
+        else:
+            continue
+        try:
+            gate.set_sites(*range(gate.interaction))
+        except (TypeError, ValueError):
+            continue
+        if getattr(gate, "generator", None) is not None:
+            names.append(name)
+    return names
+
+
+def test_generator_gate_discovery() -> None:
+    """The generator sweep covers at least the known generator-carrying gates."""
+    assert {"cx", "cz", "cp", "rxx", "ryy", "rzz"}.issubset(set(_generator_gate_names()))
+
+
+@pytest.mark.parametrize("name", _generator_gate_names())
+def test_gate_generator_matches_matrix(name: str) -> None:
+    """Exponentiating the product-form generator reproduces the gate matrix exactly.
+
+    The generator is consumed on the TDVP window path, so a wrong generator silently
+    applies a different gate there while the matrix-based paths stay correct.
+    """
+    cls = getattr(GateLibrary, name)
+    try:
+        gate = cls()
+    except (TypeError, IndexError):
+        gate = cls([0.7])
+    gate.set_sites(*range(gate.interaction))
+    kron = np.asarray(gate.generator[0], dtype=np.complex128)
+    for factor in gate.generator[1:]:
+        kron = np.kron(kron, np.asarray(factor, dtype=np.complex128))
+    assert_allclose(expm(-1j * kron), gate.matrix, atol=1e-12)
 
 
 def test_set_sites() -> None:
