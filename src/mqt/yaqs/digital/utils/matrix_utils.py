@@ -24,6 +24,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
+from ...core.data_structures.mpo_utils import resolve_lr_tensor
 from .dag_utils import convert_dag_to_tensor_algorithm, convert_matrix_layout
 from .scheduler_utils import partition_disjoint_gate_batches
 
@@ -203,7 +204,13 @@ def apply_gate_left(
     if gate.interaction == 1:
         return apply_1q_left(op, gate.matrix, gate.sites[0], num_qubits, dagger=dagger)
     if gate.interaction == 2:
-        return apply_2q_left(op, gate.tensor, gate.sites[0], gate.sites[1], num_qubits, dagger=dagger)
+        # Resolve the gate tensor to ascending site order exactly once: hardcoded gate
+        # classes already transpose ``gate.tensor`` for descending sites, so passing the
+        # declared order would make ``apply_2q_left`` transpose a second time.
+        left_site = min(gate.sites[0], gate.sites[1])
+        right_site = max(gate.sites[0], gate.sites[1])
+        tensor = resolve_lr_tensor(gate, left_site, right_site)
+        return apply_2q_left(op, tensor, left_site, right_site, num_qubits, dagger=dagger)
 
     # ``gate.matrix`` is stored in YAQS site-ordered layout; ``embed_unitary`` expects
     # Qiskit little-endian ordering. The layout map is an involution. The tensorized
