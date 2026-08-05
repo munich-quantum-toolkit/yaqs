@@ -12,9 +12,9 @@ releases may include breaking changes.
 
 ### Added
 
-- added custom one-site matrix observables for non-qubit local dimensions
+- added digital–analog simulation programs ([#525]) ([**@linusschulte**])
 
-  , including named position observables ([#497]) ([**@linusschulte**])
+- added custom one-site matrix observables for non-qubit local dimensions, including named position observables ([#497]) ([**@linusschulte**])
 
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
@@ -233,6 +233,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
 [#519]: https://github.com/munich-quantum-toolkit/yaqs/pull/519
 [#518]: https://github.com/munich-quantum-toolkit/yaqs/pull/518
