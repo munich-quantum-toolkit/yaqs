@@ -119,11 +119,10 @@ def _assert_noise_processes_match(
 
 
 @pytest.mark.parametrize(
-    ("start", "end", "expected_processes"),
+    ("sites", "expected_processes"),
     [
         (
-            1,
-            2,
+            [1, 2],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
@@ -132,8 +131,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            0,
-            1,
+            [0, 1],
             [
                 {"name": "pauli_x", "sites": [0], "strength": 0.01},
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
@@ -142,8 +140,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            2,
-            3,
+            [2, 3],
             [
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
@@ -151,30 +148,46 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            1,
-            1,
+            [1],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
             ],
         ),
         (
-            1,
-            3,
+            [1, 3],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
                 {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
             ],
         ),
+        (
+            [0, 1, 2],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+                {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
+                {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
+                {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
+                {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
+            ],
+        ),
+        (
+            [0, 2, 4],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+            ],
+        ),
     ],
 )
 def test_create_local_noise_model(
-    start: int,
-    end: int,
+    sites: list[int],
     expected_processes: list[dict[str, object]],
 ) -> None:
-    """Local noise models retain only processes overlapping the gate site range."""
-    local_model = create_local_noise_model(_sample_global_noise_model(), start, end)
+    """Local noise models retain only processes whose sites lie in the gate support."""
+    local_model = create_local_noise_model(_sample_global_noise_model(), sites)
     _assert_noise_processes_match(local_model, expected_processes)
 
 
@@ -2149,6 +2162,34 @@ def test_noisy_ccx_smoke() -> None:
     expectation = result.expectation_values[0]
     assert expectation is not None
     assert np.all(np.isfinite(expectation))
+
+
+def test_noisy_ccx_local_noise_uses_all_gate_sites() -> None:
+    """After a CCX, ``create_local_noise_model`` receives all three gate qubits."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.01},
+        {"name": "pauli_x", "sites": [2], "strength": 0.01},
+    ])
+    mps = MPS(3, state="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="mpo",
+        num_traj=1,
+        random_seed=0,
+    )
+
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        digital_tjm((0, mps, noise_model, sim_params, qc))
+
+    mock_local.assert_called_once()
+    _noise, sites = mock_local.call_args.args
+    assert list(sites) == [0, 1, 2]
 
 
 def test_bell_state_sanity() -> None:

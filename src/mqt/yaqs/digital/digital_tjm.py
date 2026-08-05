@@ -36,6 +36,8 @@ from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
@@ -44,26 +46,23 @@ if TYPE_CHECKING:
     from ..core.methods.decompositions import TruncMode
 
 
-def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site: int) -> NoiseModel:
+def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> NoiseModel:
     """Create local noise model.
 
-    Create a local noise model from a global noise model for a given gate.
+    Create a local noise model from a global noise model for a given gate. Only
+    processes whose support is a subset of the gate qubits are retained, so idle
+    sites between long-range or multi-qubit gates are not noised.
 
     Args:
-        noise_model (NoiseModel): The global noise model.
-        first_site (int): The first site of the gate support.
-        last_site (int): The last site of the gate support.
+        noise_model: The global noise model.
+        sites: Qubit indices the gate acts on.
 
     Returns:
-        NoiseModel: The local noise model.
+        The local noise model.
     """
-    affected_sites = [first_site, last_site]
+    gate_sites = set(sites)
 
-    local_processes = [
-        process
-        for process in noise_model.processes
-        if process["sites"] == affected_sites or process["sites"] == [first_site] or process["sites"] == [last_site]
-    ]
+    local_processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
     return NoiseModel(local_processes)
 
 
@@ -512,12 +511,13 @@ def digital_tjm(
 
         for _, group in [("even", even_nodes), ("odd", odd_nodes)]:
             for node in group:
-                first_site, last_site = apply_two_qubit_gate(state, node, sim_params)
+                apply_two_qubit_gate(state, node, sim_params)
 
                 if not noisy:
                     state.normalize(form="B", decomposition="QR")
                 else:
-                    local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
+                    gate_sites = [dag.find_bit(qubit).index for qubit in node.qargs]
+                    local_noise_model = create_local_noise_model(noise_model, gate_sites)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
