@@ -37,6 +37,8 @@ releases may include breaking changes.
 
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])
+- fixed the CZ and CPhase generators used on the TDVP gate application path
+  ([#526]) ([**@Pouri96**])
 - fixed TJM jump selection to align processes with site-sweep probabilities
   ([#506]) ([**@Pouri96**])
 
@@ -242,6 +244,7 @@ for previous changelogs._
 [#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
 [#528]: https://github.com/munich-quantum-toolkit/yaqs/pull/528
+[#526]: https://github.com/munich-quantum-toolkit/yaqs/pull/526
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
 [#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482
