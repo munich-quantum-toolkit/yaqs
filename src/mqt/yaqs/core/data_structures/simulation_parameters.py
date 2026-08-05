@@ -18,7 +18,6 @@ dimension limits, and thresholds. Simulation outputs are stored on
 from __future__ import annotations
 
 import copy
-import math
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, TypedDict
 
@@ -27,8 +26,6 @@ import numpy as np
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from numpy.typing import ArrayLike
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
@@ -95,16 +92,12 @@ def _validate_random_seed(random_seed: int | None) -> None:
         raise ValueError(msg)
 
 
-def _validate_analog_time_grid(
-    elapsed_time: float | np.floating[Any] | np.integer[Any],
-    dt: float | np.floating[Any] | np.integer[Any],
-) -> int:
+def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
     """Validate analog time parameters and return the integer number of steps.
 
     Backends evolve every interval with the full ``dt``, so ``elapsed_time`` must be an
-    integer multiple of ``dt`` (within a precision-aware tolerance on their dimensionless
-    ratio). Relabeling the final timestamp without a fractional step would otherwise
-    disagree with the evolution.
+    integer multiple of ``dt`` within a small fraction of one timestep. Relabeling the
+    final timestamp without a fractional step would otherwise disagree with the evolution.
 
     Args:
         elapsed_time: Total simulation time (must be finite and ``>= 0``).
@@ -132,10 +125,6 @@ def _validate_analog_time_grid(
         msg = "elapsed_time and dt must be representable as finite floats."
         raise ValueError(msg) from exc
 
-    for name, value, value_f in (("elapsed_time", elapsed_time, elapsed_f), ("dt", dt, dt_f)):
-        if isinstance(value, (int, np.integer)) and int(value_f) != int(value):
-            msg = f"{name} must be exactly representable as a float, got {value!r}."
-            raise ValueError(msg)
     if not np.isfinite(elapsed_f):
         msg = f"elapsed_time must be finite, got {elapsed_time!r}."
         raise ValueError(msg)
@@ -151,19 +140,6 @@ def _validate_analog_time_grid(
     if not elapsed_f > 0.0:
         return 0
 
-    if isinstance(elapsed_time, (int, np.integer)) and isinstance(dt, (int, np.integer)):
-        n_steps, remainder = divmod(int(elapsed_time), int(dt))
-        if remainder != 0:
-            msg = (
-                f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
-                f"got integer remainder {remainder}."
-            )
-            raise ValueError(msg)
-        if n_steps > np.iinfo(np.intp).max - 1:
-            msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
-            raise ValueError(msg)
-        return n_steps
-
     n_float = elapsed_f / dt_f
     if not np.isfinite(n_float):
         msg = f"elapsed_time / dt must be finite, got {n_float}."
@@ -174,21 +150,9 @@ def _validate_analog_time_grid(
         msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
         raise ValueError(msg)
 
-    # Bound only float64 representation dust from the two stored values and the
-    # ``n_steps * dt`` multiplication. Lower-precision NumPy inputs are converted to
-    # their exact float64 values; accepting additional source-dtype uncertainty would
-    # let the reported endpoint differ materially from the duration evolved by backends.
-    elapsed_ulp = 0.0 if isinstance(elapsed_time, (int, np.integer)) else math.ulp(elapsed_f)
-    dt_ulp = 0.0 if isinstance(dt, (int, np.integer)) else math.ulp(dt_f)
-
     evolved_time = n_steps * dt_f
     residual = abs(elapsed_f - evolved_time)
-    ulp_tolerance = 0.5 * (elapsed_ulp + n_steps * dt_ulp + math.ulp(evolved_time))
-    # An ULP can be a material fraction of a subnormal ``dt``. Never let the
-    # representation allowance exceed a tiny, dimensionless fraction of one step.
-    step_fraction_tolerance = 1e-9 * dt_f
-    rounding_tolerance = min(ulp_tolerance, step_fraction_tolerance)
-    if n_steps <= 0 or residual > rounding_tolerance:
+    if n_steps <= 0 or residual > 1e-9 * dt_f:
         msg = (
             f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
             f"got elapsed_time/dt = {n_float} (nearest integer {n_steps}, time residual {residual})."
@@ -488,8 +452,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
     def __init__(
         self,
         observables: list[Observable] | None = None,
-        elapsed_time: float | np.floating[Any] | np.integer[Any] = 0.1,
-        dt: float | np.floating[Any] | np.integer[Any] = 0.1,
+        elapsed_time: float = 0.1,
+        dt: float = 0.1,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
         trunc_mode: str = "discarded_weight",
