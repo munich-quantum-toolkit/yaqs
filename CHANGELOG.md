@@ -21,6 +21,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- hardened stability of noise model, timestep selection, and RNG ([#527])
+  ([**@aaronleesander**])
 - State.representation set as sole backend selector ([#519])
   ([**@aaronleesander**])
 - added QR canonicalization before compression sweep for stability ([#518])
@@ -235,6 +237,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
 [#519]: https://github.com/munich-quantum-toolkit/yaqs/pull/519
 [#518]: https://github.com/munich-quantum-toolkit/yaqs/pull/518
