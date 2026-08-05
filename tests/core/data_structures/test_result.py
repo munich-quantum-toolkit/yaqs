@@ -17,7 +17,7 @@ read-only ``*SimParams`` configuration object and can be pickled.
 from __future__ import annotations
 
 import copy
-import pickle  # ruff:ignore[suspicious-pickle-import]  # test-only: controlled Result round-trip; no untrusted input deserialized
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 
 import numpy as np
 import pytest
@@ -153,7 +153,7 @@ def test_result_is_pickleable() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     blob = pickle.dumps(result)
-    restored = pickle.loads(blob)  # ruff:ignore[suspicious-pickle-usage]  # test-only: bytes are produced one line above (round-trip)
+    restored = pickle.loads(blob)  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip of bytes produced above
 
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)
@@ -176,7 +176,7 @@ def test_result_supports_ordered_nested_segment_results() -> None:
         ]
     )
 
-    restored = pickle.loads(pickle.dumps(outer))  # ruff:ignore[suspicious-pickle-usage]  # controlled round-trip
+    restored = pickle.loads(pickle.dumps(outer))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
 
     assert restored.sim_params is None
     assert len(restored.segment_results) == 2

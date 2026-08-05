@@ -24,7 +24,8 @@ records observables for individual segments.
 To demonstrate this workflow, the following example:
 
 1. prepares a phase-sensitive state with a digital operation;
-2. evolves it continuously under a simple coherent dephasing Hamiltonian;
+2. evolves it continuously under a simple static-$Z$ Hamiltonian that
+   accumulates phase;
 3. optionally inserts an instantaneous digital pulse between two analog parts;
 4. runs both programs with and without noise.
 

@@ -67,6 +67,21 @@ class _CompiledCircuit:
     num_mid_measurements: int
 
 
+_INVALID_SWAP_ROUTE_MESSAGE = (
+    "gate_mode='swaps' cannot route a qubit gate through a non-qubit spectator; use gate_mode='mpo' or a TDVP mode."
+)
+
+
+def _swap_route_is_valid(
+    physical_dimensions: tuple[int, ...] | list[int],
+    site0: int,
+    site1: int,
+) -> bool:
+    """Return whether SWAP routing crosses only qubit sites."""
+    first_site, last_site = min(site0, site1), max(site0, site1)
+    return all(dimension == 2 for dimension in physical_dimensions[first_site : last_site + 1])
+
+
 def _freeze_gate_arrays(gate: BaseGate) -> BaseGate:
     """Protect executor-owned gate arrays against accidental in-process mutation.
 
@@ -115,14 +130,12 @@ def _validate_gate_layout(
                 f"{dimension}; digital gates currently require dimension 2 targets."
             )
             raise ValueError(msg)
-    if gate.interaction == 2 and gate_mode == "swaps":
-        first_site, last_site = min(gate.sites), max(gate.sites)
-        if any(dimension != 2 for dimension in physical_dimensions[first_site : last_site + 1]):
-            msg = (
-                "gate_mode='swaps' cannot route a qubit gate through a non-qubit spectator; "
-                "use gate_mode='mpo' or a TDVP mode."
-            )
-            raise ValueError(msg)
+    if (
+        gate.interaction == 2
+        and gate_mode == "swaps"
+        and not _swap_route_is_valid(physical_dimensions, gate.sites[0], gate.sites[1])
+    ):
+        raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
 
 
 def _compile_circuit(
@@ -566,14 +579,8 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
     has_generator = getattr(gate, "generator", None) is not None
 
-    if gate_mode == "swaps" and any(
-        dimension != 2 for dimension in state.physical_dimensions[min(site0, site1) : max(site0, site1) + 1]
-    ):
-        msg = (
-            "gate_mode='swaps' cannot route a qubit gate through a non-qubit spectator; "
-            "use gate_mode='mpo' or a TDVP mode."
-        )
-        raise ValueError(msg)
+    if gate_mode == "swaps" and not _swap_route_is_valid(state.physical_dimensions, site0, site1):
+        raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
 
     if gate_mode == "full-tdvp":
         if has_generator:

@@ -173,6 +173,74 @@ def aggregate_counts(result: Result) -> None:
     result.counts = dict(sorted(counts.items()))
 
 
+def _segment_trace(
+    segment: Result,
+    observable: Observable,
+    *,
+    is_program_result: bool,
+    position: int,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
+    """Return one segment's trace, or ``None`` for an absent digital observable.
+
+    Raises:
+        ValueError: If the segment metadata or stored trace data is invalid.
+    """
+    segment_label = segment.segment_index if segment.segment_index is not None else position
+    is_digital = segment.segment_type == "digital" or (
+        not is_program_result and isinstance(segment.sim_params, DigitalSimParams)
+    )
+    segment_kind = "digital" if is_digital else "analog"
+    if is_program_result and segment.segment_type not in {"analog", "digital"}:
+        msg = f"Program segment {segment_label} has no valid segment_type."
+        raise ValueError(msg)
+    if not is_program_result and segment.times is None and not is_digital:
+        msg = "Result has no observable trace data."
+        raise ValueError(msg)
+
+    matches = [
+        index for index, candidate in enumerate(segment.observables) if _observables_match(candidate, observable)
+    ]
+    if not matches:
+        if is_digital:
+            return None
+        msg = f"Observable is not recorded in analog segment {segment_label}."
+        raise ValueError(msg)
+    if len(matches) > 1:
+        msg = f"Observable is recorded more than once in {segment_kind} segment {segment_label}."
+        raise ValueError(msg)
+
+    observable_index = matches[0]
+    if observable_index >= len(segment.expectation_values):
+        msg = f"Observable in {segment_kind} segment {segment_label} has no expectation values."
+        raise ValueError(msg)
+    values = np.asarray(segment.expectation_values[observable_index])
+    if values.ndim != 1:
+        msg = f"Observable in {segment_kind} segment {segment_label} is not a scalar series."
+        raise ValueError(msg)
+
+    if is_digital:
+        if is_program_result and segment.time_offset is None:
+            msg = f"Digital segment {segment_label} has no time_offset."
+            raise ValueError(msg)
+        offset = segment.time_offset if segment.time_offset is not None else 0.0
+        times = np.full(len(values), offset, dtype=np.float64)
+    else:
+        if segment.times is None:
+            msg = f"Analog segment {segment_label} has no time data."
+            raise ValueError(msg)
+        if is_program_result and segment.time_offset is None:
+            msg = f"Analog segment {segment_label} has no time_offset."
+            raise ValueError(msg)
+        times = np.asarray(segment.times, dtype=np.float64)
+        if times.ndim != 1 or len(times) != len(values):
+            msg = f"Observable in analog segment {segment_label} is not a scalar time series aligned with times."
+            raise ValueError(msg)
+        offset = segment.time_offset if segment.time_offset is not None else 0.0
+        times = np.asarray(times + offset, dtype=np.float64)
+
+    return times, np.asarray(np.real(values), dtype=np.float64)
+
+
 @dataclass
 class Result:
     """Result of a :meth:`~mqt.yaqs.Simulator.run` call.
@@ -248,74 +316,21 @@ class Result:
 
         is_program_result = bool(self.segment_results)
         segments = self.segment_results if is_program_result else [self]
-        if (
-            not is_program_result
-            and self.times is None
-            and self.segment_type != "digital"
-            and not isinstance(self.sim_params, DigitalSimParams)
-        ):
-            msg = "Result has no observable trace data."
-            raise ValueError(msg)
 
         time_parts: list[NDArray[np.float64]] = []
         value_parts: list[NDArray[np.float64]] = []
         for position, segment in enumerate(segments):
-            segment_label = segment.segment_index if segment.segment_index is not None else position
-            is_digital = segment.segment_type == "digital" or (
-                not is_program_result and isinstance(segment.sim_params, DigitalSimParams)
+            trace = _segment_trace(
+                segment,
+                observable,
+                is_program_result=is_program_result,
+                position=position,
             )
-            segment_kind = "digital" if is_digital else "analog"
-            if is_program_result and segment.segment_type not in {"analog", "digital"}:
-                msg = f"Program segment {segment_label} has no valid segment_type."
-                raise ValueError(msg)
-
-            matches = [
-                index
-                for index, candidate in enumerate(segment.observables)
-                if _observables_match(candidate, observable)
-            ]
-            if not matches:
-                if is_digital:
-                    continue
-                msg = f"Observable is not recorded in analog segment {segment_label}."
-                raise ValueError(msg)
-            if len(matches) > 1:
-                msg = f"Observable is recorded more than once in {segment_kind} segment {segment_label}."
-                raise ValueError(msg)
-
-            observable_index = matches[0]
-            if observable_index >= len(segment.expectation_values):
-                msg = f"Observable in {segment_kind} segment {segment_label} has no expectation values."
-                raise ValueError(msg)
-            values = np.asarray(segment.expectation_values[observable_index])
-            if values.ndim != 1:
-                msg = f"Observable in {segment_kind} segment {segment_label} is not a scalar series."
-                raise ValueError(msg)
-
-            if is_digital:
-                if is_program_result and segment.time_offset is None:
-                    msg = f"Digital segment {segment_label} has no time_offset."
-                    raise ValueError(msg)
-                offset = segment.time_offset if segment.time_offset is not None else 0.0
-                times = np.full(len(values), offset, dtype=np.float64)
-            else:
-                if segment.times is None:
-                    msg = f"Analog segment {segment_label} has no time data."
-                    raise ValueError(msg)
-                if is_program_result and segment.time_offset is None:
-                    msg = f"Analog segment {segment_label} has no time_offset."
-                    raise ValueError(msg)
-                times = np.asarray(segment.times, dtype=np.float64)
-                if times.ndim != 1 or len(times) != len(values):
-                    msg = (
-                        f"Observable in analog segment {segment_label} is not a scalar time series aligned with times."
-                    )
-                    raise ValueError(msg)
-                offset = segment.time_offset if segment.time_offset is not None else 0.0
-                times = np.asarray(times + offset, dtype=np.float64)
-
+            if trace is None:
+                continue
+            times, values = trace
             time_parts.append(times)
-            value_parts.append(np.asarray(np.real(values), dtype=np.float64))
+            value_parts.append(values)
 
         if not time_parts:
             msg = "Result has no observable trace data."

@@ -528,8 +528,8 @@ def test_program_num_traj_overrides_segment_defaults() -> None:
 
     assert result.segment_results[0].trajectories[0].shape[0] == 4
     assert len(result.segment_results[1].measurements) == 4
-    assert analog_params.num_traj == 256
-    assert digital_params.num_traj == 128
+    assert analog_params.num_traj == AnalogSimParams(observables=[Observable("z", 0)]).num_traj
+    assert digital_params.num_traj == DigitalSimParams(shots=3, preset="fast").num_traj
 
 
 def test_program_infers_agreeing_segment_num_traj() -> None:

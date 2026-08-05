@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-import pickle  # ruff:ignore[suspicious-pickle-import]  # test-only controlled round-trips
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -118,6 +118,9 @@ def test_program_rejects_empty_or_invalid_segments() -> None:
         )
     with pytest.raises(TypeError, match="segments must be an iterable"):
         SimulationProgram(None)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+    for invalid_segments in ("analog", b"digital"):
+        with pytest.raises(TypeError, match="segments must be an iterable"):
+            SimulationProgram(invalid_segments)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
 
 
 def test_program_rejects_non_boolean_get_state() -> None:
@@ -159,7 +162,7 @@ def test_program_specification_is_pickleable() -> None:
         get_state=True,
     )
 
-    restored = pickle.loads(pickle.dumps(program))  # ruff:ignore[suspicious-pickle-usage]  # controlled round-trip
+    restored = pickle.loads(pickle.dumps(program))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
 
     assert len(restored) == 2
     assert isinstance(restored.segments[0], DigitalSegment)

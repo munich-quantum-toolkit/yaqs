@@ -292,6 +292,117 @@ def _validate_noise_layout(
             raise ValueError(msg)
 
 
+def _compile_analog_segment(
+    segment: AnalogSegment,
+    *,
+    index: int,
+    signature: _StateSignature,
+    noise_model: NoiseModel | None,
+    time_offset: float,
+    num_traj: int | None,
+    random_seed: int | None,
+    random_seed_conflict: bool,
+) -> _CompiledAnalogInstruction:
+    """Compile one analog segment after program-wide settings are resolved.
+
+    Returns:
+        The validated private analog instruction.
+
+    Raises:
+        ValueError: If the segment is incompatible with the state or program executor.
+    """
+    if segment.hamiltonian.length != signature.length:
+        msg = (
+            f"segments[{index}] Hamiltonian.length={segment.hamiltonian.length} "
+            f"does not match State.length={signature.length}."
+        )
+        raise ValueError(msg)
+    sim_params = segment.sim_params if segment.sim_params is not None else AnalogSimParams()
+    if sim_params.order not in {1, 2}:
+        msg = f"segments[{index}] AnalogSimParams.order must be 1 or 2, got {sim_params.order}."
+        raise ValueError(msg)
+    if sim_params.multi_time_observables:
+        msg = f"segments[{index}] multi_time_observables are not supported in program execution."
+        raise ValueError(msg)
+    execution_params = copy.deepcopy(sim_params)
+    execution_params.times = exact_time_grid(sim_params.elapsed_time, sim_params.dt)
+    execution_params.get_state = True
+    if num_traj is not None:
+        execution_params.num_traj = num_traj
+    if not random_seed_conflict:
+        execution_params.random_seed = random_seed
+    execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+    segment.hamiltonian.ensure_mpo()
+    for site, (tensor, dimension) in enumerate(
+        zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
+    ):
+        if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
+            msg = (
+                f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
+                f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
+            )
+            raise ValueError(msg)
+    return _CompiledAnalogInstruction(
+        index=index,
+        hamiltonian=segment.hamiltonian.mpo,
+        sim_params=sim_params,
+        execution_params=execution_params,
+        noise_model=noise_model,
+        time_offset=time_offset,
+    )
+
+
+def _compile_digital_segment(
+    segment: DigitalSegment,
+    *,
+    index: int,
+    signature: _StateSignature,
+    noise_model: NoiseModel | None,
+    time_offset: float,
+    num_traj: int | None,
+    random_seed: int | None,
+    random_seed_conflict: bool,
+) -> _CompiledDigitalInstruction:
+    """Compile one digital segment after program-wide settings are resolved.
+
+    Returns:
+        The validated private digital instruction.
+
+    Raises:
+        ValueError: If the circuit size or gate layout is incompatible with the state.
+    """
+    if segment.circuit.num_qubits != signature.length:
+        msg = (
+            f"segments[{index}] circuit.num_qubits={segment.circuit.num_qubits} "
+            f"does not match State.length={signature.length}."
+        )
+        raise ValueError(msg)
+    sim_params = segment.sim_params if segment.sim_params is not None else DigitalSimParams()
+    execution_params = copy.deepcopy(sim_params)
+    execution_params.get_state = True
+    if num_traj is not None:
+        execution_params.num_traj = num_traj
+    if not random_seed_conflict:
+        execution_params.random_seed = random_seed
+    execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+    compiled_circuit = _compile_circuit(
+        segment.circuit,
+        signature.physical_dimensions,
+        gate_mode=execution_params.gate_mode,
+    )
+    if execution_params.sample_layers:
+        execution_params.num_mid_measurements = compiled_circuit.num_mid_measurements
+    return _CompiledDigitalInstruction(
+        index=index,
+        circuit=segment.circuit,
+        compiled_circuit=compiled_circuit,
+        sim_params=sim_params,
+        execution_params=execution_params,
+        noise_model=noise_model,
+        time_offset=time_offset,
+    )
+
+
 def _compile_program(
     program: SimulationProgram,
     initial_state: State,
@@ -354,80 +465,30 @@ def _compile_program(
         _validate_noise_layout(resolved_noise_model, signature.physical_dimensions, segment_index=index)
 
         if isinstance(segment, AnalogSegment):
-            if segment.hamiltonian.length != signature.length:
-                msg = (
-                    f"segments[{index}] Hamiltonian.length={segment.hamiltonian.length} "
-                    f"does not match State.length={signature.length}."
-                )
-                raise ValueError(msg)
-            sim_params = segment.sim_params if segment.sim_params is not None else AnalogSimParams()
-            if sim_params.order not in {1, 2}:
-                msg = f"segments[{index}] AnalogSimParams.order must be 1 or 2, got {sim_params.order}."
-                raise ValueError(msg)
-            if sim_params.multi_time_observables:
-                msg = f"segments[{index}] multi_time_observables are not supported in program execution."
-                raise ValueError(msg)
-            execution_params = copy.deepcopy(sim_params)
-            execution_params.times = exact_time_grid(sim_params.elapsed_time, sim_params.dt)
-            execution_params.get_state = True
-            if num_traj is not None:
-                execution_params.num_traj = num_traj
-            if not random_seed_conflict:
-                execution_params.random_seed = random_seed
-            execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
-            segment.hamiltonian.ensure_mpo()
-            for site, (tensor, dimension) in enumerate(
-                zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
-            ):
-                if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
-                    msg = (
-                        f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
-                        f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
-                    )
-                    raise ValueError(msg)
-            instructions.append(
-                _CompiledAnalogInstruction(
-                    index=index,
-                    hamiltonian=segment.hamiltonian.mpo,
-                    sim_params=sim_params,
-                    execution_params=execution_params,
-                    noise_model=resolved_noise_model,
-                    time_offset=time_offset,
-                )
+            instruction = _compile_analog_segment(
+                segment,
+                index=index,
+                signature=signature,
+                noise_model=resolved_noise_model,
+                time_offset=time_offset,
+                num_traj=num_traj,
+                random_seed=random_seed,
+                random_seed_conflict=random_seed_conflict,
             )
-            time_offset += float(sim_params.elapsed_time)
+            instructions.append(instruction)
+            time_offset += float(instruction.sim_params.elapsed_time)
             continue
         if isinstance(segment, DigitalSegment):
-            if segment.circuit.num_qubits != signature.length:
-                msg = (
-                    f"segments[{index}] circuit.num_qubits={segment.circuit.num_qubits} "
-                    f"does not match State.length={signature.length}."
-                )
-                raise ValueError(msg)
-            sim_params = segment.sim_params if segment.sim_params is not None else DigitalSimParams()
-            execution_params = copy.deepcopy(sim_params)
-            execution_params.get_state = True
-            if num_traj is not None:
-                execution_params.num_traj = num_traj
-            if not random_seed_conflict:
-                execution_params.random_seed = random_seed
-            execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
-            compiled_circuit = _compile_circuit(
-                segment.circuit,
-                signature.physical_dimensions,
-                gate_mode=execution_params.gate_mode,
-            )
-            if execution_params.sample_layers:
-                execution_params.num_mid_measurements = compiled_circuit.num_mid_measurements
             instructions.append(
-                _CompiledDigitalInstruction(
+                _compile_digital_segment(
+                    segment,
                     index=index,
-                    circuit=segment.circuit,
-                    compiled_circuit=compiled_circuit,
-                    sim_params=sim_params,
-                    execution_params=execution_params,
+                    signature=signature,
                     noise_model=resolved_noise_model,
                     time_offset=time_offset,
+                    num_traj=num_traj,
+                    random_seed=random_seed,
+                    random_seed_conflict=random_seed_conflict,
                 )
             )
         else:

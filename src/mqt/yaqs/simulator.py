@@ -428,6 +428,64 @@ def _prepare_result_observables(
     result.times = times
 
 
+def _allocate_program_segment_results(
+    compiled: _CompiledProgram,
+    effective_num_traj: int,
+) -> tuple[list[Result], list[NDArray[np.float64] | None]]:
+    """Allocate result and diagnostic buffers for every compiled instruction.
+
+    Returns:
+        Ordered segment results and their matching optional diagnostic buffers.
+    """
+    segment_results: list[Result] = []
+    diagnostic_buffers: list[NDArray[np.float64] | None] = []
+    for instruction in compiled.instructions:
+        sim_params = instruction.sim_params
+        segment_result = Result(
+            sim_params=sim_params,
+            noise_model=instruction.noise_model,
+            segment_index=instruction.index,
+            segment_type="analog" if isinstance(instruction, _CompiledAnalogInstruction) else "digital",
+            time_offset=instruction.time_offset,
+        )
+        if isinstance(instruction, _CompiledAnalogInstruction):
+            _prepare_result_observables(
+                segment_result,
+                sim_params,
+                num_traj=effective_num_traj,
+                buffer_params=instruction.execution_params,
+            )
+            segment_result.times = np.asarray(instruction.execution_params.times, dtype=np.float64)
+            diag_per_traj, _ = allocate_diagnostic_buffers(
+                instruction.execution_params,
+                num_traj=effective_num_traj,
+            )
+        else:
+            digital_params = instruction.sim_params
+            wants_observables = bool(digital_params.observables)
+            wants_shots = digital_params.shots is not None
+            shots_only = wants_shots and not wants_observables
+            if wants_observables:
+                _prepare_result_observables(
+                    segment_result,
+                    digital_params,
+                    num_traj=effective_num_traj,
+                    num_mid_measurements=instruction.execution_params.num_mid_measurements,
+                )
+            if wants_shots:
+                segment_result.measurements = [None] * effective_num_traj
+            if shots_only:
+                diag_per_traj = None
+            else:
+                diag_per_traj, _ = allocate_diagnostic_buffers(
+                    instruction.execution_params,
+                    num_traj=effective_num_traj,
+                )
+        segment_results.append(segment_result)
+        diagnostic_buffers.append(diag_per_traj)
+    return segment_results, diagnostic_buffers
+
+
 def _worker_sim_params(
     sim_params: AnalogSimParams | DigitalSimParams,
 ) -> AnalogSimParams | DigitalSimParams:
@@ -847,52 +905,7 @@ class Simulator:
         else:
             effective_num_traj = 1
 
-        segment_results: list[Result] = []
-        diagnostic_buffers: list[NDArray[np.float64] | None] = []
-        for instruction in compiled.instructions:
-            sim_params = instruction.sim_params
-            segment_result = Result(
-                sim_params=sim_params,
-                noise_model=instruction.noise_model,
-                segment_index=instruction.index,
-                segment_type="analog" if isinstance(instruction, _CompiledAnalogInstruction) else "digital",
-                time_offset=instruction.time_offset,
-            )
-            if isinstance(instruction, _CompiledAnalogInstruction):
-                _prepare_result_observables(
-                    segment_result,
-                    sim_params,
-                    num_traj=effective_num_traj,
-                    buffer_params=instruction.execution_params,
-                )
-                segment_result.times = np.asarray(instruction.execution_params.times, dtype=np.float64)
-                diag_per_traj, _ = allocate_diagnostic_buffers(
-                    instruction.execution_params,
-                    num_traj=effective_num_traj,
-                )
-            else:
-                digital_params = instruction.sim_params
-                wants_observables = bool(digital_params.observables)
-                wants_shots = digital_params.shots is not None
-                shots_only = wants_shots and not wants_observables
-                if wants_observables:
-                    _prepare_result_observables(
-                        segment_result,
-                        digital_params,
-                        num_traj=effective_num_traj,
-                        num_mid_measurements=instruction.execution_params.num_mid_measurements,
-                    )
-                if wants_shots:
-                    segment_result.measurements = [None] * effective_num_traj
-                if shots_only:
-                    diag_per_traj = None
-                else:
-                    diag_per_traj, _ = allocate_diagnostic_buffers(
-                        instruction.execution_params,
-                        num_traj=effective_num_traj,
-                    )
-            segment_results.append(segment_result)
-            diagnostic_buffers.append(diag_per_traj)
+        segment_results, diagnostic_buffers = _allocate_program_segment_results(compiled, effective_num_traj)
 
         payload: dict[str, Any] = {
             "initial_state": initial_state.mps,

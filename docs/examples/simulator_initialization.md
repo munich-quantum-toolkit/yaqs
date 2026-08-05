@@ -273,9 +273,11 @@ standalone digital result consequently returns time zero for every checkpoint;
 use a circuit-specific coordinate such as `np.arange(len(values))` when plotting
 against circuit progress instead of physical time.
 
-For noisy programs, `SimulationProgram.num_traj` controls observable ensembles.
-A program that requests shots but no observables follows standalone digital
-semantics and executes one complete-program stochastic trajectory per shot.
+For noisy programs, `SimulationProgram.num_traj` controls observable ensembles
+when set; otherwise, YAQS uses the shared `num_traj` value from the segment
+simulation parameters. A program that requests shots but no observables follows
+standalone digital semantics and executes one complete-program stochastic
+trajectory per shot.
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and
 resume analysis from disk:
