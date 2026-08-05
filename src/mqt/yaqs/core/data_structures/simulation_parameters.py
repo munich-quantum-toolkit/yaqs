@@ -96,8 +96,8 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
     """Validate analog time parameters and return the integer number of steps.
 
     Backends evolve every interval with the full ``dt``, so ``elapsed_time`` must be an
-    integer multiple of ``dt`` within a small fraction of one timestep. Relabeling the
-    final timestamp without a fractional step would otherwise disagree with the evolution.
+    integer multiple of ``dt`` within a scale-aware tolerance. Relabeling the final
+    timestamp without a fractional step would otherwise disagree with the evolution.
 
     Args:
         elapsed_time: Total simulation time (must be finite and ``>= 0``).
@@ -152,7 +152,10 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
 
     evolved_time = n_steps * dt_f
     residual = abs(elapsed_f - evolved_time)
-    if n_steps <= 0 or residual > 1e-9 * dt_f:
+    # Scale with max(elapsed, dt): residuals from long fine grids sit near ulp(elapsed),
+    # which can exceed a fixed fraction of a tiny dt alone.
+    tol = max(1e-12, 1e-9 * max(elapsed_f, dt_f))
+    if n_steps <= 0 or residual > tol:
         msg = (
             f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
             f"got elapsed_time/dt = {n_float} (nearest integer {n_steps}, time residual {residual})."

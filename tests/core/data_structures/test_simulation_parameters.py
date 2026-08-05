@@ -170,10 +170,15 @@ def test_analog_simparams_times_no_float_overshoot() -> None:
 
 @pytest.mark.parametrize(
     ("elapsed_time", "dt"),
-    [(100.1, 0.1), (1.0, 1.0 / 9015)],
+    [
+        (100.1, 0.1),
+        (1.0, 1.0 / 9015),
+        # Fine dt vs O(1) elapsed: residual is ~ulp(elapsed), not a fraction of dt.
+        (1.23456789, 1e-8),
+    ],
 )
 def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt: float) -> None:
-    """Ordinary float rounding remains valid on longer grids."""
+    """Ordinary float rounding remains valid on longer and fine-dt grids."""
     params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
 
     assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
