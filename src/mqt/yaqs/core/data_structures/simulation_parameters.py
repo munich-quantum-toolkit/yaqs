@@ -504,8 +504,10 @@ class DigitalSimParams(_ObservableOrderingMixin):
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
         num_mid_measurements: Mid-circuit barrier count when sampling layers.
-        gate_mode: Two-qubit gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
-            ``"mpo"``). Default is ``"mpo"``.
+        gate_mode: Gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
+            ``"mpo"``). Default is ``"mpo"``. Gates on three or more qubits use the
+            generator MPO and TDVP window in the TDVP modes when a generator is
+            available, and the gate-MPO path otherwise (including ``"swaps"``).
         tdvp_sweeps: Number of symmetric TDVP substeps per gate. Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
             Default is ``"2site"``.
@@ -557,7 +559,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            gate_mode: Gate update mode (default ``"mpo"``).
             tdvp_sweeps: Number of symmetric TDVP substeps per gate (default ``1``).
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
