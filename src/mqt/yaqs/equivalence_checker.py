@@ -234,7 +234,8 @@ class EquivalenceChecker:
         ):
             msg = (
                 "representation='mpo' does not support gates acting on more than two qubits; "
-                "use representation='matrix'."
+                "use representation='matrix'. The matrix fallback for unknown unitaries "
+                "supports at most eight qubits."
             )
             raise ValueError(msg)
         start_time = time.time()

@@ -65,8 +65,9 @@ measurements raise an error. Barriers are ignored on the matrix path. The
 skipped during zone extraction); mid-circuit measurements are not supported for
 unitary equivalence on either backend. Gates on more than two qubits (for
 example `ccx`) are supported on the matrix backend only; the MPO backend rejects
-them with a `ValueError`. See {cite:p}`sander2025_EquivalenceChecking` for the
-underlying MPO method.
+them with a `ValueError`. Unknown unitaries translate via the matrix fallback,
+which supports at most eight qubits (see {doc}`custom_gates`). See
+{cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
 
 `check` returns a dictionary:
 

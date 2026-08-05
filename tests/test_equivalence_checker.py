@@ -369,6 +369,7 @@ def test_matrix_backend_supports_multi_qubit_gates() -> None:
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
     decomposed = transpile(qc, basis_gates=["cx", "u"], optimization_level=0)
+    assert all(len(instruction.qubits) <= 2 for instruction in decomposed.data)
 
     checker = EquivalenceChecker(representation="matrix")
     result = checker.check(qc, decomposed)

@@ -118,9 +118,10 @@ Plain `barrier` instructions are dropped in simulation except barriers labelled
 $W = U_2^\dagger U_1$ and testing whether $W$ is identity-like up to global
 phase. Custom and QASM-defined gates use the same translation path as
 simulation; unknown unitaries work via matrix fallback. Gates on more than two
-qubits require `representation="matrix"`; the MPO backend rejects them. See
-{doc}`equivalence_checking` for backend choice (`representation="mpo"`
-recommended for one- and two-qubit circuits at scale).
+qubits require the matrix backend; use `representation="matrix"` explicitly when
+`auto` would select the MPO backend. See {doc}`equivalence_checking` for backend
+choice (`representation="mpo"` recommended for one- and two-qubit circuits at
+scale).
 
 ---
 
