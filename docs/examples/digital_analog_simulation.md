@@ -142,9 +142,9 @@ echo_noiseless = simulator.run(initial_state, evolution_with_hahn_echo)
 ```
 
 Adding noise does not require changing either program. We pass YAQS's built-in
-Markovian `pauli_z` dephasing process to the same calls and use the program-level
-trajectory count specified above. This dissipative process reduces transverse
-signal contrast independently of the coherent static $Z$ field in the
+Markovian `pauli_z` dephasing process to the same calls and use the
+program-level trajectory count specified above. This dissipative process reduces
+transverse signal contrast independently of the coherent static $Z$ field in the
 Hamiltonian.
 
 ```{code-cell} ipython3
@@ -239,8 +239,8 @@ recover lost signal contrast.
   full program.
 - Segment results remain individually accessible and analog time offsets place
   them on the full program timeline.
-- `Result.observable_trace` includes observables recorded by digital segments
-  at repeated physical timestamps. Digital segments without the requested
+- `Result.observable_trace` includes observables recorded by digital segments at
+  repeated physical timestamps. Digital segments without the requested
   observable are skipped.
 - A noiseless program can retain its final state with
   `SimulationProgram(..., get_state=True)`.
