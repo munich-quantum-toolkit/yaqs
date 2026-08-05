@@ -14,7 +14,8 @@ releases may include breaking changes.
 
 - added digital–analog simulation programs ([#525]) ([**@linusschulte**])
 
-- added custom one-site matrix observables for non-qubit local dimensions, including named position observables ([#497]) ([**@linusschulte**])
+- added custom one-site matrix observables for non-qubit local dimensions,
+  including named position observables ([#497]) ([**@linusschulte**])
 
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
