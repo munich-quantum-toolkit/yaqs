@@ -340,17 +340,16 @@ def test_zero_probability_weight_raises() -> None:
         create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
 
 
-@pytest.mark.parametrize("bad", [np.nan, 1e200])
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_nonfinite_probability_weight_raises(bad: float) -> None:
-    """NaN and overflow (true Inf norm) jump weights raise the non-finite guard."""
+    """NaN and Inf jump weights raise the non-finite guard."""
     state = MPS(1, state="zeros")
-    state.tensors[0] = state.tensors[0].astype(np.complex128)
-    state.tensors[0][:] = 0.0
-    state.tensors[0][0, 0, 0] = bad
-    # All-Inf tensors yield NaN via 0*Inf in contractions; 1e200 overflows to a true Inf norm.
+    state.normalize("B")
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1.0}])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    with pytest.raises(ValueError, match="zero or non-finite"):
+    # Inject the non-finite weight directly: planting 1e200 overflows in the norm
+    # contraction and emits a platform-dependent RuntimeWarning under BLAS.
+    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
         create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
 
 

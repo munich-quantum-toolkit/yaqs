@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
@@ -104,17 +106,16 @@ def test_apply_scheduled_jumps_custom_matrix() -> None:
     assert np.isclose(relaxed.expect(Observable(Z(), sites=0)), 1.0)
 
 
-@pytest.mark.parametrize("bad", [np.nan, 1e200])
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_apply_scheduled_jumps_nonfinite_norm_raises(bad: float) -> None:
-    """NaN and overflow (true Inf norm) post-jump norms raise instead of normalizing."""
+    """NaN and Inf post-jump norms raise instead of normalizing."""
     noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(dt=0.1, get_state=True)
     state = MPS(1, state="zeros")
-    state.tensors[0] = state.tensors[0].astype(np.complex128)
-    state.tensors[0][:] = 0.0
-    state.tensors[0][0, 0, 0] = bad
-    # All-Inf tensors yield NaN via 0*Inf in contractions; 1e200 overflows to a true Inf norm.
-    with pytest.raises(ValueError, match="zero or non-finite"):
+    state.normalize("B")
+    # Inject the non-finite squared norm directly: planting 1e200 overflows in the
+    # norm contraction and emits a platform-dependent RuntimeWarning under BLAS.
+    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
         apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
 
