@@ -27,6 +27,19 @@ Calls such as `AnalogSimParams(elapsed_time=0.25, dt=0.1)` now raise a
 `ValueError`. Use a divisible step size or duration instead; fractional final
 steps are not supported.
 
+### Breaking: seeded stochastic RNG streams no longer use `base_seed + traj_idx`
+
+When `random_seed` is set, trajectory jump draws, order-2 measurement-copy
+jumps, and static noise-model disorder sampling each use distinct
+`numpy.random.SeedSequence` coordinates (stream tags), instead of
+`base_seed + traj_idx`.
+
+This removes aliasing between pairs such as `(base_seed=0, traj_idx=1)` and
+`(base_seed=1, traj_idx=0)`, and stops order-2 `sample()` calls from advancing
+the trajectory jump stream.
+**Bit-identical replay of older seeded runs is not preserved.** Re-record any
+baselines that depend on exact sample paths.
+
 ### Breaking: unified circuit parameters as `DigitalSimParams`
 
 Circuit simulation now uses a single {class}`~mqt.yaqs.DigitalSimParams` type.
