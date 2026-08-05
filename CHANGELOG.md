@@ -16,6 +16,10 @@ releases may include breaking changes.
   simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
   ([**@Pouri96**])
 
+- added tests validating the local noise model applied to multi-qubit gates
+  against exact references, and documented the per-gate noise semantics ([#524])
+  ([**@Pouri96**])
+
 - added custom one-site matrix observables for non-qubit local dimensions
 
   , including named position observables ([#497]) ([**@linusschulte**])
