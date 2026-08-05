@@ -16,13 +16,14 @@ and handles empty noise models appropriately.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel, is_pauli
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel, is_pauli, validate_noise_model_for_run
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
@@ -299,16 +300,24 @@ def test_truncated_normal_sampling() -> None:
 
     rng = np.random.default_rng(42)
     samples = []
-    for _ in range(2000):
-        sampled_nm = nm.sample(rng=rng)
-        # Truncated normal (a=0) should strictly be >= 0
-        s = sampled_nm.processes[0]["strength"]
-        assert s >= 0
-        samples.append(s)
+    # Mock the SciPy draw so this path stays covered across NumPy/SciPy versions
+    # that disagree on ``np.array(..., copy=CopyMode)`` inside truncnorm.rvs.
 
-    # For standard half-normal (mean=0, sigma=1, lower=0),
-    expected_mean = std * np.sqrt(2 / np.pi)
-    assert np.isclose(np.mean(samples), expected_mean, atol=0.05)
+    def _fake_truncnorm_rvs(*_args: object, **_kwargs: object) -> float:
+        return float(rng.random() + 0.1)
+
+    with patch(
+        "mqt.yaqs.core.data_structures.noise_model.truncnorm.rvs",
+        side_effect=_fake_truncnorm_rvs,
+    ):
+        for _ in range(50):
+            sampled_nm = nm.sample(rng=rng)
+            s = sampled_nm.processes[0]["strength"]
+            assert s >= 0
+            samples.append(s)
+
+    assert all(isinstance(s, float) for s in samples)
+    assert len(set(samples)) > 1
 
 
 def test_truncated_normal_zero_std() -> None:
@@ -606,3 +615,293 @@ def test_asymmetric_pauli_perturbation_not_shortcut() -> None:
         {"name": "almost_x", "sites": [0], "strength": 0.1, "matrix": perturbed},
     ]).processes[0]
     assert is_pauli(proc) is False
+
+
+def test_process_and_jump_type_guards() -> None:
+    """Non-mapping entries and non-sequence containers raise TypeError."""
+    with pytest.raises(TypeError, match="dictionary"):
+        _ = NoiseModel([cast("Any", "not-a-dict")])
+    with pytest.raises(TypeError, match="list or tuple"):
+        _ = NoiseModel(cast("Any", {"name": "pauli_x", "sites": [0], "strength": 0.1}))
+    with pytest.raises(TypeError, match="list or tuple"):
+        _ = NoiseModel(scheduled_jumps=cast("Any", {"time": 0.0, "sites": [0], "name": "x"}))
+
+
+def test_name_and_site_validation_errors() -> None:
+    """Name/site type and value errors are reported clearly."""
+    with pytest.raises(TypeError, match="must be a string"):
+        _ = NoiseModel([{"name": 1, "sites": [0], "strength": 0.1}])
+    with pytest.raises(ValueError, match="nonempty"):
+        _ = NoiseModel([{"name": "", "sites": [0], "strength": 0.1}])
+    with pytest.raises(TypeError, match="list or tuple of integers"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": 0, "strength": 0.1}])
+    with pytest.raises(ValueError, match="nonnegative"):
+        _ = NoiseModel([{"name": "pauli_x", "sites": [-1], "strength": 0.1}])
+
+
+def test_matrix_validation_errors() -> None:
+    """Explicit matrices must be finite square arrays."""
+    with pytest.raises(TypeError, match="numeric array"):
+        _ = NoiseModel([{"name": "custom", "sites": [0], "strength": 0.1, "matrix": object()}])
+    with pytest.raises(ValueError, match="square"):
+        _ = NoiseModel([{"name": "custom", "sites": [0], "strength": 0.1, "matrix": np.ones((2, 3))}])
+    with pytest.raises(ValueError, match="finite"):
+        _ = NoiseModel([
+            {"name": "custom", "sites": [0], "strength": 0.1, "matrix": np.array([[np.nan, 0], [0, 1]])},
+        ])
+
+
+def test_one_site_factors_and_adjacent_factors_rejected() -> None:
+    """Factors are only valid for non-adjacent two-site processes."""
+    with pytest.raises(ValueError, match="One-site processes do not accept"):
+        _ = NoiseModel([
+            {"name": "custom", "sites": [0], "strength": 0.1, "factors": (PauliX.matrix, PauliY.matrix)},
+        ])
+    with pytest.raises(ValueError, match="use 'matrix', not 'factors'"):
+        _ = NoiseModel([
+            {
+                "name": "custom",
+                "sites": [0, 1],
+                "strength": 0.1,
+                "factors": (PauliX.matrix, PauliY.matrix),
+            }
+        ])
+
+
+def test_non_adjacent_full_matrix_rejected() -> None:
+    """Long-range processes reject a full embedded matrix."""
+    with pytest.raises(ValueError, match="require 'factors'"):
+        _ = NoiseModel([
+            {"name": "custom", "sites": [0, 2], "strength": 0.1, "matrix": np.eye(4, dtype=complex)},
+        ])
+
+
+def test_adjacent_library_two_site_and_explicit_ascending_factors() -> None:
+    """Adjacent non-crosstalk library names and ascending long-range factors work."""
+    nm_adj = NoiseModel([{"name": "raising_two", "sites": [0, 1], "strength": 0.1}])
+    assert nm_adj.processes[0]["matrix"].shape == (4, 4)
+
+    nm_lr = NoiseModel([
+        {
+            "name": "custom_lr",
+            "sites": [0, 2],
+            "strength": 0.1,
+            "factors": (PauliX.matrix, PauliZ.matrix),
+        }
+    ])
+    a_op, b_op = nm_lr.processes[0]["factors"]
+    assert _allclose(a_op, PauliX.matrix)
+    assert _allclose(b_op, PauliZ.matrix)
+
+
+def test_factors_wrong_arity_rejected() -> None:
+    """Factors must be an exact pair of matrices."""
+    with pytest.raises(ValueError, match="exactly two"):
+        _ = NoiseModel([
+            {"name": "custom", "sites": [0, 2], "strength": 0.1, "factors": (PauliX.matrix,)},
+        ])
+
+
+def test_scheduled_jump_construction_paths() -> None:
+    """Scheduled jumps cover missing keys, custom matrices, and crosstalk synthesis."""
+    with pytest.raises(ValueError, match="'time' key"):
+        _ = NoiseModel(scheduled_jumps=[{"sites": [0], "name": "x"}])
+    mat = np.kron(PauliX.matrix, PauliZ.matrix)
+    with pytest.raises(ValueError, match="ascending site order"):
+        _ = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [1, 0], "name": "custom", "matrix": mat}])
+
+    custom = np.eye(2, dtype=complex)
+    nm = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "custom", "matrix": custom}])
+    assert _allclose(nm.scheduled_jumps[0]["matrix"], custom)
+
+    nm_xx = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0, 1], "name": "crosstalk_xx"}])
+    assert nm_xx.scheduled_jumps[0]["sites"] == [0, 1]
+    assert _allclose(nm_xx.scheduled_jumps[0]["matrix"], np.kron(PauliX.matrix, PauliX.matrix))
+
+    with pytest.raises(ValueError, match="finite"):
+        _ = NoiseModel(scheduled_jumps=[{"time": np.nan, "sites": [0], "name": "x"}])
+
+
+def test_get_operator_crosstalk_and_sample_invalid_runtime_dist() -> None:
+    """get_operator accepts crosstalk labels; sample rejects mutated unsupported distributions."""
+    op = NoiseModel.get_operator("crosstalk_xy")
+    assert _allclose(op, np.kron(PauliX.matrix, PauliY.matrix))
+
+    nm = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+    nm.processes[0]["strength"] = {"distribution": "bogus", "mean": 0.0, "std": 0.1}
+    with pytest.raises(ValueError, match="Unsupported distribution type"):
+        _ = nm.sample(rng=0)
+
+
+def test_is_pauli_structure_branches() -> None:
+    """is_pauli covers missing operators, shape mismatches, and valid Pauli pairs."""
+    assert is_pauli({"sites": [0], "name": "x", "strength": 0.1}) is False
+    assert is_pauli({"sites": [0, 1, 2], "name": "x", "strength": 0.1}) is False
+    assert (
+        is_pauli({
+            "sites": [0, 1],
+            "name": "custom",
+            "strength": 0.1,
+            "factors": (PauliX.matrix, PauliY.matrix),
+        })
+        is False
+    )
+    assert (
+        is_pauli({
+            "sites": [0, 2],
+            "name": "custom",
+            "strength": 0.1,
+            "matrix": np.eye(4, dtype=complex),
+        })
+        is False
+    )
+
+    phased = np.exp(1j * 0.3) * PauliX.matrix
+    assert is_pauli({"sites": [0], "name": "x", "strength": 0.1, "matrix": phased}) is True
+    assert is_pauli({"sites": [0], "name": "x", "strength": 0.1, "matrix": 2 * PauliX.matrix}) is False
+    assert is_pauli({"sites": [0], "name": "x", "strength": 0.1, "matrix": np.eye(3, dtype=complex)}) is False
+
+    kron = np.kron(PauliX.matrix, PauliZ.matrix)
+    assert is_pauli({"sites": [0, 1], "name": "xz", "strength": 0.1, "matrix": kron}) is True
+    lr = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.1},
+    ]).processes[0]
+    assert is_pauli(lr) is True
+
+
+def test_validate_noise_model_for_run_success_and_errors() -> None:
+    """validate_noise_model_for_run checks sites, shapes, and run-context constraints."""
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.2,
+        order=1,
+        get_state=True,
+    )
+    ok = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+    validate_noise_model_for_run(
+        ok,
+        length=2,
+        physical_dimensions=2,
+        representation="mps",
+        sim_params=sim_params,
+    )
+
+    with pytest.raises(ValueError, match="out of range"):
+        validate_noise_model_for_run(
+            NoiseModel([{"name": "pauli_x", "sites": [3], "strength": 0.1}]),
+            length=2,
+            representation="mps",
+        )
+
+    bad_shape = NoiseModel([
+        {"name": "custom", "sites": [0], "strength": 0.1, "matrix": np.eye(3, dtype=complex)},
+    ])
+    with pytest.raises(ValueError, match="matrix shape"):
+        validate_noise_model_for_run(bad_shape, length=2, physical_dimensions=2, representation="mps")
+
+    bad_factor = NoiseModel([
+        {
+            "name": "custom",
+            "sites": [0, 2],
+            "strength": 0.1,
+            "factors": (np.eye(3, dtype=complex), PauliY.matrix),
+        }
+    ])
+    with pytest.raises(ValueError, match="factor on site"):
+        validate_noise_model_for_run(bad_factor, length=3, physical_dimensions=2, representation="mps")
+
+    longrange = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.1},
+    ])
+    with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
+        validate_noise_model_for_run(
+            longrange,
+            length=3,
+            representation="mps",
+            is_digital=True,
+        )
+
+    non_pauli_lr = NoiseModel([
+        {
+            "name": "custom",
+            "sites": [0, 2],
+            "strength": 0.1,
+            "factors": (np.array([[0, 1], [0, 0]], dtype=complex), PauliY.matrix),
+        }
+    ])
+    with pytest.raises(ValueError, match="non-Pauli long-range"):
+        validate_noise_model_for_run(
+            non_pauli_lr,
+            length=3,
+            representation="mps",
+            is_digital=False,
+            is_ensemble=False,
+        )
+
+    jumps = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    with pytest.raises(ValueError, match="AnalogSimParams are required"):
+        validate_noise_model_for_run(
+            jumps,
+            length=2,
+            representation="mps",
+            is_digital=False,
+            is_ensemble=False,
+            sim_params=None,
+        )
+
+    with pytest.raises(ValueError, match="only supported for single-State analog MPS"):
+        validate_noise_model_for_run(
+            jumps,
+            length=2,
+            representation="mps",
+            is_digital=True,
+            sim_params=sim_params,
+        )
+    with pytest.raises(ValueError, match="only supported for single-State analog MPS"):
+        validate_noise_model_for_run(
+            jumps,
+            length=2,
+            representation="vector",
+            is_digital=False,
+            is_ensemble=False,
+            sim_params=sim_params,
+        )
+
+    order2 = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.2,
+        order=2,
+        get_state=True,
+    )
+    with pytest.raises(ValueError, match="order=1"):
+        validate_noise_model_for_run(
+            jumps,
+            length=2,
+            representation="mps",
+            is_digital=False,
+            is_ensemble=False,
+            sim_params=order2,
+        )
+
+    off_grid = NoiseModel(scheduled_jumps=[{"time": 0.05, "sites": [0], "name": "x"}])
+    with pytest.raises(ValueError, match="not on the simulation time grid"):
+        validate_noise_model_for_run(
+            off_grid,
+            length=2,
+            representation="mps",
+            is_digital=False,
+            is_ensemble=False,
+            sim_params=sim_params,
+        )
+
+    on_grid = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    validate_noise_model_for_run(
+        on_grid,
+        length=2,
+        representation="mps",
+        is_digital=False,
+        is_ensemble=False,
+        sim_params=sim_params,
+    )
