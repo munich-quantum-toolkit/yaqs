@@ -1994,8 +1994,14 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
     def _shared_factory(randoms: list[float], choices: list[int]) -> object:
         shared = _ScriptedRng(randoms, choices)
 
-        def _factory(traj_idx: int, *, base_seed: int | None, timestep: int) -> _ScriptedRng:
-            _ = (traj_idx, base_seed, timestep)
+        def _factory(
+            traj_idx: int,
+            *,
+            base_seed: int | None,
+            timestep: int,
+            stream_id: int | None = None,
+        ) -> _ScriptedRng:
+            _ = (traj_idx, base_seed, timestep, stream_id)
             return shared
 
         return _factory
