@@ -145,6 +145,14 @@ def test_from_gate_rejects_chain_shorter_than_support() -> None:
         MPO.from_gate(gate, 2)
 
 
+def test_from_gate_rejects_sites_outside_chain() -> None:
+    """Padded chains reject gate sites outside ``[0, chain_length)``."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(2, 3, 4)
+    with pytest.raises(ValueError, match="outside the chain"):
+        MPO.from_gate(gate, chain_length=4)
+
+
 def test_from_gate_pads_identity_outside_support() -> None:
     """``MPO.from_gate`` inserts identity sites when ``chain_length`` exceeds support width."""
     gate = GateLibrary.cx()

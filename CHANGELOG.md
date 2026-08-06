@@ -14,6 +14,10 @@ releases may include breaking changes.
 
 - added digital–analog simulation programs ([#525]) ([**@linusschulte**])
 
+- added native support for gates acting on three or more qubits in circuit
+  simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
+  ([**@Pouri96**])
+
 - added custom one-site matrix observables for non-qubit local dimensions,
   including named position observables ([#497]) ([**@linusschulte**])
 
@@ -22,6 +26,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- hardened stability of noise model, timestep selection, and RNG ([#527])
+  ([**@aaronleesander**])
 - State.representation set as sole backend selector ([#519])
   ([**@aaronleesander**])
 - added QR canonicalization before compression sweep for stability ([#518])
@@ -36,6 +42,10 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed descending-site two-qubit gate application in the dense equivalence
+  backend ([#528]) ([**@Pouri96**])
+- fixed the CZ and CPhase generators used on the TDVP gate application path
+  ([#526]) ([**@Pouri96**])
 - fixed TJM jump selection to align processes with site-sweep probabilities
   ([#506]) ([**@Pouri96**])
 
@@ -235,12 +245,16 @@ for previous changelogs._
 <!-- PR links -->
 
 [#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
+[#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
+[#524]: https://github.com/munich-quantum-toolkit/yaqs/pull/524
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
 [#519]: https://github.com/munich-quantum-toolkit/yaqs/pull/519
 [#518]: https://github.com/munich-quantum-toolkit/yaqs/pull/518
 [#516]: https://github.com/munich-quantum-toolkit/yaqs/pull/516
 [#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
+[#528]: https://github.com/munich-quantum-toolkit/yaqs/pull/528
+[#526]: https://github.com/munich-quantum-toolkit/yaqs/pull/526
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
 [#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482

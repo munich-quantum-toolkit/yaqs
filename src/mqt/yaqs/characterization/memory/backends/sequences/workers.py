@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
 from mqt.yaqs.core.random_utils import make_trajectory_rng
-from mqt.yaqs.core.time_utils import exact_time_grid
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.intervention_steps import apply_intervention_to_backend
@@ -53,7 +53,7 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
     key = (dt_f, dur_f)
     out = times_cache.get(key)
     if out is None:
-        out = exact_time_grid(dur_f, dt_f, allow_zero=True)
+        out = AnalogSimParams(elapsed_time=dur_f, dt=dt_f).times
         times_cache[key] = out
     return out
 

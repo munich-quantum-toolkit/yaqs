@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -45,6 +46,30 @@ from mqt.yaqs.core.libraries.gate_library import (
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+
+def _mpo_train_to_matrix(mpo_tensors: list[NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Contract a list of MPO tensors with leg order (phys_out, phys_in, bond_left, bond_right) to a dense matrix.
+
+    Returns:
+        The dense matrix represented by the MPO tensors.
+    """
+    accumulated = mpo_tensors[0]
+    for tensor in mpo_tensors[1:]:
+        accumulated = np.einsum("abcd,efdg->aebfcg", accumulated, tensor)
+        shape = accumulated.shape
+        accumulated = accumulated.reshape(shape[0] * shape[1], shape[2] * shape[3], shape[4], shape[5])
+    assert accumulated.shape[2] == 1
+    assert accumulated.shape[3] == 1
+    return accumulated[:, :, 0, 0]
+
+
+def _haar_unitary(dim: int, rng: np.random.Generator) -> NDArray[np.complex128]:
+    """Return a Haar-random unitary of the given dimension."""
+    z = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    q, r = np.linalg.qr(z)
+    phases = np.diagonal(r) / np.abs(np.diagonal(r))
+    return np.asarray(q * phases, dtype=np.complex128)
 
 
 def test_split_tensor_valid_shape() -> None:
@@ -121,21 +146,95 @@ def test_extend_gate_with_identity() -> None:
 def test_extend_gate_reverse_order() -> None:
     """Test that extend_gate correctly handles reverse ordering of sites.
 
-    This test applies extend_gate with sites provided in reverse order, reverses the resulting MPO tensors,
-    and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
+    This test applies extend_gate to a non-symmetric gate with sites provided in reverse order and
+    verifies that the contracted MPO equals the gate with its site axes exchanged, i.e. the gate
+    acting with its first declared site on the higher chain site.
     """
-    tensor = np.eye(4, dtype=np.complex128).reshape(2, 2, 2, 2)
-    mpo_forward_tensors = extend_gate(tensor, [0, 1])
-    mpo_reverse_tensors = extend_gate(tensor, [1, 0])
+    cx_tensor = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=np.complex128).reshape(
+        2, 2, 2, 2
+    )
+    mpo_forward_tensors = extend_gate(cx_tensor, [0, 1])
+    mpo_reverse_tensors = extend_gate(cx_tensor, [1, 0])
 
-    mpo_forward = MPO()
-    mpo_reverse = MPO()
-    mpo_forward.custom(mpo_forward_tensors, transpose=False)
-    mpo_reverse.custom(mpo_reverse_tensors, transpose=False)
+    expected_forward = cx_tensor.reshape(4, 4)
+    expected_reverse = np.transpose(cx_tensor, (1, 0, 3, 2)).reshape(4, 4)
+    assert_allclose(_mpo_train_to_matrix(mpo_forward_tensors), expected_forward, atol=1e-12)
+    assert_allclose(_mpo_train_to_matrix(mpo_reverse_tensors), expected_reverse, atol=1e-12)
 
-    mpo_reverse.tensors.reverse()
-    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):
-        assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
+
+def test_split_tensor_three_site() -> None:
+    """Test that split_tensor splits a three-qubit gate tensor into three site tensors.
+
+    The Toffoli tensor is split into three tensors with internal bond dimensions (2, 2), and
+    contracting the tensors back yields the original matrix.
+    """
+    toffoli = np.eye(8, dtype=np.complex128)
+    toffoli[6:8, 6:8] = np.array([[0, 1], [1, 0]])
+    tensors = split_tensor(toffoli.reshape((2,) * 6))
+
+    assert isinstance(tensors, list)
+    assert len(tensors) == 3
+    assert tensors[0].shape == (2, 2, 1, 2)
+    assert tensors[1].shape == (2, 2, 2, 2)
+    assert tensors[2].shape == (2, 2, 2, 1)
+    assert_allclose(_mpo_train_to_matrix(tensors), toffoli, atol=1e-12)
+
+
+def test_split_tensor_three_site_round_trip() -> None:
+    """Test that a Haar-random three-qubit gate tensor is reproduced by contracting its split."""
+    unitary = _haar_unitary(8, np.random.default_rng(42))
+    tensors = split_tensor(unitary.reshape((2,) * 6))
+    assert len(tensors) == 3
+    assert_allclose(_mpo_train_to_matrix(tensors), unitary, atol=1e-12)
+
+
+def test_extend_gate_three_site_with_identity() -> None:
+    """Test extend_gate for a three-qubit gate with gaps between the sites.
+
+    A three-qubit gate on sites (0, 2, 4) yields five MPO tensors with bond-diagonal identity
+    tensors at the two interior positions.
+    """
+    unitary = _haar_unitary(8, np.random.default_rng(7))
+    mpo_tensors = extend_gate(unitary.reshape((2,) * 6), [0, 2, 4])
+    assert len(mpo_tensors) == 5
+
+    for position in (1, 3):
+        identity_tensor = mpo_tensors[position]
+        prev_bond = mpo_tensors[position - 1].shape[3]
+        assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
+        for i in range(prev_bond):
+            assert_array_equal(identity_tensor[:, :, i, i], np.eye(2))
+
+
+def test_extend_gate_site_permutation() -> None:
+    """Test extend_gate for a three-qubit gate with sites given in permuted order.
+
+    The contracted MPO must equal the gate with its axes permuted to ascending site order.
+    """
+    unitary = _haar_unitary(8, np.random.default_rng(11))
+    tensor = unitary.reshape((2,) * 6)
+    sites = [2, 0, 1]
+
+    mpo_tensors = extend_gate(tensor, sites)
+    assert len(mpo_tensors) == 3
+
+    order = list(np.argsort(sites))
+    expected = np.transpose(tensor, [*order, *[3 + idx for idx in order]]).reshape(8, 8)
+    assert_allclose(_mpo_train_to_matrix(mpo_tensors), expected, atol=1e-12)
+
+
+def test_set_sites_three_qubit() -> None:
+    """Test that BaseGate.set_sites builds the tensor and MPO tensors for a three-qubit gate."""
+    gate = BaseGate(_haar_unitary(8, np.random.default_rng(3)))
+    assert gate.interaction == 3
+
+    gate.set_sites(1, 2, 3)
+    assert gate.sites == [1, 2, 3]
+    assert gate.tensor.shape == (2,) * 6
+    assert len(gate.mpo_tensors) == 3
+
+    with pytest.raises(ValueError, match="Number of sites 2 must be equal to the interaction level 3"):
+        gate.set_sites(0, 1)
 
 
 def test_gate_x() -> None:
@@ -402,6 +501,53 @@ def test_gate_cz() -> None:
         gate.set_sites(0, 1, 2)
 
 
+def test_gate_ccx() -> None:
+    """Test the CCX (Toffoli) gate from GateLibrary.
+
+    This test sets the sites for a CCX gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The generator is exact: exponentiating it reproduces the gate matrix.
+    """
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 1, 2)
+    assert gate.sites == [0, 1, 2]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+
+    base_gate = BaseGate.ccx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    generator_product = np.kron(np.kron(gate.generator[0], gate.generator[1]), gate.generator[2])
+    assert_allclose(expm(-1j * generator_product), gate.matrix, atol=1e-12)
+
+    with pytest.raises(ValueError, match="Number of sites 2 must be equal to the interaction level 3"):
+        gate.set_sites(0, 1)
+
+
+def test_gate_ccz() -> None:
+    """Test the CCZ gate from GateLibrary.
+
+    This test sets the sites for a CCZ gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The generator is exact: exponentiating it reproduces the gate matrix.
+    """
+    gate = GateLibrary.ccz()
+    gate.set_sites(1, 2, 3)
+    assert gate.sites == [1, 2, 3]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+
+    base_gate = BaseGate.ccz()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    generator_product = np.kron(np.kron(gate.generator[0], gate.generator[1]), gate.generator[2])
+    assert_allclose(expm(-1j * generator_product), gate.matrix, atol=1e-12)
+
+
 def test_gate_swap() -> None:
     """Test the SWAP gate from GateLibrary.
 
@@ -416,6 +562,26 @@ def test_gate_swap() -> None:
     assert_array_equal(gate.tensor, expected)
 
     base_gate = BaseGate.swap()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_cswap() -> None:
+    """Test the CSWAP (Fredkin) gate from GateLibrary.
+
+    This test sets the sites for a CSWAP gate and verifies that:
+      - The sites attribute is correct and the tensor is reshaped to (2,2,2,2,2,2).
+      - An MPO with three tensors has been constructed.
+      - The gate carries no generator (the SWAP part has no single-product generator).
+    """
+    gate = GateLibrary.cswap()
+    gate.set_sites(0, 1, 2)
+    assert gate.sites == [0, 1, 2]
+    assert gate.interaction == 3
+    assert gate.tensor.shape == (2, 2, 2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == 3
+    assert not hasattr(gate, "generator")
+
+    base_gate = BaseGate.cswap()
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
@@ -525,6 +691,58 @@ def test_gate_constructor() -> None:
     # Test for non-square matrix
     with pytest.raises(ValueError, match="Matrix must be square"):
         BaseGate(non_square_matrix)
+
+
+def _generator_gate_names() -> list[str]:
+    """Names of GateLibrary classes that define a product-form generator.
+
+    Returns:
+        The gate names, discovered dynamically so newly added gates are covered.
+    """
+    names = []
+    for name in sorted(dir(GateLibrary)):
+        cls = getattr(GateLibrary, name)
+        if not isinstance(cls, type) or not issubclass(cls, BaseGate):
+            continue
+        for args in ((), ([0.7],)):
+            try:
+                gate = cls(*args)
+                break
+            except (TypeError, ValueError, AttributeError, IndexError):
+                continue
+        else:
+            continue
+        try:
+            gate.set_sites(*range(gate.interaction))
+        except (TypeError, ValueError):
+            continue
+        if getattr(gate, "generator", None) is not None:
+            names.append(name)
+    return names
+
+
+def test_generator_gate_discovery() -> None:
+    """The generator sweep covers at least the known generator-carrying gates."""
+    assert {"cx", "cz", "cp", "rxx", "ryy", "rzz"}.issubset(set(_generator_gate_names()))
+
+
+@pytest.mark.parametrize("name", _generator_gate_names())
+def test_gate_generator_matches_matrix(name: str) -> None:
+    """Exponentiating the product-form generator reproduces the gate matrix exactly.
+
+    The generator is consumed on the TDVP window path, so a wrong generator silently
+    applies a different gate there while the matrix-based paths stay correct.
+    """
+    cls = getattr(GateLibrary, name)
+    try:
+        gate = cls()
+    except (TypeError, IndexError):
+        gate = cls([0.7])
+    gate.set_sites(*range(gate.interaction))
+    kron = np.asarray(gate.generator[0], dtype=np.complex128)
+    for factor in gate.generator[1:]:
+        kron = np.kron(kron, np.asarray(factor, dtype=np.complex128))
+    assert_allclose(expm(-1j * kron), gate.matrix, atol=1e-12)
 
 
 def test_set_sites() -> None:

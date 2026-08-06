@@ -41,6 +41,16 @@ Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in
 the operator `matrix` (or per-site `factors` for long-range crosstalk) from
 {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
 
+Malformed configs raise `TypeError` (wrong types, including booleans used as
+sites/strengths) or `ValueError` (invalid values). Fixed `strength` values must
+be finite and **nonnegative**—they are Lindblad/quantum-jump rates $\gamma$, not
+signed dissipator coefficients. Temporarily negative rates can appear in
+time-local non-Markovian master equations, but YAQS does not implement signed
+generators or reverse-jump unravelings. Custom `matrix` / `factors` entries may
+still contain negative elements. Site lists/tuples must contain exactly one or
+two distinct nonnegative integers; custom full two-site matrices require
+**ascending** site order (or use `factors` instead).
+
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
 
@@ -259,8 +269,11 @@ circuit_result = sim.run(State(num_qubits, initial="zeros"), circuit, circuit_pa
 
 ## 5. Long-range crosstalk
 
-Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS
-attaches per-site Pauli factors automatically:
+Non-adjacent pairs use the exact `longrange_crosstalk_[xyz]{2}` naming
+convention (e.g. `longrange_crosstalk_xy`); YAQS attaches per-site Pauli factors
+automatically. The same physics works on analog MPS TJM, MCWF, and Lindblad.
+Digital TJM rejects non-adjacent / factorized two-site noise up front
+(gate-local scoping remains nearest-neighbor only).
 
 ```{code-cell} ipython3
 lr_model = NoiseModel([
@@ -276,17 +289,19 @@ Every noise process is a dictionary. Besides the built-in
 `pauli_x`, `crosstalk_xx`, …), you can supply your own operator as a NumPy
 array:
 
-| Key        | Required | Description                                                                                                                        |
-| ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `name`     | yes      | Label for the process. When `matrix` is omitted, must match a `NoiseLibrary` entry. When `matrix` is provided, any string is fine. |
-| `sites`    | yes      | Site indices the jump acts on (one site for single-qubit channels).                                                                |
-| `strength` | yes      | Rate $\gamma$ in Lindblad form; YAQS uses jump operators $L_k = \sqrt{\gamma}\,L$.                                                 |
-| `matrix`   | no       | Local operator $L$ as a `d×d` array (`d=2` for qubits). If omitted, YAQS looks up `name` in `NoiseLibrary`.                        |
+| Key        | Required | Description                                                                                                                                               |
+| ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | yes      | Nonempty label. When `matrix`/`factors` are omitted, must be a library name, `x`/`y`/`z`, or exact `crosstalk_[xyz]{2}` / `longrange_crosstalk_[xyz]{2}`. |
+| `sites`    | yes      | List/tuple of exactly one or two distinct nonnegative site indices.                                                                                       |
+| `strength` | yes      | Nonnegative finite rate $\gamma$, or a distribution dict (`normal` / `lognormal` / `truncated_normal`).                                                   |
+| `matrix`   | no       | Square finite local operator $L$ (`d×d`, or `d_i d_j` for adjacent two-site). Ascending sites required for custom two-site matrices.                      |
+| `factors`  | no       | Exactly two square one-site operators for non-adjacent pairs.                                                                                             |
 
 YAQS does not check complete positivity; supply physically meaningful jump
 operators. The same `matrix` override works for **scheduled jumps** (see
-{doc}`scheduled_jumps`) and for all backends—TJM (`mps`), MCWF (`vector`),
-Lindblad (`density_matrix`), and noisy circuits.
+{doc}`scheduled_jumps`) on supported backends and for process noise on TJM
+(`mps`), MCWF (`vector`), Lindblad (`density_matrix`), and noisy circuits
+(nearest-neighbor digital processes only).
 
 ### Amplitude damping with an explicit $\sigma_-$
 

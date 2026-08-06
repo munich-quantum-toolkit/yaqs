@@ -38,6 +38,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_program import (
     _compile_program,  # ruff: ignore[import-private-name]  # validate private compiler invariant
 )
+from mqt.yaqs.core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGOpNode
@@ -256,16 +257,6 @@ def test_program_call_contract_is_distinct_from_standalone_run() -> None:
             SimulationProgram([AnalogSegment(_zero_hamiltonian(3))]),
             "Hamiltonian.length=3",
         ),
-        (
-            State(2, initial="zeros"),
-            SimulationProgram([
-                AnalogSegment(
-                    _zero_hamiltonian(2),
-                    sim_params=AnalogSimParams(elapsed_time=0.15, dt=0.1, get_state=True),
-                )
-            ]),
-            "integer multiple",
-        ),
     ],
 )
 def test_program_compilation_rejects_unsupported_inputs(
@@ -480,8 +471,8 @@ def test_program_threads_one_rng_stream_across_analog_and_digital_segments(
     Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program, noise_model=noise_model)
 
     expected = [
-        *np.random.default_rng(31).random(3),
-        *np.random.default_rng(32).random(3),
+        *make_trajectory_rng(0, base_seed=31).random(3),
+        *make_trajectory_rng(1, base_seed=31).random(3),
     ]
     np.testing.assert_allclose(samples, expected, rtol=0, atol=0)
 

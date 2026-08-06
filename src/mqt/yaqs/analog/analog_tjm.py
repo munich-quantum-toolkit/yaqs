@@ -27,7 +27,7 @@ from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import tdvp
-from ..core.random_utils import make_trajectory_rng
+from ..core.random_utils import make_sample_rng, make_trajectory_rng
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -121,7 +121,9 @@ def sample(
         sim_params (AnalogSimParams): Simulation parameters including time step and measurement settings.
         results (NDArray[np.float64]): An array to store the measured observable values.
         j (int): The time step or shot index at which the measurement is recorded.
-        rng: The random number generator to use.
+        rng: RNG for jump decisions on the measurement copy. Must be independent of the
+            trajectory RNG used for ``initialize`` / ``step_through`` so intermediate
+            sampling does not alter subsequent evolution.
         diagnostics: Optional ``(3, T)`` buffer for runtime cost, max bond, and total bond.
 
     Returns:
@@ -185,6 +187,7 @@ def analog_tjm_2(
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
+    base_seed = sim_params.random_seed
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
@@ -197,24 +200,51 @@ def analog_tjm_2(
         results = np.zeros((len(sim_params.sorted_observables), 1))
 
     final_state: MPS | None = None
+    n_times = len(sim_params.times)
+
+    # Zero-duration runs: evaluate the initial state before any noise/evolution (F0).
+    if n_times == 1:
+        state.record_diagnostics(diagnostics, 0)
+        if sim_params.sample_timesteps:
+            state.evaluate_observables(sim_params, results, 0)
+        else:
+            state.evaluate_observables(sim_params, results)
+        return results, diagnostics, state if sim_params.get_state else None
 
     if sim_params.sample_timesteps:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
     phi = initialize(state, noise_model, sim_params, rng=rng)
-    if sim_params.sample_timesteps or len(sim_params.times) == 2:
+
+    # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).
+    # Per-timestep sample RNGs so intermediate draws cannot change the final measurement.
+    if sim_params.sample_timesteps or n_times == 2:
         sampled_state = sample(
-            phi, hamiltonian, noise_model, sim_params, results, j=1, rng=rng, diagnostics=diagnostics
+            phi,
+            hamiltonian,
+            noise_model,
+            sim_params,
+            results,
+            j=1,
+            rng=make_sample_rng(traj_idx, base_seed=base_seed, timestep=1),
+            diagnostics=diagnostics,
         )
         if sampled_state is not None:
             final_state = sampled_state
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
         phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
-        if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
+        if sim_params.sample_timesteps or j == n_times - 1:
             sampled_state = sample(
-                phi, hamiltonian, noise_model, sim_params, results, j, rng=rng, diagnostics=diagnostics
+                phi,
+                hamiltonian,
+                noise_model,
+                sim_params,
+                results,
+                j,
+                rng=make_sample_rng(traj_idx, base_seed=base_seed, timestep=j),
+                diagnostics=diagnostics,
             )
             if sampled_state is not None:
                 final_state = sampled_state
@@ -262,6 +292,11 @@ def analog_tjm_1(
     else:
         results = np.zeros((len(sim_params.sorted_observables), 1), dtype=object)
 
+    # Apply scheduled jumps at t=times[0] before the initial sample so observables
+    # and get_state agree (later timesteps also sample after the jump event).
+    if noise_model is not None and has_scheduled_jump(noise_model, sim_params.times[0], sim_params.dt):
+        state = apply_scheduled_jumps(state, noise_model, sim_params.times[0], sim_params)
+
     if sim_params.sample_timesteps:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
@@ -282,6 +317,11 @@ def analog_tjm_1(
         elif j == len(sim_params.times) - 1:
             state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results)
+
+    # Final-only runs with elapsed_time=0 never enter the loop above.
+    if not sim_params.sample_timesteps and len(sim_params.times) <= 1:
+        state.record_diagnostics(diagnostics, 0)
+        state.evaluate_observables(sim_params, results)
 
     final_state = state if sim_params.get_state else None
     return results, diagnostics, final_state

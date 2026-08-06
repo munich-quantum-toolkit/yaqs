@@ -17,7 +17,6 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit
 
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
-from ..time_utils import exact_time_grid
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
 from .simulation_parameters import AnalogSimParams, DigitalSimParams
@@ -325,7 +324,6 @@ def _compile_analog_segment(
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
     execution_params = copy.deepcopy(sim_params)
-    execution_params.times = exact_time_grid(sim_params.elapsed_time, sim_params.dt)
     execution_params.get_state = True
     if num_traj is not None:
         execution_params.num_traj = num_traj

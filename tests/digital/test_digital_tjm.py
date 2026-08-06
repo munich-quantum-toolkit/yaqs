@@ -65,6 +65,8 @@ from tests.core.methods.tdvp.conftest import (
 from tests.digital.conftest import _physical_second_schmidt, _run_digital_observables_noiseless
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
@@ -118,11 +120,10 @@ def _assert_noise_processes_match(
 
 
 @pytest.mark.parametrize(
-    ("start", "end", "expected_processes"),
+    ("sites", "expected_processes"),
     [
         (
-            1,
-            2,
+            [1, 2],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
@@ -131,8 +132,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            0,
-            1,
+            [0, 1],
             [
                 {"name": "pauli_x", "sites": [0], "strength": 0.01},
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
@@ -141,8 +141,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            2,
-            3,
+            [2, 3],
             [
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
@@ -150,30 +149,46 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            1,
-            1,
+            [1],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
             ],
         ),
         (
-            1,
-            3,
+            [1, 3],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
                 {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
             ],
         ),
+        (
+            [0, 1, 2],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+                {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
+                {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
+                {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
+                {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
+            ],
+        ),
+        (
+            [0, 2, 4],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+            ],
+        ),
     ],
 )
 def test_create_local_noise_model(
-    start: int,
-    end: int,
+    sites: list[int],
     expected_processes: list[dict[str, object]],
 ) -> None:
-    """Local noise models retain only processes overlapping the gate site range."""
-    local_model = create_local_noise_model(_sample_global_noise_model(), start, end)
+    """Local noise models retain only processes whose sites lie in the gate support."""
+    local_model = create_local_noise_model(_sample_global_noise_model(), sites)
     _assert_noise_processes_match(local_model, expected_processes)
 
 
@@ -243,19 +258,27 @@ def test_process_layer_rejects_mid_circuit_measure() -> None:
         process_layer(dag)
 
 
-def test_process_layer_unsupported_gate() -> None:
-    """Test that process_layer raises an exception when encountering an unsupported gate.
+def test_process_layer_multi_qubit_gates() -> None:
+    """Test that process_layer groups gates on three or more qubits by their lowest qubit index.
 
-    This test creates a 3-qubit circuit with a CCX gate, which is not supported by process_layer.
-    It verifies that an exception is raised.
+    This test creates a circuit with two CCX gates acting on disjoint qubits in the same layer
+    and verifies that they are grouped into the even and odd lists by the parity of their lowest
+    qubit index, ordered by that index.
     """
-    qc = QuantumCircuit(3)
+    qc = QuantumCircuit(8)
+    qc.ccx(3, 5, 7)
     qc.ccx(0, 1, 2)
 
     dag = circuit_to_dag(qc)
+    single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
-    with pytest.raises(NotImplementedError):
-        process_layer(dag)
+    assert single_qubit_nodes == []
+    assert measure_barriers == []
+    assert len(even_nodes) == 1
+    assert len(odd_nodes) == 1
+    assert even_nodes[0].op.name == "ccx"
+    assert {dag.find_bit(qubit).index for qubit in even_nodes[0].qargs} == {0, 1, 2}
+    assert {dag.find_bit(qubit).index for qubit in odd_nodes[0].qargs} == {3, 5, 7}
 
 
 # --- apply_single_qubit_gate ---
@@ -306,6 +329,27 @@ def test_construct_generator_mpo() -> None:
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
     for i in range(length):
         if i not in {1, 3}:
+            np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
+
+
+def test_construct_generator_mpo_three_qubit() -> None:
+    """Test the construction of a generator MPO from a three-qubit gate with permuted sites.
+
+    This test retrieves a CCX gate from the GateLibrary, sets its sites in permuted order, and
+    verifies that each generator factor is placed on its declared site and that all other tensors
+    are the identity.
+    """
+    gate = GateLibrary.ccx()
+    gate.set_sites(4, 1, 3)
+    length = 6
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    assert first_site == 1
+    assert last_site == 4
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[4], (2, 3, 0, 1))), np.complex128(gate.generator[0]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[1], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[2]))
+    for i in range(length):
+        if i not in {1, 3, 4}:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
 
@@ -1719,12 +1763,12 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     num_qubits = 3
     noise_factor = 0.01
 
-    # Seeded TJM reference (random_seed=7, num_traj=100); re-recorded after jump-order fix
+    # Seeded TJM reference (random_seed=7, num_traj=100); re-recorded after SeedSequence coordinates
     reference = np.array(
         [
-            [1.0, 0.9400000000000001, 0.9400000000000001, 0.96, 0.88, 0.8200000000000001],
-            [1.0, 0.76, 0.64, 0.6, 0.52, 0.34],
-            [1.0, 0.96, 0.88, 0.74, 0.72, 0.7000000000000001],
+            [1.0, 0.94, 0.82, 0.7, 0.52, 0.5],
+            [1.0, 0.96, 0.86, 0.72, 0.46, 0.5],
+            [1.0, 1.0, 0.94, 0.88, 0.82, 0.76],
         ],
         dtype=float,
     )
@@ -1990,6 +2034,187 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     )
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
     assert result.expectation_values[0] is not None
+
+
+def _ccx_circuit() -> QuantumCircuit:
+    """Return a three-qubit circuit whose CCX gate acts nontrivially on the state.
+
+    The target qubit is rotated away from the ``X`` eigenbasis so the Toffoli is not a no-op.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.h(1)
+    qc.ry(0.9, 2)
+    qc.ccx(0, 1, 2)
+    qc.rz(0.3, 0)
+    qc.cx(0, 1)
+    return qc
+
+
+def _ccx_long_range_circuit() -> QuantumCircuit:
+    """Return a five-qubit circuit with a long-range CCX gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(5)
+    qc.h(0)
+    qc.ry(0.7, 1)
+    qc.h(2)
+    qc.ry(0.4, 3)
+    qc.ry(0.2, 4)
+    qc.ccx(0, 2, 4)
+    return qc
+
+
+def _ccz_circuit() -> QuantumCircuit:
+    """Return a four-qubit circuit with a long-range CCZ gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(4)
+    for qubit in range(4):
+        qc.h(qubit)
+    qc.ccz(0, 1, 3)
+    qc.cx(1, 2)
+    return qc
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_ccx_statevector_vs_qiskit(gate_mode: GateMode) -> None:
+    """A circuit with a CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccx_long_range_statevector() -> None:
+    """A long-range CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_long_range_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccz_statevector_mpo() -> None:
+    """A CCZ gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccz_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_cswap_statevector(gate_mode: GateMode) -> None:
+    """A CSWAP gate applied through the gate-MPO path should match the Qiskit statevector."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.x(1)
+    qc.ry(0.5, 2)
+    qc.cswap(0, 1, 2)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("circuit_factory", "gate_mode"),
+    [
+        (_ccx_long_range_circuit, "tdvp"),
+        (_ccz_circuit, "full-tdvp"),
+    ],
+)
+def test_multi_qubit_generator_window_converges(
+    circuit_factory: Callable[[], QuantumCircuit],
+    gate_mode: GateMode,
+) -> None:
+    """The generator-window path converges with the number of TDVP substeps.
+
+    The single-substep result carries the state-dependent time-discretization error of the
+    windowed 2TDVP update, so the fidelity is asserted against a floor rather than machine
+    precision; increasing ``tdvp_sweeps`` reduces the error. The floor leaves headroom for
+    the spread of the single-substep error across supported dependency versions (0.89-0.93
+    observed for the ccz case between the minimum and the latest resolutions) and stays
+    above the overlap with the gate-skipped state, which the test pins below 0.7 so that
+    the floor separates an approximate gate application from a gate that was not applied.
+    """
+    qc = circuit_factory()
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    no_gate = QuantumCircuit(qc.num_qubits)
+    for instruction in qc.data:
+        if len(instruction.qubits) <= 2:
+            no_gate.append(instruction.operation, instruction.qubits, instruction.clbits)
+    ref_no_gate = np.asarray(Statevector(no_gate).data, dtype=np.complex128)
+    assert _fidelity(ref, ref_no_gate) < 0.7
+
+    vec_single = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=1)
+    assert isinstance(vec_single, np.ndarray)
+    fidelity_single = _fidelity(ref, vec_single)
+    assert fidelity_single >= 0.85
+
+    vec_many = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=16)
+    assert isinstance(vec_many, np.ndarray)
+    fidelity_many = _fidelity(ref, vec_many)
+    assert fidelity_many >= 0.995
+    assert 1.0 - fidelity_many <= 1.0 - fidelity_single
+
+
+def test_noisy_ccx_smoke() -> None:
+    """Noisy digital simulation still runs with a CCX gate in the circuit."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    state = State(3, initial="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="tdvp",
+        num_traj=4,
+        random_seed=0,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert np.all(np.isfinite(expectation))
+
+
+def test_noisy_ccx_local_noise_uses_all_gate_sites() -> None:
+    """After a CCX, ``create_local_noise_model`` receives all three gate qubits."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.01},
+        {"name": "pauli_x", "sites": [2], "strength": 0.01},
+    ])
+    mps = MPS(3, state="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="mpo",
+        num_traj=1,
+        random_seed=0,
+    )
+
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        digital_tjm((0, mps, noise_model, sim_params, qc))
+
+    mock_local.assert_called_once()
+    _noise, sites = mock_local.call_args.args
+    assert list(sites) == [0, 1, 2]
 
 
 def test_bell_state_sanity() -> None:

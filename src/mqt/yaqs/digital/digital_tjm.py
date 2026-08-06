@@ -37,6 +37,8 @@ from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
@@ -183,26 +185,23 @@ def _compile_circuit(
     return _CompiledCircuit(tuple(layers), num_mid_measurements)
 
 
-def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site: int) -> NoiseModel:
+def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> NoiseModel:
     """Create local noise model.
 
-    Create a local noise model from a global noise model for a given gate.
+    Create a local noise model from a global noise model for a given gate. Only
+    processes whose support is a subset of the gate qubits are retained, so idle
+    sites between long-range or multi-qubit gates are not noised.
 
     Args:
-        noise_model (NoiseModel): The global noise model.
-        first_site (int): The first site of the gate.
-        last_site (int): The last site of the gate.
+        noise_model: The global noise model.
+        sites: Qubit indices the gate acts on.
 
     Returns:
-        NoiseModel: The local noise model.
+        The local noise model.
     """
-    affected_sites = [first_site, last_site]
+    gate_sites = set(sites)
 
-    local_processes = [
-        process
-        for process in noise_model.processes
-        if process["sites"] == affected_sites or process["sites"] == [first_site] or process["sites"] == [last_site]
-    ]
+    local_processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
     return NoiseModel(local_processes)
 
 
@@ -235,8 +234,8 @@ def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     """Process quantum circuit layer before applying to MPS.
 
-    Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
-    and odd-indexed two-qubit gates.
+    Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit gates and
+    even-indexed and odd-indexed multi-qubit gates.
 
     Args:
         dag (DAGCircuit): The directed acyclic graph representing the quantum circuit.
@@ -244,12 +243,11 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     Returns:
         tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]: A tuple containing four lists:
             - single_qubit_nodes: Nodes corresponding to single-qubit gates.
-            - even_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is even.
-            - odd_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is odd.
+            - even_nodes: Nodes corresponding to gates on two or more qubits whose lowest qubit index is even.
+            - odd_nodes: Nodes corresponding to gates on two or more qubits whose lowest qubit index is odd.
             - measure_barriers: Labelled barriers ("SAMPLE_OBSERVABLES") used as sampling points.
 
     Raises:
-        NotImplementedError: If a node with more than two qubits is encountered.
         ValueError: If a non-terminal ``measure`` operation is encountered.
     """
     # Extract the current layer
@@ -290,20 +288,16 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
 
         if len(node.qargs) == 1:
             single_qubit_nodes.append(node)
-        elif len(node.qargs) == 2:
-            # Group two-qubit gates by even/odd based on the lower qubit index.
-            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # ruff:ignore[private-member-access]
-            if min(q0, q1) % 2 == 0:
-                even_nodes.append(node)
-            else:
-                odd_nodes.append(node)
+        # Group gates on two or more qubits by even/odd based on the lowest qubit index.
+        elif min(qubit._index for qubit in node.qargs) % 2 == 0:  # ruff:ignore[private-member-access]
+            even_nodes.append(node)
         else:
-            raise NotImplementedError
+            odd_nodes.append(node)
 
     # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
     single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # ruff:ignore[private-member-access]
-    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
-    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # ruff:ignore[private-member-access]
+    even_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
+    odd_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
@@ -336,7 +330,8 @@ def construct_generator_mpo(
     """Construct Generator MPO.
 
     Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
-    specified length.
+    specified length. The generator is a list with one 2x2 product factor per site, ordered as
+    ``gate.sites``; identity factors are placed on all other sites.
 
     Args:
         gate: The gate containing the generator and the sites it acts on.
@@ -346,32 +341,17 @@ def construct_generator_mpo(
     Returns:
         A tuple containing the constructed MPO, the first site index, and the last site index.
     """
+    factors = dict(zip(gate.sites, gate.generator, strict=True))
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
+
     tensors = []
-
-    if gate.sites[0] < gate.sites[1]:
-        first_gen = 0
-        second_gen = 1
-    else:
-        first_gen = 1
-        second_gen = 0
-
-    first_site = gate.sites[first_gen]
-    last_site = gate.sites[second_gen]
     dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * length
     for site in range(length):
-        if site == first_site:
-            w = np.zeros((1, 1, 2, 2), dtype=complex)
-            w[0, 0] = gate.generator[first_gen]
-            tensors.append(w)
-        elif site == last_site:
-            w = np.zeros((1, 1, 2, 2), dtype=complex)
-            w[0, 0] = gate.generator[second_gen]
-            tensors.append(w)
-        else:
-            dimension = dimensions[site]
-            w = np.zeros((1, 1, dimension, dimension), dtype=complex)
-            w[0, 0] = np.eye(dimension)
-            tensors.append(w)
+        dimension = dimensions[site]
+        w = np.zeros((1, 1, dimension, dimension), dtype=complex)
+        w[0, 0] = factors.get(site, np.eye(dimension))
+        tensors.append(w)
 
     mpo = MPO()
     mpo.custom(tensors)
@@ -431,12 +411,13 @@ def apply_two_qubit_gate_tdvp(
     gate: BaseGate,
     sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
-    """Apply a two-qubit gate via generator MPO and TDVP.
+    """Apply a gate via generator MPO and TDVP.
 
     Long-range gates use local two-site TDVP (2TDVP) on a window-local MPS without
     post-sweep renormalization before grafting tensors back into the full chain.
-    Nearest-neighbor gates in hybrid ``gate_mode="tdvp"`` use TEBD instead;
-    callers should route via :func:`apply_two_qubit_gate`.
+    Nearest-neighbor two-qubit gates in hybrid ``gate_mode="tdvp"`` use TEBD instead;
+    callers should route via :func:`apply_two_qubit_gate`. The window spans the full
+    gate support, so the function applies to any gate with a product-form generator.
 
     Args:
         state: MPS updated in place.
@@ -546,19 +527,18 @@ def apply_long_range_gate_mpo(
     gate: BaseGate,
     sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
-    """Apply a long-range two-qubit gate via :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.multiply`.
+    """Apply a gate on two or more qubits via :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.multiply`.
 
     Args:
         state: MPS updated in place.
-        gate: Two-qubit gate with sites and MPO data populated.
+        gate: Gate with sites and MPO data populated.
         sim_params: Truncation settings for the compression sweep.
 
     Returns:
         ``(first_site, last_site)`` spanning the gate support in MPS order.
     """
-    site0, site1 = gate.sites[0], gate.sites[1]
-    first_site = min(site0, site1)
-    last_site = max(site0, site1)
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
     MPO.from_gate(gate, state.length, physical_dimensions=state.physical_dimensions).multiply(
         state, sim_params=sim_params, compress=True
     )
@@ -566,7 +546,17 @@ def apply_long_range_gate_mpo(
 
 
 def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimParams) -> tuple[int, int]:
-    """Apply one translated two-qubit gate using the configured mode.
+    """Apply one translated gate on two or more qubits using the configured mode.
+
+    Two-qubit gates are routed by ``gate_mode`` exactly as before. Gates on three or
+    more qubits have no TEBD path: the TDVP modes use the generator window when a
+    product-form generator exists, and all other cases use the gate-MPO path
+    (including ``gate_mode="swaps"``).
+
+    Args:
+        state: MPS updated in place.
+        gate: Executor-owned translated gate.
+        sim_params: Simulation parameters including ``gate_mode``.
 
     Returns:
         First and last affected MPS sites.
@@ -574,10 +564,22 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
     Raises:
         ValueError: If the gate mode is unknown or heterogeneous SWAP routing is unsafe.
     """
+    gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    if gate_mode not in {"tdvp", "full-tdvp", "swaps", "mpo"}:
+        msg = f"Unknown gate_mode: {gate_mode!r}"
+        raise ValueError(msg)
+
+    # Matrix-backed custom gates have no ``generator`` and bypass the TDVP window
+    # path in ``tdvp`` / ``full-tdvp`` modes (TEBD for NN, MPO for LR).
+    has_generator = getattr(gate, "generator", None) is not None
+
+    if gate.interaction > 2:
+        if gate_mode in {"tdvp", "full-tdvp"} and has_generator:
+            return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
+
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
-    gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
-    has_generator = getattr(gate, "generator", None) is not None
 
     if gate_mode == "swaps" and not _swap_route_is_valid(state.physical_dimensions, site0, site1):
         raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
@@ -599,13 +601,10 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
             return apply_two_qubit_gate_tdvp(state, gate, sim_params)
         return apply_long_range_gate_mpo(state, gate, sim_params)
 
-    if gate_mode == "mpo":
-        if is_nearest_neighbor:
-            return apply_two_qubit_gate_tebd(state, gate, sim_params)
-        return apply_long_range_gate_mpo(state, gate, sim_params)
-
-    msg = f"Unknown gate_mode: {gate_mode!r}"
-    raise ValueError(msg)
+    # The remaining mode is mpo: TEBD for nearest neighbors, gate MPO otherwise.
+    if is_nearest_neighbor:
+        return apply_two_qubit_gate_tebd(state, gate, sim_params)
+    return apply_long_range_gate_mpo(state, gate, sim_params)
 
 
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimParams) -> tuple[int, int]:
@@ -693,12 +692,12 @@ def digital_tjm(
 
         for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
             for gate in group:
-                first_site, last_site = _apply_two_qubit_gate(state, gate, sim_params)
+                _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
 
                 if not noisy:
                     state.normalize(form="B", decomposition="QR")
                 else:
-                    local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
+                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 

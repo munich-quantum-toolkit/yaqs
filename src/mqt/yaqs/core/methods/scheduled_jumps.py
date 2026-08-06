@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from ..methods.decompositions import TruncMode
 
 
+def _scheduled_jump_matches_time(jump_time: float, time: float, dt: float) -> bool:
+    """Return True if ``jump_time`` matches ``time`` within ``atol=dt * 1e-3``."""
+    return bool(np.isclose(jump_time, time, atol=dt * 1e-3, rtol=0.0))
+
+
 def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -> bool:
     """Check if there is a scheduled jump at the given time.
 
@@ -41,7 +46,7 @@ def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -
     if noise_model is None or not noise_model.scheduled_jumps:
         return False
 
-    return any(np.isclose(jump["time"], time, atol=dt * 1e-3) for jump in noise_model.scheduled_jumps)
+    return any(_scheduled_jump_matches_time(jump["time"], time, dt) for jump in noise_model.scheduled_jumps)
 
 
 def apply_scheduled_jumps(
@@ -62,13 +67,16 @@ def apply_scheduled_jumps(
         The updated Matrix Product State (MPS).
 
     Raises:
-        ValueError: If a two-site jump acts on non-adjacent sites.
+        ValueError: If a two-site jump acts on non-adjacent sites, or if a matched
+            jump produces a zero or non-finite squared norm.
     """
     if noise_model is None or not noise_model.scheduled_jumps:
         return state
 
+    applied = False
     for jump in noise_model.scheduled_jumps:
-        if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3):
+        if _scheduled_jump_matches_time(jump["time"], time, sim_params.dt):
+            applied = True
             sites = jump["sites"]
             jump_op = jump["matrix"]
 
@@ -98,5 +106,15 @@ def apply_scheduled_jumps(
                 state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
                 state.update_center_after_split(i, j, "right")
 
+    if not applied:
+        return state
+
+    post_squared_norm = float(state.norm())
+    if not np.isfinite(post_squared_norm) or post_squared_norm <= 0.0:
+        msg = (
+            "Scheduled jump produced a zero or non-finite squared norm "
+            f"(squared_norm={post_squared_norm}). The jump operator annihilates the current state."
+        )
+        raise ValueError(msg)
     state.normalize("B")
     return state
