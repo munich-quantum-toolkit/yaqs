@@ -163,6 +163,7 @@ def analog_tjm_2(
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
+    sample_stream_id: int | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a two-site evolution scheme.
 
@@ -180,6 +181,8 @@ def analog_tjm_2(
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
         rng: Optional externally managed trajectory RNG. When omitted, the
             standalone trajectory seed behavior is preserved.
+        sample_stream_id: Optional bounded-evolution identifier for independent
+            measurement-copy streams. Program execution supplies the segment index.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -188,8 +191,23 @@ def analog_tjm_2(
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
     base_seed = sim_params.random_seed
+    external_rng = rng is not None
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    n_times = len(sim_params.times)
+
+    def measurement_rng(timestep: int) -> np.random.Generator:
+        """Return the appropriate RNG for a sampled physical state."""
+        if external_rng and timestep == n_times - 1:
+            return rng
+        if sample_stream_id is None:
+            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
+        return make_sample_rng(
+            traj_idx,
+            base_seed=base_seed,
+            timestep=timestep,
+            stream_id=sample_stream_id,
+        )
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
@@ -200,7 +218,6 @@ def analog_tjm_2(
         results = np.zeros((len(sim_params.sorted_observables), 1))
 
     final_state: MPS | None = None
-    n_times = len(sim_params.times)
 
     # Zero-duration runs: evaluate the initial state before any noise/evolution (F0).
     if n_times == 1:
@@ -227,7 +244,7 @@ def analog_tjm_2(
             sim_params,
             results,
             j=1,
-            rng=make_sample_rng(traj_idx, base_seed=base_seed, timestep=1),
+            rng=measurement_rng(1),
             diagnostics=diagnostics,
         )
         if sampled_state is not None:
@@ -243,7 +260,7 @@ def analog_tjm_2(
                 sim_params,
                 results,
                 j,
-                rng=make_sample_rng(traj_idx, base_seed=base_seed, timestep=j),
+                rng=measurement_rng(j),
                 diagnostics=diagnostics,
             )
             if sampled_state is not None:

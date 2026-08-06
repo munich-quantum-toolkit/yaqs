@@ -37,7 +37,13 @@ def make_trajectory_rng(traj_idx: int, *, base_seed: int | None) -> np.random.Ge
     return np.random.default_rng(np.random.SeedSequence([base_seed, traj_idx, _STREAM_TRAJECTORY]))
 
 
-def make_sample_rng(traj_idx: int, *, base_seed: int | None, timestep: int) -> np.random.Generator:
+def make_sample_rng(
+    traj_idx: int,
+    *,
+    base_seed: int | None,
+    timestep: int,
+    stream_id: int | None = None,
+) -> np.random.Generator:
     """Create an RNG for one TJM-2 measurement copy at a given timestep.
 
     Intermediate ``sample()`` calls evolve a deep copy of the sampling MPS. Their jump
@@ -46,20 +52,27 @@ def make_sample_rng(traj_idx: int, *, base_seed: int | None, timestep: int) -> n
     does not change the final measurement draw relative to final-only mode.
 
     When ``base_seed`` is set, the stream is derived from separate ``SeedSequence``
-    coordinates ``(base_seed, traj_idx, timestep, sample-tag)``. When ``base_seed`` is
+    coordinates ``(base_seed, traj_idx, timestep, sample-tag)``. A caller that
+    composes multiple bounded evolutions may additionally supply ``stream_id`` to
+    keep equal local timestep indices in distinct streams. When ``base_seed`` is
     ``None``, returns an unseeded generator.
 
     Args:
         traj_idx: Trajectory index (0-based), typically the worker job id.
         base_seed: Optional run-level seed from simulation parameters.
         timestep: Index into ``sim_params.times`` for this measurement copy.
+        stream_id: Optional bounded-evolution identifier. Omit it to preserve the
+            standalone sampling stream.
 
     Returns:
         A NumPy random generator for jump decisions on that measurement copy only.
     """
     if base_seed is None:
         return np.random.default_rng()
-    return np.random.default_rng(np.random.SeedSequence([base_seed, traj_idx, timestep, _STREAM_SAMPLE]))
+    coordinates = [base_seed, traj_idx, timestep, _STREAM_SAMPLE]
+    if stream_id is not None:
+        coordinates.insert(2, stream_id)
+    return np.random.default_rng(np.random.SeedSequence(coordinates))
 
 
 def make_disorder_rng(*, base_seed: int | None) -> np.random.Generator:

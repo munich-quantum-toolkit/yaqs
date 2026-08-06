@@ -89,6 +89,22 @@ def test_get_support_mpo_rejects_wrong_homogeneous_dimension_count() -> None:
         get_support_mpo(gate, first_site=0, last_site=2, physical_dimensions=[2, 2])
 
 
+def test_get_support_mpo_preserves_multi_qubit_targets_with_heterogeneous_spectator() -> None:
+    """A multi-qubit support inserts heterogeneous identities without dropping target tensors."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 1, 3)
+
+    support = get_support_mpo(
+        gate,
+        first_site=0,
+        last_site=3,
+        physical_dimensions=[2, 2, 3, 2],
+    )
+
+    assert len(support) == 4
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in support] == [(2, 2), (2, 2), (3, 3), (2, 2)]
+
+
 def test_get_support_mpo_calls_extend_gate_without_cache() -> None:
     """Gates without ``mpo_tensors`` build support tensors via ``extend_gate``."""
     gate = GateLibrary.cx()

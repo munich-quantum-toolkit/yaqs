@@ -299,6 +299,7 @@ def _execute_program_trajectory(
                 ),
                 copy_initial_state=False,
                 rng=rng,
+                **({"sample_stream_id": instruction.index} if backend is analog_tjm_2 else {}),
             )
             shot_counts = None
         elif isinstance(instruction, _CompiledDigitalInstruction):
@@ -883,6 +884,18 @@ class Simulator:
             msg = "Noisy SimulationProgram segment sim_params contain conflicting random_seed values."
             raise ValueError(msg)
         compiled = _sample_program_noise_models(compiled)
+        for instruction in compiled.instructions:
+            if instruction.noise_model is None:
+                continue
+            is_digital = isinstance(instruction, _CompiledDigitalInstruction)
+            validate_noise_model_for_run(
+                instruction.noise_model,
+                length=compiled.state_signature.length,
+                physical_dimensions=list(compiled.state_signature.physical_dimensions),
+                representation="mps",
+                is_digital=is_digital,
+                sim_params=None if is_digital else instruction.execution_params,
+            )
         stochastic = any(_noise_model_is_stochastic(instruction.noise_model) for instruction in compiled.instructions)
         if stochastic and compiled.num_traj_conflict:
             msg = "Noisy SimulationProgram segment sim_params must use one shared num_traj value."

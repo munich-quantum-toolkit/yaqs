@@ -477,6 +477,93 @@ def test_program_threads_one_rng_stream_across_analog_and_digital_segments(
     np.testing.assert_allclose(samples, expected, rtol=0, atol=0)
 
 
+def test_order_two_program_handoff_uses_continuous_trajectory_rng(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Order-2 final sampling advances the owned trajectory RNG at segment boundaries."""
+    samples: list[float] = []
+
+    def record_rng(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        dt: float,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        del noise_model, dt, sim_params
+        assert rng is not None
+        samples.append(float(rng.random()))
+        return state
+
+    monkeypatch.setattr(analog_module, "stochastic_process", record_rng)
+    params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        random_seed=31,
+        order=2,
+    )
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+            AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+        ],
+        num_traj=1,
+    )
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+
+    Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program, noise_model=noise_model)
+
+    expected = make_trajectory_rng(0, base_seed=31).random(4)
+    np.testing.assert_allclose(samples, expected, rtol=0, atol=0)
+
+
+def test_order_two_program_uses_distinct_segment_sample_streams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Intermediate measurement copies include the program segment in their seed coordinates."""
+    streams: list[tuple[int | None, int]] = []
+    original_make_sample_rng = analog_module.make_sample_rng
+
+    def record_sample_stream(
+        traj_idx: int,
+        *,
+        base_seed: int | None,
+        timestep: int,
+        stream_id: int | None = None,
+    ) -> np.random.Generator:
+        streams.append((stream_id, timestep))
+        return original_make_sample_rng(
+            traj_idx,
+            base_seed=base_seed,
+            timestep=timestep,
+            stream_id=stream_id,
+        )
+
+    monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_stream)
+    params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        random_seed=31,
+        order=2,
+    )
+    program = SimulationProgram(
+        [
+            AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+            AnalogSegment(_zero_hamiltonian(1), sim_params=params),
+        ],
+        num_traj=1,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert streams == [(0, 1), (1, 1)]
+
+
 def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:
     """Run a small noisy mixed program.
 
@@ -679,6 +766,26 @@ def test_long_range_qubit_gate_crosses_non_qubit_spectator(gate_mode: GateMode) 
     assert result.output_state.mps.project_onto_bitstring("101") == pytest.approx(1.0, abs=1e-8)
 
 
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_multi_qubit_gate_crosses_non_qubit_spectator(gate_mode: GateMode) -> None:
+    """Native three-qubit gate MPOs retain every target around a non-qubit spectator."""
+    dimensions = [2, 2, 3, 2]
+    circuit = QuantumCircuit(4)
+    circuit.x(0)
+    circuit.x(1)
+    circuit.ccx(0, 1, 3)
+    params = DigitalSimParams(gate_mode=gate_mode, max_bond_dim=16, svd_threshold=1e-12)
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(4, initial="zeros", physical_dimensions=dimensions),
+        SimulationProgram([DigitalSegment(circuit, sim_params=params)], get_state=True),
+    )
+
+    assert result.output_state is not None
+    assert result.output_state.mps.physical_dimensions == dimensions
+    assert result.output_state.mps.project_onto_bitstring("1101") == pytest.approx(1.0, abs=1e-8)
+
+
 def test_heterogeneous_program_rejects_incompatible_gate_target_and_swap_route() -> None:
     """Compilation reports incompatible targets and heterogeneous SWAP routing."""
     target_circuit = QuantumCircuit(3)
@@ -858,6 +965,36 @@ def test_program_rejects_noise_operator_incompatible_with_non_qubit_site() -> No
             State(3, initial="zeros", physical_dimensions=[2, 2, 3]),
             SimulationProgram([DigitalSegment(circuit)]),
             noise_model=noise_model,
+        )
+
+
+def test_program_preserves_contextual_noise_validation() -> None:
+    """Programs reject noise models unsupported by their analog or digital backend."""
+    digital_noise = NoiseModel([
+        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.1},
+    ])
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 2)
+    with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros"),
+            SimulationProgram([DigitalSegment(circuit)]),
+            noise_model=digital_noise,
+        )
+
+    analog_noise = NoiseModel([
+        {
+            "name": "custom",
+            "sites": [0, 2],
+            "strength": 0.1,
+            "factors": (np.array([[0, 1], [0, 0]], dtype=complex), np.array([[0, -1j], [1j, 0]])),
+        }
+    ])
+    with pytest.raises(ValueError, match="Analog MPS TJM does not support non-Pauli long-range"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros"),
+            SimulationProgram([AnalogSegment(_zero_hamiltonian(3))]),
+            noise_model=analog_noise,
         )
 
 

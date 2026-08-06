@@ -200,22 +200,33 @@ def get_support_mpo(
             [first_site, last_site],
         )
 
-    if dimensions[0] != 2 or dimensions[-1] != 2:
-        msg = "Two-qubit gate MPO endpoints must both have physical dimension 2."
-        raise ValueError(msg)
+    order = sorted(range(gate.interaction), key=lambda index: gate.sites[index])
+    sorted_sites = sorted(gate.sites)
+    for site in sorted_sites:
+        if dimensions[site - first_site] != 2:
+            msg = f"Gate MPO target site {site} must have physical dimension 2."
+            raise ValueError(msg)
 
-    left_tensor, right_tensor = split_tensor(resolve_lr_tensor(gate))
-    tensors = [left_tensor]
-    bond_dimension = left_tensor.shape[3]
-    for dimension in dimensions[1:-1]:
-        identity_tensor = np.zeros(
-            (dimension, dimension, bond_dimension, bond_dimension),
-            dtype=np.complex128,
-        )
-        for bond in range(bond_dimension):
-            identity_tensor[:, :, bond, bond] = np.eye(dimension, dtype=np.complex128)
-        tensors.append(identity_tensor)
-    tensors.append(right_tensor)
+    tensor = np.asarray(gate.tensor, dtype=np.complex128)
+    if order != list(range(gate.interaction)):
+        tensor = np.transpose(tensor, [*order, *[gate.interaction + index for index in order]])
+    gate_tensors = split_tensor(tensor)
+
+    tensors = [gate_tensors[0]]
+    for target_index in range(1, gate.interaction):
+        previous_site = sorted_sites[target_index - 1]
+        current_site = sorted_sites[target_index]
+        bond_dimension = tensors[-1].shape[3]
+        for site in range(previous_site + 1, current_site):
+            dimension = dimensions[site - first_site]
+            identity_tensor = np.zeros(
+                (dimension, dimension, bond_dimension, bond_dimension),
+                dtype=np.complex128,
+            )
+            for bond in range(bond_dimension):
+                identity_tensor[:, :, bond, bond] = np.eye(dimension, dtype=np.complex128)
+            tensors.append(identity_tensor)
+        tensors.append(gate_tensors[target_index])
     return tensors
 
 
