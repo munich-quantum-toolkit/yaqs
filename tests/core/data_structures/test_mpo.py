@@ -1027,6 +1027,17 @@ def test_from_gate_rejects_wrong_physical_dimension_count() -> None:
         MPO.from_gate(gate, 2, physical_dimensions=[2])
 
 
+def test_from_gate_support_only_accepts_nonzero_site_labels() -> None:
+    """Support-only MPO dimensions are local even when gate site labels are nonzero."""
+    gate = GateLibrary.cx()
+    gate.set_sites(2, 3)
+
+    gate_mpo = MPO.from_gate(gate, 2, physical_dimensions=[2, 2])
+
+    assert gate_mpo.length == 2
+    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix)
+
+
 def test_multiply_mps_invalidates_then_restores_center() -> None:
     """``multiply(MPS)`` clears gauge during apply and ``compress`` restores tracking."""
     length = 3

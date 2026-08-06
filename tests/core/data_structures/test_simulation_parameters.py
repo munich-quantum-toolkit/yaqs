@@ -198,6 +198,7 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
         (0.15, 0.1),
         (0.25, 0.1),
         (5e-13, 1e-12),
+        (1.5e-12, 1e-12),
         (1.0, 1e9),
     ],
 )

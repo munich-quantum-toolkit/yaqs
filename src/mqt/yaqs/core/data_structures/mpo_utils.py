@@ -174,14 +174,14 @@ def get_support_mpo(
         first_site: First site of the support interval (inclusive).
         last_site: Last site of the support interval (inclusive).
         physical_dimensions: Optional local dimensions for the support interval.
-            Endpoints must be qubits; intermediate dimensions determine the
-            identity tensor at each spectator site.
+            Every gate target must be a qubit; intermediate dimensions determine
+            the identity tensor at each spectator site.
 
     Returns:
         Support MPO tensors from the gate cache or :func:`~mqt.yaqs.core.libraries.gate_library.extend_gate`.
 
     Raises:
-        ValueError: If explicit dimensions do not match the support or its qubit endpoints.
+        ValueError: If explicit dimensions do not match the support or a gate target is not a qubit.
     """
     support_len = last_site - first_site + 1
     dimensions = tuple(physical_dimensions) if physical_dimensions is not None else None

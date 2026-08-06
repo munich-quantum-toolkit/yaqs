@@ -1079,11 +1079,12 @@ class MPO:
         if len(dimensions) != chain_length:
             msg = f"Expected {chain_length} physical dimensions, got {len(dimensions)}."
             raise ValueError(msg)
+        support_dimensions = dimensions if chain_length == support_len else dimensions[first_site : last_site + 1]
         support = get_support_mpo(
             gate,
             first_site=first_site,
             last_site=last_site,
-            physical_dimensions=dimensions[first_site : last_site + 1],
+            physical_dimensions=support_dimensions,
         )
         if chain_length == support_len:
             tensors = support

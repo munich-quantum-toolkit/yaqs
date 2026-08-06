@@ -154,9 +154,14 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
 
     evolved_time = n_steps * dt_f
     residual = abs(elapsed_f - evolved_time)
-    # Scale with max(elapsed, dt): residuals from long fine grids sit near ulp(elapsed),
-    # which can exceed a fixed fraction of a tiny dt alone.
-    tol = max(1e-12, 1e-9 * max(elapsed_f, dt_f))
+    # Account only for accumulated float64 roundoff and keep the tolerance well
+    # below half a step so a genuinely fractional duration cannot be relabeled.
+    roundoff_tol = max(
+        np.spacing(elapsed_f),
+        abs(n_steps) * np.spacing(dt_f),
+        8 * np.finfo(np.float64).eps * max(elapsed_f, evolved_time, dt_f),
+    )
+    tol = min(roundoff_tol, 0.25 * dt_f)
     if n_steps <= 0 or residual > tol:
         msg = (
             f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "

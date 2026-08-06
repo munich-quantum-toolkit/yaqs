@@ -1960,9 +1960,15 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
     def _run(*, sample_timesteps: bool) -> list[int]:
         timesteps: list[int] = []
 
-        def _tracking_sample_rng(traj_idx: int, *, base_seed: int | None, timestep: int) -> np.random.Generator:
+        def _tracking_sample_rng(
+            traj_idx: int,
+            *,
+            base_seed: int | None,
+            timestep: int,
+            stream_id: int | None = None,
+        ) -> np.random.Generator:
             timesteps.append(timestep)
-            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
+            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep, stream_id=stream_id)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), 0)],

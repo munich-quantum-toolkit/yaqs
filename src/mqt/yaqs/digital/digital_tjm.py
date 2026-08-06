@@ -289,15 +289,15 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         if len(node.qargs) == 1:
             single_qubit_nodes.append(node)
         # Group gates on two or more qubits by even/odd based on the lowest qubit index.
-        elif min(qubit._index for qubit in node.qargs) % 2 == 0:  # ruff:ignore[private-member-access]
+        elif min(dag.find_bit(qubit).index for qubit in node.qargs) % 2 == 0:
             even_nodes.append(node)
         else:
             odd_nodes.append(node)
 
     # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
-    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # ruff:ignore[private-member-access]
-    even_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
-    odd_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
+    single_qubit_nodes.sort(key=lambda node: dag.find_bit(node.qargs[0]).index)
+    even_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
+    odd_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
