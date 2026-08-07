@@ -1,0 +1,381 @@
+{
+  "cnot_rank_orientation_code": [
+    1,
+    10
+  ],
+  "effective_zero_svd_threshold": 1e-300,
+  "failures": [],
+  "git": {
+    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_dirty": "true"
+  },
+  "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+  "n_failures": 0,
+  "pass": true,
+  "production_svd_threshold": 1e-13,
+  "residuals": {
+    "cnot_rank_state_files": 120,
+    "cx_path_power_residuals": {
+      "1": 3.1401849173675503e-16,
+      "16": 4.652682298944613e-16,
+      "2": 1.5700924586837752e-16,
+      "3": 1.0007415106216804e-16,
+      "32": 4.742874840267547e-16,
+      "4": 5.273559366969494e-16,
+      "8": 4.449557262054371e-16
+    },
+    "expm_minus_i_H_CX_vs_CX": 3.1401849173675503e-16,
+    "generator_mpo": {
+      "full_CX(1,10)": 0.0,
+      "full_CX(10,1)": 0.0,
+      "local_CX(1,10)": 0.0,
+      "local_CX(10,1)": 0.0
+    },
+    "n128_to_n256_distances": [
+      {
+        "chi_max": 8,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0008954989640276124,
+        "seed": 11
+      },
+      {
+        "chi_max": 8,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0008197813898923519,
+        "seed": 22
+      },
+      {
+        "chi_max": 8,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0008017677261636056,
+        "seed": 33
+      },
+      {
+        "chi_max": 10,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.004102962953187991,
+        "seed": 11
+      },
+      {
+        "chi_max": 10,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.003912933196101194,
+        "seed": 22
+      },
+      {
+        "chi_max": 10,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.004696587041418282,
+        "seed": 33
+      },
+      {
+        "chi_max": 12,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0030796358896217377,
+        "seed": 11
+      },
+      {
+        "chi_max": 12,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0036991591674706685,
+        "seed": 22
+      },
+      {
+        "chi_max": 12,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0037471710608544028,
+        "seed": 33
+      },
+      {
+        "chi_max": 14,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0016259392505662475,
+        "seed": 11
+      },
+      {
+        "chi_max": 14,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0008506750113195252,
+        "seed": 22
+      },
+      {
+        "chi_max": 14,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 0.0024201700521612524,
+        "seed": 33
+      },
+      {
+        "chi_max": 16,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 1.3710023138782552e-12,
+        "seed": 11
+      },
+      {
+        "chi_max": 16,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 2.0458743706211593e-13,
+        "seed": 22
+      },
+      {
+        "chi_max": 16,
+        "note": "Fine-resolution control only; small distance does not imply convergence.",
+        "phase_aligned_distance_n128_n256": 3.5589830353865196e-13,
+        "seed": 33
+      }
+    ],
+    "pauli_matrix": {
+      "rxx_x0.001_vs_expm": 4.336808689942018e-19,
+      "rxx_x0.001_vs_formula": 0.0,
+      "rxx_x0.0_vs_expm": 0.0,
+      "rxx_x0.0_vs_formula": 0.0,
+      "rxx_x0.25_vs_expm": 0.0,
+      "rxx_x0.25_vs_formula": 0.0,
+      "ryy_x0.001_vs_expm": 4.336808689942018e-19,
+      "ryy_x0.001_vs_formula": 0.0,
+      "ryy_x0.0_vs_expm": 0.0,
+      "ryy_x0.0_vs_formula": 0.0,
+      "ryy_x0.25_vs_expm": 0.0,
+      "ryy_x0.25_vs_formula": 0.0,
+      "rzz_x0.001_vs_expm": 0.0,
+      "rzz_x0.001_vs_formula": 0.0,
+      "rzz_x0.0_vs_expm": 0.0,
+      "rzz_x0.0_vs_formula": 0.0,
+      "rzz_x0.25_vs_expm": 0.0,
+      "rzz_x0.25_vs_formula": 0.0
+    },
+    "production_vs_effective_zero_n1": [
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.13995993444401655,
+        "infidelity_production": 0.13995993444401655,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.04229100233685801,
+        "infidelity_production": 0.04229100233685801,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.08729045071656671,
+        "infidelity_production": 0.08729045071656671,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.17274173923903213,
+        "infidelity_production": 0.17274173923903213,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.08238683379681688,
+        "infidelity_production": 0.08238683379681688,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.3106502482953706,
+        "infidelity_production": 0.3106502482953706,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.2077373944211538,
+        "infidelity_production": 0.2077373944211538,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.10299783161262921,
+        "infidelity_production": 0.10299783161262921,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 8,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.30666300082701226,
+        "infidelity_production": 0.30666300082701226,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 1.1102230246251565e-16,
+        "infidelity_production": 1.1102230246251565e-16,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 11
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 2.220446049250313e-16,
+        "infidelity_production": 2.220446049250313e-16,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 22
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 1.1102230246251565e-16,
+        "infidelity_production": 1.1102230246251565e-16,
+        "method": "gate_local_2tdvp",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
+        "method": "mpo_zipup",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      },
+      {
+        "abs_diff": 0.0,
+        "chi_max": 16,
+        "effective_zero_svd_threshold": 1e-300,
+        "infidelity_effective_zero": 1.1102230246251565e-16,
+        "infidelity_production": 1.1102230246251565e-16,
+        "method": "tebd_swap",
+        "production_svd_threshold": 1e-13,
+        "seed": 33
+      }
+    ],
+    "qiskit_endpoint": {
+      "CX(1,10)": 0.0,
+      "CX(10,1)": 0.0
+    },
+    "row_inventory": {
+      "actual_campaign_rows": 468,
+      "actual_cnot_rank_rows": 90,
+      "chi_max_campaign": [
+        8,
+        16
+      ],
+      "chi_max_cnot_rank": [
+        8,
+        10,
+        12,
+        14,
+        16
+      ],
+      "expected_campaign_rows": 468,
+      "expected_cnot_rank_rows": 90,
+      "expected_cnot_rows": 36,
+      "expected_pauli_rows": 432,
+      "seeds": [
+        11,
+        22,
+        33
+      ]
+    },
+    "tdvp_dispatch_counts": {
+      "CX(1,10)": {
+        "mpo": 0,
+        "tdvp": 1,
+        "tebd": 0
+      },
+      "CX(10,1)": {
+        "mpo": 0,
+        "tdvp": 1,
+        "tebd": 0
+      }
+    }
+  },
+  "sites_paper_one_based": [
+    2,
+    11
+  ],
+  "stage": "validate",
+  "versions": {
+    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260803",
+    "numpy": "2.4.6",
+    "qiskit": "2.5.1",
+    "scipy": "1.18.0"
+  }
+}

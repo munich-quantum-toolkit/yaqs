@@ -1,0 +1,16 @@
+{
+  "chi_max": 8,
+  "git": {
+    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_dirty": "true"
+  },
+  "infidelity_vs_exact": 0.19270907524911207,
+  "krylov_tol_baseline": 1e-12,
+  "krylov_tol_control": 1e-14,
+  "n_sub": 1024,
+  "phase_aligned_distance_to_baseline_1e-12": 4.1444638456841925e-13,
+  "seed": 11,
+  "svd_threshold": 1e-300,
+  "task_id": "e1e5c35eb55f9720f96016ae"
+}

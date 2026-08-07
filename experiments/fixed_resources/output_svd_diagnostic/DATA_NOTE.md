@@ -1,1 +1,0 @@
-All 30 (method, χ, τ) runs completed successfully. Writing trajectories/events crashed on a DictWriter field mismatch; summary was recovered from the run log. Event-level CSVs and spectra are stubs — re-run `run_svd_cutoff_diagnostic.py` only if needed.

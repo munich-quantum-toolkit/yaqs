@@ -28,7 +28,6 @@ from mqt.yaqs.core.methods.tdvp.sweep_utils import (
     _resize_bond,
     _scale_dt,
     _sync_bond_dim,
-    get_min_keep,
     renorm_drift,
     renorm_trunc,
     split_tdvp,
@@ -243,8 +242,8 @@ def test_split_truncation_max_bond_enforced() -> None:
     assert A1.shape[1] == 2
 
 
-def test_split_tdvp_min_keep() -> None:
-    """``split_tdvp`` enforces ``min_keep=2`` even when threshold would drop further."""
+def test_split_tdvp_discards_exact_zero_directions() -> None:
+    """``split_tdvp`` discards singular values below threshold (``min_keep=1``)."""
     svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
     d0, d1, D0, D2 = 2, 2, 2, 2
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=31)
@@ -259,8 +258,29 @@ def test_split_tdvp_min_keep() -> None:
         sample_timesteps=True,
     )
     A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
-    assert A0.shape[2] == 2
-    assert A1.shape[1] == 2
+    assert A0.shape[2] == 1
+    assert A1.shape[1] == 1
+
+
+def test_split_tdvp_retains_nonzero_singular_values() -> None:
+    """Genuinely nonzero singular values are kept under the threshold and cap."""
+    svs = np.array([1.0, 0.5, 0.2, 1e-14], dtype=np.float64)
+    d0, d1, D0, D2 = 2, 2, 2, 2
+    theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=32)
+    A_in = _as_input_tensor(theta, d0, d1, D0, D2)
+
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        max_bond_dim=4,
+        svd_threshold=1e-8,
+        trunc_mode="relative",
+        sample_timesteps=True,
+    )
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
+    assert A0.shape[2] == 3
+    assert A1.shape[1] == 3
 
 
 @pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
@@ -387,14 +407,6 @@ def test_sync_bond_dim_preserves_low_rank_state() -> None:
     assert state.tensors[0].shape[2] == 1
     assert state.tensors[1].shape[1] == 1
     assert abs(np.vdot(reference, state.to_vec())) ** 2 == pytest.approx(1.0, abs=1e-12)
-
-
-def test_get_min_keep_with_and_without_cap() -> None:
-    """Minimum retained bond rank respects an explicit max_bond_dim cap."""
-    uncapped = DigitalSimParams(preset="exact", get_state=True)
-    capped = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=1)
-    assert get_min_keep(uncapped) == 2
-    assert get_min_keep(capped) == 1
 
 
 def test_scale_dt_analog_vs_digital() -> None:

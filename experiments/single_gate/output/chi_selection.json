@@ -1,8 +1,0 @@
-{
-  "chi0": 8,
-  "chi_full": 16,
-  "chi_intermediate": 12,
-  "fidelity_definition": "normalized_state_fidelity_v2",
-  "rule": "Prefer smallest chi with all methods <= 1e-10 on scan angles; otherwise smallest chi with TEBD/MPO/variational <= 1e-10 and TDVP <= 1e-8",
-  "selection_note": "relaxed_tdvp: smallest chi with TEBD/MPO/variational <= 1e-10 and TDVP <= 1e-8 (worst TDVP=2.213e-09)"
-}

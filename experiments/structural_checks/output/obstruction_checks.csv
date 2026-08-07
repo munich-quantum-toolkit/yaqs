@@ -1,0 +1,6 @@
+check_family,geometry,N,site_a_zero_based,site_b_zero_based,site_a_one_based,site_b_one_based,theta,x_norm,p1_action_norm,p1_action_rel,p2_action_norm,p2_action_rel,infidelity_vs_unchanged,all_schmidt_ranks_one,all_projector_terms_vanish,term_norms_json,chi_max,n_sub,phase_aligned_distance,infidelity_vs_exact,final_bond_profile,peak_retained_rank_during_split,absolute_residual,relative_residual,pass
+analytical_obstruction,product_xx,4,0,3,1,4,1.5707963267948966,1.0,0.0,0.0,0.0,0.0,0.4999999999999999,True,True,"[{""term"": ""K"", ""index"": 0, ""norm"": 0.0}, {""term"": ""K"", ""index"": 1, ""norm"": 0.0}, {""term"": ""K"", ""index"": 2, ""norm"": 0.0}, {""term"": ""S"", ""index"": 0, ""norm"": 0.0}, {""term"": ""S"", ""index"": 1, ""norm"": 0.0}, {""term"": ""S"", ""index"": 2, ""norm"": 0.0}, {""term"": ""S"", ""index"": 3, ""norm"": 0.0}]",,,,,,,0.0,0.0,True
+production_product_sweep,rxx_product,4,0,3,1,4,,,,,,,,,,,2,1,0.0,0.4999999999999999,"[1, 1, 1, 1, 1]",1,,,True
+production_product_sweep,rxx_product,4,0,3,1,4,,,,,,,,,,,2,8,0.0,0.4999999999999999,"[1, 1, 1, 1, 1]",1,,,True
+production_product_sweep,rxx_product,4,0,3,1,4,,,,,,,,,,,32,1,0.0,0.4999999999999999,"[1, 1, 1, 1, 1]",1,,,True
+production_product_sweep,rxx_product,4,0,3,1,4,,,,,,,,,,,32,8,0.0,0.4999999999999999,"[1, 1, 1, 1, 1]",1,,,True

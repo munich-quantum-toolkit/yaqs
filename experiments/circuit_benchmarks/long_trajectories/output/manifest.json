@@ -1,0 +1,113 @@
+{
+  "artifacts": {
+    "trajectory_rows": "experiments/circuit_benchmarks/long_trajectories/output/trajectory_rows.csv"
+  },
+  "campaign_id": "circuit-infidelity-until-saturation-v2",
+  "cases": {
+    "heisenberg_1d": {
+      "criterion_met": true,
+      "elapsed_s": 215.21979233296588,
+      "first_reliability_crossing_steps": {
+        "gate_local_2tdvp": 14,
+        "mpo_contract_compress": 8,
+        "tebd_swap": 8
+      },
+      "individual_saturation_steps": {
+        "gate_local_2tdvp": 37,
+        "mpo_contract_compress": 28,
+        "tebd_swap": 28
+      },
+      "right_censored": false,
+      "status": "success",
+      "stop_step": 37,
+      "stop_time": 3.7
+    },
+    "heisenberg_2d": {
+      "criterion_met": true,
+      "elapsed_s": 413.081740415073,
+      "first_reliability_crossing_steps": {
+        "gate_local_2tdvp": 1,
+        "mpo_contract_compress": 2,
+        "tebd_swap": 1
+      },
+      "individual_saturation_steps": {
+        "gate_local_2tdvp": 33,
+        "mpo_contract_compress": 22,
+        "tebd_swap": 14
+      },
+      "right_censored": false,
+      "status": "success",
+      "stop_step": 33,
+      "stop_time": 3.3000000000000003
+    },
+    "ising_1d": {
+      "criterion_met": true,
+      "elapsed_s": 96.00939319096506,
+      "first_reliability_crossing_steps": {
+        "gate_local_2tdvp": 43,
+        "mpo_contract_compress": 29,
+        "tebd_swap": 29
+      },
+      "individual_saturation_steps": {
+        "gate_local_2tdvp": 62,
+        "mpo_contract_compress": 62,
+        "tebd_swap": 62
+      },
+      "right_censored": false,
+      "status": "success",
+      "stop_step": 62,
+      "stop_time": 6.2
+    },
+    "ising_2d": {
+      "criterion_met": true,
+      "elapsed_s": 311.3761748489924,
+      "first_reliability_crossing_steps": {
+        "gate_local_2tdvp": 17,
+        "mpo_contract_compress": 9,
+        "tebd_swap": 2
+      },
+      "individual_saturation_steps": {
+        "gate_local_2tdvp": 74,
+        "mpo_contract_compress": 52,
+        "tebd_swap": 11
+      },
+      "right_censored": false,
+      "status": "success",
+      "stop_step": 74,
+      "stop_time": 7.4
+    }
+  },
+  "created_utc": "2026-08-02T21:31:51.721326+00:00",
+  "criterion": {
+    "definition": "Every method remains outside the reliable regime while the range of log10 normalized infidelity over its trailing window does not exceed the stated tolerance.",
+    "log_range_decades": 0.05,
+    "max_steps": 120,
+    "reliability_threshold": 0.01,
+    "window_steps": 10,
+    "window_time": 1.0
+  },
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260731",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "git": {
+    "commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "diff_hash": "65133307ded20e0d74a9cbe81a434bb854127362461a3bff6b3ad875c10a3275",
+    "dirty": true
+  },
+  "source_hash": "2ad0cc4fb8265aa8bdabb57b57a290afc570478be4dae50e93c38653abfe7cfe"
+}

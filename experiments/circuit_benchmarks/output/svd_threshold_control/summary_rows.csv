@@ -1,0 +1,13 @@
+campaign_id,case,method,chi_max,n_sub,svd_threshold,target_step,endpoint_infidelity,max_infidelity_through_target,endpoint_parameter_count,max_completed_step_parameter_count,endpoint_max_bond_dim,max_completed_step_bond_dim,single_trajectory_runtime_s
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-14,15,0.008142301522302442,0.008142301522302442,11880,11880,28,28,25.603555696550757
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-13,15,0.009524171677551485,0.009524171677551485,11880,11880,28,28,20.767540492815897
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-12,15,0.009654256250539062,0.009654256250539062,11880,11880,28,28,19.741652089636773
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-09,15,0.013658886426206385,0.013658886426206385,11880,11880,28,28,17.043837196892127
+svd_threshold_control_final_protocol_v1,ising_2d,mpo_contract_compress,96,1,1e-14,15,0.00897893513317638,0.00897893513317638,72360,72360,96,96,10.596380485687405
+svd_threshold_control_final_protocol_v1,ising_2d,mpo_contract_compress,96,1,1e-13,15,0.009306663569043083,0.009306663569043083,72360,72360,96,96,10.244378239614889
+svd_threshold_control_final_protocol_v1,ising_2d,mpo_contract_compress,96,1,1e-12,15,0.008900941065878465,0.008900941065878465,72360,72360,96,96,10.139218457974494
+svd_threshold_control_final_protocol_v1,ising_2d,mpo_contract_compress,96,1,1e-09,15,0.004486406760377704,0.004486406760377704,72360,72360,96,96,7.741747292457148
+svd_threshold_control_final_protocol_v1,ising_2d,tebd_swap,192,1,1e-14,15,0.00421132751263209,0.00421132751263209,141992,141992,192,192,13.079308101441711
+svd_threshold_control_final_protocol_v1,ising_2d,tebd_swap,192,1,1e-13,15,0.004404644865690588,0.004404644865690588,141992,141992,192,192,12.824219706933945
+svd_threshold_control_final_protocol_v1,ising_2d,tebd_swap,192,1,1e-12,15,0.003738969620484367,0.003738969620484367,141992,141992,192,192,12.452229709830135
+svd_threshold_control_final_protocol_v1,ising_2d,tebd_swap,192,1,1e-09,15,0.003293593615919299,0.003293593615919299,141992,141992,192,192,11.148195119807497

@@ -1,0 +1,219 @@
+{
+  "all_pass": true,
+  "analytical_obstruction": [
+    {
+      "N": 4,
+      "absolute_residual": 0.0,
+      "all_projector_terms_vanish": true,
+      "all_schmidt_ranks_one": true,
+      "check_family": "analytical_obstruction",
+      "geometry": "product_xx",
+      "infidelity_vs_unchanged": 0.4999999999999999,
+      "p1_action_norm": 0.0,
+      "p1_action_rel": 0.0,
+      "p2_action_norm": 0.0,
+      "p2_action_rel": 0.0,
+      "pass": true,
+      "relative_residual": 0.0,
+      "site_a_one_based": 1,
+      "site_a_zero_based": 0,
+      "site_b_one_based": 4,
+      "site_b_zero_based": 3,
+      "term_norms_json": "[{\"term\": \"K\", \"index\": 0, \"norm\": 0.0}, {\"term\": \"K\", \"index\": 1, \"norm\": 0.0}, {\"term\": \"K\", \"index\": 2, \"norm\": 0.0}, {\"term\": \"S\", \"index\": 0, \"norm\": 0.0}, {\"term\": \"S\", \"index\": 1, \"norm\": 0.0}, {\"term\": \"S\", \"index\": 2, \"norm\": 0.0}, {\"term\": \"S\", \"index\": 3, \"norm\": 0.0}]",
+      "theta": 1.5707963267948966,
+      "x_norm": 1.0
+    }
+  ],
+  "artifacts": {
+    "exterior_cancellation": "output/exterior_cancellation.csv",
+    "obstruction_checks": "output/obstruction_checks.csv",
+    "projector_checks": "output/projector_checks.csv",
+    "summary": "output/summary.json",
+    "table": "output/table_structural.tex",
+    "table_production_stall": "output/table_production_stall.tex"
+  },
+  "configuration": {
+    "N": 8,
+    "bond_profile": [
+      1,
+      2,
+      4,
+      4,
+      4,
+      4,
+      4,
+      2,
+      1
+    ],
+    "chi": 4,
+    "d": 2,
+    "exterior_seed": 101,
+    "exterior_sites": [
+      2,
+      5
+    ],
+    "fixed_rank_geometries": {
+      "interior": [
+        2,
+        5
+      ],
+      "left_boundary": [
+        0,
+        4
+      ],
+      "right_boundary": [
+        3,
+        7
+      ]
+    },
+    "generator_seed": 20260731,
+    "mps_seeds": [
+      101,
+      102,
+      103
+    ],
+    "nn_geometries": {
+      "interior": [
+        3,
+        4
+      ],
+      "left_boundary": [
+        0,
+        1
+      ],
+      "right_boundary": [
+        6,
+        7
+      ]
+    },
+    "product_sweep_configs": [
+      {
+        "chi_max": 2,
+        "n_sub": 1
+      },
+      {
+        "chi_max": 2,
+        "n_sub": 8
+      },
+      {
+        "chi_max": 32,
+        "n_sub": 1
+      },
+      {
+        "chi_max": 32,
+        "n_sub": 8
+      }
+    ],
+    "two_site_geometries": {
+      "adjacent_interior": [
+        3,
+        4
+      ],
+      "left_clipped": [
+        0,
+        4
+      ],
+      "right_clipped": [
+        3,
+        7
+      ],
+      "separated_interior": [
+        2,
+        5
+      ]
+    }
+  },
+  "description": "Structural projector validation: locality identities plus the minimal-support obstruction (analytical_obstruction / production_product_sweep)",
+  "dtype": "complex128",
+  "experiment_dir": "experiments/structural_checks",
+  "fixture_error": null,
+  "generated_utc": "2026-08-07T10:16:04.864423+00:00",
+  "maximum_residual_by_family": {
+    "analytical_obstruction": 0.0,
+    "exterior_cancellation_P1": 4.869232756717637e-16,
+    "exterior_cancellation_P2": 2.29803009844118e-16,
+    "fixed_rank_locality": 8.40166968283472e-16,
+    "nearest_neighbor_exactness": 8.204383645081037e-16,
+    "projector_algebra": 9.16211337771552e-16,
+    "two_site_locality": 1.0680081513363372e-15
+  },
+  "n_cases": 49,
+  "n_failed": 0,
+  "n_passed": 49,
+  "numpy": "2.4.6",
+  "production_product_sweep": [
+    {
+      "N": 4,
+      "check_family": "production_product_sweep",
+      "chi_max": 2,
+      "final_bond_profile": "[1, 1, 1, 1, 1]",
+      "geometry": "rxx_product",
+      "infidelity_vs_exact": 0.4999999999999999,
+      "n_sub": 1,
+      "pass": true,
+      "peak_retained_rank_during_split": 1,
+      "phase_aligned_distance": 0.0,
+      "site_a_one_based": 1,
+      "site_a_zero_based": 0,
+      "site_b_one_based": 4,
+      "site_b_zero_based": 3
+    },
+    {
+      "N": 4,
+      "check_family": "production_product_sweep",
+      "chi_max": 2,
+      "final_bond_profile": "[1, 1, 1, 1, 1]",
+      "geometry": "rxx_product",
+      "infidelity_vs_exact": 0.4999999999999999,
+      "n_sub": 8,
+      "pass": true,
+      "peak_retained_rank_during_split": 1,
+      "phase_aligned_distance": 0.0,
+      "site_a_one_based": 1,
+      "site_a_zero_based": 0,
+      "site_b_one_based": 4,
+      "site_b_zero_based": 3
+    },
+    {
+      "N": 4,
+      "check_family": "production_product_sweep",
+      "chi_max": 32,
+      "final_bond_profile": "[1, 1, 1, 1, 1]",
+      "geometry": "rxx_product",
+      "infidelity_vs_exact": 0.4999999999999999,
+      "n_sub": 1,
+      "pass": true,
+      "peak_retained_rank_during_split": 1,
+      "phase_aligned_distance": 0.0,
+      "site_a_one_based": 1,
+      "site_a_zero_based": 0,
+      "site_b_one_based": 4,
+      "site_b_zero_based": 3
+    },
+    {
+      "N": 4,
+      "check_family": "production_product_sweep",
+      "chi_max": 32,
+      "final_bond_profile": "[1, 1, 1, 1, 1]",
+      "geometry": "rxx_product",
+      "infidelity_vs_exact": 0.4999999999999999,
+      "n_sub": 8,
+      "pass": true,
+      "peak_retained_rank_during_split": 1,
+      "phase_aligned_distance": 0.0,
+      "site_a_one_based": 1,
+      "site_a_zero_based": 0,
+      "site_b_one_based": 4,
+      "site_b_zero_based": 3
+    }
+  ],
+  "python": "3.14.2",
+  "tolerances": {
+    "exterior_term_floor_factor": 1e-06,
+    "obstruction_p2": 1e-12,
+    "production_stall_distance": 1e-12,
+    "production_stall_infidelity": 1e-12,
+    "relative_residual": 1e-10
+  },
+  "yaqs": "0.6.1.dev85+g2df89739f.d20260807"
+}

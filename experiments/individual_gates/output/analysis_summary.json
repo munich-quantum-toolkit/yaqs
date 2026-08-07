@@ -1,0 +1,98 @@
+{
+  "cnot_rank_summary": {
+    "control": 1,
+    "csv": "experiments/individual_gates/output/cnot_rank_summary.csv",
+    "display_tdvp_n_sub": [
+      1,
+      16,
+      256
+    ],
+    "n_rows": 30,
+    "note": "n_sub=128 retained as refinement-control; display uses {1,16,256}. n_sub=256 is fine resolution, not labeled converged.",
+    "sites_paper_one_based": [
+      2,
+      11
+    ],
+    "target": 10
+  },
+  "discarded_weight_note": "Do not compare cumulative discarded weights quantitatively across methods without noting that methods perform different numbers and sequences of SVDs.",
+  "methods": [
+    "gate_local_2tdvp",
+    "mpo_zipup",
+    "tebd_swap"
+  ],
+  "n_campaign_rows": 468,
+  "pauli_finite_angle_summary": {
+    "chi_max": 8,
+    "csv": "experiments/individual_gates/output/pauli_finite_angle_summary.csv",
+    "n_finite_angle_cells": 63,
+    "n_matched_cells": 72,
+    "note": "Matched cells: same gate, method, \u03c7_max, n_sub, and angle; median/min/max over three states. Do not pool across unmatched caps/angles/gates. Discarded weights are not compared across methods here (methods perform different SVD sequences).",
+    "tebd_x0": [
+      {
+        "chi_max": 8,
+        "gate": "rxx",
+        "infidelity_max": 0.29339051981997644,
+        "infidelity_median": 0.2359431254208647,
+        "infidelity_min": 0.0484808812842068,
+        "is_identity_angle": true,
+        "method": "tebd_swap",
+        "n_states": 3,
+        "n_sub": 1,
+        "seeds": [
+          11,
+          22,
+          33
+        ],
+        "theta": 0.0,
+        "x": 0.0
+      },
+      {
+        "chi_max": 8,
+        "gate": "ryy",
+        "infidelity_max": 0.29339051981997644,
+        "infidelity_median": 0.2359431254208647,
+        "infidelity_min": 0.0484808812842068,
+        "is_identity_angle": true,
+        "method": "tebd_swap",
+        "n_states": 3,
+        "n_sub": 1,
+        "seeds": [
+          11,
+          22,
+          33
+        ],
+        "theta": 0.0,
+        "x": 0.0
+      },
+      {
+        "chi_max": 8,
+        "gate": "rzz",
+        "infidelity_max": 0.29339051981997644,
+        "infidelity_median": 0.2359431254208647,
+        "infidelity_min": 0.0484808812842068,
+        "is_identity_angle": true,
+        "method": "tebd_swap",
+        "n_states": 3,
+        "n_sub": 1,
+        "seeds": [
+          11,
+          22,
+          33
+        ],
+        "theta": 0.0,
+        "x": 0.0
+      }
+    ]
+  },
+  "pauli_gates": [
+    "rxx",
+    "ryy",
+    "rzz"
+  ],
+  "seeds": [
+    11,
+    22,
+    33
+  ]
+}

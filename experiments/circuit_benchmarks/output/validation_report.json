@@ -1,0 +1,96 @@
+{
+  "complete": true,
+  "created_utc": "2026-08-02T19:39:20.345787+00:00",
+  "exact": {
+    "heisenberg_1d": {
+      "expected_protocol": {
+        "case": "heisenberg_1d",
+        "circuit_fingerprint": "f2a4530c0eb1b228f683a14fdd19e56f719147ef9e4e1180ade1ec767aae0de7",
+        "cols": 16,
+        "geometry": "1d",
+        "initial_basis_string": "0101010101010101",
+        "model": "heisenberg",
+        "n_edges": 15,
+        "n_qubits": 16,
+        "n_steps": 30,
+        "rows": 1
+      },
+      "max_norm_error": 9.43689570931383e-14,
+      "present": true,
+      "shape": [
+        31,
+        65536
+      ]
+    },
+    "heisenberg_2d": {
+      "expected_protocol": {
+        "case": "heisenberg_2d",
+        "circuit_fingerprint": "2f06dff7eba9fdb28bde9cfaa84fd0adbe1327f0cefd4a7bbab482e746b9b707",
+        "cols": 4,
+        "geometry": "2d",
+        "initial_basis_string": "0101010101010101",
+        "model": "heisenberg",
+        "n_edges": 24,
+        "n_qubits": 16,
+        "n_steps": 30,
+        "rows": 4
+      },
+      "max_norm_error": 1.5343282200319663e-13,
+      "present": true,
+      "shape": [
+        31,
+        65536
+      ]
+    },
+    "ising_1d": {
+      "expected_protocol": {
+        "case": "ising_1d",
+        "circuit_fingerprint": "82e72f07d73dfe5687fd6ad826ae4f245c8464e5aa7ef3600d4896c224a76a1a",
+        "cols": 16,
+        "geometry": "1d",
+        "initial_basis_string": "0000000000000000",
+        "model": "ising",
+        "n_edges": 15,
+        "n_qubits": 16,
+        "n_steps": 30,
+        "rows": 1
+      },
+      "max_norm_error": 5.839773109528323e-14,
+      "present": true,
+      "shape": [
+        31,
+        65536
+      ]
+    },
+    "ising_2d": {
+      "expected_protocol": {
+        "case": "ising_2d",
+        "circuit_fingerprint": "5eef7d8270326154d9beb7eba59f93fd898ed30351f583530400f345de741b2f",
+        "cols": 4,
+        "geometry": "2d",
+        "initial_basis_string": "0000000000000000",
+        "model": "ising",
+        "n_edges": 24,
+        "n_qubits": 16,
+        "n_steps": 30,
+        "rows": 4
+      },
+      "max_norm_error": 7.704947790898586e-14,
+      "present": true,
+      "shape": [
+        31,
+        65536
+      ]
+    }
+  },
+  "failed_tasks": [],
+  "frontier_missing": [],
+  "main_complete_count": 12,
+  "main_expected_count": 12,
+  "main_missing": [],
+  "publication_ready": true,
+  "publication_ready_note": "Completeness is necessary, not sufficient: inspect the trajectories, threshold sensitivity, numerical-resolution report, and figure before publication.",
+  "raw_checkpoint_count": 276914,
+  "resolution_confirmed": true,
+  "timing_missing": []
+}

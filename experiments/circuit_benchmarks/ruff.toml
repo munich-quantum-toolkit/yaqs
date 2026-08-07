@@ -1,0 +1,10 @@
+# Local overrides for this standalone publication campaign.
+
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "I", "UP", "W"]
+ignore = [
+  "E402", # the runner fixes numerical thread limits before importing NumPy/YAQS
+]

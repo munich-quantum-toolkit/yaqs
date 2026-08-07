@@ -1,0 +1,13 @@
+{
+  "csv": "experiments/individual_gates/output/campaign_rows.csv",
+  "git": {
+    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_dirty": "true"
+  },
+  "n_new": 468,
+  "n_resumed": 0,
+  "n_rows": 468,
+  "note": "Rows retain their recorded Git provenance.",
+  "stage": "campaign"
+}

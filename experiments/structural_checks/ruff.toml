@@ -1,0 +1,15 @@
+# Local overrides for this CLI experiment. The repo excludes experiments/
+# from the global ruff config; this file is auto-discovered when linting
+# this directory (including `uvx ruff check experiments/structural_checks`).
+
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "I", "UP", "W"]
+ignore = [
+  "E402", # sys.path bootstrap before local imports
+]
+
+[lint.per-file-ignores]
+"test_*.py" = ["S101"]

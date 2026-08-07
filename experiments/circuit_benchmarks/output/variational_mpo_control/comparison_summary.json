@@ -1,0 +1,128 @@
+{
+  "benchmark_source_sha256": "d06a956a272c1d5f486d4ac75510ad68518bc685658760372239af0ee34ed630",
+  "campaign_id": "variational_mpo_ising_fixed_horizon_v3",
+  "caps": {
+    "16": {
+      "all_selected_fits_converged": true,
+      "maximum_phase_distance_to_mpo": 0.17976427558901797,
+      "maximum_sweeps": 13,
+      "mpo_contract_compress": {
+        "endpoint_infidelity": 0.10685704885964153,
+        "endpoint_parameter_count": 4776,
+        "peak_parameter_count": 4776,
+        "worst_prefix_infidelity": 0.10685704885964153
+      },
+      "retried_fits": 0,
+      "variational_fits": 270,
+      "variational_mpo": {
+        "endpoint_infidelity": 0.1159437903562317,
+        "endpoint_parameter_count": 4776,
+        "peak_parameter_count": 15016,
+        "runtime_s": 224.29624806367792,
+        "worst_prefix_infidelity": 0.1159437903562317
+      }
+    },
+    "28": {
+      "all_selected_fits_converged": true,
+      "maximum_phase_distance_to_mpo": 0.11910976286199602,
+      "maximum_sweeps": 8,
+      "mpo_contract_compress": {
+        "endpoint_infidelity": 0.08910431936206686,
+        "endpoint_parameter_count": 11880,
+        "peak_parameter_count": 11880,
+        "worst_prefix_infidelity": 0.08910431936206686
+      },
+      "retried_fits": 0,
+      "variational_fits": 270,
+      "variational_mpo": {
+        "endpoint_infidelity": 0.0905077409463414,
+        "endpoint_parameter_count": 11880,
+        "peak_parameter_count": 41896,
+        "runtime_s": 3454.383549743332,
+        "worst_prefix_infidelity": 0.0905077409463414
+      }
+    },
+    "4": {
+      "all_selected_fits_converged": true,
+      "maximum_phase_distance_to_mpo": 0.6001081615388563,
+      "maximum_sweeps": 6,
+      "mpo_contract_compress": {
+        "endpoint_infidelity": 0.3265325339231263,
+        "endpoint_parameter_count": 424,
+        "peak_parameter_count": 424,
+        "worst_prefix_infidelity": 0.3265325339231263
+      },
+      "retried_fits": 0,
+      "variational_fits": 270,
+      "variational_mpo": {
+        "endpoint_infidelity": 0.359771816325294,
+        "endpoint_parameter_count": 424,
+        "peak_parameter_count": 1064,
+        "runtime_s": 27.66377439466305,
+        "worst_prefix_infidelity": 0.359771816325294
+      }
+    },
+    "8": {
+      "all_selected_fits_converged": true,
+      "maximum_phase_distance_to_mpo": 0.31647642136263854,
+      "maximum_sweeps": 75,
+      "mpo_contract_compress": {
+        "endpoint_infidelity": 0.17774161067945082,
+        "endpoint_parameter_count": 1448,
+        "peak_parameter_count": 1448,
+        "worst_prefix_infidelity": 0.17774161067945082
+      },
+      "retried_fits": 1,
+      "variational_fits": 270,
+      "variational_mpo": {
+        "endpoint_infidelity": 0.18549323887952385,
+        "endpoint_parameter_count": 1448,
+        "peak_parameter_count": 4008,
+        "runtime_s": 41.537632611813024,
+        "worst_prefix_infidelity": 0.18549323887952385
+      }
+    }
+  },
+  "case": "ising_2d",
+  "control_source_sha256": "348baf76c10b1da2cdef7362549ec50aa0ed067777414372ec3fd81804432b42",
+  "core_source_sha256": "5de656faaffffcfdfed32d8e2aab4060ce960fca436c40ed5eb5e13c5a72579d",
+  "exact_reference_sha256": "ea22e7ae19c4293f7a369816c03bd452f170bf5a1dddee9fdb3a2d2cc49f4e6e",
+  "fit_diagnostics": "experiments/circuit_benchmarks/output/variational_mpo_control/circuit_fit_diagnostics.csv.gz",
+  "source_data": "experiments/circuit_benchmarks/output/variational_mpo_control/circuit_rows.csv",
+  "target_step": 15,
+  "thread_metadata": {
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    },
+    "threadpools": [
+      {
+        "architecture": "Haswell",
+        "filepath": ".venv/lib/python3.14/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.188.0"
+      },
+      {
+        "architecture": "Haswell",
+        "filepath": ".venv/lib/python3.14/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.dev"
+      }
+    ],
+    "threads": 1
+  },
+  "threads": 1,
+  "timing_repeats_per_cap": 1,
+  "timing_scope": "one complete one-thread observation per cap for the current two-initializer implementation; no repeated timing baseline and no fitted scaling exponent"
+}

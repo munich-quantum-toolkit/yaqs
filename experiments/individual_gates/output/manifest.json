@@ -1,0 +1,24 @@
+{
+  "artifacts": {
+    "campaign_rows": "experiments/individual_gates/output/campaign_rows.csv",
+    "cnot_rank_rows": "experiments/individual_gates/output/cnot_rank_rows.csv",
+    "refinement_controls": "experiments/individual_gates/output/refinement_controls.json",
+    "refinement_rows": "experiments/individual_gates/output/refinement_rows.csv",
+    "validation_report": "experiments/individual_gates/output/validation_report.json"
+  },
+  "campaign_id": "individual_gates_v2_sites_1_10",
+  "completed_utc": "2026-08-03T15:02:09.337841+00:00",
+  "cx_generator_branch": "H_CX = (pi/4)(I-Z_c)\u2297(I-X_t) = (pi/2)(I-U_CX); U_CX(s)=expm(-i s H_CX) for s in [0,1]; expm(-i H_CX)=CX",
+  "git": {
+    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_dirty": "true"
+  },
+  "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+  "versions": {
+    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260803",
+    "numpy": "2.4.6",
+    "qiskit": "2.5.1",
+    "scipy": "1.18.0"
+  }
+}

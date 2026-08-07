@@ -30,22 +30,6 @@ if TYPE_CHECKING:
 # --- Truncation policy ---
 
 
-def get_min_keep(sim_params: AnalogSimParams | DigitalSimParams) -> int:
-    """Return the minimum bond dimension to retain during TDVP truncation.
-
-    Args:
-        sim_params: Simulation parameters supplying ``max_bond_dim``.
-
-    Returns:
-        ``min(2, max_bond_dim)`` when a cap is set, otherwise ``2``.
-
-    """
-    cap = sim_params.max_bond_dim
-    if cap is None:
-        return 2
-    return min(2, cap)
-
-
 def split_tdvp(
     merged: NDArray[np.complex128],
     sim_params: AnalogSimParams | DigitalSimParams,
@@ -59,7 +43,8 @@ def split_tdvp(
     Thin adapter around :func:`mqt.yaqs.core.methods.decompositions.split_two_site`.
     When ``dynamic`` is True, no ``max_bond_dim`` cap is applied during truncation
     (bond growth is handled by the dynamic TDVP sweep and global χ enforcement).
-    Otherwise the cap is ``sim_params.max_bond_dim``.
+    Otherwise the cap is ``sim_params.max_bond_dim``. Exact-zero singular values
+    may be discarded (``min_keep=1``); there is no unconditional rank-two padding.
 
     Args:
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
@@ -80,7 +65,7 @@ def split_tdvp(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic else sim_params.max_bond_dim,
-        min_keep=get_min_keep(sim_params),
+        min_keep=1,
     )
 
 

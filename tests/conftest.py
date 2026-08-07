@@ -117,3 +117,15 @@ requires_qasm3_import = pytest.mark.skipif(
     not HAS_QASM3_IMPORT,
     reason="qiskit-qasm3-import is not installed",
 )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register markers used across digital and TDVP regression suites."""
+    config.addinivalue_line(
+        "markers",
+        "tdvp_regression: circuit TDVP infrastructure stability regressions",
+    )
+    config.addinivalue_line(
+        "markers",
+        "slow: tests that need many TDVP sweeps or large L",
+    )

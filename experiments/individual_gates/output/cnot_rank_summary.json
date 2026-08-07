@@ -1,0 +1,141 @@
+{
+  "chi_max_values": [
+    8,
+    10,
+    12,
+    14,
+    16
+  ],
+  "control": 1,
+  "csv": "experiments/individual_gates/output/cnot_rank_rows.csv",
+  "distances_n128_n256": [
+    {
+      "chi_max": 8,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0008954989640276124,
+      "seed": 11
+    },
+    {
+      "chi_max": 8,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0008197813898923519,
+      "seed": 22
+    },
+    {
+      "chi_max": 8,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0008017677261636056,
+      "seed": 33
+    },
+    {
+      "chi_max": 10,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.004102962953187991,
+      "seed": 11
+    },
+    {
+      "chi_max": 10,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.003912933196101194,
+      "seed": 22
+    },
+    {
+      "chi_max": 10,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.004696587041418282,
+      "seed": 33
+    },
+    {
+      "chi_max": 12,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0030796358896217377,
+      "seed": 11
+    },
+    {
+      "chi_max": 12,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0036991591674706685,
+      "seed": 22
+    },
+    {
+      "chi_max": 12,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0037471710608544028,
+      "seed": 33
+    },
+    {
+      "chi_max": 14,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0016259392505662475,
+      "seed": 11
+    },
+    {
+      "chi_max": 14,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0008506750113195252,
+      "seed": 22
+    },
+    {
+      "chi_max": 14,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 0.0024201700521612524,
+      "seed": 33
+    },
+    {
+      "chi_max": 16,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 1.3710023138782552e-12,
+      "seed": 11
+    },
+    {
+      "chi_max": 16,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 2.0458743706211593e-13,
+      "seed": 22
+    },
+    {
+      "chi_max": 16,
+      "note": "Fine-resolution control only; small distance does not imply convergence.",
+      "phase_aligned_distance_n128_n256": 3.5589830353865196e-13,
+      "seed": 33
+    }
+  ],
+  "git": {
+    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_dirty": "true"
+  },
+  "matched_table": {
+    "control": 1,
+    "csv": "experiments/individual_gates/output/cnot_rank_summary.csv",
+    "display_tdvp_n_sub": [
+      1,
+      16,
+      256
+    ],
+    "n_rows": 30,
+    "note": "n_sub=128 retained as refinement-control; display uses {1,16,256}. n_sub=256 is fine resolution, not labeled converged.",
+    "sites_paper_one_based": [
+      2,
+      11
+    ],
+    "target": 10
+  },
+  "n_new": 90,
+  "n_resumed": 0,
+  "n_rows": 90,
+  "note": "Separate from production-threshold campaign CNOT rows; do not merge.",
+  "sites_paper_one_based": [
+    2,
+    11
+  ],
+  "stage": "cnot_rank",
+  "svd_threshold": 1e-300,
+  "target": 10,
+  "tdvp_n_sub": [
+    1,
+    16,
+    128,
+    256
+  ]
+}

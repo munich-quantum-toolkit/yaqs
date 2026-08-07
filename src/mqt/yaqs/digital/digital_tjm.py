@@ -29,7 +29,7 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
+from ..core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
 from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
@@ -379,7 +379,7 @@ def apply_two_qubit_gate_tebd(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
-        min_keep=get_min_keep(sim_params),
+        min_keep=1,
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right

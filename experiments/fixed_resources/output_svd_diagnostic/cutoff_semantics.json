@@ -1,8 +1,0 @@
-{
-  "production_trunc_mode": "discarded_weight",
-  "tau_meaning": "Cumulative discarded squared singular-value weight; retained_rank=min(keep_cutoff, chi_max), min_keep=1.",
-  "gate_library_split_tensor_hard_cutoff": 1e-14,
-  "corrected_benchmark_svd_threshold": 1e-13,
-  "diagnostic_reference_tau": 1e-14,
-  "reuse_1e-14_from_corrected": false
-}

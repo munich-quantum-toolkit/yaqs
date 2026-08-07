@@ -1,0 +1,87 @@
+{
+  "artifacts": {
+    "fit_diagnostics": "experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/fit_diagnostics.csv.gz",
+    "trajectory_rows": "experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/trajectory_rows.csv"
+  },
+  "campaign_id": "circuit-long-trajectory-variational-mpo-v1",
+  "cases": {
+    "heisenberg_1d": {
+      "all_selected_fits_converged": true,
+      "cumulative_runtime_s": 4.317576900590211,
+      "elapsed_wall_s": 4.983529653865844,
+      "maximum_sweeps": 0,
+      "primary_endpoint": 37,
+      "retried_fits": 0,
+      "runtime_budget_overshoot_s": 0.0,
+      "status": "success",
+      "stop_reason": "primary_panel_endpoint",
+      "stop_step": 37,
+      "stop_time": 3.7,
+      "variational_fits": 0
+    },
+    "ising_1d": {
+      "all_selected_fits_converged": true,
+      "cumulative_runtime_s": 2.5516159483231604,
+      "elapsed_wall_s": 3.2178086929488927,
+      "maximum_sweeps": 0,
+      "primary_endpoint": 62,
+      "retried_fits": 0,
+      "runtime_budget_overshoot_s": 0.0,
+      "status": "success",
+      "stop_reason": "primary_panel_endpoint",
+      "stop_step": 62,
+      "stop_time": 6.2,
+      "variational_fits": 0
+    },
+    "ising_2d": {
+      "all_selected_fits_converged": true,
+      "cumulative_runtime_s": 468.5847485540435,
+      "elapsed_wall_s": 468.64830398210324,
+      "maximum_sweeps": 4,
+      "primary_endpoint": 74,
+      "retried_fits": 0,
+      "runtime_budget_overshoot_s": 368.5847485540435,
+      "status": "success",
+      "stop_reason": "runtime_budget_reached_at_completed_step",
+      "stop_step": 4,
+      "stop_time": 0.4,
+      "variational_fits": 72
+    }
+  },
+  "created_utc": "2026-08-06T14:59:19.359007+00:00",
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260731",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "git": {
+    "commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "diff_hash": "10d851d79bce0a7945050bc2385537de6002530bba7a39bf5be56c0a2c18f208",
+    "dirty": true
+  },
+  "primary_campaign_id": "circuit-infidelity-until-saturation-v2",
+  "primary_source_hash": "2ad0cc4fb8265aa8bdabb57b57a290afc570478be4dae50e93c38653abfe7cfe",
+  "runtime_budget_s": 100.0,
+  "runtime_scope": {
+    "excluded": "schedule compilation, state initialization, dense evolution, fidelity and resource diagnostics, checkpointing, and plotting",
+    "included": "variational-state gate updates, including exact MPO target construction, both initializers, and alternating fits for separated gates",
+    "repeats": 1,
+    "threads": 1,
+    "warmups": 0
+  },
+  "source_hash": "95112778d5208971d837449bfceb0ba1b2ab6e3fc7c2dc3566fb2ebbe06fbfe6",
+  "stop_definition": "First completed Trotter step with cumulative variational update runtime at least the budget, or the primary panel endpoint if it occurs first."
+}

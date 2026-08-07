@@ -1,0 +1,229 @@
+{
+  "adaptive_campaign_id": "circuit-infidelity-until-saturation-v2",
+  "adaptive_source_hash": "2ad0cc4fb8265aa8bdabb57b57a290afc570478be4dae50e93c38653abfe7cfe",
+  "artifacts": {
+    "timing_rows": "experiments/circuit_benchmarks/long_trajectories/output/timing/timing_rows.csv",
+    "timing_summary": "experiments/circuit_benchmarks/long_trajectories/output/timing/timing_summary.csv"
+  },
+  "campaign_id": "circuit-fixed-endpoint-timing-v1",
+  "created_utc": "2026-08-03T08:42:47.746590+00:00",
+  "endpoints": {
+    "heisenberg_1d": 37,
+    "heisenberg_2d": 33,
+    "ising_1d": 62,
+    "ising_2d": 74
+  },
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260731",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "git": {
+    "commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
+    "diff_hash": "65133307ded20e0d74a9cbe81a434bb854127362461a3bff6b3ad875c10a3275",
+    "dirty": true
+  },
+  "repeats": 3,
+  "source_hash": "4abe4b91ddc598fe51dd8dc7d841b8ce43693a044ba166d82f5def33dadab9e4",
+  "tasks": {
+    "heisenberg_1d/gate_local_2tdvp/repeat0": {
+      "elapsed_wall_s": 171.47992128995247,
+      "endpoint_infidelity": 0.6027130517522814,
+      "status": "success"
+    },
+    "heisenberg_1d/gate_local_2tdvp/repeat1": {
+      "elapsed_wall_s": 171.20481132296845,
+      "endpoint_infidelity": 0.6027130517522814,
+      "status": "success"
+    },
+    "heisenberg_1d/gate_local_2tdvp/repeat2": {
+      "elapsed_wall_s": 176.01728825003374,
+      "endpoint_infidelity": 0.6027130517522814,
+      "status": "success"
+    },
+    "heisenberg_1d/mpo_contract_compress/repeat0": {
+      "elapsed_wall_s": 4.33957787998952,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_1d/mpo_contract_compress/repeat1": {
+      "elapsed_wall_s": 4.381504438002594,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_1d/mpo_contract_compress/repeat2": {
+      "elapsed_wall_s": 4.3938984390115365,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_1d/tebd_swap/repeat0": {
+      "elapsed_wall_s": 4.317647622083314,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_1d/tebd_swap/repeat1": {
+      "elapsed_wall_s": 4.32760777999647,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_1d/tebd_swap/repeat2": {
+      "elapsed_wall_s": 4.341265839990228,
+      "endpoint_infidelity": 0.9992676521900743,
+      "status": "success"
+    },
+    "heisenberg_2d/gate_local_2tdvp/repeat0": {
+      "elapsed_wall_s": 324.9441877879435,
+      "endpoint_infidelity": 0.673729251791094,
+      "status": "success"
+    },
+    "heisenberg_2d/gate_local_2tdvp/repeat1": {
+      "elapsed_wall_s": 321.5819327359786,
+      "endpoint_infidelity": 0.673729251791094,
+      "status": "success"
+    },
+    "heisenberg_2d/gate_local_2tdvp/repeat2": {
+      "elapsed_wall_s": 320.87359067599755,
+      "endpoint_infidelity": 0.673729251791094,
+      "status": "success"
+    },
+    "heisenberg_2d/mpo_contract_compress/repeat0": {
+      "elapsed_wall_s": 21.002002884983085,
+      "endpoint_infidelity": 0.7456469705501345,
+      "status": "success"
+    },
+    "heisenberg_2d/mpo_contract_compress/repeat1": {
+      "elapsed_wall_s": 21.266061736969277,
+      "endpoint_infidelity": 0.7456469705501345,
+      "status": "success"
+    },
+    "heisenberg_2d/mpo_contract_compress/repeat2": {
+      "elapsed_wall_s": 20.96421135601122,
+      "endpoint_infidelity": 0.7456469705501345,
+      "status": "success"
+    },
+    "heisenberg_2d/tebd_swap/repeat0": {
+      "elapsed_wall_s": 11.950130890938453,
+      "endpoint_infidelity": 0.9998973528275418,
+      "status": "success"
+    },
+    "heisenberg_2d/tebd_swap/repeat1": {
+      "elapsed_wall_s": 11.941841027000919,
+      "endpoint_infidelity": 0.9998973528275418,
+      "status": "success"
+    },
+    "heisenberg_2d/tebd_swap/repeat2": {
+      "elapsed_wall_s": 11.911967979976907,
+      "endpoint_infidelity": 0.9998973528275418,
+      "status": "success"
+    },
+    "ising_1d/gate_local_2tdvp/repeat0": {
+      "elapsed_wall_s": 75.79088260408025,
+      "endpoint_infidelity": 0.1544611213475281,
+      "status": "success"
+    },
+    "ising_1d/gate_local_2tdvp/repeat1": {
+      "elapsed_wall_s": 76.14178597892169,
+      "endpoint_infidelity": 0.1544611213475281,
+      "status": "success"
+    },
+    "ising_1d/gate_local_2tdvp/repeat2": {
+      "elapsed_wall_s": 74.88045092998073,
+      "endpoint_infidelity": 0.1544611213475281,
+      "status": "success"
+    },
+    "ising_1d/mpo_contract_compress/repeat0": {
+      "elapsed_wall_s": 2.5668300470570102,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_1d/mpo_contract_compress/repeat1": {
+      "elapsed_wall_s": 2.5651415939209983,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_1d/mpo_contract_compress/repeat2": {
+      "elapsed_wall_s": 2.5539771940093488,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_1d/tebd_swap/repeat0": {
+      "elapsed_wall_s": 2.5866278080502525,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_1d/tebd_swap/repeat1": {
+      "elapsed_wall_s": 2.5490336740622297,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_1d/tebd_swap/repeat2": {
+      "elapsed_wall_s": 2.585834224941209,
+      "endpoint_infidelity": 0.5625345071136019,
+      "status": "success"
+    },
+    "ising_2d/gate_local_2tdvp/repeat0": {
+      "elapsed_wall_s": 244.2942691699136,
+      "endpoint_infidelity": 0.09369243451358333,
+      "status": "success"
+    },
+    "ising_2d/gate_local_2tdvp/repeat1": {
+      "elapsed_wall_s": 242.699474707013,
+      "endpoint_infidelity": 0.09369243451358333,
+      "status": "success"
+    },
+    "ising_2d/gate_local_2tdvp/repeat2": {
+      "elapsed_wall_s": 245.74288032297045,
+      "endpoint_infidelity": 0.09369243451358333,
+      "status": "success"
+    },
+    "ising_2d/mpo_contract_compress/repeat0": {
+      "elapsed_wall_s": 16.411861809086986,
+      "endpoint_infidelity": 0.31406962288508344,
+      "status": "success"
+    },
+    "ising_2d/mpo_contract_compress/repeat1": {
+      "elapsed_wall_s": 16.446725627989508,
+      "endpoint_infidelity": 0.31406962288508344,
+      "status": "success"
+    },
+    "ising_2d/mpo_contract_compress/repeat2": {
+      "elapsed_wall_s": 16.362134704948403,
+      "endpoint_infidelity": 0.31406962288508344,
+      "status": "success"
+    },
+    "ising_2d/tebd_swap/repeat0": {
+      "elapsed_wall_s": 9.402979403035715,
+      "endpoint_infidelity": 0.9904226753819764,
+      "status": "success"
+    },
+    "ising_2d/tebd_swap/repeat1": {
+      "elapsed_wall_s": 9.47983701492194,
+      "endpoint_infidelity": 0.9904226753819764,
+      "status": "success"
+    },
+    "ising_2d/tebd_swap/repeat2": {
+      "elapsed_wall_s": 9.507799351005815,
+      "endpoint_infidelity": 0.9904226753819764,
+      "status": "success"
+    }
+  },
+  "timing_scope": {
+    "excluded": "schedule compilation, MPS initialization, dense evolution, endpoint fidelity, parameter/resource diagnostics, and plotting",
+    "included": "apply_mps_step for every gate in each complete Trotter step",
+    "threads": 1
+  },
+  "warmup_trajectories_per_pair": 1
+}
