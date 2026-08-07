@@ -1,5 +1,7 @@
 {
   "accuracy_task_ids": [
+    "10c1c970d5d3ccafd2db",
+    "211cbb888fcc3ff6c216",
     "258815907ab6c1754964",
     "33d658bdc325080c48a3",
     "34e96b0988a1fdc77ed7",
@@ -7,7 +9,14 @@
     "4020ec0a566be7dbaf6d",
     "45085334d93b8e925c5b",
     "63876d787b9d5ab126db",
+    "6a4ad7c478d88f6033b9",
     "982312d4d5d4e3a1231b",
+    "9a617af7cd29550e8895",
+    "a4d8a68ccc85e66c1681",
+    "c6e520481fd817aa44ca",
+    "ca43734f38d6ccda6ac0",
+    "dcc1168ac9f55207f18d",
+    "e1b8358a5ec7320cff34",
     "ed8b0e38f09eabad66ee"
   ],
   "artifacts": {
@@ -16,7 +25,7 @@
   },
   "campaign_id": "circuit_fixed_horizon_refinement_v1",
   "case": "ising_2d",
-  "coarse_input_sha256": "35899fe5f512c791644d73b0f6a7a28c14f357531477bc56ceb0214fe3869bb9",
+  "coarse_input_sha256": "c4d1f5fd39d4d0a551627792b22586290dc3ad3c67261b22f4864a1b8aa0376a",
   "hardware": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "thread_environment": {
@@ -27,7 +36,7 @@
       "VECLIB_MAXIMUM_THREADS": "1"
     }
   },
-  "last_stage": "timing",
+  "last_stage": "select",
   "mps_entry_bytes": 16,
   "refinement_caps": {
     "gate_local_2tdvp": [
@@ -36,64 +45,64 @@
       30
     ],
     "mpo_contract_compress": [
-      80,
-      96,
-      112
+      26,
+      28,
+      30
     ],
     "tebd_swap": [
-      144,
-      160,
-      176
+      26,
+      28,
+      30
     ]
   },
   "selected": [
     {
-      "endpoint_infidelity": "0.009524171677551485",
-      "last_fail_chi_max": "26",
-      "last_fail_max_infidelity_through": "0.011103176157003625",
-      "last_fail_peak_mps_bytes": "167296",
-      "last_fail_peak_parameter_count": "10456",
-      "max_infidelity_through": "0.009524171677551485",
+      "endpoint_infidelity": 0.009524171677551485,
+      "last_fail_chi_max": 26,
+      "last_fail_max_infidelity_through": 0.011103176157003625,
+      "last_fail_peak_mps_bytes": 167296,
+      "last_fail_peak_parameter_count": 10456,
+      "max_infidelity_through": 0.009524171677551485,
       "method": "gate_local_2tdvp",
-      "peak_bond_dim": "28",
-      "peak_mps_bytes": "190080",
-      "peak_parameter_count": "11880",
-      "selected_chi_max": "28",
-      "target_step": "15",
-      "target_time": "1.5",
-      "task_id": "3c93c94a593c894cf178"
+      "peak_bond_dim": 28,
+      "peak_mps_bytes": 190080,
+      "peak_parameter_count": 11880,
+      "selected_chi_max": 28,
+      "target_step": 15,
+      "target_time": 1.5,
+      "task_id": "6a4ad7c478d88f6033b9"
     },
     {
-      "endpoint_infidelity": "0.009306663569043083",
-      "last_fail_chi_max": "80",
-      "last_fail_max_infidelity_through": "0.013691253320548435",
-      "last_fail_peak_mps_bytes": "3549824",
-      "last_fail_peak_parameter_count": "221864",
-      "max_infidelity_through": "0.009306663569043083",
+      "endpoint_infidelity": 0.00864810787193504,
+      "last_fail_chi_max": 24,
+      "last_fail_max_infidelity_through": 0.0103963676635358,
+      "last_fail_peak_mps_bytes": 502400,
+      "last_fail_peak_parameter_count": 31400,
+      "max_infidelity_through": 0.00864810787193504,
       "method": "mpo_contract_compress",
-      "peak_bond_dim": "192",
-      "peak_mps_bytes": "4532864",
-      "peak_parameter_count": "283304",
-      "selected_chi_max": "96",
-      "target_step": "15",
-      "target_time": "1.5",
-      "task_id": "982312d4d5d4e3a1231b"
+      "peak_bond_dim": 52,
+      "peak_mps_bytes": 583296,
+      "peak_parameter_count": 36456,
+      "selected_chi_max": 26,
+      "target_step": 15,
+      "target_time": 1.5,
+      "task_id": "a4d8a68ccc85e66c1681"
     },
     {
-      "endpoint_infidelity": "0.004404644865690588",
-      "last_fail_chi_max": "176",
-      "last_fail_max_infidelity_through": "0.020859377375085697",
-      "last_fail_peak_mps_bytes": "2140800",
-      "last_fail_peak_parameter_count": "133800",
-      "max_infidelity_through": "0.004404644865690588",
+      "endpoint_infidelity": 0.009353909872396815,
+      "last_fail_chi_max": 30,
+      "last_fail_max_infidelity_through": 0.010842516916948708,
+      "last_fail_peak_mps_bytes": 214400,
+      "last_fail_peak_parameter_count": 13400,
+      "max_infidelity_through": 0.009353909872396815,
       "method": "tebd_swap",
-      "peak_bond_dim": "192",
-      "peak_mps_bytes": "2271872",
-      "peak_parameter_count": "141992",
-      "selected_chi_max": "192",
-      "target_step": "15",
-      "target_time": "1.5",
-      "task_id": "3172f99a2f5dcd00d7cf"
+      "peak_bond_dim": 32,
+      "peak_mps_bytes": 240256,
+      "peak_parameter_count": 15016,
+      "selected_chi_max": 32,
+      "target_step": 15,
+      "target_time": 1.5,
+      "task_id": "175b241308cff632cdf0"
     }
   ],
   "selection_rule": "Choose the tested reliable trajectory with the smallest observed peak MPS tensor storage; report the largest tested failing cap below it as the resolution bracket.",
@@ -114,5 +123,5 @@
     "d2e37bba81025f7c70ab",
     "dcdb7583320f5ae075c7"
   ],
-  "updated_utc": "2026-08-04T14:38:11.381125+00:00"
+  "updated_utc": "2026-08-07T14:34:35.964980+00:00"
 }

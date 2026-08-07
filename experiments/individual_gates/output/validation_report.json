@@ -6,16 +6,16 @@
   "effective_zero_svd_threshold": 1e-300,
   "failures": [],
   "git": {
-    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
-    "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+    "git_commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
+    "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
     "git_dirty": "true"
   },
-  "git_diff_hash": "54e7477d1624238eae90d9c40a1503a2ca6d07853944dcaf5d868d91ca9cfee9",
+  "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
   "n_failures": 0,
   "pass": true,
   "production_svd_threshold": 1e-13,
   "residuals": {
-    "cnot_rank_state_files": 120,
+    "cnot_rank_state_files": 60,
     "cx_path_power_residuals": {
       "1": 3.1401849173675503e-16,
       "16": 4.652682298944613e-16,
@@ -108,19 +108,19 @@
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 1.3710023138782552e-12,
+        "phase_aligned_distance_n128_n256": 1.3710027154502072e-12,
         "seed": 11
       },
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 2.0458743706211593e-13,
+        "phase_aligned_distance_n128_n256": 2.0458927942687137e-13,
         "seed": 22
       },
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 3.5589830353865196e-13,
+        "phase_aligned_distance_n128_n256": 3.5590025652522155e-13,
         "seed": 33
       }
     ],
@@ -169,8 +169,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.08729045071656671,
-        "infidelity_production": 0.08729045071656671,
+        "infidelity_effective_zero": 0.046778356587868664,
+        "infidelity_production": 0.046778356587868664,
         "method": "tebd_swap",
         "production_svd_threshold": 1e-13,
         "seed": 11
@@ -199,8 +199,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.3106502482953706,
-        "infidelity_production": 0.3106502482953706,
+        "infidelity_effective_zero": 0.10045476950488608,
+        "infidelity_production": 0.10045476950488608,
         "method": "tebd_swap",
         "production_svd_threshold": 1e-13,
         "seed": 22
@@ -229,8 +229,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.30666300082701226,
-        "infidelity_production": 0.30666300082701226,
+        "infidelity_effective_zero": 0.12231570172465023,
+        "infidelity_production": 0.12231570172465023,
         "method": "tebd_swap",
         "production_svd_threshold": 1e-13,
         "seed": 33
@@ -259,8 +259,8 @@
         "abs_diff": 0.0,
         "chi_max": 16,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 1.1102230246251565e-16,
-        "infidelity_production": 1.1102230246251565e-16,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
         "method": "tebd_swap",
         "production_svd_threshold": 1e-13,
         "seed": 11
@@ -289,8 +289,8 @@
         "abs_diff": 0.0,
         "chi_max": 16,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.0,
-        "infidelity_production": 0.0,
+        "infidelity_effective_zero": 2.220446049250313e-16,
+        "infidelity_production": 2.220446049250313e-16,
         "method": "tebd_swap",
         "production_svd_threshold": 1e-13,
         "seed": 22
@@ -299,8 +299,8 @@
         "abs_diff": 0.0,
         "chi_max": 16,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 1.1102230246251565e-16,
-        "infidelity_production": 1.1102230246251565e-16,
+        "infidelity_effective_zero": 0.0,
+        "infidelity_production": 0.0,
         "method": "gate_local_2tdvp",
         "production_svd_threshold": 1e-13,
         "seed": 33
@@ -373,7 +373,7 @@
   ],
   "stage": "validate",
   "versions": {
-    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260803",
+    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
     "numpy": "2.4.6",
     "qiskit": "2.5.1",
     "scipy": "1.18.0"

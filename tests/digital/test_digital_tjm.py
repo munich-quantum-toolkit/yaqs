@@ -24,6 +24,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
+from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
@@ -1347,6 +1348,74 @@ def test_sweeps_mixed_regression() -> None:
 
 
 # --- apply_two_qubit_gate_tebd ---
+
+
+def _dense_chain_tensor(mps: MPS) -> np.ndarray:
+    """Contract an MPS into a dense tensor ordered by ascending MPS site.
+
+    Returns:
+        Dense state tensor with one physical axis per MPS site.
+    """
+    tensor = mps.tensors[0].transpose(1, 0, 2)
+    for site_tensor in mps.tensors[1:]:
+        tensor = np.tensordot(
+            tensor,
+            site_tensor.transpose(1, 0, 2),
+            axes=([tensor.ndim - 1], [0]),
+        )
+    return tensor.reshape([2] * mps.length)
+
+
+@pytest.mark.parametrize("left_site", range(3, 8))
+def test_tebd_capped_split_attains_schmidt_bound(left_site: int) -> None:
+    """A capped adjacent TEBD update realizes the optimal Schmidt truncation."""
+    length = 12
+    chi = 8
+    rng = np.random.default_rng(7)
+    bonds = [1, *(min(chi, 2**site, 2 ** (length - site)) for site in range(1, length)), 1]
+    tensors = [
+        (
+            rng.standard_normal((2, bonds[site], bonds[site + 1]))
+            - 1j * rng.standard_normal((2, bonds[site], bonds[site + 1]))
+        ).astype(np.complex128)
+        for site in range(length)
+    ]
+    state = MPS(length=length, tensors=tensors)
+    state.normalize(form="B", decomposition="QR")
+    assert state.orthogonality_center == 0
+    assert not state.check_covers_sites([left_site, left_site + 1])
+
+    gate = GateLibrary.cx()
+    gate.set_sites(left_site, left_site + 1)
+    gate_tensor = resolve_lr_tensor(gate, left_site, left_site + 1)
+    exact = np.moveaxis(
+        np.tensordot(
+            gate_tensor,
+            _dense_chain_tensor(state),
+            axes=([2, 3], [left_site, left_site + 1]),
+        ),
+        [0, 1],
+        [left_site, left_site + 1],
+    )
+    singular_values = np.linalg.svd(exact.reshape(2 ** (left_site + 1), -1), compute_uv=False)
+    weights = singular_values**2 / np.sum(singular_values**2)
+    optimal_infidelity = float(np.sum(weights[chi:]))
+    assert optimal_infidelity > 1e-6
+
+    params = DigitalSimParams(
+        observables=[],
+        get_state=True,
+        max_bond_dim=chi,
+        svd_threshold=1e-14,
+    )
+    apply_two_qubit_gate_tebd(state, gate, params)
+    approximation = _dense_chain_tensor(state)
+    normalized_overlap = abs(np.vdot(exact, approximation)) ** 2 / (
+        np.vdot(exact, exact).real * np.vdot(approximation, approximation).real
+    )
+    achieved_infidelity = abs(1.0 - float(normalized_overlap))
+
+    assert achieved_infidelity == pytest.approx(optimal_infidelity, rel=1e-10, abs=1e-12)
 
 
 def test_tebd_lr_cx() -> None:

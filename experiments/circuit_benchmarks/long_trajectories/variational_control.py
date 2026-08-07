@@ -454,6 +454,10 @@ def run_case(
                 start=1,
             ):
                 dense = benchmark_common.apply_dense_step(dense, physical_step, case.n_qubits)
+                print(
+                    f"{case_key}: starting step={step_number}/{primary_endpoint}",
+                    flush=True,
+                )
                 step_runtime_s, step_diagnostics = _apply_variational_step(
                     state,
                     compiled_step,

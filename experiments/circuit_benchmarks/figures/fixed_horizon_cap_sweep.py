@@ -24,10 +24,6 @@ from typing import TYPE_CHECKING
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
-from matplotlib.ticker import FixedLocator, NullFormatter, ScalarFormatter
-from matplotlib.transforms import ScaledTranslation
-
 from experiments.circuit_benchmarks.config import (
     METHODS,
     OUTPUT_DIR,
@@ -35,6 +31,9 @@ from experiments.circuit_benchmarks.config import (
     REPO_ROOT,
 )
 from experiments.circuit_benchmarks.plotting import METHOD_STYLES, apply_style
+from matplotlib.lines import Line2D
+from matplotlib.ticker import FixedLocator, NullFormatter, ScalarFormatter
+from matplotlib.transforms import ScaledTranslation
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -45,7 +44,7 @@ SWEEP_FILENAME = "combined_cap_sweep.csv"
 TIMING_FILENAME = "cap_timing_summary.csv"
 VARIATIONAL_SUMMARY_FILENAME = "comparison_summary.json"
 VARIATIONAL_CONTROL_DIR_NAME = "variational_mpo_control"
-VARIATIONAL_CAPS = (4, 8, 16, 28)
+VARIATIONAL_CAPS = (4, 8, 16)
 VARIATIONAL_TIMING_REPEATS = 1
 EXPECTED_VARIATIONAL_FITS = 270
 FIGURE_STEM = "figure_circuit_fixed_horizon_cap_sweep"
@@ -437,10 +436,10 @@ def _add_selection_ring(axis: plt.Axes, x: float, y: float) -> None:
     ring = axis.scatter(
         [x],
         [y],
-        s=62,
+        s=42,
         facecolors="none",
         edgecolors="black",
-        linewidths=1.1,
+        linewidths=1.0,
         zorder=9,
     )
     ring.set_gid(RING_GID)
@@ -696,11 +695,11 @@ def caption() -> str:
         "precompression MPO--MPS intermediate; temporary working arrays are excluded. Runtime "
         "markers for TDVP, MPO, and TEBD+SWAP are medians of three one-thread "
         "repetitions at every timed cap, with bars spanning their full range. Variational-MPO "
-        "diamonds at $\\chi_{\\max}=4,8,16,$ and $28$ are one complete one-thread run per cap, "
+        "diamonds at $\\chi_{\\max}=4,8,$ and $16$ are one complete one-thread run per cap, "
         "without timing repeats; their $P_{\\max}$ values include the largest uncompressed target MPS. "
         "The dotted curve shows only the observed cap dependence and is not a fitted scaling law. "
         "Black rings mark "
-        "the first caps satisfying $E_\\star\\leq10^{-2}$: $\\chi_{\\max}=28$, 96, and 192 for "
+        "the first caps satisfying $E_\\star\\leq10^{-2}$: $\\chi_{\\max}=28$, 26, and 32 for "
         "TDVP, MPO, and TEBD+SWAP, respectively. Coincident TDVP and TEBD+SWAP markers at shared "
         "caps in (b) are offset horizontally in display space only for visibility; their guide "
         "curves remain at identical data coordinates. Thin lines only guide the eye between raw "

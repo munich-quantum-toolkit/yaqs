@@ -1,14 +1,14 @@
 {
   "artifacts": {
-    "fit_diagnostics": "experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/fit_diagnostics.csv.gz",
-    "trajectory_rows": "experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/trajectory_rows.csv"
+    "fit_diagnostics": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/fit_diagnostics.csv.gz",
+    "trajectory_rows": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/variational_mpo_control/trajectory_rows.csv"
   },
   "campaign_id": "circuit-long-trajectory-variational-mpo-v1",
   "cases": {
     "heisenberg_1d": {
       "all_selected_fits_converged": true,
-      "cumulative_runtime_s": 4.317576900590211,
-      "elapsed_wall_s": 4.983529653865844,
+      "cumulative_runtime_s": 5.524606702150777,
+      "elapsed_wall_s": 6.207734376890585,
       "maximum_sweeps": 0,
       "primary_endpoint": 37,
       "retried_fits": 0,
@@ -21,8 +21,8 @@
     },
     "ising_1d": {
       "all_selected_fits_converged": true,
-      "cumulative_runtime_s": 2.5516159483231604,
-      "elapsed_wall_s": 3.2178086929488927,
+      "cumulative_runtime_s": 2.951670007314533,
+      "elapsed_wall_s": 3.5961573149543256,
       "maximum_sweeps": 0,
       "primary_endpoint": 62,
       "retried_fits": 0,
@@ -35,12 +35,12 @@
     },
     "ising_2d": {
       "all_selected_fits_converged": true,
-      "cumulative_runtime_s": 468.5847485540435,
-      "elapsed_wall_s": 468.64830398210324,
-      "maximum_sweeps": 4,
+      "cumulative_runtime_s": 455.52779681491666,
+      "elapsed_wall_s": 455.59052991098724,
+      "maximum_sweeps": 2,
       "primary_endpoint": 74,
       "retried_fits": 0,
-      "runtime_budget_overshoot_s": 368.5847485540435,
+      "runtime_budget_overshoot_s": 355.52779681491666,
       "status": "success",
       "stop_reason": "runtime_budget_reached_at_completed_step",
       "stop_step": 4,
@@ -48,11 +48,11 @@
       "variational_fits": 72
     }
   },
-  "created_utc": "2026-08-06T14:59:19.359007+00:00",
+  "created_utc": "2026-08-07T15:51:23.737776+00:00",
   "environment": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "packages": {
-      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260731",
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
       "numpy": "2.4.6",
       "qiskit": "2.5.1",
       "scipy": "1.18.0",
@@ -68,12 +68,12 @@
     }
   },
   "git": {
-    "commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
-    "diff_hash": "10d851d79bce0a7945050bc2385537de6002530bba7a39bf5be56c0a2c18f208",
+    "commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
+    "diff_hash": "e5cb7c609e56d3942a2019966306ca162ab76fabb6405ecbfbed810f91ee0346",
     "dirty": true
   },
   "primary_campaign_id": "circuit-infidelity-until-saturation-v2",
-  "primary_source_hash": "2ad0cc4fb8265aa8bdabb57b57a290afc570478be4dae50e93c38653abfe7cfe",
+  "primary_source_hash": "3e395aa45f436d4d66d61f271fb3ba7219fd361dbe2caeef780e225ca56ceed5",
   "runtime_budget_s": 100.0,
   "runtime_scope": {
     "excluded": "schedule compilation, state initialization, dense evolution, fidelity and resource diagnostics, checkpointing, and plotting",
@@ -82,6 +82,6 @@
     "threads": 1,
     "warmups": 0
   },
-  "source_hash": "95112778d5208971d837449bfceb0ba1b2ab6e3fc7c2dc3566fb2ebbe06fbfe6",
+  "source_hash": "d411e8f04274736e6640058dd8ebf631e98e8faa989d8357d981438207019456",
   "stop_definition": "First completed Trotter step with cumulative variational update runtime at least the budget, or the primary panel endpoint if it occurs first."
 }

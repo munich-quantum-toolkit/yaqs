@@ -35,6 +35,7 @@ from experiments.circuit_benchmarks.config import (
     FRONTIER_STEPS,
     METHODS,
     OUTPUT_DIR,
+    REPO_ROOT,
     RELIABILITY_THRESHOLD,
     TIMING_REPEATS,
     TIMING_WARMUPS,
@@ -48,10 +49,11 @@ if TYPE_CHECKING:
 CAMPAIGN_ID = "circuit_fixed_horizon_refinement_v1"
 TARGET_STEP = FRONTIER_STEPS
 MPS_ENTRY_BYTES = 16
+COARSE_CAPS = (4, 8, 16, 24, 32)
 REFINEMENT_CAPS: dict[Method, tuple[int, ...]] = {
     "gate_local_2tdvp": (26, 28, 30),
-    "mpo_contract_compress": (80, 96, 112),
-    "tebd_swap": (144, 160, 176),
+    "mpo_contract_compress": (26, 28, 30),
+    "tebd_swap": (26, 28, 30),
 }
 
 REFINEMENT_DIR = OUTPUT_DIR / "fixed_horizon_refinement"
@@ -272,6 +274,8 @@ def _coarse_rows(rows: Sequence[Mapping[str, str]]) -> list[dict[str, Any]]:
             continue
         method = str(row["method"])
         if method not in METHODS:
+            continue
+        if int(row["chi_max"]) not in COARSE_CAPS:
             continue
         parameters = int(row["peak_parameter_count"])
         converted.append(
@@ -535,8 +539,8 @@ def _write_manifest(
             },
         },
         "artifacts": {
-            "combined_cap_sweep": str(COMBINED_PATH.relative_to(benchmark_run.REPO_ROOT)),
-            "selected": str(SELECTED_PATH.relative_to(benchmark_run.REPO_ROOT)),
+            "combined_cap_sweep": str(COMBINED_PATH.relative_to(REPO_ROOT)),
+            "selected": str(SELECTED_PATH.relative_to(REPO_ROOT)),
         },
     }
     _atomic_json(MANIFEST_PATH, manifest)

@@ -1,0 +1,81 @@
+{
+  "confirmed": true,
+  "created_utc": "2026-08-07T13:45:43.379010+00:00",
+  "criterion": "Confirm the fixed production choice n_sub=2 when doubling it changes the endpoint by normalized infidelity at most 0.0005, preserves the reliability classification, and preserves endpoint rank and stored parameter count. This is a fixed-cap stability criterion, not a monotonic-convergence claim.",
+  "global_n_sub": 2,
+  "per_case": {
+    "heisenberg_2d": {
+      "comparisons": [
+        {
+          "coarse_n_sub": 1,
+          "fine_n_sub": 2,
+          "passes": true,
+          "phase_aligned_distance": 0.0178701945621268,
+          "refinement_infidelity": 0.0003193183585616932
+        },
+        {
+          "coarse_n_sub": 2,
+          "fine_n_sub": 4,
+          "passes": true,
+          "phase_aligned_distance": 0.00918813995175072,
+          "refinement_infidelity": 8.44201339967876e-05
+        }
+      ],
+      "confirmed": true,
+      "endpoint_resources_stable": true,
+      "fine_reliable": false,
+      "production_reliable": false,
+      "selected_n_sub": 2,
+      "steps": 1,
+      "task_ids": {
+        "1": "15a1b8366fefcc116baa",
+        "2": "efe055af6dac1d56d446",
+        "4": "d75bc99c20f76e6ac8d6"
+      },
+      "task_status": {
+        "1": "success",
+        "2": "success",
+        "4": "success"
+      },
+      "threshold_classification_stable": true,
+      "time": 0.1
+    },
+    "ising_2d": {
+      "comparisons": [
+        {
+          "coarse_n_sub": 1,
+          "fine_n_sub": 2,
+          "passes": true,
+          "phase_aligned_distance": 0.018568469821096962,
+          "refinement_infidelity": 0.0003447583517979247
+        },
+        {
+          "coarse_n_sub": 2,
+          "fine_n_sub": 4,
+          "passes": true,
+          "phase_aligned_distance": 0.015425798940027682,
+          "refinement_infidelity": 0.0002379411172496182
+        }
+      ],
+      "confirmed": true,
+      "endpoint_resources_stable": true,
+      "fine_reliable": true,
+      "production_reliable": true,
+      "selected_n_sub": 2,
+      "steps": 15,
+      "task_ids": {
+        "1": "e0a8ed825f2febcb09d2",
+        "2": "caf995a0357f46358f5b",
+        "4": "3f900d2e5372f80c745f"
+      },
+      "task_status": {
+        "1": "success",
+        "2": "success",
+        "4": "success"
+      },
+      "threshold_classification_stable": true,
+      "time": 1.5
+    }
+  },
+  "tolerance": 0.0005
+}

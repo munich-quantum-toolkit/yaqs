@@ -1,7 +1,7 @@
 {
   "cnot_rank_summary": {
     "control": 1,
-    "csv": "experiments/individual_gates/output/cnot_rank_summary.csv",
+    "csv": "/home/aaron/Github/yaqs/experiments/individual_gates/output/cnot_rank_summary.csv",
     "display_tdvp_n_sub": [
       1,
       16,
@@ -24,7 +24,7 @@
   "n_campaign_rows": 468,
   "pauli_finite_angle_summary": {
     "chi_max": 8,
-    "csv": "experiments/individual_gates/output/pauli_finite_angle_summary.csv",
+    "csv": "/home/aaron/Github/yaqs/experiments/individual_gates/output/pauli_finite_angle_summary.csv",
     "n_finite_angle_cells": 63,
     "n_matched_cells": 72,
     "note": "Matched cells: same gate, method, \u03c7_max, n_sub, and angle; median/min/max over three states. Do not pool across unmatched caps/angles/gates. Discarded weights are not compared across methods here (methods perform different SVD sequences).",
@@ -32,9 +32,9 @@
       {
         "chi_max": 8,
         "gate": "rxx",
-        "infidelity_max": 0.29339051981997644,
-        "infidelity_median": 0.2359431254208647,
-        "infidelity_min": 0.0484808812842068,
+        "infidelity_max": 0.06972273567495968,
+        "infidelity_median": 0.05981319124312212,
+        "infidelity_min": 0.01647655250273572,
         "is_identity_angle": true,
         "method": "tebd_swap",
         "n_states": 3,
@@ -50,9 +50,9 @@
       {
         "chi_max": 8,
         "gate": "ryy",
-        "infidelity_max": 0.29339051981997644,
-        "infidelity_median": 0.2359431254208647,
-        "infidelity_min": 0.0484808812842068,
+        "infidelity_max": 0.06972273567495968,
+        "infidelity_median": 0.05981319124312212,
+        "infidelity_min": 0.01647655250273572,
         "is_identity_angle": true,
         "method": "tebd_swap",
         "n_states": 3,
@@ -68,9 +68,9 @@
       {
         "chi_max": 8,
         "gate": "rzz",
-        "infidelity_max": 0.29339051981997644,
-        "infidelity_median": 0.2359431254208647,
-        "infidelity_min": 0.0484808812842068,
+        "infidelity_max": 0.06972273567495968,
+        "infidelity_median": 0.05981319124312212,
+        "infidelity_min": 0.01647655250273572,
         "is_identity_angle": true,
         "method": "tebd_swap",
         "n_states": 3,

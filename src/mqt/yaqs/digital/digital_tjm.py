@@ -361,6 +361,11 @@ def apply_two_qubit_gate_tebd(
 
     left_site = min(site0, site1)
     right_site = max(site0, site1)
+    if not state.check_covers_sites([left_site, right_site]):
+        if state.orthogonality_center is None:
+            state.set_canonical_form(left_site, decomposition="QR")
+        else:
+            state.shift_center_to(left_site, decomposition="QR")
     u_gate = resolve_lr_tensor(gate, left_site, right_site)
 
     left_tensor = state.tensors[left_site]

@@ -1,0 +1,9 @@
+{
+  "checkpoint_rows": 277392,
+  "created_utc": "2026-08-07T14:15:43.751770+00:00",
+  "frontier_selections": 9,
+  "schmidt_tail_rows": 0,
+  "timing_rows": 9,
+  "trajectory_rows": 666,
+  "validation_complete": false
+}

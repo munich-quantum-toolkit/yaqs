@@ -29,8 +29,8 @@ def test_threshold_control_uses_the_final_bounded_protocol() -> None:
     assert control.THRESHOLDS == (1e-14, 1e-13, 1e-12, 1e-9)
     assert control.METHOD_CAPS == {
         "gate_local_2tdvp": 28,
-        "mpo_contract_compress": 96,
-        "tebd_swap": 192,
+        "mpo_contract_compress": 26,
+        "tebd_swap": 32,
     }
     assert control.METHOD_SUBSTEPS == {
         "gate_local_2tdvp": 2,

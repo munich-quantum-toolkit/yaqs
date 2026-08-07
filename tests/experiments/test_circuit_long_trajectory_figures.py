@@ -245,16 +245,16 @@ def _variational_runtime_censor_fixture() -> dict[str, object]:
         "attempted_step": 1,
         "last_completed_step": 0,
         "plot_step": 1,
-        "status": "manually_interrupted",
+        "status": "runtime_censored",
         "attempted_step_completed": False,
         "state_metrics_available": False,
-        "runtime_lower_bound_s": 1200.0,
+        "runtime_lower_bound_s": 100.0,
         "bound_relation": "greater_than",
         "runtime_quantity": "single_thread_wall_time_since_attempted_step_started",
         "threads": 1,
         "repeats": 1,
         "warmups": 0,
-        "interruption_reason": "Manually interrupted after more than 20 minutes.",
+        "interruption_reason": "Interrupted after the configured runtime-censoring budget.",
     }
 
 
@@ -320,7 +320,7 @@ def test_runtime_censor_uses_a_distinct_upward_limit_glyph() -> None:
     assert len(axis.lines) == 1
     assert axis.lines[0].get_marker() == r"$\uparrow$"
     assert axis.lines[0].get_xdata().tolist() == [1]
-    assert axis.lines[0].get_ydata().tolist() == [1200.0]
+    assert axis.lines[0].get_ydata().tolist() == [100.0]
     plt.close(figure)
 
 
@@ -330,7 +330,8 @@ def test_runtime_censor_caption_disclaims_missing_state_metrics() -> None:
     censor = _variational_runtime_censor_fixture()
     text = caption(primary, {"repeats": 3}, control, censor)
     assert "upward purple caret" in text
-    assert "manually interrupted, incomplete first step" in text
+    assert "lower bound $>100$ s" in text
+    assert "runtime-censored, incomplete first step" in text
     assert "No corresponding infidelity or parameter datum exists" in text
 
 

@@ -1,6 +1,6 @@
 {
-  "complete": true,
-  "created_utc": "2026-08-02T19:39:20.345787+00:00",
+  "complete": false,
+  "created_utc": "2026-08-07T14:15:43.745481+00:00",
   "exact": {
     "heisenberg_1d": {
       "expected_protocol": {
@@ -88,9 +88,46 @@
   "main_complete_count": 12,
   "main_expected_count": 12,
   "main_missing": [],
-  "publication_ready": true,
+  "publication_ready": false,
   "publication_ready_note": "Completeness is necessary, not sufficient: inspect the trajectories, threshold sensitivity, numerical-resolution report, and figure before publication.",
-  "raw_checkpoint_count": 276914,
+  "raw_checkpoint_count": 277392,
   "resolution_confirmed": true,
-  "timing_missing": []
+  "timing_missing": [
+    {
+      "method": "gate_local_2tdvp",
+      "target_step": 5
+    },
+    {
+      "method": "mpo_contract_compress",
+      "target_step": 5
+    },
+    {
+      "method": "tebd_swap",
+      "target_step": 5
+    },
+    {
+      "method": "gate_local_2tdvp",
+      "target_step": 10
+    },
+    {
+      "method": "mpo_contract_compress",
+      "target_step": 10
+    },
+    {
+      "method": "tebd_swap",
+      "target_step": 10
+    },
+    {
+      "method": "gate_local_2tdvp",
+      "target_step": 15
+    },
+    {
+      "method": "mpo_contract_compress",
+      "target_step": 15
+    },
+    {
+      "method": "tebd_swap",
+      "target_step": 15
+    }
+  ]
 }

@@ -12,9 +12,6 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
-from matplotlib.ticker import LogLocator, MaxNLocator, NullFormatter
-
 from experiments.circuit_benchmarks.config import METHODS, RELIABILITY_THRESHOLD, REPO_ROOT
 from experiments.circuit_benchmarks.plotting import (
     CASE_LABELS,
@@ -29,6 +26,8 @@ from experiments.circuit_benchmarks.plotting import (
 from experiments.circuit_benchmarks.plotting import (
     style_axis as _style_axis,
 )
+from matplotlib.lines import Line2D
+from matplotlib.ticker import LogLocator, MaxNLocator, NullFormatter
 
 from .config import (
     CASE_ORDER,
@@ -50,7 +49,7 @@ FULL_PROFILE_PARAMETERS = 15016
 PARAMETER_Y_LIMITS = (25, 2.2e4)
 PARAMETER_INSET_Y_LIMITS = (25, 1.8e4)
 PARAMETER_INSET_Y_TICKS = (1e2, 1e3, 1e4)
-RUNTIME_Y_LIMITS = (1e-2, 5e2)
+RUNTIME_Y_LIMITS = (1e-2, 1e3)
 TIMING_CAMPAIGN_ID = "circuit-fixed-endpoint-timing-v1"
 VARIATIONAL_CAMPAIGN_ID = "circuit-long-trajectory-variational-mpo-v1"
 VARIATIONAL_METHOD = "variational_mpo"
@@ -64,10 +63,10 @@ VARIATIONAL_STYLE = {
 }
 
 PLATEAU_INSET_Y = {
-    "ising_1d": ((0.10, 0.60), (0.2, 0.4, 0.6)),
-    "heisenberg_1d": ((0.52, 1.02), (0.6, 0.8, 1.0)),
-    "ising_2d": ((0.06, 1.02), (0.1, 0.5, 0.9)),
-    "heisenberg_2d": ((0.58, 1.02), (0.6, 0.8, 1.0)),
+    "ising_1d": ((0.135, 0.16), (0.14, 0.15, 0.16)),
+    "heisenberg_1d": ((0.50, 0.61), (0.52, 0.56, 0.60)),
+    "ising_2d": ((0.055, 0.10), (0.06, 0.08, 0.10)),
+    "heisenberg_2d": ((0.50, 0.69), (0.52, 0.60, 0.68)),
 }
 
 
@@ -263,7 +262,7 @@ def _validate_variational_runtime_censor(
         "primary_campaign_id": primary_manifest.get("campaign_id"),
         "primary_source_hash": primary_manifest.get("source_hash"),
         "chi_cap": 32,
-        "status": "manually_interrupted",
+        "status": "runtime_censored",
         "bound_relation": "greater_than",
         "runtime_quantity": "single_thread_wall_time_since_attempted_step_started",
         "threads": 1,
@@ -1025,12 +1024,10 @@ def caption(
         )
     if variational_runtime_censor is not None:
         lower_bound = float(variational_runtime_censor["runtime_lower_bound_s"])
-        lower_bound_thousands = lower_bound / 1.0e3
         step = int(variational_runtime_censor["plot_step"])
         variational_note += (
             f" The upward purple caret at $n={step}$ in panel (l) records only the conservative wall-time "
-            f"lower bound $>{lower_bound_thousands:g}\\times10^3$ s for the manually interrupted, "
-            "incomplete first step. "
+            f"lower bound $>{lower_bound:g}$ s for the runtime-censored, incomplete first step. "
             "No corresponding infidelity or parameter datum exists."
         )
     return (

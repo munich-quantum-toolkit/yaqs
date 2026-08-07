@@ -1,0 +1,145 @@
+{
+  "artifacts": {
+    "checkpoint_directory": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/checkpoints",
+    "exact_directory": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/exact",
+    "exact_schmidt_tails": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/exact_schmidt_tails.csv",
+    "frontier_selected": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/frontier_selected.csv",
+    "resolution_summary": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/resolution_summary.json",
+    "runtime_summary": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/runtime_summary.csv",
+    "tasks_directory": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/tasks",
+    "trajectory_rows": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/trajectory_rows.csv"
+  },
+  "campaign_id": "circuit_benchmarks_v1",
+  "git": {
+    "commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
+    "diff_hash": "3c31bbe85ba7c17aea401ad2f2601da0194198f6c0c1faa1d8f0d96b52bbbf8b",
+    "dirty": true
+  },
+  "hardware": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "hostname": "aaron-linux-desktop",
+    "logical_cpus": 20,
+    "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    },
+    "threadpools": [
+      {
+        "architecture": "Haswell",
+        "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.188.0"
+      },
+      {
+        "architecture": "Haswell",
+        "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.dev"
+      }
+    ]
+  },
+  "last_stage": "frontier",
+  "protocol": {
+    "cases": {
+      "heisenberg_1d": {
+        "circuit_fingerprint": "f2a4530c0eb1b228f683a14fdd19e56f719147ef9e4e1180ade1ec767aae0de7",
+        "cols": 16,
+        "geometry": "1d",
+        "initial_state": "neel",
+        "key": "heisenberg_1d",
+        "label": "1D Heisenberg",
+        "model": "heisenberg",
+        "rows": 1
+      },
+      "heisenberg_2d": {
+        "circuit_fingerprint": "2f06dff7eba9fdb28bde9cfaa84fd0adbe1327f0cefd4a7bbab482e746b9b707",
+        "cols": 4,
+        "geometry": "2d",
+        "initial_state": "neel",
+        "key": "heisenberg_2d",
+        "label": "2D Heisenberg",
+        "model": "heisenberg",
+        "rows": 4
+      },
+      "ising_1d": {
+        "circuit_fingerprint": "82e72f07d73dfe5687fd6ad826ae4f245c8464e5aa7ef3600d4896c224a76a1a",
+        "cols": 16,
+        "geometry": "1d",
+        "initial_state": "zeros",
+        "key": "ising_1d",
+        "label": "1D Ising",
+        "model": "ising",
+        "rows": 1
+      },
+      "ising_2d": {
+        "circuit_fingerprint": "5eef7d8270326154d9beb7eba59f93fd898ed30351f583530400f345de741b2f",
+        "cols": 4,
+        "geometry": "2d",
+        "initial_state": "zeros",
+        "key": "ising_2d",
+        "label": "2D Ising",
+        "model": "ising",
+        "rows": 4
+      }
+    },
+    "chi_grid": [
+      4,
+      8,
+      16,
+      24,
+      32,
+      64
+    ],
+    "chi_main": 32,
+    "dt": 0.1,
+    "frontier_case": "ising_2d",
+    "frontier_steps": 15,
+    "frontier_target_steps": [
+      5,
+      10,
+      15
+    ],
+    "krylov_tol": 1e-12,
+    "method_semantics": {
+      "gate_local_2tdvp": "Generator-backed two-qubit gates use gate-local two-site TDVP, including adjacent gates.",
+      "mpo_contract_compress": "Separated gates use full MPO-MPS contraction followed by global compression; adjacent gates use the production TEBD kernel.",
+      "tebd_swap": "Separated gates use forward and reverse nearest-neighbor SWAP routing."
+    },
+    "n_steps": 30,
+    "reliability_threshold": 0.01,
+    "svd_threshold": 1e-13,
+    "threshold_sensitivity": [
+      0.005,
+      0.01,
+      0.02
+    ],
+    "timing_repeats": 3,
+    "timing_warmups": 1,
+    "trotter_order": 2,
+    "trunc_mode": "discarded_weight"
+  },
+  "software": {
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2"
+  },
+  "source_hash": "141f153a6140118308f3b6d9d40c2d747224327c75da0b7a148516d7d58d49e1",
+  "updated_utc": "2026-08-07T14:14:52.766634+00:00"
+}

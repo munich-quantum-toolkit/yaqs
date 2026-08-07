@@ -1,21 +1,21 @@
 {
   "artifacts": {
-    "trajectory_rows": "experiments/circuit_benchmarks/long_trajectories/output/trajectory_rows.csv"
+    "trajectory_rows": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/trajectory_rows.csv"
   },
   "campaign_id": "circuit-infidelity-until-saturation-v2",
   "cases": {
     "heisenberg_1d": {
       "criterion_met": true,
-      "elapsed_s": 215.21979233296588,
+      "elapsed_s": 297.973854719894,
       "first_reliability_crossing_steps": {
         "gate_local_2tdvp": 14,
-        "mpo_contract_compress": 8,
-        "tebd_swap": 8
+        "mpo_contract_compress": 14,
+        "tebd_swap": 14
       },
       "individual_saturation_steps": {
         "gate_local_2tdvp": 37,
-        "mpo_contract_compress": 28,
-        "tebd_swap": 28
+        "mpo_contract_compress": 36,
+        "tebd_swap": 36
       },
       "right_censored": false,
       "status": "success",
@@ -24,16 +24,16 @@
     },
     "heisenberg_2d": {
       "criterion_met": true,
-      "elapsed_s": 413.081740415073,
+      "elapsed_s": 444.49907580111176,
       "first_reliability_crossing_steps": {
         "gate_local_2tdvp": 1,
-        "mpo_contract_compress": 2,
-        "tebd_swap": 1
+        "mpo_contract_compress": 3,
+        "tebd_swap": 3
       },
       "individual_saturation_steps": {
         "gate_local_2tdvp": 33,
-        "mpo_contract_compress": 22,
-        "tebd_swap": 14
+        "mpo_contract_compress": 27,
+        "tebd_swap": 22
       },
       "right_censored": false,
       "status": "success",
@@ -42,11 +42,11 @@
     },
     "ising_1d": {
       "criterion_met": true,
-      "elapsed_s": 96.00939319096506,
+      "elapsed_s": 119.45259031979367,
       "first_reliability_crossing_steps": {
         "gate_local_2tdvp": 43,
-        "mpo_contract_compress": 29,
-        "tebd_swap": 29
+        "mpo_contract_compress": 43,
+        "tebd_swap": 43
       },
       "individual_saturation_steps": {
         "gate_local_2tdvp": 62,
@@ -60,16 +60,16 @@
     },
     "ising_2d": {
       "criterion_met": true,
-      "elapsed_s": 311.3761748489924,
+      "elapsed_s": 420.2824341140222,
       "first_reliability_crossing_steps": {
         "gate_local_2tdvp": 17,
-        "mpo_contract_compress": 9,
-        "tebd_swap": 2
+        "mpo_contract_compress": 18,
+        "tebd_swap": 16
       },
       "individual_saturation_steps": {
         "gate_local_2tdvp": 74,
-        "mpo_contract_compress": 52,
-        "tebd_swap": 11
+        "mpo_contract_compress": 60,
+        "tebd_swap": 50
       },
       "right_censored": false,
       "status": "success",
@@ -77,7 +77,7 @@
       "stop_time": 7.4
     }
   },
-  "created_utc": "2026-08-02T21:31:51.721326+00:00",
+  "created_utc": "2026-08-07T14:05:32.487180+00:00",
   "criterion": {
     "definition": "Every method remains outside the reliable regime while the range of log10 normalized infidelity over its trailing window does not exceed the stated tolerance.",
     "log_range_decades": 0.05,
@@ -89,7 +89,7 @@
   "environment": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "packages": {
-      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260731",
+      "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
       "numpy": "2.4.6",
       "qiskit": "2.5.1",
       "scipy": "1.18.0",
@@ -105,9 +105,9 @@
     }
   },
   "git": {
-    "commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
-    "diff_hash": "65133307ded20e0d74a9cbe81a434bb854127362461a3bff6b3ad875c10a3275",
+    "commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
+    "diff_hash": "b119e407e45297ef8082507eadbe45195ed3008b304e57b88d1eb52dfb14979f",
     "dirty": true
   },
-  "source_hash": "2ad0cc4fb8265aa8bdabb57b57a290afc570478be4dae50e93c38653abfe7cfe"
+  "source_hash": "3e395aa45f436d4d66d61f271fb3ba7219fd361dbe2caeef780e225ca56ceed5"
 }

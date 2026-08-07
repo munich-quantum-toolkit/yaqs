@@ -61,8 +61,8 @@ TARGET_STEP = 15
 THRESHOLDS = (1e-14, 1e-13, 1e-12, 1e-9)
 METHOD_CAPS = {
     "gate_local_2tdvp": 28,
-    "mpo_contract_compress": 96,
-    "tebd_swap": 192,
+    "mpo_contract_compress": 26,
+    "tebd_swap": 32,
 }
 METHOD_SUBSTEPS = {
     "gate_local_2tdvp": benchmark_config.TDVP_PRODUCTION_SUBSTEPS,

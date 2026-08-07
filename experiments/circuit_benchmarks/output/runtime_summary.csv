@@ -1,0 +1,10 @@
+target_step,target_time,method,selected_chi_max,median_s,min_s,max_s,missing
+5,0.5,gate_local_2tdvp,8,,,,True
+5,0.5,mpo_contract_compress,8,,,,True
+5,0.5,tebd_swap,8,,,,True
+10,1.0,gate_local_2tdvp,16,,,,True
+10,1.0,mpo_contract_compress,16,,,,True
+10,1.0,tebd_swap,16,,,,True
+15,1.5,gate_local_2tdvp,32,,,,True
+15,1.5,mpo_contract_compress,32,,,,True
+15,1.5,tebd_swap,32,,,,True
