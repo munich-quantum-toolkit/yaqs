@@ -1,0 +1,3831 @@
+{
+  "bond_profiles": [
+    {
+      "bond": 1,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 1,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "heisenberg_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    }
+  ],
+  "completed_utc": "2026-08-07T17:19:16.650390+00:00",
+  "elapsed_wall_s": 301.8548852240201,
+  "endpoint_metrics": {
+    "fidelity_normalized": 0.32349623401446376,
+    "infidelity_normalized": 0.6765037659855362,
+    "norm_approx": 1.0000000000000002,
+    "norm_drift": -1.687538997430238e-13,
+    "norm_exact": 1.000000000000169
+  },
+  "payload": {
+    "base_manifest_sha256": "e01bccc5398d8fc661d44f62684234f2fe5a97ddeb9706823b5a0367391dee82",
+    "base_trajectory_sha256": "9f2e332fc5e781b0beed70e2a1c1aa8116c71140190f16f98f86955ba94341c6",
+    "bond_profile_max_step": 30,
+    "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+    "case": "heisenberg_2d",
+    "chi_cap": 32,
+    "circuit_fingerprint": "9957ddda6e83af11ff0f0628a475e6155dc34de76849d1fef130c1529f8155fd",
+    "krylov_tolerance": 1e-05,
+    "n_sub": 2,
+    "source_hash": "81be240cd543b7b55c4bddb9811f7995f91237a6e41388754d27d8241951456a",
+    "stop_step": 33,
+    "svd_threshold": 1e-13,
+    "threads": 1,
+    "truncation_mode": "discarded_weight"
+  },
+  "rows": [
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 32,
+      "current_peak_bond_dim": 1,
+      "fidelity_normalized": 1.0,
+      "infidelity_normalized": 0.0,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": 0.0,
+      "norm_exact": 1.0,
+      "step": 0,
+      "time": 0.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9823170835474511,
+      "infidelity_normalized": 0.017682916452548936,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999982,
+      "norm_drift": -7.327471962526033e-15,
+      "norm_exact": 1.0000000000000056,
+      "step": 1,
+      "time": 0.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9804964147237207,
+      "infidelity_normalized": 0.019503585276279267,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -9.547918011776346e-15,
+      "norm_exact": 1.0000000000000098,
+      "step": 2,
+      "time": 0.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9612227714584073,
+      "infidelity_normalized": 0.03877722854159271,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -1.554312234475219e-14,
+      "norm_exact": 1.0000000000000158,
+      "step": 3,
+      "time": 0.30000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9026938247274012,
+      "infidelity_normalized": 0.09730617527259877,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.9539925233402755e-14,
+      "norm_exact": 1.0000000000000202,
+      "step": 4,
+      "time": 0.4
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.8255466000239506,
+      "infidelity_normalized": 0.17445339997604936,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999996,
+      "norm_drift": -2.5757174171303632e-14,
+      "norm_exact": 1.0000000000000253,
+      "step": 5,
+      "time": 0.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.7523215443611457,
+      "infidelity_normalized": 0.24767845563885427,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -2.9531932455029164e-14,
+      "norm_exact": 1.0000000000000302,
+      "step": 6,
+      "time": 0.6000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.6909233888253042,
+      "infidelity_normalized": 0.30907661117469576,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999998,
+      "norm_drift": -3.574918139293004e-14,
+      "norm_exact": 1.0000000000000355,
+      "step": 7,
+      "time": 0.7000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.6462316937887306,
+      "infidelity_normalized": 0.3537683062112694,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000022,
+      "norm_drift": -3.907985046680551e-14,
+      "norm_exact": 1.0000000000000413,
+      "step": 8,
+      "time": 0.8
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.6147513387778184,
+      "infidelity_normalized": 0.3852486612221816,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -4.6074255521943996e-14,
+      "norm_exact": 1.000000000000046,
+      "step": 9,
+      "time": 0.9
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.5833815878869127,
+      "infidelity_normalized": 0.41661841211308726,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -5.140332604014475e-14,
+      "norm_exact": 1.0000000000000513,
+      "step": 10,
+      "time": 1.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.5555608643017301,
+      "infidelity_normalized": 0.44443913569826987,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999994,
+      "norm_drift": -5.67323965583455e-14,
+      "norm_exact": 1.0000000000000562,
+      "step": 11,
+      "time": 1.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.5308806115944317,
+      "infidelity_normalized": 0.4691193884055683,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -6.128431095930864e-14,
+      "norm_exact": 1.000000000000062,
+      "step": 12,
+      "time": 1.2000000000000002
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.5086298795257663,
+      "infidelity_normalized": 0.4913701204742337,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -6.683542608243442e-14,
+      "norm_exact": 1.0000000000000668,
+      "step": 13,
+      "time": 1.3
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4932709945702304,
+      "infidelity_normalized": 0.5067290054297696,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -7.105427357601002e-14,
+      "norm_exact": 1.000000000000071,
+      "step": 14,
+      "time": 1.4000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4801781846634799,
+      "infidelity_normalized": 0.5198218153365202,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -7.460698725481052e-14,
+      "norm_exact": 1.0000000000000757,
+      "step": 15,
+      "time": 1.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4665563375783693,
+      "infidelity_normalized": 0.5334436624216308,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -8.171241461241152e-14,
+      "norm_exact": 1.0000000000000817,
+      "step": 16,
+      "time": 1.6
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4515889188563703,
+      "infidelity_normalized": 0.5484110811436297,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -8.526512829121202e-14,
+      "norm_exact": 1.0000000000000864,
+      "step": 17,
+      "time": 1.7000000000000002
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4373901392946831,
+      "infidelity_normalized": 0.5626098607053169,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -9.103828801926284e-14,
+      "norm_exact": 1.0000000000000921,
+      "step": 18,
+      "time": 1.8
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4259284736053239,
+      "infidelity_normalized": 0.5740715263946761,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -9.703349235223868e-14,
+      "norm_exact": 1.0000000000000973,
+      "step": 19,
+      "time": 1.9000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4207442158528961,
+      "infidelity_normalized": 0.5792557841471039,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -1.0225154056797692e-13,
+      "norm_exact": 1.0000000000001021,
+      "step": 20,
+      "time": 2.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4195737503589834,
+      "infidelity_normalized": 0.5804262496410166,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999992,
+      "norm_drift": -1.0802470029602773e-13,
+      "norm_exact": 1.0000000000001072,
+      "step": 21,
+      "time": 2.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.4135653563863404,
+      "infidelity_normalized": 0.5864346436136596,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -1.1168843627729075e-13,
+      "norm_exact": 1.0000000000001126,
+      "step": 22,
+      "time": 2.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.40383062523923835,
+      "infidelity_normalized": 0.5961693747607617,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.1657341758564144e-13,
+      "norm_exact": 1.0000000000001172,
+      "step": 23,
+      "time": 2.3000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.38788108724402676,
+      "infidelity_normalized": 0.6121189127559732,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999992,
+      "norm_drift": -1.2401191185062999e-13,
+      "norm_exact": 1.0000000000001232,
+      "step": 24,
+      "time": 2.4000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3670460186136463,
+      "infidelity_normalized": 0.6329539813863537,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -1.2745360322696797e-13,
+      "norm_exact": 1.0000000000001277,
+      "step": 25,
+      "time": 2.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.35392782013922336,
+      "infidelity_normalized": 0.6460721798607767,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -1.3167245072054357e-13,
+      "norm_exact": 1.0000000000001326,
+      "step": 26,
+      "time": 2.6
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3528487390151501,
+      "infidelity_normalized": 0.6471512609848499,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999994,
+      "norm_drift": -1.3933298959045715e-13,
+      "norm_exact": 1.0000000000001388,
+      "step": 27,
+      "time": 2.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3523729473192228,
+      "infidelity_normalized": 0.6476270526807772,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000004,
+      "norm_drift": -1.4299672557172016e-13,
+      "norm_exact": 1.0000000000001434,
+      "step": 28,
+      "time": 2.8000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3489482966664078,
+      "infidelity_normalized": 0.6510517033335922,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -1.474376176702208e-13,
+      "norm_exact": 1.0000000000001485,
+      "step": 29,
+      "time": 2.9000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3430670335578453,
+      "infidelity_normalized": 0.6569329664421547,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.5276668818842154e-13,
+      "norm_exact": 1.0000000000001534,
+      "step": 30,
+      "time": 3.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.3383717854511132,
+      "infidelity_normalized": 0.6616282145488868,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999994,
+      "norm_drift": -1.5931700403370996e-13,
+      "norm_exact": 1.0000000000001588,
+      "step": 31,
+      "time": 3.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.33244112115863034,
+      "infidelity_normalized": 0.6675588788413697,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999996,
+      "norm_drift": -1.6409096303959814e-13,
+      "norm_exact": 1.0000000000001636,
+      "step": 32,
+      "time": 3.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.32349623401446376,
+      "infidelity_normalized": 0.6765037659855362,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -1.687538997430238e-13,
+      "norm_exact": 1.000000000000169,
+      "step": 33,
+      "time": 3.3000000000000003
+    }
+  ],
+  "status": "success"
+}

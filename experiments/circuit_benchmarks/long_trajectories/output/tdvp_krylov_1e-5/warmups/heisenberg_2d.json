@@ -1,0 +1,33 @@
+{
+  "case": "heisenberg_2d",
+  "completed_utc": "2026-08-07T17:59:16.383052+00:00",
+  "elapsed_wall_s": 301.4950319689233,
+  "endpoint_metrics": {
+    "fidelity_normalized": 0.32349623401446376,
+    "infidelity_normalized": 0.6765037659855362,
+    "norm_approx": 1.0000000000000002,
+    "norm_drift": -1.687538997430238e-13,
+    "norm_exact": 1.000000000000169
+  },
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+  "status": "success",
+  "stop_step": 33
+}

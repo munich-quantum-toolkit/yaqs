@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -21,6 +24,9 @@ from experiments.circuit_benchmarks.long_trajectories.config import (
     SATURATION_WINDOW_STEPS,
 )
 from experiments.circuit_benchmarks.long_trajectories.plot import (
+    TDVP_OVERRIDE_CAMPAIGN_ID,
+    TDVP_OVERRIDE_METHOD,
+    TDVP_OVERRIDE_TOLERANCE,
     VARIATIONAL_CAMPAIGN_ID,
     VARIATIONAL_CENSOR_RECORD_TYPE,
     VARIATIONAL_CENSOR_SCHEMA_VERSION,
@@ -33,7 +39,9 @@ from experiments.circuit_benchmarks.long_trajectories.plot import (
     _validate_runtime_rows,
     _validate_variational_rows,
     _validate_variational_runtime_censor,
+    apply_tdvp_row_override,
     caption,
+    load_validated_tdvp_override_manifest,
 )
 from experiments.circuit_benchmarks.long_trajectories.run import (
     _criterion_met,
@@ -46,6 +54,9 @@ from experiments.circuit_benchmarks.long_trajectories.variational_control import
     _apply_variational_step,
     _stop_reason,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_saturation_window_must_be_unreliable_and_flat() -> None:
@@ -442,3 +453,155 @@ def test_runtime_plot_rejects_nonfinite_or_clipped_values(
     target[field] = value
     with pytest.raises(RuntimeError, match="Invalid cumulative runtime summary"):
         _validate_runtime_rows(rows, "ising_1d", stop_step=3)
+
+
+def _write_tdvp_override_manifest_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Write a compact content-addressed manifest fixture.
+
+    Returns:
+        The override and base campaign directories.
+    """
+    base_dir = tmp_path / "base"
+    override_dir = base_dir / "tdvp-control"
+    override_dir.mkdir(parents=True)
+    base_trajectory = base_dir / "trajectory_rows.csv"
+    base_trajectory.write_text("base trajectory\n", encoding="utf-8")
+    base_manifest = {
+        "campaign_id": "circuit-infidelity-until-saturation-v2",
+        "source_hash": "strict-source",
+        "cases": {
+            case_key: {
+                "status": "success",
+                "criterion_met": True,
+                "right_censored": False,
+                "stop_step": 30,
+            }
+            for case_key in ("ising_1d", "heisenberg_1d", "ising_2d", "heisenberg_2d")
+        },
+    }
+    base_manifest_path = base_dir / "manifest.json"
+    base_manifest_path.write_text(json.dumps(base_manifest), encoding="utf-8")
+
+    artifacts = {}
+    for name, filename in {
+        "trajectory_rows": "trajectory_rows.csv",
+        "bond_profiles": "bond_profiles.csv",
+        "timing_rows": "timing_rows.csv",
+        "timing_summary": "timing_summary.csv",
+    }.items():
+        path = override_dir / filename
+        path.write_text(f"{name}\n", encoding="utf-8")
+        artifacts[name] = {
+            "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "bytes": path.stat().st_size,
+        }
+    manifest = {
+        "campaign_id": TDVP_OVERRIDE_CAMPAIGN_ID,
+        "source_hash": "control-source",
+        "environment": {
+            "thread_environment": {
+                "OMP_NUM_THREADS": "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "MKL_NUM_THREADS": "1",
+                "VECLIB_MAXIMUM_THREADS": "1",
+                "NUMEXPR_NUM_THREADS": "1",
+            }
+        },
+        "base_provenance": {
+            "campaign_id": base_manifest["campaign_id"],
+            "source_hash": base_manifest["source_hash"],
+            "manifest_sha256": hashlib.sha256(base_manifest_path.read_bytes()).hexdigest(),
+            "trajectory_sha256": hashlib.sha256(base_trajectory.read_bytes()).hexdigest(),
+        },
+        "protocol": {
+            "method": TDVP_OVERRIDE_METHOD,
+            "chi_cap": 32,
+            "n_sub": 2,
+            "krylov_tolerance": TDVP_OVERRIDE_TOLERANCE,
+            "svd_threshold": 1e-13,
+            "truncation_mode": "discarded_weight",
+            "frozen_endpoints": dict.fromkeys(
+                ("ising_1d", "heisenberg_1d", "ising_2d", "heisenberg_2d"),
+                30,
+            ),
+            "bond_profile_max_step": 30,
+            "threads": 1,
+        },
+        "timing_scope": {
+            "warmup_trajectories_per_case": 1,
+            "measured_repeats": 3,
+            "included": "apply_mps_step for every gate in each complete Trotter step",
+        },
+        "cases": {
+            case_key: {
+                "stop_step": 30,
+                "accuracy_status": "success",
+                "endpoint_infidelity": 0.1,
+                "timing_repeats_complete": 3,
+            }
+            for case_key in ("ising_1d", "heisenberg_1d", "ising_2d", "heisenberg_2d")
+        },
+        "artifacts": artifacts,
+    }
+    (override_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return override_dir, base_dir
+
+
+def test_tdvp_override_manifest_authenticates_protocol_and_artifacts(tmp_path: Path) -> None:
+    """Accept only the complete tau=1e-5 control tied to the strict inputs."""
+    override_dir, base_dir = _write_tdvp_override_manifest_fixture(tmp_path)
+    manifest = load_validated_tdvp_override_manifest(override_dir, base_dir)
+    assert manifest["protocol"]["krylov_tolerance"] == TDVP_OVERRIDE_TOLERANCE
+
+    (override_dir / "timing_summary.csv").write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="manifest digest"):
+        load_validated_tdvp_override_manifest(override_dir, base_dir)
+
+
+def test_tdvp_override_manifest_rejects_a_loose_or_incomplete_protocol(tmp_path: Path) -> None:
+    """Do not silently plot exploratory tolerances or partial timing campaigns."""
+    override_dir, base_dir = _write_tdvp_override_manifest_fixture(tmp_path)
+    manifest_path = override_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["protocol"]["krylov_tolerance"] = 1e-3
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="publication control"):
+        load_validated_tdvp_override_manifest(override_dir, base_dir)
+
+
+def test_tdvp_row_override_preserves_every_comparator_row() -> None:
+    """Only TDVP data may change when the isolated control is overlaid."""
+    base = [
+        {"case": "ising_1d", "method": method, "step": str(step), "value": f"base-{method}-{step}"}
+        for method in METHODS
+        for step in range(2)
+    ]
+    override = [
+        {
+            "case": "ising_1d",
+            "method": TDVP_OVERRIDE_METHOD,
+            "step": str(step),
+            "value": f"control-{step}",
+        }
+        for step in range(2)
+    ]
+    combined = apply_tdvp_row_override(base, override, table="accuracy")
+    assert [row for row in combined if row["method"] == TDVP_OVERRIDE_METHOD] == override
+    assert [row for row in combined if row["method"] != TDVP_OVERRIDE_METHOD] == [
+        row for row in base if row["method"] != TDVP_OVERRIDE_METHOD
+    ]
+
+
+def test_tdvp_override_caption_does_not_reassert_the_flatness_criterion() -> None:
+    """Frozen control windows must not be described as newly satisfying the stop rule."""
+    _, control, primary = _variational_plot_fixture()
+    text = caption(
+        primary,
+        {"repeats": 3},
+        control,
+        tdvp_override_manifest={"protocol": {"krylov_tolerance": TDVP_OVERRIDE_TOLERANCE}},
+    )
+    assert "selected and frozen by the original strict-Krylov campaign" in text
+    assert "do not assert that the control itself re-satisfies" in text
+    assert "control at tolerance $10^{-5}$" in text

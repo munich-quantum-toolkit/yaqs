@@ -18,8 +18,6 @@ from typing import TYPE_CHECKING, Any
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import Normalize
-
 from experiments.circuit_benchmarks.config import (
     CAMPAIGN_ID,
     CHI_MAIN,
@@ -28,10 +26,17 @@ from experiments.circuit_benchmarks.config import (
     REPO_ROOT,
     N,
 )
+from experiments.circuit_benchmarks.long_trajectories.plot import (
+    TDVP_OVERRIDE_CHI_CAP,
+    TDVP_OVERRIDE_METHOD,
+    TDVP_OVERRIDE_PROFILE_MAX_STEP,
+    load_validated_tdvp_override_manifest,
+)
 from experiments.circuit_benchmarks.plotting import (
     CASE_ORDER,
     apply_style,
 )
+from matplotlib.colors import Normalize
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -185,8 +190,7 @@ def _load_profile_table(path: Path) -> dict[TaskKey, np.ndarray]:
     matrices: dict[TaskKey, np.ndarray] = {}
     for key, by_step in profiles.items():
         step_profiles = {
-            step: np.asarray([bonds[bond] for bond in range(1, N)], dtype=np.int64)
-            for step, bonds in by_step.items()
+            step: np.asarray([bonds[bond] for bond in range(1, N)], dtype=np.int64) for step, bonds in by_step.items()
         }
         matrices[key] = _stack_step_profiles(step_profiles)
     expected = {(case, method) for case in CASE_ORDER for method in PROFILE_METHOD_ORDER}
@@ -194,6 +198,86 @@ def _load_profile_table(path: Path) -> dict[TaskKey, np.ndarray]:
         msg = f"Incomplete bond-profile source table: missing={sorted(expected - set(matrices))}."
         raise RuntimeError(msg)
     return matrices
+
+
+def _load_tdvp_override_profiles(path: Path) -> dict[TaskKey, np.ndarray]:
+    """Load exactly four complete step-zero-through-30 TDVP profile matrices."""
+    profiles: dict[TaskKey, dict[int, dict[int, int]]] = {}
+    seen: set[tuple[str, int, int]] = set()
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            case = row.get("case", "")
+            method = row.get("method", "")
+            if case not in CASE_ORDER or method != TDVP_OVERRIDE_METHOD:
+                msg = "The bond-profile override must contain only the four TDVP cases."
+                raise RuntimeError(msg)
+            step = int(row["step"])
+            bond = int(row["bond"])
+            dimension = int(row["bond_dimension"])
+            record_key = (case, step, bond)
+            if record_key in seen:
+                msg = f"Duplicate TDVP bond-profile row {record_key}."
+                raise RuntimeError(msg)
+            if (
+                not 0 <= step <= TDVP_OVERRIDE_PROFILE_MAX_STEP
+                or not 1 <= bond < N
+                or not 1 <= dimension <= TDVP_OVERRIDE_CHI_CAP
+            ):
+                msg = f"Invalid TDVP bond-profile row {record_key}."
+                raise RuntimeError(msg)
+            seen.add(record_key)
+            key = (case, method)
+            profiles.setdefault(key, {}).setdefault(step, {})[bond] = dimension
+
+    expected_keys = {(case, TDVP_OVERRIDE_METHOD) for case in CASE_ORDER}
+    if set(profiles) != expected_keys:
+        msg = f"Incomplete TDVP bond-profile override: missing={sorted(expected_keys - set(profiles))}."
+        raise RuntimeError(msg)
+    matrices: dict[TaskKey, np.ndarray] = {}
+    for key, by_step in profiles.items():
+        step_profiles: dict[int, np.ndarray] = {}
+        for step, bonds in by_step.items():
+            expected_bonds = set(range(1, N))
+            if set(bonds) != expected_bonds:
+                msg = f"Incomplete TDVP bond profile for {key[0]}, step {step}."
+                raise RuntimeError(msg)
+            step_profiles[step] = np.asarray(
+                [bonds[bond] for bond in range(1, N)],
+                dtype=np.int64,
+            )
+        matrices[key] = _stack_step_profiles(
+            step_profiles,
+            n_steps=TDVP_OVERRIDE_PROFILE_MAX_STEP,
+        )
+    return matrices
+
+
+def apply_tdvp_profile_override(
+    profiles: Mapping[TaskKey, np.ndarray],
+    override: Mapping[TaskKey, np.ndarray],
+) -> dict[TaskKey, np.ndarray]:
+    """Replace only the four TDVP matrices and preserve all direct profiles."""
+    expected_base = {(case, method) for case in CASE_ORDER for method in PROFILE_METHOD_ORDER}
+    expected_override = {(case, TDVP_OVERRIDE_METHOD) for case in CASE_ORDER}
+    if set(profiles) != expected_base:
+        msg = "The frozen bond-profile table is incomplete."
+        raise RuntimeError(msg)
+    if set(override) != expected_override:
+        msg = "The TDVP bond-profile override is incomplete."
+        raise RuntimeError(msg)
+    for key, matrix in override.items():
+        expected_shape = (TDVP_OVERRIDE_PROFILE_MAX_STEP + 1, N - 1)
+        if matrix.shape != expected_shape or np.any(matrix < 1) or np.any(matrix > TDVP_OVERRIDE_CHI_CAP):
+            msg = f"The TDVP bond-profile override has invalid values for {key[0]}."
+            raise RuntimeError(msg)
+
+    combined = dict(profiles)
+    combined.update(override)
+    for key in expected_base - expected_override:
+        if combined[key] is not profiles[key]:
+            msg = f"The TDVP overlay modified the frozen direct profile {key}."
+            raise RuntimeError(msg)
+    return combined
 
 
 def _write_profile_table(path: Path, profiles: Mapping[TaskKey, np.ndarray]) -> None:
@@ -211,14 +295,22 @@ def load_profile_matrices(
     output_dir: Path,
     *,
     refresh_data: bool = False,
+    tdvp_override_dir: Path | None = None,
+    tdvp_base_output_dir: Path | None = None,
 ) -> dict[TaskKey, np.ndarray]:
     """Load all 12 profiles, optionally refreshing the portable source table."""
     source_path = output_dir / DATA_FILENAME
     if source_path.is_file() and not refresh_data:
-        return _load_profile_table(source_path)
-    tasks = _current_trajectory_tasks(output_dir)
-    profiles = {key: _task_profile_matrix(task, output_dir) for key, task in tasks.items()}
-    _write_profile_table(source_path, profiles)
+        profiles = _load_profile_table(source_path)
+    else:
+        tasks = _current_trajectory_tasks(output_dir)
+        profiles = {key: _task_profile_matrix(task, output_dir) for key, task in tasks.items()}
+        _write_profile_table(source_path, profiles)
+    if tdvp_override_dir is not None:
+        base_output_dir = tdvp_base_output_dir or tdvp_override_dir.parent
+        load_validated_tdvp_override_manifest(tdvp_override_dir, base_output_dir)
+        override = _load_tdvp_override_profiles(tdvp_override_dir / "bond_profiles.csv")
+        profiles = apply_tdvp_profile_override(profiles, override)
     return profiles
 
 
@@ -355,12 +447,19 @@ def create_figure(profiles: Mapping[TaskKey, np.ndarray]) -> plt.Figure:
     return figure
 
 
-def caption() -> str:
+def caption(*, tdvp_override_manifest: Mapping[str, object] | None = None) -> str:
     """Return the manuscript-ready figure caption."""
+    control_note = ""
+    if tdvp_override_manifest is not None:
+        control_note = (
+            "The TDVP profiles are recomputed in the isolated Krylov control at tolerance $10^{-5}$; "
+            "the MPO and TEBD+SWAP profiles retain the frozen original data. "
+        )
     return (
         "MPS bond profiles during fixed-cap circuit evolution at chi_max=32. Rows (a)--(d) show the four "
         "model and geometry combinations; columns show TDVP, MPO, and TEBD+SWAP. TDVP denotes gate-local "
         "two-site TDVP, and MPO denotes routing-free MPO contract-and-truncate. "
+        f"{control_note}"
         "The displayed step ranges end at n=27, 6, "
         "6, and 1 from top to bottom. Colors encode the retained bond dimensions linearly, with the terminal "
         "color marking the imposed cap. Profiles are recorded after complete Trotter "
@@ -386,9 +485,27 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Rebuild bond_profiles.csv from the current trajectory checkpoints.",
     )
+    parser.add_argument(
+        "--tdvp-override-dir",
+        type=Path,
+        help=(
+            "Explicit directory containing the complete TDVP-only Krylov control. "
+            "When supplied, only the TDVP profile column is replaced in memory."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    profiles = load_profile_matrices(args.output_dir, refresh_data=args.refresh_data)
+    profiles = load_profile_matrices(
+        args.output_dir,
+        refresh_data=args.refresh_data,
+        tdvp_override_dir=args.tdvp_override_dir,
+    )
+    tdvp_override_manifest = None
+    if args.tdvp_override_dir is not None:
+        tdvp_override_manifest = load_validated_tdvp_override_manifest(
+            args.tdvp_override_dir,
+            args.tdvp_override_dir.parent,
+        )
     figure = create_figure(profiles)
     args.figures_dir.mkdir(parents=True, exist_ok=True)
     figure.savefig(args.figures_dir / f"{FIGURE_STEM}.pdf", dpi=DPI)
@@ -396,7 +513,7 @@ def main(argv: list[str] | None = None) -> None:
     plt.close(figure)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / f"{FIGURE_STEM}_caption.md").write_text(
-        caption() + "\n",
+        caption(tdvp_override_manifest=tdvp_override_manifest) + "\n",
         encoding="utf-8",
     )
 

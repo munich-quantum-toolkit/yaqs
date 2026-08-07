@@ -1,0 +1,109 @@
+{
+  "accuracy_task_source_hashes": [
+    "81be240cd543b7b55c4bddb9811f7995f91237a6e41388754d27d8241951456a"
+  ],
+  "artifacts": {
+    "bond_profiles": {
+      "bytes": 69018,
+      "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/bond_profiles.csv",
+      "sha256": "f6e4c9c2212b1319a417affcac934a9f8b6b3cb3319aafe9064e07de38757502"
+    },
+    "timing_rows": {
+      "bytes": 74387,
+      "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_rows.csv",
+      "sha256": "ac39095a8a8b3272cbd930ae6edfe354ec9d0108961f50a3aa5cd6ae9e0f6481"
+    },
+    "timing_summary": {
+      "bytes": 28702,
+      "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_summary.csv",
+      "sha256": "d7dee4d89f9ee7f38b15a58e252378fc3ca4e5b92293f5c31230d353aaed2707"
+    },
+    "trajectory_rows": {
+      "bytes": 42174,
+      "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/trajectory_rows.csv",
+      "sha256": "a91cb6550588f482c0967321bbe03b0ed36a3f0de28c4bd60d902462a55d250d"
+    }
+  },
+  "base_provenance": {
+    "campaign_id": "circuit-infidelity-until-saturation-v2",
+    "manifest_path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/manifest.json",
+    "manifest_sha256": "e01bccc5398d8fc661d44f62684234f2fe5a97ddeb9706823b5a0367391dee82",
+    "source_hash": "3e395aa45f436d4d66d61f271fb3ba7219fd361dbe2caeef780e225ca56ceed5",
+    "trajectory_path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/trajectory_rows.csv",
+    "trajectory_sha256": "9f2e332fc5e781b0beed70e2a1c1aa8116c71140190f16f98f86955ba94341c6"
+  },
+  "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+  "cases": {
+    "heisenberg_1d": {
+      "accuracy_status": "success",
+      "endpoint_infidelity": 0.6026990544479991,
+      "stop_step": 37,
+      "timing_repeats_complete": 3
+    },
+    "heisenberg_2d": {
+      "accuracy_status": "success",
+      "endpoint_infidelity": 0.6765037659855362,
+      "stop_step": 33,
+      "timing_repeats_complete": 3
+    },
+    "ising_1d": {
+      "accuracy_status": "success",
+      "endpoint_infidelity": 0.1534132287865002,
+      "stop_step": 62,
+      "timing_repeats_complete": 3
+    },
+    "ising_2d": {
+      "accuracy_status": "success",
+      "endpoint_infidelity": 0.09440729697595562,
+      "stop_step": 74,
+      "timing_repeats_complete": 3
+    }
+  },
+  "created_utc": "2026-08-07T18:14:24.125856+00:00",
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "git": {
+    "commit": "9a236a41dec23a3b25e48e95644eecc30aff4095",
+    "diff_hash": "0f0fcb273465cb67f6ca48323180c716f1a475de54e00a3d9e04625cf5d1db29",
+    "dirty": true
+  },
+  "protocol": {
+    "bond_profile_max_step": 30,
+    "chi_cap": 32,
+    "frozen_endpoints": {
+      "heisenberg_1d": 37,
+      "heisenberg_2d": 33,
+      "ising_1d": 62,
+      "ising_2d": 74
+    },
+    "krylov_tolerance": 1e-05,
+    "method": "gate_local_2tdvp",
+    "n_sub": 2,
+    "svd_threshold": 1e-13,
+    "threads": 1,
+    "truncation_mode": "discarded_weight"
+  },
+  "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+  "timing_scope": {
+    "excluded": "schedule compilation, MPS initialization, dense evolution, endpoint fidelity, resource diagnostics, serialization, and plotting",
+    "included": "apply_mps_step for every gate in each complete Trotter step",
+    "measured_repeats": 3,
+    "warmup_trajectories_per_case": 1
+  }
+}

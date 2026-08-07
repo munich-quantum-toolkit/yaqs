@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import math
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import matplotlib as mpl
@@ -56,6 +59,21 @@ VARIATIONAL_METHOD = "variational_mpo"
 VARIATIONAL_RUNTIME_BUDGET_S = 1.0e2
 VARIATIONAL_CENSOR_SCHEMA_VERSION = 1
 VARIATIONAL_CENSOR_RECORD_TYPE = "incomplete_variational_step_runtime_lower_bound"
+TDVP_OVERRIDE_CAMPAIGN_ID = "circuit-long-trajectory-tdvp-krylov-override-v1"
+TDVP_OVERRIDE_METHOD = "gate_local_2tdvp"
+TDVP_OVERRIDE_TOLERANCE = 1e-5
+TDVP_OVERRIDE_CHI_CAP = 32
+TDVP_OVERRIDE_N_SUB = 2
+TDVP_OVERRIDE_SVD_THRESHOLD = 1e-13
+TDVP_OVERRIDE_TRUNCATION_MODE = "discarded_weight"
+TDVP_OVERRIDE_PROFILE_MAX_STEP = 30
+TDVP_OVERRIDE_REPEATS = 3
+TDVP_OVERRIDE_ARTIFACTS = {
+    "trajectory_rows": "trajectory_rows.csv",
+    "bond_profiles": "bond_profiles.csv",
+    "timing_rows": "timing_rows.csv",
+    "timing_summary": "timing_summary.csv",
+}
 VARIATIONAL_STYLE = {
     "color": "#CC79A7",
     "marker": "D",
@@ -88,6 +106,303 @@ def _read_manifest(path: Path) -> dict[str, object]:
         msg = f"Expected a JSON object in {path}."
         raise TypeError(msg)
     return value
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest of one provenance input or artifact."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _base_endpoints(manifest: Mapping[str, object]) -> dict[str, int]:
+    """Return the four successful endpoints frozen by the strict campaign."""
+    if manifest.get("campaign_id") != "circuit-infidelity-until-saturation-v2":
+        msg = "Unexpected base long-trajectory campaign."
+        raise RuntimeError(msg)
+    records = manifest.get("cases")
+    if not isinstance(records, Mapping) or set(records) != set(CASE_ORDER):
+        msg = "The base long-trajectory manifest does not contain exactly four cases."
+        raise RuntimeError(msg)
+    endpoints: dict[str, int] = {}
+    for case_key in CASE_ORDER:
+        record = records[case_key]
+        if (
+            not isinstance(record, Mapping)
+            or record.get("status") != "success"
+            or record.get("criterion_met") is not True
+            or record.get("right_censored") is not False
+        ):
+            msg = f"The base endpoint for {case_key} is incomplete or censored."
+            raise RuntimeError(msg)
+        endpoint = int(record.get("stop_step", -1))
+        if endpoint < TDVP_OVERRIDE_PROFILE_MAX_STEP:
+            msg = f"The base endpoint for {case_key} is too short for the TDVP control."
+            raise RuntimeError(msg)
+        endpoints[case_key] = endpoint
+    return endpoints
+
+
+def _validate_override_artifact(
+    override_dir: Path,
+    artifacts: Mapping[str, object],
+    name: str,
+) -> None:
+    """Authenticate one portable control artifact against its manifest."""
+    record = artifacts.get(name)
+    if not isinstance(record, Mapping):
+        msg = f"The TDVP override manifest has no {name!r} artifact record."
+        raise RuntimeError(msg)
+    path = override_dir / TDVP_OVERRIDE_ARTIFACTS[name]
+    if not path.is_file():
+        msg = f"Missing TDVP override artifact {path}."
+        raise FileNotFoundError(msg)
+    expected_digest = record.get("sha256")
+    if not isinstance(expected_digest, str) or _sha256(path) != expected_digest:
+        msg = f"The TDVP override artifact {name!r} does not match its manifest digest."
+        raise RuntimeError(msg)
+    try:
+        expected_bytes = int(record["bytes"])
+    except (KeyError, TypeError, ValueError) as error:
+        msg = f"The TDVP override artifact {name!r} has no valid byte count."
+        raise ValueError(msg) from error
+    if path.stat().st_size != expected_bytes:
+        msg = f"The TDVP override artifact {name!r} does not match its manifest byte count."
+        raise RuntimeError(msg)
+
+
+def load_validated_tdvp_override_manifest(
+    override_dir: Path,
+    base_output_dir: Path,
+) -> dict[str, object]:
+    """Load and authenticate the complete TDVP-only Krylov control.
+
+    The control is valid only as an in-memory replacement for the TDVP rows of
+    the content-addressed strict campaign from which its endpoints were frozen.
+    """
+    manifest_path = override_dir / "manifest.json"
+    base_manifest_path = base_output_dir / "manifest.json"
+    base_trajectory_path = base_output_dir / "trajectory_rows.csv"
+    manifest = _read_manifest(manifest_path)
+    base_manifest = _read_manifest(base_manifest_path)
+    endpoints = _base_endpoints(base_manifest)
+
+    if manifest.get("campaign_id") != TDVP_OVERRIDE_CAMPAIGN_ID:
+        msg = "Unexpected TDVP Krylov-override campaign."
+        raise RuntimeError(msg)
+    protocol = manifest.get("protocol")
+    if not isinstance(protocol, Mapping):
+        msg = "The TDVP override manifest has no protocol record."
+        raise RuntimeError(msg)
+    expected_protocol: dict[str, object] = {
+        "method": TDVP_OVERRIDE_METHOD,
+        "chi_cap": TDVP_OVERRIDE_CHI_CAP,
+        "n_sub": TDVP_OVERRIDE_N_SUB,
+        "krylov_tolerance": TDVP_OVERRIDE_TOLERANCE,
+        "svd_threshold": TDVP_OVERRIDE_SVD_THRESHOLD,
+        "truncation_mode": TDVP_OVERRIDE_TRUNCATION_MODE,
+        "frozen_endpoints": endpoints,
+        "bond_profile_max_step": TDVP_OVERRIDE_PROFILE_MAX_STEP,
+        "threads": 1,
+    }
+    mismatches = {
+        key: (protocol.get(key), expected)
+        for key, expected in expected_protocol.items()
+        if protocol.get(key) != expected
+    }
+    if mismatches:
+        msg = f"The TDVP override protocol does not match the publication control: {mismatches}."
+        raise RuntimeError(msg)
+
+    timing_scope = manifest.get("timing_scope")
+    if (
+        not isinstance(timing_scope, Mapping)
+        or timing_scope.get("warmup_trajectories_per_case") != 1
+        or timing_scope.get("measured_repeats") != TDVP_OVERRIDE_REPEATS
+        or timing_scope.get("included") != "apply_mps_step for every gate in each complete Trotter step"
+    ):
+        msg = "The TDVP override does not use the required one-thread repeated timing protocol."
+        raise RuntimeError(msg)
+
+    environment = manifest.get("environment")
+    thread_environment = environment.get("thread_environment") if isinstance(environment, Mapping) else None
+    if not isinstance(thread_environment, Mapping) or any(
+        thread_environment.get(name) != "1"
+        for name in (
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        )
+    ):
+        msg = "The TDVP override environment does not record one numerical thread."
+        raise RuntimeError(msg)
+
+    cases = manifest.get("cases")
+    if not isinstance(cases, Mapping) or set(cases) != set(CASE_ORDER):
+        msg = "The TDVP override must contain exactly the four publication cases."
+        raise RuntimeError(msg)
+    for case_key, endpoint in endpoints.items():
+        record = cases[case_key]
+        if (
+            not isinstance(record, Mapping)
+            or record.get("accuracy_status") != "success"
+            or int(record.get("stop_step", -1)) != endpoint
+            or int(record.get("timing_repeats_complete", -1)) != TDVP_OVERRIDE_REPEATS
+        ):
+            msg = f"The TDVP override is incomplete for {case_key}."
+            raise RuntimeError(msg)
+        endpoint_infidelity = float(record.get("endpoint_infidelity", float("nan")))
+        if not math.isfinite(endpoint_infidelity) or not 0.0 <= endpoint_infidelity <= 1.0:
+            msg = f"The TDVP override endpoint is invalid for {case_key}."
+            raise RuntimeError(msg)
+
+    provenance = manifest.get("base_provenance")
+    if not isinstance(provenance, Mapping):
+        msg = "The TDVP override has no base-campaign provenance."
+        raise RuntimeError(msg)
+    expected_provenance = {
+        "campaign_id": base_manifest.get("campaign_id"),
+        "source_hash": base_manifest.get("source_hash"),
+        "manifest_sha256": _sha256(base_manifest_path),
+        "trajectory_sha256": _sha256(base_trajectory_path),
+    }
+    provenance_mismatches = {
+        key: (provenance.get(key), expected)
+        for key, expected in expected_provenance.items()
+        if provenance.get(key) != expected
+    }
+    if provenance_mismatches:
+        msg = f"The TDVP override does not match the frozen base artifacts: {provenance_mismatches}."
+        raise RuntimeError(msg)
+
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, Mapping) or set(artifacts) != set(TDVP_OVERRIDE_ARTIFACTS):
+        msg = "The complete TDVP override must contain all four compact artifacts."
+        raise RuntimeError(msg)
+    for name in TDVP_OVERRIDE_ARTIFACTS:
+        _validate_override_artifact(override_dir, artifacts, name)
+    return manifest
+
+
+def _validate_tdvp_override_rows(
+    trajectory_rows: Sequence[Mapping[str, str]],
+    timing_rows: Sequence[Mapping[str, str]],
+    manifest: Mapping[str, object],
+) -> None:
+    """Require complete, finite TDVP-only accuracy and timing trajectories."""
+    protocol = manifest["protocol"]
+    cases = manifest["cases"]
+    if not isinstance(protocol, Mapping) or not isinstance(cases, Mapping):
+        msg = "The validated TDVP override manifest is malformed."
+        raise RuntimeError(msg)
+    endpoints = protocol["frozen_endpoints"]
+    if not isinstance(endpoints, Mapping):
+        msg = "The validated TDVP override has no frozen endpoints."
+        raise RuntimeError(msg)
+
+    for rows, table in ((trajectory_rows, "trajectory"), (timing_rows, "timing")):
+        if not rows:
+            msg = f"The TDVP override {table} table is empty."
+            raise RuntimeError(msg)
+        if any(
+            row.get("campaign_id") != TDVP_OVERRIDE_CAMPAIGN_ID
+            or row.get("method") != TDVP_OVERRIDE_METHOD
+            or row.get("case") not in CASE_ORDER
+            for row in rows
+        ):
+            msg = f"The TDVP override {table} table must contain only TDVP control rows."
+            raise RuntimeError(msg)
+
+    for case_key in CASE_ORDER:
+        endpoint = int(endpoints[case_key])
+        accuracy = _case_method_rows(list(trajectory_rows), case_key, TDVP_OVERRIDE_METHOD)
+        timing = _runtime_method_rows(list(timing_rows), case_key, TDVP_OVERRIDE_METHOD)
+        expected_steps = list(range(endpoint + 1))
+        if [int(row["step"]) for row in accuracy] != expected_steps:
+            msg = f"The TDVP override accuracy trajectory is incomplete for {case_key}."
+            raise RuntimeError(msg)
+        if [int(row["step"]) for row in timing] != expected_steps:
+            msg = f"The TDVP override timing trajectory is incomplete for {case_key}."
+            raise RuntimeError(msg)
+        if any(
+            int(row["chi_cap"]) != TDVP_OVERRIDE_CHI_CAP or int(row["n_sub"]) != TDVP_OVERRIDE_N_SUB for row in accuracy
+        ):
+            msg = f"The TDVP override accuracy protocol changed for {case_key}."
+            raise RuntimeError(msg)
+        infidelities = np.asarray([float(row["infidelity_normalized"]) for row in accuracy])
+        parameters = np.asarray([float(row["current_parameter_count"]) for row in accuracy])
+        if (
+            not np.all(np.isfinite(infidelities))
+            or not np.all(np.isfinite(parameters))
+            or np.any(infidelities < -1e-12)
+            or np.any(infidelities > 1.0 + 1e-12)
+            or np.any(parameters <= 0.0)
+        ):
+            msg = f"The TDVP override accuracy values are invalid for {case_key}."
+            raise RuntimeError(msg)
+        reported_endpoint = float(cases[case_key]["endpoint_infidelity"])  # type: ignore[index]
+        if not np.isclose(infidelities[-1], reported_endpoint, rtol=0.0, atol=1e-12):
+            msg = f"The TDVP override endpoint disagrees with its manifest for {case_key}."
+            raise RuntimeError(msg)
+        if any(int(row["repeats"]) != TDVP_OVERRIDE_REPEATS for row in timing):
+            msg = f"The TDVP override timing summary has the wrong repeat count for {case_key}."
+            raise RuntimeError(msg)
+        medians = np.asarray([float(row["median_cumulative_runtime_s"]) for row in timing])
+        lows = np.asarray([float(row["min_cumulative_runtime_s"]) for row in timing])
+        highs = np.asarray([float(row["max_cumulative_runtime_s"]) for row in timing])
+        if (
+            not np.all(np.isfinite(medians))
+            or not np.all(np.isfinite(lows))
+            or not np.all(np.isfinite(highs))
+            or medians[0] != 0.0
+            or lows[0] != 0.0
+            or highs[0] != 0.0
+            or np.any(medians[1:] <= 0.0)
+            or np.any(lows > medians)
+            or np.any(medians > highs)
+            or np.any(np.diff(medians) < 0.0)
+            or np.any(np.diff(lows) < 0.0)
+            or np.any(np.diff(highs) < 0.0)
+        ):
+            msg = f"The TDVP override runtime values are invalid for {case_key}."
+            raise RuntimeError(msg)
+
+
+def apply_tdvp_row_override(
+    base_rows: Sequence[dict[str, str]],
+    override_rows: Sequence[dict[str, str]],
+    *,
+    table: str,
+) -> list[dict[str, str]]:
+    """Replace TDVP rows in memory while preserving every comparator row."""
+
+    def key(row: Mapping[str, str]) -> tuple[str, int]:
+        return str(row["case"]), int(row["step"])
+
+    base_tdvp = [row for row in base_rows if row.get("method") == TDVP_OVERRIDE_METHOD]
+    replacement: dict[tuple[str, int], dict[str, str]] = {}
+    for row in override_rows:
+        row_key = key(row)
+        if row_key in replacement:
+            msg = f"Duplicate TDVP override row {row_key} in {table}."
+            raise RuntimeError(msg)
+        replacement[row_key] = row
+    base_keys = [key(row) for row in base_tdvp]
+    if set(base_keys) != set(replacement) or len(base_keys) != len(replacement):
+        msg = f"The TDVP override keys do not match the frozen {table} trajectory."
+        raise RuntimeError(msg)
+
+    combined = [replacement[key(row)] if row.get("method") == TDVP_OVERRIDE_METHOD else row for row in base_rows]
+    base_comparators = [row for row in base_rows if row.get("method") != TDVP_OVERRIDE_METHOD]
+    combined_comparators = [row for row in combined if row.get("method") != TDVP_OVERRIDE_METHOD]
+    if combined_comparators != base_comparators:
+        msg = f"The TDVP override modified a frozen comparator row in {table}."
+        raise RuntimeError(msg)
+    return combined
 
 
 def _case_method_rows(
@@ -272,9 +587,7 @@ def _validate_variational_runtime_censor(
         "attempted_step_completed": False,
     }
     mismatches = {
-        key: (record.get(key), expected)
-        for key, expected in expected_exact.items()
-        if record.get(key) != expected
+        key: (record.get(key), expected) for key, expected in expected_exact.items() if record.get(key) != expected
     }
     if mismatches:
         msg = f"Invalid variational runtime-censor identity: {mismatches}."
@@ -815,10 +1128,7 @@ def _plot_runtime(
     axis.set_xlim(-0.5, stop_step + 0.5)
     axis.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True, min_n_ticks=3))
     panel_label_x = (
-        0.14
-        if variational_runtime_censor is not None
-        and variational_runtime_censor.get("case") == case_key
-        else 0.025
+        0.14 if variational_runtime_censor is not None and variational_runtime_censor.get("case") == case_key else 0.025
     )
     axis.text(
         panel_label_x,
@@ -1009,6 +1319,7 @@ def caption(
     runtime_manifest: dict[str, object],
     variational_manifest: dict[str, object] | None = None,
     variational_runtime_censor: dict[str, object] | None = None,
+    tdvp_override_manifest: dict[str, object] | None = None,
 ) -> str:
     """Return a manuscript-ready explanation of all three metric rows."""
     cases = manifest["cases"]
@@ -1030,21 +1341,47 @@ def caption(
             f"lower bound $>{lower_bound:g}$ s for the runtime-censored, incomplete first step. "
             "No corresponding infidelity or parameter datum exists."
         )
+    endpoint_note = (
+        "Each column ends at the first Trotter step for which each of the three primary methods has "
+        f"maintained $1-F>10^{{-2}}$ and varied by at most {SATURATION_LOG_RANGE_DECADES:g} decades over "
+        f"the trailing {SATURATION_WINDOW_STEPS} Trotter steps; this local-flatness rule sets only the "
+        "displayed time range: it neither alters the first-crossing reliability horizon nor establishes "
+        "asymptotic long-time saturation. "
+    )
+    tdvp_note = ""
+    window_note = (
+        "The shaded region and linear-scale inset show the final ten-sample window satisfying the "
+        "local-flatness criterion; the inset vertical range is chosen separately for each circuit. "
+    )
+    if tdvp_override_manifest is not None:
+        endpoint_note = (
+            "The endpoints were selected and frozen by the original strict-Krylov campaign at the first "
+            "Trotter step for which each of its three primary trajectories maintained $1-F>10^{-2}$ and "
+            f"varied by at most {SATURATION_LOG_RANGE_DECADES:g} decades over the trailing "
+            f"{SATURATION_WINDOW_STEPS} steps. They are held fixed when TDVP is recomputed for the Krylov "
+            "control; the shaded final windows and insets therefore do not assert that the control itself "
+            "re-satisfies the endpoint-selection rule. The rule sets only the displayed time range and "
+            "does not establish asymptotic long-time saturation. "
+        )
+        tdvp_note = (
+            "The displayed TDVP accuracy, retained-size, and runtime curves use the isolated Krylov "
+            "control at tolerance $10^{-5}$; the MPO, TEBD+SWAP, and variational-MPO curves retain their "
+            "frozen data. "
+        )
+        window_note = (
+            "The shaded region and linear-scale inset show the same frozen final ten-sample window; "
+            "the inset vertical range is chosen separately for each circuit. "
+        )
     return (
         "Fixed-cap circuit accuracy, retained MPS size, and cumulative update runtime for four 16-site open "
         "systems at $\\chi_{\\max}=32$ and physical step size $\\Delta t=0.1$. Here $n=0$ denotes the initial "
         "MPS before any Trotter step. TDVP denotes gate-local two-site TDVP, and MPO denotes the routing-free "
         "MPO update. Rows (a)--(d) show normalized infidelity "
-        "relative to dense execution of the identical ordered second-order Trotter circuit. Each column ends "
-        "at the first Trotter step "
-        "for which each of the three primary methods has maintained "
-        f"$1-F>10^{{-2}}$ and varied by at most {SATURATION_LOG_RANGE_DECADES:g} decades over the trailing "
-        f"{SATURATION_WINDOW_STEPS} Trotter steps; this "
-        "local-flatness rule sets only the displayed time range: it neither alters the first-crossing reliability "
-        "horizon nor establishes asymptotic long-time saturation. In the 1D panels, MPO and TEBD+SWAP "
+        "relative to dense execution of the identical ordered second-order Trotter circuit. "
+        f"{endpoint_note}"
+        "In the 1D panels, MPO and TEBD+SWAP "
         "coincide because every gate is nearest-neighbor and both baselines use the same adjacent-gate update. "
-        "The shaded region and linear-scale inset show the final ten-sample window satisfying the local-flatness "
-        "criterion; the inset vertical range is chosen separately for each circuit. "
+        f"{window_note}"
         "The dotted line marks the reliability tolerance $\\epsilon=10^{-2}$, and values at or below $10^{-13}$ are "
         "shown at that plotting floor. Rows (e)--(h) show the total number of retained MPS tensor entries "
         "$P$ after each complete "
@@ -1062,6 +1399,7 @@ def caption(
         "matched-accuracy efficiency comparison. Runtime curves should therefore be compared within a column; "
         "the columns contain different gate counts and endpoint step counts. TDVP uses "
         "$n_{\\mathrm{sub}}=2$; the direct methods use $n_{\\mathrm{sub}}=1$. "
+        f"{tdvp_note}"
         f"{variational_note} "
         f"Panel endpoints are {endpoints}."
     )
@@ -1073,6 +1411,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--timing-dir", type=Path)
     parser.add_argument("--variational-dir", type=Path)
     parser.add_argument(
+        "--tdvp-override-dir",
+        type=Path,
+        help=(
+            "Explicit directory containing the complete TDVP-only Krylov control. "
+            "When supplied, only TDVP accuracy and timing rows are replaced in memory."
+        ),
+    )
+    parser.add_argument(
         "--figures-dir",
         type=Path,
         default=REPO_ROOT / "experiments" / "figures",
@@ -1083,6 +1429,25 @@ def main(argv: list[str] | None = None) -> None:
     manifest = _read_manifest(args.output_dir / "manifest.json")
     runtime_rows = _read_rows(timing_dir / "timing_summary.csv")
     runtime_manifest = _read_manifest(timing_dir / "manifest.json")
+    tdvp_override_manifest = None
+    if args.tdvp_override_dir is not None:
+        tdvp_override_manifest = load_validated_tdvp_override_manifest(
+            args.tdvp_override_dir,
+            args.output_dir,
+        )
+        override_rows = _read_rows(args.tdvp_override_dir / "trajectory_rows.csv")
+        override_runtime_rows = _read_rows(args.tdvp_override_dir / "timing_summary.csv")
+        _validate_tdvp_override_rows(
+            override_rows,
+            override_runtime_rows,
+            tdvp_override_manifest,
+        )
+        rows = apply_tdvp_row_override(rows, override_rows, table="accuracy")
+        runtime_rows = apply_tdvp_row_override(
+            runtime_rows,
+            override_runtime_rows,
+            table="timing",
+        )
     variational_dir = args.variational_dir or args.output_dir / VARIATIONAL_DIRNAME
     variational_rows_path = variational_dir / "trajectory_rows.csv"
     variational_manifest_path = variational_dir / "manifest.json"
@@ -1092,11 +1457,7 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError(msg)
     variational_rows = _read_rows(variational_rows_path) if variational_rows_path.is_file() else None
     variational_manifest = _read_manifest(variational_manifest_path) if variational_manifest_path.is_file() else None
-    variational_runtime_censor = (
-        _read_manifest(variational_censor_path)
-        if variational_censor_path.is_file()
-        else None
-    )
+    variational_runtime_censor = _read_manifest(variational_censor_path) if variational_censor_path.is_file() else None
     figure = create_figure(
         rows,
         manifest,
@@ -1117,6 +1478,7 @@ def main(argv: list[str] | None = None) -> None:
             runtime_manifest,
             variational_manifest,
             variational_runtime_censor,
+            tdvp_override_manifest,
         )
         + "\n",
         encoding="utf-8",

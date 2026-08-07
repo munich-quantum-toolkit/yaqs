@@ -1,0 +1,33 @@
+{
+  "case": "ising_2d",
+  "completed_utc": "2026-08-07T17:42:57.108806+00:00",
+  "elapsed_wall_s": 225.19480886287056,
+  "endpoint_metrics": {
+    "fidelity_normalized": 0.9055927030240444,
+    "infidelity_normalized": 0.09440729697595562,
+    "norm_approx": 0.9999999999999991,
+    "norm_drift": -1.9451107391432743e-13,
+    "norm_exact": 1.0000000000001936
+  },
+  "environment": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "packages": {
+      "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+      "numpy": "2.4.6",
+      "qiskit": "2.5.1",
+      "scipy": "1.18.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    }
+  },
+  "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+  "status": "success",
+  "stop_step": 74
+}

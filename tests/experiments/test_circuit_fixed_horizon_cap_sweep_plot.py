@@ -11,14 +11,19 @@ from experiments.circuit_benchmarks.config import METHODS
 from experiments.circuit_benchmarks.figures.fixed_horizon_cap_sweep import (
     FIGURE_HEIGHT_MM,
     FIGURE_WIDTH_MM,
+    KRYLOV_CAMPAIGN_ID,
+    KRYLOV_OVERLAY_CAPS,
+    KRYLOV_OVERLAY_TOLERANCE,
     PARAMETER_CURVE_GID,
     RING_GID,
     SHARED_MARKER_GID,
     VARIATIONAL_POINT_GID,
+    apply_tdvp_krylov_overlay,
     caption,
     create_figure,
     first_passing_caps,
     prepare_cap_sweep_data,
+    prepare_tdvp_krylov_overlay,
     prepare_variational_controls,
 )
 
@@ -40,9 +45,7 @@ def _inputs() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
                 "chi_max": str(cap),
                 "target_step": "15",
                 "max_infidelity_through": str(error),
-                "peak_parameter_count": str(
-                    (cap_index + 1) * 1000 * (2 if method == METHODS[1] else 1)
-                ),
+                "peak_parameter_count": str((cap_index + 1) * 1000 * (2 if method == METHODS[1] else 1)),
                 "selected": str(cap == selected_caps[method]),
             })
             median = float((method_index + 1) * (cap_index + 1))
@@ -81,6 +84,46 @@ def _variational_payload() -> dict[str, object]:
             for cap in (4, 8, 16)
         },
     }
+
+
+def _krylov_control() -> tuple[list[dict[str, str]], dict[str, object]]:
+    """Return a complete production-tolerance TDVP overlay and manifest."""
+    errors = (0.253, 0.102, 0.030, 0.0126, 0.0111, 0.00952, 0.00826, 0.00735)
+    rows = [
+        {
+            "campaign_id": KRYLOV_CAMPAIGN_ID,
+            "case": "ising_2d",
+            "method": METHODS[0],
+            "chi_max": str(cap),
+            "n_sub": "2",
+            "target_step": "15",
+            "krylov_tolerance": str(KRYLOV_OVERLAY_TOLERANCE),
+            "svd_threshold": "1e-13",
+            "max_infidelity_through": str(error),
+            "peak_parameter_count": str((index + 1) * 1111),
+            "median_runtime_s": str(3.0 + index),
+            "min_runtime_s": str(2.9 + index),
+            "max_runtime_s": str(3.1 + index),
+            "timing_repeats": "3",
+        }
+        for index, (cap, error) in enumerate(zip(KRYLOV_OVERLAY_CAPS, errors, strict=True))
+    ]
+    manifest: dict[str, object] = {
+        "campaign_id": KRYLOV_CAMPAIGN_ID,
+        "case": "ising_2d",
+        "method": METHODS[0],
+        "n_sub": 2,
+        "target_step": 15,
+        "timing_repeats": 3,
+        "svd_threshold": 1e-13,
+        "complete": True,
+        "row_counts": {"summary": len(rows)},
+        "hardware": {"threads": 1},
+        "requested_points": [
+            {"chi_max": cap, "krylov_tolerance": KRYLOV_OVERLAY_TOLERANCE} for cap in KRYLOV_OVERLAY_CAPS
+        ],
+    }
+    return rows, manifest
 
 
 def test_prepare_cap_sweep_data_joins_complete_method_cap_grid() -> None:
@@ -139,6 +182,54 @@ def test_prepare_cap_sweep_data_validates_selected_flag() -> None:
 
     with pytest.raises(RuntimeError, match="first passing cap is 28"):
         prepare_cap_sweep_data(sweep, timing)
+
+
+def test_tdvp_krylov_overlay_replaces_only_tdvp_and_preserves_selection() -> None:
+    """The production control should replace all and only the TDVP values."""
+    base = prepare_cap_sweep_data(*_inputs())
+    rows, manifest = _krylov_control()
+    overlay = prepare_tdvp_krylov_overlay(rows, manifest)
+    combined = apply_tdvp_krylov_overlay(base, overlay)
+
+    assert overlay.tolerance == KRYLOV_OVERLAY_TOLERANCE
+    assert [point.chi_max for point in overlay.points] == list(KRYLOV_OVERLAY_CAPS)
+    assert first_passing_caps(base) == first_passing_caps(combined)
+    assert [point for point in combined if point.method != METHODS[0]] == [
+        point for point in base if point.method != METHODS[0]
+    ]
+    assert [point for point in combined if point.method == METHODS[0]] == list(overlay.points)
+    assert combined[0].peak_parameters == 1111
+    assert combined[0].runtime_median_s == pytest.approx(3.0)
+
+
+def test_tdvp_krylov_overlay_requires_complete_fixed_protocol() -> None:
+    """Missing caps and deviations from the isolated control protocol must fail."""
+    rows, manifest = _krylov_control()
+    rows.pop()
+    manifest["row_counts"] = {"summary": len(rows)}
+    with pytest.raises(RuntimeError, match="complete tau=1e-05 cap grid"):
+        prepare_tdvp_krylov_overlay(rows, manifest)
+
+    rows, manifest = _krylov_control()
+    rows[0]["method"] = METHODS[1]
+    with pytest.raises(ValueError, match="only the 4x4 Ising TDVP method"):
+        prepare_tdvp_krylov_overlay(rows, manifest)
+
+    rows, manifest = _krylov_control()
+    rows[0]["timing_repeats"] = "1"
+    with pytest.raises(ValueError, match="fixed Figure 4 protocol"):
+        prepare_tdvp_krylov_overlay(rows, manifest)
+
+
+def test_tdvp_krylov_overlay_rejects_changed_first_passing_cap() -> None:
+    """The control may not silently change the accuracy-matched cap selection."""
+    base = prepare_cap_sweep_data(*_inputs())
+    rows, manifest = _krylov_control()
+    rows[4]["max_infidelity_through"] = "0.0099"
+    overlay = prepare_tdvp_krylov_overlay(rows, manifest)
+
+    with pytest.raises(RuntimeError, match="first-passing cap from 28 to 26"):
+        apply_tdvp_krylov_overlay(base, overlay)
 
 
 def test_prepare_variational_controls_require_complete_converged_cap_grid() -> None:
@@ -216,7 +307,11 @@ def test_cap_sweep_figure_dimensions_scales_labels_and_rings() -> None:
 
 def test_cap_sweep_caption_is_concise_and_explicit() -> None:
     """The caption should identify raw guides, selection, and timing scope."""
-    text = caption()
+    base = prepare_cap_sweep_data(*_inputs())
+    rows, manifest = _krylov_control()
+    overlay = prepare_tdvp_krylov_overlay(rows, manifest)
+    points = apply_tdvp_krylov_overlay(base, overlay)
+    text = caption(points, tdvp_krylov_tolerance=overlay.tolerance)
     assert text.startswith("\\textbf{Fixed-horizon cap sweep.}")
     assert "three one-thread" in text
     assert "at every timed cap" in text
@@ -227,6 +322,8 @@ def test_cap_sweep_caption_is_concise_and_explicit() -> None:
     assert "maximum observed MPS tensor" in text
     assert "precompression MPO--MPS intermediate" in text
     assert "temporary working arrays are excluded" in text
+    assert "isolated Krylov control at tolerance $10^{-5}$" in text
+    assert "direct-method series retain the frozen cap-sweep data" in text
     assert "offset horizontally in display space only for visibility" in text
     assert "guide curves remain at identical data coordinates" in text
     assert "$\\chi_{\\max}=28$, 26, and 32" in text

@@ -1,0 +1,4487 @@
+{
+  "bond_profiles": [
+    {
+      "bond": 1,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 1,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 0
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 1
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 6,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 9,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 7,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 10,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 6,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 2
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 15,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 17,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 17,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 17,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 17,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 18,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 17,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 15,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 3
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 24,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 27,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 28,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 30,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 28,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 27,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 24,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 4
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 30,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 30,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 5
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 6
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 7
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 8
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 9
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 10
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 11
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 12
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 13
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 14
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 15
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 16
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 17
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 18
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 19
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 20
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 21
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 22
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 23
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 24
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 25
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 26
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 27
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 28
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 29
+    },
+    {
+      "bond": 1,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 2,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 3,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 4,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 5,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 6,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 7,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 8,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 9,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 10,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 11,
+      "bond_dimension": 32,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 12,
+      "bond_dimension": 16,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 13,
+      "bond_dimension": 8,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 14,
+      "bond_dimension": 4,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    },
+    {
+      "bond": 15,
+      "bond_dimension": 2,
+      "case": "ising_2d",
+      "method": "gate_local_2tdvp",
+      "step": 30
+    }
+  ],
+  "completed_utc": "2026-08-07T17:14:14.703811+00:00",
+  "elapsed_wall_s": 225.4138625022024,
+  "endpoint_metrics": {
+    "fidelity_normalized": 0.9055927030240444,
+    "infidelity_normalized": 0.09440729697595562,
+    "norm_approx": 0.9999999999999991,
+    "norm_drift": -1.9451107391432743e-13,
+    "norm_exact": 1.0000000000001936
+  },
+  "payload": {
+    "base_manifest_sha256": "e01bccc5398d8fc661d44f62684234f2fe5a97ddeb9706823b5a0367391dee82",
+    "base_trajectory_sha256": "9f2e332fc5e781b0beed70e2a1c1aa8116c71140190f16f98f86955ba94341c6",
+    "bond_profile_max_step": 30,
+    "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+    "case": "ising_2d",
+    "chi_cap": 32,
+    "circuit_fingerprint": "d7746a0cfc57c796b6fdf626bc9447b9d508c99c42621c06074e108b7f4f094f",
+    "krylov_tolerance": 1e-05,
+    "n_sub": 2,
+    "source_hash": "81be240cd543b7b55c4bddb9811f7995f91237a6e41388754d27d8241951456a",
+    "stop_step": 74,
+    "svd_threshold": 1e-13,
+    "threads": 1,
+    "truncation_mode": "discarded_weight"
+  },
+  "rows": [
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 32,
+      "current_peak_bond_dim": 1,
+      "fidelity_normalized": 1.0,
+      "infidelity_normalized": 0.0,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": 0.0,
+      "norm_exact": 1.0,
+      "step": 0,
+      "time": 0.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 120,
+      "current_peak_bond_dim": 2,
+      "fidelity_normalized": 0.9999650619426723,
+      "infidelity_normalized": 3.4938057327682515e-05,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000058,
+      "norm_drift": -2.731148640577885e-14,
+      "norm_exact": 1.000000000000033,
+      "step": 1,
+      "time": 0.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 1218,
+      "current_peak_bond_dim": 10,
+      "fidelity_normalized": 0.9997262170875258,
+      "infidelity_normalized": 0.000273782912474152,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -5.329070518200751e-15,
+      "norm_exact": 1.000000000000006,
+      "step": 2,
+      "time": 0.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 5136,
+      "current_peak_bond_dim": 18,
+      "fidelity_normalized": 0.9994156519945545,
+      "infidelity_normalized": 0.0005843480054454897,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -8.659739592076221e-15,
+      "norm_exact": 1.0000000000000098,
+      "step": 3,
+      "time": 0.30000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 11192,
+      "current_peak_bond_dim": 30,
+      "fidelity_normalized": 0.9994155110123988,
+      "infidelity_normalized": 0.0005844889876012171,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999983,
+      "norm_drift": -1.3877787807814457e-14,
+      "norm_exact": 1.0000000000000122,
+      "step": 4,
+      "time": 0.4
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 14632,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9994152506944197,
+      "infidelity_normalized": 0.0005847493055802788,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999997,
+      "norm_drift": -1.099120794378905e-14,
+      "norm_exact": 1.0000000000000107,
+      "step": 5,
+      "time": 0.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9994141286343631,
+      "infidelity_normalized": 0.0005858713656369252,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000024,
+      "norm_drift": -1.176836406102666e-14,
+      "norm_exact": 1.0000000000000142,
+      "step": 6,
+      "time": 0.6000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9994120375015083,
+      "infidelity_normalized": 0.0005879624984916898,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -1.8318679906315083e-14,
+      "norm_exact": 1.0000000000000182,
+      "step": 7,
+      "time": 0.7000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9994047630744092,
+      "infidelity_normalized": 0.0005952369255908252,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.999999999999999,
+      "norm_drift": -2.2093438190040615e-14,
+      "norm_exact": 1.000000000000021,
+      "step": 8,
+      "time": 0.8
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.999369110881977,
+      "infidelity_normalized": 0.0006308891180230036,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000002,
+      "norm_drift": -2.0650148258027912e-14,
+      "norm_exact": 1.0000000000000226,
+      "step": 9,
+      "time": 0.9
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9992343688310347,
+      "infidelity_normalized": 0.0007656311689653306,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999984,
+      "norm_drift": -2.708944180085382e-14,
+      "norm_exact": 1.0000000000000255,
+      "step": 10,
+      "time": 1.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9988571987980447,
+      "infidelity_normalized": 0.0011428012019553124,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999988,
+      "norm_drift": -2.986499936241671e-14,
+      "norm_exact": 1.0000000000000286,
+      "step": 11,
+      "time": 1.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9980464644227076,
+      "infidelity_normalized": 0.001953535577292387,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -3.042011087472929e-14,
+      "norm_exact": 1.0000000000000313,
+      "step": 12,
+      "time": 1.2000000000000002
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9966537416028377,
+      "infidelity_normalized": 0.003346258397162294,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -3.397282455352979e-14,
+      "norm_exact": 1.0000000000000342,
+      "step": 13,
+      "time": 1.3
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9947573761780989,
+      "infidelity_normalized": 0.0052426238219011045,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -3.752553823233029e-14,
+      "norm_exact": 1.0000000000000377,
+      "step": 14,
+      "time": 1.4000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9926521703366361,
+      "infidelity_normalized": 0.007347829663363892,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999982,
+      "norm_drift": -4.063416270128073e-14,
+      "norm_exact": 1.0000000000000389,
+      "step": 15,
+      "time": 1.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9905021092095856,
+      "infidelity_normalized": 0.00949789079041441,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -4.0523140398818214e-14,
+      "norm_exact": 1.0000000000000404,
+      "step": 16,
+      "time": 1.6
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.988298569682104,
+      "infidelity_normalized": 0.011701430317896055,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -3.885780586188048e-14,
+      "norm_exact": 1.0000000000000397,
+      "step": 17,
+      "time": 1.7000000000000002
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9860310428698978,
+      "infidelity_normalized": 0.013968957130102155,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000016,
+      "norm_drift": -4.196643033083092e-14,
+      "norm_exact": 1.0000000000000435,
+      "step": 18,
+      "time": 1.8
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.983731163603243,
+      "infidelity_normalized": 0.016268836396757025,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000013,
+      "norm_drift": -4.907185768843192e-14,
+      "norm_exact": 1.0000000000000504,
+      "step": 19,
+      "time": 1.9000000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.981495775125921,
+      "infidelity_normalized": 0.01850422487407899,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999998,
+      "norm_drift": -5.240252676230739e-14,
+      "norm_exact": 1.0000000000000522,
+      "step": 20,
+      "time": 2.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9793936725667862,
+      "infidelity_normalized": 0.020606327433213778,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999981,
+      "norm_drift": -5.4067861299245124e-14,
+      "norm_exact": 1.0000000000000522,
+      "step": 21,
+      "time": 2.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9774034399349433,
+      "infidelity_normalized": 0.022596560065056726,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999984,
+      "norm_drift": -5.573319583618286e-14,
+      "norm_exact": 1.0000000000000542,
+      "step": 22,
+      "time": 2.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.975460328622123,
+      "infidelity_normalized": 0.024539671377877048,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -5.88418203051333e-14,
+      "norm_exact": 1.0000000000000597,
+      "step": 23,
+      "time": 2.3000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9734965465136051,
+      "infidelity_normalized": 0.026503453486394934,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.999999999999997,
+      "norm_drift": -6.628031457012185e-14,
+      "norm_exact": 1.0000000000000633,
+      "step": 24,
+      "time": 2.4000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9714867926018317,
+      "infidelity_normalized": 0.028513207398168317,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999988,
+      "norm_drift": -6.628031457012185e-14,
+      "norm_exact": 1.000000000000065,
+      "step": 25,
+      "time": 2.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9694853196711224,
+      "infidelity_normalized": 0.030514680328877608,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000013,
+      "norm_drift": -6.661338147750939e-14,
+      "norm_exact": 1.000000000000068,
+      "step": 26,
+      "time": 2.6
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9675520909754363,
+      "infidelity_normalized": 0.03244790902456374,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000018,
+      "norm_drift": -6.94999613415348e-14,
+      "norm_exact": 1.0000000000000713,
+      "step": 27,
+      "time": 2.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9657311740113048,
+      "infidelity_normalized": 0.034268825988695184,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999987,
+      "norm_drift": -7.549516567451064e-14,
+      "norm_exact": 1.0000000000000742,
+      "step": 28,
+      "time": 2.8000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9640736764627053,
+      "infidelity_normalized": 0.035926323537294746,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -7.172040739078511e-14,
+      "norm_exact": 1.0000000000000724,
+      "step": 29,
+      "time": 2.9000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9625555650650514,
+      "infidelity_normalized": 0.037444434934948645,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -7.505107646466058e-14,
+      "norm_exact": 1.0000000000000757,
+      "step": 30,
+      "time": 3.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9610723059977007,
+      "infidelity_normalized": 0.03892769400229934,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -8.08242361927114e-14,
+      "norm_exact": 1.0000000000000817,
+      "step": 31,
+      "time": 3.1
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9595424825053681,
+      "infidelity_normalized": 0.04045751749463189,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999993,
+      "norm_drift": -8.415490526658687e-14,
+      "norm_exact": 1.0000000000000835,
+      "step": 32,
+      "time": 3.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9579802251851997,
+      "infidelity_normalized": 0.04201977481480035,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999997,
+      "norm_drift": -8.804068585277491e-14,
+      "norm_exact": 1.0000000000000877,
+      "step": 33,
+      "time": 3.3000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9564516636613095,
+      "infidelity_normalized": 0.043548336338690485,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999997,
+      "norm_drift": -8.892886427247504e-14,
+      "norm_exact": 1.0000000000000886,
+      "step": 34,
+      "time": 3.4000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9549741726512797,
+      "infidelity_normalized": 0.04502582734872029,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -9.059419880941277e-14,
+      "norm_exact": 1.0000000000000913,
+      "step": 35,
+      "time": 3.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9536029531886104,
+      "infidelity_normalized": 0.046397046811389564,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999998,
+      "norm_drift": -9.614531393253856e-14,
+      "norm_exact": 1.000000000000096,
+      "step": 36,
+      "time": 3.6
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.952371310334503,
+      "infidelity_normalized": 0.04762868966549705,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000024,
+      "norm_drift": -9.459100169806334e-14,
+      "norm_exact": 1.000000000000097,
+      "step": 37,
+      "time": 3.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9511923147599356,
+      "infidelity_normalized": 0.0488076852400644,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -9.769962616701378e-14,
+      "norm_exact": 1.0000000000000984,
+      "step": 38,
+      "time": 3.8000000000000003
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9499729277643023,
+      "infidelity_normalized": 0.05002707223569769,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999998,
+      "norm_drift": -1.0147438445073931e-13,
+      "norm_exact": 1.0000000000001013,
+      "step": 39,
+      "time": 3.9000000000000004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9486772409902969,
+      "infidelity_normalized": 0.05132275900970307,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000009,
+      "norm_drift": -1.021405182655144e-13,
+      "norm_exact": 1.000000000000103,
+      "step": 40,
+      "time": 4.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.947326855550125,
+      "infidelity_normalized": 0.05267314444987503,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -1.0824674490095276e-13,
+      "norm_exact": 1.0000000000001081,
+      "step": 41,
+      "time": 4.1000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9460109815935083,
+      "infidelity_normalized": 0.05398901840649173,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000004,
+      "norm_drift": -1.0791367799356522e-13,
+      "norm_exact": 1.0000000000001084,
+      "step": 42,
+      "time": 4.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9448014697624286,
+      "infidelity_normalized": 0.055198530237571375,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -1.1268763699945339e-13,
+      "norm_exact": 1.0000000000001126,
+      "step": 43,
+      "time": 4.3
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9436436101507105,
+      "infidelity_normalized": 0.05635638984928948,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.1390888232654106e-13,
+      "norm_exact": 1.0000000000001146,
+      "step": 44,
+      "time": 4.4
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9424610568719058,
+      "infidelity_normalized": 0.057538943128094155,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.1723955140041653e-13,
+      "norm_exact": 1.000000000000118,
+      "step": 45,
+      "time": 4.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9412078792565012,
+      "infidelity_normalized": 0.05879212074349882,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -1.192379528447418e-13,
+      "norm_exact": 1.0000000000001192,
+      "step": 46,
+      "time": 4.6000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9397973980992806,
+      "infidelity_normalized": 0.060202601900719355,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999994,
+      "norm_drift": -1.2378986724570495e-13,
+      "norm_exact": 1.0000000000001232,
+      "step": 47,
+      "time": 4.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9382752775559436,
+      "infidelity_normalized": 0.06172472244405636,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -1.2434497875801753e-13,
+      "norm_exact": 1.0000000000001255,
+      "step": 48,
+      "time": 4.800000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9368097852459591,
+      "infidelity_normalized": 0.06319021475404085,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000004,
+      "norm_drift": -1.3034018309099338e-13,
+      "norm_exact": 1.0000000000001308,
+      "step": 49,
+      "time": 4.9
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.935518423955664,
+      "infidelity_normalized": 0.06448157604433602,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000027,
+      "norm_drift": -1.254552017826427e-13,
+      "norm_exact": 1.0000000000001281,
+      "step": 50,
+      "time": 5.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9343517861577367,
+      "infidelity_normalized": 0.06564821384226327,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -1.3589129821411916e-13,
+      "norm_exact": 1.0000000000001361,
+      "step": 51,
+      "time": 5.1000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9331404306165461,
+      "infidelity_normalized": 0.06685956938345394,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999999,
+      "norm_drift": -1.340039190722564e-13,
+      "norm_exact": 1.000000000000134,
+      "step": 52,
+      "time": 5.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9318179319316076,
+      "infidelity_normalized": 0.06818206806839244,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000002,
+      "norm_drift": -1.376676550535194e-13,
+      "norm_exact": 1.000000000000138,
+      "step": 53,
+      "time": 5.300000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9304537698558505,
+      "infidelity_normalized": 0.06954623014414951,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999986,
+      "norm_drift": -1.439959262938828e-13,
+      "norm_exact": 1.0000000000001426,
+      "step": 54,
+      "time": 5.4
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.929115600770223,
+      "infidelity_normalized": 0.07088439922977696,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000004,
+      "norm_drift": -1.4011014570769476e-13,
+      "norm_exact": 1.0000000000001406,
+      "step": 55,
+      "time": 5.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9278451761042741,
+      "infidelity_normalized": 0.07215482389572592,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999997,
+      "norm_drift": -1.45328193923433e-13,
+      "norm_exact": 1.000000000000145,
+      "step": 56,
+      "time": 5.6000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.92652783319887,
+      "infidelity_normalized": 0.07347216680113,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000007,
+      "norm_drift": -1.4521717162097048e-13,
+      "norm_exact": 1.0000000000001459,
+      "step": 57,
+      "time": 5.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9250805635838615,
+      "infidelity_normalized": 0.07491943641613852,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999964,
+      "norm_drift": -1.5343282200319663e-13,
+      "norm_exact": 1.0000000000001499,
+      "step": 58,
+      "time": 5.800000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9236161017860005,
+      "infidelity_normalized": 0.07638389821399949,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -1.525446435834965e-13,
+      "norm_exact": 1.0000000000001525,
+      "step": 59,
+      "time": 5.9
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9223551559414985,
+      "infidelity_normalized": 0.07764484405850147,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -1.5476508963274682e-13,
+      "norm_exact": 1.0000000000001548,
+      "step": 60,
+      "time": 6.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9213367563215691,
+      "infidelity_normalized": 0.07866324367843092,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000022,
+      "norm_drift": -1.5520917884259688e-13,
+      "norm_exact": 1.0000000000001574,
+      "step": 61,
+      "time": 6.1000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9203264565560242,
+      "infidelity_normalized": 0.07967354344397581,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0,
+      "norm_drift": -1.6076029396572267e-13,
+      "norm_exact": 1.0000000000001608,
+      "step": 62,
+      "time": 6.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9191010617050007,
+      "infidelity_normalized": 0.08089893829499928,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999986,
+      "norm_drift": -1.6486811915683575e-13,
+      "norm_exact": 1.0000000000001634,
+      "step": 63,
+      "time": 6.300000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.917691413218783,
+      "infidelity_normalized": 0.082308586781217,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999991,
+      "norm_drift": -1.645350522494482e-13,
+      "norm_exact": 1.0000000000001636,
+      "step": 64,
+      "time": 6.4
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9162417437923234,
+      "infidelity_normalized": 0.08375825620767663,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999966,
+      "norm_drift": -1.7152945730458669e-13,
+      "norm_exact": 1.000000000000168,
+      "step": 65,
+      "time": 6.5
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9149326538779163,
+      "infidelity_normalized": 0.08506734612208366,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000001,
+      "norm_drift": -1.6897594434794883e-13,
+      "norm_exact": 1.00000000000017,
+      "step": 66,
+      "time": 6.6000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9138439691661985,
+      "infidelity_normalized": 0.08615603083380152,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999997,
+      "norm_drift": -1.744160371686121e-13,
+      "norm_exact": 1.000000000000174,
+      "step": 67,
+      "time": 6.7
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9128556691206968,
+      "infidelity_normalized": 0.08714433087930318,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.0000000000000018,
+      "norm_drift": -1.787459069646502e-13,
+      "norm_exact": 1.0000000000001805,
+      "step": 68,
+      "time": 6.800000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9118345760038443,
+      "infidelity_normalized": 0.08816542399615568,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999993,
+      "norm_drift": -1.7918999617450027e-13,
+      "norm_exact": 1.0000000000001785,
+      "step": 69,
+      "time": 6.9
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9107057066879698,
+      "infidelity_normalized": 0.0892942933120302,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.999999999999999,
+      "norm_drift": -1.8174350913113813e-13,
+      "norm_exact": 1.0000000000001807,
+      "step": 70,
+      "time": 7.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9094410691454758,
+      "infidelity_normalized": 0.09055893085452416,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999983,
+      "norm_drift": -1.8640644583456378e-13,
+      "norm_exact": 1.0000000000001847,
+      "step": 71,
+      "time": 7.1000000000000005
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9081448755262836,
+      "infidelity_normalized": 0.09185512447371635,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 1.000000000000002,
+      "norm_drift": -1.851852005074761e-13,
+      "norm_exact": 1.0000000000001872,
+      "step": 72,
+      "time": 7.2
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9068986404701485,
+      "infidelity_normalized": 0.09310135952985155,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999978,
+      "norm_drift": -1.9273471707492718e-13,
+      "norm_exact": 1.0000000000001905,
+      "step": 73,
+      "time": 7.300000000000001
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "ising_2d",
+      "chi_cap": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "fidelity_normalized": 0.9055927030240444,
+      "infidelity_normalized": 0.09440729697595562,
+      "method": "gate_local_2tdvp",
+      "n_sub": 2,
+      "norm_approx": 0.9999999999999991,
+      "norm_drift": -1.9451107391432743e-13,
+      "norm_exact": 1.0000000000001936,
+      "step": 74,
+      "time": 7.4
+    }
+  ],
+  "status": "success"
+}

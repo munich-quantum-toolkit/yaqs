@@ -5,6 +5,11 @@
 #
 # Licensed under the MIT License
 """Focused tests for the circuit bond-profile figure."""
+# ruff: file-ignore[import-private-name] - this focused test intentionally exercises private helpers
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,11 +28,17 @@ from experiments.circuit_benchmarks.figures.bond_profiles import (
     PROFILE_ROW_LABELS,
     _bond_edges,
     _internal_bond_profile,
+    _load_tdvp_override_profiles,
     _stack_step_profiles,
+    apply_tdvp_profile_override,
+    caption,
     create_figure,
     load_profile_matrices,
 )
 from experiments.circuit_benchmarks.plotting import CASE_ORDER
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_internal_bond_profile_omits_fixed_boundaries() -> None:
@@ -52,7 +63,10 @@ def test_step_profile_stack_requires_every_endpoint() -> None:
         _stack_step_profiles(profiles, n_steps=2)
 
 
-def test_refresh_replaces_the_portable_profile_table(tmp_path, monkeypatch) -> None:
+def test_refresh_replaces_the_portable_profile_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A fresh campaign must be able to replace the retained compact table."""
     source = tmp_path / bond_profiles.DATA_FILENAME
     source.write_text("stale\n", encoding="utf-8")
@@ -66,9 +80,7 @@ def test_refresh_replaces_the_portable_profile_table(tmp_path, monkeypatch) -> N
     monkeypatch.setattr(
         bond_profiles,
         "_task_profile_matrix",
-        lambda task, _output_dir: expected[
-            tuple(str(task["task_id"]).split("-", maxsplit=1))
-        ],
+        lambda task, _output_dir: expected[tuple(str(task["task_id"]).split("-", maxsplit=1))],
     )
 
     refreshed = load_profile_matrices(tmp_path, refresh_data=True)
@@ -132,3 +144,42 @@ def test_publication_figure_uses_single_column_layout() -> None:
     assert all(type(mesh.norm) is Normalize for mesh in meshes)
     assert all(len(axis.collections) == 1 for axis in data_axes)
     assert all(mesh.cmap.name == PROFILE_COLORMAP for mesh in meshes)
+
+
+def test_tdvp_profile_override_preserves_direct_matrices() -> None:
+    """Overlay all four TDVP matrices without touching either direct method."""
+    profiles = {
+        (case, method): np.full((N_STEPS + 1, N - 1), 2, dtype=np.int64)
+        for case in CASE_ORDER
+        for method in PROFILE_METHOD_ORDER
+    }
+    override = {(case, "gate_local_2tdvp"): np.full((N_STEPS + 1, N - 1), 7, dtype=np.int64) for case in CASE_ORDER}
+    combined = apply_tdvp_profile_override(profiles, override)
+    for case in CASE_ORDER:
+        assert np.all(combined[case, "gate_local_2tdvp"] == 7)
+        for method in ("mpo_contract_compress", "tebd_swap"):
+            assert combined[case, method] is profiles[case, method]
+
+
+def test_tdvp_profile_table_requires_every_step_and_bond(tmp_path: Path) -> None:
+    """A partial TDVP trajectory must fail before it reaches a heatmap."""
+    path = tmp_path / "bond_profiles.csv"
+    lines = ["case,method,step,bond,bond_dimension"]
+    for case in CASE_ORDER:
+        for step in range(N_STEPS + 1):
+            lines.extend(f"{case},gate_local_2tdvp,{step},{bond},8" for bond in range(1, N))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    profiles = _load_tdvp_override_profiles(path)
+    assert set(profiles) == {(case, "gate_local_2tdvp") for case in CASE_ORDER}
+    assert all(matrix.shape == (N_STEPS + 1, N - 1) for matrix in profiles.values())
+
+    path.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Incomplete TDVP bond profile"):
+        _load_tdvp_override_profiles(path)
+
+
+def test_bond_profile_caption_identifies_the_tdvp_control() -> None:
+    """Distinguish the recomputed TDVP column from both frozen comparators."""
+    text = caption(tdvp_override_manifest={"protocol": {"krylov_tolerance": 1e-5}})
+    assert "TDVP profiles are recomputed" in text
+    assert "MPO and TEBD+SWAP profiles retain the frozen original data" in text

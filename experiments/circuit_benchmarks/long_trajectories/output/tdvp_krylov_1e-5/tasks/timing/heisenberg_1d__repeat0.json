@@ -1,0 +1,391 @@
+{
+  "completed_utc": "2026-08-07T17:33:38.213894+00:00",
+  "elapsed_wall_s": 172.4492695441004,
+  "endpoint_metrics": {
+    "fidelity_normalized": 0.39730094555200096,
+    "infidelity_normalized": 0.6026990544479991,
+    "norm_approx": 0.9999999999999996,
+    "norm_drift": -1.1679546219056647e-13,
+    "norm_exact": 1.0000000000001164
+  },
+  "payload": {
+    "base_manifest_sha256": "e01bccc5398d8fc661d44f62684234f2fe5a97ddeb9706823b5a0367391dee82",
+    "base_trajectory_sha256": "9f2e332fc5e781b0beed70e2a1c1aa8116c71140190f16f98f86955ba94341c6",
+    "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+    "case": "heisenberg_1d",
+    "chi_cap": 32,
+    "environment": {
+      "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+      "packages": {
+        "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+        "numpy": "2.4.6",
+        "qiskit": "2.5.1",
+        "scipy": "1.18.0",
+        "threadpoolctl": "3.6.0"
+      },
+      "python": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+      "thread_environment": {
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1"
+      }
+    },
+    "expected_endpoint_infidelity": 0.6026990544479991,
+    "krylov_tolerance": 1e-05,
+    "method": "gate_local_2tdvp",
+    "n_sub": 2,
+    "repeat": 0,
+    "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+    "stop_step": 37,
+    "svd_threshold": 1e-13,
+    "threads": 1,
+    "timing_scope": "apply_mps_step_only"
+  },
+  "rows": [
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 0.0,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 0,
+      "step_runtime_s": 0.0
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 0.3883530080784112,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 1,
+      "step_runtime_s": 0.3883530080784112
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 0.8165785830933601,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 2,
+      "step_runtime_s": 0.42822557501494884
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 1.2994937610346824,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 3,
+      "step_runtime_s": 0.4829151779413223
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 2.010298504959792,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 4,
+      "step_runtime_s": 0.7108047439251095
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 3.5637016298715025,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 5,
+      "step_runtime_s": 1.5534031249117106
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 8.11244064103812,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 6,
+      "step_runtime_s": 4.548739011166617
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 13.266502561047673,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 7,
+      "step_runtime_s": 5.154061920009553
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 18.40248315082863,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 8,
+      "step_runtime_s": 5.1359805897809565
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 23.60683967289515,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 9,
+      "step_runtime_s": 5.204356522066519
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 28.69329879176803,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 10,
+      "step_runtime_s": 5.086459118872881
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 38.60169185581617,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 11,
+      "step_runtime_s": 9.908393064048141
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 43.678048459813,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 12,
+      "step_runtime_s": 5.076356603996828
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 48.776273293886334,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 13,
+      "step_runtime_s": 5.098224834073335
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 53.95622850488871,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 14,
+      "step_runtime_s": 5.17995521100238
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 59.03293161303736,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 15,
+      "step_runtime_s": 5.076703108148649
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 64.19142700801603,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 16,
+      "step_runtime_s": 5.158495394978672
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 69.35216589691117,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 17,
+      "step_runtime_s": 5.160738888895139
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 74.42001433391124,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 18,
+      "step_runtime_s": 5.067848437000066
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 79.46755614993162,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 19,
+      "step_runtime_s": 5.047541816020384
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 84.73754346603528,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 20,
+      "step_runtime_s": 5.269987316103652
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 89.87668751785532,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 21,
+      "step_runtime_s": 5.13914405182004
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 95.07129256566986,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 22,
+      "step_runtime_s": 5.194605047814548
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 100.13487887964584,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 23,
+      "step_runtime_s": 5.063586313975975
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 105.34050444164313,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 24,
+      "step_runtime_s": 5.205625561997294
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 110.75735005666502,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 25,
+      "step_runtime_s": 5.416845615021884
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 115.96292599081062,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 26,
+      "step_runtime_s": 5.2055759341456
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 121.00570113188587,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 27,
+      "step_runtime_s": 5.0427751410752535
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 126.15211788192391,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 28,
+      "step_runtime_s": 5.146416750038043
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 131.3524223389104,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 29,
+      "step_runtime_s": 5.200304456986487
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 136.3526487390045,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 30,
+      "step_runtime_s": 5.000226400094107
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 141.79084776109084,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 31,
+      "step_runtime_s": 5.438199022086337
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 146.86827403097413,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 32,
+      "step_runtime_s": 5.07742626988329
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 151.96330560091883,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 33,
+      "step_runtime_s": 5.095031569944695
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 156.9849799249787,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 34,
+      "step_runtime_s": 5.021674324059859
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 162.143957182765,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 35,
+      "step_runtime_s": 5.158977257786319
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 167.30904250475578,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 36,
+      "step_runtime_s": 5.165085321990773
+    },
+    {
+      "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
+      "case": "heisenberg_1d",
+      "cumulative_runtime_s": 172.37795856990851,
+      "method": "gate_local_2tdvp",
+      "repeat": 0,
+      "step": 37,
+      "step_runtime_s": 5.0689160651527345
+    }
+  ],
+  "status": "success"
+}

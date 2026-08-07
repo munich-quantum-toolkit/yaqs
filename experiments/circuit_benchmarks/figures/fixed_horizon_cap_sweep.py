@@ -5,6 +5,8 @@
 This pure plotting step reads
 ``output/fixed_horizon_refinement/combined_cap_sweep.csv``,
 ``cap_timing_summary.csv``, and the variational-MPO cap-control summary.
+By default, the validated TDVP-only Krylov-tolerance control replaces the
+original TDVP values in memory; the frozen sweep tables are never modified.
 The three primary methods use controlled timing subsets with three repetitions;
 the variational method uses one complete observed trajectory per cap.  No
 interpolation, fitting, or simulation is performed here.
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 from collections.abc import Mapping
@@ -25,6 +28,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from experiments.circuit_benchmarks.config import (
+    KRYLOV_TOL,
     METHODS,
     OUTPUT_DIR,
     RELIABILITY_THRESHOLD,
@@ -44,6 +48,16 @@ SWEEP_FILENAME = "combined_cap_sweep.csv"
 TIMING_FILENAME = "cap_timing_summary.csv"
 VARIATIONAL_SUMMARY_FILENAME = "comparison_summary.json"
 VARIATIONAL_CONTROL_DIR_NAME = "variational_mpo_control"
+KRYLOV_CONTROL_DIR_NAME = "krylov_tolerance_control"
+KRYLOV_SUMMARY_FILENAME = "summary.csv"
+KRYLOV_MANIFEST_FILENAME = "manifest.json"
+KRYLOV_CAMPAIGN_ID = "circuit_tdvp_krylov_tolerance_control_v1"
+KRYLOV_OVERLAY_TOLERANCE = 1e-5
+KRYLOV_OVERLAY_CAPS = (4, 8, 16, 24, 26, 28, 30, 32)
+TDVP_METHOD = "gate_local_2tdvp"
+CONTROL_CASE = "ising_2d"
+CONTROL_N_SUB = 2
+CONTROL_SVD_THRESHOLD = 1e-13
 VARIATIONAL_CAPS = (4, 8, 16)
 VARIATIONAL_TIMING_REPEATS = 1
 EXPECTED_VARIATIONAL_FITS = 270
@@ -102,6 +116,14 @@ class VariationalControlPoint:
     maximum_sweeps: int
 
 
+@dataclass(frozen=True)
+class TdvpKrylovOverlay:
+    """Validated TDVP cap sweep at one Krylov stopping tolerance."""
+
+    points: tuple[CapSweepPoint, ...]
+    tolerance: float
+
+
 def _read_rows(path: Path) -> list[dict[str, str]]:
     """Read one required CSV table."""
     if not path.is_file():
@@ -148,6 +170,180 @@ def _integer(row: Mapping[str, str], field: str, *, context: str) -> int:
 def _serialized_true(value: object) -> bool:
     """Return whether an optional serialized flag is true."""
     return str(value).strip().lower() in {"1", "1.0", "true", "yes"}
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest of one input artifact."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def prepare_tdvp_krylov_overlay(
+    summary_rows: Sequence[Mapping[str, str]],
+    manifest: Mapping[str, object],
+    *,
+    expected_caps: Sequence[int] = KRYLOV_OVERLAY_CAPS,
+    expected_tolerance: float = KRYLOV_OVERLAY_TOLERANCE,
+) -> TdvpKrylovOverlay:
+    """Validate the production TDVP-only Krylov control for Figure 4.
+
+    The control directory may contain exploratory tolerances.  Only the full
+    eight-cap production slice is selected, while every row is required to
+    belong to the same TDVP-only campaign and fixed numerical protocol.
+    """
+    _require_fields(
+        summary_rows,
+        (
+            "campaign_id",
+            "case",
+            "method",
+            "chi_max",
+            "n_sub",
+            "target_step",
+            "krylov_tolerance",
+            "svd_threshold",
+            "max_infidelity_through",
+            "peak_parameter_count",
+            "median_runtime_s",
+            "min_runtime_s",
+            "max_runtime_s",
+            "timing_repeats",
+        ),
+        table=KRYLOV_SUMMARY_FILENAME,
+    )
+
+    if not _serialized_true(manifest.get("complete")):
+        msg = "The Krylov-tolerance control manifest is not complete."
+        raise RuntimeError(msg)
+    expected_manifest = {
+        "campaign_id": KRYLOV_CAMPAIGN_ID,
+        "case": CONTROL_CASE,
+        "method": TDVP_METHOD,
+        "n_sub": CONTROL_N_SUB,
+        "target_step": TARGET_STEP,
+        "timing_repeats": TIMING_REPEATS,
+    }
+    for field, expected in expected_manifest.items():
+        if manifest.get(field) != expected:
+            msg = f"Krylov control manifest {field!r} is {manifest.get(field)!r}, expected {expected!r}."
+            raise ValueError(msg)
+    try:
+        manifest_svd_threshold = float(manifest["svd_threshold"])
+        summary_row_count = int(manifest["row_counts"]["summary"])  # type: ignore[index]
+        thread_count = int(manifest["hardware"]["threads"])  # type: ignore[index]
+    except (KeyError, TypeError, ValueError) as error:
+        msg = "The Krylov control manifest is missing fixed-protocol metadata."
+        raise ValueError(msg) from error
+    if manifest_svd_threshold != CONTROL_SVD_THRESHOLD:
+        msg = f"Krylov control SVD threshold is {manifest_svd_threshold:g}, expected {CONTROL_SVD_THRESHOLD:g}."
+        raise ValueError(msg)
+    if summary_row_count != len(summary_rows):
+        msg = f"Krylov manifest records {summary_row_count} summary rows, found {len(summary_rows)}."
+        raise RuntimeError(msg)
+    if thread_count != 1:
+        msg = f"Krylov control must use one numerical thread, found {thread_count}."
+        raise RuntimeError(msg)
+
+    requested = manifest.get("requested_points")
+    if not isinstance(requested, list):
+        msg = "The Krylov control manifest has no requested-point grid."
+        raise ValueError(msg)
+    requested_caps: list[int] = []
+    for item in requested:
+        if not isinstance(item, Mapping):
+            msg = "The Krylov control manifest contains an invalid requested point."
+            raise ValueError(msg)
+        try:
+            tolerance = float(item["krylov_tolerance"])
+            cap = int(item["chi_max"])
+        except (KeyError, TypeError, ValueError) as error:
+            msg = "The Krylov control manifest contains an invalid requested point."
+            raise ValueError(msg) from error
+        if tolerance == expected_tolerance:
+            requested_caps.append(cap)
+
+    normalized_caps = tuple(int(cap) for cap in expected_caps)
+    if tuple(sorted(requested_caps)) != tuple(sorted(normalized_caps)):
+        msg = (
+            f"Krylov manifest must request the complete tau={expected_tolerance:g} cap grid "
+            f"{list(normalized_caps)}, found {sorted(requested_caps)}."
+        )
+        raise RuntimeError(msg)
+
+    selected: dict[int, CapSweepPoint] = {}
+    for row in summary_rows:
+        context = f"{KRYLOV_SUMMARY_FILENAME}/row"
+        if row["campaign_id"] != KRYLOV_CAMPAIGN_ID:
+            msg = f"Unexpected campaign {row['campaign_id']!r} in {KRYLOV_SUMMARY_FILENAME}."
+            raise ValueError(msg)
+        if row["case"] != CONTROL_CASE or row["method"] != TDVP_METHOD:
+            msg = "The Krylov control summary must contain only the 4x4 Ising TDVP method."
+            raise ValueError(msg)
+        cap = _integer(row, "chi_max", context=context)
+        n_sub = _integer(row, "n_sub", context=f"{context}/chi{cap}")
+        target_step = _integer(row, "target_step", context=f"{context}/chi{cap}")
+        repeats = _integer(row, "timing_repeats", context=f"{context}/chi{cap}")
+        tolerance = _number(row, "krylov_tolerance", context=f"{context}/chi{cap}")
+        svd_threshold = _number(row, "svd_threshold", context=f"{context}/chi{cap}")
+        if (
+            n_sub != CONTROL_N_SUB
+            or target_step != TARGET_STEP
+            or repeats != TIMING_REPEATS
+            or svd_threshold != CONTROL_SVD_THRESHOLD
+        ):
+            msg = f"Krylov control row chi{cap} does not match the fixed Figure 4 protocol."
+            raise ValueError(msg)
+        if tolerance != expected_tolerance:
+            continue
+
+        error = _number(row, "max_infidelity_through", context=f"{context}/chi{cap}")
+        parameters = _integer(row, "peak_parameter_count", context=f"{context}/chi{cap}")
+        median = _number(row, "median_runtime_s", context=f"{context}/chi{cap}")
+        low = _number(row, "min_runtime_s", context=f"{context}/chi{cap}")
+        high = _number(row, "max_runtime_s", context=f"{context}/chi{cap}")
+        if cap < 1 or error <= 0.0 or parameters < 1 or not 0.0 < low <= median <= high:
+            msg = f"Invalid Krylov overlay point at chi{cap}."
+            raise ValueError(msg)
+        if cap in selected:
+            msg = f"Duplicate Krylov overlay point at chi{cap}."
+            raise RuntimeError(msg)
+        selected[cap] = CapSweepPoint(TDVP_METHOD, cap, error, parameters, median, low, high)
+
+    if tuple(sorted(selected)) != tuple(sorted(normalized_caps)):
+        msg = (
+            f"Krylov summary must contain the complete tau={expected_tolerance:g} cap grid "
+            f"{list(normalized_caps)}, found {sorted(selected)}."
+        )
+        raise RuntimeError(msg)
+    overlay_points = tuple(selected[cap] for cap in sorted(selected))
+    if not any(point.reliable for point in overlay_points):
+        msg = f"No tau={expected_tolerance:g} TDVP cap meets the accuracy threshold."
+        raise RuntimeError(msg)
+    return TdvpKrylovOverlay(overlay_points, expected_tolerance)
+
+
+def load_tdvp_krylov_overlay(summary_path: Path, manifest_path: Path) -> TdvpKrylovOverlay:
+    """Load and authenticate the compact Krylov control artifacts."""
+    if not manifest_path.is_file():
+        msg = f"Missing required Krylov control manifest {manifest_path}."
+        raise FileNotFoundError(msg)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        msg = "The Krylov control manifest must contain a JSON object."
+        raise ValueError(msg)
+    try:
+        expected_digest = str(payload["output_sha256"]["summary"])  # type: ignore[index]
+    except (KeyError, TypeError) as error:
+        msg = "The Krylov control manifest has no summary digest."
+        raise ValueError(msg) from error
+    actual_digest = _sha256(summary_path)
+    if actual_digest != expected_digest:
+        msg = "The Krylov control summary does not match its manifest digest."
+        raise RuntimeError(msg)
+    return prepare_tdvp_krylov_overlay(_read_rows(summary_path), payload)
 
 
 def prepare_cap_sweep_data(
@@ -371,6 +567,35 @@ def first_passing_caps(points: Sequence[CapSweepPoint]) -> dict[str, int]:
             raise RuntimeError(msg)
         result[method] = passing.chi_max
     return result
+
+
+def apply_tdvp_krylov_overlay(
+    points: Sequence[CapSweepPoint],
+    overlay: TdvpKrylovOverlay,
+) -> list[CapSweepPoint]:
+    """Replace only TDVP values while preserving the frozen comparator rows."""
+    base_tdvp = sorted(
+        (point for point in points if point.method == TDVP_METHOD),
+        key=lambda point: point.chi_max,
+    )
+    replacement = {point.chi_max: point for point in overlay.points}
+    base_caps = [point.chi_max for point in base_tdvp]
+    if base_caps != sorted(replacement):
+        msg = f"TDVP overlay caps {sorted(replacement)} do not match frozen TDVP caps {base_caps}."
+        raise RuntimeError(msg)
+    old_selected = next((point.chi_max for point in base_tdvp if point.reliable), None)
+    new_selected = next((point.chi_max for point in overlay.points if point.reliable), None)
+    if old_selected is None or new_selected != old_selected:
+        msg = f"Krylov overlay changes the TDVP first-passing cap from {old_selected} to {new_selected}."
+        raise RuntimeError(msg)
+
+    combined = [replacement[point.chi_max] if point.method == TDVP_METHOD else point for point in points]
+    if [point for point in combined if point.method != TDVP_METHOD] != [
+        point for point in points if point.method != TDVP_METHOD
+    ]:
+        msg = "Krylov overlay modified a frozen comparator point."
+        raise RuntimeError(msg)
+    return combined
 
 
 def _configure_style() -> None:
@@ -684,8 +909,23 @@ def create_figure(
     return figure
 
 
-def caption() -> str:
-    """Return the concise manuscript-ready caption."""
+def _latex_power_of_ten(value: float) -> str:
+    """Format one validated power of ten for a LaTeX caption."""
+    exponent = int(round(math.log10(value)))
+    if not math.isclose(value, 10.0**exponent, rel_tol=1e-12, abs_tol=0.0):
+        msg = f"Expected a power-of-ten tolerance, found {value:g}."
+        raise ValueError(msg)
+    return f"10^{{{exponent}}}"
+
+
+def caption(
+    points: Sequence[CapSweepPoint],
+    *,
+    tdvp_krylov_tolerance: float,
+) -> str:
+    """Return the concise manuscript-ready caption from the plotted data."""
+    selected = first_passing_caps(points)
+    tolerance = _latex_power_of_ten(tdvp_krylov_tolerance)
     return (
         "\\textbf{Fixed-horizon cap sweep.} For the $4\\times4$ Ising circuit through "
         "$n_\\star=15$, (a) the worst prefix infidelity "
@@ -698,8 +938,11 @@ def caption() -> str:
         "diamonds at $\\chi_{\\max}=4,8,$ and $16$ are one complete one-thread run per cap, "
         "without timing repeats; their $P_{\\max}$ values include the largest uncompressed target MPS. "
         "The dotted curve shows only the observed cap dependence and is not a fitted scaling law. "
-        "Black rings mark "
-        "the first caps satisfying $E_\\star\\leq10^{-2}$: $\\chi_{\\max}=28$, 26, and 32 for "
+        f"The TDVP series uses the isolated Krylov control at tolerance ${tolerance}$; the direct-method "
+        "series retain the frozen cap-sweep data. Black rings mark "
+        f"the first caps satisfying $E_\\star\\leq10^{{-2}}$: "
+        f"$\\chi_{{\\max}}={selected[TDVP_METHOD]}$, "
+        f"{selected['mpo_contract_compress']}, and {selected['tebd_swap']} for "
         "TDVP, MPO, and TEBD+SWAP, respectively. Coincident TDVP and TEBD+SWAP markers at shared "
         "caps in (b) are offset horizontally in display space only for visibility; their guide "
         "curves remain at identical data coordinates. Thin lines only guide the eye between raw "
@@ -707,13 +950,23 @@ def caption() -> str:
     )
 
 
-def _save_outputs(figure: plt.Figure, figures_dir: Path, input_dir: Path) -> None:
+def _save_outputs(
+    figure: plt.Figure,
+    figures_dir: Path,
+    input_dir: Path,
+    points: Sequence[CapSweepPoint],
+    *,
+    tdvp_krylov_tolerance: float,
+) -> None:
     """Write one canonical figure and keep its caption beside the source data."""
     figures_dir.mkdir(parents=True, exist_ok=True)
     figure.savefig(figures_dir / f"{FIGURE_STEM}.pdf")
     figure.savefig(figures_dir / f"{FIGURE_STEM}.png", dpi=DPI)
     input_dir.mkdir(parents=True, exist_ok=True)
-    (input_dir / f"{FIGURE_STEM}_caption.md").write_text(caption() + "\n", encoding="utf-8")
+    (input_dir / f"{FIGURE_STEM}_caption.md").write_text(
+        caption(points, tdvp_krylov_tolerance=tdvp_krylov_tolerance) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -734,15 +987,41 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=OUTPUT_DIR / VARIATIONAL_CONTROL_DIR_NAME / VARIATIONAL_SUMMARY_FILENAME,
     )
+    parser.add_argument(
+        "--krylov-summary",
+        type=Path,
+        default=OUTPUT_DIR / KRYLOV_CONTROL_DIR_NAME / KRYLOV_SUMMARY_FILENAME,
+    )
+    parser.add_argument(
+        "--krylov-manifest",
+        type=Path,
+        default=OUTPUT_DIR / KRYLOV_CONTROL_DIR_NAME / KRYLOV_MANIFEST_FILENAME,
+    )
+    parser.add_argument(
+        "--no-krylov-overlay",
+        action="store_true",
+        help="Render the frozen TDVP cap sweep instead of the validated production control.",
+    )
     args = parser.parse_args(argv)
 
     points = prepare_cap_sweep_data(
         _read_rows(args.input_dir / SWEEP_FILENAME),
         _read_rows(args.input_dir / TIMING_FILENAME),
     )
+    tdvp_krylov_tolerance = KRYLOV_TOL
+    if not args.no_krylov_overlay:
+        overlay = load_tdvp_krylov_overlay(args.krylov_summary, args.krylov_manifest)
+        points = apply_tdvp_krylov_overlay(points, overlay)
+        tdvp_krylov_tolerance = overlay.tolerance
     variational = prepare_variational_controls(json.loads(args.variational_summary.read_text(encoding="utf-8")))
     figure = create_figure(points, variational)
-    _save_outputs(figure, args.figures_dir, args.input_dir)
+    _save_outputs(
+        figure,
+        args.figures_dir,
+        args.input_dir,
+        points,
+        tdvp_krylov_tolerance=tdvp_krylov_tolerance,
+    )
     plt.close(figure)
 
 

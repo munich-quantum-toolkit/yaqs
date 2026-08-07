@@ -1,0 +1,146 @@
+{
+  "artifacts": {
+    "accuracy": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/krylov_tolerance_control/accuracy.csv",
+    "summary": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/krylov_tolerance_control/summary.csv",
+    "timing_rows": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/krylov_tolerance_control/timing_rows.csv"
+  },
+  "campaign_id": "circuit_tdvp_krylov_tolerance_control_v1",
+  "case": "ising_2d",
+  "circuit_fingerprint": "9be9e5b82b0a025611a50340eeb034e4f8fbb0f6713ca1f49b0f703537fee7ed",
+  "complete": true,
+  "completed_points": 16,
+  "control_source_sha256": "4cb0fae47f12481de8f9d92634742d3f6cf2d6fc44394bdfa94a4e6d355d2662",
+  "dense_reference_sha256": "fbcba3d7b57ba44f3f0836e471fd433e2df90c2aedcacbad65c2a21401c8c98f",
+  "dense_reference_shape": [
+    16,
+    65536
+  ],
+  "git_commit": "9a236a41dec23a3b25e48e95644eecc30aff4095",
+  "git_dirty_for_relevant_paths": false,
+  "hardware": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1"
+    },
+    "threadpools": [
+      {
+        "architecture": "Haswell",
+        "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.188.0"
+      },
+      {
+        "architecture": "Haswell",
+        "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.dev"
+      }
+    ],
+    "threads": 1
+  },
+  "implementation_sha256": "8cb872779db2f456d585e25d0b5872e2de1b9aac475f907d014b4234d95942ed",
+  "method": "gate_local_2tdvp",
+  "n_sub": 2,
+  "numerical_precision": "complex128",
+  "output_sha256": {
+    "accuracy": "0802a6827c25544abf0bec923d009ce4880fc363f1f9f52f6154d8bdcd88e953",
+    "summary": "e9105bb5f16d3fc0e531217d5478ccd3b26e81033c0ae4716999a0f804701f5a",
+    "timing_rows": "4a5bfeec79ba0543a9834d3e269b92b269b9edc61b706ea371baccea1db3c1f0"
+  },
+  "protocol_sha256": "77d07bff350ec8f6ce58ed964ea722603c0c5f1a5948cbd83f682cb864bdaf18",
+  "relevant_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "requested_points": [
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 1e-12
+    },
+    {
+      "chi_max": 32,
+      "krylov_tolerance": 1e-12
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 1e-08
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 1e-06
+    },
+    {
+      "chi_max": 4,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 8,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 16,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 24,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 26,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 30,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 32,
+      "krylov_tolerance": 1e-05
+    },
+    {
+      "chi_max": 26,
+      "krylov_tolerance": 0.0001
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 0.0001
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 0.001
+    },
+    {
+      "chi_max": 28,
+      "krylov_tolerance": 0.01
+    }
+  ],
+  "resource_scope": "peak retained full-chain MPS parameters sampled after every state-changing factorization and at step endpoints",
+  "row_counts": {
+    "accuracy": 16,
+    "summary": 16,
+    "timing_rows": 48
+  },
+  "schema_version": 1,
+  "scope": "isolated TDVP-only Krylov-tolerance control; no MPO or TEBD tasks",
+  "svd_threshold": 1e-13,
+  "target_step": 15,
+  "tdvp_mode": "2site",
+  "timing_repeats": 3,
+  "timing_scope": "MPS gate application through the complete n=15 circuit; initialization, compilation, fidelity, resource tracing, and serialization excluded",
+  "timing_warmups_per_point": 1,
+  "truncation_mode": "discarded_weight",
+  "updated_utc": "2026-08-07T16:56:55.750980+00:00"
+}
