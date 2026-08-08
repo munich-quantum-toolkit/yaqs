@@ -9,13 +9,18 @@
 
 from __future__ import annotations
 
+from qiskit.circuit import QuantumCircuit
+
 from mqt import yaqs
 from mqt.yaqs import (
+    AnalogSegment,
     AnalogSimParams,
+    DigitalSegment,
     Hamiltonian,
     MemoryCharacterizer,
     NoiseCharacterizer,
     Observable,
+    SimulationProgram,
     Simulator,
     State,
 )
@@ -26,7 +31,9 @@ EXPECTED_PUBLIC_API = frozenset({
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
+    "AnalogSegment",
     "DigitalSimParams",
+    "DigitalSegment",
     "EquivalenceChecker",
     "Hamiltonian",
     "MemoryCharacterizer",
@@ -35,6 +42,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "Observable",
     "Result",
     "Simulator",
+    "SimulationProgram",
     "State",
     "__version__",
     "simulator",
@@ -74,3 +82,18 @@ def test_top_level_import_smoke() -> None:
 
     assert MemoryCharacterizer is not None
     assert NoiseCharacterizer is not None
+
+
+def test_program_specifications_are_available_from_top_level() -> None:
+    """Mixed program specifications use the documented top-level imports."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    circuit = QuantumCircuit(2)
+    program = SimulationProgram(
+        [AnalogSegment(hamiltonian), DigitalSegment(circuit)],
+        num_traj=8,
+        get_state=True,
+    )
+
+    assert tuple(program) == program.segments
+    assert program.num_traj == 8
+    assert program.get_state

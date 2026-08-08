@@ -38,6 +38,10 @@ wherever possible (see [Cite This](#cite-this)). It is part of the
 - **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit
   observables, shot-based readout, and OpenQASM 2 inputs [3]
   (`uv pip install mqt-yaqs[qasm3]` for OpenQASM 3).
+- **Digital–analog simulation**: Compose analog evolution and digital operations
+  in one ordered program with automatic state handoff, program-wide observable
+  traces, and continuous stochastic trajectories across segment boundaries
+  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html)).
 - **Equivalence checking**: Scalable comparison of quantum circuits [2].
 - **Process characterization**: Quantify non-Markovian memory in multi-time
   quantum processes, how much temporal history a process retains, with exact

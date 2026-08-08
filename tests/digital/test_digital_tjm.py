@@ -23,6 +23,7 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Pauli, Statevector
 
+import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -1633,6 +1634,30 @@ def test_apply_two_qubit_gate() -> None:
             np.testing.assert_allclose(np.abs(element), 1, atol=1e-15)
         else:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-15)
+
+
+def test_standalone_swap_routing_rejects_non_qubit_spectator() -> None:
+    """Standalone gate application enforces the same safe SWAP route as compilation."""
+    state = MPS(3, state="zeros", physical_dimensions=[2, 3, 2])
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 2)
+    node = next(node for node in circuit_to_dag(circuit).front_layer() if node.op.name == "cx")
+    params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="swaps")
+
+    with pytest.raises(ValueError, match=r"cannot route.*non-qubit spectator"):
+        apply_two_qubit_gate(state, node, params)
+
+
+def test_freeze_gate_arrays_protects_array_generator() -> None:
+    """Compiled gates make an array-valued generator read-only."""
+    gate = X()
+    gate.generator = np.eye(2, dtype=np.complex128)
+
+    frozen = digital_module._freeze_gate_arrays(gate)  # ruff: ignore[private-member-access]
+
+    assert isinstance(frozen.generator, np.ndarray)
+    with pytest.raises(ValueError, match="read-only"):
+        frozen.generator[0, 0] = 0.0
 
 
 def test_unknown_gate_mode_raises() -> None:

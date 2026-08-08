@@ -16,7 +16,7 @@ import opt_einsum as oe
 from numpy.typing import NDArray
 
 from .. import linalg
-from ..libraries.gate_library import extend_gate
+from ..libraries.gate_library import extend_gate, split_tensor
 
 if TYPE_CHECKING:
     from ..libraries.gate_library import BaseGate
@@ -164,6 +164,7 @@ def get_support_mpo(
     *,
     first_site: int,
     last_site: int,
+    physical_dimensions: list[int] | tuple[int, ...] | None = None,
 ) -> list[NDArray[np.complex128]]:
     """MPO tensors for the gate support ``[first_site, last_site]`` in library order.
 
@@ -172,21 +173,61 @@ def get_support_mpo(
             two-qubit gates.
         first_site: First site of the support interval (inclusive).
         last_site: Last site of the support interval (inclusive).
+        physical_dimensions: Optional local dimensions for the support interval.
+            Every gate target must be a qubit; intermediate dimensions determine
+            the identity tensor at each spectator site.
 
     Returns:
         Support MPO tensors from the gate cache or :func:`~mqt.yaqs.core.libraries.gate_library.extend_gate`.
+
+    Raises:
+        ValueError: If explicit dimensions do not match the support or a gate target is not a qubit.
     """
     support_len = last_site - first_site + 1
-    try:
-        cached = gate.mpo_tensors
-    except AttributeError:
-        cached = None
-    if cached is not None and len(cached) == support_len:
-        return list(cached)
-    return extend_gate(
-        resolve_lr_tensor(gate),
-        [first_site, last_site],
-    )
+    dimensions = tuple(physical_dimensions) if physical_dimensions is not None else None
+    if dimensions is not None and len(dimensions) != support_len:
+        msg = f"Expected {support_len} physical dimensions for gate support, got {len(dimensions)}."
+        raise ValueError(msg)
+    if dimensions is None or all(dimension == 2 for dimension in dimensions):
+        try:
+            cached = gate.mpo_tensors
+        except AttributeError:
+            cached = None
+        if cached is not None and len(cached) == support_len:
+            return list(cached)
+        return extend_gate(
+            resolve_lr_tensor(gate),
+            [first_site, last_site],
+        )
+
+    order = sorted(range(gate.interaction), key=lambda index: gate.sites[index])
+    sorted_sites = sorted(gate.sites)
+    for site in sorted_sites:
+        if dimensions[site - first_site] != 2:
+            msg = f"Gate MPO target site {site} must have physical dimension 2."
+            raise ValueError(msg)
+
+    tensor = np.asarray(gate.tensor, dtype=np.complex128)
+    if order != list(range(gate.interaction)):
+        tensor = np.transpose(tensor, [*order, *[gate.interaction + index for index in order]])
+    gate_tensors = split_tensor(tensor)
+
+    tensors = [gate_tensors[0]]
+    for target_index in range(1, gate.interaction):
+        previous_site = sorted_sites[target_index - 1]
+        current_site = sorted_sites[target_index]
+        bond_dimension = tensors[-1].shape[3]
+        for site in range(previous_site + 1, current_site):
+            dimension = dimensions[site - first_site]
+            identity_tensor = np.zeros(
+                (dimension, dimension, bond_dimension, bond_dimension),
+                dtype=np.complex128,
+            )
+            for bond in range(bond_dimension):
+                identity_tensor[:, :, bond, bond] = np.eye(dimension, dtype=np.complex128)
+            tensors.append(identity_tensor)
+        tensors.append(gate_tensors[target_index])
+    return tensors
 
 
 def decompose_theta(

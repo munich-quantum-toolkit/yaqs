@@ -1028,7 +1028,13 @@ class MPO:
         return mpo
 
     @classmethod
-    def from_gate(cls, gate: BaseGate, chain_length: int) -> MPO:
+    def from_gate(
+        cls,
+        gate: BaseGate,
+        chain_length: int,
+        *,
+        physical_dimensions: list[int] | tuple[int, ...] | None = None,
+    ) -> MPO:
         """Build an MPO for a gate on two or more qubits on a chain.
 
         When ``chain_length`` equals the gate support size, the MPO contains only the
@@ -1041,6 +1047,8 @@ class MPO:
         Args:
             gate: Gate on two or more qubits with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
             chain_length: Total number of MPO sites (support length or full MPS length).
+            physical_dimensions: Optional local dimension for every chain site.
+                This permits qubit gates whose support crosses non-qubit spectators.
 
         Returns:
             MPO ready for :meth:`multiply` on an MPS or another MPO.
@@ -1067,16 +1075,24 @@ class MPO:
             msg = f"gate sites {gate.sites} are outside the chain of length {chain_length}."
             raise ValueError(msg)
 
-        support = get_support_mpo(gate, first_site=first_site, last_site=last_site)
+        dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * chain_length
+        if len(dimensions) != chain_length:
+            msg = f"Expected {chain_length} physical dimensions, got {len(dimensions)}."
+            raise ValueError(msg)
+        support_dimensions = dimensions if chain_length == support_len else dimensions[first_site : last_site + 1]
+        support = get_support_mpo(
+            gate,
+            first_site=first_site,
+            last_site=last_site,
+            physical_dimensions=support_dimensions,
+        )
         if chain_length == support_len:
             tensors = support
         else:
-            phys_dim = support[0].shape[0]
-            identity_site = make_identity_site(phys_dim)
             tensors = []
             for site in range(chain_length):
                 if site < first_site or site > last_site:
-                    tensors.append(np.array(identity_site, copy=True))
+                    tensors.append(make_identity_site(dimensions[site]))
                 else:
                     tensors.append(support[site - first_site])
 

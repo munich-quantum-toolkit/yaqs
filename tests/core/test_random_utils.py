@@ -55,6 +55,20 @@ def test_make_sample_rng_independent_of_trajectory_stream() -> None:
     assert traj.random() != sample.random()
 
 
+def test_make_sample_rng_distinguishes_bounded_evolution_streams() -> None:
+    """Equal local timesteps in different composed segments use distinct streams."""
+    standalone = make_sample_rng(0, base_seed=7, timestep=2, stream_id=None)
+    first = make_sample_rng(0, base_seed=7, timestep=2, stream_id=0)
+    second = make_sample_rng(0, base_seed=7, timestep=2, stream_id=1)
+
+    standalone_value = standalone.random()
+    first_value = first.random()
+    second_value = second.random()
+    assert standalone_value != first_value
+    assert standalone_value != second_value
+    assert first_value != second_value
+
+
 def test_make_disorder_rng_distinct_from_trajectory_stream() -> None:
     """Disorder sampling uses a dedicated stream for the same base seed."""
     assert make_disorder_rng(base_seed=7).random() == make_disorder_rng(base_seed=7).random()

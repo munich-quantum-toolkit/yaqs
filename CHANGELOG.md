@@ -12,13 +12,14 @@ releases may include breaking changes.
 
 ### Added
 
+- added digital–analog simulation programs ([#525]) ([**@linusschulte**])
+
 - added native support for gates acting on three or more qubits in circuit
   simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
   ([**@Pouri96**])
 
-- added custom one-site matrix observables for non-qubit local dimensions
-
-  , including named position observables ([#497]) ([**@linusschulte**])
+- added custom one-site matrix observables for non-qubit local dimensions,
+  including named position observables ([#497]) ([**@linusschulte**])
 
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
@@ -243,6 +244,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
 [#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
 [#524]: https://github.com/munich-quantum-toolkit/yaqs/pull/524
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497

@@ -16,9 +16,11 @@ read-only ``*SimParams`` configuration object and can be pickled.
 
 from __future__ import annotations
 
-import pickle  # ruff:ignore[suspicious-pickle-import]  # test-only: controlled Result round-trip; no untrusted input deserialized
+import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 
 import numpy as np
+import pytest
 
 from mqt.yaqs import (
     AnalogSimParams,
@@ -151,7 +153,7 @@ def test_result_is_pickleable() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     blob = pickle.dumps(result)
-    restored = pickle.loads(blob)  # ruff:ignore[suspicious-pickle-usage]  # test-only: bytes are produced one line above (round-trip)
+    restored = pickle.loads(blob)  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip of bytes produced above
 
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)
@@ -161,6 +163,357 @@ def test_result_is_pickleable() -> None:
     assert restored_results is not None
     assert original_results is not None
     np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))
+
+
+def test_result_supports_ordered_nested_segment_results() -> None:
+    """An outer program result reuses Result for ordered segment outputs."""
+    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
+    digital_params = DigitalSimParams(get_state=True)
+    outer = Result(
+        segment_results=[
+            Result(sim_params=analog_params),
+            Result(sim_params=digital_params),
+        ]
+    )
+
+    restored = pickle.loads(pickle.dumps(outer))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sim_params is None
+    assert len(restored.segment_results) == 2
+    assert isinstance(restored.segment_results[0].sim_params, AnalogSimParams)
+    assert isinstance(restored.segment_results[1].sim_params, DigitalSimParams)
+
+
+def test_observable_trace_supports_standalone_results_and_returns_copies() -> None:
+    """Standalone analog traces are returned without aliasing stored arrays."""
+    observable = Observable("z", 0)
+    result = Result(
+        observables=[copy.deepcopy(observable)],
+        expectation_values=[np.array([1.0, 0.5])],
+        times=np.array([0.0, 0.2]),
+    )
+
+    times, values = result.observable_trace(observable)
+
+    np.testing.assert_array_equal(times, np.array([0.0, 0.2]))
+    np.testing.assert_array_equal(values, np.array([1.0, 0.5]))
+    times[0] = 10.0
+    values[0] = 10.0
+    assert result.times is not None
+    np.testing.assert_allclose(result.times[0], 0.0)
+    np.testing.assert_allclose(result.expectation_values[0][0], 1.0)
+
+    result.segment_type = "analog"
+    result.time_offset = 0.3
+    shifted_times, _ = result.observable_trace(observable)
+    np.testing.assert_allclose(shifted_times, np.array([0.3, 0.5]))
+
+
+def test_observable_trace_supports_standalone_digital_results() -> None:
+    """Standalone digital checkpoints share physical time zero and retain order."""
+    observable = Observable("z", 0)
+    result = Result(
+        sim_params=DigitalSimParams(observables=[observable], sample_layers=True),
+        observables=[copy.deepcopy(observable)],
+        expectation_values=[np.array([1.0, 0.25, -1.0])],
+    )
+
+    times, values = result.observable_trace(observable)
+
+    np.testing.assert_array_equal(times, np.zeros(3))
+    np.testing.assert_array_equal(values, np.array([1.0, 0.25, -1.0]))
+    times[0] = 2.0
+    values[0] = 2.0
+    np.testing.assert_allclose(result.expectation_values[0][0], 1.0)
+
+
+def test_observable_trace_combines_analog_and_digital_samples_in_program_order() -> None:
+    """Digital checkpoints appear at their physical program offset without deduplication."""
+    observable = Observable("z", 0)
+    program_result = Result(
+        segment_results=[
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([1.0, 0.8])],
+                times=np.array([0.0, 0.1]),
+                segment_index=0,
+                segment_type="analog",
+                time_offset=0.0,
+            ),
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([0.8, 0.0, -0.8])],
+                segment_index=1,
+                segment_type="digital",
+                time_offset=0.1,
+            ),
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([-0.8, -0.6])],
+                times=np.array([0.0, 0.2]),
+                segment_index=2,
+                segment_type="analog",
+                time_offset=0.1,
+            ),
+        ]
+    )
+
+    times, values = program_result.observable_trace(observable)
+
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3]))
+    np.testing.assert_array_equal(values, np.array([1.0, 0.8, 0.8, 0.0, -0.8, -0.8, -0.6]))
+
+
+def test_observable_trace_skips_unobserved_digital_segments() -> None:
+    """A zero-duration digital segment need not record an otherwise continuous trace."""
+    observable = Observable("z", 0)
+    program_result = Result(
+        segment_results=[
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([1.0])],
+                times=np.array([0.0]),
+                segment_index=0,
+                segment_type="analog",
+                time_offset=0.0,
+            ),
+            Result(
+                observables=[Observable("x", 0)],
+                expectation_values=[np.array([0.0])],
+                segment_index=1,
+                segment_type="digital",
+                time_offset=0.0,
+            ),
+        ]
+    )
+
+    times, values = program_result.observable_trace(observable)
+
+    np.testing.assert_array_equal(times, np.array([0.0]))
+    np.testing.assert_array_equal(values, np.array([1.0]))
+
+
+def test_observable_trace_matches_named_and_custom_observables_structurally() -> None:
+    """Deep copies and independently constructed equal operators both match."""
+    named = Observable("z", 0)
+    custom_matrix = np.array([[0.0, 1.0j], [-1.0j, 0.0]])
+    custom = Observable(custom_matrix, 1)
+    result = Result(
+        observables=[copy.deepcopy(named), copy.deepcopy(custom)],
+        expectation_values=[np.array([1.0]), np.array([-0.25])],
+        times=np.array([0.1]),
+    )
+
+    _, named_values = result.observable_trace(Observable("z", 0))
+    _, custom_values = result.observable_trace(Observable(custom_matrix.copy(), 1))
+
+    np.testing.assert_array_equal(named_values, np.array([1.0]))
+    np.testing.assert_array_equal(custom_values, np.array([-0.25]))
+
+
+def test_observable_trace_distinguishes_pvm_bitstrings() -> None:
+    """PVM observables with equal placeholder matrices retain their bitstring identity."""
+    result = Result(
+        observables=[Observable("0")],
+        expectation_values=[np.array([0.75])],
+        times=np.array([0.0]),
+    )
+
+    with pytest.raises(ValueError, match="not recorded"):
+        result.observable_trace(Observable("1"))
+
+
+def test_observable_trace_combines_different_grids_and_final_only_sampling() -> None:
+    """Local grids and final-only samples are shifted onto one program timeline."""
+    observable = Observable("z", 0)
+    program_result = Result(
+        segment_results=[
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([1.0, 0.8])],
+                times=np.array([0.0, 0.1]),
+                segment_index=0,
+                segment_type="analog",
+                time_offset=0.0,
+            ),
+            Result(
+                observables=[copy.deepcopy(observable)],
+                expectation_values=[np.array([0.4])],
+                times=np.array([0.2]),
+                segment_index=1,
+                segment_type="analog",
+                time_offset=0.1,
+            ),
+        ]
+    )
+
+    times, values = program_result.observable_trace(observable)
+
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.3]))
+    np.testing.assert_array_equal(values, np.array([1.0, 0.8, 0.4]))
+
+
+@pytest.mark.parametrize(
+    ("result", "observable", "message"),
+    [
+        (Result(), Observable("z", 0), "no observable trace data"),
+        (
+            Result(observables=[Observable("x", 0)], expectation_values=[np.array([1.0])], times=np.array([0.0])),
+            Observable("z", 0),
+            "not recorded",
+        ),
+        (
+            Result(
+                observables=[Observable("z", 0), Observable("z", 0)],
+                expectation_values=[np.array([1.0]), np.array([1.0])],
+                times=np.array([0.0]),
+            ),
+            Observable("z", 0),
+            "more than once",
+        ),
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                expectation_values=[np.array([1.0, 0.5])],
+                times=np.array([0.0]),
+            ),
+            Observable("z", 0),
+            "not a scalar time series",
+        ),
+        (
+            Result(observables=[Observable("z", 0)], times=np.array([0.0])),
+            Observable("z", 0),
+            "has no expectation values",
+        ),
+    ],
+)
+def test_observable_trace_rejects_invalid_or_ambiguous_data(
+    result: Result,
+    observable: Observable,
+    message: str,
+) -> None:
+    """Trace extraction fails rather than returning incomplete data."""
+    with pytest.raises(ValueError, match=message):
+        result.observable_trace(observable)
+
+
+def test_observable_trace_rejects_invalid_argument_and_program_offset() -> None:
+    """The accessor validates its input and required program metadata."""
+    observable = Observable("z", 0)
+    segment = Result(
+        observables=[copy.deepcopy(observable)],
+        expectation_values=[np.array([1.0])],
+        times=np.array([0.0]),
+        segment_type="analog",
+    )
+
+    with pytest.raises(TypeError, match="observable must be Observable"):
+        Result().observable_trace("z")  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+    with pytest.raises(ValueError, match="has no time_offset"):
+        Result(segment_results=[segment]).observable_trace(observable)
+
+
+@pytest.mark.parametrize(
+    ("segment", "message"),
+    [
+        (Result(), "has no valid segment_type"),
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                expectation_values=[np.array([1.0])],
+                segment_type="analog",
+                time_offset=0.0,
+            ),
+            "has no time data",
+        ),
+    ],
+)
+def test_observable_trace_rejects_invalid_program_segment_metadata(segment: Result, message: str) -> None:
+    """Program traces require typed segments and time data for analog intervals."""
+    with pytest.raises(ValueError, match=message):
+        Result(segment_results=[segment]).observable_trace(Observable("z", 0))
+
+
+def test_observable_trace_rejects_program_without_requested_data() -> None:
+    """A program containing only unobserved digital segments has no requested trace."""
+    segment = Result(
+        observables=[Observable("x", 0)],
+        expectation_values=[np.array([0.0])],
+        segment_type="digital",
+        time_offset=0.0,
+    )
+
+    with pytest.raises(ValueError, match="no observable trace data"):
+        Result(segment_results=[segment]).observable_trace(Observable("z", 0))
+
+
+@pytest.mark.parametrize(
+    ("segment", "message"),
+    [
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                expectation_values=[np.array([1.0])],
+                segment_type="digital",
+            ),
+            "has no time_offset",
+        ),
+        (
+            Result(
+                observables=[Observable("z", 0), Observable("z", 0)],
+                expectation_values=[np.array([1.0]), np.array([1.0])],
+                segment_type="digital",
+                time_offset=0.0,
+            ),
+            "more than once in digital segment",
+        ),
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                expectation_values=[np.ones((1, 2))],
+                segment_type="digital",
+                time_offset=0.0,
+            ),
+            "not a scalar series",
+        ),
+        (
+            Result(
+                observables=[Observable("z", 0)],
+                segment_type="digital",
+                time_offset=0.0,
+            ),
+            "has no expectation values",
+        ),
+    ],
+)
+def test_observable_trace_rejects_malformed_digital_data(segment: Result, message: str) -> None:
+    """Recorded digital checkpoints require unambiguous values and a program offset."""
+    with pytest.raises(ValueError, match=message):
+        Result(segment_results=[segment]).observable_trace(Observable("z", 0))
+
+
+def test_observable_trace_rejects_observable_missing_from_one_program_interval() -> None:
+    """A partial trace cannot silently bridge an unobserved analog interval."""
+    observable = Observable("z", 0)
+    recorded = Result(
+        observables=[copy.deepcopy(observable)],
+        expectation_values=[np.array([1.0])],
+        times=np.array([0.0]),
+        segment_index=0,
+        segment_type="analog",
+        time_offset=0.0,
+    )
+    missing = Result(
+        observables=[Observable("x", 0)],
+        expectation_values=[np.array([0.0])],
+        times=np.array([0.1]),
+        segment_index=1,
+        segment_type="analog",
+        time_offset=0.1,
+    )
+
+    with pytest.raises(ValueError, match="not recorded in analog segment 1"):
+        Result(segment_results=[recorded, missing]).observable_trace(observable)
 
 
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:

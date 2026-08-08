@@ -1504,12 +1504,14 @@ def test_no_output_error() -> None:
     with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         sim.run(state, H, sim_params_analog)
 
-    # 2. DigitalSimParams (No observables, get_state=False) rejected at construction
+    # 2. DigitalSimParams (No observables, get_state=False) rejected by standalone run
+    sim_params_digital = DigitalSimParams(
+        observables=[],
+        get_state=False,
+    )
+    circuit = QuantumCircuit(num_qubits)
     with pytest.raises(ValueError, match=r"No output specified: set observables, shots, and/or get_state."):
-        DigitalSimParams(
-            observables=[],
-            get_state=False,
-        )
+        sim.run(state, circuit, sim_params_digital)
 
 
 def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
@@ -1958,9 +1960,15 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
     def _run(*, sample_timesteps: bool) -> list[int]:
         timesteps: list[int] = []
 
-        def _tracking_sample_rng(traj_idx: int, *, base_seed: int | None, timestep: int) -> np.random.Generator:
+        def _tracking_sample_rng(
+            traj_idx: int,
+            *,
+            base_seed: int | None,
+            timestep: int,
+            stream_id: int | None = None,
+        ) -> np.random.Generator:
             timesteps.append(timestep)
-            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
+            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep, stream_id=stream_id)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), 0)],
@@ -1986,8 +1994,14 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
     def _shared_factory(randoms: list[float], choices: list[int]) -> object:
         shared = _ScriptedRng(randoms, choices)
 
-        def _factory(traj_idx: int, *, base_seed: int | None, timestep: int) -> _ScriptedRng:
-            _ = (traj_idx, base_seed, timestep)
+        def _factory(
+            traj_idx: int,
+            *,
+            base_seed: int | None,
+            timestep: int,
+            stream_id: int | None = None,
+        ) -> _ScriptedRng:
+            _ = (traj_idx, base_seed, timestep, stream_id)
             return shared
 
         return _factory

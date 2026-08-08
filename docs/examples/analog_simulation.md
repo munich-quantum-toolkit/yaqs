@@ -156,6 +156,8 @@ plt.show()
 
 ## Related topics
 
+- {doc}`digital_analog_simulation` — combine analog evolution with digital
+  operations in one program
 - {doc}`hamiltonians` — Pauli, Hubbard, and hardware Hamiltonians
 - {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
 - {doc}`scheduled_jumps` — deterministic jumps at specified times

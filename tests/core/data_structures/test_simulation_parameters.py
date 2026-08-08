@@ -198,6 +198,7 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
         (0.15, 0.1),
         (0.25, 0.1),
         (5e-13, 1e-12),
+        (1.5e-12, 1e-12),
         (1.0, 1e9),
     ],
 )
@@ -826,10 +827,13 @@ def test_random_seed_rejects_negative(
         param_cls(random_seed=-1, **kwargs)  # ty: ignore[invalid-argument-type]
 
 
-def test_digital_simparams_requires_output() -> None:
-    """DigitalSimParams requires observables, shots, and/or get_state."""
-    with pytest.raises(ValueError, match="No output specified"):
-        DigitalSimParams()
+def test_digital_simparams_allows_outputless_program_configuration() -> None:
+    """An output-less digital configuration can propagate program state."""
+    params = DigitalSimParams()
+
+    assert params.observables == []
+    assert params.shots is None
+    assert not params.get_state
 
 
 def test_digital_simparams_sample_layers_requires_observables() -> None:
