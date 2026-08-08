@@ -23,6 +23,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, cast
 
 from benchmarks.state_preparation.phase2.binding_catalog import RepositoryBindingCatalog
+from benchmarks.state_preparation.phase2.canonical import canonical_checksum
 from benchmarks.state_preparation.phase2.execution_bindings import SCREEN_METHOD_IDS
 from benchmarks.state_preparation.phase2.execution_context import ConfirmationExecutionContext, ExternalEntropyKeyring
 from benchmarks.state_preparation.phase2.execution_protocol import OperatorGrowthExecutionSpec
@@ -230,7 +231,11 @@ def _opaque_target_authorization(
     return authorization
 
 
-def build_confirmation_context_fixture(tmp_path: Path) -> ConfirmationContextFixture:
+def build_confirmation_context_fixture(
+    tmp_path: Path,
+    *,
+    authorized_output_root: Path | None = None,
+) -> ConfirmationContextFixture:
     """Build one bounded source-locked context without empirical execution.
 
     Returns:
@@ -364,6 +369,13 @@ def build_confirmation_context_fixture(tmp_path: Path) -> ConfirmationContextFix
         repository_binding_catalog=catalog,
         target_configuration=target_configuration,
         target_manifest=target_manifest,
+        prior_target_exposure_inventory_checksum=canonical_checksum({
+            "test_fixture": "closed_prior_target_exposure_inventory",
+        }),
+        authorized_output_root=(
+            tmp_path / "confirmation-output" if authorized_output_root is None else authorized_output_root
+        ),
+        locked_study_head_custody_path=(tmp_path / "confirmation-study-head.json").resolve(),
         confirmation_authorization=confirmation_authorization,
         target_materialization_authorization=target_authorization,
         external_entropy_keyring=ExternalEntropyKeyring({

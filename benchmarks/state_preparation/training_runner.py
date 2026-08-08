@@ -20,19 +20,34 @@ opened.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import importlib.util
 import json
 import math
+import os
 import re
+import stat
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, NoReturn, cast
 
+from filelock import FileLock
+
 from benchmarks.state_preparation.constants import BALLARIN_NOISE_ID, NOISELESS_NOISE_ID
 from benchmarks.state_preparation.phase2.binding_catalog import RepositoryBindingCatalog
+from benchmarks.state_preparation.phase2.canonical import (
+    canonical_json,
+    load_canonical_json_object,
+    verify_sealed_mapping,
+)
+from benchmarks.state_preparation.phase2.confirmatory_study import PriorTargetExposureInventory
+from benchmarks.state_preparation.phase2.confirmatory_study_store import (
+    LockedConfirmatoryStudySnapshot,
+    LockedConfirmatoryStudySnapshotRef,
+)
 from benchmarks.state_preparation.phase2.execution_bindings import TrainingExecutionProfile
 from benchmarks.state_preparation.phase2.execution_context import (
     AuthorizedTargetMaterialization,
@@ -55,6 +70,7 @@ from benchmarks.state_preparation.phase2.protocol import (
     DEFAULT_PREREGISTRATION_PATH,
     TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
     AnalysisSourceManifest,
+    ConfirmationAuthorization,
     FinalConfigurationExecutionManifest,
     FinalConfirmationSeal,
     InitialPreregistration,
@@ -76,6 +92,7 @@ from benchmarks.state_preparation.phase2.source_lock import (
     verify_final_seal_source_lock,
 )
 from benchmarks.state_preparation.phase2.targets import (
+    TargetMaterializationAuthorization,
     TargetPopulationConfig,
     TargetPopulationManifest,
     authorize_target_materialization,
@@ -120,6 +137,18 @@ _EXECUTOR_FACTORY_PATTERN = re.compile(
     r"^(?P<module>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*):"
     r"(?P<attribute>[A-Za-z_][A-Za-z0-9_]*)$"
 )
+_CONFIRMATION_SESSION_HEADER_KEYS = frozenset({
+    "schema_version",
+    "plan_checksum",
+    "final_confirmation_seal_checksum",
+    "execution_source_manifest_checksum",
+    "analysis_source_manifest_checksum",
+    "prior_target_exposure_inventory_checksum",
+    "authorized_output_root",
+    "locked_study_head_custody_path",
+    "job_count",
+    "content_checksum",
+})
 _CONFIGURATION_KEYS = frozenset({
     "format",
     "preset",
@@ -190,6 +219,11 @@ _CONFIGURATION_KEYS = frozenset({
     "sample_size_design_path",
     "resource_calibration",
     "resource_calibration_path",
+    "prior_target_exposure_inventory",
+    "prior_target_exposure_inventory_path",
+    "expected_locked_study_head",
+    "expected_locked_study_head_path",
+    "target_exposure_inventory",
     "resumability_fingerprint",
     "resumability_fingerprint_path",
     "resumability_fingerprint_paths",
@@ -227,6 +261,9 @@ _CONFIGURATION_ALIASES = {
     "target_configuration_path": "target_configuration_paths",
     "sample_size_design": "sample_size_design_path",
     "resource_calibration": "resource_calibration_path",
+    "prior_target_exposure_inventory": "prior_target_exposure_inventory_path",
+    "target_exposure_inventory": "prior_target_exposure_inventory_path",
+    "expected_locked_study_head": "expected_locked_study_head_path",
     "resumability_fingerprint": "resumability_fingerprint_paths",
     "resumability_fingerprint_path": "resumability_fingerprint_paths",
     "pilot_optimization_seed": "pilot_optimization_seeds",
@@ -273,12 +310,41 @@ _CLI_DESTINATIONS = (
     "target_configuration_paths",
     "sample_size_design_path",
     "resource_calibration_path",
+    "prior_target_exposure_inventory_path",
+    "expected_locked_study_head_path",
     "resumability_fingerprint_paths",
     "external_entropy_file_specs",
     "repository_root",
     "pilot_optimization_seeds",
     "output_dir",
 )
+
+_PAPER_CONFIRM_ALLOWED_EXPLICIT_OPTIONS = frozenset({
+    "preset",
+    "target_manifest_paths",
+    "target_manifest_checksums",
+    "preregistration_path",
+    "preregistration_checksum",
+    "resume",
+    "dry_run",
+    "execute_expensive",
+    "screening_manifest_path",
+    "screening_evidence_path",
+    "promotion_decision_path",
+    "final_seal_path",
+    "configuration_execution_manifest_path",
+    "execution_source_manifest_path",
+    "analysis_source_manifest_path",
+    "binding_catalog_path",
+    "target_configuration_paths",
+    "sample_size_design_path",
+    "resource_calibration_path",
+    "prior_target_exposure_inventory_path",
+    "expected_locked_study_head_path",
+    "external_entropy_file_specs",
+    "repository_root",
+    "output_dir",
+})
 
 
 class TrainingRunnerConfigurationError(ValueError):
@@ -334,11 +400,16 @@ class TrainingRunnerOptions:
     target_configuration_paths: tuple[Path, ...]
     sample_size_design_path: Path | None
     resource_calibration_path: Path | None
+    prior_target_exposure_inventory_path: Path | None
     resumability_fingerprint_paths: tuple[Path, ...]
     external_entropy_file_specs: tuple[str, ...]
     repository_root: Path
     pilot_optimization_seeds: tuple[int, ...]
     output_dir: Path
+    expected_locked_study_head_path: Path | None = None
+    explicit_option_names: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
+    output_was_cli_explicit: bool = field(default=False, repr=False, compare=False)
+    requested_output_dir: Path | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -536,6 +607,18 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample-size-design", dest="sample_size_design_path", type=Path)
     parser.add_argument("--resource-calibration", dest="resource_calibration_path", type=Path)
     parser.add_argument(
+        "--prior-target-exposure-inventory",
+        "--target-exposure-inventory",
+        dest="prior_target_exposure_inventory_path",
+        type=Path,
+    )
+    parser.add_argument(
+        "--expected-locked-study-head",
+        dest="expected_locked_study_head_path",
+        type=Path,
+        help="External checksum-sealed head custody written before dispatch and reused for paper-confirm resume.",
+    )
+    parser.add_argument(
         "--resumability-fingerprint",
         dest="resumability_fingerprint_paths",
         type=Path,
@@ -613,10 +696,12 @@ def _preset_defaults(preset: str) -> dict[str, object]:
         "target_configuration_paths": [],
         "sample_size_design_path": None,
         "resource_calibration_path": None,
+        "prior_target_exposure_inventory_path": None,
+        "expected_locked_study_head_path": None,
         "resumability_fingerprint_paths": [],
         "external_entropy_file_specs": [],
         "repository_root": DEFAULT_REPOSITORY_ROOT,
-        "pilot_optimization_seeds": list(DEFAULT_PILOT_OPTIMIZATION_SEEDS),
+        "pilot_optimization_seeds": list(DEFAULT_PILOT_OPTIMIZATION_SEEDS) if preset == "paper-pilot" else [],
         "output_dir": DEFAULT_TRAINING_OUTPUT_ROOT / preset,
     }
 
@@ -805,6 +890,10 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
             control values are invalid or conflict.
     """
     file_values = load_configuration_file(namespace.config) if namespace.config is not None else {}
+    explicit_option_names = {_CONFIGURATION_ALIASES.get(name, name) for name in file_values if name != "format"}
+    if namespace.preset is not None:
+        explicit_option_names.add("preset")
+    explicit_option_names.update(key for key in _CLI_DESTINATIONS if getattr(namespace, key) is not None)
     preset_value = namespace.preset if namespace.preset is not None else file_values.get("preset", "training-smoke")
     if type(preset_value) is not str or preset_value not in TRAINING_PRESETS:
         msg = f"preset must be one of {TRAINING_PRESETS!r}."
@@ -866,6 +955,7 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
     except (TypeError, ValueError) as error:
         msg = f"Invalid external entropy file reference: {error}"
         raise TrainingRunnerConfigurationError(msg) from None
+    requested_output_dir = _path(resolved["output_dir"], "output_dir")
     return TrainingRunnerOptions(
         preset=preset_value,
         pipeline_path=_optional_path(resolved["pipeline_path"], "pipeline_path"),
@@ -943,6 +1033,10 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
             resolved["resource_calibration_path"],
             "resource_calibration_path",
         ),
+        prior_target_exposure_inventory_path=_optional_path(
+            resolved["prior_target_exposure_inventory_path"],
+            "prior_target_exposure_inventory_path",
+        ),
         resumability_fingerprint_paths=_path_tuple(
             resolved["resumability_fingerprint_paths"],
             "resumability_fingerprint_paths",
@@ -950,7 +1044,14 @@ def resolve_options(namespace: Namespace) -> TrainingRunnerOptions:
         external_entropy_file_specs=entropy_specs,
         repository_root=_path(resolved["repository_root"], "repository_root"),
         pilot_optimization_seeds=pilot_seeds,
-        output_dir=_path(resolved["output_dir"], "output_dir").resolve(),
+        output_dir=requested_output_dir.resolve(),
+        expected_locked_study_head_path=_optional_path(
+            resolved["expected_locked_study_head_path"],
+            "expected_locked_study_head_path",
+        ),
+        explicit_option_names=frozenset(explicit_option_names),
+        output_was_cli_explicit=namespace.output_dir is not None,
+        requested_output_dir=requested_output_dir,
     )
 
 
@@ -1046,7 +1147,7 @@ def load_executor_registry(
         raise TrainingRunnerConfigurationError(msg)
     try:
         registry = factory(context)
-    except Exception:  # noqa: BLE001 - extension boundary must redact arbitrary ordinary factory failures
+    except Exception:  # noqa: BLE001 - extension failures are redacted at the trust boundary
         msg = f"Executor factory {executor_factory!r} failed without exposing private diagnostics."
         raise TrainingRunnerConfigurationError(msg) from None
     if not isinstance(registry, TrainingExecutorRegistry):
@@ -1557,6 +1658,169 @@ def _require_confirmation_reveal_opt_in(options: TrainingRunnerOptions) -> None:
         raise TrainingRunnerConfigurationError(msg)
 
 
+def _validate_paper_confirm_output_path(requested: Path, resolved: Path) -> None:
+    """Validate one explicit output path without following its lexical symlinks.
+
+    Raises:
+        TrainingRunnerConfigurationError: If the path is linked, inconsistent,
+            or not an absent or existing directory.
+    """
+    requested_absolute = requested.absolute()
+    if requested_absolute.resolve() != resolved:
+        msg = "paper-confirm output resolution differs from the explicit CLI --output."
+        raise TrainingRunnerConfigurationError(msg)
+    current = Path(requested_absolute.anchor)
+    for component in requested_absolute.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            msg = "paper-confirm output cannot contain a symlink component."
+            raise TrainingRunnerConfigurationError(msg)
+        if current != requested_absolute and current.exists() and not current.is_dir():
+            msg = "paper-confirm output has a non-directory parent component."
+            raise TrainingRunnerConfigurationError(msg)
+    if resolved.exists() and not resolved.is_dir():
+        msg = "paper-confirm output must be absent or an existing directory."
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _validate_paper_confirm_output_roles(output_root: Path) -> None:
+    """Require a confirmation-only, non-symlink output-role namespace.
+
+    Raises:
+        TrainingRunnerConfigurationError: If the role namespace is linked,
+            mixed with another role, or not a directory.
+    """
+    roles = output_root / "roles"
+    if roles.is_symlink() or (roles.exists() and not roles.is_dir()):
+        msg = "paper-confirm output roles must be absent or a non-symlink directory."
+        raise TrainingRunnerConfigurationError(msg)
+    if roles.exists() and any(path.name != "confirmatory" for path in roles.iterdir()):
+        msg = "Development, screening, and confirmation outputs cannot share one output root."
+        raise TrainingRunnerConfigurationError(msg)
+    confirmatory = roles / "confirmatory"
+    if confirmatory.is_symlink() or (confirmatory.exists() and not confirmatory.is_dir()):
+        msg = "paper-confirm confirmatory output must be absent or a non-symlink directory."
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _validate_confirmation_staging_parent(output_root: Path) -> None:
+    """Require crash-safe off-tree staging on the output filesystem.
+
+    Raises:
+        TrainingRunnerConfigurationError: If the staging parent cannot support
+            same-filesystem atomic publication before held inputs are read.
+    """
+    staging_parent = output_root.parent
+    if not staging_parent.exists() or (
+        staging_parent.is_symlink() or not staging_parent.is_dir() or not os.access(staging_parent, os.W_OK | os.X_OK)
+    ):
+        msg = "paper-confirm output parent must be a writable non-symlink directory."
+        raise TrainingRunnerConfigurationError(msg)
+    if output_root.exists() and output_root.stat().st_dev != staging_parent.stat().st_dev:
+        msg = "paper-confirm output and off-tree staging parent must share one filesystem."
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _preflight_paper_confirm_request(options: TrainingRunnerOptions) -> None:
+    """Reject caller-selected science and unsafe output custody before held reads.
+
+    The confirmation route accepts artifact locations and the minimum operational
+    controls needed to execute those artifacts. It does not accept redundant
+    scientific assertions that could become an unblinding-time choice.
+
+    Raises:
+        TrainingRunnerConfigurationError: If a forbidden option is present, no
+            explicit CLI output was supplied, or the output root is not safely
+            isolated from the repository and nonconfirmatory roles.
+    """
+    forbidden = set(options.explicit_option_names - _PAPER_CONFIRM_ALLOWED_EXPLICIT_OPTIONS)
+    nondefault_scientific_options = (
+        ("pipeline_path", options.pipeline_path is not None),
+        ("method_id", options.method_id is not None),
+        ("stage_depths", bool(options.stage_depths)),
+        ("stage_budgets", bool(options.stage_budgets)),
+        ("training_noise_id", options.training_noise_id is not None),
+        ("training_noise_strength", options.training_noise_strength is not None),
+        ("trajectory_update", options.trajectory_update is not None),
+        ("sampling_policy", options.sampling_policy is not None),
+        ("training_trajectory_count", options.training_trajectory_count is not None),
+        (
+            "checkpoint_validation_trajectory_count",
+            options.checkpoint_validation_trajectory_count is not None,
+        ),
+        ("crn_refresh_interval", options.crn_refresh_interval is not None),
+        ("checkpoint_rule", options.checkpoint_rule is not None),
+        ("data_role", options.data_role is not None),
+        ("native_two_qubit_cap_per_edge", options.native_two_qubit_cap_per_edge is not None),
+        ("normalized_compute_cap", options.normalized_compute_cap is not None),
+        ("overwrite", options.overwrite),
+        ("fail_fast", options.fail_fast),
+        ("legacy_reproduction", options.legacy_reproduction),
+        ("executor_factory", options.executor_factory is not None),
+        ("candidate_paths", bool(options.candidate_paths)),
+        ("schedule_paths", bool(options.schedule_paths)),
+        ("execution_profile_path", options.execution_profile_path is not None),
+        ("resumability_fingerprint_paths", bool(options.resumability_fingerprint_paths)),
+        ("pilot_optimization_seeds", bool(options.pilot_optimization_seeds)),
+    )
+    forbidden.update(name for name, present in nondefault_scientific_options if present)
+    if forbidden:
+        msg = f"paper-confirm forbids caller-selected or redundant options: {sorted(forbidden)}."
+        raise TrainingRunnerConfigurationError(msg)
+    if options.resume and options.expected_locked_study_head_path is None:
+        msg = "paper-confirm --resume requires --expected-locked-study-head from external custody."
+        raise TrainingRunnerConfigurationError(msg)
+    if not options.output_was_cli_explicit or options.requested_output_dir is None:
+        msg = "paper-confirm requires an explicit CLI --output outside repository_root."
+        raise TrainingRunnerConfigurationError(msg)
+
+    output_root = options.output_dir
+    try:
+        _validate_paper_confirm_output_path(options.requested_output_dir, output_root)
+    except OSError:
+        msg = "paper-confirm output custody could not be validated safely."
+        raise TrainingRunnerConfigurationError(msg) from None
+
+    try:
+        repository_root = options.repository_root.resolve()
+    except OSError:
+        msg = "paper-confirm repository_root could not be resolved safely."
+        raise TrainingRunnerConfigurationError(msg) from None
+    output_inside_repository = output_root.is_relative_to(repository_root)
+    repository_inside_output = repository_root.is_relative_to(output_root)
+    if output_inside_repository or repository_inside_output:
+        msg = "paper-confirm --output must be disjoint from and outside repository_root."
+        raise TrainingRunnerConfigurationError(msg)
+    if options.expected_locked_study_head_path is not None:
+        try:
+            retained_head = options.expected_locked_study_head_path.resolve()
+        except OSError:
+            msg = "Externally retained study head path could not be resolved safely."
+            raise TrainingRunnerConfigurationError(msg) from None
+        if retained_head.is_relative_to(output_root) or retained_head.is_relative_to(repository_root):
+            msg = "Externally retained study head must be outside both output and repository custody."
+            raise TrainingRunnerConfigurationError(msg)
+        parent = retained_head.parent
+        if parent.is_symlink() or not parent.is_dir() or not os.access(parent, os.W_OK | os.X_OK):
+            msg = "Externally retained study head requires a writable non-symlink parent directory."
+            raise TrainingRunnerConfigurationError(msg)
+        if retained_head.is_symlink():
+            msg = "Externally retained study head cannot be a symlink."
+            raise TrainingRunnerConfigurationError(msg)
+        if retained_head.exists():
+            metadata = retained_head.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                msg = "Externally retained study head must be a single-link regular file."
+                raise TrainingRunnerConfigurationError(msg)
+
+    try:
+        _validate_paper_confirm_output_roles(output_root)
+        _validate_confirmation_staging_parent(output_root)
+    except OSError:
+        msg = "paper-confirm output roles could not be validated safely."
+        raise TrainingRunnerConfigurationError(msg) from None
+
+
 def _pilot_optimization_seeds(
     options: TrainingRunnerOptions,
     preregistration: InitialPreregistration,
@@ -1856,10 +2120,412 @@ def build_confirmation_execution_context(options: TrainingRunnerOptions) -> Conf
         msg = "A ConfirmationExecutionContext requires the paper-confirm preset."
         raise TrainingRunnerConfigurationError(msg)
     _require_confirmation_reveal_opt_in(options)
+    _preflight_paper_confirm_request(options)
     return _load_confirmation_execution_context(options, _load_preregistration(options))
 
 
+def _load_prior_target_exposure_inventory(
+    options: TrainingRunnerOptions,
+) -> PriorTargetExposureInventory:
+    """Load the required public novelty ledger for real confirmation.
+
+    Returns:
+        The strict checksum-sealed pilot, screening, Phase-I, and legacy
+        exposure inventory.
+    """
+    path = _require_optional_artifact(
+        options.prior_target_exposure_inventory_path,
+        "--prior-target-exposure-inventory",
+    )
+    return cast(
+        "PriorTargetExposureInventory",
+        _decode_artifact(
+            path,
+            "prior-target exposure inventory",
+            PriorTargetExposureInventory.from_json,
+        ),
+    )
+
+
+def _load_expected_locked_study_head(
+    options: TrainingRunnerOptions,
+) -> LockedConfirmatoryStudySnapshotRef | None:
+    """Load the externally retained exact head required for confirmation resume.
+
+    The path may contain either the strict reference itself or prior CLI output
+    with a ``locked_study_snapshot_reference`` member.
+
+    Returns:
+        The verified retained head, or ``None`` for a fresh invocation.
+
+    Raises:
+        TrainingRunnerConfigurationError: If the reference is absent on resume
+            or its schema/checksum is invalid.
+    """
+    path = options.expected_locked_study_head_path
+    if path is None:
+        msg = "paper-confirm requires --expected-locked-study-head as external custody before dispatch."
+        raise TrainingRunnerConfigurationError(msg)
+    if not path.exists():
+        return None
+    if not options.resume:
+        msg = "Fresh paper-confirm execution refuses to overwrite existing external head custody."
+        raise TrainingRunnerConfigurationError(msg)
+    try:
+        document = load_canonical_json_object(_read_single_link_custody_payload(path).decode())
+        raw_reference = document.get("locked_study_snapshot_reference", document)
+        return LockedConfirmatoryStudySnapshotRef.from_dict(raw_reference)
+    except (OSError, TypeError, ValueError):
+        msg = "Externally retained locked-study head reference is invalid."
+        raise TrainingRunnerConfigurationError(msg) from None
+
+
+def _preflight_expected_locked_study_head_before_reveal(
+    options: TrainingRunnerOptions,
+    expected_head: LockedConfirmatoryStudySnapshotRef | None,
+    *,
+    final_seal: FinalConfirmationSeal,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
+    execution_manifest: ExecutionSourceManifest,
+    analysis_manifest: AnalysisSourceManifest,
+    exposure_inventory: PriorTargetExposureInventory,
+) -> None:
+    """Authenticate external rollback custody before opening held inputs.
+
+    Raises:
+        TrainingRunnerConfigurationError: If fresh execution sees prior state,
+            resume lacks its externally retained snapshot, or the retained
+            snapshot bytes differ from the mutable output tree.
+    """
+    output_root = options.output_dir
+    entries = tuple(output_root.iterdir()) if output_root.exists() else ()
+    if not options.resume:
+        if entries:
+            msg = "Existing confirmation-owned output requires explicit resume and external head custody."
+            raise TrainingRunnerConfigurationError(msg)
+        if expected_head is not None:
+            msg = "Fresh paper-confirm execution cannot reuse an existing external study head."
+            raise TrainingRunnerConfigurationError(msg)
+        return
+    if expected_head is None:
+        allowed = {".wp22-confirmation-session.json", "confirmation_study"}
+        if not entries or any(path.name not in allowed for path in entries):
+            msg = "paper-confirm resume lacks external head custody for non-initial output state."
+            raise TrainingRunnerConfigurationError(msg)
+        study_directory = output_root / "confirmation_study"
+        if study_directory.exists():
+            if study_directory.is_symlink() or not study_directory.is_dir():
+                msg = "paper-confirm resume found an unsafe initial snapshot directory."
+                raise TrainingRunnerConfigurationError(msg)
+            snapshots = tuple(study_directory.iterdir())
+            if snapshots:
+                if len(snapshots) != 1:
+                    msg = "paper-confirm resume lost external head custody for an established snapshot chain."
+                    raise TrainingRunnerConfigurationError(msg)
+                try:
+                    snapshot_payload = _read_single_link_custody_payload(snapshots[0])
+                    initial = LockedConfirmatoryStudySnapshot.from_json(snapshot_payload.decode())
+                except (OSError, TypeError, UnicodeError, ValueError):
+                    msg = "paper-confirm resume found invalid snapshot-zero custody."
+                    raise TrainingRunnerConfigurationError(msg) from None
+                _validate_snapshot_zero_publication_gap_before_reveal(
+                    options,
+                    snapshots[0],
+                    snapshot_payload,
+                    initial,
+                    final_seal=final_seal,
+                    configuration_execution_manifest=configuration_execution_manifest,
+                    execution_manifest=execution_manifest,
+                    analysis_manifest=analysis_manifest,
+                    exposure_inventory=exposure_inventory,
+                )
+        return
+    snapshot_path = output_root / expected_head.relative_path
+    try:
+        payload = _read_single_link_custody_payload(snapshot_path)
+        file_checksum = f"sha256:{hashlib.sha256(payload).hexdigest()}"
+        snapshot = LockedConfirmatoryStudySnapshot.from_json(payload.decode())
+    except (OSError, TypeError, UnicodeError, ValueError):
+        msg = "Externally retained study head is absent or invalid in the confirmation output tree."
+        raise TrainingRunnerConfigurationError(msg) from None
+    if (
+        file_checksum != expected_head.file_checksum
+        or snapshot.ordinal != expected_head.ordinal
+        or snapshot.content_checksum != expected_head.snapshot_content_checksum
+    ):
+        msg = "Externally retained study head differs from its exact on-disk snapshot."
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _validate_snapshot_zero_publication_gap_before_reveal(
+    options: TrainingRunnerOptions,
+    snapshot_path: Path,
+    snapshot_payload: bytes,
+    initial: LockedConfirmatoryStudySnapshot,
+    *,
+    final_seal: FinalConfirmationSeal,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
+    execution_manifest: ExecutionSourceManifest,
+    analysis_manifest: AnalysisSourceManifest,
+    exposure_inventory: PriorTargetExposureInventory,
+) -> None:
+    """Bind the sole missing-external-head state to every public sealed root.
+
+    This static recovery check reads only public session and snapshot custody.
+    It deliberately neither opens the held target path nor decodes held entropy.
+
+    Raises:
+        TrainingRunnerConfigurationError: If snapshot zero is not the exact
+            all-unattempted initial state committed by the public session.
+    """
+    output_root = options.output_dir
+    marker_path = output_root / ".wp22-confirmation-session.json"
+    try:
+        marker = _read_confirmation_session_header(marker_path)
+    except (OSError, TypeError, ValueError) as error:
+        msg = "Snapshot-zero recovery cannot authenticate its exact public session marker."
+        raise TrainingRunnerConfigurationError(msg) from error
+    marker_payload = f"{canonical_json(marker)}\n".encode()
+    expected_snapshot_path = (
+        output_root / "confirmation_study" / f"snapshot_{0:08d}_{initial.content_checksum.removeprefix('sha256:')}.json"
+    )
+    custody_path = options.expected_locked_study_head_path
+    manifest = initial.study_manifest
+    expected_plan = build_paper_confirm_plan(
+        seal=final_seal,
+        target_manifest=manifest.target_manifest,
+        configuration_execution_manifest=configuration_execution_manifest,
+    )
+    session_matches = (
+        marker["content_checksum"] == initial.session_marker_content_checksum
+        and marker["plan_checksum"] == expected_plan.content_checksum
+        and marker["final_confirmation_seal_checksum"] == final_seal.content_checksum
+        and marker["execution_source_manifest_checksum"] == execution_manifest.content_checksum
+        and marker["analysis_source_manifest_checksum"] == analysis_manifest.content_checksum
+        and marker["prior_target_exposure_inventory_checksum"] == exposure_inventory.content_checksum
+        and marker["authorized_output_root"] == str(output_root)
+        and custody_path is not None
+        and marker["locked_study_head_custody_path"] == str(custody_path.resolve())
+        and marker["job_count"] == len(expected_plan.jobs)
+    )
+    snapshot_matches = (
+        snapshot_path == expected_snapshot_path
+        and snapshot_payload == f"{initial.to_json()}\n".encode()
+        and initial.ordinal == 0
+        and initial.previous_snapshot is None
+        and initial.authorized_output_root == str(output_root)
+        and _snapshot_zero_has_exact_initial_inventory(initial, marker_payload)
+    )
+    public_roots_match = (
+        manifest.plan == expected_plan
+        and manifest.final_seal == final_seal
+        and manifest.configuration_execution_manifest == configuration_execution_manifest
+        and manifest.exposure_inventory == exposure_inventory
+        and manifest.execution_source_manifest_checksum == execution_manifest.content_checksum
+        and manifest.analysis_source_manifest_checksum == analysis_manifest.content_checksum
+        and manifest.target_manifest.content_checksum == final_seal.confirmatory_target_manifest_checksum
+    )
+    all_unattempted = (
+        manifest.status == "incomplete"
+        and manifest.planned_job_count == len(expected_plan.jobs)
+        and manifest.terminal_job_count == 0
+        and manifest.successful_job_count == 0
+        and manifest.failed_job_count == 0
+        and manifest.unattempted_job_count == len(expected_plan.jobs)
+        and manifest.observed_test_trajectory_count == 0
+        and all(row.terminal_state == "unattempted" for row in manifest.rows)
+    )
+    root_names = {path.name for path in output_root.iterdir()}
+    if not (
+        root_names == {".wp22-confirmation-session.json", "confirmation_study"}
+        and session_matches
+        and snapshot_matches
+        and public_roots_match
+        and all_unattempted
+    ):
+        msg = (
+            "Only the exact public-root-bound all-unattempted snapshot-zero publication gap may lack external custody."
+        )
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _snapshot_zero_has_exact_initial_inventory(
+    initial: LockedConfirmatoryStudySnapshot,
+    marker_payload: bytes,
+) -> bool:
+    """Return whether snapshot zero receipts exactly the on-disk marker and study directory."""
+    marker_checksum = f"sha256:{hashlib.sha256(marker_payload).hexdigest()}"
+    actual = tuple(
+        (
+            entry.relative_path,
+            entry.entry_kind,
+            entry.byte_count,
+            entry.file_checksum,
+        )
+        for entry in initial.output_entries
+    )
+    expected = (
+        (".wp22-confirmation-session.json", "file", len(marker_payload), marker_checksum),
+        ("confirmation_study", "directory", None, None),
+    )
+    return actual == expected
+
+
+def _preflight_confirmation_session_header(
+    options: TrainingRunnerOptions,
+    final_seal: FinalConfirmationSeal,
+    configuration_execution_manifest: FinalConfigurationExecutionManifest,
+    execution_manifest: ExecutionSourceManifest,
+    analysis_manifest: AnalysisSourceManifest,
+    exposure_inventory: PriorTargetExposureInventory,
+) -> None:
+    """Reject foreign root state or a mismatched session before held reads.
+
+    This static pass intentionally leaves the target-dependent plan checksum
+    for the complete context preflight.  Every root that is already public is
+    nevertheless checked before the held manifest or entropy file is opened.
+
+    Raises:
+        TrainingRunnerConfigurationError: If existing output has no valid
+            source-, seal-, exposure-, and root-bound whole-plan marker.
+    """
+    output_root = options.output_dir
+    if not output_root.exists():
+        return
+    allowed_names = {
+        ".wp22-confirmation-session.json",
+        "confirmation_study",
+        "roles",
+    }
+    entries = tuple(output_root.iterdir())
+    foreign = sorted(path.name for path in entries if path.name not in allowed_names)
+    if foreign:
+        msg = f"paper-confirm output contains foreign root members before reveal: {foreign!r}."
+        raise TrainingRunnerConfigurationError(msg)
+    if not entries:
+        return
+    marker = output_root / ".wp22-confirmation-session.json"
+    if marker.is_symlink() or not marker.is_file():
+        msg = "Existing confirmation-owned output lacks a regular whole-plan session marker."
+        raise TrainingRunnerConfigurationError(msg)
+    try:
+        document = _read_confirmation_session_header(marker)
+    except (OSError, TypeError, ValueError) as error:
+        msg = "Existing confirmation whole-plan session marker is invalid before reveal."
+        raise TrainingRunnerConfigurationError(msg) from error
+    expected_job_count = (
+        sum(cast("int", count) for count in final_seal.target_count_by_family.values())
+        * final_seal.optimization_seed_count
+        * len(configuration_execution_manifest.entries)
+    )
+    expected_custody_path = (
+        None
+        if options.expected_locked_study_head_path is None
+        else str(options.expected_locked_study_head_path.resolve())
+    )
+    if (
+        document["schema_version"] != "yaqs.state_preparation.phase2.confirmation_plan_session.v1"
+        or type(document["plan_checksum"]) is not str
+        or _CHECKSUM_PATTERN.fullmatch(document["plan_checksum"]) is None
+        or document["final_confirmation_seal_checksum"] != final_seal.content_checksum
+        or document["execution_source_manifest_checksum"] != execution_manifest.content_checksum
+        or document["analysis_source_manifest_checksum"] != analysis_manifest.content_checksum
+        or document["prior_target_exposure_inventory_checksum"] != exposure_inventory.content_checksum
+        or document["authorized_output_root"] != str(output_root)
+        or document["locked_study_head_custody_path"] != expected_custody_path
+        or type(document["job_count"]) is not int
+        or document["job_count"] != expected_job_count
+    ):
+        msg = "Existing confirmation whole-plan session header differs from the sealed public roots."
+        raise TrainingRunnerConfigurationError(msg)
+
+
+def _read_confirmation_session_header(marker: Path) -> dict[str, object]:
+    """Read and checksum-verify a single-link session marker without following links.
+
+    Returns:
+        The strictly decoded and checksum-verified public session document.
+
+    Raises:
+        ValueError: If the marker changes, is linked, or is not canonical.
+
+    """
+    payload = _read_single_link_custody_payload(marker)
+    document = dict(
+        verify_sealed_mapping(
+            load_canonical_json_object(payload.decode()),
+            expected_keys=_CONFIRMATION_SESSION_HEADER_KEYS,
+            name="confirmation whole-plan session marker",
+        )
+    )
+    if payload != f"{canonical_json(document)}\n".encode():
+        msg = "Confirmation session marker bytes are not canonical."
+        raise ValueError(msg)
+    return document
+
+
+def _read_single_link_custody_payload(path: Path) -> bytes:
+    """Open and read one public custody file without following links.
+
+    Returns:
+        Exact stable file bytes.
+
+    Raises:
+        ValueError: If the file is non-regular, linked, or changes while read.
+    """
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        msg = "Public confirmation custody must be a single-link regular file."
+        raise ValueError(msg)
+    flags = os.O_RDONLY | (os.O_NOFOLLOW if hasattr(os, "O_NOFOLLOW") else 0)
+    descriptor = os.open(path, flags)
+    try:
+        return _read_pinned_custody_payload(descriptor, metadata)
+    finally:
+        os.close(descriptor)
+
+
+def _read_pinned_custody_payload(descriptor: int, expected: os.stat_result) -> bytes:
+    """Read one custody descriptor after validating its immutable identity.
+
+    Returns:
+        Exact marker bytes.
+
+    Raises:
+        ValueError: If the descriptor is unsafe or changes while read.
+    """
+    opened = os.fstat(descriptor)
+    identity = (opened.st_dev, opened.st_ino, opened.st_size)
+    expected_identity = (expected.st_dev, expected.st_ino, expected.st_size)
+    if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or identity != expected_identity:
+        msg = "Public confirmation custody changed during open."
+        raise ValueError(msg)
+    with os.fdopen(descriptor, "rb", closefd=False) as handle:
+        payload = handle.read()
+    closed = os.fstat(descriptor)
+    if (closed.st_dev, closed.st_ino, closed.st_size, closed.st_nlink) != (*identity, 1):
+        msg = "Public confirmation custody changed during read."
+        raise ValueError(msg)
+    return payload
+
+
 def _load_confirmation_execution_context(
+    options: TrainingRunnerOptions,
+    preregistration: InitialPreregistration,
+) -> ConfirmationExecutionContext:
+    """Load real confirmation while holding its off-tree whole-run lock.
+
+    Returns:
+        The non-serializable source- and final-seal-bound execution context.
+    """
+    _require_confirmation_reveal_opt_in(options)
+    _preflight_paper_confirm_request(options)
+    lock_path = options.output_dir.parent / f".{options.output_dir.name}.wp22-confirmation-runner.lock"
+    with FileLock(str(lock_path)):
+        return _load_confirmation_execution_context_under_lock(options, preregistration)
+
+
+def _load_confirmation_execution_context_under_lock(
     options: TrainingRunnerOptions,
     preregistration: InitialPreregistration,
 ) -> ConfirmationExecutionContext:
@@ -1872,7 +2538,6 @@ def _load_confirmation_execution_context(
         TrainingRunnerConfigurationError: If custody, source-lock, artifact, or
             assertion verification fails.
     """
-    _require_confirmation_reveal_opt_in(options)
     if any((
         options.execution_profile_path is not None,
         options.resumability_fingerprint_paths,
@@ -1983,6 +2648,42 @@ def _load_confirmation_execution_context(
         "RepositoryBindingCatalog",
         _decode_artifact(catalog_path, "repository binding catalog", RepositoryBindingCatalog.from_json),
     )
+    exposure_inventory = _load_prior_target_exposure_inventory(options)
+    if (
+        exposure_inventory.preregistration_checksum != preregistration.content_checksum
+        or exposure_inventory.screening_manifest != screening_manifest
+        or exposure_inventory.screening_target_manifest.content_checksum
+        != screening_manifest.screening_target_manifest_checksum
+        or exposure_inventory.resource_calibration_checksum != resource_calibration.content_checksum
+        or exposure_inventory.resource_calibration_execution_source_checksum
+        != resource_calibration.execution_source_manifest_checksum
+        or exposure_inventory.resource_calibration_execution_source_checksum != execution_manifest.content_checksum
+        or exposure_inventory.pilot_plan.content_checksum != resource_calibration.pilot_plan_checksum
+        or exposure_inventory.screening_plan.content_checksum != resource_calibration.screening_plan_checksum
+        or exposure_inventory.pilot_custody_checksum != resource_calibration.pilot_custody_checksum
+        or exposure_inventory.pilot_calibration_checksum != resource_calibration.pilot_calibration_checksum
+        or exposure_inventory.screening_custody_checksum != resource_calibration.screening_custody_checksum
+    ):
+        msg = "Prior-target exposure inventory differs from the authorized pilot and screening custody."
+        raise TrainingRunnerConfigurationError(msg)
+    _preflight_confirmation_session_header(
+        options,
+        final_seal,
+        configuration_execution_manifest,
+        execution_manifest,
+        analysis_manifest,
+        exposure_inventory,
+    )
+    expected_locked_study_head = _load_expected_locked_study_head(options)
+    _preflight_expected_locked_study_head_before_reveal(
+        options,
+        expected_locked_study_head,
+        final_seal=final_seal,
+        configuration_execution_manifest=configuration_execution_manifest,
+        execution_manifest=execution_manifest,
+        analysis_manifest=analysis_manifest,
+        exposure_inventory=exposure_inventory,
+    )
     try:
         confirmation_authorization = authorize_confirmation(
             preregistration,
@@ -2048,18 +2749,12 @@ def _load_confirmation_execution_context(
     if set(entropy_files) != {("confirmatory", "primary_q6")}:
         msg = "paper-confirm requires exactly the confirmatory/primary_q6 external entropy slot."
         raise TrainingRunnerConfigurationError(msg)
-    try:
-        keyring = ExternalEntropyKeyring.from_files(entropy_files)
-    except (OSError, TypeError, ValueError):
-        msg = "Confirmatory external entropy is unavailable or invalid."
-        raise TrainingRunnerConfigurationError(msg) from None
     if (
         target_configuration.data_role != "confirmatory"
         or target_configuration.population_scope != "primary_q6"
         or target_configuration.preregistration_checksum != preregistration.content_checksum
-        or keyring.commitment_for("confirmatory", "primary_q6") != target_configuration.role_master_entropy_commitment
     ):
-        msg = "Confirmatory target configuration or external entropy commitment is invalid."
+        msg = "Confirmatory target configuration is invalid."
         raise TrainingRunnerConfigurationError(msg)
 
     # This is deliberately the first operation that opens the confirmatory target path.
@@ -2069,15 +2764,16 @@ def _load_confirmation_execution_context(
         msg = "Revealed confirmatory target manifest differs from the final seal."
         raise TrainingRunnerConfigurationError(msg)
     try:
-        materialization_authorization = authorize_target_materialization(
-            preregistration,
-            target_configuration,
-            target_manifest,
-            keyring.entropy_for("confirmatory", "primary_q6"),
-            confirmation_authorization,
+        materialization_authorization, keyring = _authorize_revealed_confirmatory_target(
+            preregistration=preregistration,
+            target_configuration=target_configuration,
+            target_manifest=target_manifest,
+            entropy_files=entropy_files,
+            confirmation_authorization=confirmation_authorization,
+            exposure_inventory=exposure_inventory,
         )
     except (OSError, TypeError, ValueError):
-        msg = "Revealed confirmatory target materialization authorization is invalid."
+        msg = "Revealed confirmatory target novelty or materialization authorization is invalid."
         raise TrainingRunnerConfigurationError(msg) from None
     _validate_method_assertion(options, None, (), final_seal)
     _validate_resource_assertions(options, preregistration, final_seal)
@@ -2097,6 +2793,12 @@ def _load_confirmation_execution_context(
             repository_binding_catalog=catalog,
             target_configuration=target_configuration,
             target_manifest=target_manifest,
+            authorized_output_root=options.output_dir,
+            locked_study_head_custody_path=cast(
+                "Path",
+                options.expected_locked_study_head_path,
+            ).resolve(),
+            prior_target_exposure_inventory_checksum=exposure_inventory.content_checksum,
             confirmation_authorization=confirmation_authorization,
             target_materialization_authorization=materialization_authorization,
             external_entropy_keyring=keyring,
@@ -2104,6 +2806,50 @@ def _load_confirmation_execution_context(
     except (OSError, RuntimeError, TypeError, ValueError):
         msg = "Real confirmation context failed complete final-seal binding validation."
         raise TrainingRunnerConfigurationError(msg) from None
+
+
+def _authorize_revealed_confirmatory_target(
+    *,
+    preregistration: InitialPreregistration,
+    target_configuration: TargetPopulationConfig,
+    target_manifest: TargetPopulationManifest,
+    entropy_files: Mapping[tuple[str, str], Path],
+    confirmation_authorization: ConfirmationAuthorization,
+    exposure_inventory: PriorTargetExposureInventory,
+) -> tuple[TargetMaterializationAuthorization, ExternalEntropyKeyring]:
+    """Verify novelty and held entropy, then authorize target materialization.
+
+    Returns:
+        The exact sealed target-materialization authorization and held keyring.
+
+    """
+    exposure_inventory.validate_confirmatory_novelty(target_manifest)
+    keyring = ExternalEntropyKeyring.from_files(entropy_files)
+    _validate_confirmatory_entropy_commitment(keyring, target_configuration)
+    return (
+        authorize_target_materialization(
+            preregistration,
+            target_configuration,
+            target_manifest,
+            keyring.entropy_for("confirmatory", "primary_q6"),
+            confirmation_authorization,
+        ),
+        keyring,
+    )
+
+
+def _validate_confirmatory_entropy_commitment(
+    keyring: ExternalEntropyKeyring,
+    target_configuration: TargetPopulationConfig,
+) -> None:
+    """Require revealed entropy to match the confirmatory population seal.
+
+    Raises:
+        ValueError: If the entropy commitment differs from the target configuration.
+    """
+    if keyring.commitment_for("confirmatory", "primary_q6") != target_configuration.role_master_entropy_commitment:
+        msg = "Confirmatory external entropy differs from its sealed commitment."
+        raise ValueError(msg)
 
 
 def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
@@ -2122,6 +2868,7 @@ def build_training_plan(options: TrainingRunnerOptions) -> TrainingRunPlan:
         raise TypeError(msg)
     if options.preset == "paper-confirm":
         _require_confirmation_reveal_opt_in(options)
+        _preflight_paper_confirm_request(options)
     preregistration = _load_preregistration(options)
     if options.preset == "paper-confirm":
         if any((
@@ -2186,6 +2933,8 @@ build_run_plan = build_training_plan
 def _preflight_context_plan(
     options: TrainingRunnerOptions,
     context: TrainingExecutionContext | ConfirmationExecutionContext,
+    prior_target_exposure_inventory: PriorTargetExposureInventory | None = None,
+    expected_locked_study_head: LockedConfirmatoryStudySnapshotRef | None = None,
 ) -> None:
     """Validate the complete context and output universe without dispatch."""
 
@@ -2206,6 +2955,8 @@ def _preflight_context_plan(
         fail_fast=options.fail_fast,
         context=context,
         repository_root=options.repository_root,
+        prior_target_exposure_inventory=prior_target_exposure_inventory,
+        expected_locked_study_head=expected_locked_study_head,
     )
 
 
@@ -2234,10 +2985,13 @@ def run(
         raise TrainingRunnerConfigurationError(msg)
     if options.preset == "paper-confirm":
         _require_confirmation_reveal_opt_in(options)
+        _preflight_paper_confirm_request(options)
     if executor is not None and options.executor_factory is not None:
         msg = "Select either the configured executor_factory or a programmatically injected executor, not both."
         raise TrainingRunnerConfigurationError(msg)
     selected_context = context
+    exposure_inventory: PriorTargetExposureInventory | None = None
+    expected_locked_study_head: LockedConfirmatoryStudySnapshotRef | None = None
     if selected_context is None and options.preset in {"training-smoke", "paper-pilot", "paper-screen"}:
         selected_context = build_training_execution_context(options)
     elif selected_context is None and options.preset == "paper-confirm":
@@ -2249,9 +3003,20 @@ def run(
         if plan.preset != options.preset or plan.preregistration_checksum != options.preregistration_checksum:
             msg = "Programmatic execution context differs from the resolved CLI preset or preregistration assertion."
             raise TrainingRunnerConfigurationError(msg)
+    if isinstance(selected_context, ConfirmationExecutionContext):
+        expected_locked_study_head = _load_expected_locked_study_head(options)
+        exposure_inventory = _load_prior_target_exposure_inventory(options)
+        if exposure_inventory.content_checksum != selected_context.prior_target_exposure_inventory_checksum:
+            msg = "Prior-target exposure inventory differs from the authorized confirmation context."
+            raise TrainingRunnerConfigurationError(msg)
     if options.dry_run:
         if selected_context is not None:
-            _preflight_context_plan(options, selected_context)
+            _preflight_context_plan(
+                options,
+                selected_context,
+                exposure_inventory,
+                expected_locked_study_head,
+            )
         return plan
     if options.preset == "historical-layerwise-reproduction":
         if not options.execute_expensive:
@@ -2270,7 +3035,12 @@ def run(
     if selected_context is not None:
         # No extension or repository-owned executor code receives the secret-bearing
         # context until every source byte and scientific fingerprint has passed.
-        _preflight_context_plan(options, selected_context)
+        _preflight_context_plan(
+            options,
+            selected_context,
+            exposure_inventory,
+            expected_locked_study_head,
+        )
     selected_executor = executor
     if selected_executor is None and options.executor_factory is not None:
         if selected_context is None:
@@ -2300,6 +3070,8 @@ def run(
         fail_fast=options.fail_fast,
         context=selected_context,
         repository_root=options.repository_root if selected_context is not None else None,
+        prior_target_exposure_inventory=exposure_inventory,
+        expected_locked_study_head=expected_locked_study_head,
     )
 
 
@@ -2308,6 +3080,9 @@ def _render_result(result: object) -> str:
 
     Returns:
         Canonical JSON where available, otherwise the object's string form.
+
+    Raises:
+        ValueError: If a locked-study summary contains an inconsistent reference.
     """
     if isinstance(result, TrainingRunPlan):
         return result.to_json()
@@ -2317,14 +3092,27 @@ def _render_result(result: object) -> str:
         if isinstance(rendered, str):
             return rendered
     if isinstance(result, TrainingRunSummary):
+        summary: dict[str, object] = {
+            "planned": result.planned,
+            "attempted": result.attempted,
+            "succeeded": result.succeeded,
+            "failed": result.failed,
+            "skipped": result.skipped,
+        }
+        if result.locked_study_snapshot_path is not None:
+            reference = LockedConfirmatoryStudySnapshotRef(
+                relative_path=result.locked_study_snapshot_path,
+                ordinal=cast("int", result.locked_study_snapshot_ordinal),
+                file_checksum=cast("str", result.locked_study_snapshot_file_checksum),
+                snapshot_content_checksum=cast("str", result.locked_study_snapshot_content_checksum),
+            )
+            if reference.content_checksum != result.locked_study_snapshot_reference_checksum:
+                msg = "Training summary contains an inconsistent locked-study head reference."
+                raise ValueError(msg)
+            summary["locked_study_snapshot_reference"] = reference.to_dict()
+            summary["external_study_head_custody_required"] = True
         return json.dumps(
-            {
-                "planned": result.planned,
-                "attempted": result.attempted,
-                "succeeded": result.succeeded,
-                "failed": result.failed,
-                "skipped": result.skipped,
-            },
+            summary,
             sort_keys=True,
             separators=(",", ":"),
         )

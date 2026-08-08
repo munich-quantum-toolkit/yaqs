@@ -654,19 +654,20 @@ def test_pipeline_scientific_values_are_assertions_not_overrides(tmp_path: Path)
         "best_validation_fidelity",
     ))
     options = resolve_options(parse_arguments(arguments))
-    pipeline = training_runner._load_pipeline(pipeline_path)  # noqa: SLF001 - focused assertion-helper test
+    pipeline = training_runner._load_pipeline(pipeline_path)  # noqa: SLF001 -- focused assertion-helper test
 
-    training_runner._validate_pipeline_assertions(options, pipeline)  # noqa: SLF001 - focused helper test
+    training_runner._validate_pipeline_assertions(options, pipeline)  # noqa: SLF001 -- focused helper test
     assert pipeline.template == template
     assert pipeline_path.read_text(encoding="utf-8") == original
 
     mismatch = resolve_options(parse_arguments(["--pipeline", str(pipeline_path), "--stage-budget", "999"]))
     with pytest.raises(TrainingRunnerConfigurationError, match="stage_budgets"):
-        training_runner._validate_pipeline_assertions(mismatch, pipeline)  # noqa: SLF001 - focused helper test
+        training_runner._validate_pipeline_assertions(mismatch, pipeline)  # noqa: SLF001 -- focused helper test
     assert pipeline_path.read_text(encoding="utf-8") == original
 
 
 def test_paper_confirm_missing_seal_never_loads_target_manifest(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing final seal fails before the target-manifest loader is called."""
@@ -677,6 +678,8 @@ def test_paper_confirm_missing_seal_never_loads_target_manifest(
             "--target-manifest",
             "custodied-target.json",
             "--execute-expensive",
+            "--output",
+            str(tmp_path / "confirm"),
         ])
     )
 
@@ -690,6 +693,7 @@ def test_paper_confirm_missing_seal_never_loads_target_manifest(
 
 
 def test_paper_confirm_missing_configuration_execution_manifest_never_loads_targets(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The per-configuration execution root is mandatory before held-target access."""
@@ -705,7 +709,13 @@ def test_paper_confirm_missing_configuration_execution_manifest_never_loads_targ
             "execution.json",
             "--analysis-source-manifest",
             "analysis.json",
+            "--prior-target-exposure-inventory",
+            "prior-exposure.json",
+            "--expected-locked-study-head",
+            str(tmp_path / "confirmation-study-head.json"),
             "--execute-expensive",
+            "--output",
+            str(tmp_path / "confirm"),
         ])
     )
 
@@ -726,7 +736,7 @@ def test_noiseless_training_assertion_matches_explicit_noop_schedule() -> None:
         SimpleNamespace(training_noise=SimpleNamespace(mode="noiseless", components=())),
     )
 
-    training_runner._validate_schedule_assertions(  # noqa: SLF001 - focused assertion-helper test
+    training_runner._validate_schedule_assertions(  # noqa: SLF001 -- focused assertion-helper test
         options,
         (schedule,),
         pipeline_present=False,
@@ -734,6 +744,7 @@ def test_noiseless_training_assertion_matches_explicit_noop_schedule() -> None:
 
 
 def test_paper_confirm_verifies_source_lock_before_target_access(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An invalid execution/source lock prevents any confirmatory target read."""
@@ -752,6 +763,8 @@ def test_paper_confirm_verifies_source_lock_before_target_access(
             "--analysis-source-manifest",
             "analysis.json",
             "--execute-expensive",
+            "--output",
+            str(tmp_path / "confirm"),
         ])
     )
     decoded: list[str] = []
@@ -798,6 +811,7 @@ def test_paper_confirm_verifies_source_lock_before_target_access(
 
 
 def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Confirmation rejects every caller-selected executor before target access."""
@@ -818,43 +832,23 @@ def test_paper_confirm_rejects_ungoverned_executor_factory_before_target_access(
             "--executor-factory",
             "rogue.executors:build_registry",
             "--execute-expensive",
+            "--output",
+            str(tmp_path / "confirm"),
         ])
     )
-    seal = SimpleNamespace(
-        preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
-        confirmatory_target_manifest_checksum=_CHECKSUM_A,
-    )
-    execution_manifest = SimpleNamespace(
-        source_files=(SimpleNamespace(repo_path="governed.py", role="execution_source"),),
-    )
-
-    def fake_decode(_path: Path, name: str, _decoder: object) -> object:
-        """Return typed-enough custody records for the ordering seam."""
-        return {
-            "final confirmation seal": seal,
-            "final configuration execution manifest": object(),
-            "execution-source manifest": execution_manifest,
-            "analysis-source manifest": object(),
-        }[name]
 
     def forbidden_target_load(_options: object) -> object:
         """Fail if the ungoverned factory did not stop target access."""
         pytest.fail("confirmatory target was accessed before executor source authorization")
 
-    monkeypatch.setattr(training_runner, "_decode_artifact", fake_decode)
-    monkeypatch.setattr(training_runner, "verify_final_seal_source_lock", lambda *_arguments: None)
-    monkeypatch.setattr(
-        training_runner,
-        "validate_final_configuration_execution_manifest",
-        lambda *_arguments: None,
-    )
     monkeypatch.setattr(training_runner, "_load_targets", forbidden_target_load)
 
-    with pytest.raises(TrainingRunnerConfigurationError, match="repository-owned default executor registry"):
+    with pytest.raises(TrainingRunnerConfigurationError, match="executor_factory"):
         training_runner.build_training_plan(options)
 
 
 def test_paper_confirm_authorizes_final_artifacts_before_target_access(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A rejected final authorization cannot open the revealed target path."""
@@ -888,24 +882,54 @@ def test_paper_confirm_authorizes_final_artifacts_before_target_access(
             "execution.json",
             "--analysis-source-manifest",
             "analysis.json",
+            "--prior-target-exposure-inventory",
+            "prior-exposure.json",
+            "--expected-locked-study-head",
+            str(tmp_path / "confirmation-study-head.json"),
             "--execute-expensive",
+            "--output",
+            str(tmp_path / "confirm"),
         ])
     )
     seal = SimpleNamespace(
         preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
         confirmatory_target_manifest_checksum=_CHECKSUM_A,
     )
+    screening_manifest = SimpleNamespace(screening_target_manifest_checksum=_CHECKSUM_B)
+    resource_calibration = SimpleNamespace(
+        content_checksum=_CHECKSUM_A,
+        execution_source_manifest_checksum=_CHECKSUM_B,
+        pilot_plan_checksum=_CHECKSUM_A,
+        screening_plan_checksum=_CHECKSUM_B,
+        pilot_custody_checksum=_CHECKSUM_A,
+        pilot_calibration_checksum=_CHECKSUM_B,
+        screening_custody_checksum=_CHECKSUM_A,
+    )
+    execution_manifest = SimpleNamespace(content_checksum=_CHECKSUM_B)
+    prior_exposure = SimpleNamespace(
+        preregistration_checksum=TRUSTED_INITIAL_PREREGISTRATION_CHECKSUM,
+        screening_manifest=screening_manifest,
+        screening_target_manifest=SimpleNamespace(content_checksum=_CHECKSUM_B),
+        resource_calibration_checksum=resource_calibration.content_checksum,
+        resource_calibration_execution_source_checksum=execution_manifest.content_checksum,
+        pilot_plan=SimpleNamespace(content_checksum=resource_calibration.pilot_plan_checksum),
+        screening_plan=SimpleNamespace(content_checksum=resource_calibration.screening_plan_checksum),
+        pilot_custody_checksum=resource_calibration.pilot_custody_checksum,
+        pilot_calibration_checksum=resource_calibration.pilot_calibration_checksum,
+        screening_custody_checksum=resource_calibration.screening_custody_checksum,
+    )
     decoded = {
         "final confirmation seal": seal,
         "final configuration execution manifest": object(),
-        "execution-source manifest": object(),
+        "execution-source manifest": execution_manifest,
         "analysis-source manifest": object(),
-        "screening manifest": object(),
+        "screening manifest": screening_manifest,
         "screening evidence": object(),
         "promotion decision": object(),
         "sample-size design": object(),
-        "production resource calibration": object(),
+        "production resource calibration": resource_calibration,
         "repository binding catalog": object(),
+        "prior-target exposure inventory": prior_exposure,
     }
 
     def fake_decode(_path: Path, name: str, _decoder: object) -> object:

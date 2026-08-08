@@ -10,13 +10,17 @@
 from __future__ import annotations
 
 import json
-import pickle  # noqa: S403 - verifies that secret-bearing state rejects pickle
+import os
+import pickle  # noqa: S403 -- bounded serialization-rejection test
+import stat
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from benchmarks.state_preparation import phase2
+from benchmarks.state_preparation.phase2 import execution_context as execution_context_module
 from benchmarks.state_preparation.phase2.binding_catalog import RepositoryBindingCatalog
 from benchmarks.state_preparation.phase2.canonical import canonical_checksum
 from benchmarks.state_preparation.phase2.execution_context import (
@@ -50,8 +54,6 @@ from benchmarks.state_preparation.phase2.training_orchestration import (
 from tests.benchmarks import test_state_preparation_wp22a_execution_bindings as wp22a_support
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from _pytest.monkeypatch import MonkeyPatch
 
 _DEVELOPMENT_ENTROPY = bytes(range(32))
@@ -139,8 +141,8 @@ def _context() -> TrainingExecutionContext:
         A structurally complete non-serializable execution context.
     """
     preregistration = load_initial_preregistration()
-    bindings = wp22a_support._smoke_bindings()  # noqa: SLF001 - reuses the frozen WP22A test catalog
-    profile = wp22a_support._profile(bindings)  # noqa: SLF001 - reuses the frozen WP22A profile fixture
+    bindings = wp22a_support._smoke_bindings()  # noqa: SLF001 -- shared frozen binding fixture
+    profile = wp22a_support._profile(bindings)  # noqa: SLF001 -- shared frozen profile fixture
     implementation_catalog = RepositoryImplementationCatalog.frozen(
         screening_outer_trajectory_count=256,
         smoke_evaluation_trajectory_count=2,
@@ -208,6 +210,111 @@ def test_external_entropy_is_exact_nonserializable_and_redacted(tmp_path: Path) 
             ("development", "primary_q6"): _DEVELOPMENT_ENTROPY,
             ("screening_selection", "primary_q6"): _DEVELOPMENT_ENTROPY,
         })
+
+
+@pytest.mark.parametrize("size", [31, 33, 63, 65])
+def test_external_entropy_file_requires_exact_supported_size(tmp_path: Path, size: int) -> None:
+    """Only exact raw or lowercase-hex 256-bit file widths reach decoding."""
+    entropy_path = tmp_path / "wrong-size.key"
+    entropy_path.write_bytes(b"a" * size)
+
+    with pytest.raises(ValueError, match="unavailable or unsafe"):
+        ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
+
+
+def test_confirmatory_entropy_requires_owner_only_mode_without_changing_development_policy(tmp_path: Path) -> None:
+    """Held entropy must be private while ordinary development custody remains compatible."""
+    entropy_path = tmp_path / "entropy.key"
+    entropy_path.write_bytes(_DEVELOPMENT_ENTROPY)
+    entropy_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
+
+    development = ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
+    assert development.entropy_for("development", "primary_q6") == _DEVELOPMENT_ENTROPY
+    with pytest.raises(ValueError, match="unavailable or unsafe"):
+        ExternalEntropyKeyring.from_files({("confirmatory", "primary_q6"): entropy_path})
+
+    entropy_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    confirmatory = ExternalEntropyKeyring.from_files({("confirmatory", "primary_q6"): entropy_path})
+    assert confirmatory.entropy_for("confirmatory", "primary_q6") == _DEVELOPMENT_ENTROPY
+
+
+def test_external_entropy_reader_uses_nofollow_and_rejects_hard_links(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The reader pins an alias-resistant descriptor for one single-link file."""
+    entropy_path = tmp_path / "entropy.key"
+    entropy_path.write_bytes(_DEVELOPMENT_ENTROPY)
+    real_open = os.open
+    captured_flags: list[int] = []
+
+    def recording_open(path: Path, flags: int) -> int:
+        captured_flags.append(flags)
+        return real_open(path, flags)
+
+    monkeypatch.setattr(execution_context_module.os, "open", recording_open)
+    ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
+    assert len(captured_flags) == 1
+    if hasattr(os, "O_NOFOLLOW"):
+        assert captured_flags[0] & os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        assert captured_flags[0] & os.O_NONBLOCK
+
+    hard_link = tmp_path / "hard-linked.key"
+    os.link(entropy_path, hard_link)
+    with pytest.raises(ValueError, match="unavailable or unsafe"):
+        ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
+
+
+@pytest.mark.parametrize("fstat_call", [1, 2])
+def test_external_entropy_reader_rejects_open_and_postread_descriptor_identity_changes(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    fstat_call: int,
+) -> None:
+    """Opened and post-read descriptor identities must match the pre-open identity."""
+    entropy_path = tmp_path / "entropy.key"
+    entropy_path.write_bytes(_DEVELOPMENT_ENTROPY)
+    real_fstat = os.fstat
+    call_count = 0
+
+    def changing_fstat(descriptor: int) -> os.stat_result:
+        nonlocal call_count
+        call_count += 1
+        metadata = list(real_fstat(descriptor))
+        if call_count == fstat_call:
+            metadata[stat.ST_INO] += 1
+        return os.stat_result(metadata)
+
+    monkeypatch.setattr(execution_context_module.os, "fstat", changing_fstat)
+    with pytest.raises(ValueError, match="unavailable or unsafe"):
+        ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
+
+
+def test_external_entropy_reader_rejects_postread_path_identity_change(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The final path identity must still name the pinned file after reading."""
+    entropy_path = tmp_path / "entropy.key"
+    entropy_path.write_bytes(_DEVELOPMENT_ENTROPY)
+    real_stat = Path.stat
+    call_count = 0
+
+    def changing_stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        nonlocal call_count
+        metadata = real_stat(path, follow_symlinks=follow_symlinks)
+        if path == entropy_path:
+            call_count += 1
+            if call_count == 2:
+                changed = list(metadata)
+                changed[stat.ST_INO] += 1
+                return os.stat_result(changed)
+        return metadata
+
+    monkeypatch.setattr(Path, "stat", changing_stat)
+    with pytest.raises(ValueError, match="unavailable or unsafe"):
+        ExternalEntropyKeyring.from_files({("development", "primary_q6"): entropy_path})
 
 
 def test_entropy_specs_are_cli_only_exact_and_nonprobing(tmp_path: Path) -> None:

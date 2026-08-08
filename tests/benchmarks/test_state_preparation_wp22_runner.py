@@ -879,13 +879,14 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
     with pytest.raises(TypeError, match="typed confirm_executor"):
         execute_training_plan(single, output, lambda _job, _directory, _controls: _checksum("untyped"))
     assert not output.exists()
-    summary = execute_training_plan(
-        single,
-        output,
-        TrainingExecutorRegistry(confirm_executor=confirm_executor),
-    )
-    assert summary.succeeded == 1
-    assert received == [request]
+    with pytest.raises(ValueError, match="ConfirmationExecutionContext"):
+        execute_training_plan(
+            single,
+            output,
+            TrainingExecutorRegistry(confirm_executor=confirm_executor),
+        )
+    assert not output.exists()
+    assert not received
     with pytest.raises(ValueError, match="first terminal attempt"):
         execute_training_plan(
             single,
@@ -894,38 +895,6 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
             overwrite=True,
         )
     assert not (tmp_path / "confirm-overwrite-must-not-exist").exists()
-
-    failed_output = tmp_path / "typed-confirm-failure"
-
-    def failing_confirm_executor(
-        _typed_request: ConfirmExecutionRequest,
-        _directory: Path,
-        _controls: JobExecutionControls,
-    ) -> str:
-        """Fail one terminal confirm attempt.
-
-        Raises:
-            RuntimeError: Always, to exercise frozen failure semantics.
-        """
-        msg = "terminal confirm failure"
-        raise RuntimeError(msg)
-
-    failed = execute_training_plan(
-        single,
-        failed_output,
-        TrainingExecutorRegistry(confirm_executor=failing_confirm_executor),
-    )
-    assert failed.failed == 1
-    preserved = execute_training_plan(
-        single,
-        failed_output,
-        TrainingExecutorRegistry(confirm_executor=confirm_executor),
-        resume=True,
-    )
-    assert (preserved.attempted, preserved.skipped) == (0, 1)
-    failure_history = load_training_job_outcome_history(failed_output / job.output_path, job)
-    assert len(failure_history) == 1
-    assert failure_history[0].status == "failure"
 
     cli_output = tmp_path / "cli-confirm"
     cli_options = training_cli.resolve_options(
@@ -956,4 +925,4 @@ def test_confirm_plan_uses_only_sealed_configurations_and_counts(
             executor=TrainingExecutorRegistry(confirm_executor=confirm_executor),
         )
     assert not cli_output.exists()
-    assert received == [request]
+    assert not received

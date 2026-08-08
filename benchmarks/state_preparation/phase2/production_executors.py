@@ -23,18 +23,22 @@ the exact manifest member set before exposing a result.
 
 # The public codecs below delegate detailed scalar validation to validation.py.
 # The executor boundary records ordinary numerical failures before reraising.
-# ruff: noqa: DOC201, DOC501, PLW0717
+# ruff: noqa: DOC201, DOC501
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import math
 import os
+import re
 import secrets
 import stat
+import sys
 import time
 import tracemalloc
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -72,7 +76,6 @@ from .competitor_optimizers import ParameterShiftAdamConfig, SPSAConfig
 from .execution_context import ConfirmationExecutionContext, TrainingExecutionContext
 from .execution_protocol import FreshEvaluationPolicy, OperatorGrowthExecutionSpec
 from .implementation_catalog import (
-    OperatorGrowthSmokeExecution,
     OperatorGrowthSmokeRuntimeProgram,
     PipelineSmokeRuntimeProgram,
 )
@@ -91,17 +94,17 @@ from .operator_growth import (
     OperatorPoolSpec,
     materialize_operator_growth_circuit,
 )
-from .pipeline import TrainingPipelineConfig, TrainingPipelineTemplate, TrainingStageConfig
+from .pipeline import TrainingPipelineTemplate
 from .scheduled_execution import (
     OPERATOR_GROWTH_SEGMENTED_SNAPSHOT_SCHEMA_VERSION,
     AdamOptimizerPayload,
     KrotovOptimizerPayload,
     KrotovScheduledUpdateAdapter,
+    NormalizedComputeCapError,
     OperatorGrowthSegmentedObjectiveEvidence,
     OperatorGrowthSegmentedObjectiveRequest,
     OperatorGrowthSegmentedObjectiveResult,
     OperatorGrowthSegmentedSnapshot,
-    OperatorGrowthSelectionRequest,
     OperatorGrowthSelectionResult,
     OptimizerInitialization,
     ParameterShiftAdamScheduledUpdateAdapter,
@@ -112,7 +115,6 @@ from .scheduled_execution import (
     ScheduledTrainingGradientResult,
     ScheduledTrainingObjectiveRequest,
     ScheduledTrainingObjectiveResult,
-    ScheduledValidationRequest,
     ScheduledValidationResult,
     SPSAOptimizerPayload,
     SPSAScheduledUpdateAdapter,
@@ -121,10 +123,6 @@ from .scheduled_execution import (
     initialize_scheduled_execution,
 )
 from .targets import (
-    MaterializedTarget,
-    TargetInstanceSpec,
-    TargetPopulationConfig,
-    TargetPopulationManifest,
     materialize_target_population,
 )
 from .training_orchestration import (
@@ -132,7 +130,9 @@ from .training_orchestration import (
     JobExecutionControls,
     TrainingExecutorRegistry,
     TrainingJob,
+    TrainingJobOutcome,
     confirmatory_evaluation_policy_checksum,
+    load_training_job_outcome_history,
     validate_confirm_execution_request,
 )
 from .training_schedules import (
@@ -151,12 +151,30 @@ from .validation import (
 from .wp20_resources import CircuitResourceMetrics, measure_circuit_resources
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from mqt.yaqs.optimization import GateNoiseProvider, KrotovMapRole, KrotovNoiseMap
 
     from .binding_catalog import ExecutableScopedBinding
+    from .confirmatory_study_store import (
+        LockedConfirmatoryStudySnapshot,
+        LockedConfirmatoryStudySnapshotRef,
+    )
+    from .implementation_catalog import (
+        OperatorGrowthSmokeExecution,
+    )
+    from .pipeline import TrainingPipelineConfig, TrainingStageConfig
     from .protocol import ScreeningCell
+    from .scheduled_execution import (
+        OperatorGrowthSelectionRequest,
+        ScheduledValidationRequest,
+    )
+    from .targets import (
+        MaterializedTarget,
+        TargetInstanceSpec,
+        TargetPopulationConfig,
+        TargetPopulationManifest,
+    )
     from .training_schedules import TrajectoryEnsembleMembership
 
     PipelineRunnerFactory = Callable[
@@ -180,13 +198,19 @@ ATTEMPT_ARTIFACT_MANIFEST_SCHEMA_VERSION = "yaqs.state_preparation.phase2.produc
 RESULT_ARTIFACT_REF_SCHEMA_VERSION = "yaqs.state_preparation.phase2.production_result_ref.v1"
 SYNTHETIC_CONFIRM_FIXTURE_SCHEMA_VERSION = "yaqs.state_preparation.phase2.synthetic_confirm_fixture.v1"
 PRODUCTION_DOCUMENT_SCHEMA_VERSION = "yaqs.state_preparation.phase2.production_document.v1"
+CONFIRMATION_PLAN_SESSION_SCHEMA_VERSION = "yaqs.state_preparation.phase2.confirmation_plan_session.v1"
+CONFIRMATION_RESOURCE_LIMIT_PROOF_SCHEMA_VERSION = "yaqs.state_preparation.phase2.confirmation_resource_limit_proof.v1"
 
 ATTEMPT_DIRECTORY_NAME = "production_attempts"
 ATTEMPT_MANIFEST_NAME = "attempt_manifest.json"
+CONFIRMATION_PLAN_SESSION_NAME = ".wp22-confirmation-session.json"
 OPERATOR_GROWTH_GLOBAL_UPDATE_COUNT = 200
 
 ArtifactStatus = Literal["success", "failure"]
 ArtifactKind = Literal["pipeline", "operator_growth", "synthetic_confirmation"]
+CONFIRMATION_OUTER_FAILURE_EXCEPTION_TYPE = "executor_failure"
+CONFIRMATION_OUTER_FAILURE_MESSAGE = "executor failed; secret-bearing diagnostics are intentionally not persisted"
+
 
 _BLOB_REF_KEYS = frozenset({
     "schema_version",
@@ -284,6 +308,42 @@ _SYNTHETIC_FIXTURE_KEYS = frozenset({
     "content_checksum",
 })
 _PRODUCTION_DOCUMENT_KEYS = frozenset({"schema_version", "document_type", "payload", "content_checksum"})
+_CONFIRMATION_PLAN_SESSION_KEYS = frozenset({
+    "schema_version",
+    "plan_checksum",
+    "final_confirmation_seal_checksum",
+    "execution_source_manifest_checksum",
+    "analysis_source_manifest_checksum",
+    "prior_target_exposure_inventory_checksum",
+    "authorized_output_root",
+    "locked_study_head_custody_path",
+    "job_count",
+    "content_checksum",
+})
+_CONFIRMATION_HEAD_CUSTODY_WRAPPER_KEYS = frozenset({
+    "attempted",
+    "external_study_head_custody_required",
+    "failed",
+    "locked_study_snapshot_reference",
+    "planned",
+    "skipped",
+    "succeeded",
+})
+_CONFIRMATION_STUDY_SNAPSHOT_PATTERN = re.compile(r"^snapshot_(?P<ordinal>[0-9]{8})_(?P<digest>[0-9a-f]{64})\.json$")
+_CONFIRMATION_RESOURCE_LIMIT_PROOF_KEYS = frozenset({
+    "schema_version",
+    "request_checksum",
+    "proof_kind",
+    "normalized_compute_cap",
+    "native_edge_gate_cap",
+    "completed_normalized_work",
+    "prospective_normalized_work",
+    "measured_normalized_work",
+    "measured_native_edge_gate_counts",
+    "measurement_resource_ref",
+    "exceeded_dimensions",
+    "content_checksum",
+})
 _REAL_RAW_TRAJECTORY_KEYS = frozenset({
     "job_checksum",
     "evaluation_policy_checksum",
@@ -408,7 +468,15 @@ class ArtifactBlobRef:
             msg = "Artifact blob paths must remain under production_attempts."
             raise ValueError(msg)
         object.__setattr__(self, "path", path)
-        object.__setattr__(self, "byte_count", require_int(self.byte_count, "byte_count", minimum=1))
+        opaque_partial = self.role == "opaque_partial_member" and self.media_type == "application/octet-stream"
+        if self.role == "opaque_partial_member" and not opaque_partial:
+            msg = "Opaque partial members require exact binary custody."
+            raise ValueError(msg)
+        object.__setattr__(
+            self,
+            "byte_count",
+            require_int(self.byte_count, "byte_count", minimum=0 if opaque_partial else 1),
+        )
         object.__setattr__(self, "file_checksum", require_checksum(self.file_checksum, "file_checksum"))
         object.__setattr__(self, "logical_checksum", require_checksum(self.logical_checksum, "logical_checksum"))
 
@@ -451,6 +519,185 @@ class ArtifactBlobRef:
             msg = "Production blob reference checksum changed during normalization."
             raise ValueError(msg)
         return result
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationResourceLimitProof:
+    """Checksum-covered proof that one sealed confirmation cap stopped execution."""
+
+    request_checksum: str
+    proof_kind: Literal["prospective_normalized_work", "measured_confirmation_resources"]
+    normalized_compute_cap: float
+    native_edge_gate_cap: float
+    completed_normalized_work: float | None
+    prospective_normalized_work: float | None
+    measured_normalized_work: float | None
+    measured_native_edge_gate_counts: tuple[int, ...]
+    measurement_resource_ref: ArtifactBlobRef | None
+    exceeded_dimensions: tuple[Literal["normalized_work", "native_edge"], ...]
+    schema_version: str = field(default=CONFIRMATION_RESOURCE_LIMIT_PROOF_SCHEMA_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Validate proof-kind separation and mechanically derive each breach."""
+        object.__setattr__(self, "request_checksum", require_checksum(self.request_checksum, "request_checksum"))
+        normalized_cap = require_float(self.normalized_compute_cap, "normalized_compute_cap", minimum=0.0)
+        edge_cap = require_float(self.native_edge_gate_cap, "native_edge_gate_cap", minimum=0.0)
+        object.__setattr__(self, "normalized_compute_cap", normalized_cap)
+        object.__setattr__(self, "native_edge_gate_cap", edge_cap)
+        counts = tuple(
+            require_int(value, "measured_native_edge_gate_count") for value in self.measured_native_edge_gate_counts
+        )
+        object.__setattr__(self, "measured_native_edge_gate_counts", counts)
+        dimensions = tuple(self.exceeded_dimensions)
+        if self.proof_kind == "prospective_normalized_work":
+            completed = require_float(
+                self.completed_normalized_work,
+                "completed_normalized_work",
+                minimum=0.0,
+            )
+            prospective = require_float(
+                self.prospective_normalized_work,
+                "prospective_normalized_work",
+                minimum=0.0,
+            )
+            if (
+                self.measured_normalized_work is not None
+                or counts
+                or self.measurement_resource_ref is not None
+                or completed > normalized_cap
+                or prospective <= 0.0
+                or completed + prospective <= normalized_cap
+                or dimensions != ("normalized_work",)
+            ):
+                msg = "Prospective normalized-work proof does not reproduce one atomic sealed-cap breach."
+                raise ValueError(msg)
+            object.__setattr__(self, "completed_normalized_work", completed)
+            object.__setattr__(self, "prospective_normalized_work", prospective)
+        elif self.proof_kind == "measured_confirmation_resources":
+            measured = require_float(
+                self.measured_normalized_work,
+                "measured_normalized_work",
+                minimum=0.0,
+            )
+            resource_ref = self.measurement_resource_ref
+            expected_dimensions: tuple[Literal["normalized_work", "native_edge"], ...] = (
+                *(("normalized_work",) if measured > normalized_cap else ()),
+                *(("native_edge",) if any(value > edge_cap for value in counts) else ()),
+            )
+            if (
+                self.completed_normalized_work is not None
+                or self.prospective_normalized_work is not None
+                or not counts
+                or not isinstance(resource_ref, ArtifactBlobRef)
+                or resource_ref.role != "runtime_resources"
+                or not resource_ref.path.endswith("/runtime/resources.json")
+                or not expected_dimensions
+                or dimensions != expected_dimensions
+            ):
+                msg = "Measured confirmation-resource proof does not reproduce its exact sealed-cap breach."
+                raise ValueError(msg)
+            object.__setattr__(self, "measured_normalized_work", measured)
+        else:
+            msg = "proof_kind is not a supported confirmation resource-limit proof."
+            raise ValueError(msg)
+        object.__setattr__(self, "exceeded_dimensions", dimensions)
+
+    def _payload(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "request_checksum": self.request_checksum,
+            "proof_kind": self.proof_kind,
+            "normalized_compute_cap": self.normalized_compute_cap,
+            "native_edge_gate_cap": self.native_edge_gate_cap,
+            "completed_normalized_work": self.completed_normalized_work,
+            "prospective_normalized_work": self.prospective_normalized_work,
+            "measured_normalized_work": self.measured_normalized_work,
+            "measured_native_edge_gate_counts": list(self.measured_native_edge_gate_counts),
+            "measurement_resource_ref": (
+                None if self.measurement_resource_ref is None else self.measurement_resource_ref.to_dict()
+            ),
+            "exceeded_dimensions": list(self.exceeded_dimensions),
+        }
+
+    @property
+    def content_checksum(self) -> str:
+        """Checksum of the exact request, caps, measured/prospective work, and resource address."""
+        return canonical_checksum(self._payload())
+
+    def to_dict(self) -> dict[str, object]:
+        """Return strict checksum-sealed JSON-native proof data."""
+        return _sealed(self._payload())
+
+    @classmethod
+    def from_dict(cls, value: object) -> ConfirmationResourceLimitProof:
+        """Decode and verify one typed resource-limit proof.
+
+        Returns:
+            The checksum-verified proof.
+        """
+        mapping = verify_sealed_mapping(
+            value,
+            expected_keys=_CONFIRMATION_RESOURCE_LIMIT_PROOF_KEYS,
+            name="confirmation resource-limit proof",
+        )
+        if mapping["schema_version"] != CONFIRMATION_RESOURCE_LIMIT_PROOF_SCHEMA_VERSION:
+            msg = "Confirmation resource-limit proof uses an unsupported schema version."
+            raise ValueError(msg)
+        resource_ref = mapping["measurement_resource_ref"]
+        proof = cls(
+            request_checksum=cast("str", mapping["request_checksum"]),
+            proof_kind=cast(
+                "Literal['prospective_normalized_work', 'measured_confirmation_resources']",
+                mapping["proof_kind"],
+            ),
+            normalized_compute_cap=cast("float", mapping["normalized_compute_cap"]),
+            native_edge_gate_cap=cast("float", mapping["native_edge_gate_cap"]),
+            completed_normalized_work=cast("float | None", mapping["completed_normalized_work"]),
+            prospective_normalized_work=cast("float | None", mapping["prospective_normalized_work"]),
+            measured_normalized_work=cast("float | None", mapping["measured_normalized_work"]),
+            measured_native_edge_gate_counts=cast(
+                "tuple[int, ...]",
+                _strict_tuple(mapping["measured_native_edge_gate_counts"], "measured_native_edge_gate_counts"),
+            ),
+            measurement_resource_ref=(None if resource_ref is None else ArtifactBlobRef.from_dict(resource_ref)),
+            exceeded_dimensions=cast(
+                "tuple[Literal['normalized_work', 'native_edge'], ...]",
+                _strict_tuple(mapping["exceeded_dimensions"], "exceeded_dimensions"),
+            ),
+        )
+        if mapping["content_checksum"] != proof.content_checksum:
+            msg = "Confirmation resource-limit proof checksum changed during normalization."
+            raise ValueError(msg)
+        return proof
+
+
+class ConfirmationResourceLimitError(ValueError):
+    """Raised when measured real confirmation resources exceed a final-seal cap."""
+
+    def __init__(self, proof: ConfirmationResourceLimitProof) -> None:
+        """Retain the exact typed measurement proof for failure publication."""
+        if not isinstance(proof, ConfirmationResourceLimitProof) or proof.proof_kind != (
+            "measured_confirmation_resources"
+        ):
+            msg = "ConfirmationResourceLimitError requires a measured confirmation-resource proof."
+            raise TypeError(msg)
+        self.proof = proof
+        super().__init__(f"Measured confirmation resources exceed sealed cap dimensions {proof.exceeded_dimensions!r}.")
+
+
+class PersistedConfirmationResourceLimitError(RuntimeError):
+    """Raised when authenticated prior custody already stopped the whole study."""
+
+    def __init__(self, proof: ConfirmationResourceLimitProof) -> None:
+        """Retain the authenticated stop proof for a rejected later dispatch."""
+        if not isinstance(proof, ConfirmationResourceLimitProof):
+            msg = "PersistedConfirmationResourceLimitError requires a typed stop proof."
+            raise TypeError(msg)
+        self.proof = proof
+        super().__init__(
+            "A prior confirmation resource-limit failure terminally stopped the whole study "
+            f"with proof {proof.content_checksum}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1083,10 +1330,209 @@ class ResultArtifactRef:
         return result
 
 
+@dataclass(frozen=True, slots=True)
+class ConfirmationPlanSessionRef:
+    """Exact-byte address of the run-root whole-plan confirmation marker."""
+
+    marker_path: Path
+    marker_file_checksum: str
+    marker_content_checksum: str
+    plan_checksum: str
+    locked_study_head_custody_path: Path
+
+    def __post_init__(self) -> None:
+        """Validate the canonical marker address and checksum roots."""
+        if not isinstance(self.marker_path, Path) or not self.marker_path.is_absolute():
+            msg = "marker_path must be an absolute pathlib.Path."
+            raise TypeError(msg)
+        custody_path = self.locked_study_head_custody_path
+        if not isinstance(custody_path, Path) or not custody_path.is_absolute():
+            msg = "locked_study_head_custody_path must be an absolute pathlib.Path."
+            raise TypeError(msg)
+        if custody_path != Path(custody_path.resolve()):
+            msg = "locked_study_head_custody_path must be canonical."
+            raise ValueError(msg)
+        for name in ("marker_file_checksum", "marker_content_checksum", "plan_checksum"):
+            object.__setattr__(self, name, require_checksum(getattr(self, name), name))
+
+
+def _recoverable_member_role(path: str, relative_attempt_directory: str) -> str:
+    """Return the sole repository role admitted for a recovery member path."""
+    prefix = f"{relative_attempt_directory}/"
+    if not path.startswith(prefix):
+        msg = "A nonterminal production member escaped its exact attempt directory."
+        raise ValueError(msg)
+    relative = path.removeprefix(prefix)
+    exact_roles = {
+        "evaluation/fresh_fixed_map_ensemble.json": "fixed_map_ensemble",
+        "evaluation/raw_trajectory_fidelities.json": "raw_trajectory_sidecar",
+        "diagnostics/pathwise_update_vectors.json": "pilot_diagnostic_sidecar",
+        "schedule/snapshot.json": "schedule_snapshot",
+        "schedule/operator_growth_segmented_snapshot.json": "schedule_snapshot",
+        "runtime/resources.json": "runtime_resources",
+        "runtime/failure_resources.json": "runtime_resources",
+        "runtime/recovery_failure_resources.json": "runtime_resources",
+        "production_evidence.json": "production_evidence",
+        "recovery_failure_evidence.json": "production_evidence",
+        "smoke/repository_outcome.json": "structural_stage",
+    }
+    if relative in exact_roles:
+        return exact_roles[relative]
+    patterns = (
+        (r"maps/request_[0-9]{8}_(?:component_[0-9]{3}|validation)\.json", "fixed_map_ensemble"),
+        (r"map_evidence/request_[0-9]{8}\.json", "scheduled_map_evidence"),
+        (r"structural_prefix/stage_[0-9]{3}\.json", "structural_stage"),
+        (r"structural_prefix/maps/stage_[0-9]{3}_[0-9]{5}\.json", "fixed_map_ensemble"),
+        (r"diagnostics/maps/pathwise_[0-9]{3}\.json", "fixed_map_ensemble"),
+        (r"smoke/maps/ensemble_[0-9]{5}\.json", "fixed_map_ensemble"),
+        (r"runtime/recovery_failure_resources_[0-9]{3}\.json", "runtime_resources"),
+        (r"recovery_failure_evidence_[0-9]{3}\.json", "production_evidence"),
+    )
+    for pattern, role in patterns:
+        if re.fullmatch(pattern, relative) is not None:
+            return role
+    msg = "A nonterminal production attempt contains a foreign member path."
+    raise ValueError(msg)
+
+
+def _validate_recoverable_member(
+    role: str,
+    path: str,
+    payload: bytes,
+    document: Mapping[str, object],
+) -> None:
+    """Apply the role codec before treating a recovered member as closed."""
+    if role == "fixed_map_ensemble":
+        KrotovFixedMapEnsemble.from_json(payload.decode())
+    elif role == "scheduled_map_evidence":
+        ScheduledMapEvidence.from_dict(document)
+    elif role == "schedule_snapshot":
+        _decode_schedule_snapshot(payload)
+    elif role == "pilot_diagnostic_sidecar":
+        PilotDiagnosticEvidence.from_dict(document)
+    elif role == "production_evidence":
+        ProductionNumericalEvidence.from_dict(document)
+    elif role == "raw_trajectory_sidecar":
+        _production_document_payload(
+            document,
+            document_type="raw_trajectory_fidelities",
+            payload_keys=_REAL_RAW_TRAJECTORY_KEYS,
+        )
+    elif role == "runtime_resources":
+        _production_document_payload(
+            document,
+            document_type="runtime_resources",
+            payload_keys=_REAL_RESOURCE_KEYS,
+        )
+    elif role != "structural_stage":
+        msg = f"Unsupported recovered production role for {path!r}."
+        raise ValueError(msg)
+
+
+def _decode_closed_recoverable_member(
+    role: str,
+    path: str,
+    payload: bytes,
+) -> str:
+    """Decode one complete known-path member and return its logical checksum."""
+    document = load_canonical_json_object(payload.decode())
+    if payload != _json_bytes(document):
+        msg = "Recovered member differs from canonical repository encoding."
+        raise ValueError(msg)
+    logical_checksum = require_checksum(
+        document.get("content_checksum"),
+        "recovered member content_checksum",
+    )
+    unsealed = dict(document)
+    del unsealed["content_checksum"]
+    if canonical_checksum(unsealed) != logical_checksum:
+        msg = "Recovered member fails its logical checksum."
+        raise ValueError(msg)
+    _validate_recoverable_member(role, path, payload, document)
+    return logical_checksum
+
+
+def _opaque_partial_member_checksum(
+    intended_role: str,
+    path: str,
+    byte_count: int,
+    file_checksum: str,
+) -> str:
+    """Bind one torn member's known path, intended role, size, and exact bytes."""
+    return canonical_checksum({
+        "custody": "interrupted_known_path_member",
+        "intended_role": intended_role,
+        "path": path,
+        "byte_count": byte_count,
+        "file_checksum": file_checksum,
+    })
+
+
+def _atomic_rename_no_replace(
+    source_directory_descriptor: int,
+    source_name: str,
+    destination_directory_descriptor: int,
+    destination_name: str,
+) -> None:
+    """Atomically rename one file while refusing to replace its destination.
+
+    Raises:
+        FileExistsError: If the immutable destination already exists.
+        OSError: If the host lacks a safe exclusive-rename primitive or the
+            same-filesystem rename fails.
+    """
+    library = ctypes.CDLL(None, use_errno=True)
+    source = os.fsencode(source_name)
+    destination = os.fsencode(destination_name)
+    if sys.platform == "darwin":
+        rename = library.renameatx_np
+        rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(
+            source_directory_descriptor,
+            source,
+            destination_directory_descriptor,
+            destination,
+            0x00000004,  # RENAME_EXCL from <stdio.h> on Darwin.
+        )
+    elif sys.platform.startswith("linux"):
+        try:
+            rename = library.renameat2
+        except AttributeError as error:
+            msg = "Real confirmation requires the host renameat2 no-replace primitive."
+            raise OSError(errno.ENOTSUP, msg) from error
+        rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(
+            source_directory_descriptor,
+            source,
+            destination_directory_descriptor,
+            destination,
+            1,  # RENAME_NOREPLACE from <linux/fs.h>.
+        )
+    else:
+        msg = "Real confirmation requires an atomic no-replace rename primitive."
+        raise OSError(errno.ENOTSUP, msg)
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number == errno.EEXIST:
+        msg = "Immutable production attempt manifest already exists."
+        raise FileExistsError(error_number, msg, destination_name)
+    raise OSError(error_number, os.strerror(error_number), destination_name)
+
+
 class ProductionAttemptStore:
     """Append-only attempt writer and complete dereferencing verifier."""
 
-    def __init__(self, job_directory: Path, job_checksum: str, attempt: int) -> None:
+    def __init__(
+        self,
+        job_directory: Path,
+        job_checksum: str,
+        attempt: int,
+        *,
+        confirmation_output_root: Path | None = None,
+    ) -> None:
         """Bind one store to a single exact job and append-only attempt."""
         if not isinstance(job_directory, Path):
             msg = "job_directory must be a pathlib.Path."
@@ -1096,6 +1542,21 @@ class ProductionAttemptStore:
         self.attempt = require_int(attempt, "attempt", minimum=1)
         self.relative_attempt_directory = f"{ATTEMPT_DIRECTORY_NAME}/attempt_{self.attempt:06d}"
         self._written_refs: list[ArtifactBlobRef] = []
+        if confirmation_output_root is not None:
+            if not isinstance(confirmation_output_root, Path):
+                msg = "confirmation_output_root must be a pathlib.Path."
+                raise TypeError(msg)
+            canonical_root = Path(confirmation_output_root.resolve())
+            canonical_job = Path(job_directory.resolve())
+            if (
+                not confirmation_output_root.is_absolute()
+                or confirmation_output_root != canonical_root
+                or canonical_job == canonical_root
+                or not canonical_job.is_relative_to(canonical_root)
+            ):
+                msg = "Confirmation attempt storage requires one canonical job path below its output root."
+                raise ValueError(msg)
+        self.confirmation_output_root = confirmation_output_root
 
     @property
     def manifest_relative_path(self) -> str:
@@ -1133,6 +1594,23 @@ class ProductionAttemptStore:
             root_metadata = os.fstat(root_descriptor)
             members: list[str] = []
 
+            def visit_child(
+                child_descriptor: int,
+                parent_descriptor: int,
+                name: str,
+                relative: PurePosixPath,
+                metadata: os.stat_result,
+            ) -> None:
+                opened = os.fstat(child_descriptor)
+                if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+                    msg = "Production attempt directory identity changed during enumeration."
+                    raise ValueError(msg)
+                visit(child_descriptor, relative)
+                current = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+                if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                    msg = "Production attempt directory changed during enumeration."
+                    raise ValueError(msg)
+
             def visit(directory_descriptor: int, relative_directory: PurePosixPath) -> None:
                 for name in sorted(os.listdir(directory_descriptor)):
                     try:
@@ -1159,19 +1637,7 @@ class ProductionAttemptStore:
                             msg = "Production attempt directory changed during enumeration."
                             raise ValueError(msg) from error
                         try:
-                            opened = os.fstat(child_descriptor)
-                            if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
-                                msg = "Production attempt directory identity changed during enumeration."
-                                raise ValueError(msg)
-                            visit(child_descriptor, relative)
-                            current = os.stat(
-                                name,
-                                dir_fd=directory_descriptor,
-                                follow_symlinks=False,
-                            )
-                            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
-                                msg = "Production attempt directory changed during enumeration."
-                                raise ValueError(msg)
+                            visit_child(child_descriptor, directory_descriptor, name, relative, metadata)
                         finally:
                             os.close(child_descriptor)
                         continue
@@ -1182,7 +1648,7 @@ class ProductionAttemptStore:
                     if normalized != ATTEMPT_MANIFEST_NAME:
                         members.append(f"{self.relative_attempt_directory}/{normalized}")
 
-            try:
+            def enumerate_and_verify_root() -> None:
                 visit(root_descriptor, PurePosixPath())
                 verification_descriptor, verification_name = self._open_parent_descriptor(
                     self.manifest_relative_path,
@@ -1198,6 +1664,9 @@ class ProductionAttemptStore:
                         raise ValueError(msg)
                 finally:
                     os.close(verification_descriptor)
+
+            try:
+                enumerate_and_verify_root()
             finally:
                 os.close(root_descriptor)
             return tuple(sorted(members))
@@ -1247,6 +1716,57 @@ class ProductionAttemptStore:
                 msg = "Production attempt directory changed during enumeration."
                 raise ValueError(msg)
         return tuple(sorted(members))
+
+    def inventory_closed_members(self) -> tuple[ArtifactBlobRef, ...]:
+        """Reconstruct exact references for every known-path attempt member.
+
+        This recovery seam never invents a role from file contents.  A member
+        must occupy one of the repository-owned production paths.  Complete
+        canonical documents retain their typed role; a torn, truncated, or
+        zero-byte write is retained byte-for-byte as an opaque partial member
+        so the authoritative first attempt can still terminate as failure.
+
+        Returns:
+            The exact recovered member references in path order.
+
+        Raises:
+            ValueError: If a member uses a foreign path.
+        """
+        if self._written_refs:
+            msg = "Closed-member inventory requires a fresh recovery store."
+            raise ValueError(msg)
+        recovered: list[ArtifactBlobRef] = []
+        for path in self.member_paths():
+            role = _recoverable_member_role(path, self.relative_attempt_directory)
+            payload = self._read_regular_file(path)
+            try:
+                logical_checksum = _decode_closed_recoverable_member(role, path, payload)
+                ref = ArtifactBlobRef(
+                    role=role,
+                    media_type="application/json",
+                    path=path,
+                    byte_count=len(payload),
+                    file_checksum=_sha256_bytes(payload),
+                    logical_checksum=logical_checksum,
+                )
+            except (KeyError, TypeError, UnicodeDecodeError, ValueError):
+                file_checksum = _sha256_bytes(payload)
+                ref = ArtifactBlobRef(
+                    role="opaque_partial_member",
+                    media_type="application/octet-stream",
+                    path=path,
+                    byte_count=len(payload),
+                    file_checksum=file_checksum,
+                    logical_checksum=_opaque_partial_member_checksum(
+                        role,
+                        path,
+                        len(payload),
+                        file_checksum,
+                    ),
+                )
+            recovered.append(ref)
+        self._written_refs.extend(recovered)
+        return tuple(recovered)
 
     @staticmethod
     def _descriptor_creation_supported() -> bool:
@@ -1367,6 +1887,38 @@ class ProductionAttemptStore:
                 raise ValueError(msg)
             path.mkdir(exist_ok=True)
 
+    def _write_created_blob_payload(
+        self,
+        descriptor: int,
+        payload: bytes,
+        pinned_parent_descriptor: int | None,
+        relative: str,
+        filename: str | None,
+    ) -> None:
+        """Sync one exclusive member and reverify its descriptor-relative parent."""
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if pinned_parent_descriptor is None:
+            return
+        if filename is None:
+            msg = "Descriptor-relative creation lacks its pinned member name."
+            raise ValueError(msg)
+        os.fsync(pinned_parent_descriptor)
+        verification_descriptor, verification_name = self._open_parent_descriptor(relative, create=False)
+        try:
+            verification = os.fstat(verification_descriptor)
+            pinned = os.fstat(pinned_parent_descriptor)
+            if verification_name != filename or (verification.st_dev, verification.st_ino) != (
+                pinned.st_dev,
+                pinned.st_ino,
+            ):
+                msg = "Production artifact parent changed during descriptor-relative creation."
+                raise ValueError(msg)
+        finally:
+            os.close(verification_descriptor)
+
     def write_blob(
         self,
         relative_name: str,
@@ -1386,6 +1938,7 @@ class ProductionAttemptStore:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         pinned_parent_descriptor: int | None = None
+        filename: str | None = None
         if self._descriptor_creation_supported():
             parent_descriptor, filename = self._open_parent_descriptor(relative, create=True)
             pinned_parent_descriptor = parent_descriptor
@@ -1424,28 +1977,13 @@ class ProductionAttemptStore:
         # missing terminal manifest keeps the attempt non-authoritative and the
         # retained member prevents silent publication under the same attempt.
         try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            if pinned_parent_descriptor is not None:
-                os.fsync(pinned_parent_descriptor)
-                verification_descriptor, verification_name = self._open_parent_descriptor(
-                    relative,
-                    create=False,
-                )
-                try:
-                    if verification_name != filename or (
-                        os.fstat(verification_descriptor).st_dev,
-                        os.fstat(verification_descriptor).st_ino,
-                    ) != (
-                        os.fstat(pinned_parent_descriptor).st_dev,
-                        os.fstat(pinned_parent_descriptor).st_ino,
-                    ):
-                        msg = "Production artifact parent changed during descriptor-relative creation."
-                        raise ValueError(msg)
-                finally:
-                    os.close(verification_descriptor)
+            self._write_created_blob_payload(
+                descriptor,
+                payload,
+                pinned_parent_descriptor,
+                relative,
+                filename,
+            )
         finally:
             if pinned_parent_descriptor is not None:
                 os.close(pinned_parent_descriptor)
@@ -1466,6 +2004,47 @@ class ProductionAttemptStore:
         logical = require_checksum(supplied, "value.content_checksum")
         return self.write_blob(relative_name, _json_bytes(value), role=role, logical_checksum=logical)
 
+    def _read_regular_file_fallback(
+        self,
+        normalized: str,
+        path: Path,
+        parent: str,
+        parent_identities: tuple[tuple[int, int], ...],
+    ) -> bytes:
+        """Read and reverify one regular member without descriptor walking."""
+        with path.open("rb") as handle:
+            metadata = os.fstat(handle.fileno())
+            if not stat.S_ISREG(metadata.st_mode):
+                msg = "Production artifact member is not a regular file."
+                raise ValueError(msg)
+            payload = handle.read()
+            disk = self._safe_path(normalized, require_file=True).lstat()
+            if self._fallback_directory_identities(parent) != parent_identities or (
+                disk.st_dev,
+                disk.st_ino,
+            ) != (metadata.st_dev, metadata.st_ino):
+                msg = "Production artifact identity changed during fallback read."
+                raise ValueError(msg)
+            return payload
+
+    def _open_regular_file_descriptor(self, parts: tuple[str, ...]) -> int:
+        """Walk pinned nofollow directories and return the open regular-member descriptor."""
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        file_flags = os.O_RDONLY | os.O_NOFOLLOW
+        directory_descriptor = self._open_job_directory_descriptor(create=False)
+        for component in parts[:-1]:
+            try:
+                next_descriptor = os.open(component, directory_flags, dir_fd=directory_descriptor)
+            except OSError:
+                os.close(directory_descriptor)
+                raise
+            os.close(directory_descriptor)
+            directory_descriptor = next_descriptor
+        try:
+            return os.open(parts[-1], file_flags, dir_fd=directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+
     def _read_regular_file(self, relative_path: str) -> bytes:
         """Read through nofollow directory descriptors, closing path-swap races."""
         normalized = require_relative_path(relative_path, "relative_path")
@@ -1479,38 +2058,13 @@ class ProductionAttemptStore:
             parent = str(PurePosixPath(normalized).parent)
             parent_identities = self._fallback_directory_identities(parent)
             try:
-                with path.open("rb") as handle:
-                    metadata = os.fstat(handle.fileno())
-                    if not stat.S_ISREG(metadata.st_mode):
-                        msg = "Production artifact member is not a regular file."
-                        raise ValueError(msg)
-                    payload = handle.read()
-                    disk = self._safe_path(normalized, require_file=True).lstat()
-                    if self._fallback_directory_identities(parent) != parent_identities or (
-                        disk.st_dev,
-                        disk.st_ino,
-                    ) != (metadata.st_dev, metadata.st_ino):
-                        msg = "Production artifact identity changed during fallback read."
-                        raise ValueError(msg)
-                    return payload
+                return self._read_regular_file_fallback(normalized, path, parent, parent_identities)
             except OSError as error:
                 msg = "Production artifact path is unavailable or unsafe."
                 raise ValueError(msg) from error
-        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        file_flags = os.O_RDONLY | os.O_NOFOLLOW
-        directory_descriptor: int | None = None
         try:
-            directory_descriptor = self._open_job_directory_descriptor(create=False)
-            for component in parts[:-1]:
-                next_descriptor = os.open(component, directory_flags, dir_fd=directory_descriptor)
-                os.close(directory_descriptor)
-                directory_descriptor = next_descriptor
-            descriptor = os.open(parts[-1], file_flags, dir_fd=directory_descriptor)
-            os.close(directory_descriptor)
-            directory_descriptor = None
+            descriptor = self._open_regular_file_descriptor(parts)
         except OSError as error:
-            if directory_descriptor is not None:
-                os.close(directory_descriptor)
             msg = "Production artifact path is unavailable or unsafe."
             raise ValueError(msg) from error
         try:
@@ -1541,8 +2095,272 @@ class ProductionAttemptStore:
             raise ValueError(msg)
         return self._verified_bytes(ref)
 
+    @staticmethod
+    def _sync_descriptor_payload(descriptor: int, payload: bytes) -> None:
+        """Write and durably sync bytes through an already pinned descriptor."""
+        with os.fdopen(descriptor, "wb", closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    @staticmethod
+    def _link_terminal_descriptor_member(
+        temporary_name: str,
+        manifest_name: str,
+        job_descriptor: int,
+        parent_descriptor: int,
+    ) -> None:
+        """Exclusively hard-link one synced staging inode into its terminal address."""
+        try:
+            os.link(
+                temporary_name,
+                manifest_name,
+                src_dir_fd=job_descriptor,
+                dst_dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+        except FileExistsError:
+            msg = "Immutable production attempt manifest already exists."
+            raise ValueError(msg) from None
+
+    @staticmethod
+    def _validate_published_terminal_descriptor(
+        manifest_name: str,
+        parent_descriptor: int,
+        temporary_metadata: os.stat_result,
+    ) -> None:
+        """Require the terminal address to identify the exact synced staging inode."""
+        published_descriptor = os.open(
+            manifest_name,
+            os.O_RDONLY | os.O_NOFOLLOW,
+            dir_fd=parent_descriptor,
+        )
+        try:
+            published_metadata = os.fstat(published_descriptor)
+            if (published_metadata.st_dev, published_metadata.st_ino) != (
+                temporary_metadata.st_dev,
+                temporary_metadata.st_ino,
+            ):
+                msg = "Atomic terminal link does not identify the synced staging file."
+                raise ValueError(msg)
+        finally:
+            os.close(published_descriptor)
+
+    def _validate_terminal_parent_descriptor(self, manifest_name: str, parent_descriptor: int) -> None:
+        """Reopen and compare the terminal parent with its pinned descriptor."""
+        verification_descriptor, verification_name = self._open_parent_descriptor(
+            self.manifest_relative_path,
+            create=False,
+        )
+        try:
+            verification_metadata = os.fstat(verification_descriptor)
+            pinned_metadata = os.fstat(parent_descriptor)
+            if verification_name != manifest_name or (
+                verification_metadata.st_dev,
+                verification_metadata.st_ino,
+            ) != (pinned_metadata.st_dev, pinned_metadata.st_ino):
+                msg = "Terminal parent changed during atomic descriptor publication."
+                raise ValueError(msg)
+        finally:
+            os.close(verification_descriptor)
+
+    def _publish_terminal_descriptor_body(
+        self,
+        payload: bytes,
+        temporary_name: str,
+        manifest_name: str,
+        temporary_descriptor: int,
+        job_descriptor: int,
+        parent_descriptor: int,
+    ) -> None:
+        """Publish one terminal manifest through pinned descriptor-relative operations."""
+        self._sync_descriptor_payload(temporary_descriptor, payload)
+        temporary_metadata = os.fstat(temporary_descriptor)
+        named_metadata = os.stat(temporary_name, dir_fd=job_descriptor, follow_symlinks=False)
+        if not stat.S_ISREG(temporary_metadata.st_mode) or (
+            temporary_metadata.st_dev,
+            temporary_metadata.st_ino,
+        ) != (named_metadata.st_dev, named_metadata.st_ino):
+            msg = "Terminal staging identity changed before atomic publication."
+            raise ValueError(msg)
+        self._link_terminal_descriptor_member(
+            temporary_name,
+            manifest_name,
+            job_descriptor,
+            parent_descriptor,
+        )
+        self._validate_published_terminal_descriptor(
+            manifest_name,
+            parent_descriptor,
+            temporary_metadata,
+        )
+        os.fsync(parent_descriptor)
+        self._validate_terminal_parent_descriptor(manifest_name, parent_descriptor)
+
+    def _publish_terminal_fallback_body(
+        self,
+        payload: bytes,
+        descriptor: int,
+        temporary_path: Path,
+        manifest_path: Path,
+        parent_identities: tuple[tuple[int, int], ...],
+    ) -> None:
+        """Publish one terminal manifest through fallback path identity checks."""
+        self._sync_descriptor_payload(descriptor, payload)
+        staged = os.fstat(descriptor)
+        named = temporary_path.lstat()
+        if (staged.st_dev, staged.st_ino) != (named.st_dev, named.st_ino):
+            msg = "Terminal staging identity changed before fallback publication."
+            raise ValueError(msg)
+        try:
+            os.link(temporary_path, manifest_path, follow_symlinks=False)
+        except FileExistsError:
+            msg = "Immutable production attempt manifest already exists."
+            raise ValueError(msg) from None
+        published = self._safe_path(self.manifest_relative_path, require_file=True).lstat()
+        if self._fallback_directory_identities(self.relative_attempt_directory) != parent_identities or (
+            published.st_dev,
+            published.st_ino,
+        ) != (staged.st_dev, staged.st_ino):
+            msg = "Fallback terminal publication changed parent or file identity."
+            raise ValueError(msg)
+
+    @staticmethod
+    def _validate_exclusively_renamed_terminal(
+        manifest_name: str,
+        parent_descriptor: int,
+        staged: os.stat_result,
+    ) -> None:
+        """Require an exclusive rename to publish the sole link to exact bytes."""
+        flags = os.O_RDONLY | (os.O_NOFOLLOW if hasattr(os, "O_NOFOLLOW") else 0)
+        descriptor = os.open(manifest_name, flags, dir_fd=parent_descriptor)
+        try:
+            published = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(published.st_mode)
+                or published.st_nlink != 1
+                or (published.st_dev, published.st_ino, published.st_size)
+                != (staged.st_dev, staged.st_ino, staged.st_size)
+            ):
+                msg = "Exclusive terminal rename did not publish one exact immutable file."
+                raise ValueError(msg)
+        finally:
+            os.close(descriptor)
+
+    def _prepare_confirmation_terminal_staging(
+        self,
+        payload: bytes,
+        temporary_name: str,
+        staging_descriptor: int,
+        parent_descriptor: int,
+    ) -> tuple[int, os.stat_result]:
+        """Create, sync, and validate one off-tree terminal staging member."""
+        if os.fstat(staging_descriptor).st_dev != os.fstat(parent_descriptor).st_dev:
+            msg = "Real-confirmation terminal staging must share the output filesystem."
+            raise ValueError(msg)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(temporary_name, flags, 0o600, dir_fd=staging_descriptor)
+        try:
+            self._sync_descriptor_payload(descriptor, payload)
+            staged = self._validated_confirmation_staging_identity(
+                descriptor,
+                temporary_name,
+                staging_descriptor,
+            )
+        except (OSError, ValueError):
+            os.close(descriptor)
+            raise
+        return descriptor, staged
+
+    @staticmethod
+    def _validated_confirmation_staging_identity(
+        descriptor: int,
+        temporary_name: str,
+        staging_descriptor: int,
+    ) -> os.stat_result:
+        """Return exact single-link staging metadata after stable identity checks."""
+        staged = os.fstat(descriptor)
+        named = os.stat(temporary_name, dir_fd=staging_descriptor, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(staged.st_mode)
+            or staged.st_nlink != 1
+            or (staged.st_dev, staged.st_ino, staged.st_size) != (named.st_dev, named.st_ino, named.st_size)
+        ):
+            msg = "Off-tree terminal staging identity changed before exclusive rename."
+            raise ValueError(msg)
+        return staged
+
+    def _rename_confirmation_terminal_staging(
+        self,
+        temporary_name: str,
+        staging_descriptor: int,
+        parent_descriptor: int,
+        manifest_name: str,
+        staged: os.stat_result,
+    ) -> None:
+        """Exclusively rename and durably verify one real-confirmation terminal."""
+        try:
+            _atomic_rename_no_replace(
+                staging_descriptor,
+                temporary_name,
+                parent_descriptor,
+                manifest_name,
+            )
+        except FileExistsError:
+            msg = "Immutable production attempt manifest already exists."
+            raise ValueError(msg) from None
+        self._validate_exclusively_renamed_terminal(manifest_name, parent_descriptor, staged)
+        os.fsync(parent_descriptor)
+        os.fsync(staging_descriptor)
+        self._validate_terminal_parent_descriptor(manifest_name, parent_descriptor)
+
+    def _publish_confirmation_terminal_payload(self, payload: bytes) -> None:
+        """Publish a real-confirmation terminal from off-tree synced staging."""
+        output_root = self.confirmation_output_root
+        if output_root is None:
+            msg = "Real-confirmation terminal publication requires its canonical output root."
+            raise ValueError(msg)
+        staging_directory = output_root.parent
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY
+        if hasattr(os, "O_NOFOLLOW"):
+            directory_flags |= os.O_NOFOLLOW
+        staging_descriptor = os.open(staging_directory, directory_flags)
+        parent_descriptor, manifest_name = self._open_parent_descriptor(
+            self.manifest_relative_path,
+            create=True,
+        )
+        token = secrets.token_hex(16)
+        temporary_name = f".wp22g-terminal-{self.attempt:06d}-{token}.tmp"
+        temporary_descriptor: int | None = None
+        try:
+            temporary_descriptor, staged = self._prepare_confirmation_terminal_staging(
+                payload,
+                temporary_name,
+                staging_descriptor,
+                parent_descriptor,
+            )
+            self._rename_confirmation_terminal_staging(
+                temporary_name,
+                staging_descriptor,
+                parent_descriptor,
+                manifest_name,
+                staged,
+            )
+        finally:
+            if temporary_descriptor is not None:
+                os.close(temporary_descriptor)
+            with suppress(FileNotFoundError):
+                os.unlink(temporary_name, dir_fd=staging_descriptor)
+            os.close(parent_descriptor)
+            os.close(staging_descriptor)
+
     def _publish_terminal_payload(self, payload: bytes) -> None:
         """Atomically link one fully synced terminal payload into its exclusive address."""
+        if self.confirmation_output_root is not None:
+            self._publish_confirmation_terminal_payload(payload)
+            return
         token = secrets.token_hex(16)
         temporary_name = f".wp22e-terminal-{self.attempt:06d}-{token}.tmp"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -1562,64 +2380,14 @@ class ProductionAttemptStore:
                     0o600,
                     dir_fd=job_descriptor,
                 )
-                with os.fdopen(temporary_descriptor, "wb", closefd=False) as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                temporary_metadata = os.fstat(temporary_descriptor)
-                named_metadata = os.stat(
+                self._publish_terminal_descriptor_body(
+                    payload,
                     temporary_name,
-                    dir_fd=job_descriptor,
-                    follow_symlinks=False,
-                )
-                if not stat.S_ISREG(temporary_metadata.st_mode) or (
-                    temporary_metadata.st_dev,
-                    temporary_metadata.st_ino,
-                ) != (named_metadata.st_dev, named_metadata.st_ino):
-                    msg = "Terminal staging identity changed before atomic publication."
-                    raise ValueError(msg)
-                try:
-                    os.link(
-                        temporary_name,
-                        manifest_name,
-                        src_dir_fd=job_descriptor,
-                        dst_dir_fd=parent_descriptor,
-                        follow_symlinks=False,
-                    )
-                except FileExistsError:
-                    msg = "Immutable production attempt manifest already exists."
-                    raise ValueError(msg) from None
-                published_descriptor = os.open(
                     manifest_name,
-                    os.O_RDONLY | os.O_NOFOLLOW,
-                    dir_fd=parent_descriptor,
+                    temporary_descriptor,
+                    job_descriptor,
+                    parent_descriptor,
                 )
-                try:
-                    published_metadata = os.fstat(published_descriptor)
-                    if (published_metadata.st_dev, published_metadata.st_ino) != (
-                        temporary_metadata.st_dev,
-                        temporary_metadata.st_ino,
-                    ):
-                        msg = "Atomic terminal link does not identify the synced staging file."
-                        raise ValueError(msg)
-                finally:
-                    os.close(published_descriptor)
-                os.fsync(parent_descriptor)
-                verification_descriptor, verification_name = self._open_parent_descriptor(
-                    self.manifest_relative_path,
-                    create=False,
-                )
-                try:
-                    verification_metadata = os.fstat(verification_descriptor)
-                    pinned_metadata = os.fstat(parent_descriptor)
-                    if verification_name != manifest_name or (
-                        verification_metadata.st_dev,
-                        verification_metadata.st_ino,
-                    ) != (pinned_metadata.st_dev, pinned_metadata.st_ino):
-                        msg = "Terminal parent changed during atomic descriptor publication."
-                        raise ValueError(msg)
-                finally:
-                    os.close(verification_descriptor)
             finally:
                 if temporary_descriptor is not None:
                     os.close(temporary_descriptor)
@@ -1636,27 +2404,13 @@ class ProductionAttemptStore:
         parent_identities = self._fallback_directory_identities(self.relative_attempt_directory)
         descriptor = os.open(temporary_path, flags, 0o600)
         try:
-            with os.fdopen(descriptor, "wb", closefd=False) as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            staged = os.fstat(descriptor)
-            named = temporary_path.lstat()
-            if (staged.st_dev, staged.st_ino) != (named.st_dev, named.st_ino):
-                msg = "Terminal staging identity changed before fallback publication."
-                raise ValueError(msg)
-            try:
-                os.link(temporary_path, manifest_path, follow_symlinks=False)
-            except FileExistsError:
-                msg = "Immutable production attempt manifest already exists."
-                raise ValueError(msg) from None
-            published = self._safe_path(self.manifest_relative_path, require_file=True).lstat()
-            if self._fallback_directory_identities(self.relative_attempt_directory) != parent_identities or (
-                published.st_dev,
-                published.st_ino,
-            ) != (staged.st_dev, staged.st_ino):
-                msg = "Fallback terminal publication changed parent or file identity."
-                raise ValueError(msg)
+            self._publish_terminal_fallback_body(
+                payload,
+                descriptor,
+                temporary_path,
+                manifest_path,
+                parent_identities,
+            )
         finally:
             os.close(descriptor)
             temporary_path.unlink(missing_ok=True)
@@ -1760,6 +2514,16 @@ class ProductionAttemptStore:
         snapshots_by_path: dict[str, ScheduledExecutionSnapshot | OperatorGrowthSegmentedSnapshot] = {}
         for ref in manifest.blobs:
             payload = self._verified_bytes(ref)
+            if ref.role == "opaque_partial_member":
+                intended_role = _recoverable_member_role(ref.path, self.relative_attempt_directory)
+                if ref.logical_checksum != _opaque_partial_member_checksum(
+                    intended_role,
+                    ref.path,
+                    ref.byte_count,
+                    ref.file_checksum,
+                ):
+                    msg = "Opaque partial-member custody differs from its known path or exact bytes."
+                    raise ValueError(msg)
             if ref.media_type == "application/json":
                 document = load_canonical_json_object(payload.decode())
                 supplied = require_checksum(document.get("content_checksum"), "artifact content_checksum")
@@ -1866,6 +2630,46 @@ class ProductionAttemptStore:
                     raise ValueError(msg)
         resource_document = load_canonical_json_object(self._verified_bytes(evidence.resource_ref).decode())
         resource_custody = _validate_resource_document(resource_document, evidence=evidence)
+        resource_limit_proof = _failure_resource_limit_proof(evidence, resource_document)
+        if resource_limit_proof is not None and resource_limit_proof.measurement_resource_ref is not None:
+            measurement_ref = resource_limit_proof.measurement_resource_ref
+            if manifest_by_path.get(measurement_ref.path) != measurement_ref:
+                msg = "Measured resource-limit proof references a non-manifest resource document."
+                raise ValueError(msg)
+            measurement_document = load_canonical_json_object(self._verified_bytes(measurement_ref).decode())
+            measurement_payload = _production_document_payload(
+                measurement_document,
+                document_type="runtime_resources",
+                payload_keys=_REAL_RESOURCE_KEYS,
+            )
+            measurement_circuit = require_mapping(
+                measurement_payload["circuit"],
+                "measured resource-limit circuit",
+            )
+            _validate_resource_circuit(measurement_circuit, evidence=evidence)
+            measurement_counts = tuple(
+                require_int(value, "measured native edge gate count")
+                for value in _strict_tuple(
+                    measurement_circuit["native_two_qubit_gates_per_chain_edge"],
+                    "measured native edge gate counts",
+                )
+            )
+            measured_work = require_float(
+                measurement_payload["normalized_work"],
+                "measured normalized_work",
+                minimum=0.0,
+            )
+            if (
+                measurement_payload["job_checksum"] != evidence.job_checksum
+                or measurement_payload["source_fingerprint_checksum"] != evidence.source_fingerprint_checksum
+                or measurement_payload["failure_phase"] is not None
+                or measurement_payload["partial_receipts"] is not None
+                or float(measured_work).hex()
+                != float(cast("float", resource_limit_proof.measured_normalized_work)).hex()
+                or measurement_counts != resource_limit_proof.measured_native_edge_gate_counts
+            ):
+                msg = "Measured resource-limit proof differs from its exact runtime resource document."
+                raise ValueError(msg)
         if evidence.artifact_kind == "pipeline" and authoritative_snapshot is not None:
             if not isinstance(authoritative_snapshot, ScheduledExecutionSnapshot):
                 msg = "Pipeline production requires its authoritative scheduled-execution snapshot."
@@ -2001,6 +2805,457 @@ class ProductionAttemptStore:
         return manifest, evidence
 
 
+def _confirmation_plan_session_document(context: ConfirmationExecutionContext) -> dict[str, object]:
+    """Return the sole canonical whole-plan session marker document."""
+    return _sealed({
+        "schema_version": CONFIRMATION_PLAN_SESSION_SCHEMA_VERSION,
+        "plan_checksum": context.plan.content_checksum,
+        "final_confirmation_seal_checksum": context.final_seal.content_checksum,
+        "execution_source_manifest_checksum": context.execution_source_manifest.content_checksum,
+        "analysis_source_manifest_checksum": context.analysis_source_manifest.content_checksum,
+        "prior_target_exposure_inventory_checksum": context.prior_target_exposure_inventory_checksum,
+        "authorized_output_root": str(context.authorized_output_root),
+        "locked_study_head_custody_path": str(context.locked_study_head_custody_path),
+        "job_count": len(context.plan.jobs),
+    })
+
+
+def _read_confirmation_session_marker(root_descriptor: int) -> bytes:
+    """Read the root marker through a nofollow pinned directory descriptor."""
+    flags = os.O_RDONLY | (os.O_NOFOLLOW if hasattr(os, "O_NOFOLLOW") else 0)
+    try:
+        metadata = os.stat(CONFIRMATION_PLAN_SESSION_NAME, dir_fd=root_descriptor, follow_symlinks=False)
+        descriptor = os.open(CONFIRMATION_PLAN_SESSION_NAME, flags, dir_fd=root_descriptor)
+    except OSError as error:
+        msg = "Confirmation whole-plan session marker is missing or unsafe."
+        raise ValueError(msg) from error
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or (opened.st_dev, opened.st_ino)
+            != (
+                metadata.st_dev,
+                metadata.st_ino,
+            )
+            or metadata.st_nlink != 1
+            or opened.st_nlink != 1
+        ):
+            msg = "Confirmation whole-plan session marker changed during read."
+            raise ValueError(msg)
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            return handle.read()
+    finally:
+        os.close(descriptor)
+
+
+def _publish_confirmation_session_marker(
+    context: ConfirmationExecutionContext,
+    root_descriptor: int,
+    payload: bytes,
+) -> None:
+    """Stage outside the scientific root, then atomically rename one marker."""
+    parent_flags = os.O_RDONLY | os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        parent_flags |= os.O_NOFOLLOW
+    parent_descriptor = os.open(context.authorized_output_root.parent, parent_flags)
+    try:
+        _publish_confirmation_session_marker_in_parent(
+            context,
+            root_descriptor,
+            parent_descriptor,
+            payload,
+        )
+    finally:
+        os.close(parent_descriptor)
+
+
+def _publish_confirmation_session_marker_in_parent(
+    context: ConfirmationExecutionContext,
+    root_descriptor: int,
+    parent_descriptor: int,
+    payload: bytes,
+) -> None:
+    """Create, sync, and rename a marker through its pinned parent descriptor."""
+    token = secrets.token_hex(16)
+    temporary_name = f".wp22-confirmation-session-{context.authorized_output_root.name}-{token}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    temporary_descriptor: int | None = None
+    try:
+        temporary_descriptor = os.open(
+            temporary_name,
+            flags,
+            0o600,
+            dir_fd=parent_descriptor,
+        )
+        _sync_and_rename_confirmation_session_marker(
+            temporary_name,
+            temporary_descriptor,
+            parent_descriptor,
+            root_descriptor,
+            payload,
+        )
+    finally:
+        if temporary_descriptor is not None:
+            os.close(temporary_descriptor)
+        with suppress(FileNotFoundError):
+            os.unlink(temporary_name, dir_fd=parent_descriptor)
+
+
+def _sync_and_rename_confirmation_session_marker(
+    temporary_name: str,
+    temporary_descriptor: int,
+    parent_descriptor: int,
+    root_descriptor: int,
+    payload: bytes,
+) -> None:
+    """Durably fill and atomically rename one complete staged marker."""
+    with os.fdopen(temporary_descriptor, "wb", closefd=False) as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.rename(
+        temporary_name,
+        CONFIRMATION_PLAN_SESSION_NAME,
+        src_dir_fd=parent_descriptor,
+        dst_dir_fd=root_descriptor,
+    )
+    os.fsync(root_descriptor)
+    os.fsync(parent_descriptor)
+
+
+def _read_or_publish_confirmation_session_marker(
+    context: ConfirmationExecutionContext,
+    root_descriptor: int,
+    expected_payload: bytes,
+    *,
+    create: bool,
+) -> bytes:
+    """Publish the absent marker when authorized, then read its pinned bytes."""
+    if create:
+        try:
+            os.stat(CONFIRMATION_PLAN_SESSION_NAME, dir_fd=root_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            _publish_confirmation_session_marker(context, root_descriptor, expected_payload)
+    return _read_confirmation_session_marker(root_descriptor)
+
+
+def _confirmation_plan_session_ref(
+    context: ConfirmationExecutionContext,
+    *,
+    create: bool,
+) -> ConfirmationPlanSessionRef:
+    """Create or reopen the exact canonical whole-plan marker."""
+    if not isinstance(context, ConfirmationExecutionContext):
+        msg = "context must be a ConfirmationExecutionContext."
+        raise TypeError(msg)
+    context._validate_authorized_output_root(context.authorized_output_root)  # noqa: SLF001
+    expected_document = _confirmation_plan_session_document(context)
+    expected_payload = _json_bytes(expected_document)
+    store = ProductionAttemptStore(context.authorized_output_root, context.plan.content_checksum, 1)
+    try:
+        root_descriptor = store._open_job_directory_descriptor(create=create)  # noqa: SLF001
+    except OSError as error:
+        msg = "Confirmation output root is unavailable for whole-plan session custody."
+        raise ValueError(msg) from error
+    try:
+        payload = _read_or_publish_confirmation_session_marker(
+            context,
+            root_descriptor,
+            expected_payload,
+            create=create,
+        )
+    finally:
+        os.close(root_descriptor)
+    try:
+        document = verify_sealed_mapping(
+            load_canonical_json_object(payload.decode()),
+            expected_keys=_CONFIRMATION_PLAN_SESSION_KEYS,
+            name="confirmation whole-plan session marker",
+        )
+    except (UnicodeDecodeError, TypeError, ValueError) as error:
+        msg = "Confirmation whole-plan session marker is corrupt."
+        raise ValueError(msg) from error
+    if payload != expected_payload or dict(document) != expected_document:
+        msg = "Confirmation whole-plan session marker differs from the exact context and output root."
+        raise ValueError(msg)
+    return ConfirmationPlanSessionRef(
+        marker_path=context.authorized_output_root / CONFIRMATION_PLAN_SESSION_NAME,
+        marker_file_checksum=_sha256_bytes(payload),
+        marker_content_checksum=cast("str", document["content_checksum"]),
+        plan_checksum=context.plan.content_checksum,
+        locked_study_head_custody_path=context.locked_study_head_custody_path,
+    )
+
+
+def initialize_confirmation_plan_session(context: ConfirmationExecutionContext) -> ConfirmationPlanSessionRef:
+    """Exclusively create or idempotently verify the whole-plan run marker.
+
+    Returns:
+        The exact-byte marker reference required by real confirmation dispatch.
+    """
+    return _confirmation_plan_session_ref(context, create=True)
+
+
+def validate_confirmation_plan_session(context: ConfirmationExecutionContext) -> ConfirmationPlanSessionRef:
+    """Reopen the required whole-plan run marker without creating any state.
+
+    Returns:
+        The verified exact-byte session marker reference.
+    """
+    return _confirmation_plan_session_ref(context, create=False)
+
+
+def _read_pinned_confirmation_custody(path: Path, name: str) -> bytes:
+    """Read one single-link confirmation custody file through a pinned descriptor.
+
+    Returns:
+        Exact stable bytes from the named custody member.
+
+    Raises:
+        ValueError: If the member is absent, linked, non-regular, multiply
+            linked, or changes while it is read.
+    """
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        msg = f"{name} is missing or unavailable."
+        raise ValueError(msg) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        msg = f"{name} must be a single-link regular file."
+        raise ValueError(msg)
+    expected_identity = (metadata.st_dev, metadata.st_ino, metadata.st_size, 1)
+    flags = os.O_RDONLY | (os.O_NOFOLLOW if hasattr(os, "O_NOFOLLOW") else 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        msg = f"{name} changed during open."
+        raise ValueError(msg) from error
+    try:
+        payload, closed = _read_open_confirmation_custody(descriptor, metadata, name)
+    finally:
+        os.close(descriptor)
+    try:
+        current = path.lstat()
+    except OSError as error:
+        msg = f"{name} changed during read."
+        raise ValueError(msg) from error
+    closed_identity = (closed.st_dev, closed.st_ino, closed.st_size, closed.st_nlink)
+    current_identity = (current.st_dev, current.st_ino, current.st_size, current.st_nlink)
+    if closed_identity != expected_identity or current_identity != expected_identity:
+        msg = f"{name} changed during read."
+        raise ValueError(msg)
+    return payload
+
+
+def _read_open_confirmation_custody(
+    descriptor: int,
+    expected: os.stat_result,
+    name: str,
+) -> tuple[bytes, os.stat_result]:
+    """Read a custody descriptor after checking its exact opened identity.
+
+    Returns:
+        Exact bytes and the final descriptor metadata.
+
+    Raises:
+        ValueError: If the descriptor does not retain the expected identity.
+    """
+    opened = os.fstat(descriptor)
+    expected_identity = (expected.st_dev, expected.st_ino, expected.st_size, 1)
+    opened_identity = (opened.st_dev, opened.st_ino, opened.st_size, opened.st_nlink)
+    if not stat.S_ISREG(opened.st_mode) or opened_identity != expected_identity:
+        msg = f"{name} changed during open."
+        raise ValueError(msg)
+    with os.fdopen(descriptor, "rb", closefd=False) as handle:
+        payload = handle.read()
+    return payload, os.fstat(descriptor)
+
+
+def _decode_confirmation_head_custody(payload: bytes) -> LockedConfirmatoryStudySnapshotRef:
+    """Decode the raw external head or exact prior-CLI-summary wrapper.
+
+    Returns:
+        The checksum-verified locked-study snapshot reference.
+    """
+    from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a custody module cycle
+        LockedConfirmatoryStudySnapshotRef,
+    )
+
+    document = load_canonical_json_object(payload.decode())
+    if "locked_study_snapshot_reference" not in document:
+        return LockedConfirmatoryStudySnapshotRef.from_dict(document)
+    if frozenset(document) != _CONFIRMATION_HEAD_CUSTODY_WRAPPER_KEYS:
+        msg = "External locked-study head custody wrapper has unexpected fields."
+        raise ValueError(msg)
+    if document["external_study_head_custody_required"] is not True:
+        msg = "External locked-study head custody wrapper does not require retained custody."
+        raise ValueError(msg)
+    for field_name in ("planned", "attempted", "succeeded", "failed", "skipped"):
+        require_int(document[field_name], f"external locked-study head custody wrapper.{field_name}")
+    return LockedConfirmatoryStudySnapshotRef.from_dict(document["locked_study_snapshot_reference"])
+
+
+def _load_current_confirmation_aggregate_head(
+    context: ConfirmationExecutionContext,
+) -> tuple[LockedConfirmatoryStudySnapshotRef, LockedConfirmatoryStudySnapshot]:
+    """Reopen the exact external head and require it to be the internal chain tip.
+
+    Returns:
+        The exact external reference and its canonical aggregate snapshot.
+
+    Raises:
+        ValueError: If external custody is missing, rolled back, unsafe, or
+            differs from the newest immutable internal snapshot.
+    """
+    from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a custody module cycle
+        CONFIRMATORY_STUDY_DIRECTORY_NAME,
+        LockedConfirmatoryStudySnapshot,
+    )
+
+    context._validate_locked_study_head_custody_path(  # noqa: SLF001 - context-owned custody invariant
+        context.locked_study_head_custody_path,
+        context.authorized_output_root,
+    )
+    head_payload = _read_pinned_confirmation_custody(
+        context.locked_study_head_custody_path,
+        "External locked-study head custody",
+    )
+    try:
+        reference = _decode_confirmation_head_custody(head_payload)
+    except (TypeError, UnicodeDecodeError, ValueError) as error:
+        msg = "External locked-study head custody is invalid."
+        raise ValueError(msg) from error
+
+    study_directory = context.authorized_output_root / CONFIRMATORY_STUDY_DIRECTORY_NAME
+    try:
+        study_metadata = study_directory.lstat()
+    except OSError as error:
+        msg = "Confirmation aggregate study directory is missing or unavailable."
+        raise ValueError(msg) from error
+    if stat.S_ISLNK(study_metadata.st_mode) or not stat.S_ISDIR(study_metadata.st_mode):
+        msg = "Confirmation aggregate study directory is linked or non-directory."
+        raise ValueError(msg)
+    members = tuple(sorted(study_directory.iterdir(), key=lambda item: item.name))
+    if not members:
+        msg = "Confirmation aggregate study has no immutable snapshot head."
+        raise ValueError(msg)
+    for expected_ordinal, member in enumerate(members):
+        match = _CONFIRMATION_STUDY_SNAPSHOT_PATTERN.fullmatch(member.name)
+        if (
+            match is None
+            or int(match.group("ordinal")) != expected_ordinal
+            or member.is_symlink()
+            or not member.is_file()
+        ):
+            msg = "Confirmation aggregate study chain contains a foreign, unsafe, or noncontiguous member."
+            raise ValueError(msg)
+    snapshot_path = context.authorized_output_root / reference.relative_path
+    if snapshot_path != members[-1] or reference.ordinal != len(members) - 1:
+        msg = "External locked-study head custody is rolled back behind the immutable aggregate chain."
+        raise ValueError(msg)
+    snapshot_payload = _read_pinned_confirmation_custody(snapshot_path, "Confirmation aggregate snapshot head")
+    if _sha256_bytes(snapshot_payload) != reference.file_checksum:
+        msg = "Confirmation aggregate snapshot bytes differ from the external head reference."
+        raise ValueError(msg)
+    try:
+        snapshot = LockedConfirmatoryStudySnapshot.from_json(snapshot_payload.decode())
+    except (TypeError, UnicodeDecodeError, ValueError) as error:
+        msg = "Confirmation aggregate snapshot head is invalid."
+        raise ValueError(msg) from error
+    if (
+        snapshot_payload != _json_bytes(snapshot.to_dict())
+        or snapshot.ordinal != reference.ordinal
+        or snapshot.content_checksum != reference.snapshot_content_checksum
+    ):
+        msg = "Confirmation aggregate snapshot head differs from its canonical external reference."
+        raise ValueError(msg)
+    return reference, snapshot
+
+
+def _validate_confirmation_aggregate_prefix_histories(
+    context: ConfirmationExecutionContext,
+    snapshot: LockedConfirmatoryStudySnapshot,
+    next_job_index: int,
+) -> None:
+    """Require outer first-attempt histories to equal the snapshotted prefix.
+
+    Raises:
+        ValueError: If a prior outer outcome is absent or changed, or a current
+            or later outcome exists before its aggregate snapshot publication.
+    """
+    rows = snapshot.study_manifest.rows
+    for index, (job, row) in enumerate(zip(context.plan.jobs, rows, strict=True)):
+        job_directory = context.authorized_output_root / job.output_path
+        history = load_training_job_outcome_history(job_directory, job)
+        if index < next_job_index:
+            if len(history) != 1 or row.outcome != history[0]:
+                msg = "Confirmation aggregate head differs from a prior authoritative outer outcome."
+                raise ValueError(msg)
+        elif history:
+            msg = "Confirmation aggregate head has not incorporated a current or later outer outcome."
+            raise ValueError(msg)
+
+
+def _validate_confirmation_aggregate_plan_position(
+    context: ConfirmationExecutionContext,
+    request: ConfirmExecutionRequest,
+) -> None:
+    """Authorize exactly the next plan cell from the current external aggregate head.
+
+    This is a lightweight per-dispatch gate: it authenticates the external
+    rollback reference, its newest immutable aggregate snapshot, all sealed
+    scientific roots, and the exact outer-outcome prefix. Large production
+    blobs remain under the inductive production-custody checks.
+
+    Raises:
+        TypeError: If the context or request has the wrong protocol type.
+        ValueError: If the external head is absent, stale, rolled back, or does
+            not authorize this exact next unattempted plan cell.
+    """
+    if not isinstance(context, ConfirmationExecutionContext):
+        msg = "context must be a ConfirmationExecutionContext."
+        raise TypeError(msg)
+    if not isinstance(request, ConfirmExecutionRequest):
+        msg = "request must be a ConfirmExecutionRequest."
+        raise TypeError(msg)
+    positions = tuple(index for index, job in enumerate(context.plan.jobs) if job.confirm_execution_request is request)
+    if len(positions) != 1:
+        msg = "Confirmation aggregate authorization accepts only an exact context-owned request object."
+        raise ValueError(msg)
+    next_job_index = positions[0]
+    marker = validate_confirmation_plan_session(context)
+    reference, snapshot = _load_current_confirmation_aggregate_head(context)
+    manifest = snapshot.study_manifest
+    if (
+        snapshot.authorized_output_root != str(context.authorized_output_root)
+        or snapshot.session_marker_content_checksum != marker.marker_content_checksum
+        or manifest.plan != context.plan
+        or manifest.final_seal != context.final_seal
+        or manifest.configuration_execution_manifest != context.configuration_execution_manifest
+        or manifest.target_manifest != context.target_manifest
+        or manifest.exposure_inventory.content_checksum != context.prior_target_exposure_inventory_checksum
+        or manifest.execution_source_manifest_checksum != context.execution_source_manifest.content_checksum
+        or manifest.analysis_source_manifest_checksum != context.analysis_source_manifest.content_checksum
+        or manifest.analysis_template_checksum != context.preregistration.analysis_template_checksum
+    ):
+        msg = "Confirmation aggregate head differs from the exact sealed session roots."
+        raise ValueError(msg)
+    if (
+        reference.ordinal != next_job_index
+        or manifest.terminal_job_count != next_job_index
+        or manifest.unattempted_job_count != len(context.plan.jobs) - next_job_index
+        or manifest.status != "incomplete"
+        or any(row.terminal_state == "unattempted" for row in manifest.rows[:next_job_index])
+        or any(row.terminal_state != "unattempted" for row in manifest.rows[next_job_index:])
+    ):
+        msg = "Confirmation aggregate head does not authorize this exact next unattempted plan cell."
+        raise ValueError(msg)
+    _validate_confirmation_aggregate_prefix_histories(context, snapshot, next_job_index)
+
+
 @dataclass(frozen=True, slots=True)
 class ReopenedProductionResult:
     """Fully verified typed view of a source-addressed production attempt."""
@@ -2086,6 +3341,131 @@ def reopen_result_artifact(reference: ResultArtifactRef, job_directory: Path) ->
     maps = tuple(ScheduledMapEvidence.from_dict(document(ref)) for ref in evidence.map_evidence_refs)
     diagnostics = tuple(document(ref) for ref in evidence.diagnostic_refs)
     return ReopenedProductionResult(reference, manifest, evidence, raw, resources, maps, diagnostics)
+
+
+def _confirmation_failure_outcome(job_checksum: str) -> TrainingJobOutcome:
+    """Return the sole redacted outer projection of production failure custody."""
+    return TrainingJobOutcome(
+        job_checksum=job_checksum,
+        status="failure",
+        result_artifact_checksum=None,
+        exception_type=CONFIRMATION_OUTER_FAILURE_EXCEPTION_TYPE,
+        message=CONFIRMATION_OUTER_FAILURE_MESSAGE,
+        attempt=1,
+    )
+
+
+def validate_existing_confirmation_outcome(
+    context: ConfirmationExecutionContext,
+    job: TrainingJob,
+    outcome: TrainingJobOutcome,
+    job_directory: Path,
+) -> ReopenedProductionResult:
+    """Reopen one outer outcome through all sealed confirmation trust roots.
+
+    This is the resume-skip validator: a syntactically valid outer outcome is
+    insufficient unless its immutable first production attempt reproduces the
+    context-owned request, source, program, artifact family, target, policy,
+    and sealed resource limits.
+
+    Returns:
+        The fully reopened and confirmation-authenticated first attempt.
+
+    Raises:
+        TypeError: If any input has the wrong typed schema.
+        ValueError: If custody is missing, corrupt, or differs from the exact
+            context-owned first confirmation attempt.
+    """
+    if not isinstance(context, ConfirmationExecutionContext):
+        msg = "context must be a ConfirmationExecutionContext."
+        raise TypeError(msg)
+    if not isinstance(job, TrainingJob) or not isinstance(outcome, TrainingJobOutcome):
+        msg = "job and outcome must be typed orchestration records."
+        raise TypeError(msg)
+    authority = ProductionConfirmationAuthority(context)
+    request = job.confirm_execution_request
+    if request is None or authority.owned_job(request) is not job:
+        msg = "Confirmation resume custody requires the exact context-owned job object."
+        raise ValueError(msg)
+    authority.validate_job_directory(request, job_directory)
+    if outcome.job_checksum != job.content_checksum or outcome.attempt != 1:
+        msg = "Confirmation resume custody requires the exact outer first-attempt outcome."
+        raise ValueError(msg)
+    if outcome.status == "failure" and (
+        outcome.result_artifact_checksum is not None
+        or outcome.exception_type != CONFIRMATION_OUTER_FAILURE_EXCEPTION_TYPE
+        or outcome.message != CONFIRMATION_OUTER_FAILURE_MESSAGE
+    ):
+        msg = "Confirmation resume custody requires the deterministic redacted outer failure projection."
+        raise ValueError(msg)
+    reference = derive_result_artifact_ref(
+        job_directory,
+        request.content_checksum,
+        1,
+        expected_reference_checksum=outcome.result_artifact_checksum,
+    )
+    reopened = reopen_result_artifact(reference, job_directory)
+    evidence = reopened.evidence
+    expected_program = context.scheduled_program_checksum(request)
+    expected_kind = context.artifact_kind(request)
+    expected_policy = confirmatory_evaluation_policy_checksum(request)
+    aliases = (
+        (reference.status, outcome.status),
+        (reference.artifact_kind, expected_kind),
+        (evidence.artifact_kind, expected_kind),
+        (reference.job_checksum, request.content_checksum),
+        (reference.execution_source_manifest_checksum, request.execution_source_checksum),
+        (reference.source_fingerprint_checksum, request.execution_source_checksum),
+        (evidence.job_checksum, request.content_checksum),
+        (evidence.execution_source_manifest_checksum, request.execution_source_checksum),
+        (evidence.source_fingerprint_checksum, request.execution_source_checksum),
+        (evidence.executable_binding_checksum, request.executable_binding_checksum),
+        (evidence.scheduled_program_checksum, expected_program),
+        (evidence.evaluation_policy_checksum, expected_policy),
+        (evidence.derived_metrics.get("strategy_schedule_checksum"), request.hyperparameters_checksum),
+        (evidence.derived_metrics.get("execution_preset"), "paper-confirm"),
+    )
+    if any(actual != expected for actual, expected in aliases):
+        msg = "Confirmation production custody differs from its request, source, schedule, or artifact roots."
+        raise ValueError(msg)
+    target = evidence.target_identity
+    target_aliases = (
+        (target.get("target_instance_id"), request.target_instance_id),
+        (target.get("target_instance_spec_checksum"), request.target_spec_checksum),
+        (target.get("target_manifest_checksum"), request.target_manifest_checksum),
+        (target.get("family_id"), request.family_id),
+        (target.get("stratum_id"), request.stratum_id),
+        (target.get("qubit_count"), request.qubit_count),
+    )
+    if any(actual != expected for actual, expected in target_aliases):
+        msg = "Confirmation production custody differs from its sealed target roots."
+        raise ValueError(msg)
+    if outcome.status == "success":
+        if reopened.raw_trajectory is None:
+            msg = "Successful confirmation resume custody lacks raw trajectories."
+            raise ValueError(msg)
+        raw_payload = _production_document_payload(
+            reopened.raw_trajectory,
+            document_type="raw_trajectory_fidelities",
+            payload_keys=_REAL_RAW_TRAJECTORY_KEYS,
+        )
+        if (
+            raw_payload["job_checksum"] != request.content_checksum
+            or raw_payload["evaluation_policy_checksum"] != expected_policy
+            or raw_payload["data_role"] != "confirmatory"
+            or raw_payload["seed_domain"] != "confirmatory_test"
+            or raw_payload["evaluation_seed"] != request.evaluation_seed
+            or raw_payload["trajectory_count"] != request.fixed_test_trajectory_count
+        ):
+            msg = "Confirmation raw resume custody differs from its sealed role, seed, or count."
+            raise ValueError(msg)
+        validate_confirmation_resource_limits(request, reopened)
+    else:
+        if reopened.raw_trajectory is not None:
+            msg = "Failed confirmation resume custody cannot claim successful raw trajectories."
+            raise ValueError(msg)
+        authenticated_confirmation_resource_limit_proof(request, reopened)
+    return reopened
 
 
 @dataclass(frozen=True, slots=True)
@@ -2317,6 +3697,148 @@ class ProductionConfirmationAuthority:
             self._materialized_targets = self.context.materialize_targets()
         return self._materialized_targets
 
+    def owned_job(self, request: ConfirmExecutionRequest) -> TrainingJob:
+        """Return the sole context-owned job without revealing its target.
+
+        Returns:
+            The exact enclosing paper-confirm job.
+        """
+        if not isinstance(request, ConfirmExecutionRequest):
+            msg = "request must be a ConfirmExecutionRequest."
+            raise TypeError(msg)
+        jobs = tuple(job for job in self.context.plan.jobs if job.confirm_execution_request is request)
+        if len(jobs) != 1:
+            msg = "Production confirmation accepts only an exact context-owned request object."
+            raise ValueError(msg)
+        validate_confirm_execution_request(
+            request,
+            self.context.final_seal,
+            self.context.target_manifest,
+            self.context.configuration_execution_manifest,
+        )
+        return jobs[0]
+
+    def authorized_job_directory(self, request: ConfirmExecutionRequest) -> Path:
+        """Return the one context-rooted directory authorized for ``request``.
+
+        Returns:
+            The exact canonical output root joined to the sealed job path.
+        """
+        job = self.owned_job(request)
+        return self.context.authorized_output_root / job.output_path
+
+    def validate_job_directory(self, request: ConfirmExecutionRequest, job_directory: Path) -> TrainingJob:
+        """Validate output custody before target reveal or filesystem mutation.
+
+        Returns:
+            The exact context-owned enclosing job.
+        """
+        if not isinstance(job_directory, Path):
+            msg = "job_directory must be a pathlib.Path."
+            raise TypeError(msg)
+        job = self.owned_job(request)
+        expected = self.context.authorized_output_root / job.output_path
+        canonical = Path(Path(job_directory).resolve())
+        if not job_directory.is_absolute() or job_directory != canonical or job_directory != expected:
+            msg = "Confirmation job_directory differs from its exact authorized output path."
+            raise ValueError(msg)
+        self.context._validate_authorized_output_root(self.context.authorized_output_root)  # noqa: SLF001
+        current = self.context.authorized_output_root
+        for component in Path(job.output_path).parts:
+            current /= component
+            if not current.exists() and not current.is_symlink():
+                continue
+            metadata = current.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                msg = "Confirmation job_directory contains an unsafe existing component."
+                raise ValueError(msg)
+        return job
+
+    @staticmethod
+    def _validate_first_attempt_universe(job_directory: Path) -> None:
+        """Reject any confirmation attempt directory other than attempt one."""
+        root = job_directory / ATTEMPT_DIRECTORY_NAME
+        if not root.exists() and not root.is_symlink():
+            return
+        metadata = root.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            msg = "Confirmation attempt custody root is unavailable or unsafe."
+            raise ValueError(msg)
+        if any(path.name != "attempt_000001" for path in root.iterdir()):
+            msg = "Real confirmation custody contains a forbidden later attempt."
+            raise ValueError(msg)
+
+    def validate_canonical_plan_position(self, request: ConfirmExecutionRequest) -> TrainingJob:
+        """Require prior cells closed and later cells still unattempted.
+
+        Every prior terminal manifest receives a lightweight request/source
+        identity check.  Only the immediate predecessor is fully reopened:
+        canonical dispatch authenticated it inductively when it was written,
+        while reopening every growing prefix here would make the study O(n^2)
+        in large numerical artifact bytes.  Whole-study finalization performs
+        the independent one-time complete-universe reopen.
+
+        Returns:
+            The exact current job after reopening every prior terminal custody.
+        """
+        job = self.owned_job(request)
+        jobs = self.context.plan.jobs
+        index = next(position for position, candidate in enumerate(jobs) if candidate is job)
+        for prior in jobs[:index]:
+            prior_request = prior.confirm_execution_request
+            assert prior_request is not None
+            prior_directory = self.context.authorized_output_root / prior.output_path
+            self.validate_job_directory(prior_request, prior_directory)
+            self._validate_first_attempt_universe(prior_directory)
+            store = ProductionAttemptStore(prior_directory, prior_request.content_checksum, 1)
+            if not store.terminal_manifest_exists():
+                msg = "Confirmation dispatch skipped a prior canonical unattempted plan cell."
+                raise ValueError(msg)
+            reference = store.derive_existing_ref()
+            if (
+                reference.job_checksum != prior_request.content_checksum
+                or reference.attempt != 1
+                or reference.execution_source_manifest_checksum != prior_request.execution_source_checksum
+                or reference.source_fingerprint_checksum != prior_request.execution_source_checksum
+                or reference.artifact_kind != self.context.artifact_kind(prior_request)
+            ):
+                msg = "A prior confirmation terminal manifest differs from its sealed request roots."
+                raise ValueError(msg)
+            if prior is jobs[index - 1]:
+                outcome = (
+                    TrainingJobOutcome(
+                        job_checksum=prior.content_checksum,
+                        status="success",
+                        result_artifact_checksum=reference.content_checksum,
+                        exception_type=None,
+                        message=None,
+                        attempt=1,
+                    )
+                    if reference.status == "success"
+                    else _confirmation_failure_outcome(prior.content_checksum)
+                )
+                reopened = validate_existing_confirmation_outcome(
+                    self.context,
+                    prior,
+                    outcome,
+                    prior_directory,
+                )
+                proof = authenticated_confirmation_resource_limit_proof(prior_request, reopened)
+                if proof is not None:
+                    raise PersistedConfirmationResourceLimitError(proof)
+        current_directory = self.context.authorized_output_root / job.output_path
+        self._validate_first_attempt_universe(current_directory)
+        for later in jobs[index + 1 :]:
+            later_request = later.confirm_execution_request
+            assert later_request is not None
+            later_directory = self.context.authorized_output_root / later.output_path
+            self.validate_job_directory(later_request, later_directory)
+            self._validate_first_attempt_universe(later_directory)
+            if ProductionAttemptStore(later_directory, later_request.content_checksum, 1).attempt_directory_exists():
+                msg = "Confirmation custody contains a later plan cell before canonical dispatch."
+                raise ValueError(msg)
+        return job
+
     def resolve(self, request: ConfirmExecutionRequest) -> ResolvedProductionJob:
         """Close one exact nested request to frozen code, target, and policies.
 
@@ -2327,20 +3849,7 @@ class ProductionConfirmationAuthority:
             ValueError: If the request is not the exact object owned by the
                 complete final-seal Cartesian plan or any sealed root differs.
         """
-        if not isinstance(request, ConfirmExecutionRequest):
-            msg = "request must be a ConfirmExecutionRequest."
-            raise TypeError(msg)
-        jobs = tuple(job for job in self.context.plan.jobs if job.confirm_execution_request is request)
-        if len(jobs) != 1:
-            msg = "Production confirmation accepts only an exact context-owned request object."
-            raise ValueError(msg)
-        job = jobs[0]
-        validate_confirm_execution_request(
-            request,
-            self.context.final_seal,
-            self.context.target_manifest,
-            self.context.configuration_execution_manifest,
-        )
+        job = self.owned_job(request)
         link = self.context.executable_binding(request.configuration_checksum)
         link.resolve_callable()
         binding = link.binding
@@ -2600,6 +4109,207 @@ def _validate_resource_document(
         msg = "Operator-growth smoke resources cannot claim an unmeasured circuit."
         raise ValueError(msg)
     return _ResourceCustody(normalized_work, circuit_checksum, circuit_gate_count)
+
+
+def _failure_resource_limit_proof(
+    evidence: ProductionNumericalEvidence,
+    resource_document: Mapping[str, object],
+) -> ConfirmationResourceLimitProof | None:
+    """Decode identical checksum-covered proof copies from failure evidence/resources."""
+    if evidence.status != "failure":
+        return None
+    failure = require_mapping(evidence.failure, "failure")
+    resource_payload = _production_document_payload(
+        resource_document,
+        document_type="runtime_resources",
+        payload_keys=_REAL_RESOURCE_KEYS,
+    )
+    partial_receipts = require_mapping(resource_payload["partial_receipts"], "partial_receipts")
+    evidence_value = failure.get("resource_limit_proof")
+    resource_value = partial_receipts.get("resource_limit_proof")
+    evidence_proof = _decode_resource_limit_proof(evidence_value)
+    resource_proof = _decode_resource_limit_proof(resource_value)
+    if evidence_proof != resource_proof:
+        msg = "Failure evidence and resources contain different resource-limit proofs."
+        raise ValueError(msg)
+    if evidence_proof is None:
+        return None
+    expected_exception_type = (
+        "NormalizedComputeCapError"
+        if evidence_proof.proof_kind == "prospective_normalized_work"
+        else "ConfirmationResourceLimitError"
+    )
+    if (
+        failure.get("exception_type") != expected_exception_type
+        or partial_receipts.get("resource_limit_exception_type") != expected_exception_type
+    ):
+        msg = "Typed resource-limit proof differs from its failure exception family."
+        raise ValueError(msg)
+    return evidence_proof
+
+
+def _validate_confirmation_resource_limit_proof_roots(
+    request: ConfirmExecutionRequest,
+    evidence: ProductionNumericalEvidence,
+    proof: ConfirmationResourceLimitProof,
+) -> None:
+    """Bind one decoded cap proof to the exact request and evidence roots."""
+    normalized_cap = require_float(
+        request.primary_resource_budget["normalized_compute_cap"],
+        "primary_resource_budget.normalized_compute_cap",
+        minimum=0.0,
+    )
+    edge_cap = require_float(
+        request.primary_resource_budget["cap_per_chain_edge"],
+        "primary_resource_budget.cap_per_chain_edge",
+        minimum=0.0,
+    )
+    if (
+        evidence.status != "failure"
+        or evidence.job_checksum != request.content_checksum
+        or evidence.execution_source_manifest_checksum != request.execution_source_checksum
+        or proof.request_checksum != request.content_checksum
+        or float(proof.normalized_compute_cap).hex() != float(normalized_cap).hex()
+        or float(proof.native_edge_gate_cap).hex() != float(edge_cap).hex()
+    ):
+        msg = "Confirmation resource-limit proof differs from its exact request and sealed caps."
+        raise ValueError(msg)
+    if (
+        proof.proof_kind == "measured_confirmation_resources"
+        and len(proof.measured_native_edge_gate_counts) != request.qubit_count - 1
+    ):
+        msg = "Measured confirmation resource-limit proof differs from its sealed target chain."
+        raise ValueError(msg)
+
+
+def authenticated_confirmation_resource_limit_proof(
+    request: ConfirmExecutionRequest,
+    reopened: ReopenedProductionResult,
+) -> ConfirmationResourceLimitProof | None:
+    """Return an authenticated typed stop proof, or ``None`` for other outcomes.
+
+    The proof is accepted only after immutable attempt reopening has verified
+    both checksum-covered copies.  This confirmation-specific layer then binds
+    the proof to the exact request and its two final-seal resource caps.
+
+    Returns:
+        The typed cap proof for a resource-stopped failure, otherwise ``None``.
+
+    Raises:
+        TypeError: If either input has the wrong typed schema.
+        ValueError: If a present proof differs from the request or manifest.
+    """
+    if not isinstance(request, ConfirmExecutionRequest):
+        msg = "request must be a ConfirmExecutionRequest."
+        raise TypeError(msg)
+    if not isinstance(reopened, ReopenedProductionResult):
+        msg = "reopened must be a ReopenedProductionResult."
+        raise TypeError(msg)
+    proof = _failure_resource_limit_proof(reopened.evidence, reopened.resources)
+    if proof is None:
+        return None
+    _validate_confirmation_resource_limit_proof_roots(request, reopened.evidence, proof)
+    if reopened.reference.status != "failure" or reopened.reference.job_checksum != request.content_checksum:
+        msg = "Confirmation resource-limit proof differs from its terminal result reference."
+        raise ValueError(msg)
+    if proof.proof_kind == "measured_confirmation_resources":
+        measurement_ref = proof.measurement_resource_ref
+        if measurement_ref is None or measurement_ref not in reopened.manifest.blobs:
+            msg = "Measured confirmation resource-limit proof differs from its manifest custody."
+            raise ValueError(msg)
+    return proof
+
+
+def is_authenticated_confirmation_resource_limit_stop(
+    request: ConfirmExecutionRequest,
+    reopened: ReopenedProductionResult,
+) -> bool:
+    """Return whether verified failure custody proves a final-seal resource stop."""
+    return authenticated_confirmation_resource_limit_proof(request, reopened) is not None
+
+
+def validate_confirmation_resource_limits(
+    request: ConfirmExecutionRequest,
+    reopened: ReopenedProductionResult,
+) -> None:
+    """Reject successful confirmation custody above either sealed resource cap.
+
+    Raises:
+        TypeError: If either input has the wrong typed schema.
+        ValueError: If success evidence exceeds normalized work or any native
+            chain-edge gate cap, or lacks the required circuit record.
+    """
+    if not isinstance(request, ConfirmExecutionRequest):
+        msg = "request must be a ConfirmExecutionRequest."
+        raise TypeError(msg)
+    if not isinstance(reopened, ReopenedProductionResult):
+        msg = "reopened must be a ReopenedProductionResult."
+        raise TypeError(msg)
+    if reopened.evidence.status != "success":
+        return
+    if reopened.evidence.artifact_kind == "synthetic_confirmation":
+        msg = "Real confirmation resource validation rejects synthetic custody."
+        raise ValueError(msg)
+    _validate_confirmation_resource_document(
+        request,
+        reopened.resources,
+        resource_ref=reopened.evidence.resource_ref,
+    )
+
+
+def _validate_confirmation_resource_document(
+    request: ConfirmExecutionRequest,
+    resource_document: Mapping[str, object],
+    *,
+    resource_ref: ArtifactBlobRef,
+) -> None:
+    """Compare one checksum-verified real resource document with sealed caps."""
+    payload = _production_document_payload(
+        resource_document,
+        document_type="runtime_resources",
+        payload_keys=_REAL_RESOURCE_KEYS,
+    )
+    normalized_work = require_float(payload["normalized_work"], "normalized_work", minimum=0.0)
+    normalized_cap = require_float(
+        request.primary_resource_budget["normalized_compute_cap"],
+        "primary_resource_budget.normalized_compute_cap",
+        minimum=0.0,
+    )
+    circuit = require_mapping(payload["circuit"], "confirmation runtime circuit")
+    edge_counts = tuple(
+        require_int(value, "native_two_qubit_gates_per_chain_edge")
+        for value in _strict_tuple(
+            circuit["native_two_qubit_gates_per_chain_edge"],
+            "native_two_qubit_gates_per_chain_edge",
+        )
+    )
+    if len(edge_counts) != request.qubit_count - 1:
+        msg = "Confirmation native-edge resource count differs from its sealed target chain."
+        raise ValueError(msg)
+    edge_cap = require_float(
+        request.primary_resource_budget["cap_per_chain_edge"],
+        "primary_resource_budget.cap_per_chain_edge",
+        minimum=0.0,
+    )
+    exceeded: tuple[Literal["normalized_work", "native_edge"], ...] = (
+        *(("normalized_work",) if normalized_work > normalized_cap else ()),
+        *(("native_edge",) if any(count > edge_cap for count in edge_counts) else ()),
+    )
+    if exceeded:
+        raise ConfirmationResourceLimitError(
+            ConfirmationResourceLimitProof(
+                request_checksum=request.content_checksum,
+                proof_kind="measured_confirmation_resources",
+                normalized_compute_cap=normalized_cap,
+                native_edge_gate_cap=edge_cap,
+                completed_normalized_work=None,
+                prospective_normalized_work=None,
+                measured_normalized_work=normalized_work,
+                measured_native_edge_gate_counts=edge_counts,
+                measurement_resource_ref=resource_ref,
+                exceeded_dimensions=exceeded,
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -4643,9 +6353,17 @@ def _publish_attempt(
     derived_metrics: Mapping[str, object],
     diagnostic_refs: tuple[ArtifactBlobRef, ...] = (),
     failure: Mapping[str, object] | None = None,
+    evidence_relative_name: str = "production_evidence.json",
 ) -> ResultArtifactRef:
     """Write typed evidence then publish its complete terminal manifest."""
     job = resolved.job
+    if status == "success" and resolved.confirm_request is not None:
+        resource_document = load_canonical_json_object(store.read_written_receipt(resource_ref).decode())
+        _validate_confirmation_resource_document(
+            resolved.confirm_request,
+            resource_document,
+            resource_ref=resource_ref,
+        )
     metrics = dict(derived_metrics)
     metrics.update({
         "execution_preset": job.preset,
@@ -4699,7 +6417,7 @@ def _publish_attempt(
         failure=failure,
     )
     evidence_ref = store.write_json_blob(
-        "production_evidence.json",
+        evidence_relative_name,
         evidence.to_dict(),
         role="production_evidence",
     )
@@ -5197,6 +6915,217 @@ def _failure_partial_receipts(store: ProductionAttemptStore) -> tuple[float, Map
     return normalized_work, summary
 
 
+def _finalize_recovered_failure_evidence(
+    *,
+    resolved: ResolvedProductionJob,
+    store: ProductionAttemptStore,
+) -> ResultArtifactRef | None:
+    """Publish a terminal manifest for an already closed failure evidence record."""
+    candidates: list[tuple[ArtifactBlobRef, ProductionNumericalEvidence]] = []
+    for ref in store.written_refs:
+        if ref.role != "production_evidence":
+            continue
+        document = load_canonical_json_object(store.read_written_receipt(ref).decode())
+        evidence = ProductionNumericalEvidence.from_dict(document)
+        if evidence.status == "failure":
+            candidates.append((ref, evidence))
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        msg = "A nonterminal attempt contains multiple closed failure evidence records."
+        raise ValueError(msg)
+    evidence_ref, evidence = candidates[0]
+    expected_aliases = (
+        (evidence.job_checksum, resolved.evidence_identity_checksum),
+        (evidence.attempt, 1),
+        (evidence.artifact_kind, _artifact_kind_for_binding(resolved)),
+        (evidence.execution_source_manifest_checksum, resolved.execution_source_manifest_checksum),
+        (evidence.source_fingerprint_checksum, resolved.source_fingerprint_checksum),
+        (evidence.executable_binding_checksum, resolved.executable_binding_checksum),
+        (evidence.scheduled_program_checksum, resolved.scheduled_program.content_checksum),
+        (evidence.target_identity, resolved.target.identity_dict()),
+        (evidence.evaluation_policy_checksum, resolved.evaluation_policy_checksum),
+        (evidence.derived_metrics.get("strategy_schedule_checksum"), resolved.strategy_schedule_checksum),
+    )
+    if any(actual != expected for actual, expected in expected_aliases):
+        msg = "Recovered failure evidence differs from the exact confirmation execution closure."
+        raise ValueError(msg)
+    if evidence.raw_trajectory_ref is not None or evidence.diagnostic_refs:
+        msg = "Recovered failure evidence cannot claim successful outer or diagnostic results."
+        raise ValueError(msg)
+    manifest_by_path = {ref.path: ref for ref in store.written_refs}
+    referenced = (
+        *evidence.map_evidence_refs,
+        evidence.resource_ref,
+        *(() if evidence.schedule_snapshot_ref is None else (evidence.schedule_snapshot_ref,)),
+    )
+    if any(manifest_by_path.get(ref.path) != ref for ref in referenced):
+        msg = "Recovered failure evidence references a non-recovered attempt member."
+        raise ValueError(msg)
+    resource_document = load_canonical_json_object(store.read_written_receipt(evidence.resource_ref).decode())
+    _validate_resource_document(resource_document, evidence=evidence)
+    resource_limit_proof = _failure_resource_limit_proof(evidence, resource_document)
+    if resource_limit_proof is not None:
+        request = resolved.confirm_request
+        if request is None:
+            msg = "Training failure custody cannot carry a confirmation resource-limit proof."
+            raise ValueError(msg)
+        _validate_confirmation_resource_limit_proof_roots(request, evidence, resource_limit_proof)
+        if (
+            resource_limit_proof.proof_kind == "measured_confirmation_resources"
+            and _recovered_measured_resource_limit_proof(resolved, store) != resource_limit_proof
+        ):
+            msg = "Recovered measured proof differs from its durable runtime resource member."
+            raise ValueError(msg)
+    return store.publish(
+        artifact_kind=evidence.artifact_kind,
+        status="failure",
+        execution_source_manifest_checksum=evidence.execution_source_manifest_checksum,
+        source_fingerprint_checksum=evidence.source_fingerprint_checksum,
+        blobs=store.written_refs,
+        evidence_ref=evidence_ref,
+    )
+
+
+def _next_failure_member_name(
+    store: ProductionAttemptStore,
+    *,
+    preferred: str,
+    recovery_stem: str,
+) -> str:
+    """Return the first unused bounded append-only failure-member name."""
+    prefix = f"{store.relative_attempt_directory}/"
+    occupied = {ref.path.removeprefix(prefix) for ref in store.written_refs}
+    if preferred not in occupied:
+        return preferred
+    first_recovery = f"{recovery_stem}.json"
+    if first_recovery not in occupied:
+        return first_recovery
+    for index in range(1_000):
+        candidate = f"{recovery_stem}_{index:03d}.json"
+        if candidate not in occupied:
+            return candidate
+    msg = "Confirmation recovery exhausted its bounded append-only failure-member namespace."
+    raise ValueError(msg)
+
+
+def _resource_limit_proof_for_error(
+    resolved: ResolvedProductionJob,
+    error: Exception,
+) -> ConfirmationResourceLimitProof | None:
+    """Convert only typed in-process cap errors into checksum-covered proof."""
+    request = resolved.confirm_request
+    if request is None:
+        return None
+    normalized_cap = require_float(
+        request.primary_resource_budget["normalized_compute_cap"],
+        "primary_resource_budget.normalized_compute_cap",
+        minimum=0.0,
+    )
+    edge_cap = require_float(
+        request.primary_resource_budget["cap_per_chain_edge"],
+        "primary_resource_budget.cap_per_chain_edge",
+        minimum=0.0,
+    )
+    if isinstance(error, ConfirmationResourceLimitError):
+        proof = error.proof
+        if (
+            proof.request_checksum != request.content_checksum
+            or float(proof.normalized_compute_cap).hex() != float(normalized_cap).hex()
+            or float(proof.native_edge_gate_cap).hex() != float(edge_cap).hex()
+        ):
+            msg = "Measured resource-limit error differs from its sealed confirmation request."
+            raise ValueError(msg)
+        return proof
+    if isinstance(error, NormalizedComputeCapError):
+        if float(error.cap).hex() != float(normalized_cap).hex():
+            msg = "Prospective normalized-work error differs from its sealed confirmation cap."
+            raise ValueError(msg)
+        return ConfirmationResourceLimitProof(
+            request_checksum=request.content_checksum,
+            proof_kind="prospective_normalized_work",
+            normalized_compute_cap=normalized_cap,
+            native_edge_gate_cap=edge_cap,
+            completed_normalized_work=error.completed_work,
+            prospective_normalized_work=error.prospective_update_work,
+            measured_normalized_work=None,
+            measured_native_edge_gate_counts=(),
+            measurement_resource_ref=None,
+            exceeded_dimensions=("normalized_work",),
+        )
+    return None
+
+
+def _recovered_measured_resource_limit_proof(
+    resolved: ResolvedProductionJob,
+    store: ProductionAttemptStore,
+) -> ConfirmationResourceLimitProof | None:
+    """Rebuild a measured proof only from a complete durable resource member."""
+    request = resolved.confirm_request
+    if request is None:
+        return None
+    expected_path = f"{store.relative_attempt_directory}/runtime/resources.json"
+    candidates = tuple(ref for ref in store.written_refs if ref.path == expected_path)
+    if not candidates:
+        return None
+    if len(candidates) != 1 or candidates[0].role != "runtime_resources":
+        msg = "Recovered confirmation runtime-resource custody is ambiguous."
+        raise ValueError(msg)
+    resource_ref = candidates[0]
+    resource_document = load_canonical_json_object(store.read_written_receipt(resource_ref).decode())
+    payload = _production_document_payload(
+        resource_document,
+        document_type="runtime_resources",
+        payload_keys=_REAL_RESOURCE_KEYS,
+    )
+    if (
+        payload["job_checksum"] != resolved.evidence_identity_checksum
+        or payload["source_fingerprint_checksum"] != resolved.source_fingerprint_checksum
+        or payload["failure_phase"] is not None
+        or payload["partial_receipts"] is not None
+    ):
+        msg = "Recovered measured resources differ from the exact confirmation execution closure."
+        raise ValueError(msg)
+    require_float(payload["wall_time_seconds"], "wall_time_seconds", minimum=0.0)
+    require_int(payload["peak_memory_bytes"], "peak_memory_bytes")
+    identity_evidence = ProductionNumericalEvidence(
+        job_checksum=resolved.evidence_identity_checksum,
+        attempt=1,
+        artifact_kind=_artifact_kind_for_binding(resolved),
+        status="failure",
+        execution_source_manifest_checksum=resolved.execution_source_manifest_checksum,
+        source_fingerprint_checksum=resolved.source_fingerprint_checksum,
+        executable_binding_checksum=resolved.executable_binding_checksum,
+        scheduled_program_checksum=resolved.scheduled_program.content_checksum,
+        target_identity=resolved.target.identity_dict(),
+        evaluation_policy_checksum=resolved.evaluation_policy_checksum,
+        structural_prefix_checksums=(),
+        schedule_snapshot_ref=None,
+        map_evidence_refs=(),
+        diagnostic_refs=(),
+        raw_trajectory_ref=None,
+        resource_ref=resource_ref,
+        derived_metrics={"strategy_schedule_checksum": resolved.strategy_schedule_checksum},
+        failure={
+            "phase": "interrupted_resource_measurement",
+            "exception_type": "recovered_resource_measurement",
+            "message": "identity-only recovery validator",
+        },
+    )
+    circuit = require_mapping(payload["circuit"], "recovered confirmation runtime circuit")
+    _validate_resource_circuit(circuit, evidence=identity_evidence)
+    try:
+        _validate_confirmation_resource_document(request, resource_document, resource_ref=resource_ref)
+    except ConfirmationResourceLimitError as error:
+        return error.proof
+    return None
+
+
+def _decode_resource_limit_proof(value: object) -> ConfirmationResourceLimitProof | None:
+    """Decode a nullable typed resource-limit proof."""
+    return None if value is None else ConfirmationResourceLimitProof.from_dict(value)
+
+
 def _publish_failure_attempt(
     *,
     resolved: ResolvedProductionJob,
@@ -5206,30 +7135,102 @@ def _publish_failure_attempt(
     peak_memory_bytes: int,
 ) -> ResultArtifactRef:
     """Publish a redacted failure only when every already-written member is closed."""
-    if any(ref.role == "production_evidence" for ref in store.written_refs):
-        msg = "A partially published terminal evidence record makes this attempt incomplete."
-        raise ValueError(msg)
     expected_before = tuple(sorted(ref.path for ref in store.written_refs))
     if store.member_paths() != expected_before:
         msg = "A partial or foreign member prevents terminal failure publication."
         raise ValueError(msg)
+    finalized = _finalize_recovered_failure_evidence(resolved=resolved, store=store)
+    if finalized is not None:
+        return finalized
     normalized_work, partial_receipts = _failure_partial_receipts(store)
-    resource_ref = store.write_json_blob(
-        "runtime/failure_resources.json",
-        _runtime_resource_document(
-            resolved=resolved,
-            circuit_binding=None,
-            wall_time_seconds=max(float(elapsed_seconds), 0.0),
-            peak_memory_bytes=max(peak_memory_bytes, 0),
-            normalized_work=normalized_work,
-            failure_phase="production_execution",
-            partial_receipts=partial_receipts,
-        ),
-        role="runtime_resources",
+    resource_limit_proof = _resource_limit_proof_for_error(resolved, error)
+    failure_exception_type = type(error).__name__
+    recovered_measured_proof = _recovered_measured_resource_limit_proof(resolved, store)
+    if recovered_measured_proof is not None:
+        if resource_limit_proof is not None and resource_limit_proof != recovered_measured_proof:
+            msg = "In-process and recovered confirmation resource-limit proofs differ."
+            raise ValueError(msg)
+        resource_limit_proof = recovered_measured_proof
+        failure_exception_type = "ConfirmationResourceLimitError"
+    if resource_limit_proof is not None:
+        partial_receipts = {
+            **dict(partial_receipts),
+            "resource_limit_proof": resource_limit_proof.to_dict(),
+            "resource_limit_exception_type": failure_exception_type,
+        }
+    recovered_failure_resources = tuple(
+        ref
+        for ref in store.written_refs
+        if ref.role == "runtime_resources"
+        and re.fullmatch(
+            r"(?:failure_resources|recovery_failure_resources(?:_[0-9]{3})?)\.json",
+            PurePosixPath(ref.path).name,
+        )
+        is not None
     )
+    if recovered_failure_resources:
+        resource_ref = max(recovered_failure_resources, key=lambda ref: ref.path)
+        resource_document = load_canonical_json_object(store.read_written_receipt(resource_ref).decode())
+        resource_payload = _production_document_payload(
+            resource_document,
+            document_type="runtime_resources",
+            payload_keys=_REAL_RESOURCE_KEYS,
+        )
+        if (
+            resource_payload["job_checksum"] != resolved.evidence_identity_checksum
+            or resource_payload["source_fingerprint_checksum"] != resolved.source_fingerprint_checksum
+            or resource_payload["failure_phase"] != "production_execution"
+            or resource_payload["partial_receipts"] is None
+            or resource_payload["circuit"] is not None
+        ):
+            msg = "Recovered failure resources differ from the exact confirmation execution closure."
+            raise ValueError(msg)
+        recovered_partial_receipts = require_mapping(
+            resource_payload["partial_receipts"],
+            "recovered failure partial_receipts",
+        )
+        recovered_proof = _decode_resource_limit_proof(recovered_partial_receipts.get("resource_limit_proof"))
+        if resource_limit_proof is not None and recovered_proof != resource_limit_proof:
+            msg = "Recovered failure resources differ from the current typed resource-limit proof."
+            raise ValueError(msg)
+        resource_limit_proof = recovered_proof
+        recovered_exception_type = recovered_partial_receipts.get("resource_limit_exception_type")
+        if recovered_proof is not None:
+            expected_exception_type = (
+                "NormalizedComputeCapError"
+                if recovered_proof.proof_kind == "prospective_normalized_work"
+                else "ConfirmationResourceLimitError"
+            )
+            if recovered_exception_type != expected_exception_type:
+                msg = "Recovered resource-limit proof differs from its typed exception family."
+                raise ValueError(msg)
+            failure_exception_type = expected_exception_type
+    else:
+        resource_name = _next_failure_member_name(
+            store,
+            preferred="runtime/failure_resources.json",
+            recovery_stem="runtime/recovery_failure_resources",
+        )
+        resource_ref = store.write_json_blob(
+            resource_name,
+            _runtime_resource_document(
+                resolved=resolved,
+                circuit_binding=None,
+                wall_time_seconds=max(float(elapsed_seconds), 0.0),
+                peak_memory_bytes=max(peak_memory_bytes, 0),
+                normalized_work=normalized_work,
+                failure_phase="production_execution",
+                partial_receipts=partial_receipts,
+            ),
+            role="runtime_resources",
+        )
     existing_refs = store.written_refs
-    schedule_refs = tuple(ref for ref in existing_refs if ref.role == "schedule_snapshot")
     map_refs = tuple(ref for ref in existing_refs if ref.role == "scheduled_map_evidence")
+    evidence_name = _next_failure_member_name(
+        store,
+        preferred="production_evidence.json",
+        recovery_stem="recovery_failure_evidence",
+    )
     return _publish_attempt(
         store=store,
         resolved=resolved,
@@ -5237,7 +7238,7 @@ def _publish_failure_attempt(
         status="failure",
         blobs=existing_refs,
         prefix_checksums=tuple(ref.logical_checksum for ref in existing_refs if ref.role == "structural_stage"),
-        schedule_snapshot_ref=None if not schedule_refs else schedule_refs[-1],
+        schedule_snapshot_ref=None,
         map_evidence_refs=map_refs,
         raw_trajectory_ref=None,
         resource_ref=resource_ref,
@@ -5248,9 +7249,11 @@ def _publish_failure_attempt(
         },
         failure={
             "phase": "production_execution",
-            "exception_type": type(error).__name__,
+            "exception_type": failure_exception_type,
             "message": "production executor failed; diagnostics are intentionally redacted",
+            **({} if resource_limit_proof is None else {"resource_limit_proof": resource_limit_proof.to_dict()}),
         },
+        evidence_relative_name=evidence_name,
     )
 
 
@@ -5366,23 +7369,65 @@ class ProductionConfirmationExecutor:
         if controls.overwrite:
             msg = "Real confirmation forbids overwrite; its first terminal attempt is authoritative."
             raise ValueError(msg)
-        resolved = self.authority.resolve(request)
-        store = ProductionAttemptStore(job_directory, request.content_checksum, 1)
+        job = self.authority.validate_job_directory(request, job_directory)
+        validate_confirmation_plan_session(self.authority.context)
+        self.authority.validate_canonical_plan_position(request)
+        _validate_confirmation_aggregate_plan_position(self.authority.context, request)
+        store = ProductionAttemptStore(
+            job_directory,
+            request.content_checksum,
+            1,
+            confirmation_output_root=self.authority.context.authorized_output_root,
+        )
         if store.terminal_manifest_exists():
             reference = store.derive_existing_ref()
-            reopened = reopen_result_artifact(reference, job_directory)
+            outcome = (
+                TrainingJobOutcome(
+                    job_checksum=job.content_checksum,
+                    status="success",
+                    result_artifact_checksum=reference.content_checksum,
+                    exception_type=None,
+                    message=None,
+                    attempt=1,
+                )
+                if reference.status == "success"
+                else _confirmation_failure_outcome(job.content_checksum)
+            )
+            reopened = validate_existing_confirmation_outcome(
+                self.authority.context,
+                job,
+                outcome,
+                job_directory,
+            )
             if reopened.evidence.status == "failure":
                 msg = "The authoritative real confirmation attempt records structured failure."
                 raise PersistedProductionAttemptError(msg)
             return reference
         if store.attempt_directory_exists():
-            msg = "An incomplete authoritative real confirmation attempt already exists."
-            raise ValueError(msg)
+            store.inventory_closed_members()
+            resolved = self.authority.resolve(request)
+            reference = _publish_failure_attempt(
+                resolved=resolved,
+                store=store,
+                error=RuntimeError("recovered interrupted authoritative first attempt"),
+                elapsed_seconds=0.0,
+                peak_memory_bytes=0,
+            )
+            outcome = _confirmation_failure_outcome(job.content_checksum)
+            validate_existing_confirmation_outcome(
+                self.authority.context,
+                job,
+                outcome,
+                job_directory,
+            )
+            msg = f"Recovered interrupted authoritative confirmation attempt {reference.content_checksum}."
+            raise PersistedProductionAttemptError(msg)
         state = controls.schedule_resume_state
         if state is not None and state.prior_attempt > 0:
             msg = "Real confirmation cannot create a later attempt after prior orchestration state."
             raise ValueError(msg)
 
+        resolved = self.authority.resolve(request)
         owns_tracing = not tracemalloc.is_tracing()
         if owns_tracing:
             tracemalloc.start()
@@ -5399,13 +7444,20 @@ class ProductionConfirmationExecutor:
             current, peak = tracemalloc.get_traced_memory()
             measured_peak = max(current - baseline, peak - baseline, 0)
             try:
-                _publish_failure_attempt(
+                failure_reference = _publish_failure_attempt(
                     resolved=resolved,
                     store=store,
                     error=error,
                     elapsed_seconds=time.perf_counter() - started,
                     peak_memory_bytes=measured_peak,
                 )
+                validate_existing_confirmation_outcome(
+                    self.authority.context,
+                    job,
+                    _confirmation_failure_outcome(job.content_checksum),
+                    job_directory,
+                )
+                del failure_reference
             except Exception as custody_error:
                 raise error from custody_error
             finally:
@@ -5414,7 +7466,19 @@ class ProductionConfirmationExecutor:
             raise
         if owns_tracing:
             tracemalloc.stop()
-        reopened = reopen_result_artifact(reference, job_directory)
+        reopened = validate_existing_confirmation_outcome(
+            self.authority.context,
+            job,
+            TrainingJobOutcome(
+                job_checksum=job.content_checksum,
+                status="success",
+                result_artifact_checksum=reference.content_checksum,
+                exception_type=None,
+                message=None,
+                attempt=1,
+            ),
+            job_directory,
+        )
         if reopened.evidence.status != "success":
             msg = "A successful real confirmation dispatch reopened a non-success terminal attempt."
             raise ValueError(msg)

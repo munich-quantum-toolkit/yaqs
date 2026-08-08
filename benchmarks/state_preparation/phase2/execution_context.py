@@ -15,6 +15,8 @@ are copied into a :class:`~.training_orchestration.TrainingRunPlan`.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -158,6 +160,154 @@ def _entropy_slot(data_role: str, population_scope: str) -> tuple[str, str]:
     return role, scope
 
 
+def _entropy_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
+    """Return the complete stable identity required for an entropy file."""
+    return metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_nlink
+
+
+def _validate_entropy_file_metadata(metadata: os.stat_result, slot: tuple[str, str]) -> None:
+    """Require one exact, single-link regular entropy file.
+
+    Confirmatory entropy has stricter custody than development and screening
+    entropy: no group or other permission bit may be set.
+
+    Raises:
+        ValueError: If the file type, size, link count, or confirmatory mode is
+            unsafe.
+    """
+    confirmatory_is_shared = stat.S_IMODE(metadata.st_mode) & (stat.S_IRWXG | stat.S_IRWXO)
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or metadata.st_size not in {32, 64}
+        or (slot == ("confirmatory", "primary_q6") and confirmatory_is_shared)
+    ):
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg)
+
+
+def _stat_external_entropy_file(path: Path) -> os.stat_result:
+    """Return no-follow path metadata with a redacted failure.
+
+    Returns:
+        Exact metadata for the final path component.
+
+    Raises:
+        ValueError: If the path cannot be inspected safely.
+    """
+    try:
+        return path.stat(follow_symlinks=False)
+    except OSError:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg) from None
+
+
+def _open_external_entropy_file(path: Path) -> int:
+    """Open one entropy path through an alias-resistant descriptor.
+
+    Returns:
+        A caller-owned read-only descriptor.
+
+    Raises:
+        ValueError: If the source cannot be opened safely.
+    """
+    flags = os.O_RDONLY
+    for optional_flag in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK", "O_BINARY"):
+        flags |= cast("int", getattr(os, optional_flag, 0))
+    try:
+        return os.open(path, flags)
+    except OSError:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg) from None
+
+
+def _fstat_external_entropy_file(descriptor: int) -> os.stat_result:
+    """Return descriptor metadata with a redacted failure.
+
+    Returns:
+        Exact metadata for the opened file description.
+
+    Raises:
+        ValueError: If the descriptor cannot be inspected safely.
+    """
+    try:
+        return os.fstat(descriptor)
+    except OSError:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg) from None
+
+
+def _read_external_entropy_descriptor(descriptor: int) -> bytes:
+    """Read at most one byte beyond the largest accepted key encoding.
+
+    Returns:
+        At most 65 bytes read from the pinned descriptor.
+
+    Raises:
+        ValueError: If the descriptor cannot be read safely.
+    """
+    try:
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            return handle.read(65)
+    except OSError:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg) from None
+
+
+def _read_pinned_external_entropy_file(
+    descriptor: int,
+    before: os.stat_result,
+    slot: tuple[str, str],
+) -> tuple[bytes, tuple[int, int, int, int]]:
+    """Read and recheck one descriptor against its pre-open identity.
+
+    Returns:
+        The bounded payload and stable pre-open identity.
+
+    Raises:
+        ValueError: If the opened file is unsafe or changes while read.
+    """
+    identity = _entropy_file_identity(before)
+    opened = _fstat_external_entropy_file(descriptor)
+    _validate_entropy_file_metadata(opened, slot)
+    if _entropy_file_identity(opened) != identity:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg)
+    payload = _read_external_entropy_descriptor(descriptor)
+    closed = _fstat_external_entropy_file(descriptor)
+    _validate_entropy_file_metadata(closed, slot)
+    if _entropy_file_identity(closed) != identity:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg)
+    return payload, identity
+
+
+def _read_external_entropy_file(path: Path, slot: tuple[str, str]) -> bytes:
+    """Read one entropy key through a pinned no-follow descriptor.
+
+    Returns:
+        Exactly 32 raw bytes or 64 lowercase hexadecimal bytes.
+
+    Raises:
+        ValueError: If the source is unavailable, unsafe, linked, changes while
+            read, or has an unsupported size.
+    """
+    before = _stat_external_entropy_file(path)
+    _validate_entropy_file_metadata(before, slot)
+    descriptor = _open_external_entropy_file(path)
+    try:
+        payload, identity = _read_pinned_external_entropy_file(descriptor, before, slot)
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(descriptor)
+    after = _stat_external_entropy_file(path)
+    _validate_entropy_file_metadata(after, slot)
+    if _entropy_file_identity(after) != identity or len(payload) != before.st_size:
+        msg = "External entropy source is unavailable or unsafe."
+        raise ValueError(msg)
+    return payload
+
+
 class ExternalEntropyKeyring:
     """Non-serializable in-memory custody for independent role-master keys.
 
@@ -209,8 +359,6 @@ class ExternalEntropyKeyring:
 
         Raises:
             TypeError: If the mapping or a path has an unsupported type.
-            ValueError: If a path is missing, linked, non-regular, oversized, or
-                does not contain exactly one supported key encoding.
         """
         if not isinstance(entropy_files, Mapping) or not entropy_files:
             msg = "entropy_files must be a nonempty mapping."
@@ -221,19 +369,7 @@ class ExternalEntropyKeyring:
                 msg = "Every external entropy source must be a pathlib.Path."
                 raise TypeError(msg)
             slot = _entropy_slot(*raw_slot)
-            try:
-                metadata = path.stat(follow_symlinks=False)
-            except OSError:
-                msg = "External entropy source is unavailable or unsafe."
-                raise ValueError(msg) from None
-            if path.is_symlink() or not stat.S_ISREG(metadata.st_mode) or metadata.st_size not in {32, 64}:
-                msg = "External entropy source is unavailable or unsafe."
-                raise ValueError(msg)
-            try:
-                payload = path.read_bytes()
-            except OSError:
-                msg = "External entropy source is unavailable or unsafe."
-                raise ValueError(msg) from None
+            payload = _read_external_entropy_file(path, slot)
             loaded[slot] = _normalize_entropy(payload)
         return cls(loaded)
 
@@ -1113,6 +1249,9 @@ class ConfirmationExecutionContext:
     repository_binding_catalog: RepositoryBindingCatalog
     target_configuration: TargetPopulationConfig
     target_manifest: TargetPopulationManifest
+    prior_target_exposure_inventory_checksum: str
+    authorized_output_root: Path
+    locked_study_head_custody_path: Path
     confirmation_authorization: ConfirmationAuthorization = field(repr=False)
     target_materialization_authorization: TargetMaterializationAuthorization = field(repr=False)
     external_entropy_keyring: ExternalEntropyKeyring = field(repr=False, compare=False)
@@ -1140,6 +1279,12 @@ class ConfirmationExecutionContext:
             (self.repository_binding_catalog, RepositoryBindingCatalog, "repository_binding_catalog"),
             (self.target_configuration, TargetPopulationConfig, "target_configuration"),
             (self.target_manifest, TargetPopulationManifest, "target_manifest"),
+            (self.authorized_output_root, Path, "authorized_output_root"),
+            (
+                self.locked_study_head_custody_path,
+                Path,
+                "locked_study_head_custody_path",
+            ),
             (self.confirmation_authorization, ConfirmationAuthorization, "confirmation_authorization"),
             (
                 self.target_materialization_authorization,
@@ -1152,6 +1297,20 @@ class ConfirmationExecutionContext:
             if not isinstance(value, expected_type):
                 msg = f"{name} must be a {expected_type.__name__}."
                 raise TypeError(msg)
+
+        object.__setattr__(
+            self,
+            "prior_target_exposure_inventory_checksum",
+            require_checksum(
+                self.prior_target_exposure_inventory_checksum,
+                "prior_target_exposure_inventory_checksum",
+            ),
+        )
+        self._validate_authorized_output_root(self.authorized_output_root)
+        self._validate_locked_study_head_custody_path(
+            self.locked_study_head_custody_path,
+            self.authorized_output_root,
+        )
 
         seal = self.final_seal
         plan = self.plan
@@ -1351,6 +1510,77 @@ class ConfirmationExecutionContext:
             self.target_materialization_authorization,
         ).targets
 
+    @staticmethod
+    def _validate_authorized_output_root(output_root: Path) -> None:
+        """Require one absolute lexical root with no extant symlink component.
+
+        Raises:
+            TypeError: If the root is not a pathlib path.
+            ValueError: If the root is noncanonical or contains an unsafe
+                existing component.
+        """
+        if not isinstance(output_root, Path):
+            msg = "authorized_output_root must be a pathlib.Path."
+            raise TypeError(msg)
+        canonical = Path(Path(output_root).resolve())
+        if not output_root.is_absolute() or output_root != canonical:
+            msg = "authorized_output_root must be an absolute canonical path."
+            raise ValueError(msg)
+        current = Path(output_root.anchor)
+        for component in output_root.parts[1:]:
+            current /= component
+            if not current.exists() and not current.is_symlink():
+                continue
+            metadata = current.lstat()
+            if stat.S_ISLNK(metadata.st_mode):
+                msg = "authorized_output_root cannot contain a symlink component."
+                raise ValueError(msg)
+            if current != output_root and not stat.S_ISDIR(metadata.st_mode):
+                msg = "authorized_output_root has a non-directory parent component."
+                raise ValueError(msg)
+        if output_root.exists() and not output_root.is_dir():
+            msg = "authorized_output_root must be absent or an existing directory."
+            raise ValueError(msg)
+
+    @staticmethod
+    def _validate_locked_study_head_custody_path(custody_path: Path, output_root: Path) -> None:
+        """Require one external canonical single-link head-custody path.
+
+        Raises:
+            TypeError: If a path has the wrong type.
+            ValueError: If the custody location is noncanonical, linked, inside
+                the mutable scientific output, or lacks a safe existing parent.
+        """
+        if not isinstance(custody_path, Path) or not isinstance(output_root, Path):
+            msg = "locked-study custody and output roots must be pathlib.Path values."
+            raise TypeError(msg)
+        canonical = Path(custody_path.resolve())
+        if not custody_path.is_absolute() or custody_path != canonical:
+            msg = "locked_study_head_custody_path must be an absolute canonical path."
+            raise ValueError(msg)
+        if custody_path.is_relative_to(output_root):
+            msg = "Locked-study head custody must remain outside the mutable confirmation output."
+            raise ValueError(msg)
+        parent = custody_path.parent
+        if parent.is_symlink() or not parent.is_dir():
+            msg = "Locked-study head custody requires an existing non-symlink parent directory."
+            raise ValueError(msg)
+        current = Path(parent.anchor)
+        for component in parent.parts[1:]:
+            current /= component
+            metadata = current.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                msg = "Locked-study head custody cannot contain a linked or non-directory parent."
+                raise ValueError(msg)
+        if custody_path.is_symlink():
+            msg = "Locked-study head custody cannot be a symlink."
+            raise ValueError(msg)
+        if custody_path.exists():
+            metadata = custody_path.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                msg = "Locked-study head custody must be a single-link regular file."
+                raise ValueError(msg)
+
     def preflight(self, repository_root: Path, output_root: Path) -> None:
         """Recheck frozen source and output-role isolation before mutation.
 
@@ -1362,8 +1592,17 @@ class ConfirmationExecutionContext:
         if not isinstance(repository_root, Path) or not isinstance(output_root, Path):
             msg = "repository_root and output_root must be pathlib.Path values."
             raise TypeError(msg)
-        if output_root.is_symlink() or (output_root.exists() and not output_root.is_dir()):
-            msg = "output_root must be absent or an existing non-symlink directory."
+        if output_root != self.authorized_output_root:
+            msg = "output_root differs from the confirmation context's authorized output root."
+            raise ValueError(msg)
+        self._validate_authorized_output_root(output_root)
+        self._validate_locked_study_head_custody_path(
+            self.locked_study_head_custody_path,
+            output_root,
+        )
+        repository = repository_root.resolve()
+        if self.locked_study_head_custody_path.is_relative_to(repository):
+            msg = "Locked-study head custody must remain outside the governed repository."
             raise ValueError(msg)
         verify_final_seal_source_lock(
             self.final_seal,
@@ -1392,6 +1631,9 @@ class ConfirmationExecutionContext:
             f"plan_checksum={self.plan.content_checksum!r}, "
             f"final_seal_checksum={self.final_seal.content_checksum!r}, "
             f"target_manifest_checksum={self.target_manifest.content_checksum!r}, "
+            f"prior_target_exposure_inventory_checksum={self.prior_target_exposure_inventory_checksum!r}, "
+            f"authorized_output_root={str(self.authorized_output_root)!r}, "
+            f"locked_study_head_custody_path={str(self.locked_study_head_custody_path)!r}, "
             "external_entropy_keyring=<redacted>)"
         )
 

@@ -26,6 +26,7 @@ from .production_executors import (
     ReopenedProductionResult,
     derive_result_artifact_ref,
     reopen_result_artifact,
+    validate_existing_confirmation_outcome,
 )
 from .training_orchestration import (
     TrainingJob,
@@ -475,13 +476,23 @@ def reopen_confirmatory_production_attempt(
     ):
         msg = "Confirmation custody requires an exact first-attempt paper-confirm job."
         raise ValueError(msg)
-    reference = derive_result_artifact_ref(
-        job_directory,
-        request.content_checksum,
-        1,
-        expected_reference_checksum=outcome.result_artifact_checksum,
-    )
-    custody = reopen_production_result(reference, job_directory)
+    if confirmation_context is None:
+        reference = derive_result_artifact_ref(
+            job_directory,
+            request.content_checksum,
+            1,
+            expected_reference_checksum=outcome.result_artifact_checksum,
+        )
+        custody = reopen_production_result(reference, job_directory)
+    else:
+        reopened = validate_existing_confirmation_outcome(
+            confirmation_context,
+            job,
+            outcome,
+            job_directory,
+        )
+        reference = reopened.reference
+        custody = ProductionResultCustody(reopened)
     evidence = custody.production_evidence
     raw = custody.raw_trajectory_payload
     expected_evaluation_policy_checksum = confirmatory_evaluation_policy_checksum(request)

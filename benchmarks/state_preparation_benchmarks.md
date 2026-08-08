@@ -653,6 +653,32 @@ evidence; pilot inference,
 complete screening replay, promotion, source freezing, and final sealing remain
 the explicit responsibility of WP22F.
 
+The prospective WP22G runner guard executes before preregistration, external
+entropy, or held-target access. `paper-confirm` now accepts only the sealed
+custody-artifact paths and minimal operational controls, requires an explicit
+CLI output root disjoint from and outside the source repository, and rejects
+symlinked, mixed-role, or non-directory output layouts before reveal. This
+route requires a calibration/source-bound exposure inventory and rejects every
+previously exposed target identifier or instance seed before target
+materialization. Held entropy is read as an owner-private, single-link regular
+file through a pinned nofollow descriptor.
+
+Before numerical dispatch, the runner publishes an all-unattempted aggregate
+study snapshot bound to the whole-plan session. Later content-addressed
+snapshots close the exact output tree, canonical terminal prefix, 576 sealed
+jobs, fixed trajectory accounting, 288 target/optimization-block pairability
+decisions, typed resource-stop proof, and complete or structured-incomplete
+status. Snapshot zero is written to the explicitly named external head-custody
+file before dispatch, and that reference advances after every terminal cell.
+Interrupted known-path bytes remain immutable opaque partial custody; resume
+never creates attempt two and requires the independently retained prior
+snapshot head. These controls change no scientific training, evaluation, or
+analysis behavior.
+
+The unimplemented tiered sweep over remaining standard-noise conditions,
+noiseless testing, and Ballarin evaluation is deferred to a separately
+versioned exploratory WP24 protocol; it is not part of primary WP23 execution.
+
 The TFIM-only `energy_adapt_vqe` smoke cell is an analytic API preflight with
 zero noisy training trajectories. It is not evidence for the preregistered
 noisy Energy-ADAPT treatment, which remains unsupported, and it is excluded

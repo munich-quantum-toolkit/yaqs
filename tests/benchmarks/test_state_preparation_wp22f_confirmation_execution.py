@@ -16,6 +16,7 @@ import pytest
 
 from benchmarks.state_preparation import training_runner
 from benchmarks.state_preparation.phase2 import production_executors as production_executor_module
+from benchmarks.state_preparation.phase2.confirmatory_study import PriorTargetExposureInventory
 from benchmarks.state_preparation.phase2.execution_context import ConfirmationExecutionContext
 from benchmarks.state_preparation.phase2.production_executors import (
     ProductionAttemptStore,
@@ -23,6 +24,7 @@ from benchmarks.state_preparation.phase2.production_executors import (
     ProductionConfirmationExecutor,
     SyntheticConfirmationFixture,
     create_default_training_executor_registry,
+    initialize_confirmation_plan_session,
     reopen_result_artifact,
 )
 from benchmarks.state_preparation.phase2.protocol import load_initial_preregistration
@@ -107,7 +109,13 @@ def test_source_locked_confirmation_authority_compiles_then_dispatches_one_bound
         raise RuntimeError(msg)
 
     monkeypatch.setattr(production_executor_module, "_dispatch_production_attempt", bounded_stop)
+    monkeypatch.setattr(
+        production_executor_module,
+        "_validate_confirmation_aggregate_plan_position",
+        lambda _context, _request: None,
+    )
     directory = output_root / job.output_path
+    initialize_confirmation_plan_session(context)
     executor = ProductionConfirmationExecutor(context)
     with pytest.raises(RuntimeError, match="bounded confirmation dispatch stop"):
         executor.execute(request, directory, JobExecutionControls(resume=False, overwrite=False))
@@ -224,8 +232,8 @@ def test_opted_in_confirmation_dry_run_preflights_plan_without_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit reveal consent permits dry-run validation but no numerical work."""
-    fixture = build_confirmation_context_fixture(tmp_path)
     output = tmp_path / "opted-in-confirmation-dry-run"
+    fixture = build_confirmation_context_fixture(tmp_path, authorized_output_root=output)
     options = training_runner.resolve_options(
         training_runner.parse_arguments([
             "--preset",
@@ -234,6 +242,8 @@ def test_opted_in_confirmation_dry_run_preflights_plan_without_dispatch(
             "--execute-expensive",
             "--repository-root",
             str(fixture.repository_root),
+            "--expected-locked-study-head",
+            str(tmp_path / "confirmation-study-head.json"),
             "--output",
             str(output),
         ])
@@ -250,6 +260,13 @@ def test_opted_in_confirmation_dry_run_preflights_plan_without_dispatch(
         pytest.fail("opted-in confirmation dry-run attempted numerical dispatch")
 
     monkeypatch.setattr(training_runner, "_load_confirmation_execution_context", load_authorized_context)
+    inventory = object.__new__(PriorTargetExposureInventory)
+    object.__setattr__(  # noqa: PLC2801 -- narrow checksum-only dry-run test seam
+        inventory,
+        "_content_checksum",
+        fixture.context.prior_target_exposure_inventory_checksum,
+    )
+    monkeypatch.setattr(training_runner, "_load_prior_target_exposure_inventory", lambda _options: inventory)
     monkeypatch.setattr(ProductionConfirmationExecutor, "execute", forbidden_dispatch)
     plan = training_runner.run(options)
     assert plan == fixture.context.plan

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,6 +74,8 @@ from .validation import (
 )
 
 if TYPE_CHECKING:
+    from .confirmatory_study import PriorTargetExposureInventory
+    from .confirmatory_study_store import LockedConfirmatoryStudySnapshotRef
     from .execution_context import ConfirmationExecutionContext, TrainingExecutionContext
 
 TRAINING_JOB_SCHEMA_VERSION = "yaqs.state_preparation.phase2.wp22_training_job.v2"
@@ -2247,6 +2250,66 @@ class TrainingRunSummary:
     succeeded: int
     failed: int
     skipped: int
+    locked_study_snapshot_path: str | None = None
+    locked_study_snapshot_ordinal: int | None = None
+    locked_study_snapshot_file_checksum: str | None = None
+    locked_study_snapshot_content_checksum: str | None = None
+    locked_study_snapshot_reference_checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate counts and optional externally anchorable study-head receipt.
+
+        Raises:
+            ValueError: If counts or the optional snapshot address are inconsistent.
+        """
+        for name in ("planned", "attempted", "succeeded", "failed", "skipped"):
+            object.__setattr__(self, name, require_int(getattr(self, name), name))
+        snapshot_fields = (
+            self.locked_study_snapshot_path,
+            self.locked_study_snapshot_ordinal,
+            self.locked_study_snapshot_file_checksum,
+            self.locked_study_snapshot_content_checksum,
+            self.locked_study_snapshot_reference_checksum,
+        )
+        if all(item is None for item in snapshot_fields):
+            return
+        if any(item is None for item in snapshot_fields):
+            msg = "Locked-study snapshot path and both checksums must be supplied together."
+            raise ValueError(msg)
+        object.__setattr__(
+            self,
+            "locked_study_snapshot_path",
+            require_relative_path(self.locked_study_snapshot_path, "locked_study_snapshot_path"),
+        )
+        object.__setattr__(
+            self,
+            "locked_study_snapshot_ordinal",
+            require_int(self.locked_study_snapshot_ordinal, "locked_study_snapshot_ordinal"),
+        )
+        object.__setattr__(
+            self,
+            "locked_study_snapshot_file_checksum",
+            require_checksum(
+                self.locked_study_snapshot_file_checksum,
+                "locked_study_snapshot_file_checksum",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "locked_study_snapshot_content_checksum",
+            require_checksum(
+                self.locked_study_snapshot_content_checksum,
+                "locked_study_snapshot_content_checksum",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "locked_study_snapshot_reference_checksum",
+            require_checksum(
+                self.locked_study_snapshot_reference_checksum,
+                "locked_study_snapshot_reference_checksum",
+            ),
+        )
 
 
 def training_job_attempt_path(job_directory: Path, attempt: int) -> Path:
@@ -2320,7 +2383,12 @@ def load_training_job_outcome_history(
     return tuple(outcomes)
 
 
-def _write_outcome_attempt(job_directory: Path, outcome: TrainingJobOutcome) -> Path:
+def _write_outcome_attempt(
+    job_directory: Path,
+    outcome: TrainingJobOutcome,
+    *,
+    staging_directory: Path | None = None,
+) -> Path:
     """Publish one outcome without replacing any prior attempt.
 
     Returns:
@@ -2339,21 +2407,71 @@ def _write_outcome_attempt(job_directory: Path, outcome: TrainingJobOutcome) -> 
         msg = f"Refusing to replace immutable outcome attempt {attempt_path}."
         raise ValueError(msg)
     payload = f"{canonical_json(outcome.to_dict())}\n".encode()
-    temporary = job_directory / f".{JOB_RESULT_NAME}.{outcome.content_checksum.removeprefix('sha256:')}.tmp"
-    atomic_write_bytes(temporary, payload)
+    temporary = _stage_outcome_payload(job_directory, outcome, payload, staging_directory)
     try:
-        os.link(temporary, attempt_path)
-    except FileExistsError as error:
-        msg = f"Refusing to replace immutable outcome attempt {attempt_path}."
-        raise ValueError(msg) from error
+        _publish_outcome_attempt(temporary, attempt_path, confirmation=staging_directory is not None)
     finally:
         temporary.unlink(missing_ok=True)
     return attempt_path
 
 
+def _publish_outcome_attempt(temporary: Path, attempt_path: Path, *, confirmation: bool) -> None:
+    """Publish a staged immutable outcome at its canonical attempt address.
+
+    Raises:
+        ValueError: If the immutable address already exists.
+    """
+    if not confirmation:
+        try:
+            os.link(temporary, attempt_path)
+        except FileExistsError as error:
+            msg = f"Refusing to replace immutable outcome attempt {attempt_path}."
+            raise ValueError(msg) from error
+        return
+    # The whole-plan confirmation lock excludes competing writers.  A
+    # same-filesystem rename leaves either the complete staged file outside the
+    # scientific tree or the complete canonical member, never a second hard
+    # link that poisons immutable resume custody.
+    if attempt_path.exists() or attempt_path.is_symlink():
+        msg = f"Refusing to replace immutable outcome attempt {attempt_path}."
+        raise ValueError(msg)
+    temporary.rename(attempt_path)
+    _fsync_directory(attempt_path.parent)
+
+
+def _stage_outcome_payload(
+    job_directory: Path,
+    outcome: TrainingJobOutcome,
+    payload: bytes,
+    staging_directory: Path | None,
+) -> Path:
+    """Stage one outer outcome inside generic or outside confirmatory output.
+
+    Returns:
+        The complete temporary file ready for immutable linking.
+    """
+    if staging_directory is None:
+        temporary = job_directory / f".{JOB_RESULT_NAME}.{outcome.content_checksum.removeprefix('sha256:')}.tmp"
+        atomic_write_bytes(temporary, payload)
+        return temporary
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".wp22-confirmation-outcome-",
+        suffix=".tmp",
+        dir=staging_directory,
+    )
+    temporary = Path(temporary_name)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return temporary
+
+
 def _synchronize_latest_outcome(
     job_directory: Path,
     history: Sequence[TrainingJobOutcome],
+    *,
+    staging_directory: Path | None = None,
 ) -> None:
     """Rebuild the non-authoritative latest projection from attempt history.
 
@@ -2372,7 +2490,48 @@ def _synchronize_latest_outcome(
     except OSError:
         matches = False
     if not matches:
-        atomic_write_bytes(result_path, payload)
+        if staging_directory is None:
+            atomic_write_bytes(result_path, payload)
+        else:
+            _replace_confirmation_projection(result_path, payload, staging_directory)
+
+
+def _replace_confirmation_projection(result_path: Path, payload: bytes, staging_directory: Path) -> None:
+    """Atomically replace a derived projection from staging outside output."""
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _stage_external_payload(
+        payload,
+        staging_directory,
+        prefix=".wp22-confirmation-projection-",
+    )
+    try:
+        temporary.replace(result_path)
+        _fsync_directory(result_path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _stage_external_payload(payload: bytes, directory: Path, *, prefix: str) -> Path:
+    """Durably stage complete bytes outside the scientific output tree.
+
+    Returns:
+        The complete temporary file.
+    """
+    descriptor, temporary_name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=directory)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return Path(temporary_name)
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Durably publish a completed rename or link in one directory."""
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _schedule_resume_state(
@@ -2426,6 +2585,7 @@ def _preflight_existing_outcomes(
     plan: TrainingRunPlan,
     output_root: Path,
     controls: JobExecutionControls,
+    confirmation_context: ConfirmationExecutionContext | None = None,
 ) -> None:
     """Validate the complete existing outcome universe without mutation.
 
@@ -2440,6 +2600,7 @@ def _preflight_existing_outcomes(
     if lock_path.is_symlink() or (lock_path.exists() and not lock_path.is_file()):
         msg = "The WP22 runner lock must be absent or an existing non-symlink regular file."
         raise ValueError(msg)
+    confirmation_history_exists = False
     for job in plan.jobs:
         job_directory = output_root
         for component in Path(job.output_path).parts:
@@ -2458,9 +2619,123 @@ def _preflight_existing_outcomes(
         if plan.preset == "paper-confirm" and len(history) > 1:
             msg = f"paper-confirm job {job.job_id} has more than one terminal attempt."
             raise ValueError(msg)
+        if confirmation_context is not None and history:
+            from .production_executors import (  # noqa: PLC0415 - avoids a module import cycle
+                validate_existing_confirmation_outcome,
+            )
+
+            validate_existing_confirmation_outcome(
+                confirmation_context,
+                job,
+                history[0],
+                job_directory,
+            )
+            confirmation_history_exists = True
+            expected_projection = f"{canonical_json(history[-1].to_dict())}\n".encode()
+            if result_path.exists() and result_path.read_bytes() != expected_projection:
+                msg = f"Confirmation latest-outcome projection for {job.job_id} differs from immutable history."
+                raise ValueError(msg)
         if history and not controls.resume and not controls.overwrite:
             msg = f"Outcome already exists for {job.job_id}; select resume or overwrite."
             raise ValueError(msg)
+    if confirmation_context is not None:
+        from .production_executors import (  # noqa: PLC0415 - avoids a module import cycle
+            CONFIRMATION_PLAN_SESSION_NAME,
+            validate_confirmation_plan_session,
+        )
+
+        marker = output_root / CONFIRMATION_PLAN_SESSION_NAME
+        if marker.exists() or marker.is_symlink():
+            validate_confirmation_plan_session(confirmation_context)
+        elif confirmation_history_exists:
+            msg = "Existing confirmation outcomes lack their whole-plan session marker."
+            raise ValueError(msg)
+
+
+def _is_confirmation_resource_failure(job: TrainingJob, reopened: object) -> bool:
+    """Return whether reopened evidence has an authenticated sealed-cap proof."""
+    request = job.confirm_execution_request
+    if request is None:
+        return False
+    from .production_executors import (  # noqa: PLC0415 - avoids a module import cycle
+        ReopenedProductionResult,
+        is_authenticated_confirmation_resource_limit_stop,
+    )
+
+    return isinstance(reopened, ReopenedProductionResult) and is_authenticated_confirmation_resource_limit_stop(
+        request,
+        reopened,
+    )
+
+
+def _validate_confirmation_outcome(
+    context: ConfirmationExecutionContext | None,
+    job: TrainingJob,
+    outcome: TrainingJobOutcome,
+    job_directory: Path,
+) -> object | None:
+    """Reopen real confirmation custody, or return ``None`` for other runs.
+
+    Returns:
+        The authenticated reopened attempt for real confirmation, otherwise
+        ``None``.
+    """
+    if context is None:
+        return None
+    from .production_executors import (  # noqa: PLC0415 - avoids a module import cycle
+        validate_existing_confirmation_outcome,
+    )
+
+    return validate_existing_confirmation_outcome(context, job, outcome, job_directory)
+
+
+def _dispatch_job_outcome(
+    executor: TrainingJobExecutor | TrainingExecutorRegistry,
+    job: TrainingJob,
+    job_directory: Path,
+    controls: JobExecutionControls,
+    attempt: int,
+    confirmation_context: ConfirmationExecutionContext | None,
+) -> tuple[TrainingJobOutcome, bool]:
+    """Dispatch one job and authenticate any real confirmation terminal custody.
+
+    Returns:
+        The redacted outer outcome and whether a sealed resource limit stopped
+        the confirmatory study.
+    """
+    try:
+        dispatched = (
+            executor.dispatch(job, job_directory, controls)
+            if isinstance(executor, TrainingExecutorRegistry)
+            else executor(job, job_directory, controls)
+        )
+        result_checksum = require_checksum(dispatched, "executor result artifact checksum")
+    except Exception:  # noqa: BLE001 - executor boundary persists one redacted ordinary failure
+        outcome = TrainingJobOutcome(
+            job_checksum=job.content_checksum,
+            status="failure",
+            result_artifact_checksum=None,
+            exception_type="executor_failure",
+            message="executor failed; secret-bearing diagnostics are intentionally not persisted",
+            attempt=attempt,
+        )
+        reopened = _validate_confirmation_outcome(
+            confirmation_context,
+            job,
+            outcome,
+            job_directory,
+        )
+        return outcome, reopened is not None and _is_confirmation_resource_failure(job, reopened)
+    outcome = TrainingJobOutcome(
+        job_checksum=job.content_checksum,
+        status="success",
+        result_artifact_checksum=result_checksum,
+        exception_type=None,
+        message=None,
+        attempt=attempt,
+    )
+    _validate_confirmation_outcome(confirmation_context, job, outcome, job_directory)
+    return outcome, False
 
 
 def execute_training_plan(
@@ -2474,6 +2749,8 @@ def execute_training_plan(
     fail_fast: bool = False,
     context: TrainingExecutionContext | ConfirmationExecutionContext | None = None,
     repository_root: Path | None = None,
+    prior_target_exposure_inventory: PriorTargetExposureInventory | None = None,
+    expected_locked_study_head: LockedConfirmatoryStudySnapshotRef | None = None,
 ) -> TrainingRunSummary:
     """Execute or dry-run a sealed plan with atomic per-job outcomes.
 
@@ -2493,6 +2770,8 @@ def execute_training_plan(
     controls = JobExecutionControls(resume=resume, overwrite=overwrite)
     dry = require_bool(dry_run, "dry_run")
     stop_early = require_bool(fail_fast, "fail_fast")
+    confirmation_context: ConfirmationExecutionContext | None = None
+    confirmation_inventory: PriorTargetExposureInventory | None = None
     if context is not None:
         from .execution_context import (  # noqa: PLC0415 - avoids a module import cycle
             ConfirmationExecutionContext,
@@ -2509,27 +2788,186 @@ def execute_training_plan(
             msg = "repository_root is required with a TrainingExecutionContext."
             raise TypeError(msg)
         context.preflight(repository_root, output_root)
+        if isinstance(context, ConfirmationExecutionContext):
+            confirmation_context = context
+            from .confirmatory_study import (  # noqa: PLC0415 - avoids a module import cycle
+                PriorTargetExposureInventory,
+            )
+
+            if not isinstance(prior_target_exposure_inventory, PriorTargetExposureInventory):
+                msg = "Real confirmation requires its typed prior-target exposure inventory."
+                raise TypeError(msg)
+            if context.prior_target_exposure_inventory_checksum != prior_target_exposure_inventory.content_checksum:
+                msg = "Prior-target exposure inventory differs from the confirmation context."
+                raise ValueError(msg)
+            confirmation_inventory = prior_target_exposure_inventory
     if plan.preset == "paper-confirm" and controls.overwrite:
         msg = "paper-confirm forbids overwrite because its first terminal attempt is authoritative."
         raise ValueError(msg)
+    if plan.preset == "paper-confirm" and stop_early:
+        msg = "paper-confirm forbids fail_fast because every sealed cell belongs to the intention-to-treat study."
+        raise ValueError(msg)
+    if confirmation_context is not None:
+        from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a module import cycle
+            LockedConfirmatoryStudySnapshotRef,
+        )
+
+        if (
+            controls.resume
+            and not isinstance(expected_locked_study_head, LockedConfirmatoryStudySnapshotRef)
+            and confirmation_context.locked_study_head_custody_path.exists()
+        ):
+            msg = "paper-confirm resume requires its externally retained locked-study head reference."
+            raise ValueError(msg)
+        if not controls.resume and expected_locked_study_head is not None:
+            msg = "A locked-study head reference is only valid for explicit paper-confirm resume."
+            raise ValueError(msg)
+        if not controls.resume and confirmation_context.locked_study_head_custody_path.exists():
+            msg = "Fresh paper-confirm execution refuses existing external locked-study head custody."
+            raise ValueError(msg)
+    elif expected_locked_study_head is not None:
+        msg = "A locked-study head reference requires a real confirmation execution context."
+        raise ValueError(msg)
     _validate_executor_registration(plan, executor)
-    _preflight_existing_outcomes(plan, output_root, controls)
+    if plan.preset == "paper-confirm" and confirmation_context is None:
+        msg = "paper-confirm execution requires its exact ConfirmationExecutionContext."
+        raise ValueError(msg)
+    if confirmation_context is not None and plan.preset != "paper-confirm":
+        msg = "A ConfirmationExecutionContext may execute only its paper-confirm plan."
+        raise ValueError(msg)
+    _preflight_existing_outcomes(plan, output_root, controls, confirmation_context)
     if dry:
+        if confirmation_context is not None and confirmation_inventory is not None:
+            from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a module import cycle
+                confirmation_output_has_owned_state,
+                validate_locked_confirmatory_study_output,
+            )
+
+            dry_head = validate_locked_confirmatory_study_output(
+                confirmation_context,
+                confirmation_inventory,
+                expected_locked_study_head,
+            )
+            if controls.resume and dry_head is None and not confirmation_output_has_owned_state(output_root):
+                msg = "paper-confirm resume cannot recreate an absent confirmation output universe."
+                raise ValueError(msg)
         return TrainingRunSummary(len(plan.jobs), 0, 0, 0, 0)
-    output_root.mkdir(parents=True, exist_ok=True)
+    if confirmation_context is None:
+        output_root.mkdir(parents=True, exist_ok=True)
     attempted = succeeded = failed = skipped = 0
-    with FileLock(str(output_root / ".wp22-training-runner.lock")):
+    snapshot_ref = None
+    run_lock_path = (
+        output_root / ".wp22-training-runner.lock"
+        if confirmation_context is None
+        else output_root.parent / f".{output_root.name}.wp22-confirmation-runner.lock"
+    )
+    with FileLock(str(run_lock_path)):
+        confirmation_staging_directory = output_root.parent if confirmation_context is not None else None
+        if context is not None:
+            context.preflight(cast("Path", repository_root), output_root)
+        _preflight_existing_outcomes(plan, output_root, controls, confirmation_context)
+        if confirmation_context is not None:
+            if confirmation_inventory is None:
+                msg = "Real confirmation lost its required prior-target exposure inventory."
+                raise ValueError(msg)
+            from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a module import cycle
+                CONFIRMATORY_STUDY_DIRECTORY_NAME,
+                _republish_current_locked_confirmatory_study_head,
+                confirmation_output_has_interrupted_attempt,
+                confirmation_output_has_owned_state,
+                publish_locked_confirmatory_study_snapshot,
+                validate_locked_confirmatory_study_output,
+            )
+            from .production_executors import (  # noqa: PLC0415 - avoids a module import cycle
+                CONFIRMATION_PLAN_SESSION_NAME,
+                initialize_confirmation_plan_session,
+                validate_confirmation_plan_session,
+            )
+
+            owned_before_invocation = confirmation_output_has_owned_state(output_root)
+            if controls.resume:
+                if not owned_before_invocation:
+                    msg = "paper-confirm resume cannot recreate an absent confirmation output universe."
+                    raise ValueError(msg)
+                snapshot_ref = validate_locked_confirmatory_study_output(
+                    confirmation_context,
+                    confirmation_inventory,
+                    expected_locked_study_head,
+                )
+            elif owned_before_invocation:
+                msg = "Existing confirmation-owned output requires explicit resume and external head custody."
+                raise ValueError(msg)
+            output_root.mkdir(parents=True, exist_ok=True)
+            marker = output_root / CONFIRMATION_PLAN_SESSION_NAME
+            if marker.exists() or marker.is_symlink():
+                validate_confirmation_plan_session(confirmation_context)
+            elif controls.resume:
+                msg = "paper-confirm resume cannot recreate a missing whole-plan session marker."
+                raise ValueError(msg)
+            else:
+                initialize_confirmation_plan_session(confirmation_context)
+            study_directory = output_root / CONFIRMATORY_STUDY_DIRECTORY_NAME
+            has_snapshots = study_directory.is_dir() and any(study_directory.iterdir())
+            if has_snapshots:
+                if snapshot_ref is None:
+                    snapshot_ref = validate_locked_confirmatory_study_output(
+                        confirmation_context,
+                        confirmation_inventory,
+                        expected_locked_study_head,
+                    )
+                if not controls.resume:
+                    msg = "A pre-existing locked confirmation study requires explicit resume."
+                    raise ValueError(msg)
+                has_interrupted_attempt = confirmation_output_has_interrupted_attempt(
+                    confirmation_context,
+                    confirmation_inventory,
+                )
+                if expected_locked_study_head is None and has_interrupted_attempt:
+                    msg = "Interrupted confirmatory custody requires its externally retained prior head."
+                    raise ValueError(msg)
+                if has_interrupted_attempt:
+                    snapshot_ref = _republish_current_locked_confirmatory_study_head(
+                        confirmation_context,
+                        confirmation_inventory,
+                        expected_locked_study_head,
+                    )
+                else:
+                    snapshot_ref = publish_locked_confirmatory_study_snapshot(
+                        confirmation_context,
+                        confirmation_inventory,
+                    )
+            else:
+                if expected_locked_study_head is not None:
+                    msg = "Externally retained study head exists but the snapshot chain is absent."
+                    raise ValueError(msg)
+                snapshot_ref = publish_locked_confirmatory_study_snapshot(
+                    confirmation_context,
+                    confirmation_inventory,
+                )
         for job in plan.jobs:
             job_directory = output_root / job.output_path
             existing: TrainingJobOutcome | None = None
             history = load_training_job_outcome_history(job_directory, job)
-            _synchronize_latest_outcome(job_directory, history)
+            _synchronize_latest_outcome(
+                job_directory,
+                history,
+                staging_directory=confirmation_staging_directory,
+            )
             if plan.preset == "paper-confirm" and len(history) > 1:
                 msg = f"paper-confirm job {job.job_id} has more than one terminal attempt."
                 raise ValueError(msg)
             if history:
                 existing = history[-1]
                 if controls.resume and (existing.status == "success" or plan.preset == "paper-confirm"):
+                    reopened = _validate_confirmation_outcome(
+                        confirmation_context,
+                        job,
+                        existing,
+                        job_directory,
+                    )
+                    if reopened is not None and _is_confirmation_resource_failure(job, reopened):
+                        skipped += 1
+                        break
                     skipped += 1
                     continue
                 if not controls.resume and not controls.overwrite:
@@ -2542,41 +2980,54 @@ def execute_training_plan(
                 overwrite=controls.overwrite,
                 schedule_resume_state=_schedule_resume_state(job, controls, existing),
             )
-            try:
-                dispatched = (
-                    executor.dispatch(job, job_directory, job_controls)
-                    if isinstance(executor, TrainingExecutorRegistry)
-                    else executor(job, job_directory, job_controls)
-                )
-                result_checksum = require_checksum(
-                    dispatched,
-                    "executor result artifact checksum",
-                )
-                outcome = TrainingJobOutcome(
-                    job_checksum=job.content_checksum,
-                    status="success",
-                    result_artifact_checksum=result_checksum,
-                    exception_type=None,
-                    message=None,
-                    attempt=attempt,
-                )
+            outcome, resource_stop = _dispatch_job_outcome(
+                executor,
+                job,
+                job_directory,
+                job_controls,
+                attempt,
+                confirmation_context,
+            )
+            if outcome.status == "success":
                 succeeded += 1
-            except Exception:  # noqa: BLE001 - executor boundary must redact and persist arbitrary ordinary failures
-                outcome = TrainingJobOutcome(
-                    job_checksum=job.content_checksum,
-                    status="failure",
-                    result_artifact_checksum=None,
-                    exception_type="executor_failure",
-                    message="executor failed; secret-bearing diagnostics are intentionally not persisted",
-                    attempt=attempt,
-                )
+            else:
                 failed += 1
             job_directory.mkdir(parents=True, exist_ok=True)
-            _write_outcome_attempt(job_directory, outcome)
-            _synchronize_latest_outcome(job_directory, (*history, outcome))
-            if outcome.status == "failure" and stop_early:
+            _write_outcome_attempt(
+                job_directory,
+                outcome,
+                staging_directory=confirmation_staging_directory,
+            )
+            _synchronize_latest_outcome(
+                job_directory,
+                (*history, outcome),
+                staging_directory=confirmation_staging_directory,
+            )
+            if confirmation_context is not None and confirmation_inventory is not None:
+                from .confirmatory_study_store import (  # noqa: PLC0415 - avoids a module import cycle
+                    publish_locked_confirmatory_study_snapshot,
+                )
+
+                snapshot_ref = publish_locked_confirmatory_study_snapshot(
+                    confirmation_context,
+                    confirmation_inventory,
+                )
+            if outcome.status == "failure" and (stop_early or resource_stop):
                 break
-    return TrainingRunSummary(len(plan.jobs), attempted, succeeded, failed, skipped)
+    if snapshot_ref is None:
+        return TrainingRunSummary(len(plan.jobs), attempted, succeeded, failed, skipped)
+    return TrainingRunSummary(
+        len(plan.jobs),
+        attempted,
+        succeeded,
+        failed,
+        skipped,
+        locked_study_snapshot_path=snapshot_ref.relative_path,
+        locked_study_snapshot_ordinal=snapshot_ref.ordinal,
+        locked_study_snapshot_file_checksum=snapshot_ref.file_checksum,
+        locked_study_snapshot_content_checksum=snapshot_ref.snapshot_content_checksum,
+        locked_study_snapshot_reference_checksum=snapshot_ref.content_checksum,
+    )
 
 
 __all__ = [

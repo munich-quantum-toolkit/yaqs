@@ -2214,18 +2214,19 @@ without materializing confirmatory targets.
 
 ### Prospective replanning status
 
-**Replanned before execution.** The original monolithic WP22 is decomposed into
-WP22A through WP22F below. No WP22 numerical pilot, screening, promotion, or
-final-seal evidence has been generated. The initial WP15 preregistration remains
-immutable; this reviewed plan revision is a prospective operational addendum
-that fills implementation details which the preregistration did not specify.
-The final seal must bind both documents and the commits that introduced them.
-If they ever conflict, the preregistration governs and execution aborts rather
-than weakening its protections.
+**Replanned before execution.** The original monolithic WP22 was decomposed into
+WP22A through WP22F. WP22G below is a second prospective custody hardening
+addendum introduced before any held confirmatory target is revealed. No WP22
+numerical pilot, screening, promotion, or final-seal evidence has been
+generated. The initial WP15 preregistration remains immutable; these reviewed
+plan revisions fill operational details which the preregistration did not
+specify. The final seal must bind the governing documents and the commits that
+introduced them. If they ever conflict, the preregistration governs and
+execution aborts rather than weakening its protections.
 
 Each subpackage receives a separate implementation commit and review. WP22 is
-not implemented until WP22F passes. Planning-only records, callback seams, or
-synthetic fixtures do not satisfy an execution acceptance criterion.
+not operationally complete until WP22G passes. Planning-only records, callback
+seams, or synthetic fixtures do not satisfy an execution acceptance criterion.
 
 ### Frozen population and method scope
 
@@ -2660,13 +2661,94 @@ without materializing confirmation; and all execution and primary-analysis code
 is committed and fingerprinted before the immutable, pilot-feasible final seal
 is written.
 
+### WP22G: Prospective pre-reveal runner and output-custody hardening
+
+**Status: implemented prospectively; depends on WP22A through WP22F and must be
+reviewed before WP23 unblinding.**
+
+Harden only the operational boundary of the already frozen `paper-confirm`
+route. This subpackage adds no training, evaluation, target-generation, or
+analysis behavior and changes no sealed method, schedule, count, seed, noise,
+resource, or statistical choice.
+
+- Apply a strict allowlist before preregistration, external entropy, or held
+  target paths are opened. Only sealed custody-artifact locations, exact
+  checksum assertions that are subsequently verified, `resume`, `dry_run`, the
+  expensive-execution opt-in, repository identity, and output custody controls
+  are admitted.
+- Reject method and pipeline assertions, stage depths or budgets, training
+  noise or strength, update and sampling policies, training or validation
+  counts, CRN and checkpoint controls, resource overrides, pilot seeds,
+  overwrite/fail-fast controls, resumability fingerprints, and caller-selected
+  executor or execution-profile routes.
+- Require an explicit CLI `--output` for `paper-confirm`; the output root must
+  be disjoint from and outside `repository_root`, contain no symlink component,
+  and contain no development or screening role tree. No repository-relative
+  confirmation output default is admissible. Its writable parent must share the
+  output filesystem and holds only non-authoritative crash staging and the
+  whole-run lock; temporary files never enter the scientific output inventory.
+- Preserve the earlier programmatic context/executor-injection rejection order
+  and the explicitly opted-in dry-run semantics.
+- Require a checksum-sealed prior-target exposure inventory that closes the
+  legacy, Phase-I, pilot, and screening identifier/instance-seed universe and
+  binds the exact pilot/screen plans, production-calibration custody, and
+  governed execution source. Reject every confirmation ID or instance-seed
+  collision before reading held entropy or materializing a target.
+- Read held entropy only from an owner-private, single-link regular file through
+  a pinned nofollow descriptor with stable pre/open/post identity and exact
+  length checks.
+- Bind every real executor to the one canonical output root, plan job directory,
+  and canonical plan position. A whole-plan marker and all-unattempted locked
+  study snapshot must exist before direct production dispatch can resolve or
+  materialize a held target.
+- Close the exact output tree with content-addressed append-only study
+  snapshots. Each snapshot includes all 576 plan rows, the contiguous terminal
+  prefix, authenticated first-attempt production references, fixed trajectory
+  counts, 288 explicit independent-stream pairability records, typed
+  resource-limit proof/status, source/target/exposure roots, and exact
+  non-snapshot byte receipts.
+- Preserve truncated or zero-byte known-path members as opaque immutable partial
+  custody and recover an interrupted production attempt into its same
+  first-attempt structured failure. Never overwrite scientific bytes or create
+  attempt two. Authenticate every existing outer/production result before skip.
+- Emit the checksum-sealed snapshot-head reference for independent/WORM custody;
+  require its external custody path on the first invocation, publish snapshot
+  zero there before dispatch, advance it after every terminal cell, and require
+  the retained authenticated chain member on every resume to prevent rollback
+  or alternate append-only branches. `fail_fast` remains forbidden.
+
+#### WP22G tests and acceptance criteria
+
+- Sentinels prove every forbidden knob and unsafe output layout fails before
+  preregistration, entropy-key, or held-target access.
+- Config-only output, repository-contained or repository-containing output,
+  symlinked paths, mixed role trees, and non-directory role paths fail closed.
+- Existing programmatic-injection ordering, opt-in enforcement, and dry-run
+  non-dispatch behavior remain unchanged.
+- Collision fixtures prove exposed IDs/seeds fail before entropy or target
+  materialization; secure-file tests cover symlink, hardlink, mode, length, and
+  descriptor/path identity races.
+- Exact-store tests cover snapshot-zero-before-results, canonical directory
+  binding, foreign/special/link rejection, fixed-count custody, contiguous
+  terminal prefixes, resource-stop suffix rejection, crash recovery, immutable
+  resume, external-head rollback rejection, and no second attempt.
+- The primary WP23 execution design is byte-for-byte unchanged.
+
+The previously described tiered secondary sweep over remaining standard-noise
+conditions, noiseless testing, and Ballarin evaluation is not implemented by
+WP22G or WP23. It is deferred to WP24 as separately versioned exploratory work,
+must use independent artifact identities, and cannot alter the sealed primary
+analysis or claims. Ballarin remains evaluation-only.
+
 ### Boundary with WP23 and WP24
 
 WP22F may create the immutable final seal and test confirmation custody with
 synthetic fixtures or stop the real, source-locked route before numerical
-training. It may not expose the held confirmatory population. WP23 alone reveals
-the externally custodied confirmatory manifest and runs the already frozen
-executor; it adds no training, evaluation, or analysis behavior.
+training. WP22G hardens the pre-reveal CLI and output-custody boundary without
+changing that sealed scientific route. Neither may expose the held confirmatory
+population. WP23 alone reveals the externally custodied confirmatory manifest
+and runs the already frozen executor; it adds no training, evaluation, or
+analysis behavior.
 
 WP22 may freeze and synthetically test primary-analysis source, but it does not
 analyze real confirmatory outcomes, generate paper figures, formulate claims, or
@@ -2722,9 +2804,6 @@ source. It must refuse to run if:
   coupling is allowed only when stable native gate identifiers align; otherwise
   record independent Monte Carlo streams.
 - Use the sealed primary fixed-rate noise condition for the powered comparison.
-  Evaluate the remaining standard configurations, noiseless test, and Ballarin
-  in a tiered secondary sweep only within the sealed compute budget. Ballarin
-  remains evaluation-only.
 - Preserve every failure row and partial artifact and apply the sealed
   intention-to-treat and failure-rate rules.
 - Default to sequential execution until pilot measurements justify safe,
@@ -2741,7 +2820,7 @@ source. It must refuse to run if:
 - Target/optimization-block pairing and explicit event-pairability metadata.
 - Resource-limit stopping and structured incomplete-study status.
 - Resume without changing the sealed design.
-- No Ballarin training and continued Ballarin evaluation.
+- No Ballarin training; WP23 adds no secondary Ballarin evaluation route.
 
 ### Acceptance criteria
 
@@ -2765,6 +2844,10 @@ one-command-reproducible publication package.
 - Execute the frozen primary-analysis code and checksum from the final seal
   without post-unblinding edits. Version any additional analysis separately and
   label it exploratory.
+- Run any tiered secondary sweep over remaining standard-noise conditions,
+  noiseless testing, or Ballarin evaluation only as a separately versioned
+  exploratory WP24 protocol with distinct artifacts and no effect on the sealed
+  primary analysis. Ballarin remains evaluation-only.
 - Analyze target and optimization-seed blocks rather than treating trajectories
   as independent algorithm repetitions.
 - Separate:

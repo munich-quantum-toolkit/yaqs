@@ -4,6 +4,57 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Harden paper confirmation before target reveal
+
+WP22G narrows `paper-confirm` to sealed custody inputs and the minimal
+operational controls required to execute them. Caller-selected method,
+pipeline, schedule, stage, noise, trajectory, checkpoint, CRN, resource,
+pilot-seed, overwrite/fail-fast, resumability, execution-profile, and executor
+options are rejected before preregistration, external entropy, or held-target
+access, even when an explicitly supplied value equals its old default.
+
+Every confirmation invocation must now provide `--output` directly on the CLI.
+The resolved root must be disjoint from and outside `repository_root`, contain
+no symlink component, and contain no development or screening role tree;
+configuration-only output and the former repository-relative preset default do
+not authorize reveal. Its writable parent must be on the same filesystem so
+complete session, outcome, projection, and snapshot bytes can be staged outside
+the scientific tree and atomically renamed. Existing opted-in dry runs and the
+earlier rejection of programmatic context/executor injection remain unchanged.
+
+`--prior-target-exposure-inventory` (`--target-exposure-inventory`) is now a
+required checksum-sealed artifact, not a reserved option. It must close the
+legacy, Phase-I, pilot, and screening target IDs and instance seeds; bind the
+exact pilot/screen plans, production calibration, custody roots, and governed
+execution source; and prove that every confirmatory ID and seed is novel before
+held entropy is read or targets are materialized. Confirmatory entropy files
+must be single-link, owner-private regular files and are read through a pinned
+nofollow descriptor.
+
+Real dispatch now requires an all-unattempted content-addressed study snapshot
+after the whole-plan session marker is established. The output store admits
+only the canonical plan-derived job tree, one immutable outer/production first
+attempt per terminal prefix cell, and its exact authenticated members; foreign,
+linked, special, missing, reordered, or changed members fail closed. Interrupted
+known-path bytes are preserved as opaque partial custody and recovered into the
+same first-attempt structured failure. Normalized/native resource stops require
+typed proof bound to the sealed request and caps, never an exception class name.
+
+Every reveal-bearing invocation must name an external custody file with
+`--expected-locked-study-head`, including the first invocation. The runner
+writes snapshot zero there before numerical dispatch and advances the sealed
+reference after each terminal cell; place that file on independent/WORM-backed
+custody. Resume reuses the same file and requires its retained reference to be
+an authenticated member of the on-disk append-only chain before held inputs are
+opened. `fail_fast` remains forbidden at both CLI and orchestration boundaries
+because all sealed cells belong to the intention-to-treat study.
+
+This is an operational and custody change only. It does not alter the primary
+WP23 design or add training, evaluation, or analysis behavior. The previously
+planned tiered secondary standard-noise, noiseless, and Ballarin evaluation
+sweep is deferred to WP24 and must be versioned and reported separately as
+exploratory work; Ballarin remains evaluation-only.
+
 ### Seal WP22 pilot and screening evidence before confirmation
 
 WP22F replaces caller-authored pilot summaries, screening rows, resource roots,
