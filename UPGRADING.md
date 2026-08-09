@@ -4,6 +4,62 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### Complete the operational artifact ceremony before confirmation
+
+WP22H adds a repository-owned, non-numerical ceremony around the
+frozen WP22 runner and custody APIs. WP22A through WP22G provide implementation
+and synthetic verification; they do not by themselves prove that the real pilot
+and screening populations were executed or that a production final seal exists.
+Synthetic fixtures, schema-valid stand-ins, dry runs, and directly constructed
+seal objects are test evidence only and must not be presented as study evidence.
+
+The ceremony has six ordered stages: `prepare-pilot`; execution of the existing
+`paper-pilot` plan; `close-pilot-prepare-screen`; execution of the existing
+`paper-screen` plan; `close-screen-seal`; and `verify-ready`. The ceremony stages
+add no numerical callbacks. They capture a clean source root, reopen all 1,080
+pilot and 1,296 screening first attempts, mechanically derive every pilot,
+sample-size, calibration, promotion, final-configuration, final-seal, and
+prior-exposure artifact, and finally emit a checksum-sealed readiness receipt and
+exact `paper-confirm` handoff.
+
+Use an explicit ceremony root outside the repository. Each stage requires the
+preceding receipt, publishes immutable members and its aggregate index last, and
+refuses overwrite, partial authoritative state, or artifacts from another source
+or ceremony chain. Resume is idempotent only for the same authenticated inputs.
+Keep the source checkout exactly clean throughout capture, derivation, sealing,
+and readiness verification.
+
+Invoke the four path-only stages with
+`python -m benchmarks.state_preparation.phase2.operational_ceremony_runner`; the
+[WP22H operational command template](benchmarks/state_preparation_benchmarks.md#wp22h-operational-command-template)
+lists every required flag. Retain each stdout `WP22HStageRunReceipt` outside the
+ceremony root and pass its `bundle_index_checksum`—not a stage-manifest or
+receipt checksum—as the next stage's
+`--expected-predecessor-index-checksum`.
+
+The existing `paper-pilot` and `paper-screen` numerical runs remain separate.
+Supply their stage bundle's individual execution profile, binding catalog,
+target configuration/manifest, resumability fingerprint, preregistration, and
+execution-source artifacts; `paper-screen` also needs its screening manifest and
+sample-size design. The runner reconstructs the frozen plan, while the published
+plan and analysis-source bytes remain custody for the next ceremony stage. Use
+the runbook's literal commands against the fixed stage paths. An exact restart
+may add only `--resume`; do not add `--execute-expensive`, pilot-seed flags, or
+scientific, executor, resource, overwrite, or fail-fast overrides.
+
+Supply only the externally custodied public confirmatory target
+configuration/commitment at final sealing. WP22H has no option for the held
+manifest, target identifiers or seeds, entropy file, or target vectors and must
+not open them. Do not begin WP23 until an independent reviewer has verified both
+the terminal `WP22HReadinessReceipt` (pre-seal chain head, stage-two operational
+paths, and scientific registry) and the externally retained terminal
+`VERIFY_READY` `WP22HStageRunReceipt` with its matching `bundle_index.json`
+(published-file inventory). Every referenced source, pilot, screening,
+calibration, catalog, final-seal, prior-exposure, and public-commitment byte must
+reproduce; WP23 then uses the unchanged hardened `paper-confirm` path. The
+presence of the implementation or these templates does not mean the real
+ceremony has run.
+
 ### Harden paper confirmation before target reveal
 
 WP22G narrows `paper-confirm` to sealed custody inputs and the minimal

@@ -2740,15 +2740,112 @@ WP22G or WP23. It is deferred to WP24 as separately versioned exploratory work,
 must use independent artifact identities, and cannot alter the sealed primary
 analysis or claims. Ballarin remains evaluation-only.
 
+### WP22H: Operational artifact ceremony and pre-unblinding readiness
+
+**Status: implemented prospectively; depends on WP22A through WP22G and the
+real operational ceremony must be completed before WP23 unblinding.**
+
+Add one repository-owned operational ceremony around the frozen WP22 execution
+and custody APIs. WP22H adds no training, evaluation, target-generation,
+promotion, sample-size, resource, or analysis rule. It may derive artifacts only
+from exact source-locked contexts and authenticated first-attempt production
+custody, and it must not accept caller-authored scientific summaries.
+
+The ceremony has six ordered stages:
+
+1. `prepare-pilot` captures the governed execution and analysis source manifests
+   from one exactly clean committed checkout and publishes the exact pilot input
+   bundle and plan.
+2. The existing `paper-pilot` runner executes that frozen 1,080-job plan; WP22H
+   adds no numerical callback or alternate executor.
+3. `close-pilot-prepare-screen` reopens every authoritative pilot first attempt,
+   derives the q6 nuisance summary, sample-size design, and pilot compute
+   calibration, and publishes the exact calibrated 1,296-job screen bundle.
+4. The existing `paper-screen` runner executes that frozen plan; WP22H again adds
+   no numerical behavior.
+5. `close-screen-seal` reopens every authoritative screening first attempt and
+   derives screening evidence, the mechanical promotion decision, production
+   resource calibration, the final-configuration execution manifest, final seal,
+   and prior-target exposure inventory.
+6. `verify-ready` strictly reopens and mechanically rederives the complete chain,
+   verifies the clean source root, and emits one checksum-sealed readiness receipt
+   and exact `paper-confirm` artifact handoff without dispatching confirmation.
+
+The four non-numerical commands are exposed through
+`python -m benchmarks.state_preparation.phase2.operational_ceremony_runner`; the
+[benchmark runbook](state_preparation_benchmarks.md#wp22h-operational-command-template)
+lists every required path flag. Retain each command's stdout
+`WP22HStageRunReceipt` outside the ceremony root and pass its exact
+`bundle_index_checksum` as the successor's
+`--expected-predecessor-index-checksum`; a stage-manifest or receipt checksum is
+not a substitute.
+
+The two numerical gaps remain invocations of the existing
+`benchmarks.state_preparation.training_runner`, not WP22H commands. `paper-pilot`
+and `paper-screen` consume the preceding bundle's individually published
+execution profile, binding catalog, target configuration/manifest,
+resumability-fingerprint, preregistration, and execution-source artifacts (plus
+the screening manifest and sample-size design for `paper-screen`). The runner
+reconstructs the frozen plan; the published `training_plan.json` and analysis
+source manifest remain custody artifacts that the successor ceremony stage
+reopens and verifies. The runbook gives the literal commands against the fixed
+`00-prepare-pilot` and `01-close-pilot-prepare-screen` paths. Exact restart may
+add only `--resume`; neither initial execution nor restart may add
+`--execute-expensive`, pilot-seed flags, or scientific/implementation overrides.
+
+All ceremony artifacts live in an explicit output root outside the repository.
+Each stage requires the preceding checksum-sealed receipt, writes immutable or
+content-addressed members, and publishes its aggregate index last. Resume may
+only reproduce or extend the same authenticated chain; overwrite, mixed roots,
+alternate predecessors, partial authoritative bundles, and caller-selected
+scientific values fail closed.
+
+Before final sealing, WP22H accepts only an externally custodied public
+confirmatory target configuration/commitment whose family counts equal the
+pilot-derived design. It has no option or API for a held confirmatory manifest,
+instance identifier, instance seed, entropy file, or target vector. Those inputs
+remain unopened until the separately authorized WP23 invocation.
+
+The completed ceremony yields two complementary authorization records. The
+terminal bundle's `WP22HReadinessReceipt` binds the pre-seal chain head,
+stage-two operational-paths ledger, clean commit, scientific
+source/custody/derivation checksums, and logical artifact registry. The
+externally retained terminal `VERIFY_READY`
+`WP22HStageRunReceipt` binds the terminal `bundle_index.json`, which closes the
+actual published-file inventory. Synthetic fixtures, schema-valid stand-ins, dry
+runs, and direct construction of a final-seal object are test evidence only;
+none constitutes a completed WP22 production ceremony.
+
+#### WP22H tests and acceptance criteria
+
+- Bounded lifecycle tests cover all six transitions, strict round trips,
+  deterministic rederivation, immutable resume, index-last crash recovery, and
+  rejection of a missing, changed, foreign, or reordered predecessor.
+- Representative production records exercise real first-attempt reopening, while
+  exact full-grid custody fixtures cover the 1,080- and 1,296-row derivations
+  without invoking a numerical callback.
+- Missing, nonterminal, second-attempt, wrong-source, wrong-count, or tampered
+  pilot or screening custody publishes no successor receipt.
+- q12 pilot archive changes cannot affect q6 inference, sample size, compute cap,
+  promotion, or final-seal bytes.
+- Sentinels prove source dirtiness and invalid public commitments fail before any
+  held path is opened, and that neither the ceremony nor `verify-ready` can
+  dispatch WP23.
+- WP23 is authorized only after independent review of both the checksum-valid
+  `WP22HReadinessReceipt` and the terminal `VERIFY_READY` `WP22HStageRunReceipt`
+  with its matching `bundle_index.json`; the logical registry and published-file
+  inventory must each reproduce byte for byte.
+
 ### Boundary with WP23 and WP24
 
 WP22F may create the immutable final seal and test confirmation custody with
 synthetic fixtures or stop the real, source-locked route before numerical
 training. WP22G hardens the pre-reveal CLI and output-custody boundary without
-changing that sealed scientific route. Neither may expose the held confirmatory
-population. WP23 alone reveals the externally custodied confirmatory manifest
-and runs the already frozen executor; it adds no training, evaluation, or
-analysis behavior.
+changing that sealed scientific route. WP22H operationalizes the real pilot and
+screen closure and issues the pre-unblinding readiness receipt without changing
+or executing that route. None may expose the held confirmatory population. WP23
+alone reveals the externally custodied confirmatory manifest and runs the already
+frozen executor; it adds no training, evaluation, or analysis behavior.
 
 WP22 may freeze and synthetically test primary-analysis source, but it does not
 analyze real confirmatory outcomes, generate paper figures, formulate claims, or
@@ -2758,7 +2855,14 @@ build the archival publication bundle. Those remain WP24.
 
 ### Dependencies
 
-The Phase II runner and final confirmation seal from WP22.
+Independent review of both WP22H authorization records: the terminal
+`WP22HReadinessReceipt`, including its pre-seal chain head, stage-two operational
+paths, and scientific artifact registry; and the externally retained terminal
+`VERIFY_READY` `WP22HStageRunReceipt` with its matching `bundle_index.json` and
+published-file inventory. Every referenced Phase II runner, final confirmation
+seal, source manifest, production calibration, final-configuration execution
+manifest, prior-target exposure inventory, exact paper-screen binding catalog,
+and public held-target commitment must reproduce from that pair.
 
 ### Objective
 

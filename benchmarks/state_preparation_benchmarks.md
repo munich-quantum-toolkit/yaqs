@@ -675,6 +675,148 @@ never creates attempt two and requires the independently retained prior
 snapshot head. These controls change no scientific training, evaluation, or
 analysis behavior.
 
+WP22H adds the missing operational artifact ceremony around these
+already frozen APIs. It adds no numerical callback or scientific choice. The
+ordered workflow is:
+
+1. `prepare-pilot` captures one exactly clean execution/analysis source root and
+   publishes the exact pilot inputs and 1,080-job plan.
+2. The existing `paper-pilot` runner executes that plan.
+3. `close-pilot-prepare-screen` reopens every pilot first attempt, derives the q6
+   nuisance summary, sample-size design, and pilot compute calibration, and
+   publishes the calibrated 1,296-job screen.
+4. The existing `paper-screen` runner executes that plan.
+5. `close-screen-seal` reopens every screening first attempt and derives the
+   evidence, promotion, production resource calibration, final-configuration
+   manifest, final seal, and prior-target exposure inventory.
+6. `verify-ready` reopens and rederives the full chain and emits the
+   checksum-sealed readiness receipt and exact `paper-confirm` handoff without
+   dispatching confirmation.
+
+#### WP22H operational command template
+
+Set every variable below to an absolute path and create a fresh `RECEIPT_ROOT`
+outside both the clean repository and `CEREMONY_ROOT`. The shell settings stop on
+failure and refuse to replace an already retained receipt; each command writes
+one `WP22HStageRunReceipt` only after successful atomic publication.
+
+```bash
+set -o errexit
+set -o noclobber
+
+python -m benchmarks.state_preparation.phase2.operational_ceremony_runner prepare-pilot \
+  --repository-root "$REPOSITORY_ROOT" \
+  --ceremony-root "$CEREMONY_ROOT" \
+  --pilot-primary-target-config "$PILOT_PRIMARY_CONFIG" \
+  --pilot-primary-target-manifest "$PILOT_PRIMARY_MANIFEST" \
+  --pilot-secondary-target-config "$PILOT_SECONDARY_CONFIG" \
+  --pilot-secondary-target-manifest "$PILOT_SECONDARY_MANIFEST" \
+  --pilot-primary-entropy "$PILOT_PRIMARY_ENTROPY" \
+  --pilot-secondary-entropy "$PILOT_SECONDARY_ENTROPY" \
+  > "$RECEIPT_ROOT/00-prepare-pilot.json"
+PREPARE_INDEX_CHECKSUM="$(jq -er '.bundle_index_checksum' "$RECEIPT_ROOT/00-prepare-pilot.json")"
+
+python -m benchmarks.state_preparation.training_runner \
+  --preset paper-pilot \
+  --repository-root "$REPOSITORY_ROOT" \
+  --output "$PILOT_OUTPUT_ROOT" \
+  --preregistration "$CEREMONY_ROOT/00-prepare-pilot/source/preregistration.json" \
+  --execution-source-manifest "$CEREMONY_ROOT/00-prepare-pilot/source/execution_source_manifest.json" \
+  --execution-profile "$CEREMONY_ROOT/00-prepare-pilot/pilot/execution_profile.json" \
+  --binding-catalog "$CEREMONY_ROOT/00-prepare-pilot/pilot/execution_catalog.json" \
+  --target-configuration "$CEREMONY_ROOT/00-prepare-pilot/pilot/primary_target_config.json" \
+  --target-configuration "$CEREMONY_ROOT/00-prepare-pilot/pilot/secondary_target_config.json" \
+  --target-manifest "$CEREMONY_ROOT/00-prepare-pilot/pilot/primary_target_manifest.json" \
+  --target-manifest "$CEREMONY_ROOT/00-prepare-pilot/pilot/secondary_target_manifest.json" \
+  --resumability-fingerprint "$CEREMONY_ROOT/00-prepare-pilot/pilot/resumability_fingerprint.json" \
+  --external-entropy-file "development/primary_q6=$PILOT_PRIMARY_ENTROPY" \
+  --external-entropy-file "screening_selection/secondary_q12=$PILOT_SECONDARY_ENTROPY"
+
+python -m benchmarks.state_preparation.phase2.operational_ceremony_runner close-pilot-prepare-screen \
+  --repository-root "$REPOSITORY_ROOT" \
+  --ceremony-root "$CEREMONY_ROOT" \
+  --expected-predecessor-index-checksum "$PREPARE_INDEX_CHECKSUM" \
+  --pilot-output-root "$PILOT_OUTPUT_ROOT" \
+  --pilot-primary-entropy "$PILOT_PRIMARY_ENTROPY" \
+  --pilot-secondary-entropy "$PILOT_SECONDARY_ENTROPY" \
+  --screening-target-config "$SCREEN_CONFIG" \
+  --screening-target-manifest "$SCREEN_MANIFEST" \
+  --screening-entropy "$SCREEN_ENTROPY" \
+  > "$RECEIPT_ROOT/01-close-pilot-prepare-screen.json"
+PILOT_CLOSE_INDEX_CHECKSUM="$(jq -er '.bundle_index_checksum' "$RECEIPT_ROOT/01-close-pilot-prepare-screen.json")"
+
+python -m benchmarks.state_preparation.training_runner \
+  --preset paper-screen \
+  --repository-root "$REPOSITORY_ROOT" \
+  --output "$SCREEN_OUTPUT_ROOT" \
+  --preregistration "$CEREMONY_ROOT/00-prepare-pilot/source/preregistration.json" \
+  --execution-source-manifest "$CEREMONY_ROOT/00-prepare-pilot/source/execution_source_manifest.json" \
+  --execution-profile "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/execution_profile.json" \
+  --binding-catalog "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/execution_catalog.json" \
+  --target-configuration "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/target_config.json" \
+  --target-manifest "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/target_manifest.json" \
+  --resumability-fingerprint "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/resumability_fingerprint.json" \
+  --screening-manifest "$CEREMONY_ROOT/01-close-pilot-prepare-screen/screen/screening_manifest.json" \
+  --sample-size-design "$CEREMONY_ROOT/01-close-pilot-prepare-screen/pilot/sample_size_design.json" \
+  --external-entropy-file "screening_selection/primary_q6=$SCREEN_ENTROPY"
+
+python -m benchmarks.state_preparation.phase2.operational_ceremony_runner close-screen-seal \
+  --repository-root "$REPOSITORY_ROOT" \
+  --ceremony-root "$CEREMONY_ROOT" \
+  --expected-predecessor-index-checksum "$PILOT_CLOSE_INDEX_CHECKSUM" \
+  --screen-output-root "$SCREEN_OUTPUT_ROOT" \
+  --pilot-primary-entropy "$PILOT_PRIMARY_ENTROPY" \
+  --pilot-secondary-entropy "$PILOT_SECONDARY_ENTROPY" \
+  --screening-entropy "$SCREEN_ENTROPY" \
+  --confirmatory-target-config "$CONFIRMATORY_PUBLIC_CONFIG" \
+  --confirmatory-target-commitment "$CONFIRMATORY_PUBLIC_COMMITMENT" \
+  > "$RECEIPT_ROOT/02-close-screen-seal.json"
+SCREEN_CLOSE_INDEX_CHECKSUM="$(jq -er '.bundle_index_checksum' "$RECEIPT_ROOT/02-close-screen-seal.json")"
+
+python -m benchmarks.state_preparation.phase2.operational_ceremony_runner verify-ready \
+  --repository-root "$REPOSITORY_ROOT" \
+  --ceremony-root "$CEREMONY_ROOT" \
+  --expected-predecessor-index-checksum "$SCREEN_CLOSE_INDEX_CHECKSUM" \
+  --pilot-primary-entropy "$PILOT_PRIMARY_ENTROPY" \
+  --pilot-secondary-entropy "$PILOT_SECONDARY_ENTROPY" \
+  --screening-entropy "$SCREEN_ENTROPY" \
+  > "$RECEIPT_ROOT/03-verify-ready.json"
+```
+
+The successor assertion is always the exact `bundle_index_checksum` from the
+preceding retained receipt, never its stage-manifest or receipt checksum. The
+existing numerical runner does not accept a ceremony directory as one opaque
+input: `paper-pilot` and `paper-screen` receive the individually published
+`execution_profile.json`, `execution_catalog.json` (as `--binding-catalog`),
+target configurations/manifests, resumability fingerprint, preregistration, and
+execution-source manifest. `paper-screen` additionally receives its screening
+manifest and sample-size design; each runner reconstructs the frozen plan, while
+the published `training_plan.json` and analysis-source manifest remain exact
+custody that the next ceremony command verifies.
+
+For an interrupted numerical run, repeat its command with the same inputs and
+output root and add only `--resume`. Do not add `--execute-expensive`, pilot-seed
+flags, executor selection, or method, schedule, noise, trajectory, checkpoint,
+resource, overwrite, fail-fast, or other scientific overrides; those values are
+already fixed by the authenticated artifacts.
+
+The ceremony uses an explicit outside-repository root, immutable members, and an
+aggregate index published last. Each stage is bound to the preceding receipt;
+resume can only reproduce or extend that exact chain. Real authenticated pilot
+and screening production custody is mandatory: synthetic fixtures, schema-valid
+stand-ins, dry runs, and a directly constructed final seal are tests, not study
+evidence.
+
+WP22H accepts only an externally custodied public confirmatory target
+configuration/commitment with the pilot-derived family counts. It cannot accept
+or open a held confirmatory manifest, identifier, seed, entropy file, or target
+vector. The terminal `WP22HReadinessReceipt` binds the pre-seal chain head,
+stage-two operational paths, and logical scientific-artifact registry; the
+externally retained terminal `VERIFY_READY` `WP22HStageRunReceipt` binds the
+matching `bundle_index.json` and actual published-file inventory. WP23 may reveal
+the held manifest through the unchanged `paper-confirm` route only after an
+independent reviewer verifies both records and every referenced byte.
+
 The unimplemented tiered sweep over remaining standard-noise conditions,
 noiseless testing, and Ballarin evaluation is deferred to a separately
 versioned exploratory WP24 protocol; it is not part of primary WP23 execution.
