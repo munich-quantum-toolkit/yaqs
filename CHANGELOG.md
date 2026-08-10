@@ -16,10 +16,6 @@ releases may include breaking changes.
   simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
   ([**@Pouri96**])
 
-- added tests validating the local noise model applied to multi-qubit gates
-  against exact references, and documented the per-gate noise semantics ([#524])
-  ([**@Pouri96**])
-
 - added custom one-site matrix observables for non-qubit local dimensions
 
   , including named position observables ([#497]) ([**@linusschulte**])
@@ -29,6 +25,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- tested and documented the multi-qubit local noise rule ([#529])
+  ([**@Pouri96**])
 - hardened stability of noise model, timestep selection, and RNG ([#527])
   ([**@aaronleesander**])
 - State.representation set as sole backend selector ([#519])
@@ -247,6 +245,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
 [#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
 [#524]: https://github.com/munich-quantum-toolkit/yaqs/pull/524
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497

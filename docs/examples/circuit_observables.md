@@ -83,17 +83,11 @@ ax.set_title("Optional noise model on the fourth `run` argument")
 ax.legend(frameon=False)
 ```
 
-In digital simulation the noise model is applied once per gate acting on two or
-more qubits: after the gate's unitary update, one noise layer (dissipation and
-jump sampling) of unit duration acts on the processes whose sites all belong to
-the gate's qubits. Single-qubit gates receive no noise layer, and idle sites
-between the qubits of a long-range or multi-qubit gate are not noised. For a
-multi-qubit gate such as `ccx`, every gate qubit receives its single-qubit
-processes, plus any two-site processes supported inside the gate's qubit set.
-Each gate counts as one unit of noise time regardless of its size; to model the
-noise of a compiled execution (where a Toffoli is several native two-qubit gates
-deep), simulate the transpiled circuit instead — each native gate then carries
-its own noise layer.
+In digital simulation the noise model is applied once per gate on two or more
+qubits: after the unitary update, one noise layer acts on processes whose sites
+all belong to the gate's qubits. Single-qubit gates and idle sites between the
+gate qubits receive no noise. Each gate counts as one unit of noise time; to
+model compiled depth, simulate the transpiled circuit.
 
 ## 2. Noise-strength sweep
 
