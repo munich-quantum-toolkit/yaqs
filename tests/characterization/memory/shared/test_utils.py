@@ -95,6 +95,21 @@ def test_evolve_backend_state_tjm_does_not_mutate_caller_params() -> None:
     assert getattr(params, "get_state", False) is False
 
 
+def test_evolve_backend_state_tjm_may_mutate_input_mps() -> None:
+    """TJM evolution uses copy_initial_state=False and can change the caller's MPS."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, elapsed_time=0.1, max_bond_dim=8, order=1)
+    state = _initialize_backend_state(op, solver="TJM")
+    assert isinstance(state, MPS)
+    before = state.to_vec().copy()
+
+    out = _evolve_backend_state(state, op, None, params, solver="TJM")
+
+    assert isinstance(out, MPS)
+    assert out is state
+    assert not np.allclose(before, state.to_vec())
+
+
 def test_evolve_backend_state_forwards_shared_tjm_rng(monkeypatch: pytest.MonkeyPatch) -> None:
     """Characterization can reuse one TJM stream across bounded evolutions."""
     received_rng: np.random.Generator | None = None

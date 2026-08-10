@@ -338,7 +338,13 @@ def _execute_analog_instruction(
     """
     backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
     if backend is analog_tjm_2:
+        # Hand off mid-Trotter ``phi`` only when neither this nor the next segment
+        # needs a physical checkpoint (sample-state), so get_state never sees ``phi``.
         hand_off_trajectory = _order2_chain_continues(instructions, instruction, instruction.index)
+        if hand_off_trajectory:
+            nxt = instructions[instruction.index + 1]
+            if instruction.sim_params.get_state or nxt.sim_params.get_state:
+                hand_off_trajectory = False
         traj_data, traj_diag, next_state = backend(
             (
                 traj_idx,
@@ -474,7 +480,12 @@ def _execute_program_trajectory(
             msg = f"Program segment {instruction.index} did not return its propagated state."
             raise RuntimeError(msg)
         current_state = next_state
-        checkpoint = copy.deepcopy(current_state) if instruction.sim_params.get_state else None
+        # Segment get_state is rejected for noisy instructions before execution.
+        checkpoint = (
+            copy.deepcopy(current_state)
+            if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
+            else None
+        )
         segment_payloads.append((traj_data, traj_diag, shot_counts, checkpoint))
 
     final_state = current_state if compiled.get_state else None
@@ -518,6 +529,10 @@ def _validate_compiled_program(compiled: _CompiledProgram) -> tuple[bool, bool, 
     if stochastic and compiled.get_state:
         msg = "Cannot return state from a noisy SimulationProgram due to stochastic trajectories."
         raise ValueError(msg)
+    for instruction in compiled.instructions:
+        if instruction.sim_params.get_state and _noise_model_is_stochastic(instruction.noise_model):
+            msg = "Cannot return state from a noisy SimulationProgram due to stochastic trajectories."
+            raise ValueError(msg)
     return has_observables, has_shots, stochastic
 
 

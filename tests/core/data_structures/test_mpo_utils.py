@@ -89,6 +89,36 @@ def test_get_support_mpo_rejects_wrong_homogeneous_dimension_count() -> None:
         get_support_mpo(gate, first_site=0, last_site=2, physical_dimensions=[2, 2])
 
 
+def test_get_support_mpo_allows_dim3_spectator_between_two_qubit_effective_targets() -> None:
+    """Two-qubit support validates first/last sites, so mid-span spectators may be qudits."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    support = get_support_mpo(
+        gate,
+        first_site=0,
+        last_site=2,
+        physical_dimensions=[2, 3, 2],
+    )
+
+    assert len(support) == 3
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in support] == [(2, 2), (3, 3), (2, 2)]
+
+
+def test_get_support_mpo_rejects_dim3_two_qubit_effective_target() -> None:
+    """A non-qubit first_site/last_site endpoint is rejected for two-qubit gates."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    with pytest.raises(ValueError, match="Gate MPO target site 2 must have physical dimension 2"):
+        get_support_mpo(
+            gate,
+            first_site=0,
+            last_site=2,
+            physical_dimensions=[2, 2, 3],
+        )
+
+
 def test_get_support_mpo_preserves_multi_qubit_targets_with_heterogeneous_spectator() -> None:
     """A multi-qubit support inserts heterogeneous identities without dropping target tensors."""
     gate = GateLibrary.ccx()

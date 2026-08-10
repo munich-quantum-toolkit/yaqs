@@ -1244,6 +1244,61 @@ def test_noisy_program_rejects_requested_trajectory_state() -> None:
         )
 
 
+def test_validate_rejects_corrupted_noisy_segment_get_state() -> None:
+    """A stochastic instruction with segment get_state is rejected before execution."""
+    program = SimulationProgram(
+        [(_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.1, dt=0.1))],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+    )
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+    compiled = _compile_program(program, State(1, initial="zeros"), noise_model)
+    compiled = simulator_module._sample_program_noise_models(compiled)  # ruff: ignore[private-member-access]
+    compiled.instructions[0].sim_params.get_state = True
+
+    with pytest.raises(ValueError, match="Cannot return state from a noisy SimulationProgram"):
+        simulator_module._validate_compiled_program(compiled)  # ruff: ignore[private-member-access]
+
+
+def test_order_two_segment_checkpoint_request_breaks_continuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Order-2 mid-Trotter handoff stops when a segment requests a checkpoint."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), params),
+            (_zero_hamiltonian(1), params),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=3,
+    )
+    compiled = _compile_program(program, State(1, initial="zeros"))
+    compiled.instructions[1].sim_params.get_state = True
+
+    simulator_module._execute_program_trajectory(  # ruff: ignore[private-member-access]
+        0,
+        State(1, initial="zeros").mps,
+        compiled,
+        1,
+    )
+
+    assert initialize_calls == 2
+
+
 def test_program_rejects_program_owned_fields_on_segment_params() -> None:
     """Segment params must leave observables, random_seed, and get_state unset."""
     with pytest.raises(ValueError, match=r"sim_params.observables must be empty"):

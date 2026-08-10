@@ -255,7 +255,7 @@ on them safely. The full set is:
 | `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                     |
 | `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                    |
 | `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                       |
-| `times`                                  | Shared analog time grid; for digital–analog programs, the stitched physical timeline; `None` for standalone digital circuits.                                         |
+| `times`                                  | Shared analog time grid; for digital–analog programs, the stitched physical timeline when observables are configured (`None` for shots-only / no-observable programs and standalone digital circuits). |
 | `runtime_cost`                           | MPS-backed analog and digital runs that are not shots-only (contraction-cost heuristic over time).                                                                    |
 | `max_bond`                               | MPS-backed analog and digital runs that are not shots-only (maximum bond dimension over time).                                                                        |
 | `total_bond`                             | MPS-backed analog and digital runs that are not shots-only (sum of internal bond dimensions).                                                                         |
@@ -264,9 +264,12 @@ on them safely. The full set is:
 | `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                     |
 | `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                              |
 
-A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns the same fields:
-`result.times` and `result.expectation_values` are already stitched onto the
-physical program timeline. Observables and `random_seed` are set on the program
+A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns a top-level
+{class}`~mqt.yaqs.Result` whose `sim_params` is `None`; read each segment's
+parameters from `result.segment_results[i].sim_params`. When observables are
+configured, `result.times` and `result.expectation_values` are stitched onto the
+physical program timeline; shots-only and other no-observable programs leave
+`result.times` as `None`. Observables and `random_seed` are set on the program
 (or as keyword arguments when passing a pair list to
 {meth}`~mqt.yaqs.Simulator.run`). Prefer setting `num_traj` the same way; when
 {attr}`~mqt.yaqs.SimulationProgram.num_traj` is omitted (`None`), execution
