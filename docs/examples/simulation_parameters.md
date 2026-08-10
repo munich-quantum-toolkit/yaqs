@@ -174,7 +174,10 @@ _trunc_summary(shot_params)
 
 Besides the preset (and any overrides), you typically set the time grid
 (`elapsed_time`, `dt`), observables, and whether to record intermediate times
-(`sample_timesteps`).
+(`sample_timesteps`). Analog backends use a fixed step size, so `dt` must be
+positive and `elapsed_time` must be a non-negative integer multiple of `dt`.
+Non-integral grids raise a `ValueError`; choose the step count first and set
+`elapsed_time = num_steps * dt` when constructing a grid programmatically.
 
 ```{code-cell} ipython3
 L = 4
@@ -233,10 +236,12 @@ sampling with `sample_layers=True` (see {doc}`circuit_observables`).
 
 Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic
 MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path
-as `swaps`, and long-range gates contract an extended gate MPO site-wise
-(library leg ordering, MPS virtual index before MPO virtual index) followed by
-compression with `svd_threshold` and `max_bond_dim`. Other modes differ only in
-how two-qubit gates are applied:
+as `swaps` (the orthogonality center is moved onto the gate pair first, so the
+truncated SVD discards the smallest Schmidt coefficients of the state), and
+long-range gates contract an extended gate MPO site-wise (library leg ordering,
+MPS virtual index before MPO virtual index) followed by compression with
+`svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit
+gates are applied:
 
 - **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed
   with adjacent SWAP insertion before and after the local update.

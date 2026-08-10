@@ -156,9 +156,85 @@ def test_analog_simparams_basic() -> None:
     assert params.elapsed_time == elapsed_time
     assert params.dt == dt
     expected_times = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    assert np.allclose(params.times, expected_times), "Times array should match numpy.arange(0, elapsed_time+dt, dt)."
+    assert np.allclose(params.times, expected_times), "Times array should sample 0..elapsed_time in steps of dt."
     assert params.sample_timesteps is True
     assert params.num_traj == 50
+
+
+def test_analog_simparams_times_no_float_overshoot() -> None:
+    """``elapsed_time=0.2, dt=0.1`` must yield ``[0, 0.1, 0.2]``, not an extra 0.3."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.2, dt=0.1)
+    np.testing.assert_allclose(params.times, [0.0, 0.1, 0.2])
+    assert params.times[-1] == pytest.approx(params.elapsed_time)
+
+
+def test_analog_simparams_zero_elapsed_time() -> None:
+    """``elapsed_time=0`` with a valid ``dt`` yields a single-point grid at ``t=0``."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.0, dt=0.1)
+    assert params.elapsed_time == pytest.approx(0.0)
+    assert params.dt == pytest.approx(0.1)
+    np.testing.assert_allclose(params.times, [0.0])
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt"),
+    [
+        (100.1, 0.1),
+        (1.0, 1.0 / 9015),
+        # Fine dt vs O(1) elapsed: residual is ~ulp(elapsed), not a fraction of dt.
+        (1.23456789, 1e-8),
+    ],
+)
+def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt: float) -> None:
+    """Ordinary float rounding remains valid on longer and fine-dt grids."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+    assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt"),
+    [
+        (0.15, 0.1),
+        (0.25, 0.1),
+        (5e-13, 1e-12),
+        (1.0, 1e9),
+    ],
+)
+def test_analog_simparams_rejects_nonintegral_duration(elapsed_time: float, dt: float) -> None:
+    """Non-integral ``elapsed_time/dt`` must raise rather than mislabel the final time."""
+    with pytest.raises(ValueError, match="integer multiple"):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+
+@pytest.mark.parametrize(
+    ("elapsed_time", "dt", "match"),
+    [
+        (-0.1, 0.1, "non-negative"),
+        (0.1, 0.0, "positive"),
+        (0.1, -0.1, "positive"),
+        (float("nan"), 0.1, "finite"),
+        (float("inf"), 0.1, "finite"),
+        (0.1, float("nan"), "finite"),
+        (0.1, float("inf"), "finite"),
+        (1e308, 1e-308, "elapsed_time / dt must be finite"),
+    ],
+)
+def test_analog_simparams_rejects_invalid_time_parameters(elapsed_time: float, dt: float, match: str) -> None:
+    """Non-finite, zero, or negative time parameters raise clear ValueErrors."""
+    with pytest.raises(ValueError, match=match):
+        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+
+
+@pytest.mark.parametrize(("elapsed_time", "dt"), [(True, 0.1), (0.1, False), ("0.1", 0.1), (0.1, None)])
+def test_analog_simparams_rejects_non_numeric_time_parameters(elapsed_time: object, dt: object) -> None:
+    """Booleans and non-numeric time parameters raise clear TypeErrors."""
+    with pytest.raises(TypeError, match="real number"):
+        AnalogSimParams(
+            observables=[Observable(X(), 0)],
+            elapsed_time=cast("Any", elapsed_time),
+            dt=cast("Any", dt),
+        )
 
 
 def test_analog_simparams_defaults() -> None:
@@ -174,7 +250,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.elapsed_time == pytest.approx(0.1)
     assert params.dt == pytest.approx(0.1)
     assert params.sample_timesteps is True
-    # times should be np.arange(0, elapsed_time+dt, dt)
+    # times should be 0..elapsed_time inclusive with spacing dt
     assert np.isclose(params.times[-1], 0.1)
     balanced = SIMULATION_PRESETS["balanced"]
     assert params.preset == "balanced"

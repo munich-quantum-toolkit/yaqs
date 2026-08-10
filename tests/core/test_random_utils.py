@@ -19,7 +19,7 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.libraries.gate_library import Z
-from mqt.yaqs.core.random_utils import make_trajectory_rng
+from mqt.yaqs.core.random_utils import make_disorder_rng, make_sample_rng, make_trajectory_rng
 
 
 def test_make_trajectory_rng_reproducible_per_index() -> None:
@@ -33,6 +33,32 @@ def test_make_trajectory_rng_none_returns_generator() -> None:
     """Unseeded mode returns a fresh NumPy Generator."""
     rng = make_trajectory_rng(0, base_seed=None)
     assert isinstance(rng, np.random.Generator)
+
+
+def test_seed_coordinates_do_not_collapse_under_addition() -> None:
+    """``(base_seed, traj)`` pairs that sum equally must still get distinct streams."""
+    a = make_trajectory_rng(1, base_seed=0).random()
+    b = make_trajectory_rng(0, base_seed=1).random()
+    assert a != b
+
+    sa = make_sample_rng(1, base_seed=0, timestep=3).random()
+    sb = make_sample_rng(0, base_seed=1, timestep=3).random()
+    assert sa != sb
+
+
+def test_make_sample_rng_independent_of_trajectory_stream() -> None:
+    """Sample RNG is reproducible, per-timestep, and distinct from the trajectory RNG."""
+    traj = make_trajectory_rng(0, base_seed=7)
+    sample = make_sample_rng(0, base_seed=7, timestep=2)
+    assert make_sample_rng(0, base_seed=7, timestep=2).random() == make_sample_rng(0, base_seed=7, timestep=2).random()
+    assert make_sample_rng(0, base_seed=7, timestep=1).random() != make_sample_rng(0, base_seed=7, timestep=2).random()
+    assert traj.random() != sample.random()
+
+
+def test_make_disorder_rng_distinct_from_trajectory_stream() -> None:
+    """Disorder sampling uses a dedicated stream for the same base seed."""
+    assert make_disorder_rng(base_seed=7).random() == make_disorder_rng(base_seed=7).random()
+    assert make_disorder_rng(base_seed=7).random() != make_trajectory_rng(0, base_seed=7).random()
 
 
 @pytest.mark.parametrize("run_parallel", [False, True])
