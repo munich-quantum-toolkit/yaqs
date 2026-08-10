@@ -250,19 +250,19 @@ The properties that don't apply to your simulation kind return `None` (or an
 empty list for `observables` when only shots were requested), so you can branch
 on them safely. The full set is:
 
-| Property                                 | Populated for                                                                                                                                                         |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                     |
-| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                    |
-| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                       |
+| Property                                 | Populated for                                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                                                      |
+| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                                                     |
+| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                                                        |
 | `times`                                  | Shared analog time grid; for digital–analog programs, the stitched physical timeline when observables are configured (`None` for shots-only / no-observable programs and standalone digital circuits). |
-| `runtime_cost`                           | MPS-backed analog and digital runs that are not shots-only (contraction-cost heuristic over time).                                                                    |
-| `max_bond`                               | MPS-backed analog and digital runs that are not shots-only (maximum bond dimension over time).                                                                        |
-| `total_bond`                             | MPS-backed analog and digital runs that are not shots-only (sum of internal bond dimensions).                                                                         |
-| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                              |
-| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `DigitalSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
-| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                     |
-| `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                              |
+| `runtime_cost`                           | MPS-backed analog and digital runs that are not shots-only (contraction-cost heuristic over time).                                                                                                     |
+| `max_bond`                               | MPS-backed analog and digital runs that are not shots-only (maximum bond dimension over time).                                                                                                         |
+| `total_bond`                             | MPS-backed analog and digital runs that are not shots-only (sum of internal bond dimensions).                                                                                                          |
+| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                                                               |
+| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `DigitalSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only.                                  |
+| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                                                      |
+| `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                                                               |
 
 A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns a top-level
 {class}`~mqt.yaqs.Result` whose `sim_params` is `None`; read each segment's
