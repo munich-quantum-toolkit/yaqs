@@ -298,18 +298,33 @@ def _execute_program_trajectory(
     continue_order2_trajectory = False
     instructions = compiled.instructions
 
-    def _next_instruction_continues_order2(index: int) -> bool:
-        """Return whether the following instruction continues this order-2 trajectory."""
+    def _order2_chain_continues(current: _CompiledAnalogInstruction, index: int) -> bool:
+        """Return whether the next instruction can continue this order-2 trajectory.
+
+        Continuation requires an adjacent order-2 analog segment with the same ``dt``
+        and ``sample_timesteps``, and a non-trivial current time grid so a mid-Trotter
+        ``phi`` handoff is meaningful.
+        """
         if index + 1 >= len(instructions):
             return False
         nxt = instructions[index + 1]
-        return isinstance(nxt, _CompiledAnalogInstruction) and nxt.execution_params.order == 2
+        if not isinstance(nxt, _CompiledAnalogInstruction):
+            return False
+        current_params = current.execution_params
+        next_params = nxt.execution_params
+        if next_params.order != 2:
+            return False
+        if len(current_params.times) <= 1 or len(next_params.times) <= 1:
+            return False
+        if current_params.dt != next_params.dt:
+            return False
+        return current_params.sample_timesteps == next_params.sample_timesteps
 
     for instruction in instructions:
         if isinstance(instruction, _CompiledAnalogInstruction):
             backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
             if backend is analog_tjm_2:
-                hand_off_trajectory = _next_instruction_continues_order2(instruction.index)
+                hand_off_trajectory = _order2_chain_continues(instruction, instruction.index)
                 traj_data, traj_diag, next_state = backend(
                     (
                         traj_idx,
@@ -325,11 +340,15 @@ def _execute_program_trajectory(
                     return_trajectory_state=hand_off_trajectory,
                     continue_trajectory=continue_order2_trajectory,
                 )
-                n_times = len(instruction.execution_params.times)
-                # Match global sample indices of one continuous order-2 run: after a
-                # segment with T grid points, the next sample timestep is T - 1 + local.
-                sample_timestep_offset += max(n_times - 1, 0)
-                continue_order2_trajectory = True
+                if hand_off_trajectory:
+                    n_times = len(instruction.execution_params.times)
+                    # Match global sample indices of one continuous order-2 run: after a
+                    # segment with T grid points, the next sample timestep is T - 1 + local.
+                    sample_timestep_offset += max(n_times - 1, 0)
+                    continue_order2_trajectory = True
+                else:
+                    sample_timestep_offset = 0
+                    continue_order2_trajectory = False
             else:
                 traj_data, traj_diag, next_state = backend(
                     (
@@ -342,6 +361,7 @@ def _execute_program_trajectory(
                     copy_initial_state=False,
                     rng=rng,
                 )
+                sample_timestep_offset = 0
                 continue_order2_trajectory = False
             shot_counts = None
         elif isinstance(instruction, _CompiledDigitalInstruction):

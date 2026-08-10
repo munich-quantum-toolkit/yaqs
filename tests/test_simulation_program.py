@@ -605,6 +605,85 @@ def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pyte
     assert timesteps == [1, 2, 3, 4]
 
 
+def test_order_one_segment_resets_order_two_sample_timestep_offset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An order-1 gap restarts the order-2 measurement-copy timeline."""
+    timesteps: list[int] = []
+    original_make_sample_rng = analog_module.make_sample_rng
+
+    def record_sample_timestep(
+        traj_idx: int,
+        *,
+        base_seed: int | None,
+        timestep: int,
+        stream_id: int | None = None,
+    ) -> np.random.Generator:
+        timesteps.append(timestep)
+        return original_make_sample_rng(
+            traj_idx,
+            base_seed=base_seed,
+            timestep=timestep,
+            stream_id=stream_id,
+        )
+
+    monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_timestep)
+    order2 = AnalogSimParams(elapsed_time=0.2, dt=0.1, sample_timesteps=True, order=2)
+    order1 = AnalogSimParams(elapsed_time=0.1, dt=0.1, order=1)
+    program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), order2),
+            (_zero_hamiltonian(1), order1),
+            (_zero_hamiltonian(1), order2),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=31,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    # First order-2 uses timesteps 1,2; after order-1 the next order-2 restarts at 1,2.
+    assert timesteps == [1, 2, 1, 2]
+
+
+def test_order_two_continuation_requires_matching_dt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mismatched dt breaks order-2 continuation and re-initializes the next segment."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+            (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.05, order=2)),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=7,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert initialize_calls == 2
+
+
 def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:
     """Run a small noisy mixed program.
 
