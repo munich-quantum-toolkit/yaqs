@@ -789,15 +789,15 @@ def _plot_plateau_inset(
     y_limits, y_ticks = PLATEAU_INSET_Y[case_key]
     inset.set_ylim(*y_limits)
     inset.set_yticks(y_ticks)
-    inset.set_xlabel(r"$n$", fontsize=5.8, labelpad=0.5)
+    inset.set_xlabel(r"$n$", fontsize=6.3, labelpad=0.5)
     if case_key != "ising_1d":
-        inset.set_ylabel(r"$1-F$", fontsize=5.8, labelpad=0.8)
+        inset.set_ylabel(r"$1-F$", fontsize=6.3, labelpad=0.8)
     inset.tick_params(
         which="both",
         direction="out",
         width=0.55,
         length=1.7,
-        labelsize=5.8,
+        labelsize=6.3,
         pad=1.0,
     )
     inset.grid(False)
@@ -1042,8 +1042,8 @@ def _plot_parameter_inset(
     inset.set_yscale("log")
     inset.set_ylim(*PARAMETER_INSET_Y_LIMITS)
     inset.set_yticks(PARAMETER_INSET_Y_TICKS)
-    inset.set_xlabel(r"$n$", fontsize=5.8, labelpad=0.5)
-    inset.set_ylabel(r"$P$", fontsize=5.8, labelpad=0.8)
+    inset.set_xlabel(r"$n$", fontsize=6.3, labelpad=0.5)
+    inset.set_ylabel(r"$P$", fontsize=6.3, labelpad=0.8)
     inset.yaxis.set_minor_locator(LogLocator(base=10.0, subs=(2, 5)))
     inset.yaxis.set_minor_formatter(NullFormatter())
     inset.tick_params(
@@ -1051,7 +1051,7 @@ def _plot_parameter_inset(
         direction="out",
         width=0.55,
         length=1.7,
-        labelsize=5.8,
+        labelsize=6.3,
         pad=1.0,
         labelleft=True,
     )

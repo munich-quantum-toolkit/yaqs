@@ -465,9 +465,9 @@ def caption(*, tdvp_override_manifest: Mapping[str, object] | None = None) -> st
         "color marking the imposed cap. Profiles are recorded after complete Trotter "
         "steps, not exact Schmidt ranks or transient working ranks, and do not by themselves establish "
         "accuracy. For the two-dimensional systems, b "
-        "indexes cuts of the snake-ordered MPS. TDVP fills the available bond space later in the "
-        "first three cases, whereas every method reaches the stable cap-limited profile after one step for "
-        "the 4x4 Heisenberg circuit."
+        "indexes cuts of the snake-ordered MPS. TDVP fills the available bond space one step later than "
+        "both direct methods in 1D Ising and one step later than MPO, but alongside TEBD+SWAP, in 4x4 "
+        "Ising; all three methods tie in the Heisenberg cases."
     )
 
 
