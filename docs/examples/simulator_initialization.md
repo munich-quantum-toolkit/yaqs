@@ -269,9 +269,9 @@ A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns the same fields:
 physical program timeline. Observables and `random_seed` are set on the program
 (or as keyword arguments when passing a pair list to
 {meth}`~mqt.yaqs.Simulator.run`). Prefer setting `num_traj` the same way; when
-{attr}`~mqt.yaqs.SimulationProgram.num_traj` is omitted (`None`), execution falls
-back to the `num_traj` value specified consistently on every segment's parameter
-object. Conflicting segment values require an explicit program-level
+{attr}`~mqt.yaqs.SimulationProgram.num_traj` is omitted (`None`), execution
+falls back to the `num_traj` value specified consistently on every segment's
+parameter object. Conflicting segment values require an explicit program-level
 `num_traj`. A program that requests shots but no observables follows standalone
 digital semantics and executes one complete-program stochastic trajectory per
 shot.
