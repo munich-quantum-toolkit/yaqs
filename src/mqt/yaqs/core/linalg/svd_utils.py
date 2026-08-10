@@ -16,7 +16,7 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-TruncMode = Literal["discarded_weight", "relative", "hard_cutoff"]
+TruncMode = Literal["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"]
 
 
 def truncate(
@@ -39,6 +39,11 @@ def truncate(
               ``s[0] == 0``, then keep is ``0`` before caps).
             - ``hard_cutoff``: count singular values strictly greater than
               ``threshold``, then apply ``min_keep`` / ``max_bond_dim``.
+            - ``relative_discarded_weight``: discard the largest trailing block
+              whose relative discarded weight
+              ``sum(discarded s**2) / sum(all s**2)`` stays ``<= threshold``.
+              Invariant under nonzero common rescaling of ``s``. An all-zero
+              spectrum yields keep ``0`` before caps.
         threshold: Mode-dependent cutoff (see above).
         max_bond_dim: Optional hard cap on the returned keep count.
         min_keep: Minimum number of singular values to retain (applied last).
@@ -73,6 +78,21 @@ def truncate(
             if discard >= threshold:
                 keep = max(n - idx, min_keep)
                 break
+    elif mode == "relative_discarded_weight":
+        weights = np.asarray(s_vec, dtype=np.float64) ** 2
+        total = float(np.sum(weights))
+        if total <= 0.0:
+            keep = 0
+        else:
+            keep = n
+            discard = 0.0
+            for idx, w in enumerate(reversed(weights)):
+                candidate = discard + float(w)
+                if candidate / total <= threshold:
+                    discard = candidate
+                    keep = n - idx - 1
+                else:
+                    break
     else:
         msg = f"Unknown truncation mode: {mode!r}"
         raise ValueError(msg)

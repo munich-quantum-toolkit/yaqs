@@ -73,8 +73,15 @@ All `*SimParams` classes accept a keyword-only `preset` argument (default
 `svd_threshold` controls **tensor-network SVD truncation** (bond truncation).
 `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside
 TDVP updates. These are independent: tightening one does not change the other.
-`trunc_mode` (default `"discarded_weight"`) is unchanged across presets. The
-chosen preset name is stored on the object as `params.preset`.
+`trunc_mode` (default `"discarded_weight"`) is unchanged across presets.
+Supported modes include `"discarded_weight"`, `"relative"`, `"hard_cutoff"`, and
+`"relative_discarded_weight"`. The chosen preset name is stored on the object as
+`params.preset`.
+
+For analog BUG evolution, set `evolution_mode=EvolutionMode.BUG` and optionally
+pass a `BUGConfig` (both exported from `mqt.yaqs`). Defaults keep the historical
+single-endpoint, center-augmented sweep with one post-root compression. See
+{doc}`analog_simulation` for paper-facing configurations.
 
 ## Override only what you need
 

@@ -18,6 +18,7 @@ dimension limits, and thresholds. Simulation outputs are stored on
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, TypedDict
 
@@ -31,6 +32,10 @@ if TYPE_CHECKING:
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
 TDVPMode = Literal["1site", "2site", "dynamic"]
+BUGBasisMode = Literal["center", "explicit_old_basis", "fixed_profile"]
+BUGSchedule = Literal["single_endpoint", "alternating_endpoints"]
+BUGCompression = Literal["after_sweep", "after_step", "none"]
+TruncModeName = Literal["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"]
 
 
 class PresetTypes(TypedDict):
@@ -252,16 +257,19 @@ def _validate_svd_threshold(svd_threshold: float) -> float:
 
     Args:
         svd_threshold: Tolerance for SVD-based bond truncation during simulation.
+            Zero is allowed: it disables tolerance-based truncation for discarded-
+            weight modes and removes only exact zeros for ``hard_cutoff``, while a
+            hard bond cap may still reduce rank.
 
     Returns:
         The validated threshold as a float.
 
     Raises:
-        ValueError: If ``svd_threshold`` is non-finite or not strictly positive.
+        ValueError: If ``svd_threshold`` is non-finite or negative.
     """
     svd_threshold = float(svd_threshold)
-    if not np.isfinite(svd_threshold) or svd_threshold <= 0.0:
-        msg = f"svd_threshold must be a finite positive float, got {svd_threshold!r}."
+    if not np.isfinite(svd_threshold) or svd_threshold < 0.0:
+        msg = f"svd_threshold must be a finite non-negative float, got {svd_threshold!r}."
         raise ValueError(msg)
     return svd_threshold
 
@@ -294,6 +302,115 @@ class EvolutionMode(Enum):
 
     TDVP = "tdvp"
     BUG = "bug"
+
+
+@dataclass(frozen=True)
+class BUGConfig:
+    """Configuration for analog BUG evolution.
+
+    Defaults preserve the historical single left-endpoint, center-augmented
+    sweep of duration ``dt`` followed by one compression and no explicit
+    normalization.
+
+    Attributes:
+        basis_mode: Trial-basis construction
+            (``"center"``, ``"explicit_old_basis"``, or ``"fixed_profile"``).
+        schedule: ``"single_endpoint"`` or ``"alternating_endpoints"``.
+            Alternating applies two half-sweeps of duration ``dt / 2`` with a
+            site-reflected MPO between them. It is not claimed to be second order.
+        compression: When to apply SVD compression
+            (``"after_sweep"``, ``"after_step"``, or ``"none"``).
+        normalize_after_compression: If ``True``, normalize after each
+            configured compression. Ignored when ``compression == "none"``.
+    """
+
+    basis_mode: BUGBasisMode = "center"
+    schedule: BUGSchedule = "single_endpoint"
+    compression: BUGCompression = "after_sweep"
+    normalize_after_compression: bool = False
+
+
+def _validate_trunc_mode(trunc_mode: str) -> TruncModeName:
+    """Validate the SVD truncation mode name.
+
+    Args:
+        trunc_mode: Truncation mode string.
+
+    Returns:
+        The validated truncation mode.
+
+    Raises:
+        ValueError: If ``trunc_mode`` is not a supported value.
+    """
+    allowed: tuple[TruncModeName, ...] = (
+        "discarded_weight",
+        "relative",
+        "hard_cutoff",
+        "relative_discarded_weight",
+    )
+    if trunc_mode not in allowed:
+        msg = f"trunc_mode must be one of {allowed!r}, got {trunc_mode!r}."
+        raise ValueError(msg)
+    return trunc_mode  # type: ignore[return-value]
+
+
+def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
+    """Validate and coerce the analog evolution mode.
+
+    Args:
+        evolution_mode: Evolution mode enum or string value.
+
+    Returns:
+        The validated :class:`EvolutionMode`.
+
+    Raises:
+        ValueError: If ``evolution_mode`` is not a supported value.
+    """
+    if isinstance(evolution_mode, EvolutionMode):
+        return evolution_mode
+    try:
+        return EvolutionMode(evolution_mode)
+    except ValueError as exc:
+        allowed = tuple(mode.value for mode in EvolutionMode)
+        msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
+        raise ValueError(msg) from exc
+
+
+def _validate_bug_config(bug_config: BUGConfig) -> BUGConfig:
+    """Validate a :class:`BUGConfig` instance.
+
+    Args:
+        bug_config: BUG configuration object.
+
+    Returns:
+        The validated configuration.
+
+    Raises:
+        TypeError: If ``bug_config`` is not a :class:`BUGConfig`.
+        ValueError: If any field has an unsupported value.
+    """
+    if not isinstance(bug_config, BUGConfig):
+        msg = f"bug_config must be BUGConfig, got {type(bug_config).__name__}."
+        raise TypeError(msg)
+    basis_allowed: tuple[BUGBasisMode, ...] = ("center", "explicit_old_basis", "fixed_profile")
+    schedule_allowed: tuple[BUGSchedule, ...] = ("single_endpoint", "alternating_endpoints")
+    compression_allowed: tuple[BUGCompression, ...] = ("after_sweep", "after_step", "none")
+    if bug_config.basis_mode not in basis_allowed:
+        msg = f"bug_config.basis_mode must be one of {basis_allowed!r}, got {bug_config.basis_mode!r}."
+        raise ValueError(msg)
+    if bug_config.schedule not in schedule_allowed:
+        msg = f"bug_config.schedule must be one of {schedule_allowed!r}, got {bug_config.schedule!r}."
+        raise ValueError(msg)
+    if bug_config.compression not in compression_allowed:
+        msg = f"bug_config.compression must be one of {compression_allowed!r}, got {bug_config.compression!r}."
+        raise ValueError(msg)
+    if not isinstance(bug_config.normalize_after_compression, bool):
+        msg = (
+            "bug_config.normalize_after_compression must be bool, "
+            f"got {type(bug_config.normalize_after_compression).__name__}."
+        )
+        raise TypeError(msg)
+    return bug_config
 
 
 class Observable:
@@ -440,8 +557,10 @@ class AnalogSimParams(_ObservableOrderingMixin):
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
-        trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
-        svd_threshold: SVD truncation threshold for bond dimension control.
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
+        svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
+            tolerance-based truncation for discarded-weight modes.
         order: Integration order.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
@@ -452,6 +571,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
             Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
             Default is ``"2site"``.
+        bug_config: BUG integrator options (augmentation, schedule, compression). Used only
+            when ``evolution_mode`` is :attr:`EvolutionMode.BUG`.
     """
 
     def __init__(
@@ -468,7 +589,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
         *,
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
-        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
+        evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
+        bug_config: BUGConfig | None = None,
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -496,11 +618,14 @@ class AnalogSimParams(_ObservableOrderingMixin):
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
                 Smaller values are more accurate but may require more Krylov vectors. Explicit values
                 override the preset.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
+            bug_config: BUG options when ``evolution_mode`` is :attr:`EvolutionMode.BUG`.
+                Defaults preserve the single-endpoint center-augmented kernel.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
@@ -531,13 +656,14 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = order
-        self.evolution_mode = evolution_mode
+        self.evolution_mode = _validate_evolution_mode(evolution_mode)
+        self.bug_config = _validate_bug_config(BUGConfig() if bug_config is None else bug_config)
         self.get_state = get_state
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
@@ -671,7 +797,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )

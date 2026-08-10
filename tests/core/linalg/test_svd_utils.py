@@ -49,3 +49,33 @@ def test_truncate_unknown_mode_raises() -> None:
     s = np.ones(3, dtype=np.float64)
     with pytest.raises(ValueError, match="Unknown truncation mode"):
         linalg.truncate(s, mode=cast("Any", "invalid"), threshold=1.0)
+
+
+def test_truncate_relative_discarded_weight_known_rank() -> None:
+    """Relative discarded weight keeps a hand-computed prefix of the spectrum."""
+    # s^2 = [100, 1, 0.01, 0.0001]; total = 101.0101
+    # Discarding last two: (0.01+0.0001)/total ≈ 0.0001; last three: (1+0.01+0.0001)/total ≈ 0.01
+    s = np.array([10.0, 1.0, 0.1, 0.01], dtype=np.float64)
+    keep = linalg.truncate(s, mode="relative_discarded_weight", threshold=1e-3, min_keep=1)
+    assert keep == 2
+    keep_loose = linalg.truncate(s, mode="relative_discarded_weight", threshold=0.02, min_keep=1)
+    assert keep_loose == 1
+
+
+def test_truncate_relative_discarded_weight_scale_invariant() -> None:
+    """Multiplying all singular values by a constant does not change retained rank."""
+    s = np.array([4.0, 2.0, 0.5, 0.1], dtype=np.float64)
+    keep_a = linalg.truncate(s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
+    keep_b = linalg.truncate(3.7 * s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
+    assert keep_a == keep_b
+
+
+def test_truncate_relative_discarded_weight_edge_cases() -> None:
+    """Threshold 0, all-zero spectra, min_keep, and max_bond_dim behave sensibly."""
+    s = np.array([3.0, 2.0, 0.0, 0.0], dtype=np.float64)
+    assert linalg.truncate(s, mode="relative_discarded_weight", threshold=0.0, min_keep=1) == 2
+    zeros = np.zeros(4, dtype=np.float64)
+    assert linalg.truncate(zeros, mode="relative_discarded_weight", threshold=0.1, min_keep=1) == 1
+    s2 = np.array([5.0, 4.0, 3.0, 2.0], dtype=np.float64)
+    assert linalg.truncate(s2, mode="relative_discarded_weight", threshold=1.0, min_keep=2) == 2
+    assert linalg.truncate(s2, mode="relative_discarded_weight", threshold=1.0, max_bond_dim=1, min_keep=1) == 1

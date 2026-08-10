@@ -31,7 +31,9 @@ from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories,
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
+    BUGConfig,
     DigitalSimParams,
+    EvolutionMode,
     Observable,
     _validate_tdvp_sweeps,
 )
@@ -450,11 +452,36 @@ def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
         _ = AnalogSimParams(krylov_tol=bad_tol)
 
 
-@pytest.mark.parametrize("bad_threshold", [0.0, -1.0, float("inf"), float("nan")])
+@pytest.mark.parametrize("bad_threshold", [-1.0, float("inf"), float("nan")])
 def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
-    """svd_threshold must be finite and strictly positive."""
-    with pytest.raises(ValueError, match="svd_threshold must be a finite positive float"):
+    """svd_threshold must be finite and non-negative."""
+    with pytest.raises(ValueError, match="svd_threshold must be a finite non-negative float"):
         _ = AnalogSimParams(svd_threshold=bad_threshold)
+
+
+def test_simparams_allows_zero_svd_threshold() -> None:
+    """Zero SVD threshold is allowed for exact-zero / hard-cap truncation protocols."""
+    params = AnalogSimParams(svd_threshold=0.0)
+    assert params.svd_threshold == pytest.approx(0.0)
+
+
+def test_bug_config_defaults_and_validation() -> None:
+    """BUGConfig defaults preserve the single-endpoint center-augmented kernel."""
+    params = AnalogSimParams(evolution_mode=EvolutionMode.BUG)
+    assert params.bug_config == BUGConfig()
+    assert params.bug_config.basis_mode == "center"
+    assert params.bug_config.schedule == "single_endpoint"
+    assert params.bug_config.compression == "after_sweep"
+    assert params.bug_config.normalize_after_compression is False
+
+    with pytest.raises(ValueError, match="evolution_mode"):
+        _ = AnalogSimParams(evolution_mode="not-a-mode")
+    with pytest.raises(ValueError, match="trunc_mode"):
+        _ = AnalogSimParams(trunc_mode="nope")
+    with pytest.raises(TypeError, match="bug_config"):
+        _ = AnalogSimParams(bug_config=cast("Any", "bad"))
+    with pytest.raises(ValueError, match="basis_mode"):
+        _ = AnalogSimParams(bug_config=BUGConfig(basis_mode=cast("Any", "nope")))
 
 
 def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:

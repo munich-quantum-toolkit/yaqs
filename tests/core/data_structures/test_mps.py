@@ -304,6 +304,24 @@ def test_flip_network() -> None:
         assert np.allclose(orig, now)
 
 
+def test_flip_network_reverses_heterogeneous_physical_dimensions() -> None:
+    """flip_network reverses physical_dimensions with tensors and center metadata."""
+    t1 = rng.random(size=(3, 1, 2)).astype(np.complex128)
+    t2 = rng.random(size=(2, 2, 1)).astype(np.complex128)
+    mps = MPS(2, tensors=[t1, t2], physical_dimensions=[3, 2])
+    mps.set_center(0)
+    mps.flip_network()
+    assert mps.physical_dimensions == [2, 3]
+    assert mps.orthogonality_center == 1
+    assert mps.flipped is True
+    mps.flip_network()
+    assert mps.physical_dimensions == [3, 2]
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
+    assert np.allclose(mps.tensors[0], t1)
+    assert np.allclose(mps.tensors[1], t2)
+
+
 def test_shift_orthogonality_center_right() -> None:
     """Test shifting the orthogonality center to the right in an MPS.
 

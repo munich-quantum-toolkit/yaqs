@@ -47,10 +47,11 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
-from mqt.yaqs.analog.analog_tjm import initialize, step_through
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.methods.stochastic_process import calculate_stochastic_factor, stochastic_process
@@ -95,12 +96,11 @@ def test_initialize() -> None:
 
 
 def test_step_through() -> None:
-    """Test that step_through calls dynamic_tdvp, apply_dissipation, and stochastic_process with correct arguments.
+    """Test that step_through calls unitary evolution, dissipation, and stochastic_process.
 
     This test creates an Ising MPO and an MPS of length 5, along with a minimal NoiseModel and AnalogSimParams.
-    It patches dynamic_tdvp, apply_dissipation, and stochastic_process to ensure that step_through calls each of them
-    correctly: dynamic_tdvp should be called with the state, H, and sim_params, and both apply_dissipation and
-    stochastic_process should be called with dt.
+    It patches apply_unitary_evolution, apply_dissipation, and stochastic_process to ensure that step_through
+    calls each of them correctly.
     """
     L = 5
     J = 1
@@ -118,12 +118,12 @@ def test_step_through() -> None:
         sample_timesteps=False,
     )
     with (
-        patch("mqt.yaqs.analog.analog_tjm.tdvp") as mock_dynamic_tdvp,
+        patch("mqt.yaqs.analog.analog_tjm.apply_unitary_evolution") as mock_unitary,
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
         step_through(state, H, noise_model, sim_params, current_time=0.2)
-        mock_dynamic_tdvp.assert_called_once_with(state, H, sim_params)
+        mock_unitary.assert_called_once_with(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
@@ -376,3 +376,56 @@ def test_tjm_and_mcwf_lowering_mean_excitation_agreement() -> None:
     # v0.5.0 showed ~0.03 excess excitation in TJM at t=2; keep tolerance below that.
     mean_abs_diff = float(np.mean(np.abs(n_tjm - n_mcwf)))
     assert mean_abs_diff < 0.03, f"mean |n_TJM - n_MCWF| = {mean_abs_diff:.4f}"
+
+
+def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default order-1 TJM honors EvolutionMode.BUG for each unitary interval."""
+    calls = {"bug": 0, "tdvp": 0}
+
+    def fake_bug(state: MPS, _hamiltonian: MPO, _sim_params: AnalogSimParams) -> None:
+        calls["bug"] += 1
+        state.set_center(0)
+
+    def fake_tdvp(_state: MPS, _hamiltonian: MPO, _sim_params: AnalogSimParams) -> None:
+        calls["tdvp"] += 1
+
+    monkeypatch.setattr("mqt.yaqs.analog.evolution.bug", fake_bug)
+    monkeypatch.setattr("mqt.yaqs.analog.evolution.tdvp", fake_tdvp)
+
+    length = 3
+    state = MPS(length, state="zeros")
+    state.set_canonical_form(0)
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), site) for site in range(length)],
+        elapsed_time=0.2,
+        dt=0.1,
+        num_traj=1,
+        order=1,
+        evolution_mode=EvolutionMode.BUG,
+        sample_timesteps=True,
+        max_bond_dim=4,
+    )
+    analog_tjm_1((0, state, None, sim_params, hamiltonian))
+    assert calls["bug"] == 2
+    assert calls["tdvp"] == 0
+
+
+def test_simulator_order1_honors_bug_evolution_mode() -> None:
+    """Ordinary single-State default-order Simulator runs invoke BUG when requested."""
+    length = 3
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), site) for site in range(length)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        order=1,
+        evolution_mode=EvolutionMode.BUG,
+        max_bond_dim=8,
+        sample_timesteps=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+    assert result.expectation_values is not None
+    assert result.expectation_values[0].shape == (len(sim_params.times),)

@@ -21,13 +21,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..core.data_structures.simulation_parameters import EvolutionMode
-from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import tdvp
 from ..core.random_utils import make_sample_rng, make_trajectory_rng
+from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -87,10 +85,7 @@ def step_through(
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(state, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(state, hamiltonian, sim_params)
+    apply_unitary_evolution(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
 
     if has_scheduled_jump(noise_model, current_time, sim_params.dt):
@@ -130,10 +125,7 @@ def sample(
         The evolved MPS when this is the final time step and ``get_state=True``, else ``None``.
     """
     psi = copy.deepcopy(phi)
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(psi, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(psi, hamiltonian, sim_params)
+    apply_unitary_evolution(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
 
     current_time = sim_params.times[j]
@@ -248,10 +240,11 @@ def analog_tjm_2(
 def analog_tjm_1(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using a one-site evolution scheme.
+    """Run a single trajectory of the TJM using a first-order evolution scheme.
 
-    This function evolves the state with a one-site TDVP update, applying noise (if provided)
-    and taking observable measurements over time. It corresponds to the one-site evolution method in the TJM paper.
+    This function evolves the state with one unitary update per interval
+    (TDVP or BUG according to ``sim_params.evolution_mode``), applying noise
+    (if provided) and taking observable measurements over time.
 
     Args:
         args (tuple): A tuple containing:
@@ -288,7 +281,7 @@ def analog_tjm_1(
         state.evaluate_observables(sim_params, results, 0)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        tdvp(state, hamiltonian, sim_params)
+        apply_unitary_evolution(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt, sim_params)
             current_time = sim_params.times[j]

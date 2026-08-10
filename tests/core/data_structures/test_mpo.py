@@ -1460,3 +1460,35 @@ def test_mpo_sum_matches_iterated_addition() -> None:
     mpos = [MPO.identity(2), MPO.identity(2), MPO.identity(2)]
     ref = 3.0 * MPO.identity(2).to_matrix()
     np.testing.assert_allclose(MPO.mpo_sum(mpos).to_matrix(), ref, atol=1e-12)
+
+
+def test_mpo_reflected_involution_and_dense_equivalence() -> None:
+    """Reflecting an MPO twice restores tensors; dense matches site-reversed conjugation."""
+    mpo = MPO.ising(3, 1.0, 0.5)
+    original = [t.copy() for t in mpo.tensors]
+    reflected = mpo.reflected()
+    assert reflected is not mpo
+    for a, b in zip(original, mpo.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    twice = reflected.reflected()
+    for a, b in zip(original, twice.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    # Physical legs are not swapped by reflection.
+    for tensor in reflected.tensors:
+        assert tensor.shape[0] == tensor.shape[1] == 2
+
+    dense = mpo.to_matrix()
+    dense_reflected = reflected.to_matrix()
+    # Site-reversal permutation on a 3-qubit computational basis.
+    n = 2**3
+    perm = np.empty(n, dtype=int)
+    for i in range(n):
+        bits = [(i >> b) & 1 for b in range(3)]
+        rev = 0
+        for b, bit in enumerate(reversed(bits)):
+            rev |= bit << b
+        perm[i] = rev
+    p = np.eye(n, dtype=complex)[perm]
+    np.testing.assert_allclose(dense_reflected, p @ dense @ p.T, atol=1e-12)

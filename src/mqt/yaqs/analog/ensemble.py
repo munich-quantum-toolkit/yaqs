@@ -14,9 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..core.data_structures.simulation_parameters import EvolutionMode
-from ..core.methods.bug import bug
-from ..core.methods.tdvp import tdvp
+from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -34,10 +32,7 @@ def _unitary_step(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams) -> 
         hamiltonian (MPO): Hamiltonian as an MPO.
         sim_params (AnalogSimParams): Analog simulation parameters (time step, bond limits, etc.).
     """
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(state, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(state, hamiltonian, sim_params)
+    apply_unitary_evolution(state, hamiltonian, sim_params)
 
 
 def _step_correlator_phis(

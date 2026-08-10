@@ -19,7 +19,7 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simul
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
+from mqt.yaqs.core.data_structures.simulation_parameters import BUGConfig, EvolutionMode
 from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
 
 
@@ -511,3 +511,27 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
     jr = _embed_two_site_operator(length, 1, j_bond)
     expected = float(np.real(np.vdot(psi, jr @ jr @ psi)))
     assert val_worker == pytest.approx(expected, rel=0, abs=1e-6)
+
+
+def test_unitary_ensemble_bug_config_alternating() -> None:
+    """Ensemble path accepts BUGConfig alternating schedule through Simulator."""
+    length = 2
+    hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        evolution_mode=EvolutionMode.BUG,
+        bug_config=BUGConfig(
+            basis_mode="center",
+            schedule="alternating_endpoints",
+            compression="after_step",
+            normalize_after_compression=True,
+        ),
+        max_bond_dim=16,
+        svd_threshold=1e-10,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    assert result.expectation_values[0] is not None
+    assert len(sim_params.times) == 2
