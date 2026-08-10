@@ -162,12 +162,6 @@ During a noisy run, each trajectory passes through the complete program on one
 worker (one MPS and one RNG) before YAQS averages the recorded observables.
 Parallelism is over trajectories, not over segments.
 
-When an analog segment uses `scheduled_jumps`, jump times are segment-local:
-they are matched against that segment's own time grid (the same convention as a
-standalone analog run), not against the stitched program timeline. Put jumps on
-a segment's optional third-tuple noise model when only one segment should fire
-them.
-
 You can also pass the pair list directly to `run`, which builds a
 `SimulationProgram` under the hood:
 
@@ -181,7 +175,46 @@ result = simulator.run(
 )
 ```
 
-## 5. Compare the four results
+## 5. OpenQASM, scheduled jumps, and per-segment results
+
+Whatever you already use for standalone analog or digital runs works inside a
+program the same way.
+
+**Digital operators.** A segment may take a
+{class}`~qiskit.circuit.QuantumCircuit`, or an OpenQASM string / file path, with
+{class}`~mqt.yaqs.DigitalSimParams` — the same inputs as
+{meth}`~mqt.yaqs.Simulator.run` for circuits:
+
+```python
+program = SimulationProgram(
+    [("prep.qasm", digital_parameters), (hamiltonian, analog_parameters)],
+    observables=[x_observable],
+)
+```
+
+**Scheduled jumps.** Attach them through a {class}`~mqt.yaqs.NoiseModel` as in
+{doc}`scheduled_jumps`. Constraints are unchanged (analog MPS TJM, `order=1`,
+times on that segment's `dt` grid). Jump times are relative to the start of the
+analog segment that carries the model. Use a third-tuple noise override when
+only one segment should fire them:
+
+```python
+jumps = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
+program = SimulationProgram(
+    [
+        (preparation, digital_parameters),
+        (hamiltonian, analog_parameters, jumps),
+    ],
+    observables=[x_observable],
+)
+```
+
+**Results.** The outer result is already stitched (`result.times`,
+`result.expectation_values`, `result.counts`). Each segment also keeps an
+ordinary {class}`~mqt.yaqs.Result` at `result.segment_results[i]` if you need
+the unstitched per-segment view.
+
+## 6. Compare the four results
 
 Program results look like ordinary analog/digital results: use `result.times`
 and `result.expectation_values`. Digital samples sit at their physical time
@@ -251,7 +284,6 @@ recover lost signal contrast.
 - A noise model passed to `Simulator.run` is inherited by every segment unless
   that segment supplies a third-tuple override (`None` inherits; an empty
   `NoiseModel()` disables noise).
-- Scheduled jumps are not yet accepted in a `SimulationProgram`.
 - Noisy trajectories and their RNG streams remain continuous across segment
   boundaries.
 - A noiseless program can retain its final state with
@@ -264,5 +296,7 @@ recover lost signal contrast.
 ## Related topics
 
 - {doc}`analog_simulation` — standalone noisy analog evolution
-- {doc}`circuit_observables` — standalone digital circuit simulation
+- {doc}`circuit_observables` — standalone digital circuit simulation and
+  OpenQASM
+- {doc}`scheduled_jumps` — deterministic jumps on an analog time grid
 - {doc}`simulation_parameters` — simulation accuracy and output controls
