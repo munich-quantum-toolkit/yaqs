@@ -82,9 +82,9 @@ shared observable at circuit entry and exit.
 ## 3. Put the operations into programs
 
 A program is an ordered list of `(operator, params)` pairs. The operator type
-selects the mode: a {class}`~qiskit.circuit.QuantumCircuit` with
-{class}`~mqt.yaqs.DigitalSimParams`, or a {class}`~mqt.yaqs.Hamiltonian` with
-{class}`~mqt.yaqs.AnalogSimParams`.
+selects the mode: a {class}`~qiskit.circuit.QuantumCircuit` (or an OpenQASM
+string / file path) with {class}`~mqt.yaqs.DigitalSimParams`, or a
+{class}`~mqt.yaqs.Hamiltonian` with {class}`~mqt.yaqs.AnalogSimParams`.
 
 ```{code-cell} ipython3
 from mqt.yaqs import SimulationProgram
@@ -158,8 +158,15 @@ echo_noisy = simulator.run(
 )
 ```
 
-During a noisy run, each trajectory passes through the complete program before
-YAQS averages the recorded observables.
+During a noisy run, each trajectory passes through the complete program on one
+worker (one MPS and one RNG) before YAQS averages the recorded observables.
+Parallelism is over trajectories, not over segments.
+
+When an analog segment uses `scheduled_jumps`, jump times are segment-local:
+they are matched against that segment's own time grid (the same convention as a
+standalone analog run), not against the stitched program timeline. Put jumps on
+a segment's optional third-tuple noise model when only one segment should fire
+them.
 
 You can also pass the pair list directly to `run`, which builds a
 `SimulationProgram` under the hood:
@@ -176,10 +183,10 @@ result = simulator.run(
 
 ## 5. Compare the four results
 
-Program results look like ordinary analog/digital results: use `result.times` and
-`result.expectation_values`. Digital samples sit at their physical time offset
-(operations are instantaneous on the program timeline), so repeated timestamps
-around pulses are expected.
+Program results look like ordinary analog/digital results: use `result.times`
+and `result.expectation_values`. Digital samples sit at their physical time
+offset (operations are instantaneous on the program timeline), so repeated
+timestamps around pulses are expected.
 
 ```{code-cell} ipython3
 times = echo_noiseless.times
@@ -237,8 +244,8 @@ recover lost signal contrast.
 ## Useful things to know
 
 - Segments run in the order they appear in `SimulationProgram`.
-- Observables, `num_traj`, and `random_seed` are program-wide; leave them unset on
-  segment `AnalogSimParams` / `DigitalSimParams`.
+- Observables, `num_traj`, and `random_seed` are program-wide; leave them unset
+  on segment `AnalogSimParams` / `DigitalSimParams`.
 - YAQS passes the state between segments automatically and does not mutate the
   input state you give `Simulator.run`.
 - A noise model passed to `Simulator.run` is inherited by every segment unless

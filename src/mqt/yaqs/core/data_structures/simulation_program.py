@@ -12,12 +12,14 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import KW_ONLY, dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
+from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
 from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
@@ -36,6 +38,10 @@ SegmentInput = (
     | tuple[Hamiltonian, AnalogSimParams, NoiseModel | None]
     | tuple[QuantumCircuit, DigitalSimParams]
     | tuple[QuantumCircuit, DigitalSimParams, NoiseModel | None]
+    | tuple[str, DigitalSimParams]
+    | tuple[str, DigitalSimParams, NoiseModel | None]
+    | tuple[Path, DigitalSimParams]
+    | tuple[Path, DigitalSimParams, NoiseModel | None]
 )
 
 
@@ -111,14 +117,20 @@ def _normalize_segment(item: object, *, index: int) -> _ProgramSegment:
         _reject_program_owned_fields(params, index=index)
         return _AnalogSegment(operator, sim_params=params, noise_model=noise_model)
 
+    if isinstance(operator, (str, Path)):
+        operator = load_circuit(operator)
+
     if isinstance(operator, QuantumCircuit):
         if not isinstance(params, DigitalSimParams):
-            msg = f"segments[{index}] pairs a QuantumCircuit with {type(params).__name__}; expected DigitalSimParams."
+            msg = f"segments[{index}] pairs a circuit operator with {type(params).__name__}; expected DigitalSimParams."
             raise TypeError(msg)
         _reject_program_owned_fields(params, index=index)
         return _DigitalSegment(operator, sim_params=params, noise_model=noise_model)
 
-    msg = f"segments[{index}] operator must be Hamiltonian or QuantumCircuit, got {type(operator).__name__}."
+    msg = (
+        f"segments[{index}] operator must be Hamiltonian, QuantumCircuit, or an OpenQASM str/Path, "
+        f"got {type(operator).__name__}."
+    )
     raise TypeError(msg)
 
 
@@ -128,13 +140,16 @@ class SimulationProgram:
 
     Construct from ``(operator, params)`` pairs. Mode is selected by the operator
     type: :class:`~mqt.yaqs.Hamiltonian` with :class:`~mqt.yaqs.AnalogSimParams`, or
-    :class:`~qiskit.circuit.QuantumCircuit` with :class:`~mqt.yaqs.DigitalSimParams`.
-    An optional third ``noise_model`` entry overrides the run-level model for that
-    segment (``None`` inherits; an empty :class:`~mqt.yaqs.NoiseModel` disables noise).
+    a :class:`~qiskit.circuit.QuantumCircuit` / OpenQASM ``str`` / :class:`~pathlib.Path`
+    with :class:`~mqt.yaqs.DigitalSimParams`. An optional third ``noise_model`` entry
+    overrides the run-level model for that segment (``None`` inherits; an empty
+    :class:`~mqt.yaqs.NoiseModel` disables noise).
 
     Observables, trajectory count, and RNG seed are program-wide. Segment
     ``sim_params`` must leave ``observables`` empty and ``random_seed`` unset;
     they only carry truncation, timing, gate-mode, and related backend settings.
+    Analog ``scheduled_jumps`` times are segment-local (relative to that segment's
+    time grid), matching standalone analog runs.
 
     Args:
         segments: Non-empty iterable of ``(operator, params)`` pairs.
@@ -493,12 +508,6 @@ def _compile_program(
 
     for index, segment in enumerate(program.segments):
         resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model
-        if resolved_noise_model is not None and resolved_noise_model.scheduled_jumps:
-            msg = (
-                f"segments[{index}] uses scheduled_jumps, which are not supported in SimulationProgram execution; "
-                "their timing semantics across segment-local clocks are not yet defined."
-            )
-            raise ValueError(msg)
         _validate_noise_layout(resolved_noise_model, signature.physical_dimensions, segment_index=index)
 
         if isinstance(segment, _AnalogSegment):

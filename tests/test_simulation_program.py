@@ -696,23 +696,77 @@ def test_program_num_traj_configures_the_ensemble() -> None:
     assert digital_params.num_traj == DigitalSimParams(shots=3, preset="fast").num_traj
 
 
-def test_program_rejects_scheduled_jumps_until_program_time_semantics_are_defined() -> None:
-    """Segment-local clocks must not silently repeat run-level scheduled jumps."""
-    scheduled = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "pauli_x"}])
+def test_program_scheduled_jumps_are_segment_local() -> None:
+    """Scheduled X jumps use each analog segment's local time grid."""
+    jump_time = 0.1
+    noise = NoiseModel(scheduled_jumps=[{"time": jump_time, "sites": [0], "name": "x"}])
     program = SimulationProgram(
         [
-            (_zero_hamiltonian(1), AnalogSimParams()),
-            (_zero_hamiltonian(1), AnalogSimParams()),
+            (
+                _zero_hamiltonian(1),
+                AnalogSimParams(elapsed_time=0.3, dt=0.1, order=1),
+                noise,
+            )
         ],
-        get_state=True,
+        observables=[Observable("z", 0)],
+        num_traj=1,
     )
 
-    with pytest.raises(ValueError, match=r"scheduled_jumps.*not supported"):
-        Simulator(parallel=False, show_progress=False).run(
-            State(1, initial="zeros"),
-            program,
-            noise_model=scheduled,
-        )
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    z = np.asarray(result.expectation_values[0], dtype=float)
+    np.testing.assert_allclose(z[:1], 1.0, atol=1e-10)
+    np.testing.assert_allclose(z[1:], -1.0, atol=1e-10)
+
+
+def test_program_scheduled_jumps_rejected_for_order_2() -> None:
+    """Program analog segments keep the standalone order=1 scheduled-jump constraint."""
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
+    program = SimulationProgram(
+        [
+            (
+                _zero_hamiltonian(1),
+                AnalogSimParams(elapsed_time=0.3, dt=0.1, order=2),
+                noise,
+            )
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+    )
+
+    with pytest.raises(ValueError, match="order=1"):
+        Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+
+def test_program_scheduled_jumps_rejected_for_digital_segments() -> None:
+    """Scheduled jumps remain unsupported on digital program segments."""
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    program = SimulationProgram(
+        [(QuantumCircuit(1), DigitalSimParams(), noise)],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+    )
+
+    with pytest.raises(ValueError, match="scheduled_jumps"):
+        Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+
+def test_program_accepts_qasm_string_digital_operator() -> None:
+    """OpenQASM strings are valid digital segment operators."""
+    qasm = """\
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[1];
+x q[0];
+"""
+    program = SimulationProgram(
+        [(qasm, DigitalSimParams())],
+        observables=[Observable("z", 0)],
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(-1.0)
 
 
 def test_noiseless_program_ignores_trajectory_configuration_without_warning() -> None:

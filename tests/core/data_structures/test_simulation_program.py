@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 from dataclasses import FrozenInstanceError
+from typing import TYPE_CHECKING
 
 import pytest
 from qiskit.circuit import QuantumCircuit
@@ -27,6 +28,16 @@ from mqt.yaqs.core.data_structures.simulation_program import (
     _AnalogSegment,  # ruff: ignore[import-private-name]  # private normalized segment type
     _DigitalSegment,  # ruff: ignore[import-private-name]  # private normalized segment type
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_QASM2_X = """\
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+x q[0];
+"""
 
 
 def test_program_normalizes_pair_segments() -> None:
@@ -65,40 +76,56 @@ def test_segment_noise_is_optional() -> None:
 
 def test_program_rejects_wrong_operator_or_params_types() -> None:
     """Each pair must combine a matching operator and parameter type."""
-    with pytest.raises(TypeError, match=r"segments\[0\] operator must be Hamiltonian or QuantumCircuit"):
+    with pytest.raises(TypeError, match=r"segments\[0\] operator must be Hamiltonian, QuantumCircuit"):
         SimulationProgram([(object(), AnalogSimParams())])  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError, match=r"segments\[0\].*expected AnalogSimParams"):
-        SimulationProgram([
+        SimulationProgram([  # ty: ignore[invalid-argument-type]
             (
                 Hamiltonian.ising(2, J=1.0, g=0.5),
-                DigitalSimParams(),  # ty: ignore[invalid-argument-type]
+                DigitalSimParams(),
             )
         ])
     with pytest.raises(TypeError, match=r"segments\[0\].*expected DigitalSimParams"):
-        SimulationProgram([
+        SimulationProgram([  # ty: ignore[invalid-argument-type]
             (
                 QuantumCircuit(2),
-                AnalogSimParams(),  # ty: ignore[invalid-argument-type]
+                AnalogSimParams(),
             )
         ])
+
+
+def test_program_normalizes_qasm_string_and_path_operators(tmp_path: Path) -> None:
+    """OpenQASM strings and paths become digital segments via ``load_circuit``."""
+    qasm_path = tmp_path / "prep.qasm"
+    qasm_path.write_text(_QASM2_X, encoding="utf-8")
+
+    from_string = SimulationProgram([(_QASM2_X, DigitalSimParams())])
+    from_path = SimulationProgram([(qasm_path, DigitalSimParams())])
+
+    assert isinstance(from_string.segments[0], _DigitalSegment)
+    assert isinstance(from_path.segments[0], _DigitalSegment)
+    assert from_string.segments[0].circuit.num_qubits == 2
+    assert from_path.segments[0].circuit.num_qubits == 2
+    assert from_string.segments[0].circuit.data[0].operation.name == "x"
+    assert from_path.segments[0].circuit.data[0].operation.name == "x"
 
 
 def test_program_rejects_wrong_noise_model_type() -> None:
     """The optional third entry must be a NoiseModel when provided."""
     with pytest.raises(TypeError, match=r"segments\[0\] noise_model must be NoiseModel"):
-        SimulationProgram([
+        SimulationProgram([  # ty: ignore[invalid-argument-type]
             (
                 Hamiltonian.ising(2, J=1.0, g=0.5),
                 AnalogSimParams(),
-                object(),  # ty: ignore[invalid-argument-type]
+                object(),
             )
         ])
     with pytest.raises(TypeError, match=r"segments\[0\] noise_model must be NoiseModel"):
-        SimulationProgram([
+        SimulationProgram([  # ty: ignore[invalid-argument-type]
             (
                 QuantumCircuit(2),
                 DigitalSimParams(),
-                object(),  # ty: ignore[invalid-argument-type]
+                object(),
             )
         ])
 
@@ -133,8 +160,12 @@ def test_program_preserves_order_and_defensively_copies_input() -> None:
 
     assert len(program) == 2
     assert list(program) == list(program.segments)
-    assert program.segments[0].hamiltonian is hamiltonian
-    assert program.segments[1].circuit is circuit
+    first = program.segments[0]
+    second = program.segments[1]
+    assert isinstance(first, _AnalogSegment)
+    assert isinstance(second, _DigitalSegment)
+    assert first.hamiltonian is hamiltonian
+    assert second.circuit is circuit
     assert len(program.observables) == 1
     assert program.observables[0].gate.name == "z"
     assert program.num_traj == 17
