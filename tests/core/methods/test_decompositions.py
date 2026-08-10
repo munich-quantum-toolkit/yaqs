@@ -195,7 +195,7 @@ def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
     mat = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
     q, _ = np.linalg.qr(mat)
     q = np.asarray(q, dtype=np.complex128)
-    return cast("NDArray[np.complex128]", q[:, :n])
+    return q[:, :n]
 
 
 def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) -> NDArray[np.complex128]:

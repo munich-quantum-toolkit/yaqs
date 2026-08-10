@@ -28,6 +28,7 @@ from .core.data_structures.simulation_parameters import (
     DigitalSimParams,
     Observable,
 )
+from .core.data_structures.simulation_program import SimulationProgram
 from .core.data_structures.state import State
 from .equivalence_checker import EquivalenceChecker
 from .memory_characterizer import MemoryCharacterizer
@@ -47,6 +48,7 @@ __all__ = [
     "NoiseModel",
     "Observable",
     "Result",
+    "SimulationProgram",
     "Simulator",
     "State",
     "__version__",

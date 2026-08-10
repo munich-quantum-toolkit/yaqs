@@ -15,6 +15,7 @@ matrix product states (MPS) and constructing generator MPOs.
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
@@ -44,6 +45,144 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.simulation_parameters import DigitalSimParams, GateMode
     from ..core.methods.decompositions import TruncMode
+
+
+@dataclass(frozen=True)
+class _CompiledCircuitLayer:
+    """Executor-owned gate data for one digital execution layer.
+
+    Compiled gates are private to the executor and must never be mutated during
+    trajectory execution.
+    """
+
+    single_qubit_gates: tuple[BaseGate, ...]
+    even_two_qubit_gates: tuple[BaseGate, ...]
+    odd_two_qubit_gates: tuple[BaseGate, ...]
+    sample_points: int
+
+
+@dataclass(frozen=True)
+class _CompiledCircuit:
+    """Executor-owned circuit translation reused without mutation across trajectories."""
+
+    layers: tuple[_CompiledCircuitLayer, ...]
+    num_mid_measurements: int
+
+
+_INVALID_SWAP_ROUTE_MESSAGE = (
+    "gate_mode='swaps' cannot route a qubit gate through a non-qubit spectator; use gate_mode='mpo' or a TDVP mode."
+)
+
+
+def _swap_route_is_valid(
+    physical_dimensions: tuple[int, ...] | list[int],
+    site0: int,
+    site1: int,
+) -> bool:
+    """Return whether SWAP routing crosses only qubit sites."""
+    first_site, last_site = min(site0, site1), max(site0, site1)
+    return all(dimension == 2 for dimension in physical_dimensions[first_site : last_site + 1])
+
+
+def _freeze_gate_arrays(gate: BaseGate) -> BaseGate:
+    """Protect executor-owned gate arrays against accidental in-process mutation.
+
+    Array flags are a defensive check in the compiling process, not the
+    cross-process ownership contract. The executor owns compiled gates and never
+    mutates them during trajectory execution.
+
+    Returns:
+        The same gate with non-writable NumPy arrays.
+    """
+    for name in ("matrix", "tensor"):
+        value = getattr(gate, name, None)
+        if isinstance(value, np.ndarray):
+            value.setflags(write=False)
+    generator = getattr(gate, "generator", None)
+    if isinstance(generator, np.ndarray):
+        generator.setflags(write=False)
+    elif isinstance(generator, list):
+        for value in generator:
+            value.setflags(write=False)
+    try:
+        mpo_tensors = gate.mpo_tensors
+    except AttributeError:
+        mpo_tensors = None
+    if mpo_tensors is not None:
+        for value in mpo_tensors:
+            value.setflags(write=False)
+    return gate
+
+
+def _validate_gate_layout(
+    gate: BaseGate,
+    physical_dimensions: tuple[int, ...],
+    gate_mode: GateMode | None,
+) -> None:
+    """Validate one translated gate against an MPS layout.
+
+    Raises:
+        ValueError: If a target is not a qubit or SWAP routing crosses a non-qubit site.
+    """
+    for site in gate.sites:
+        dimension = physical_dimensions[site]
+        if dimension != 2:
+            msg = (
+                f"Qubit gate '{gate.name}' targets site {site} with physical dimension "
+                f"{dimension}; digital gates currently require dimension 2 targets."
+            )
+            raise ValueError(msg)
+    if (
+        gate.interaction == 2
+        and gate_mode == "swaps"
+        and not _swap_route_is_valid(physical_dimensions, gate.sites[0], gate.sites[1])
+    ):
+        raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
+
+
+def _compile_circuit(
+    circuit: QuantumCircuit,
+    physical_dimensions: tuple[int, ...] | None = None,
+    *,
+    gate_mode: GateMode | None = None,
+) -> _CompiledCircuit:
+    """Translate and validate a circuit once for repeated trajectory execution.
+
+    Args:
+        circuit: Qiskit circuit to translate.
+        physical_dimensions: Optional MPS layout. When supplied, every operated-on
+            site must be a qubit, while idle non-qubit wires remain spectators.
+        gate_mode: Two-qubit execution mode. ``"swaps"`` cannot route through a
+            non-qubit spectator and is rejected during compilation.
+
+    Returns:
+        Executor-owned layer metadata containing translated YAQS gates.
+
+    """
+    dag = circuit_to_dag(circuit)
+    layers: list[_CompiledCircuitLayer] = []
+    num_mid_measurements = 0
+    while dag.op_nodes():
+        single_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
+
+        def translate(nodes: list[DAGOpNode]) -> tuple[BaseGate, ...]:
+            gates = tuple(_freeze_gate_arrays(convert_dag_to_tensor_algorithm(node)[0]) for node in nodes)
+            if physical_dimensions is not None:
+                for gate in gates:
+                    _validate_gate_layout(gate, physical_dimensions, gate_mode)
+            return gates
+
+        single_gates = translate(single_nodes)
+        even_gates = translate(even_nodes)
+        odd_gates = translate(odd_nodes)
+        for node in (*single_nodes, *even_nodes, *odd_nodes, *measure_barriers):
+            dag.remove_op_node(node)
+        sample_points = len(measure_barriers)
+        num_mid_measurements += sample_points
+        if single_gates or even_gates or odd_gates or sample_points:
+            layers.append(_CompiledCircuitLayer(single_gates, even_gates, odd_gates, sample_points))
+
+    return _CompiledCircuit(tuple(layers), num_mid_measurements)
 
 
 def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> NoiseModel:
@@ -150,17 +289,25 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         if len(node.qargs) == 1:
             single_qubit_nodes.append(node)
         # Group gates on two or more qubits by even/odd based on the lowest qubit index.
-        elif min(qubit._index for qubit in node.qargs) % 2 == 0:  # ruff:ignore[private-member-access]
+        elif min(dag.find_bit(qubit).index for qubit in node.qargs) % 2 == 0:
             even_nodes.append(node)
         else:
             odd_nodes.append(node)
 
     # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
-    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # ruff:ignore[private-member-access]
-    even_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
-    odd_nodes.sort(key=lambda node: min(qubit._index for qubit in node.qargs))  # ruff:ignore[private-member-access]
+    single_qubit_nodes.sort(key=lambda node: dag.find_bit(node.qargs[0]).index)
+    even_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
+    odd_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
+
+
+def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
+    """Apply one translated single-qubit gate to an MPS in place."""
+    site = gate.sites[0]
+    state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
+    if state.orthogonality_center is not None and state.orthogonality_center != site:
+        state.set_center(None)
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
@@ -172,14 +319,14 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     state (MPS): The matrix product state (MPS) representing the quantum state.
     node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
     """
-    gate = convert_dag_to_tensor_algorithm(node)[0]
-    site = gate.sites[0]
-    state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
-    if state.orthogonality_center is not None and state.orthogonality_center != site:
-        state.set_center(None)
+    _apply_single_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0])
 
 
-def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
+def construct_generator_mpo(
+    gate: BaseGate,
+    length: int,
+    physical_dimensions: tuple[int, ...] | list[int] | None = None,
+) -> tuple[MPO, int, int]:
     """Construct Generator MPO.
 
     Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
@@ -189,6 +336,7 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     Args:
         gate: The gate containing the generator and the sites it acts on.
         length: The total number of sites in the system.
+        physical_dimensions: Local dimensions used for spectator identities.
 
     Returns:
         A tuple containing the constructed MPO, the first site index, and the last site index.
@@ -198,9 +346,11 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     last_site = max(gate.sites)
 
     tensors = []
+    dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * length
     for site in range(length):
-        w = np.zeros((1, 1, 2, 2), dtype=complex)
-        w[0, 0] = factors.get(site, np.eye(2))
+        dimension = dimensions[site]
+        w = np.zeros((1, 1, dimension, dimension), dtype=complex)
+        w[0, 0] = factors.get(site, np.eye(dimension))
         tensors.append(w)
 
     mpo = MPO()
@@ -243,7 +393,11 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     short_mpo = MPO()
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
-    short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
+    short_state = MPS(
+        length=window[1] - window[0] + 1,
+        tensors=state.tensors[window[0] : window[1] + 1],
+        physical_dimensions=state.physical_dimensions[window[0] : window[1] + 1],
+    )
     if rel_center is not None:
         short_state.set_center(rel_center)
     else:
@@ -280,7 +434,7 @@ def apply_two_qubit_gate_tdvp(
     if sim_params.tdvp_mode != "2site":
         msg = f'apply_two_qubit_gate_tdvp only supports tdvp_mode="2site"; got {sim_params.tdvp_mode!r}.'
         raise ValueError(msg)
-    mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
+    mpo, first_site, last_site = construct_generator_mpo(gate, state.length, state.physical_dimensions)
 
     window_size = 1
     gauge_known = state.orthogonality_center is not None
@@ -397,12 +551,14 @@ def apply_long_range_gate_mpo(
     """
     first_site = min(gate.sites)
     last_site = max(gate.sites)
-    MPO.from_gate(gate, state.length).multiply(state, sim_params=sim_params, compress=True)
+    MPO.from_gate(gate, state.length, physical_dimensions=state.physical_dimensions).multiply(
+        state, sim_params=sim_params, compress=True
+    )
     return first_site, last_site
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimParams) -> tuple[int, int]:
-    """Apply a gate on two or more qubits using the configured gate mode.
+def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimParams) -> tuple[int, int]:
+    """Apply one translated gate on two or more qubits using the configured mode.
 
     Two-qubit gates are routed by ``gate_mode`` exactly as before. Gates on three or
     more qubits have no TEBD path: the TDVP modes use the generator window when a
@@ -411,16 +567,15 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
 
     Args:
         state: MPS updated in place.
-        node: DAG node for the gate.
+        gate: Executor-owned translated gate.
         sim_params: Simulation parameters including ``gate_mode``.
 
     Returns:
-        ``(first_site, last_site)`` for downstream local noise handling.
+        First and last affected MPS sites.
 
     Raises:
-        ValueError: If ``gate_mode`` is unknown.
+        ValueError: If the gate mode is unknown or heterogeneous SWAP routing is unsafe.
     """
-    gate = convert_dag_to_tensor_algorithm(node)[0]
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
     if gate_mode not in {"tdvp", "full-tdvp", "swaps", "mpo"}:
         msg = f"Unknown gate_mode: {gate_mode!r}"
@@ -437,6 +592,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
 
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
+
+    if gate_mode == "swaps" and not _swap_route_is_valid(state.physical_dimensions, site0, site1):
+        raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
 
     if gate_mode == "full-tdvp":
         if has_generator:
@@ -461,8 +619,27 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     return apply_long_range_gate_mpo(state, gate, sim_params)
 
 
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimParams) -> tuple[int, int]:
+    """Apply a two-qubit gate using the configured two-qubit gate mode.
+
+    Args:
+        state: MPS updated in place.
+        node: DAG node for the two-qubit gate.
+        sim_params: Simulation parameters including ``gate_mode``.
+
+    Returns:
+        ``(first_site, last_site)`` for downstream local noise handling.
+
+    """
+    return _apply_two_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0], sim_params)
+
+
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+    *,
+    copy_initial_state: bool = True,
+    rng: np.random.Generator | None = None,
+    compiled_circuit: _CompiledCircuit | None = None,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
@@ -480,6 +657,12 @@ def digital_tjm(
             - Noise model, or ``None``
             - Digital simulation parameters
             - Quantum circuit
+        copy_initial_state: Whether to deep-copy the input MPS before execution.
+        rng: Optional externally managed trajectory RNG. When omitted, the
+            standalone trajectory seed behavior is preserved.
+        compiled_circuit: Optional executor-owned pretranslated circuit reused
+            without mutation across trajectories. Standalone calls compile the
+            supplied circuit once.
 
     Returns:
         ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
@@ -489,8 +672,8 @@ def digital_tjm(
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
 
-    state = copy.deepcopy(initial_state)
-    dag = circuit_to_dag(circuit)
+    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
+    compiled = compiled_circuit if compiled_circuit is not None else _compile_circuit(circuit)
     diagnostics: NDArray[np.float64] | None = None
     results: NDArray[np.float64] | None = None
     wants_obs = bool(sim_params.observables)
@@ -499,45 +682,41 @@ def digital_tjm(
     noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
 
     # Observable / get-state path allocates diagnostics (shots-only leaves them None).
+    # Prefer the compiled circuit's barrier count so every layer.sample_points entry fits.
     if not shots_only:
-        num_cols = (sim_params.num_mid_measurements + 2) if sim_params.sample_layers else 1
+        mid = compiled.num_mid_measurements if sim_params.sample_layers else 0
+        num_cols = (mid + 2) if sim_params.sample_layers else 1
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
-            results = np.zeros((n_obs, sim_params.num_mid_measurements + 2))
+            results = np.zeros((n_obs, mid + 2))
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
                 state.evaluate_observables(sim_params, results, 0)
         else:
             results = np.zeros((n_obs, 1))
 
-    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    if rng is None:
+        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     col_idx = 0
-    while dag.op_nodes():
-        single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
+    for layer in compiled.layers:
+        for gate in layer.single_qubit_gates:
+            _apply_single_qubit_gate(state, gate)
 
-        for node in single_qubit_nodes:
-            apply_single_qubit_gate(state, node)
-            dag.remove_op_node(node)
-
-        for _, group in [("even", even_nodes), ("odd", odd_nodes)]:
-            for node in group:
-                apply_two_qubit_gate(state, node, sim_params)
+        for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
+            for gate in group:
+                _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
 
                 if not noisy:
                     state.normalize(form="B", decomposition="QR")
                 else:
-                    gate_sites = [dag.find_bit(qubit).index for qubit in node.qargs]
-                    local_noise_model = create_local_noise_model(noise_model, gate_sites)
+                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
-                dag.remove_op_node(node)
-
         if sim_params.sample_layers:
-            for measure_barrier in measure_barriers:
-                dag.remove_op_node(measure_barrier)
+            for _ in range(layer.sample_points):
                 col_idx += 1
                 assert diagnostics is not None
                 assert results is not None
@@ -548,7 +727,8 @@ def digital_tjm(
     final = state if sim_params.get_state else None
 
     if shots_only:
-        per_call = 1 if noisy else _per_call_shots(sim_params, traj_idx)
+        has_explicit_shot_plan = "per_call_shots" in WORKER_CTX or "shot_distribution" in WORKER_CTX
+        per_call = _per_call_shots(sim_params, traj_idx) if has_explicit_shot_plan or not noisy else 1
         counts = state.measure_shots(per_call) if per_call > 0 else {}
         return None, None, counts, final
 

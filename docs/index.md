@@ -72,6 +72,7 @@ flowchart LR
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
 | Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
+| Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
 
@@ -133,6 +134,15 @@ examples/circuit_observables
 examples/circuit_shots
 examples/custom_gates
 examples/equivalence_checking
+```
+
+```{toctree}
+:caption: Digital–analog simulation
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
+examples/digital_analog_simulation
 ```
 
 ```{toctree}

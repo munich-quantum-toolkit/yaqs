@@ -17,18 +17,17 @@ read-only configuration; the simulator never mutates the objects passed to
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from .simulation_parameters import AnalogSimParams, DigitalSimParams
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 
 if TYPE_CHECKING:
     from numpy import complex128, float64
     from numpy.typing import NDArray
 
     from .noise_model import NoiseModel
-    from .simulation_parameters import Observable
     from .state import State
 
 
@@ -157,16 +156,20 @@ def aggregate_counts(result: Result) -> None:
 class Result:
     """Result of a :meth:`~mqt.yaqs.Simulator.run` call.
 
-    Holds all simulation outputs. :attr:`sim_params` is the read-only configuration
-    object the user passed in. :attr:`observables` preserves the user-supplied
-    ordering from ``sim_params.observables`` (deep-copied from the configuration);
-    :attr:`expectation_values` and
-    :attr:`trajectories` hold the corresponding data in lock-step by index.
-    For MPS-backed analog and digital runs with observables, :attr:`runtime_cost`,
-    :attr:`max_bond`, and :attr:`total_bond` are populated automatically.
+    Holds all simulation outputs. For standalone runs, :attr:`sim_params` is the
+    read-only configuration object the user passed in. For a
+    :class:`~mqt.yaqs.SimulationProgram`, the outer result uses ``sim_params=None``
+    and exposes stitched :attr:`expectation_values`, :attr:`times`, and
+    :attr:`counts` like a normal run; :attr:`segment_results` retains per-segment
+    detail. :attr:`observables` preserves the user-supplied ordering;
+    :attr:`expectation_values` and :attr:`trajectories` hold the corresponding
+    data in lock-step by index. For MPS-backed runs with observables,
+    :attr:`runtime_cost`, :attr:`max_bond`, and :attr:`total_bond` are populated
+    automatically. Nested segment results use :attr:`segment_index`,
+    :attr:`segment_type`, and :attr:`time_offset`.
     """
 
-    sim_params: AnalogSimParams | DigitalSimParams
+    sim_params: AnalogSimParams | DigitalSimParams | None = None
     observables: list[Observable] = field(default_factory=list)
     expectation_values: list[NDArray[float64]] = field(default_factory=list)
     trajectories: list[NDArray] = field(default_factory=list)
@@ -180,3 +183,7 @@ class Result:
     multi_time_results: NDArray[complex128] | None = None
     measurements: list[dict[int, int] | None] = field(default_factory=list)
     counts: dict[int, int] | None = None
+    segment_results: list[Result] = field(default_factory=list)
+    segment_index: int | None = None
+    segment_type: Literal["analog", "digital"] | None = None
+    time_offset: float | None = None

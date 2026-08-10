@@ -1003,6 +1003,57 @@ def test_multiply_mps_with_compression() -> None:
     assert state.orthogonality_center is not None
 
 
+def test_from_gate_uses_heterogeneous_spectator_identities() -> None:
+    """A long-range qubit gate MPO preserves actual spectator dimensions."""
+    dimensions = [2, 3, 2]
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 2)
+
+    gate_mpo = MPO.from_gate(gate, 3, physical_dimensions=dimensions)
+
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in gate_mpo.tensors] == [
+        (2, 2),
+        (3, 3),
+        (2, 2),
+    ]
+
+
+def test_from_gate_pads_interior_support_with_heterogeneous_outer_identities() -> None:
+    """Interior gate support keeps spectator dims outside and inside the support."""
+    dimensions = [3, 2, 2, 4]
+    gate = GateLibrary.cx()
+    gate.set_sites(1, 2)
+
+    gate_mpo = MPO.from_gate(gate, 4, physical_dimensions=dimensions)
+
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in gate_mpo.tensors] == [
+        (3, 3),
+        (2, 2),
+        (2, 2),
+        (4, 4),
+    ]
+
+
+def test_from_gate_rejects_wrong_physical_dimension_count() -> None:
+    """Explicit chain metadata must describe every MPO site."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    with pytest.raises(ValueError, match="Expected 2 physical dimensions"):
+        MPO.from_gate(gate, 2, physical_dimensions=[2])
+
+
+def test_from_gate_support_only_accepts_nonzero_site_labels() -> None:
+    """Support-only MPO dimensions are local even when gate site labels are nonzero."""
+    gate = GateLibrary.cx()
+    gate.set_sites(2, 3)
+
+    gate_mpo = MPO.from_gate(gate, 2, physical_dimensions=[2, 2])
+
+    assert gate_mpo.length == 2
+    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix, atol=1e-12)
+
+
 def test_multiply_mps_invalidates_then_restores_center() -> None:
     """``multiply(MPS)`` clears gauge during apply and ``compress`` restores tracking."""
     length = 3
