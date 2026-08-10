@@ -83,6 +83,12 @@ ax.set_title("Optional noise model on the fourth `run` argument")
 ax.legend(frameon=False)
 ```
 
+In digital simulation the noise model is applied once per gate on two or more
+qubits: after the unitary update, one noise layer acts on processes whose sites
+all belong to the gate's qubits. Single-qubit gates and idle sites between the
+gate qubits receive no noise. Each gate counts as one unit of noise time; to
+model compiled depth, simulate the transpiled circuit.
+
 ## 2. Noise-strength sweep
 
 On a longer chain, sweep a global relaxation rate $\gamma$ and track how each

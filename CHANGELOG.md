@@ -24,6 +24,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- tested and documented the multi-qubit local noise rule ([#529])
+  ([**@Pouri96**])
 - hardened stability of noise model, timestep selection, and RNG ([#527])
   ([**@aaronleesander**])
 - State.representation set as sole backend selector ([#519])
@@ -242,6 +244,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
 [#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
 [#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
 [#524]: https://github.com/munich-quantum-toolkit/yaqs/pull/524
