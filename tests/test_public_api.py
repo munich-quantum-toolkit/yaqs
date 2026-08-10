@@ -56,8 +56,8 @@ def test_characterization_result_not_top_level() -> None:
     """CharacterizationResult is returned by MemoryCharacterizer, not a top-level import."""
     assert "CharacterizationResult" not in yaqs.__all__
     assert "ProbeResult" not in yaqs.__all__
-    assert "AnalogSegment" not in yaqs.__all__
-    assert "DigitalSegment" not in yaqs.__all__
+    assert "_AnalogSegment" not in yaqs.__all__
+    assert "_DigitalSegment" not in yaqs.__all__
 
 
 def test_top_level_import_smoke() -> None:

@@ -569,14 +569,12 @@ def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pyte
         *,
         base_seed: int | None,
         timestep: int,
-        stream_id: int | None = None,
     ) -> np.random.Generator:
         timesteps.append(timestep)
         return original_make_sample_rng(
             traj_idx,
             base_seed=base_seed,
             timestep=timestep,
-            stream_id=stream_id,
         )
 
     monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_timestep)
@@ -616,14 +614,12 @@ def test_order_one_segment_resets_order_two_sample_timestep_offset(monkeypatch: 
         *,
         base_seed: int | None,
         timestep: int,
-        stream_id: int | None = None,
     ) -> np.random.Generator:
         timesteps.append(timestep)
         return original_make_sample_rng(
             traj_idx,
             base_seed=base_seed,
             timestep=timestep,
-            stream_id=stream_id,
         )
 
     monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_timestep)

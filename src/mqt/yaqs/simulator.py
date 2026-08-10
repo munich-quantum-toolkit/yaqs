@@ -55,6 +55,7 @@ import copy
 # Thread limits are enforced in worker processes via limit_worker_threads()
 # and in backend calls via call_serial_capped() with threadpoolctl.
 # ---------------------------------------------------------------------------
+from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -62,7 +63,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
 
     from .core.data_structures.mpo import MPO
     from .core.data_structures.noise_model import NoiseModel
@@ -271,6 +272,148 @@ def _sample_program_noise_models(compiled: _CompiledProgram) -> _CompiledProgram
     return replace(compiled, instructions=instructions, default_noise_model=sampled_default)
 
 
+def _same_order2_operator(
+    left: _CompiledAnalogInstruction,
+    right: _CompiledAnalogInstruction,
+) -> bool:
+    """Return whether two analog instructions share Hamiltonian and noise content."""
+    if left.noise_model is not right.noise_model:
+        return False
+    left_mpo = left.hamiltonian
+    right_mpo = right.hamiltonian
+    if left_mpo is right_mpo:
+        return True
+    if len(left_mpo.tensors) != len(right_mpo.tensors):
+        return False
+    return all(starmap(np.array_equal, zip(left_mpo.tensors, right_mpo.tensors, strict=True)))
+
+
+def _order2_chain_continues(
+    instructions: tuple[_CompiledAnalogInstruction | _CompiledDigitalInstruction, ...],
+    current: _CompiledAnalogInstruction,
+    index: int,
+) -> bool:
+    """Return whether the next instruction can continue this order-2 trajectory.
+
+    Continuation requires an adjacent order-2 analog segment with the same
+    Hamiltonian, resolved noise model, ``dt``, and ``sample_timesteps``, and a
+    non-trivial current time grid so a mid-Trotter ``phi`` handoff is meaningful.
+    """
+    nxt = instructions[index + 1] if index + 1 < len(instructions) else None
+    next_params = nxt.execution_params if isinstance(nxt, _CompiledAnalogInstruction) else None
+    current_params = current.execution_params
+    return (
+        isinstance(nxt, _CompiledAnalogInstruction)
+        and next_params is not None
+        and next_params.order == 2
+        and len(current_params.times) > 1
+        and len(next_params.times) > 1
+        and current_params.dt == next_params.dt
+        and current_params.sample_timesteps == next_params.sample_timesteps
+        and _same_order2_operator(current, nxt)
+    )
+
+
+def _execute_analog_instruction(
+    traj_idx: int,
+    current_state: MPS,
+    instruction: _CompiledAnalogInstruction,
+    instructions: tuple[_CompiledAnalogInstruction | _CompiledDigitalInstruction, ...],
+    rng: np.random.Generator,
+    *,
+    sample_timestep_offset: int,
+    continue_order2_trajectory: bool,
+) -> tuple[
+    NDArray[np.float64] | None,
+    NDArray[np.float64] | None,
+    MPS | None,
+    int,
+    bool,
+]:
+    """Execute one analog program segment and update order-2 continuation state.
+
+    Returns:
+        Observable data, diagnostics, next MPS, and the updated
+        ``(sample_timestep_offset, continue_order2_trajectory)`` pair.
+    """
+    backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
+    if backend is analog_tjm_2:
+        hand_off_trajectory = _order2_chain_continues(instructions, instruction, instruction.index)
+        traj_data, traj_diag, next_state = backend(
+            (
+                traj_idx,
+                current_state,
+                instruction.noise_model,
+                instruction.execution_params,
+                instruction.hamiltonian,
+            ),
+            copy_initial_state=False,
+            rng=rng,
+            sample_timestep_offset=sample_timestep_offset,
+            use_trajectory_rng_for_final_sample=False,
+            return_trajectory_state=hand_off_trajectory,
+            continue_trajectory=continue_order2_trajectory,
+        )
+        if hand_off_trajectory:
+            n_times = len(instruction.execution_params.times)
+            # Match global sample indices of one continuous order-2 run: after a
+            # segment with T grid points, the next sample timestep is T - 1 + local.
+            sample_timestep_offset += max(n_times - 1, 0)
+            continue_order2_trajectory = True
+        else:
+            sample_timestep_offset = 0
+            continue_order2_trajectory = False
+    else:
+        traj_data, traj_diag, next_state = backend(
+            (
+                traj_idx,
+                current_state,
+                instruction.noise_model,
+                instruction.execution_params,
+                instruction.hamiltonian,
+            ),
+            copy_initial_state=False,
+            rng=rng,
+        )
+        sample_timestep_offset = 0
+        continue_order2_trajectory = False
+    return traj_data, traj_diag, next_state, sample_timestep_offset, continue_order2_trajectory
+
+
+def _execute_digital_instruction(
+    traj_idx: int,
+    current_state: MPS,
+    instruction: _CompiledDigitalInstruction,
+    rng: np.random.Generator,
+    *,
+    effective_num_traj: int,
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
+    """Execute one digital program segment.
+
+    Returns:
+        Observable data, diagnostics, optional shot counts, and the next MPS.
+    """
+    shots = instruction.execution_params.shots
+    if shots is not None:
+        WORKER_CTX["shot_distribution"] = (shots, effective_num_traj)
+    try:
+        return digital_tjm(
+            (
+                traj_idx,
+                current_state,
+                instruction.noise_model,
+                instruction.execution_params,
+                instruction.circuit,
+            ),
+            copy_initial_state=False,
+            rng=rng,
+            compiled_circuit=instruction.compiled_circuit,
+        )
+    finally:
+        if shots is not None:
+            WORKER_CTX.pop("shot_distribution", None)
+
+
 def _execute_program_trajectory(
     traj_idx: int,
     initial_state: MPS,
@@ -299,113 +442,30 @@ def _execute_program_trajectory(
     continue_order2_trajectory = False
     instructions = compiled.instructions
 
-    def _same_order2_operator(
-        left: _CompiledAnalogInstruction,
-        right: _CompiledAnalogInstruction,
-    ) -> bool:
-        """Return whether two analog instructions share Hamiltonian and noise content."""
-        if left.noise_model is not right.noise_model:
-            return False
-        left_mpo = left.hamiltonian
-        right_mpo = right.hamiltonian
-        if left_mpo is right_mpo:
-            return True
-        if len(left_mpo.tensors) != len(right_mpo.tensors):
-            return False
-        return all(starmap(np.array_equal, zip(left_mpo.tensors, right_mpo.tensors, strict=True)))
-
-    def _order2_chain_continues(current: _CompiledAnalogInstruction, index: int) -> bool:
-        """Return whether the next instruction can continue this order-2 trajectory.
-
-        Continuation requires an adjacent order-2 analog segment with the same
-        Hamiltonian, resolved noise model, ``dt``, and ``sample_timesteps``, and a
-        non-trivial current time grid so a mid-Trotter ``phi`` handoff is meaningful.
-        Different operators or noise break the chain so the next segment
-        re-initializes from a physical sample-state handoff.
-        """
-        if index + 1 >= len(instructions):
-            return False
-        nxt = instructions[index + 1]
-        if not isinstance(nxt, _CompiledAnalogInstruction):
-            return False
-        current_params = current.execution_params
-        next_params = nxt.execution_params
-        if next_params.order != 2:
-            return False
-        if len(current_params.times) <= 1 or len(next_params.times) <= 1:
-            return False
-        if current_params.dt != next_params.dt:
-            return False
-        if current_params.sample_timesteps != next_params.sample_timesteps:
-            return False
-        return _same_order2_operator(current, nxt)
-
     for instruction in instructions:
         if isinstance(instruction, _CompiledAnalogInstruction):
-            backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
-            if backend is analog_tjm_2:
-                hand_off_trajectory = _order2_chain_continues(instruction, instruction.index)
-                traj_data, traj_diag, next_state = backend(
-                    (
-                        traj_idx,
-                        current_state,
-                        instruction.noise_model,
-                        instruction.execution_params,
-                        instruction.hamiltonian,
-                    ),
-                    copy_initial_state=False,
-                    rng=rng,
+            traj_data, traj_diag, next_state, sample_timestep_offset, continue_order2_trajectory = (
+                _execute_analog_instruction(
+                    traj_idx,
+                    current_state,
+                    instruction,
+                    instructions,
+                    rng,
                     sample_timestep_offset=sample_timestep_offset,
-                    use_trajectory_rng_for_final_sample=False,
-                    return_trajectory_state=hand_off_trajectory,
-                    continue_trajectory=continue_order2_trajectory,
+                    continue_order2_trajectory=continue_order2_trajectory,
                 )
-                if hand_off_trajectory:
-                    n_times = len(instruction.execution_params.times)
-                    # Match global sample indices of one continuous order-2 run: after a
-                    # segment with T grid points, the next sample timestep is T - 1 + local.
-                    sample_timestep_offset += max(n_times - 1, 0)
-                    continue_order2_trajectory = True
-                else:
-                    sample_timestep_offset = 0
-                    continue_order2_trajectory = False
-            else:
-                traj_data, traj_diag, next_state = backend(
-                    (
-                        traj_idx,
-                        current_state,
-                        instruction.noise_model,
-                        instruction.execution_params,
-                        instruction.hamiltonian,
-                    ),
-                    copy_initial_state=False,
-                    rng=rng,
-                )
-                sample_timestep_offset = 0
-                continue_order2_trajectory = False
+            )
             shot_counts = None
         elif isinstance(instruction, _CompiledDigitalInstruction):
             continue_order2_trajectory = False
             sample_timestep_offset = 0
-            shots = instruction.execution_params.shots
-            if shots is not None:
-                WORKER_CTX["shot_distribution"] = (shots, effective_num_traj)
-            try:
-                traj_data, traj_diag, shot_counts, next_state = digital_tjm(
-                    (
-                        traj_idx,
-                        current_state,
-                        instruction.noise_model,
-                        instruction.execution_params,
-                        instruction.circuit,
-                    ),
-                    copy_initial_state=False,
-                    rng=rng,
-                    compiled_circuit=instruction.compiled_circuit,
-                )
-            finally:
-                if shots is not None:
-                    WORKER_CTX.pop("shot_distribution", None)
+            traj_data, traj_diag, shot_counts, next_state = _execute_digital_instruction(
+                traj_idx,
+                current_state,
+                instruction,
+                rng,
+                effective_num_traj=effective_num_traj,
+            )
         else:
             msg = f"Unknown instruction type {type(instruction).__name__} in compiled program."
             raise TypeError(msg)
@@ -419,6 +479,46 @@ def _execute_program_trajectory(
 
     final_state = current_state if compiled.get_state else None
     return tuple(segment_payloads), final_state
+
+
+def _validate_compiled_program(compiled: _CompiledProgram) -> tuple[bool, bool, bool]:
+    """Validate program outputs and per-segment noise models.
+
+    Args:
+        compiled: Compiled program after pair normalization.
+
+    Returns:
+        ``(has_observables, has_shots, stochastic)`` flags used by the executor.
+
+    Raises:
+        ValueError: If no output is specified or a noisy program requests a state.
+    """
+    has_observables = bool(compiled.observables)
+    has_shots = any(
+        isinstance(instruction, _CompiledDigitalInstruction) and instruction.execution_params.shots is not None
+        for instruction in compiled.instructions
+    )
+    if not has_observables and not has_shots and not compiled.get_state:
+        msg = "No output specified: set observables=, shots on a digital segment, and/or get_state=."
+        raise ValueError(msg)
+
+    for instruction in compiled.instructions:
+        if instruction.noise_model is None:
+            continue
+        is_digital = isinstance(instruction, _CompiledDigitalInstruction)
+        validate_noise_model_for_run(
+            instruction.noise_model,
+            length=compiled.state_signature.length,
+            physical_dimensions=list(compiled.state_signature.physical_dimensions),
+            representation="mps",
+            is_digital=is_digital,
+            sim_params=None if is_digital else instruction.execution_params,
+        )
+    stochastic = any(_noise_model_is_stochastic(instruction.noise_model) for instruction in compiled.instructions)
+    if stochastic and compiled.get_state:
+        msg = "Cannot return state from a noisy SimulationProgram due to stochastic trajectories."
+        raise ValueError(msg)
+    return has_observables, has_shots, stochastic
 
 
 def _program_worker(traj_idx: int, payload: dict[str, Any] | None = None) -> _ProgramTrajectory:
@@ -880,8 +980,10 @@ class Simulator:
                 program, or the initial state is incompatible with the selected mode.
         """
         program_kwargs_set = observables is not None or num_traj is not None or random_seed is not None or get_state
-        if isinstance(operator, list) or (
-            isinstance(operator, tuple) and operator and isinstance(operator[0], tuple) and len(operator[0]) in {2, 3}
+        if (
+            isinstance(operator, Sequence)
+            and not isinstance(operator, (str, bytes))
+            and (not operator or (isinstance(operator[0], tuple) and len(operator[0]) in {2, 3}))
         ):
             if sim_params is not None:
                 msg = "sim_params must be None when operator is a segment pair list."
@@ -988,36 +1090,11 @@ class Simulator:
             An outer result containing one result per segment in program order.
 
         Raises:
-            ValueError: If a stochastic program requests an arbitrary trajectory state.
             RuntimeError: If stochastic compilation does not resolve a trajectory count.
         """
         compiled = _compile_program(program, initial_state, noise_model)
-        has_observables = bool(compiled.observables)
-        has_shots = any(
-            isinstance(instruction, _CompiledDigitalInstruction) and instruction.execution_params.shots is not None
-            for instruction in compiled.instructions
-        )
-        if not has_observables and not has_shots and not compiled.get_state:
-            msg = "No output specified: set observables=, shots on a digital segment, and/or get_state=."
-            raise ValueError(msg)
-
         compiled = _sample_program_noise_models(compiled)
-        for instruction in compiled.instructions:
-            if instruction.noise_model is None:
-                continue
-            is_digital = isinstance(instruction, _CompiledDigitalInstruction)
-            validate_noise_model_for_run(
-                instruction.noise_model,
-                length=compiled.state_signature.length,
-                physical_dimensions=list(compiled.state_signature.physical_dimensions),
-                representation="mps",
-                is_digital=is_digital,
-                sim_params=None if is_digital else instruction.execution_params,
-            )
-        stochastic = any(_noise_model_is_stochastic(instruction.noise_model) for instruction in compiled.instructions)
-        if stochastic and compiled.get_state:
-            msg = "Cannot return state from a noisy SimulationProgram due to stochastic trajectories."
-            raise ValueError(msg)
+        has_observables, _has_shots, stochastic = _validate_compiled_program(compiled)
         if stochastic:
             if compiled.num_traj is None:  # pragma: no cover
                 msg = "Noisy SimulationProgram has no resolved trajectory count."

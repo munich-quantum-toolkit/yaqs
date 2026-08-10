@@ -103,6 +103,14 @@ def test_get_support_mpo_preserves_multi_qubit_targets_with_heterogeneous_specta
 
     assert len(support) == 4
     assert [(tensor.shape[0], tensor.shape[1]) for tensor in support] == [(2, 2), (2, 2), (3, 3), (2, 2)]
+    spectator = support[2]
+    bond = spectator.shape[3]
+    assert spectator.shape == (3, 3, bond, bond)
+    for slot in range(bond):
+        np.testing.assert_allclose(spectator[:, :, slot, slot], np.eye(3, dtype=np.complex128))
+        for other in range(bond):
+            if other != slot:
+                np.testing.assert_allclose(spectator[:, :, slot, other], np.zeros((3, 3), dtype=np.complex128))
 
 
 def test_get_support_mpo_calls_extend_gate_without_cache() -> None:

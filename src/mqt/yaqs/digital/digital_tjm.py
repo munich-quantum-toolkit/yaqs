@@ -682,12 +682,14 @@ def digital_tjm(
     noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
 
     # Observable / get-state path allocates diagnostics (shots-only leaves them None).
+    # Prefer the compiled circuit's barrier count so every layer.sample_points entry fits.
     if not shots_only:
-        num_cols = (sim_params.num_mid_measurements + 2) if sim_params.sample_layers else 1
+        mid = compiled.num_mid_measurements if sim_params.sample_layers else 0
+        num_cols = (mid + 2) if sim_params.sample_layers else 1
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
-            results = np.zeros((n_obs, sim_params.num_mid_measurements + 2))
+            results = np.zeros((n_obs, mid + 2))
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
                 state.evaluate_observables(sim_params, results, 0)

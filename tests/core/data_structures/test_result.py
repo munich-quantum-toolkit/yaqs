@@ -307,6 +307,42 @@ def test_stitch_program_results_rejects_analog_segment_without_times() -> None:
         stitch_program_results(segment_results, [observable])
 
 
+def test_stitch_program_results_rejects_misaligned_analog_times() -> None:
+    """Analog expectation buffers must match the segment time grid length."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0, -1.0])],
+            times=np.array([0.0]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="is not aligned with times"):
+        stitch_program_results(segment_results, [observable])
+
+
+def test_stitch_program_results_rejects_inconsistent_observable_shapes() -> None:
+    """Every observable in a segment must share the same sample count."""
+    observables = [Observable("z", 0), Observable("x", 0)]
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(obs) for obs in observables],
+            expectation_values=[np.array([1.0, -1.0]), np.array([0.5])],
+            times=np.array([0.0, 0.1]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="has inconsistent shape"):
+        stitch_program_results(segment_results, observables)
+
+
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
     """aggregate_counts must sum every non-None measurement, even after a None entry.
 

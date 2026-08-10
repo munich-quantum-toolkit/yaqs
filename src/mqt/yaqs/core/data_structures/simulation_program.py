@@ -68,6 +68,60 @@ class _DigitalSegment:
 _ProgramSegment = _AnalogSegment | _DigitalSegment
 
 
+def _normalize_program_settings(
+    *,
+    observables: Sequence[Observable] | None,
+    num_traj: int | None,
+    random_seed: int | None,
+    get_state: bool,
+) -> tuple[tuple[Observable, ...], int | None, int | None, bool]:
+    """Validate and normalize program-level keyword arguments.
+
+    Args:
+        observables: Optional program-wide observables.
+        num_traj: Optional program-wide trajectory count.
+        random_seed: Optional program-wide RNG seed.
+        get_state: Whether to retain the final noiseless state.
+
+    Returns:
+        Normalized ``(observables, num_traj, random_seed, get_state)``.
+
+    Raises:
+        TypeError: If a keyword argument has the wrong type.
+        ValueError: If ``num_traj`` or ``random_seed`` is out of range.
+    """
+    if observables is None:
+        obs_tuple: tuple[Observable, ...] = ()
+    else:
+        if isinstance(observables, (str, bytes)) or not isinstance(observables, Sequence):
+            msg = "observables must be a sequence of Observable."
+            raise TypeError(msg)
+        obs_list = list(observables)
+        for index, observable in enumerate(obs_list):
+            if not isinstance(observable, Observable):
+                msg = f"observables[{index}] must be Observable, got {type(observable).__name__}."
+                raise TypeError(msg)
+        obs_tuple = tuple(obs_list)
+
+    if num_traj is not None and (isinstance(num_traj, bool) or not isinstance(num_traj, int)):
+        msg = f"num_traj must be int or None, got {type(num_traj).__name__}."
+        raise TypeError(msg)
+    if num_traj is not None and num_traj < 1:
+        msg = f"num_traj must be at least 1, got {num_traj}."
+        raise ValueError(msg)
+    if random_seed is not None and (isinstance(random_seed, bool) or not isinstance(random_seed, int)):
+        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
+        raise TypeError(msg)
+    if random_seed is not None and random_seed < 0:
+        msg = f"random_seed must be non-negative, got {random_seed}."
+        raise ValueError(msg)
+    if not isinstance(get_state, bool):
+        msg = f"get_state must be bool, got {type(get_state).__name__}."
+        raise TypeError(msg)
+
+    return obs_tuple, num_traj, random_seed, get_state
+
+
 def _reject_program_owned_fields(sim_params: AnalogSimParams | DigitalSimParams, *, index: int) -> None:
     """Reject segment-level fields that belong on :class:`SimulationProgram`.
 
@@ -210,35 +264,12 @@ class SimulationProgram:
             raise ValueError(msg)
 
         normalized_segments = tuple(_normalize_segment(item, index=index) for index, item in enumerate(raw_segments))
-
-        if observables is None:
-            obs_tuple: tuple[Observable, ...] = ()
-        else:
-            if isinstance(observables, (str, bytes)) or not isinstance(observables, Sequence):
-                msg = "observables must be a sequence of Observable."
-                raise TypeError(msg)
-            obs_list = list(observables)
-            for index, observable in enumerate(obs_list):
-                if not isinstance(observable, Observable):
-                    msg = f"observables[{index}] must be Observable, got {type(observable).__name__}."
-                    raise TypeError(msg)
-            obs_tuple = tuple(obs_list)
-
-        if num_traj is not None and (isinstance(num_traj, bool) or not isinstance(num_traj, int)):
-            msg = f"num_traj must be int or None, got {type(num_traj).__name__}."
-            raise TypeError(msg)
-        if num_traj is not None and num_traj < 1:
-            msg = f"num_traj must be at least 1, got {num_traj}."
-            raise ValueError(msg)
-        if random_seed is not None and (isinstance(random_seed, bool) or not isinstance(random_seed, int)):
-            msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
-            raise TypeError(msg)
-        if random_seed is not None and random_seed < 0:
-            msg = f"random_seed must be non-negative, got {random_seed}."
-            raise ValueError(msg)
-        if not isinstance(get_state, bool):
-            msg = f"get_state must be bool, got {type(get_state).__name__}."
-            raise TypeError(msg)
+        obs_tuple, num_traj, random_seed, get_state = _normalize_program_settings(
+            observables=observables,
+            num_traj=num_traj,
+            random_seed=random_seed,
+            get_state=get_state,
+        )
 
         object.__setattr__(self, "segments", normalized_segments)
         object.__setattr__(self, "observables", obs_tuple)
@@ -605,13 +636,13 @@ def _compile_program(
         )
 
     return _CompiledProgram(
-        tuple(instructions),
-        signature,
-        observables,
-        program.get_state,
-        num_traj,
-        random_seed,
-        default_noise_model,
+        instructions=tuple(instructions),
+        state_signature=signature,
+        observables=observables,
+        get_state=program.get_state,
+        num_traj=num_traj,
+        random_seed=random_seed,
+        default_noise_model=default_noise_model,
     )
 
 

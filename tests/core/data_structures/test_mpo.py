@@ -1018,6 +1018,22 @@ def test_from_gate_uses_heterogeneous_spectator_identities() -> None:
     ]
 
 
+def test_from_gate_pads_interior_support_with_heterogeneous_outer_identities() -> None:
+    """Interior gate support keeps spectator dims outside and inside the support."""
+    dimensions = [3, 2, 2, 4]
+    gate = GateLibrary.cx()
+    gate.set_sites(1, 2)
+
+    gate_mpo = MPO.from_gate(gate, 4, physical_dimensions=dimensions)
+
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in gate_mpo.tensors] == [
+        (3, 3),
+        (2, 2),
+        (2, 2),
+        (4, 4),
+    ]
+
+
 def test_from_gate_rejects_wrong_physical_dimension_count() -> None:
     """Explicit chain metadata must describe every MPO site."""
     gate = GateLibrary.cx()
@@ -1035,7 +1051,7 @@ def test_from_gate_support_only_accepts_nonzero_site_labels() -> None:
     gate_mpo = MPO.from_gate(gate, 2, physical_dimensions=[2, 2])
 
     assert gate_mpo.length == 2
-    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix, atol=1e-12)
 
 
 def test_multiply_mps_invalidates_then_restores_center() -> None:

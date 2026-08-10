@@ -63,7 +63,11 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     return tensors
 
 
-def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArray[np.complex128]]:
+def extend_gate(
+    tensor: NDArray[np.complex128],
+    sites: list[int],
+    physical_dimensions: list[int] | tuple[int, ...] | None = None,
+) -> list[NDArray[np.complex128]]:
     """Extends gate to long-range MPO.
 
     Extends a given gate tensor to a Matrix Product Operator (MPO) by adding identity tensors
@@ -72,9 +76,14 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
     Args:
         tensor: The input gate tensor to be extended.
         sites: A list of site indices where the gate tensor is to be applied.
+        physical_dimensions: Optional local dimensions for the contiguous span from
+            ``min(sites)`` to ``max(sites)``. When omitted, every site uses dimension 2.
 
     Returns:
         MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
+
+    Raises:
+        ValueError: If ``physical_dimensions`` does not match the site span length.
 
     Notes:
         - The gate axes are permuted to ascending site order before the split, so the sites may
@@ -87,17 +96,30 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
         # Permute the gate axes from the declared site order to ascending site order.
         tensor = np.transpose(tensor, [*order, *[num_sites + idx for idx in order]])
     sorted_sites = sorted(sites)
+    span_start = sorted_sites[0]
+    span_len = sorted_sites[-1] - span_start + 1
+    if physical_dimensions is None:
+        dimensions = (2,) * span_len
+    else:
+        dimensions = tuple(physical_dimensions)
+        if len(dimensions) != span_len:
+            msg = f"Expected {span_len} physical dimensions for gate support, got {len(dimensions)}."
+            raise ValueError(msg)
 
     tensors = split_tensor(tensor)
 
     # Adds identity tensors between sites
     mpo_tensors = [tensors[0]]
     for idx in range(1, num_sites):
-        for _ in range(sorted_sites[idx] - sorted_sites[idx - 1] - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2)
+        previous_right_bond = mpo_tensors[-1].shape[3]
+        for site in range(sorted_sites[idx - 1] + 1, sorted_sites[idx]):
+            dimension = dimensions[site - span_start]
+            identity_tensor = np.zeros(
+                (dimension, dimension, previous_right_bond, previous_right_bond),
+                dtype=np.complex128,
+            )
+            for bond in range(previous_right_bond):
+                identity_tensor[:, :, bond, bond] = np.eye(dimension, dtype=np.complex128)
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[idx])
 

@@ -1965,10 +1965,9 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
             *,
             base_seed: int | None,
             timestep: int,
-            stream_id: int | None = None,
         ) -> np.random.Generator:
             timesteps.append(timestep)
-            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep, stream_id=stream_id)
+            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), 0)],
@@ -1999,9 +1998,8 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
             *,
             base_seed: int | None,
             timestep: int,
-            stream_id: int | None = None,
         ) -> _ScriptedRng:
-            _ = (traj_idx, base_seed, timestep, stream_id)
+            _ = (traj_idx, base_seed, timestep)
             return shared
 
         return _factory

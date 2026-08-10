@@ -266,11 +266,15 @@ on them safely. The full set is:
 
 A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns the same fields:
 `result.times` and `result.expectation_values` are already stitched onto the
-physical program timeline. Observables, `num_traj`, and `random_seed` are set on
-the program (or as keyword arguments when passing a pair list to
-{meth}`~mqt.yaqs.Simulator.run`), not on the per-segment parameter objects. A
-program that requests shots but no observables follows standalone digital
-semantics and executes one complete-program stochastic trajectory per shot.
+physical program timeline. Observables and `random_seed` are set on the program
+(or as keyword arguments when passing a pair list to
+{meth}`~mqt.yaqs.Simulator.run`). Prefer setting `num_traj` the same way; when
+{attr}`~mqt.yaqs.SimulationProgram.num_traj` is omitted (`None`), execution falls
+back to the `num_traj` value specified consistently on every segment's parameter
+object. Conflicting segment values require an explicit program-level
+`num_traj`. A program that requests shots but no observables follows standalone
+digital semantics and executes one complete-program stochastic trajectory per
+shot.
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and
 resume analysis from disk:

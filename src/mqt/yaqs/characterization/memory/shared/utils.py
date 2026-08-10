@@ -403,9 +403,7 @@ def _evolve_backend_state(
     """Evolve a backend state forward in time by one segment.
 
     Args:
-        state: Current backend state (dense vector for MCWF, MPS for TJM). The
-            TJM branch mutates the supplied MPS in place, so callers must provide
-            an exclusively owned state.
+        state: Current backend state (dense vector for MCWF, MPS for TJM).
         operator: Hamiltonian MPO.
         noise_model: Optional noise model; ``None`` for deterministic evolution.
         step_params: Simulation parameters for this step (duration and time grid are read here).
@@ -415,9 +413,7 @@ def _evolve_backend_state(
         rng: Optional trajectory RNG reused across consecutive TJM segments.
 
     Returns:
-        Updated backend state after evolution. The TJM branch returns the same
-        MPS object it was given after mutating it in place; other solver branches
-        return their backend's evolved state.
+        The evolved backend state returned by the selected solver.
 
     Raises:
         TypeError: If ``state`` is incompatible with ``solver``.
