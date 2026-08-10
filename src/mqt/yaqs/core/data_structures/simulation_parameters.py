@@ -20,11 +20,12 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 import numpy as np
 
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
+from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -35,7 +36,6 @@ TDVPMode = Literal["1site", "2site", "dynamic"]
 BUGBasisMode = Literal["center", "explicit_old_basis", "fixed_profile"]
 BUGSchedule = Literal["single_endpoint", "alternating_endpoints"]
 BUGCompression = Literal["after_sweep", "after_step", "none"]
-TruncModeName = Literal["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"]
 
 
 class PresetTypes(TypedDict):
@@ -306,22 +306,18 @@ class EvolutionMode(Enum):
 
 @dataclass(frozen=True)
 class BUGConfig:
-    """Configuration for analog BUG evolution.
+    """Advanced options for analog BUG evolution.
 
-    Defaults preserve the historical single left-endpoint, center-augmented
-    sweep of duration ``dt`` followed by one compression and no explicit
-    normalization.
+    Ordinary runs only need ``evolution_mode=EvolutionMode.BUG``. Defaults match
+    the historical single left-endpoint, center-augmented sweep of duration
+    ``dt`` followed by one compression.
 
     Attributes:
-        basis_mode: Trial-basis construction
-            (``"center"``, ``"explicit_old_basis"``, or ``"fixed_profile"``).
-        schedule: ``"single_endpoint"`` or ``"alternating_endpoints"``.
-            Alternating applies two half-sweeps of duration ``dt / 2`` with a
-            site-reflected MPO between them. It is not claimed to be second order.
-        compression: When to apply SVD compression
-            (``"after_sweep"``, ``"after_step"``, or ``"none"``).
-        normalize_after_compression: If ``True``, normalize after each
-            configured compression. Ignored when ``compression == "none"``.
+        basis_mode: Trial-basis construction (default ``"center"``).
+        schedule: ``"single_endpoint"`` (default) or ``"alternating_endpoints"``
+            (two half-sweeps of ``dt / 2``; not claimed to be second order).
+        compression: ``"after_sweep"`` (default), ``"after_step"``, or ``"none"``.
+        normalize_after_compression: Normalize after compression (default ``False``).
     """
 
     basis_mode: BUGBasisMode = "center"
@@ -330,7 +326,15 @@ class BUGConfig:
     normalize_after_compression: bool = False
 
 
-def _validate_trunc_mode(trunc_mode: str) -> TruncModeName:
+_ALLOWED_TRUNC_MODES = frozenset({
+    "discarded_weight",
+    "relative",
+    "hard_cutoff",
+    "relative_discarded_weight",
+})
+
+
+def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
     """Validate the SVD truncation mode name.
 
     Args:
@@ -342,16 +346,10 @@ def _validate_trunc_mode(trunc_mode: str) -> TruncModeName:
     Raises:
         ValueError: If ``trunc_mode`` is not a supported value.
     """
-    allowed: tuple[TruncModeName, ...] = (
-        "discarded_weight",
-        "relative",
-        "hard_cutoff",
-        "relative_discarded_weight",
-    )
-    if trunc_mode not in allowed:
-        msg = f"trunc_mode must be one of {allowed!r}, got {trunc_mode!r}."
+    if trunc_mode not in _ALLOWED_TRUNC_MODES:
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
         raise ValueError(msg)
-    return trunc_mode  # type: ignore[return-value]
+    return cast("TruncMode", trunc_mode)
 
 
 def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
@@ -392,24 +390,17 @@ def _validate_bug_config(bug_config: BUGConfig) -> BUGConfig:
     if not isinstance(bug_config, BUGConfig):
         msg = f"bug_config must be BUGConfig, got {type(bug_config).__name__}."
         raise TypeError(msg)
-    basis_allowed: tuple[BUGBasisMode, ...] = ("center", "explicit_old_basis", "fixed_profile")
-    schedule_allowed: tuple[BUGSchedule, ...] = ("single_endpoint", "alternating_endpoints")
-    compression_allowed: tuple[BUGCompression, ...] = ("after_sweep", "after_step", "none")
-    if bug_config.basis_mode not in basis_allowed:
-        msg = f"bug_config.basis_mode must be one of {basis_allowed!r}, got {bug_config.basis_mode!r}."
-        raise ValueError(msg)
-    if bug_config.schedule not in schedule_allowed:
-        msg = f"bug_config.schedule must be one of {schedule_allowed!r}, got {bug_config.schedule!r}."
-        raise ValueError(msg)
-    if bug_config.compression not in compression_allowed:
-        msg = f"bug_config.compression must be one of {compression_allowed!r}, got {bug_config.compression!r}."
-        raise ValueError(msg)
-    if not isinstance(bug_config.normalize_after_compression, bool):
-        msg = (
-            "bug_config.normalize_after_compression must be bool, "
-            f"got {type(bug_config.normalize_after_compression).__name__}."
-        )
-        raise TypeError(msg)
+    # Literals are not enforced at runtime; reject unsupported strings early.
+    allowed = {
+        "basis_mode": ("center", "explicit_old_basis", "fixed_profile"),
+        "schedule": ("single_endpoint", "alternating_endpoints"),
+        "compression": ("after_sweep", "after_step", "none"),
+    }
+    for field, choices in allowed.items():
+        value = getattr(bug_config, field)
+        if value not in choices:
+            msg = f"bug_config.{field} must be one of {choices!r}, got {value!r}."
+            raise ValueError(msg)
     return bug_config
 
 
