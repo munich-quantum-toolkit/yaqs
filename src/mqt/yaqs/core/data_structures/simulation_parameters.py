@@ -314,6 +314,10 @@ class BUGConfig:
 
     Attributes:
         basis_mode: Trial-basis construction (default ``"center"``).
+            ``"fixed_profile"`` means the trial-basis sweep does not enlarge bonds
+            (predictor-only LQ). It is a fixed-cap / non-enlarging comparator, not
+            a guarantee that post-compression SVD returns exactly the entry profile;
+            compression may still shrink bonds.
         schedule: ``"single_endpoint"`` (default) or ``"alternating_endpoints"``
             (two half-sweeps of ``dt / 2``; not claimed to be second order).
         compression: ``"after_sweep"`` (default), ``"after_step"``, or ``"none"``.

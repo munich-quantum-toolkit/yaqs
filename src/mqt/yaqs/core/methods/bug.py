@@ -151,8 +151,12 @@ def bug_sweep(
 ) -> None:
     """Apply one uncompressed left-root endpoint BUG sweep in place.
 
-    Requires a known orthogonality center at site ``0``. Performs no compression
-    or normalization.
+    Requires a known orthogonality center at site ``0``. The caller is responsible
+    for supplying an endpoint-canonical MPS in that gauge (typically via
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.set_canonical_form` /
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.set_center`); this routine checks
+    the tracked center metadata but does not re-validate full right-canonicality
+    of every tensor. Performs no compression or normalization.
 
     Args:
         state: MPS to evolve in place.

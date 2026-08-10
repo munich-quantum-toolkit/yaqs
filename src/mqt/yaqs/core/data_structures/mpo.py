@@ -1604,7 +1604,8 @@ class MPO:
             A new :class:`MPO` representing the spatially reflected operator.
         """
         reflected_tensors = [
-            np.asarray(np.transpose(tensor, (0, 1, 3, 2)), dtype=np.complex128) for tensor in reversed(self.tensors)
+            np.asarray(np.transpose(tensor, (0, 1, 3, 2)), dtype=np.complex128).copy()
+            for tensor in reversed(self.tensors)
         ]
         out = MPO()
         out.tensors = reflected_tensors
@@ -1736,13 +1737,13 @@ class MPO:
         return float(np.abs(trace) / hilbert_dim)
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """MPO to matrix conversion.
+        """MPO to matrix conversion (site 0 = MSB Kronecker layout).
 
-        Converts a list of tensors into a matrix using Einstein summation convention.
-        This method iterates over the list of tensors and performs tensor contractions
-        using the Einstein summation convention (`oe.constrain`). The resulting tensor is
-        then reshaped accordingly. The final matrix is squeezed to ensure the left and
-        right bonds are 1.
+        Contracts MPO tensors left-to-right with Einstein summation. The resulting
+        dense layout treats site ``0`` as the most-significant bit. For operators
+        that must act on :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`
+        (site 0 = LSB), use :meth:`to_matrix_mps_order` or
+        :meth:`to_sparse_matrix` instead.
 
         Returns:
             The resulting matrix after tensor contractions and reshaping.
@@ -1762,6 +1763,19 @@ class MPO:
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    def to_matrix_mps_order(self) -> NDArray[np.complex128]:
+        """Dense matrix in MPS ``to_vec`` order (site 0 = LSB).
+
+        Matches :meth:`to_sparse_matrix` and
+        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`. Prefer this (or the
+        sparse converter) for dense state-vector references under asymmetric
+        Hamiltonians; :meth:`to_matrix` keeps the historical site-0-MSB layout.
+
+        Returns:
+            Dense operator matrix acting on vectors from :meth:`MPS.to_vec`.
+        """
+        return np.asarray(self.to_sparse_matrix().toarray(), dtype=np.complex128)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
         """MPO to sparse matrix conversion.
