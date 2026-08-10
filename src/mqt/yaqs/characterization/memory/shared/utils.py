@@ -15,7 +15,7 @@ terminology.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -292,7 +292,7 @@ def _reprepare_backend_state_forced(
         if not isinstance(state, np.ndarray):
             msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
             raise TypeError(msg)
-        state_vec = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
+        state_vec = np.asarray(state, dtype=np.complex128)
         return _reprepare_site_zero_vector_forced(state_vec, proj_state, new_state)
     assert isinstance(state, MPS)
     new_mps = copy.deepcopy(state)
@@ -430,7 +430,7 @@ def _evolve_backend_state(
         if static_ctx is None:
             static_ctx = make_mcwf_static_context(operator, step_params, noise_model=noise_model)
         dynamic_ctx = copy.copy(static_ctx)
-        dynamic_ctx.psi_initial = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
+        dynamic_ctx.psi_initial = np.asarray(state, dtype=np.complex128)
         dynamic_ctx.sim_params = step_params
         _, _, out = mcwf((traj_idx, dynamic_ctx))
         if out is None:

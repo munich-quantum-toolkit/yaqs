@@ -1134,13 +1134,18 @@ def test_empty_noise_override_disables_analog_and_digital_segments() -> None:
     circuit = QuantumCircuit(2)
     circuit.x(0)
     circuit.cx(0, 1)
-    digital_kwargs = {
-        "observables": [Observable("z", 0)],
-        "num_traj": 48,
-        "random_seed": 8,
-    }
-    digital_disabled = SimulationProgram([(circuit, DigitalSimParams(), disabled)], **digital_kwargs)
-    digital_noisy = SimulationProgram([(circuit, DigitalSimParams())], **digital_kwargs)
+    digital_disabled = SimulationProgram(
+        [(circuit, DigitalSimParams(), disabled)],
+        observables=[Observable("z", 0)],
+        num_traj=48,
+        random_seed=8,
+    )
+    digital_noisy = SimulationProgram(
+        [(circuit, DigitalSimParams())],
+        observables=[Observable("z", 0)],
+        num_traj=48,
+        random_seed=8,
+    )
 
     simulator = Simulator(parallel=False, show_progress=False)
     analog_result = simulator.run(State(1, initial="zeros"), analog_program, noise_model=strong)
