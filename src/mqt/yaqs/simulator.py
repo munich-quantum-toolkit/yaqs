@@ -119,7 +119,7 @@ from .core.data_structures.simulation_program import (
     _CompiledAnalogInstruction,
     _CompiledDigitalInstruction,
     _CompiledProgram,
-    flatten_program_results,
+    stitch_program_results,
 )
 from .core.data_structures.state import State
 from .core.parallel_utils import (
@@ -278,6 +278,12 @@ def _execute_program_trajectory(
 ) -> _ProgramTrajectory:
     """Execute one complete compiled program with one owned state and RNG.
 
+    Args:
+        traj_idx: Trajectory index for seeded RNG streams.
+        initial_state: Deep-copied into the worker-owned MPS.
+        compiled: Validated program instructions.
+        effective_num_traj: Ensemble size used for shot distribution.
+
     Returns:
         Per-segment trajectory payloads and the optional requested final MPS.
 
@@ -288,24 +294,59 @@ def _execute_program_trajectory(
     current_state = copy.deepcopy(initial_state)
     rng = make_trajectory_rng(traj_idx, base_seed=compiled.random_seed)
     segment_payloads: list[_ProgramSegmentTrajectory] = []
+    sample_timestep_offset = 0
+    continue_order2_trajectory = False
+    instructions = compiled.instructions
 
-    for instruction in compiled.instructions:
+    def _next_instruction_continues_order2(index: int) -> bool:
+        """Return whether the following instruction continues this order-2 trajectory."""
+        if index + 1 >= len(instructions):
+            return False
+        nxt = instructions[index + 1]
+        return isinstance(nxt, _CompiledAnalogInstruction) and nxt.execution_params.order == 2
+
+    for instruction in instructions:
         if isinstance(instruction, _CompiledAnalogInstruction):
             backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
-            traj_data, traj_diag, next_state = backend(
-                (
-                    traj_idx,
-                    current_state,
-                    instruction.noise_model,
-                    instruction.execution_params,
-                    instruction.hamiltonian,
-                ),
-                copy_initial_state=False,
-                rng=rng,
-                **({"sample_stream_id": instruction.index} if backend is analog_tjm_2 else {}),
-            )
+            if backend is analog_tjm_2:
+                hand_off_trajectory = _next_instruction_continues_order2(instruction.index)
+                traj_data, traj_diag, next_state = backend(
+                    (
+                        traj_idx,
+                        current_state,
+                        instruction.noise_model,
+                        instruction.execution_params,
+                        instruction.hamiltonian,
+                    ),
+                    copy_initial_state=False,
+                    rng=rng,
+                    sample_timestep_offset=sample_timestep_offset,
+                    use_trajectory_rng_for_final_sample=False,
+                    return_trajectory_state=hand_off_trajectory,
+                    continue_trajectory=continue_order2_trajectory,
+                )
+                n_times = len(instruction.execution_params.times)
+                # Match global sample indices of one continuous order-2 run: after a
+                # segment with T grid points, the next sample timestep is T - 1 + local.
+                sample_timestep_offset += max(n_times - 1, 0)
+                continue_order2_trajectory = True
+            else:
+                traj_data, traj_diag, next_state = backend(
+                    (
+                        traj_idx,
+                        current_state,
+                        instruction.noise_model,
+                        instruction.execution_params,
+                        instruction.hamiltonian,
+                    ),
+                    copy_initial_state=False,
+                    rng=rng,
+                )
+                continue_order2_trajectory = False
             shot_counts = None
         elif isinstance(instruction, _CompiledDigitalInstruction):
+            continue_order2_trajectory = False
+            sample_timestep_offset = 0
             shots = instruction.execution_params.shots
             if shots is not None:
                 WORKER_CTX["shot_distribution"] = (shots, effective_num_traj)
@@ -1026,7 +1067,7 @@ class Simulator:
             if segment_result.measurements:
                 aggregate_counts(segment_result)
 
-        expectation_values, times, counts = flatten_program_results(segment_results, compiled.observables)
+        expectation_values, times, counts = stitch_program_results(segment_results, compiled.observables)
         result = Result(
             observables=[copy.deepcopy(obs) for obs in compiled.observables],
             expectation_values=expectation_values,

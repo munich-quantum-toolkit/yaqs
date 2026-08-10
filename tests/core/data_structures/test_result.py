@@ -33,7 +33,7 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.core.data_structures.result import aggregate_counts
-from mqt.yaqs.core.data_structures.simulation_program import flatten_program_results
+from mqt.yaqs.core.data_structures.simulation_program import stitch_program_results
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import Z
 
@@ -185,7 +185,7 @@ def test_result_supports_ordered_nested_segment_results() -> None:
     assert isinstance(restored.segment_results[1].sim_params, DigitalSimParams)
 
 
-def test_flatten_program_results_combines_analog_and_digital_samples() -> None:
+def test_stitch_program_results_combines_analog_and_digital_samples() -> None:
     """Digital checkpoints appear at their physical program offset without deduplication."""
     observable = Observable("z", 0)
     segment_results = [
@@ -214,7 +214,7 @@ def test_flatten_program_results_combines_analog_and_digital_samples() -> None:
         ),
     ]
 
-    expectation_values, times, counts = flatten_program_results(segment_results, [observable])
+    expectation_values, times, counts = stitch_program_results(segment_results, [observable])
 
     assert counts is None
     assert times is not None
@@ -222,7 +222,7 @@ def test_flatten_program_results_combines_analog_and_digital_samples() -> None:
     np.testing.assert_array_equal(expectation_values[0], np.array([1.0, 0.8, 0.8, 0.0, -0.8, -0.8, -0.6]))
 
 
-def test_flatten_program_results_shifts_adjacent_analog_grids() -> None:
+def test_stitch_program_results_shifts_adjacent_analog_grids() -> None:
     """Local grids are shifted onto one program timeline."""
     observable = Observable("z", 0)
     segment_results = [
@@ -244,28 +244,28 @@ def test_flatten_program_results_shifts_adjacent_analog_grids() -> None:
         ),
     ]
 
-    expectation_values, times, _ = flatten_program_results(segment_results, [observable])
+    expectation_values, times, _ = stitch_program_results(segment_results, [observable])
 
     assert times is not None
     np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.3]))
     np.testing.assert_array_equal(expectation_values[0], np.array([1.0, 0.8, 0.4]))
 
 
-def test_flatten_program_results_aggregates_counts_without_observables() -> None:
-    """Shot-only programs stitch counts and leave expectation buffers empty."""
+def test_stitch_program_results_keeps_final_segment_counts() -> None:
+    """Outer counts come from the last shot segment, not a sum across segments."""
     segment_results = [
         Result(counts={0: 2, 1: 1}, segment_index=0, segment_type="digital", time_offset=0.0),
         Result(counts={1: 3}, segment_index=1, segment_type="digital", time_offset=0.0),
     ]
 
-    expectation_values, times, counts = flatten_program_results(segment_results, [])
+    expectation_values, times, counts = stitch_program_results(segment_results, [])
 
     assert expectation_values == []
     assert times is None
-    assert counts == {0: 2, 1: 4}
+    assert counts == {1: 3}
 
 
-def test_flatten_program_results_rejects_mismatched_observable_counts() -> None:
+def test_stitch_program_results_rejects_mismatched_observable_counts() -> None:
     """Every segment must record the shared program observable set."""
     observable = Observable("z", 0)
     segment_results = [
@@ -287,10 +287,10 @@ def test_flatten_program_results_rejects_mismatched_observable_counts() -> None:
     ]
 
     with pytest.raises(ValueError, match="recorded 0 observables, expected 1"):
-        flatten_program_results(segment_results, [observable])
+        stitch_program_results(segment_results, [observable])
 
 
-def test_flatten_program_results_rejects_analog_segment_without_times() -> None:
+def test_stitch_program_results_rejects_analog_segment_without_times() -> None:
     """Analog intervals need time data aligned with recorded values."""
     observable = Observable("z", 0)
     segment_results = [
@@ -304,7 +304,7 @@ def test_flatten_program_results_rejects_analog_segment_without_times() -> None:
     ]
 
     with pytest.raises(ValueError, match="has no time data"):
-        flatten_program_results(segment_results, [observable])
+        stitch_program_results(segment_results, [observable])
 
 
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:

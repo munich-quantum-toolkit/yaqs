@@ -71,8 +71,12 @@ _ProgramSegment = _AnalogSegment | _DigitalSegment
 def _reject_program_owned_fields(sim_params: AnalogSimParams | DigitalSimParams, *, index: int) -> None:
     """Reject segment-level fields that belong on :class:`SimulationProgram`.
 
+    Args:
+        sim_params: Segment simulation parameters to validate.
+        index: Segment index used in error messages.
+
     Raises:
-        ValueError: If observables or ``random_seed`` are set on the segment params.
+        ValueError: If observables, ``random_seed``, or ``get_state`` are set on the segment.
     """
     if sim_params.observables:
         msg = (
@@ -84,6 +88,9 @@ def _reject_program_owned_fields(sim_params: AnalogSimParams | DigitalSimParams,
         msg = (
             f"segments[{index}] sim_params.random_seed must be None; pass random_seed=... on SimulationProgram instead."
         )
+        raise ValueError(msg)
+    if sim_params.get_state:
+        msg = f"segments[{index}] sim_params.get_state must be False; pass get_state=... on SimulationProgram instead."
         raise ValueError(msg)
 
 
@@ -145,21 +152,21 @@ class SimulationProgram:
     overrides the run-level model for that segment (``None`` inherits; an empty
     :class:`~mqt.yaqs.NoiseModel` disables noise).
 
-    Observables, trajectory count, and RNG seed are program-wide. Segment
-    ``sim_params`` must leave ``observables`` empty and ``random_seed`` unset;
-    they only carry truncation, timing, gate-mode, and related backend settings.
-    Analog ``scheduled_jumps`` times are segment-local (relative to that segment's
-    time grid), matching standalone analog runs.
+    Observables, RNG seed, and ``get_state`` are program-wide. Segment
+    ``sim_params`` must leave ``observables`` empty and keep ``random_seed`` /
+    ``get_state`` unset; they carry truncation, timing, ``shots``, gate-mode, and
+    related backend settings. Analog ``scheduled_jumps`` times are segment-local.
 
     Args:
         segments: Non-empty iterable of ``(operator, params)`` pairs.
         observables: Shared observables recorded by every segment.
-        num_traj: Trajectory count for stochastic execution. If omitted, the
-            default from a fresh :class:`~mqt.yaqs.AnalogSimParams` is used for
-            noisy runs. A noisy program with shots but no observables instead
-            executes one complete-program trajectory per requested shot.
+        num_traj: Trajectory count for stochastic execution. When omitted, a
+            unanimous segment ``num_traj`` is used; conflicting segment values
+            require an explicit program-level ``num_traj``. A noisy program with
+            shots but no observables executes one complete-program trajectory per
+            requested shot.
         random_seed: Program-wide base seed for reproducible stochastic runs.
-        get_state: Whether to retain the final state on the outer result.
+        get_state: Whether to retain the final noiseless state on the outer result.
 
     Raises:
         TypeError: If ``segments`` or an item has the wrong type.
@@ -297,7 +304,7 @@ class _CompiledProgram:
     state_signature: _StateSignature
     observables: tuple[Observable, ...]
     get_state: bool
-    num_traj: int | None
+    num_traj: int
     random_seed: int | None
     default_noise_model: NoiseModel | None
 
@@ -349,23 +356,52 @@ def _validate_noise_layout(
             raise ValueError(msg)
 
 
-def _inject_program_settings(
+def _resolve_program_num_traj(program: SimulationProgram) -> int:
+    """Resolve the ensemble size for a program from program- or segment-level values.
+
+    Args:
+        program: Program whose trajectory count should be resolved.
+
+    Returns:
+        The trajectory count applied to every compiled instruction.
+
+    Raises:
+        ValueError: If ``program.num_traj`` is omitted and segment values disagree.
+    """
+    if program.num_traj is not None:
+        return program.num_traj
+    segment_counts = {segment.sim_params.num_traj for segment in program.segments}
+    if len(segment_counts) == 1:
+        return next(iter(segment_counts))
+    msg = (
+        "segments disagree on sim_params.num_traj; pass num_traj=... on SimulationProgram to select the ensemble size."
+    )
+    raise ValueError(msg)
+
+
+def _apply_program_settings(
     sim_params: AnalogSimParams | DigitalSimParams,
     *,
     observables: Sequence[Observable],
-    num_traj: int | None,
+    num_traj: int,
     random_seed: int | None,
 ) -> AnalogSimParams | DigitalSimParams:
-    """Deep-copy segment params and write program-owned ensemble fields.
+    """Copy segment params and write program-owned ensemble fields for execution.
+
+    Args:
+        sim_params: User-facing segment parameters.
+        observables: Program-wide observables injected into every segment.
+        num_traj: Resolved trajectory count.
+        random_seed: Program-wide RNG seed.
 
     Returns:
-        Execution params with program observables, trajectory count, and seed applied.
+        Execution params with handoff ``get_state``, observables, trajectory count,
+        and seed applied.
     """
     execution_params = copy.deepcopy(sim_params)
     execution_params.get_state = True
     execution_params.observables = [copy.deepcopy(observable) for observable in observables]
-    if num_traj is not None:
-        execution_params.num_traj = num_traj
+    execution_params.num_traj = num_traj
     execution_params.random_seed = random_seed
     return execution_params
 
@@ -378,10 +414,20 @@ def _compile_analog_segment(
     noise_model: NoiseModel | None,
     time_offset: float,
     observables: Sequence[Observable],
-    num_traj: int | None,
+    num_traj: int,
     random_seed: int | None,
 ) -> _CompiledAnalogInstruction:
     """Compile one analog segment after program-wide settings are resolved.
+
+    Args:
+        segment: Private analog segment.
+        index: Segment index in the program.
+        signature: Shared MPS state signature.
+        noise_model: Resolved noise model for this segment.
+        time_offset: Physical start time on the program timeline.
+        observables: Program-wide observables.
+        num_traj: Resolved trajectory count.
+        random_seed: Program-wide RNG seed.
 
     Returns:
         The validated private analog instruction.
@@ -402,7 +448,7 @@ def _compile_analog_segment(
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
-    execution_params = _inject_program_settings(
+    execution_params = _apply_program_settings(
         sim_params,
         observables=observables,
         num_traj=num_traj,
@@ -437,10 +483,20 @@ def _compile_digital_segment(
     noise_model: NoiseModel | None,
     time_offset: float,
     observables: Sequence[Observable],
-    num_traj: int | None,
+    num_traj: int,
     random_seed: int | None,
 ) -> _CompiledDigitalInstruction:
     """Compile one digital segment after program-wide settings are resolved.
+
+    Args:
+        segment: Private digital segment.
+        index: Segment index in the program.
+        signature: Shared MPS state signature.
+        noise_model: Resolved noise model for this segment.
+        time_offset: Physical start time on the program timeline.
+        observables: Program-wide observables.
+        num_traj: Resolved trajectory count.
+        random_seed: Program-wide RNG seed.
 
     Returns:
         The validated private digital instruction.
@@ -455,7 +511,7 @@ def _compile_digital_segment(
         )
         raise ValueError(msg)
     sim_params = segment.sim_params
-    execution_params = _inject_program_settings(
+    execution_params = _apply_program_settings(
         sim_params,
         observables=observables,
         num_traj=num_traj,
@@ -487,6 +543,11 @@ def _compile_program(
 ) -> _CompiledProgram:
     """Validate and compile a program for MPS execution.
 
+    Args:
+        program: Public program specification.
+        initial_state: Initial MPS-backed state.
+        default_noise_model: Run-level noise inherited by segments without an override.
+
     Returns:
         A private immutable sequence of executable instructions.
 
@@ -502,7 +563,12 @@ def _compile_program(
     instructions: list[_CompiledInstruction] = []
     time_offset = 0.0
 
-    num_traj = program.num_traj if program.num_traj is not None else AnalogSimParams().num_traj
+    for index, segment in enumerate(program.segments):
+        if not isinstance(segment, (_AnalogSegment, _DigitalSegment)):
+            msg = f"segments[{index}] has unsupported private segment type {type(segment).__name__}."
+            raise TypeError(msg)
+
+    num_traj = _resolve_program_num_traj(program)
     random_seed = program.random_seed
     observables = program.observables
 
@@ -524,22 +590,19 @@ def _compile_program(
             instructions.append(instruction)
             time_offset += float(instruction.sim_params.elapsed_time)
             continue
-        if isinstance(segment, _DigitalSegment):
-            instructions.append(
-                _compile_digital_segment(
-                    segment,
-                    index=index,
-                    signature=signature,
-                    noise_model=resolved_noise_model,
-                    time_offset=time_offset,
-                    observables=observables,
-                    num_traj=num_traj,
-                    random_seed=random_seed,
-                )
+        assert isinstance(segment, _DigitalSegment)
+        instructions.append(
+            _compile_digital_segment(
+                segment,
+                index=index,
+                signature=signature,
+                noise_model=resolved_noise_model,
+                time_offset=time_offset,
+                observables=observables,
+                num_traj=num_traj,
+                random_seed=random_seed,
             )
-            continue
-        msg = f"segments[{index}] has unsupported private segment type {type(segment).__name__}."
-        raise TypeError(msg)
+        )
 
     return _CompiledProgram(
         tuple(instructions),
@@ -552,8 +615,12 @@ def _compile_program(
     )
 
 
-def _segment_physical_times(segment: Result, value_count: int) -> NDArray[np.float64]:
+def _build_segment_timeline(segment: Result, value_count: int) -> NDArray[np.float64]:
     """Build one segment's physical-time coordinates on the program timeline.
+
+    Args:
+        segment: Per-segment result with local times and ``time_offset``.
+        value_count: Number of samples recorded for each observable.
 
     Returns:
         The segment coordinates on the physical program timeline.
@@ -574,11 +641,33 @@ def _segment_physical_times(segment: Result, value_count: int) -> NDArray[np.flo
     return np.asarray(times + offset, dtype=np.float64)
 
 
-def flatten_program_results(
+def _select_final_segment_counts(segment_results: Sequence[Result]) -> dict[int, int] | None:
+    """Return shot counts from the last segment that recorded any.
+
+    Args:
+        segment_results: Per-segment results in program order.
+
+    Returns:
+        The final shot histogram, or ``None`` when no segment recorded counts.
+    """
+    for segment in reversed(segment_results):
+        if segment.counts:
+            return dict(sorted(segment.counts.items()))
+    return None
+
+
+def stitch_program_results(
     segment_results: Sequence[Result],
     observables: Sequence[Observable],
 ) -> tuple[list[NDArray[Any]], NDArray[np.float64] | None, dict[int, int] | None]:
     """Stitch per-segment outputs into top-level expectation values, times, and counts.
+
+    Outer ``counts`` come from the last segment that recorded shots. Per-segment
+    histograms remain available on ``result.segment_results[i].counts``.
+
+    Args:
+        segment_results: Per-segment results in program order.
+        observables: Shared program observables.
 
     Returns:
         ``(expectation_values, times, counts)`` for the outer program result.
@@ -587,16 +676,10 @@ def flatten_program_results(
         ValueError: If a segment's observable buffers are missing or misaligned.
     """
     if not observables:
-        counts: dict[int, int] = {}
-        for segment in segment_results:
-            if segment.counts:
-                for key, value in segment.counts.items():
-                    counts[key] = counts.get(key, 0) + value
-        return [], None, (dict(sorted(counts.items())) if counts else None)
+        return [], None, _select_final_segment_counts(segment_results)
 
     expectation_parts: list[list[NDArray[Any]]] = [[] for _ in observables]
     time_parts: list[NDArray[np.float64]] = []
-    times_initialized = False
 
     for segment in segment_results:
         if len(segment.expectation_values) != len(observables):
@@ -606,12 +689,7 @@ def flatten_program_results(
             )
             raise ValueError(msg)
         first_values = np.asarray(segment.expectation_values[0])
-        segment_times = _segment_physical_times(segment, len(first_values))
-        if not times_initialized:
-            time_parts.append(segment_times)
-            times_initialized = True
-        else:
-            time_parts.append(segment_times)
+        time_parts.append(_build_segment_timeline(segment, len(first_values)))
         for index, values in enumerate(segment.expectation_values):
             arr = np.asarray(values)
             if arr.ndim != 1 or len(arr) != len(first_values):
@@ -621,11 +699,4 @@ def flatten_program_results(
 
     expectation_values = [np.concatenate(parts) if parts else np.empty(0) for parts in expectation_parts]
     times = np.concatenate(time_parts) if time_parts else None
-
-    counts = {}
-    for segment in segment_results:
-        if segment.counts:
-            for key, value in segment.counts.items():
-                counts[key] = counts.get(key, 0) + value
-
-    return expectation_values, times, (dict(sorted(counts.items())) if counts else None)
+    return expectation_values, times, _select_final_segment_counts(segment_results)

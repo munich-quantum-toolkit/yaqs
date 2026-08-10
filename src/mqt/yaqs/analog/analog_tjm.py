@@ -163,7 +163,10 @@ def analog_tjm_2(
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
-    sample_stream_id: int | None = None,
+    sample_timestep_offset: int = 0,
+    use_trajectory_rng_for_final_sample: bool = False,
+    return_trajectory_state: bool = False,
+    continue_trajectory: bool = False,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a two-site evolution scheme.
 
@@ -172,21 +175,31 @@ def analog_tjm_2(
     It corresponds to the two-site evolution method presented in the TJM paper.
 
     Args:
-        args (tuple): A tuple containing:
-            - int: Trajectory identifier.
-            - MPS: The initial state of the system.
-            - NoiseModel | None: The noise model to be applied (if any).
-            - AnalogSimParams: Simulation parameters (including time step, SVD threshold, etc.).
-            - MPO: The Hamiltonian operator represented as an MPO.
+        args: A tuple containing:
+            - Trajectory identifier.
+            - The initial MPS.
+            - Optional noise model.
+            - Simulation parameters (time step, SVD threshold, etc.).
+            - Hamiltonian MPO.
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
         rng: Optional externally managed trajectory RNG. When omitted, the
             standalone trajectory seed behavior is preserved.
-        sample_stream_id: Optional bounded-evolution identifier for independent
-            measurement-copy streams. Program execution supplies the segment index.
+        sample_timestep_offset: Added to each local measurement timestep when
+            deriving sample RNG streams. Program execution accumulates this
+            across prior analog segments so split evolutions share one global
+            sample timeline with a single continuous run.
+        use_trajectory_rng_for_final_sample: When True with an external ``rng``,
+            the last measurement copy draws from the trajectory RNG. Programs
+            enable this only on the final order-2 instruction.
+        return_trajectory_state: When True, return the trajectory MPS (``phi``)
+            for handoff instead of the last measurement copy. Programs always
+            enable this so later segments continue the physical trajectory.
+        continue_trajectory: When True, skip ``initialize`` and continue
+            ``step_through`` from the handed-off trajectory state. Programs set
+            this for order-2 segments after the first.
 
     Returns:
-        tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-            Observable data, diagnostics ``(3, T)``, and optional final MPS.
+        Observable data, diagnostics ``(3, T)``, and optional final MPS.
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
@@ -197,16 +210,13 @@ def analog_tjm_2(
     n_times = len(sim_params.times)
 
     def measurement_rng(timestep: int) -> np.random.Generator:
-        """Return the appropriate RNG for a sampled physical state."""
-        if external_rng and timestep == n_times - 1:
+        """Return the RNG for one measurement-copy sample at ``timestep``."""
+        if use_trajectory_rng_for_final_sample and external_rng and timestep == n_times - 1:
             return rng
-        if sample_stream_id is None:
-            return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
         return make_sample_rng(
             traj_idx,
             base_seed=base_seed,
-            timestep=timestep,
-            stream_id=sample_stream_id,
+            timestep=timestep + sample_timestep_offset,
         )
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
@@ -226,46 +236,66 @@ def analog_tjm_2(
             state.evaluate_observables(sim_params, results, 0)
         else:
             state.evaluate_observables(sim_params, results)
-        return results, diagnostics, state if sim_params.get_state else None
+        return results, diagnostics, state if (sim_params.get_state or return_trajectory_state) else None
 
     if sim_params.sample_timesteps:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
-    phi = initialize(state, noise_model, sim_params, rng=rng)
+    if continue_trajectory:
+        phi = state
+        for j, _ in enumerate(sim_params.times[1:], start=1):
+            phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
+            if sim_params.sample_timesteps or j == n_times - 1:
+                sampled_state = sample(
+                    phi,
+                    hamiltonian,
+                    noise_model,
+                    sim_params,
+                    results,
+                    j,
+                    rng=measurement_rng(j),
+                    diagnostics=diagnostics,
+                )
+                if sampled_state is not None:
+                    final_state = sampled_state
+    else:
+        phi = initialize(state, noise_model, sim_params, rng=rng)
 
-    # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).
-    # Per-timestep sample RNGs so intermediate draws cannot change the final measurement.
-    if sim_params.sample_timesteps or n_times == 2:
-        sampled_state = sample(
-            phi,
-            hamiltonian,
-            noise_model,
-            sim_params,
-            results,
-            j=1,
-            rng=measurement_rng(1),
-            diagnostics=diagnostics,
-        )
-        if sampled_state is not None:
-            final_state = sampled_state
-
-    for j, _ in enumerate(sim_params.times[2:], start=2):
-        phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
-        if sim_params.sample_timesteps or j == n_times - 1:
+        # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).
+        # Per-timestep sample RNGs so intermediate draws cannot change the final measurement.
+        if sim_params.sample_timesteps or n_times == 2:
             sampled_state = sample(
                 phi,
                 hamiltonian,
                 noise_model,
                 sim_params,
                 results,
-                j,
-                rng=measurement_rng(j),
+                j=1,
+                rng=measurement_rng(1),
                 diagnostics=diagnostics,
             )
             if sampled_state is not None:
                 final_state = sampled_state
 
+        for j, _ in enumerate(sim_params.times[2:], start=2):
+            phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
+            if sim_params.sample_timesteps or j == n_times - 1:
+                sampled_state = sample(
+                    phi,
+                    hamiltonian,
+                    noise_model,
+                    sim_params,
+                    results,
+                    j,
+                    rng=measurement_rng(j),
+                    diagnostics=diagnostics,
+                )
+                if sampled_state is not None:
+                    final_state = sampled_state
+
+    if return_trajectory_state:
+        return results, diagnostics, phi
     return results, diagnostics, final_state
 
 

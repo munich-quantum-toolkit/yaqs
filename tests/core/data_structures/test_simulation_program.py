@@ -43,9 +43,9 @@ x q[0];
 def test_program_normalizes_pair_segments() -> None:
     """``(operator, params[, noise])`` pairs become typed private segments."""
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
-    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
+    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1)
     circuit = QuantumCircuit(2)
-    digital_params = DigitalSimParams(get_state=True)
+    digital_params = DigitalSimParams()
     noise_model = NoiseModel()
 
     program = SimulationProgram([
@@ -131,11 +131,13 @@ def test_program_rejects_wrong_noise_model_type() -> None:
 
 
 def test_program_rejects_program_owned_fields_on_segment_params() -> None:
-    """Observables and random_seed belong on SimulationProgram, not segment params."""
+    """Observables, random_seed, and get_state belong on SimulationProgram."""
     with pytest.raises(ValueError, match=r"segments\[0\] sim_params.observables must be empty"):
         SimulationProgram([(Hamiltonian.ising(2, J=1.0, g=0.5), AnalogSimParams(observables=[Observable("z", 0)]))])
     with pytest.raises(ValueError, match=r"segments\[0\] sim_params.random_seed must be None"):
         SimulationProgram([(QuantumCircuit(2), DigitalSimParams(random_seed=1))])
+    with pytest.raises(ValueError, match=r"segments\[0\] sim_params.get_state must be False"):
+        SimulationProgram([(QuantumCircuit(2), DigitalSimParams(get_state=True))])
 
 
 def test_program_preserves_order_and_defensively_copies_input() -> None:
@@ -249,10 +251,10 @@ def test_program_specification_is_pickleable() -> None:
     """A mixed program specification round-trips for future worker execution."""
     program = SimulationProgram(
         [
-            (QuantumCircuit(2), DigitalSimParams(get_state=True)),
+            (QuantumCircuit(2), DigitalSimParams()),
             (
                 Hamiltonian.ising(2, J=1.0, g=0.5),
-                AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True),
+                AnalogSimParams(elapsed_time=0.1, dt=0.1),
             ),
         ],
         observables=[Observable("z", 0)],

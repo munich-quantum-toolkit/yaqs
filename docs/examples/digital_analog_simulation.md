@@ -53,8 +53,9 @@ digital pair in the program.
 
 ## 2. Configure the parameters
 
-Segment parameters carry timing, truncation, and gate-mode settings only.
-Observables, trajectory count, and the RNG seed belong on the program.
+Segment parameters carry timing, truncation, gate-mode, and digital `shots`.
+Observables, `random_seed`, and `get_state` belong on the program; `num_traj` is
+either unanimous on the segments or set on the program.
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, DigitalSimParams, Hamiltonian, Observable
@@ -177,13 +178,14 @@ result = simulator.run(
 
 ## 5. OpenQASM, scheduled jumps, and per-segment results
 
-Whatever you already use for standalone analog or digital runs works inside a
-program the same way.
+Programs reuse the same **operator / params / noise** objects as MPS TJM analog
+and digital runs. A few knobs are program-owned or unsupported here: the initial
+state must be MPS; observables, `random_seed`, and `get_state` belong on the
+program; `multi_time_observables` are not supported.
 
 **Digital operators.** A segment may take a
 {class}`~qiskit.circuit.QuantumCircuit`, or an OpenQASM string / file path, with
-{class}`~mqt.yaqs.DigitalSimParams` — the same inputs as
-{meth}`~mqt.yaqs.Simulator.run` for circuits:
+{class}`~mqt.yaqs.DigitalSimParams`. `shots` stay on the digital segment params:
 
 ```python
 program = SimulationProgram(
@@ -193,10 +195,10 @@ program = SimulationProgram(
 ```
 
 **Scheduled jumps.** Attach them through a {class}`~mqt.yaqs.NoiseModel` as in
-{doc}`scheduled_jumps`. Constraints are unchanged (analog MPS TJM, `order=1`,
-times on that segment's `dt` grid). Jump times are relative to the start of the
-analog segment that carries the model. Use a third-tuple noise override when
-only one segment should fire them:
+{doc}`scheduled_jumps` (analog MPS TJM, `order=1`, times on that segment's `dt`
+grid). Jump times are relative to the start of the analog segment that carries
+the model. Use a third-tuple noise override when only one segment should fire
+them:
 
 ```python
 jumps = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
@@ -209,10 +211,13 @@ program = SimulationProgram(
 )
 ```
 
-**Results.** The outer result is already stitched (`result.times`,
-`result.expectation_values`, `result.counts`). Each segment also keeps an
-ordinary {class}`~mqt.yaqs.Result` at `result.segment_results[i]` if you need
-the unstitched per-segment view.
+**Trajectory count.** Set `num_traj=` on the program, or use the same `num_traj`
+on every segment. If segments disagree, pass an explicit program value.
+
+**Results.** The outer result stitches `result.times` and
+`result.expectation_values`. Outer `result.counts` is the histogram from the
+last segment that recorded shots. Each segment also keeps an ordinary
+{class}`~mqt.yaqs.Result` at `result.segment_results[i]`.
 
 ## 6. Compare the four results
 
@@ -277,8 +282,9 @@ recover lost signal contrast.
 ## Useful things to know
 
 - Segments run in the order they appear in `SimulationProgram`.
-- Observables, `num_traj`, and `random_seed` are program-wide; leave them unset
-  on segment `AnalogSimParams` / `DigitalSimParams`.
+- Observables, `random_seed`, and `get_state` are program-wide; leave them unset
+  on segment params. `num_traj` may be unanimous on segments or set on the
+  program. `shots` stay on digital segment params.
 - YAQS passes the state between segments automatically and does not mutate the
   input state you give `Simulator.run`.
 - A noise model passed to `Simulator.run` is inherited by every segment unless

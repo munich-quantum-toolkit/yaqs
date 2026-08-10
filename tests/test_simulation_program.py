@@ -60,12 +60,11 @@ def test_mixed_program_matches_manual_state_handoff() -> None:
     intervention = QuantumCircuit(length)
     intervention.x(1)
     observables = [Observable("z", 0), Observable("z", 1)]
-    digital_params = DigitalSimParams(get_state=True)
+    digital_params = DigitalSimParams()
     analog_params = AnalogSimParams(
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,
-        get_state=True,
     )
     outputless_params = DigitalSimParams()
     hamiltonian = _zero_hamiltonian(length)
@@ -122,8 +121,8 @@ def test_mixed_program_matches_manual_state_handoff() -> None:
     assert isinstance(result.segment_results[0].sim_params, DigitalSimParams)
     assert isinstance(result.segment_results[1].sim_params, AnalogSimParams)
     assert isinstance(result.segment_results[2].sim_params, DigitalSimParams)
-    assert result.segment_results[0].output_state is not None
-    assert result.segment_results[1].output_state is not None
+    assert result.segment_results[0].output_state is None
+    assert result.segment_results[1].output_state is None
     assert result.segment_results[2].output_state is None
     analog_times = result.segment_results[1].times
     assert analog_times is not None
@@ -515,58 +514,64 @@ def test_program_threads_one_rng_stream_across_analog_and_digital_segments(
     np.testing.assert_allclose(samples, expected, rtol=0, atol=0)
 
 
-def test_order_two_program_handoff_uses_continuous_trajectory_rng(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Order-2 final sampling advances the owned trajectory RNG at segment boundaries."""
-    samples: list[float] = []
+def test_noisy_order_two_program_matches_standalone_and_split_segments() -> None:
+    """Seeded noisy order-2 programs match standalone runs and continuous splits."""
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    simulator = Simulator(parallel=False, show_progress=False)
+    standalone = simulator.run(
+        State(1, initial="zeros"),
+        Hamiltonian.ising(1, J=0.0, g=0.0),
+        AnalogSimParams(
+            elapsed_time=0.4,
+            dt=0.1,
+            order=2,
+            num_traj=16,
+            observables=[Observable("z", 0)],
+            random_seed=1,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
+    full = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [(_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.4, dt=0.1, order=2))],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=1,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
+    split = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+                (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+            ],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=1,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
 
-    def record_rng(
-        state: MPS,
-        noise_model: NoiseModel | None,
-        dt: float,
-        sim_params: AnalogSimParams,
-        rng: np.random.Generator | None = None,
-    ) -> MPS:
-        del noise_model, dt, sim_params
-        assert rng is not None
-        samples.append(float(rng.random()))
-        return state
-
-    monkeypatch.setattr(analog_module, "stochastic_process", record_rng)
-    params = AnalogSimParams(
-        elapsed_time=0.1,
-        dt=0.1,
-        order=2,
-    )
-    program = SimulationProgram(
-        [
-            (_zero_hamiltonian(1), params),
-            (_zero_hamiltonian(1), params),
-        ],
-        observables=[Observable("z", 0)],
-        num_traj=1,
-        random_seed=31,
-    )
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
-
-    Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program, noise_model=noise_model)
-
-    expected = make_trajectory_rng(0, base_seed=31).random(4)
-    np.testing.assert_allclose(samples, expected, rtol=0, atol=0)
+    np.testing.assert_allclose(full, standalone, rtol=0, atol=0)
+    assert full[-1] == pytest.approx(split[-1])
 
 
-def test_order_two_program_uses_distinct_segment_sample_streams(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Intermediate measurement copies include the program segment in their seed coordinates."""
-    streams: list[tuple[int | None, int]] = []
+def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Adjacent order-2 segments continue one global measurement-copy timeline."""
+    timesteps: list[int] = []
     original_make_sample_rng = analog_module.make_sample_rng
 
-    def record_sample_stream(
+    def record_sample_timestep(
         traj_idx: int,
         *,
         base_seed: int | None,
         timestep: int,
         stream_id: int | None = None,
     ) -> np.random.Generator:
-        streams.append((stream_id, timestep))
+        timesteps.append(timestep)
         return original_make_sample_rng(
             traj_idx,
             base_seed=base_seed,
@@ -574,7 +579,7 @@ def test_order_two_program_uses_distinct_segment_sample_streams(monkeypatch: pyt
             stream_id=stream_id,
         )
 
-    monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_stream)
+    monkeypatch.setattr(analog_module, "make_sample_rng", record_sample_timestep)
     params = AnalogSimParams(
         elapsed_time=0.2,
         dt=0.1,
@@ -597,7 +602,7 @@ def test_order_two_program_uses_distinct_segment_sample_streams(monkeypatch: pyt
         noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
     )
 
-    assert streams == [(0, 1), (1, 1)]
+    assert timesteps == [1, 2, 3, 4]
 
 
 def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:
@@ -658,7 +663,7 @@ def test_noisy_program_rejects_requested_trajectory_state() -> None:
 
 
 def test_program_rejects_program_owned_fields_on_segment_params() -> None:
-    """Segment params must leave observables empty and random_seed unset."""
+    """Segment params must leave observables, random_seed, and get_state unset."""
     with pytest.raises(ValueError, match=r"sim_params.observables must be empty"):
         SimulationProgram([
             (_zero_hamiltonian(2), AnalogSimParams(observables=[Observable("z", 0)])),
@@ -669,6 +674,8 @@ def test_program_rejects_program_owned_fields_on_segment_params() -> None:
             (_zero_hamiltonian(2), AnalogSimParams(random_seed=1)),
             (QuantumCircuit(2), DigitalSimParams(random_seed=2)),
         ])
+    with pytest.raises(ValueError, match=r"sim_params.get_state must be False"):
+        SimulationProgram([(_zero_hamiltonian(2), AnalogSimParams(get_state=True))])
 
 
 def test_program_num_traj_configures_the_ensemble() -> None:
@@ -694,6 +701,60 @@ def test_program_num_traj_configures_the_ensemble() -> None:
     assert len(result.segment_results[1].measurements) == 4
     assert analog_params.num_traj == AnalogSimParams().num_traj
     assert digital_params.num_traj == DigitalSimParams(shots=3, preset="fast").num_traj
+
+
+def test_program_inherits_unanimous_segment_num_traj() -> None:
+    """Omitting program num_traj keeps a shared segment value."""
+    params = AnalogSimParams(num_traj=3)
+    program = SimulationProgram(
+        [(_zero_hamiltonian(1), params), (_zero_hamiltonian(1), AnalogSimParams(num_traj=3))],
+        observables=[Observable("z", 0)],
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert result.segment_results[0].trajectories[0].shape[0] == 3
+
+
+def test_program_rejects_conflicting_segment_num_traj() -> None:
+    """Conflicting segment ensemble sizes require an explicit program value."""
+    program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), AnalogSimParams(num_traj=2)),
+            (_zero_hamiltonian(1), AnalogSimParams(num_traj=3)),
+        ],
+        observables=[Observable("z", 0)],
+    )
+
+    with pytest.raises(ValueError, match=r"disagree on sim_params\.num_traj"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            program,
+            noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+        )
+
+
+def test_noisy_program_leaves_segment_output_state_unset() -> None:
+    """Stochastic programs never expose a per-segment trajectory state."""
+    program = SimulationProgram(
+        [(_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1))],
+        observables=[Observable("z", 0)],
+        num_traj=3,
+        random_seed=0,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.5}]),
+    )
+
+    assert result.output_state is None
+    assert result.segment_results[0].output_state is None
 
 
 def test_program_scheduled_jumps_are_segment_local() -> None:

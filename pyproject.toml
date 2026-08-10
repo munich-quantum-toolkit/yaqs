@@ -94,10 +94,6 @@ addopts = [
   "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
 ]
 log_level = "INFO"
-markers = [
-  "slow: computationally expensive regression tests",
-  "tdvp_regression: numerical regression tests for TDVP gate evolution",
-]
 filterwarnings = [
   "error",
   "ignore:Could not import matplotlib.*:UserWarning",
