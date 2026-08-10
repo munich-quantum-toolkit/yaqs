@@ -777,6 +777,40 @@ def test_order_two_noise_change_breaks_continuation(monkeypatch: pytest.MonkeyPa
     assert initialize_calls == 2
 
 
+def test_order_two_value_equal_noise_models_break_continuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Order-2 continuation compares resolved noise models by identity, not value equality."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    process = {"name": "pauli_x", "sites": [0], "strength": 0.1}
+    program = SimulationProgram(
+        [
+            (hamiltonian, params, NoiseModel([process])),
+            (hamiltonian, params, NoiseModel([dict(process)])),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=3,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert initialize_calls == 2
+
+
 def test_order_two_continued_junction_matches_prior_sample() -> None:
     """Continued order-2 segments remeasure the junction to match the prior sample."""
     hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
@@ -834,6 +868,322 @@ def test_order_two_same_operator_split_matches_full_observable_trace() -> None:
         np.asarray(split.segment_results[1].expectation_values[0][1:]),
     ])
     np.testing.assert_allclose(split_trace, full, rtol=0, atol=0)
+
+
+def test_order_two_final_only_split_matches_continuous() -> None:
+    """Order-2 continuation with sample_timesteps=False matches a continuous run."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    simulator = Simulator(parallel=False, show_progress=False)
+    full = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [(hamiltonian, AnalogSimParams(elapsed_time=0.4, dt=0.1, order=2, sample_timesteps=False))],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=5,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
+    split = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=False)),
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=False)),
+            ],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=5,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
+
+    assert full[-1] == pytest.approx(split[-1])
+
+
+def test_order_two_sample_timesteps_mismatch_breaks_continuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mismatched sample_timesteps flags re-initialize the next order-2 segment."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    program = SimulationProgram(
+        [
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=True)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=False)),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=9,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert initialize_calls == 2
+
+
+def test_zero_duration_analog_segment_preserves_state_and_time_offset() -> None:
+    """An elapsed_time=0 analog records at the program offset without advancing time."""
+    hamiltonian = _zero_hamiltonian(1)
+    pulse = QuantumCircuit(1)
+    pulse.x(0)
+    program = SimulationProgram(
+        [
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.0, dt=0.1, order=1)),
+            (pulse, DigitalSimParams()),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.1, dt=0.1, order=1)),
+        ],
+        observables=[Observable("z", 0)],
+        get_state=True,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert result.segment_results[1].time_offset == pytest.approx(0.2)
+    assert result.segment_results[2].time_offset == pytest.approx(0.2)
+    assert result.segment_results[3].time_offset == pytest.approx(0.2)
+    zero_values = np.asarray(result.segment_results[1].expectation_values[0], dtype=float)
+    np.testing.assert_allclose(zero_values, [1.0], atol=1e-10)
+    assert result.output_state is not None
+    final_z = float(np.real(result.output_state.mps.expect(Observable("z", 0))))
+    assert final_z == pytest.approx(-1.0)
+
+
+def test_order_two_zero_duration_breaks_continuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A zero-duration order-2 neighbor cannot continue a mid-Trotter trajectory."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    program = SimulationProgram(
+        [
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.0, dt=0.1, order=2)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=2,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    # First and third segments initialize; zero-duration uses the early-return path.
+    assert initialize_calls == 2
+
+
+def test_parallel_seeded_order_two_split_matches_serial() -> None:
+    """Order-2 continued splits are bit-identical in serial and parallel execution."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    program = SimulationProgram(
+        [
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=8,
+        random_seed=101,
+    )
+
+    serial = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program, noise_model=noise)
+    parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=noise,
+    )
+
+    for serial_segment, parallel_segment in zip(serial.segment_results, parallel.segment_results, strict=True):
+        for serial_traj, parallel_traj in zip(serial_segment.trajectories, parallel_segment.trajectories, strict=True):
+            np.testing.assert_allclose(serial_traj, parallel_traj, rtol=0, atol=0)
+
+
+def test_multi_digital_shots_keep_last_segment_outer_counts() -> None:
+    """Outer counts come from the last shot segment; each segment keeps its own budget."""
+    first = QuantumCircuit(1)
+    first.x(0)
+    second = QuantumCircuit(1)
+    program = SimulationProgram([
+        (first, DigitalSimParams(shots=5)),
+        (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.1, dt=0.1)),
+        (second, DigitalSimParams(shots=7)),
+    ])
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert result.segment_results[0].counts is not None
+    assert sum(result.segment_results[0].counts.values()) == 5
+    assert result.segment_results[2].counts is not None
+    assert sum(result.segment_results[2].counts.values()) == 7
+    assert result.counts is not None
+    assert result.counts == result.segment_results[2].counts
+    assert sum(result.counts.values()) == 7
+
+
+def test_scheduled_jumps_fire_on_each_analog_segments_local_clock() -> None:
+    """Inherited scheduled jumps match each analog segment's local time grid."""
+    jump = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
+    program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)),
+            (_zero_hamiltonian(1), AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=jump,
+    )
+
+    first = np.asarray(result.segment_results[0].expectation_values[0], dtype=float)
+    second = np.asarray(result.segment_results[1].expectation_values[0], dtype=float)
+    # Local t=0 starts at +1; jump at local 0.1 flips to -1 for the rest of the first segment.
+    np.testing.assert_allclose(first, [1.0, -1.0, -1.0], atol=1e-10)
+    # State carries into the next segment, so the second entry starts flipped and the
+    # next local jump at 0.1 returns it to +1.
+    np.testing.assert_allclose(second, [-1.0, 1.0, 1.0], atol=1e-10)
+
+
+def test_digital_between_same_hamiltonian_order_two_breaks_continuation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A digital pulse clears order-2 continuation even when Hamiltonians match."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    pulse = QuantumCircuit(1)
+    pulse.x(0)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    program = SimulationProgram(
+        [
+            (hamiltonian, params),
+            (pulse, DigitalSimParams()),
+            (hamiltonian, params),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=4,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert initialize_calls == 2
+
+
+def test_empty_noise_override_disables_analog_and_digital_segments() -> None:
+    """An empty segment NoiseModel disables inherited stochastic noise for that segment."""
+    strong = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 2.0}])
+    disabled = NoiseModel()
+    params = AnalogSimParams(elapsed_time=0.5, dt=0.1, order=1)
+    analog_program = SimulationProgram(
+        [
+            (_zero_hamiltonian(1), params, disabled),
+            (_zero_hamiltonian(1), params),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=48,
+        random_seed=8,
+    )
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    circuit.cx(0, 1)
+    digital_kwargs = {
+        "observables": [Observable("z", 0)],
+        "num_traj": 48,
+        "random_seed": 8,
+    }
+    digital_disabled = SimulationProgram([(circuit, DigitalSimParams(), disabled)], **digital_kwargs)
+    digital_noisy = SimulationProgram([(circuit, DigitalSimParams())], **digital_kwargs)
+
+    simulator = Simulator(parallel=False, show_progress=False)
+    analog_result = simulator.run(State(1, initial="zeros"), analog_program, noise_model=strong)
+    disabled_digital = simulator.run(State(2, initial="zeros"), digital_disabled, noise_model=strong)
+    noisy_digital = simulator.run(State(2, initial="zeros"), digital_noisy, noise_model=strong)
+
+    quiet = np.asarray(analog_result.segment_results[0].expectation_values[0], dtype=float)
+    noisy = np.asarray(analog_result.segment_results[1].expectation_values[0], dtype=float)
+    disabled_z = np.asarray(disabled_digital.expectation_values[0]).real
+    noisy_z = np.asarray(noisy_digital.segment_results[0].trajectories[0][:, 0]).real
+    np.testing.assert_allclose(quiet, np.ones_like(quiet), atol=1e-10)
+    assert abs(float(noisy[-1])) < 0.9
+    assert disabled_digital.segment_results[0].noise_model is not None
+    assert disabled_digital.segment_results[0].noise_model.processes == []
+    # Empty override makes the digital-only program non-stochastic and unitary (X+CX -> |11>).
+    np.testing.assert_allclose(disabled_z, [-1.0], atol=1e-10)
+    assert not np.allclose(noisy_z, -np.ones_like(noisy_z), atol=1e-10)
+
+
+def test_qasm_digital_then_analog_matches_circuit_program() -> None:
+    """OpenQASM digital operators match an equivalent QuantumCircuit program."""
+    qasm = """\
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[1];
+x q[0];
+"""
+    circuit = QuantumCircuit(1)
+    circuit.x(0)
+    hamiltonian = _zero_hamiltonian(1)
+    analog = AnalogSimParams(elapsed_time=0.1, dt=0.1, order=1)
+    digital = DigitalSimParams()
+    simulator = Simulator(parallel=False, show_progress=False)
+    from_qasm = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram([(qasm, digital), (hamiltonian, analog)], observables=[Observable("z", 0)]),
+    )
+    from_circuit = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram([(circuit, digital), (hamiltonian, analog)], observables=[Observable("z", 0)]),
+    )
+
+    np.testing.assert_allclose(from_qasm.expectation_values[0], from_circuit.expectation_values[0], atol=1e-10)
 
 
 def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:
