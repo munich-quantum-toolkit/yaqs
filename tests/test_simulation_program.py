@@ -602,7 +602,8 @@ def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pyte
         noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
     )
 
-    assert timesteps == [1, 2, 3, 4]
+    # First segment samples 1,2; continued segment remasures junction at global 2, then 3,4.
+    assert timesteps == [1, 2, 2, 3, 4]
 
 
 def test_order_one_segment_resets_order_two_sample_timestep_offset(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -682,6 +683,157 @@ def test_order_two_continuation_requires_matching_dt(monkeypatch: pytest.MonkeyP
     )
 
     assert initialize_calls == 2
+
+
+def test_order_two_hamiltonian_quench_matches_manual_handoff() -> None:
+    """Different Hamiltonians break order-2 continuation and match sequential get_state runs."""
+    hamiltonian_a = Hamiltonian.ising(2, J=1.0, g=0.5)
+    hamiltonian_b = Hamiltonian.ising(2, J=0.2, g=1.0)
+    observables = [Observable("z", 0)]
+    first_params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    second_params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    simulator = Simulator(parallel=False, show_progress=False)
+
+    program_result = simulator.run(
+        State(2, initial="zeros"),
+        SimulationProgram(
+            [(hamiltonian_a, first_params), (hamiltonian_b, second_params)],
+            observables=observables,
+            get_state=True,
+        ),
+    )
+    first = simulator.run(
+        State(2, initial="zeros"),
+        hamiltonian_a,
+        AnalogSimParams(
+            elapsed_time=0.2,
+            dt=0.1,
+            order=2,
+            observables=observables,
+            get_state=True,
+        ),
+    )
+    assert first.output_state is not None
+    second = simulator.run(
+        first.output_state,
+        hamiltonian_b,
+        AnalogSimParams(
+            elapsed_time=0.2,
+            dt=0.1,
+            order=2,
+            observables=observables,
+            get_state=True,
+        ),
+    )
+
+    np.testing.assert_allclose(
+        program_result.expectation_values[0],
+        np.concatenate([
+            first.expectation_values[0],
+            second.expectation_values[0],
+        ]),
+    )
+    assert program_result.output_state is not None
+    assert second.output_state is not None
+    np.testing.assert_allclose(
+        program_result.output_state.mps.to_vec(),
+        second.output_state.mps.to_vec(),
+        atol=1e-10,
+    )
+
+
+def test_order_two_noise_change_breaks_continuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Different resolved noise models re-initialize the next order-2 segment."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    noise_a = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}])
+    noise_b = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    program = SimulationProgram(
+        [
+            (hamiltonian, params, noise_a),
+            (hamiltonian, params, noise_b),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=3,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert initialize_calls == 2
+
+
+def test_order_two_continued_junction_matches_prior_sample() -> None:
+    """Continued order-2 segments remeasure the junction to match the prior sample."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, sample_timesteps=True, order=2)
+    program = SimulationProgram(
+        [(hamiltonian, params), (hamiltonian, params)],
+        observables=[Observable("z", 0)],
+        num_traj=8,
+        random_seed=11,
+    )
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.25}])
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=noise,
+    )
+
+    first_last = np.asarray(result.segment_results[0].expectation_values[0][-1], dtype=float)
+    second_first = np.asarray(result.segment_results[1].expectation_values[0][0], dtype=float)
+    np.testing.assert_allclose(second_first, first_last, rtol=0, atol=0)
+
+
+def test_order_two_same_operator_split_matches_full_observable_trace() -> None:
+    """Same-Hamiltonian order-2 halves reproduce a single continuous observable path."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    simulator = Simulator(parallel=False, show_progress=False)
+    full = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [(hamiltonian, AnalogSimParams(elapsed_time=0.4, dt=0.1, order=2))],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=1,
+        ),
+        noise_model=noise,
+    ).expectation_values[0]
+    split = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)),
+            ],
+            observables=[Observable("z", 0)],
+            num_traj=16,
+            random_seed=1,
+        ),
+        noise_model=noise,
+    )
+    # Drop the duplicated junction sample from the second segment.
+    split_trace = np.concatenate([
+        np.asarray(split.segment_results[0].expectation_values[0]),
+        np.asarray(split.segment_results[1].expectation_values[0][1:]),
+    ])
+    np.testing.assert_allclose(split_trace, full, rtol=0, atol=0)
 
 
 def _run_seeded_noisy_program(*, parallel: bool) -> list[list[np.ndarray]]:

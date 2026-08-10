@@ -238,12 +238,22 @@ def analog_tjm_2(
             state.evaluate_observables(sim_params, results)
         return results, diagnostics, state if (sim_params.get_state or return_trajectory_state) else None
 
-    if sim_params.sample_timesteps:
-        state.record_diagnostics(diagnostics, 0)
-        state.evaluate_observables(sim_params, results, 0)
-
     if continue_trajectory:
+        # Mid-Trotter handoff: remeasure the junction with the global sample stream
+        # (local 0 + offset matches the prior segment's last sample) without
+        # replacing ``phi``, then continue ``step_through``.
         phi = state
+        if sim_params.sample_timesteps:
+            sample(
+                phi,
+                hamiltonian,
+                noise_model,
+                sim_params,
+                results,
+                j=0,
+                rng=measurement_rng(0),
+                diagnostics=diagnostics,
+            )
         for j, _ in enumerate(sim_params.times[1:], start=1):
             phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
             if sim_params.sample_timesteps or j == n_times - 1:
@@ -260,6 +270,10 @@ def analog_tjm_2(
                 if sampled_state is not None:
                     final_state = sampled_state
     else:
+        if sim_params.sample_timesteps:
+            state.record_diagnostics(diagnostics, 0)
+            state.evaluate_observables(sim_params, results, 0)
+
         phi = initialize(state, noise_model, sim_params, rng=rng)
 
         # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).

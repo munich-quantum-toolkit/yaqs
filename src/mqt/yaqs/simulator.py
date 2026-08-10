@@ -85,6 +85,7 @@ else:
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+from itertools import starmap
 from pathlib import Path
 
 from qiskit.circuit import QuantumCircuit
@@ -298,12 +299,29 @@ def _execute_program_trajectory(
     continue_order2_trajectory = False
     instructions = compiled.instructions
 
+    def _same_order2_operator(
+        left: _CompiledAnalogInstruction,
+        right: _CompiledAnalogInstruction,
+    ) -> bool:
+        """Return whether two analog instructions share Hamiltonian and noise content."""
+        if left.noise_model is not right.noise_model:
+            return False
+        left_mpo = left.hamiltonian
+        right_mpo = right.hamiltonian
+        if left_mpo is right_mpo:
+            return True
+        if len(left_mpo.tensors) != len(right_mpo.tensors):
+            return False
+        return all(starmap(np.array_equal, zip(left_mpo.tensors, right_mpo.tensors, strict=True)))
+
     def _order2_chain_continues(current: _CompiledAnalogInstruction, index: int) -> bool:
         """Return whether the next instruction can continue this order-2 trajectory.
 
-        Continuation requires an adjacent order-2 analog segment with the same ``dt``
-        and ``sample_timesteps``, and a non-trivial current time grid so a mid-Trotter
-        ``phi`` handoff is meaningful.
+        Continuation requires an adjacent order-2 analog segment with the same
+        Hamiltonian, resolved noise model, ``dt``, and ``sample_timesteps``, and a
+        non-trivial current time grid so a mid-Trotter ``phi`` handoff is meaningful.
+        Different operators or noise break the chain so the next segment
+        re-initializes from a physical sample-state handoff.
         """
         if index + 1 >= len(instructions):
             return False
@@ -318,7 +336,9 @@ def _execute_program_trajectory(
             return False
         if current_params.dt != next_params.dt:
             return False
-        return current_params.sample_timesteps == next_params.sample_timesteps
+        if current_params.sample_timesteps != next_params.sample_timesteps:
+            return False
+        return _same_order2_operator(current, nxt)
 
     for instruction in instructions:
         if isinstance(instruction, _CompiledAnalogInstruction):
