@@ -12,11 +12,13 @@ releases may include breaking changes.
 
 ### Added
 
-- added infrastructure for analog-digital simulation ([#525]) ([**@linusschulte**])
+- added infrastructure for analog-digital simulation ([#525])
+  ([**@linusschulte**])
 - added native support for gates acting on three or more qubits in circuit
   simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
   ([**@Pouri96**])
-- added custom one-site matrix observables for non-qubit local dimensions, including named position observables ([#497]) ([**@linusschulte**])
+- added custom one-site matrix observables for non-qubit local dimensions,
+  including named position observables ([#497]) ([**@linusschulte**])
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
 
