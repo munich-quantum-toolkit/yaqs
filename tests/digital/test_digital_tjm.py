@@ -25,6 +25,7 @@ from qiskit.quantum_info import Pauli, Statevector
 
 import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
+from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
@@ -2381,3 +2382,102 @@ def test_obs_order_aligned() -> None:
         expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
+
+
+# ---- TEBD truncation gauge --------------------------------------------------------------
+
+GAUGE_LENGTH = 8
+GAUGE_CHI = 4
+GAUGE_SEED = 7
+GAUGE_OPT_RTOL = 0.05
+
+
+def _random_capped_mps(length: int, chi: int, seed: int) -> MPS:
+    """Random right-canonical MPS with every bond at its maximal value capped by ``chi``.
+
+    Args:
+        length: Number of sites.
+        chi: Bond-dimension cap.
+        seed: RNG seed.
+
+    Returns:
+        Right-canonical MPS with the orthogonality center at site 0.
+    """
+    rng = np.random.default_rng(seed)
+    bonds = [1] + [min(chi, 2**i, 2 ** (length - i)) for i in range(1, length)] + [1]
+    tensors = [
+        rng.standard_normal((2, bonds[i], bonds[i + 1])) + 1j * rng.standard_normal((2, bonds[i], bonds[i + 1]))
+        for i in range(length)
+    ]
+    state = MPS(length=length, tensors=tensors)
+    state.normalize(form="B", decomposition="QR")
+    return state
+
+
+def _dense_state(state: MPS) -> np.ndarray:
+    """Contract an MPS into a dense array in site order.
+
+    Args:
+        state: MPS to contract.
+
+    Returns:
+        Dense state of shape ``[2] * length`` with axes in site order.
+    """
+    acc = state.tensors[0].transpose(1, 0, 2)
+    for tensor in state.tensors[1:]:
+        acc = np.tensordot(acc, tensor.transpose(1, 0, 2), axes=([acc.ndim - 1], [0]))
+    return np.asarray(acc, dtype=np.complex128).reshape([2] * state.length)
+
+
+@pytest.mark.parametrize("gauge_known", [True, False])
+@pytest.mark.parametrize("left_site", [2, 3, 4])
+def test_tebd_truncation_schmidt_optimal(left_site: int, *, gauge_known: bool) -> None:
+    """Capped TEBD must realize the optimal truncation error at the gate bond.
+
+    One nearest-neighbor gate on a state whose bonds all sit at the cap can only
+    exceed the cap at the gate bond, so the best reachable infidelity is exactly the
+    discarded Schmidt weight of the exact post-gate state at that cut. This holds only
+    if the two-site split truncates in a canonical gauge; a right-canonical chain with
+    the center at site 0 (the state every gate sees in the circuit loop) is *not* in
+    that gauge for ``left_site > 0``, and truncating anyway lands far above the optimum.
+    """
+    params = DigitalSimParams(observables=[], num_traj=1, max_bond_dim=GAUGE_CHI, svd_threshold=1e-14, get_state=True)
+
+    state = _random_capped_mps(GAUGE_LENGTH, GAUGE_CHI, GAUGE_SEED)
+    if not gauge_known:
+        state.set_center(None)
+
+    gate = GateLibrary.cx()
+    gate.set_sites(left_site, left_site + 1)
+    u_gate = resolve_lr_tensor(gate, left_site, left_site + 1)
+
+    exact = np.tensordot(u_gate, _dense_state(state), axes=([2, 3], [left_site, left_site + 1]))
+    exact = np.moveaxis(exact, [0, 1], [left_site, left_site + 1])
+
+    singular_values = np.linalg.svd(exact.reshape(2 ** (left_site + 1), -1), compute_uv=False)
+    weights = singular_values**2 / np.sum(singular_values**2)
+    optimal_infidelity = float(np.sum(weights[GAUGE_CHI:]))
+    assert optimal_infidelity > 1e-8  # non-vacuous: the cap truncates
+
+    apply_two_qubit_gate_tebd(state, gate, params)
+
+    truncated = _dense_state(state).reshape(-1)
+    exact_vec = exact.reshape(-1)
+    overlap = np.abs(np.vdot(exact_vec, truncated)) ** 2
+    achieved = float(abs(1.0 - overlap / (np.vdot(exact_vec, exact_vec).real * np.vdot(truncated, truncated).real)))
+
+    assert achieved <= optimal_infidelity * (1.0 + GAUGE_OPT_RTOL) + 1e-12
+    assert state.orthogonality_center == left_site + 1
+
+
+def test_tebd_establishes_canonical_gauge() -> None:
+    """TEBD leaves a valid mixed-canonical state with the center on the gate pair."""
+    params = DigitalSimParams(observables=[], num_traj=1, max_bond_dim=GAUGE_CHI, svd_threshold=1e-14, get_state=True)
+    state = _random_capped_mps(GAUGE_LENGTH, GAUGE_CHI, GAUGE_SEED)
+
+    gate = GateLibrary.cx()
+    gate.set_sites(4, 5)
+    apply_two_qubit_gate_tebd(state, gate, params)
+
+    assert state.orthogonality_center == 5
+    assert state.check_canonical_form()[0] == 5

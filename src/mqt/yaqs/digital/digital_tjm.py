@@ -460,6 +460,11 @@ def apply_two_qubit_gate_tebd(
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
 
+    The orthogonality center is moved onto the gate pair before the two-site split,
+    so the SVD truncation is performed in a canonical gauge. Truncating in any other
+    gauge is not equivalent to discarding the smallest Schmidt values of the state and
+    can leave errors far above the optimal truncation error at the same bond dimension.
+
     Args:
         state: MPS updated in place.
         gate: Internal gate object from the gate library.
@@ -497,6 +502,13 @@ def apply_two_qubit_gate_tebd(
     left_site = min(site0, site1)
     right_site = max(site0, site1)
     u_gate = resolve_lr_tensor(gate, left_site, right_site)
+
+    # The truncated split below is optimal only if the orthogonality center lies on
+    # the gate pair; establish that gauge first (cf. apply_window and MPS.compress).
+    if state.orthogonality_center is None:
+        state.set_canonical_form(left_site)
+    elif state.orthogonality_center not in {left_site, right_site}:
+        state.shift_center_to(left_site)
 
     left_tensor = state.tensors[left_site]
     right_tensor = state.tensors[right_site]

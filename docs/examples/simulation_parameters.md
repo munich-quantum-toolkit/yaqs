@@ -236,10 +236,12 @@ sampling with `sample_layers=True` (see {doc}`circuit_observables`).
 
 Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic
 MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path
-as `swaps`, and long-range gates contract an extended gate MPO site-wise
-(library leg ordering, MPS virtual index before MPO virtual index) followed by
-compression with `svd_threshold` and `max_bond_dim`. Other modes differ only in
-how two-qubit gates are applied:
+as `swaps` (the orthogonality center is moved onto the gate pair first, so the
+truncated SVD discards the smallest Schmidt coefficients of the state), and
+long-range gates contract an extended gate MPO site-wise (library leg ordering,
+MPS virtual index before MPO virtual index) followed by compression with
+`svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit
+gates are applied:
 
 - **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed
   with adjacent SWAP insertion before and after the local update.
