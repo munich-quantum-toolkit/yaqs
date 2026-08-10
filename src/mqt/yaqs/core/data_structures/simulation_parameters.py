@@ -653,8 +653,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
         Raises:
-            ValueError: If ``sample_layers`` is set without observables, or ``shots``
-                is not a positive integer when provided.
+            ValueError: If ``shots`` is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -670,9 +669,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
             raise ValueError(msg)
         self.shots = shots
 
-        if sample_layers and not obs_list:
-            msg = "sample_layers requires a non-empty observables list."
-            raise ValueError(msg)
+        # ``sample_layers`` may be set without observables here so a
+        # :class:`~mqt.yaqs.SimulationProgram` can inject program-wide observables later.
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = trunc_mode

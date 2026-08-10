@@ -836,10 +836,12 @@ def test_digital_simparams_allows_outputless_program_configuration() -> None:
     assert not params.get_state
 
 
-def test_digital_simparams_sample_layers_requires_observables() -> None:
-    """sample_layers without observables is rejected."""
-    with pytest.raises(ValueError, match="sample_layers requires"):
-        DigitalSimParams(shots=4, sample_layers=True)
+def test_digital_simparams_allows_sample_layers_without_observables() -> None:
+    """sample_layers may be set alone so a SimulationProgram can inject observables later."""
+    params = DigitalSimParams(sample_layers=True)
+
+    assert params.sample_layers
+    assert params.observables == []
 
 
 def test_digital_simparams_rejects_invalid_shots() -> None:

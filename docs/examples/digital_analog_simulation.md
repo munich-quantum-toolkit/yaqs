@@ -14,12 +14,12 @@ mystnb:
 
 # Digital–Analog Simulation
 
-Some simulations need both analog parts (e.g. continuous evolution) and digital
-parts (i.e. quantum circuits). A YAQS {class}`~mqt.yaqs.SimulationProgram` lets
-you arrange analog and digital segments in one sequence and simulate them as a
-single program. YAQS automatically passes the evolving state from one segment to
-the next, keeps each noisy trajectory continuous across segment boundaries, and
-records observables for individual segments.
+Some simulations need both analog parts (continuous Hamiltonian evolution) and
+digital parts (quantum circuits). A YAQS {class}`~mqt.yaqs.SimulationProgram`
+accepts an ordered list of `(operator, params)` pairs and runs them as one
+program. YAQS passes the evolving state from one segment to the next, keeps each
+noisy trajectory continuous across segment boundaries, and returns a normal
+{class}`~mqt.yaqs.Result` with stitched `times` and `expectation_values`.
 
 To demonstrate this workflow, the following example:
 
@@ -48,15 +48,13 @@ refocusing_pulse = QuantumCircuit(number_of_qubits)
 refocusing_pulse.x(0);
 ```
 
-These are normal Qiskit circuits. We will place them inside `DigitalSegment`
-objects in a moment.
+These are normal Qiskit circuits. They will appear as the first entry of each
+digital pair in the program.
 
-## 2. Configure the analog evolution
+## 2. Configure the parameters
 
-An `AnalogSegment` needs a Hamiltonian and simulation settings. Here a static
-$Z$ field produces coherent phase accumulation. We track the observable
-$\langle X\rangle$ throughout each half of the evolution, which reflects phase
-accumulation.
+Segment parameters carry timing, truncation, and gate-mode settings only.
+Observables, trajectory count, and the RNG seed belong on the program.
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, DigitalSimParams, Hamiltonian, Observable
@@ -70,40 +68,36 @@ hamiltonian = Hamiltonian.pauli(
 )
 x_observable = Observable("x", 0)
 analog_parameters = AnalogSimParams(
-    observables=[x_observable],
     elapsed_time=half_duration,
     dt=0.05,
     sample_timesteps=True,
-    num_traj=number_of_trajectories,
-    random_seed=7,
 )
-digital_parameters = DigitalSimParams(
-    observables=[x_observable],
-    sample_layers=True,
-    num_traj=number_of_trajectories,
-    random_seed=7,
-)
+digital_parameters = DigitalSimParams(sample_layers=True)
 ```
 
 `elapsed_time` is the duration of each analog segment, while `dt` controls its
-time-step size. The digital parameters record the same observable at circuit
-entry and exit, allowing the combined trace to retain instantaneous changes.
+time-step size. With `sample_layers=True`, digital segments also record the
+shared observable at circuit entry and exit.
 
 ## 3. Put the operations into programs
 
-A program is simply an ordered list of segments. The first program contains
-state preparation followed by two uninterrupted analog intervals.
+A program is an ordered list of `(operator, params)` pairs. The operator type
+selects the mode: a {class}`~qiskit.circuit.QuantumCircuit` with
+{class}`~mqt.yaqs.DigitalSimParams`, or a {class}`~mqt.yaqs.Hamiltonian` with
+{class}`~mqt.yaqs.AnalogSimParams`.
 
 ```{code-cell} ipython3
-from mqt.yaqs import AnalogSegment, DigitalSegment, SimulationProgram
+from mqt.yaqs import SimulationProgram
 
 free_evolution = SimulationProgram(
     [
-        DigitalSegment(preparation, sim_params=digital_parameters),
-        AnalogSegment(hamiltonian, sim_params=analog_parameters),
-        AnalogSegment(hamiltonian, sim_params=analog_parameters),
+        (preparation, digital_parameters),
+        (hamiltonian, analog_parameters),
+        (hamiltonian, analog_parameters),
     ],
+    observables=[x_observable],
     num_traj=number_of_trajectories,
+    random_seed=7,
 )
 ```
 
@@ -113,13 +107,15 @@ repeats it at the end as a frame correction.
 ```{code-cell} ipython3
 evolution_with_hahn_echo = SimulationProgram(
     [
-        DigitalSegment(preparation, sim_params=digital_parameters),
-        AnalogSegment(hamiltonian, sim_params=analog_parameters),
-        DigitalSegment(refocusing_pulse, sim_params=digital_parameters),
-        AnalogSegment(hamiltonian, sim_params=analog_parameters),
-        DigitalSegment(refocusing_pulse, sim_params=digital_parameters),
+        (preparation, digital_parameters),
+        (hamiltonian, analog_parameters),
+        (refocusing_pulse, digital_parameters),
+        (hamiltonian, analog_parameters),
+        (refocusing_pulse, digital_parameters),
     ],
+    observables=[x_observable],
     num_traj=number_of_trajectories,
+    random_seed=7,
 )
 ```
 
@@ -142,11 +138,8 @@ free_noiseless = simulator.run(initial_state, free_evolution)
 echo_noiseless = simulator.run(initial_state, evolution_with_hahn_echo)
 ```
 
-Adding noise does not require changing either program. We pass YAQS's built-in
-Markovian `pauli_z` dephasing process to the same calls and use the
-program-level trajectory count specified above. This dissipative process reduces
-transverse signal contrast independently of the coherent static $Z$ field in the
-Hamiltonian.
+Adding noise does not require changing either program. Pass YAQS's built-in
+Markovian `pauli_z` dephasing process to the same calls.
 
 ```{code-cell} ipython3
 dephasing_noise = NoiseModel(
@@ -168,22 +161,30 @@ echo_noisy = simulator.run(
 During a noisy run, each trajectory passes through the complete program before
 YAQS averages the recorded observables.
 
-## 5. Compare the four results
+You can also pass the pair list directly to `run`, which builds a
+`SimulationProgram` under the hood:
 
-Results remain in program order at `result.segment_results`. To visualize the
-evolution of the $\langle X\rangle$ observable, we use
-{meth}`~mqt.yaqs.Result.observable_trace`, which collects one observable from
-the analog segments and from any digital segments that recorded it, then places
-the samples on the complete physical program timeline.
-
-```{code-cell} ipython3
-times, signal = echo_noiseless.observable_trace(x_observable)
+```python
+result = simulator.run(
+    initial_state,
+    [(preparation, digital_parameters), (hamiltonian, analog_parameters)],
+    observables=[x_observable],
+    num_traj=number_of_trajectories,
+    random_seed=7,
+)
 ```
 
-The returned trace preserves repeated boundary times. Every checkpoint recorded
-inside a digital segment receives that segment's physical time because the
-digital operations are instantaneous. The ordering of trace values at the same
-time preserves circuit checkpoint order.
+## 5. Compare the four results
+
+Program results look like ordinary analog/digital results: use `result.times` and
+`result.expectation_values`. Digital samples sit at their physical time offset
+(operations are instantaneous on the program timeline), so repeated timestamps
+around pulses are expected.
+
+```{code-cell} ipython3
+times = echo_noiseless.times
+signal = echo_noiseless.expectation_values[0]
+```
 
 We now plot the results, indicating noisy simulation with dashed lines.
 
@@ -206,8 +207,15 @@ traces = [
 
 fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
 for result, label, color, line_style in traces:
-    times, signal = result.observable_trace(x_observable)
-    ax.plot(times, signal, "o", color=color, linestyle=line_style, markersize=2.5, label=label)
+    ax.plot(
+        result.times,
+        result.expectation_values[0],
+        "o",
+        color=color,
+        linestyle=line_style,
+        markersize=2.5,
+        label=label,
+    )
 
 ax.axvline(half_duration, color="0.65", linewidth=1, label="digital pulse")
 ax.set(
@@ -228,21 +236,17 @@ recover lost signal contrast.
 
 ## Useful things to know
 
-- Segments run in the order in which they appear in `SimulationProgram`.
-- YAQS passes the state between segments automatically.
-- `Simulator.run` does not change the input state you give it.
-- A noise model passed to `Simulator.run` is inherited by every compatible
-  segment unless that segment supplies an override.
-- Scheduled jumps are not yet accepted in a `SimulationProgram` because their
-  timing relative to segment-local clocks requires an explicit contract.
-- Noisy trajectories and their random-number streams remain continuous across
-  segment boundaries; YAQS averages only after each trajectory has completed the
-  full program.
-- Segment results remain individually accessible and analog time offsets place
-  them on the full program timeline.
-- `Result.observable_trace` includes observables recorded by digital segments at
-  repeated physical timestamps. Digital segments without the requested
-  observable are skipped.
+- Segments run in the order they appear in `SimulationProgram`.
+- Observables, `num_traj`, and `random_seed` are program-wide; leave them unset on
+  segment `AnalogSimParams` / `DigitalSimParams`.
+- YAQS passes the state between segments automatically and does not mutate the
+  input state you give `Simulator.run`.
+- A noise model passed to `Simulator.run` is inherited by every segment unless
+  that segment supplies a third-tuple override (`None` inherits; an empty
+  `NoiseModel()` disables noise).
+- Scheduled jumps are not yet accepted in a `SimulationProgram`.
+- Noisy trajectories and their RNG streams remain continuous across segment
+  boundaries.
 - A noiseless program can retain its final state with
   `SimulationProgram(..., get_state=True)`.
 - Digital segments may operate on qubit sites in a heterogeneous state while

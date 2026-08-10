@@ -10,8 +10,9 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import KW_ONLY, dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from qiskit.circuit import QuantumCircuit
@@ -19,172 +20,215 @@ from qiskit.circuit import QuantumCircuit
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
-from .simulation_parameters import AnalogSimParams, DigitalSimParams
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from numpy.typing import NDArray
 
     from .mpo import MPO
+    from .result import Result
     from .state import State
 
-__all__ = ["AnalogSegment", "DigitalSegment", "SimulationProgram"]
+__all__ = ["SimulationProgram"]
+
+SegmentInput = (
+    tuple[Hamiltonian, AnalogSimParams]
+    | tuple[Hamiltonian, AnalogSimParams, NoiseModel | None]
+    | tuple[QuantumCircuit, DigitalSimParams]
+    | tuple[QuantumCircuit, DigitalSimParams, NoiseModel | None]
+)
 
 
 @dataclass(frozen=True)
-class AnalogSegment:
-    """Specification of one static analog part of a simulation program.
-
-    Args:
-        hamiltonian: Hamiltonian evolved during this segment.
-        sim_params: Analog simulation parameters for the segment. If omitted,
-            program execution supplies its documented internal defaults.
-        noise_model: Optional segment noise model. ``None`` inherits the
-            program-wide model supplied to :meth:`~mqt.yaqs.Simulator.run`; an
-            explicit empty model disables noise for this segment.
-
-    Raises:
-        TypeError: If an argument does not have the corresponding analog type.
-    """
+class _AnalogSegment:
+    """Private analog segment after pair normalization."""
 
     hamiltonian: Hamiltonian
     _: KW_ONLY
-    sim_params: AnalogSimParams | None = None
+    sim_params: AnalogSimParams
     noise_model: NoiseModel | None = None
-
-    def __post_init__(self) -> None:
-        """Validate the closed analog segment specification.
-
-        Raises:
-            TypeError: If any value has the wrong analog type.
-        """
-        if not isinstance(self.hamiltonian, Hamiltonian):
-            msg = f"hamiltonian must be Hamiltonian, got {type(self.hamiltonian).__name__}."
-            raise TypeError(msg)
-        if self.sim_params is not None and not isinstance(self.sim_params, AnalogSimParams):
-            msg = f"sim_params must be AnalogSimParams or None, got {type(self.sim_params).__name__}."
-            raise TypeError(msg)
-        if self.noise_model is not None and not isinstance(self.noise_model, NoiseModel):
-            msg = f"noise_model must be NoiseModel or None, got {type(self.noise_model).__name__}."
-            raise TypeError(msg)
 
 
 @dataclass(frozen=True)
-class DigitalSegment:
-    """Specification of one digital part of a simulation program.
-
-    Args:
-        circuit: Qiskit circuit executed during this segment.
-        sim_params: Digital simulation parameters for the segment. If omitted,
-            program execution supplies its documented internal defaults.
-        noise_model: Optional segment noise model. ``None`` inherits the
-            program-wide model supplied to :meth:`~mqt.yaqs.Simulator.run`; an
-            explicit empty model disables noise for this segment.
-
-    Raises:
-        TypeError: If an argument does not have the corresponding digital type.
-    """
+class _DigitalSegment:
+    """Private digital segment after pair normalization."""
 
     circuit: QuantumCircuit
     _: KW_ONLY
-    sim_params: DigitalSimParams | None = None
+    sim_params: DigitalSimParams
     noise_model: NoiseModel | None = None
 
-    def __post_init__(self) -> None:
-        """Validate the closed digital segment specification.
 
-        Raises:
-            TypeError: If any value has the wrong digital type.
-        """
-        if not isinstance(self.circuit, QuantumCircuit):
-            msg = f"circuit must be QuantumCircuit, got {type(self.circuit).__name__}."
+_ProgramSegment = _AnalogSegment | _DigitalSegment
+
+
+def _reject_program_owned_fields(sim_params: AnalogSimParams | DigitalSimParams, *, index: int) -> None:
+    """Reject segment-level fields that belong on :class:`SimulationProgram`.
+
+    Raises:
+        ValueError: If observables or ``random_seed`` are set on the segment params.
+    """
+    if sim_params.observables:
+        msg = (
+            f"segments[{index}] sim_params.observables must be empty; "
+            "pass observables=... on SimulationProgram instead."
+        )
+        raise ValueError(msg)
+    if sim_params.random_seed is not None:
+        msg = (
+            f"segments[{index}] sim_params.random_seed must be None; pass random_seed=... on SimulationProgram instead."
+        )
+        raise ValueError(msg)
+
+
+def _normalize_segment(item: object, *, index: int) -> _ProgramSegment:
+    """Convert a public ``(operator, params[, noise])`` pair into a private segment.
+
+    Returns:
+        The private analog or digital segment.
+
+    Raises:
+        TypeError: If ``item`` is not a supported pair or types disagree.
+    """
+    if not isinstance(item, tuple) or len(item) not in {2, 3}:
+        msg = (
+            f"segments[{index}] must be a (operator, params) or "
+            f"(operator, params, noise_model) tuple, got {type(item).__name__}."
+        )
+        raise TypeError(msg)
+
+    operator = item[0]
+    params = item[1]
+    noise_model = item[2] if len(item) == 3 else None
+    if noise_model is not None and not isinstance(noise_model, NoiseModel):
+        msg = f"segments[{index}] noise_model must be NoiseModel or None, got {type(noise_model).__name__}."
+        raise TypeError(msg)
+
+    if isinstance(operator, Hamiltonian):
+        if not isinstance(params, AnalogSimParams):
+            msg = f"segments[{index}] pairs a Hamiltonian with {type(params).__name__}; expected AnalogSimParams."
             raise TypeError(msg)
-        if self.sim_params is not None and not isinstance(self.sim_params, DigitalSimParams):
-            msg = f"sim_params must be DigitalSimParams or None, got {type(self.sim_params).__name__}."
+        _reject_program_owned_fields(params, index=index)
+        return _AnalogSegment(operator, sim_params=params, noise_model=noise_model)
+
+    if isinstance(operator, QuantumCircuit):
+        if not isinstance(params, DigitalSimParams):
+            msg = f"segments[{index}] pairs a QuantumCircuit with {type(params).__name__}; expected DigitalSimParams."
             raise TypeError(msg)
-        if self.noise_model is not None and not isinstance(self.noise_model, NoiseModel):
-            msg = f"noise_model must be NoiseModel or None, got {type(self.noise_model).__name__}."
-            raise TypeError(msg)
+        _reject_program_owned_fields(params, index=index)
+        return _DigitalSegment(operator, sim_params=params, noise_model=noise_model)
+
+    msg = f"segments[{index}] operator must be Hamiltonian or QuantumCircuit, got {type(operator).__name__}."
+    raise TypeError(msg)
 
 
 @dataclass(frozen=True, init=False)
 class SimulationProgram:
     """Ordered analog and digital segments that share one evolving state.
 
-    The supplied iterable is copied into a tuple. Its order therefore cannot be
-    changed through the caller's original collection after construction.
+    Construct from ``(operator, params)`` pairs. Mode is selected by the operator
+    type: :class:`~mqt.yaqs.Hamiltonian` with :class:`~mqt.yaqs.AnalogSimParams`, or
+    :class:`~qiskit.circuit.QuantumCircuit` with :class:`~mqt.yaqs.DigitalSimParams`.
+    An optional third ``noise_model`` entry overrides the run-level model for that
+    segment (``None`` inherits; an empty :class:`~mqt.yaqs.NoiseModel` disables noise).
+
+    Observables, trajectory count, and RNG seed are program-wide. Segment
+    ``sim_params`` must leave ``observables`` empty and ``random_seed`` unset;
+    they only carry truncation, timing, gate-mode, and related backend settings.
 
     Args:
-        segments: Non-empty iterable of analog and digital segment specifications.
-        num_traj: Program-wide trajectory count for stochastic execution. If
-            supplied, it overrides values resolved on segment simulation
-            parameters. If omitted, execution uses the shared segment value;
-            supplied segment values must agree. As in standalone digital
-            simulation, a noisy program with shots but no observables instead
+        segments: Non-empty iterable of ``(operator, params)`` pairs.
+        observables: Shared observables recorded by every segment.
+        num_traj: Trajectory count for stochastic execution. If omitted, the
+            default from a fresh :class:`~mqt.yaqs.AnalogSimParams` is used for
+            noisy runs. A noisy program with shots but no observables instead
             executes one complete-program trajectory per requested shot.
-        get_state: Whether program execution should retain the final state in the
-            outer :class:`~mqt.yaqs.Result`.
+        random_seed: Program-wide base seed for reproducible stochastic runs.
+        get_state: Whether to retain the final state on the outer result.
 
     Raises:
-        TypeError: If ``segments`` is not iterable, contains an unsupported item,
-            ``num_traj`` is not an integer or ``None``, or ``get_state`` is not a
-            Boolean.
-        ValueError: If ``segments`` is empty or ``num_traj`` is less than one.
+        TypeError: If ``segments`` or an item has the wrong type.
+        ValueError: If ``segments`` is empty, a segment sets program-owned fields,
+            or ``num_traj`` is less than one.
     """
 
-    segments: tuple[AnalogSegment | DigitalSegment, ...]
+    segments: tuple[_ProgramSegment, ...]
+    observables: tuple[Observable, ...]
     num_traj: int | None
+    random_seed: int | None
     get_state: bool
 
     def __init__(
         self,
-        segments: Iterable[AnalogSegment | DigitalSegment],
+        segments: Iterable[SegmentInput],
         *,
+        observables: Sequence[Observable] | None = None,
         num_traj: int | None = None,
+        random_seed: int | None = None,
         get_state: bool = False,
     ) -> None:
         """Initialize and validate an immutable ordered program.
 
         Raises:
-            TypeError: If the segment collection, an item, ``num_traj``, or
-                ``get_state`` has the wrong type.
-            ValueError: If the program has no segments or ``num_traj`` is less
-                than one.
+            TypeError: If ``segments``, an item, or a keyword argument has the wrong type.
+            ValueError: If the program is empty, ``num_traj`` is invalid, or a segment
+                sets program-owned fields.
         """
         if isinstance(segments, (str, bytes)):
-            msg = "segments must be an iterable of AnalogSegment or DigitalSegment."
+            msg = "segments must be an iterable of (operator, params) pairs."
             raise TypeError(msg)
         try:
-            normalized_segments = tuple(segments)
+            raw_segments = tuple(segments)
         except TypeError as error:
-            msg = "segments must be an iterable of AnalogSegment or DigitalSegment."
+            msg = "segments must be an iterable of (operator, params) pairs."
             raise TypeError(msg) from error
 
-        if not normalized_segments:
+        if not raw_segments:
             msg = "SimulationProgram requires at least one segment."
             raise ValueError(msg)
-        for index, segment in enumerate(normalized_segments):
-            if not isinstance(segment, (AnalogSegment, DigitalSegment)):
-                msg = f"segments[{index}] must be AnalogSegment or DigitalSegment, got {type(segment).__name__}."
+
+        normalized_segments = tuple(_normalize_segment(item, index=index) for index, item in enumerate(raw_segments))
+
+        if observables is None:
+            obs_tuple: tuple[Observable, ...] = ()
+        else:
+            if isinstance(observables, (str, bytes)) or not isinstance(observables, Sequence):
+                msg = "observables must be a sequence of Observable."
                 raise TypeError(msg)
+            obs_list = list(observables)
+            for index, observable in enumerate(obs_list):
+                if not isinstance(observable, Observable):
+                    msg = f"observables[{index}] must be Observable, got {type(observable).__name__}."
+                    raise TypeError(msg)
+            obs_tuple = tuple(obs_list)
+
         if num_traj is not None and (isinstance(num_traj, bool) or not isinstance(num_traj, int)):
             msg = f"num_traj must be int or None, got {type(num_traj).__name__}."
             raise TypeError(msg)
         if num_traj is not None and num_traj < 1:
             msg = f"num_traj must be at least 1, got {num_traj}."
             raise ValueError(msg)
+        if random_seed is not None and (isinstance(random_seed, bool) or not isinstance(random_seed, int)):
+            msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
+            raise TypeError(msg)
+        if random_seed is not None and random_seed < 0:
+            msg = f"random_seed must be non-negative, got {random_seed}."
+            raise ValueError(msg)
         if not isinstance(get_state, bool):
             msg = f"get_state must be bool, got {type(get_state).__name__}."
             raise TypeError(msg)
 
         object.__setattr__(self, "segments", normalized_segments)
+        object.__setattr__(self, "observables", obs_tuple)
         object.__setattr__(self, "num_traj", num_traj)
+        object.__setattr__(self, "random_seed", random_seed)
         object.__setattr__(self, "get_state", get_state)
 
-    def __iter__(self) -> Iterator[AnalogSegment | DigitalSegment]:
-        """Iterate over segments in program order.
+    def __iter__(self) -> Iterator[_ProgramSegment]:
+        """Iterate over private segments in program order.
 
         Returns:
-            An iterator over the immutable segment tuple.
+            An iterator over the immutable private segment tuple.
         """
         return iter(self.segments)
 
@@ -236,11 +280,10 @@ class _CompiledProgram:
 
     instructions: tuple[_CompiledInstruction, ...]
     state_signature: _StateSignature
+    observables: tuple[Observable, ...]
     get_state: bool
     num_traj: int | None
     random_seed: int | None
-    num_traj_conflict: bool
-    random_seed_conflict: bool
     default_noise_model: NoiseModel | None
 
 
@@ -291,16 +334,37 @@ def _validate_noise_layout(
             raise ValueError(msg)
 
 
+def _inject_program_settings(
+    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    observables: Sequence[Observable],
+    num_traj: int | None,
+    random_seed: int | None,
+) -> AnalogSimParams | DigitalSimParams:
+    """Deep-copy segment params and write program-owned ensemble fields.
+
+    Returns:
+        Execution params with program observables, trajectory count, and seed applied.
+    """
+    execution_params = copy.deepcopy(sim_params)
+    execution_params.get_state = True
+    execution_params.observables = [copy.deepcopy(observable) for observable in observables]
+    if num_traj is not None:
+        execution_params.num_traj = num_traj
+    execution_params.random_seed = random_seed
+    return execution_params
+
+
 def _compile_analog_segment(
-    segment: AnalogSegment,
+    segment: _AnalogSegment,
     *,
     index: int,
     signature: _StateSignature,
     noise_model: NoiseModel | None,
     time_offset: float,
+    observables: Sequence[Observable],
     num_traj: int | None,
     random_seed: int | None,
-    random_seed_conflict: bool,
 ) -> _CompiledAnalogInstruction:
     """Compile one analog segment after program-wide settings are resolved.
 
@@ -316,20 +380,20 @@ def _compile_analog_segment(
             f"does not match State.length={signature.length}."
         )
         raise ValueError(msg)
-    sim_params = segment.sim_params if segment.sim_params is not None else AnalogSimParams()
+    sim_params = segment.sim_params
     if sim_params.order not in {1, 2}:
         msg = f"segments[{index}] AnalogSimParams.order must be 1 or 2, got {sim_params.order}."
         raise ValueError(msg)
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
-    execution_params = copy.deepcopy(sim_params)
-    execution_params.get_state = True
-    if num_traj is not None:
-        execution_params.num_traj = num_traj
-    if not random_seed_conflict:
-        execution_params.random_seed = random_seed
-    execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+    execution_params = _inject_program_settings(
+        sim_params,
+        observables=observables,
+        num_traj=num_traj,
+        random_seed=random_seed,
+    )
+    assert isinstance(execution_params, AnalogSimParams)
     segment.hamiltonian.ensure_mpo()
     for site, (tensor, dimension) in enumerate(
         zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
@@ -351,15 +415,15 @@ def _compile_analog_segment(
 
 
 def _compile_digital_segment(
-    segment: DigitalSegment,
+    segment: _DigitalSegment,
     *,
     index: int,
     signature: _StateSignature,
     noise_model: NoiseModel | None,
     time_offset: float,
+    observables: Sequence[Observable],
     num_traj: int | None,
     random_seed: int | None,
-    random_seed_conflict: bool,
 ) -> _CompiledDigitalInstruction:
     """Compile one digital segment after program-wide settings are resolved.
 
@@ -375,14 +439,14 @@ def _compile_digital_segment(
             f"does not match State.length={signature.length}."
         )
         raise ValueError(msg)
-    sim_params = segment.sim_params if segment.sim_params is not None else DigitalSimParams()
-    execution_params = copy.deepcopy(sim_params)
-    execution_params.get_state = True
-    if num_traj is not None:
-        execution_params.num_traj = num_traj
-    if not random_seed_conflict:
-        execution_params.random_seed = random_seed
-    execution_params.observables = [copy.deepcopy(observable) for observable in sim_params.sorted_observables]
+    sim_params = segment.sim_params
+    execution_params = _inject_program_settings(
+        sim_params,
+        observables=observables,
+        num_traj=num_traj,
+        random_seed=random_seed,
+    )
+    assert isinstance(execution_params, DigitalSimParams)
     compiled_circuit = _compile_circuit(
         segment.circuit,
         signature.physical_dimensions,
@@ -408,19 +472,12 @@ def _compile_program(
 ) -> _CompiledProgram:
     """Validate and compile a program for MPS execution.
 
-    Args:
-        program: Public ordered program specification.
-        initial_state: State used to validate the program-wide state signature.
-        default_noise_model: Run-level model inherited by segments whose model
-            is ``None``.
-
     Returns:
         A private immutable sequence of executable instructions.
 
     Raises:
         TypeError: If a program contains an unknown segment type.
-        ValueError: If the state, dimensions, lengths, trajectory settings, or
-            analog time grids are not supported by program execution.
+        ValueError: If the state, dimensions, lengths, or analog settings are unsupported.
     """
     if initial_state.representation != "mps":
         msg = "SimulationProgram execution currently requires State.representation='mps'."
@@ -430,27 +487,9 @@ def _compile_program(
     instructions: list[_CompiledInstruction] = []
     time_offset = 0.0
 
-    segment_num_traj = {segment.sim_params.num_traj for segment in program.segments if segment.sim_params is not None}
-    if program.num_traj is not None:
-        num_traj = program.num_traj
-        num_traj_conflict = False
-    elif len(segment_num_traj) == 1:
-        num_traj = segment_num_traj.pop()
-        num_traj_conflict = False
-    elif segment_num_traj:
-        num_traj = None
-        num_traj_conflict = True
-    else:
-        num_traj = AnalogSimParams().num_traj
-        num_traj_conflict = False
-
-    explicit_seeds = {
-        segment.sim_params.random_seed
-        for segment in program.segments
-        if segment.sim_params is not None and segment.sim_params.random_seed is not None
-    }
-    random_seed_conflict = len(explicit_seeds) > 1
-    random_seed = explicit_seeds.pop() if len(explicit_seeds) == 1 else None
+    num_traj = program.num_traj if program.num_traj is not None else AnalogSimParams().num_traj
+    random_seed = program.random_seed
+    observables = program.observables
 
     for index, segment in enumerate(program.segments):
         resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model
@@ -462,21 +501,21 @@ def _compile_program(
             raise ValueError(msg)
         _validate_noise_layout(resolved_noise_model, signature.physical_dimensions, segment_index=index)
 
-        if isinstance(segment, AnalogSegment):
+        if isinstance(segment, _AnalogSegment):
             instruction = _compile_analog_segment(
                 segment,
                 index=index,
                 signature=signature,
                 noise_model=resolved_noise_model,
                 time_offset=time_offset,
+                observables=observables,
                 num_traj=num_traj,
                 random_seed=random_seed,
-                random_seed_conflict=random_seed_conflict,
             )
             instructions.append(instruction)
             time_offset += float(instruction.sim_params.elapsed_time)
             continue
-        if isinstance(segment, DigitalSegment):
+        if isinstance(segment, _DigitalSegment):
             instructions.append(
                 _compile_digital_segment(
                     segment,
@@ -484,22 +523,100 @@ def _compile_program(
                     signature=signature,
                     noise_model=resolved_noise_model,
                     time_offset=time_offset,
+                    observables=observables,
                     num_traj=num_traj,
                     random_seed=random_seed,
-                    random_seed_conflict=random_seed_conflict,
                 )
             )
-        else:
-            msg = f"segments[{index}] must be AnalogSegment or DigitalSegment, got {type(segment).__name__}."
-            raise TypeError(msg)
+            continue
+        msg = f"segments[{index}] has unsupported private segment type {type(segment).__name__}."
+        raise TypeError(msg)
 
     return _CompiledProgram(
         tuple(instructions),
         signature,
+        observables,
         program.get_state,
         num_traj,
         random_seed,
-        num_traj_conflict,
-        random_seed_conflict,
         default_noise_model,
     )
+
+
+def _segment_physical_times(segment: Result, value_count: int) -> NDArray[np.float64]:
+    """Build one segment's physical-time coordinates on the program timeline.
+
+    Returns:
+        The segment coordinates on the physical program timeline.
+
+    Raises:
+        ValueError: If required time metadata is missing or malformed.
+    """
+    offset = 0.0 if segment.time_offset is None else float(segment.time_offset)
+    if segment.segment_type == "digital":
+        return np.full(value_count, offset, dtype=np.float64)
+    if segment.times is None:
+        msg = f"Analog segment {segment.segment_index} has no time data."
+        raise ValueError(msg)
+    times = np.asarray(segment.times, dtype=np.float64)
+    if times.ndim != 1 or len(times) != value_count:
+        msg = f"Observable in analog segment {segment.segment_index} is not aligned with times."
+        raise ValueError(msg)
+    return np.asarray(times + offset, dtype=np.float64)
+
+
+def flatten_program_results(
+    segment_results: Sequence[Result],
+    observables: Sequence[Observable],
+) -> tuple[list[NDArray[Any]], NDArray[np.float64] | None, dict[int, int] | None]:
+    """Stitch per-segment outputs into top-level expectation values, times, and counts.
+
+    Returns:
+        ``(expectation_values, times, counts)`` for the outer program result.
+
+    Raises:
+        ValueError: If a segment's observable buffers are missing or misaligned.
+    """
+    if not observables:
+        counts: dict[int, int] = {}
+        for segment in segment_results:
+            if segment.counts:
+                for key, value in segment.counts.items():
+                    counts[key] = counts.get(key, 0) + value
+        return [], None, (dict(sorted(counts.items())) if counts else None)
+
+    expectation_parts: list[list[NDArray[Any]]] = [[] for _ in observables]
+    time_parts: list[NDArray[np.float64]] = []
+    times_initialized = False
+
+    for segment in segment_results:
+        if len(segment.expectation_values) != len(observables):
+            msg = (
+                f"Segment {segment.segment_index} recorded {len(segment.expectation_values)} "
+                f"observables, expected {len(observables)}."
+            )
+            raise ValueError(msg)
+        first_values = np.asarray(segment.expectation_values[0])
+        segment_times = _segment_physical_times(segment, len(first_values))
+        if not times_initialized:
+            time_parts.append(segment_times)
+            times_initialized = True
+        else:
+            time_parts.append(segment_times)
+        for index, values in enumerate(segment.expectation_values):
+            arr = np.asarray(values)
+            if arr.ndim != 1 or len(arr) != len(first_values):
+                msg = f"Segment {segment.segment_index} observable {index} has inconsistent shape."
+                raise ValueError(msg)
+            expectation_parts[index].append(arr)
+
+    expectation_values = [np.concatenate(parts) if parts else np.empty(0) for parts in expectation_parts]
+    times = np.concatenate(time_parts) if time_parts else None
+
+    counts = {}
+    for segment in segment_results:
+        if segment.counts:
+            for key, value in segment.counts.items():
+                counts[key] = counts.get(key, 0) + value
+
+    return expectation_values, times, (dict(sorted(counts.items())) if counts else None)

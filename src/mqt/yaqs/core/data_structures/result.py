@@ -8,8 +8,7 @@
 """Result container returned by :meth:`~mqt.yaqs.Simulator.run`.
 
 This module defines :class:`Result`, which holds all outputs produced by a simulation
-run. Program results recursively contain one ``Result`` per segment.
-:class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and
+run. :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and
 :class:`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams` remain
 read-only configuration; the simulator never mutates the objects passed to
 :meth:`~mqt.yaqs.Simulator.run`.
@@ -30,26 +29,6 @@ if TYPE_CHECKING:
 
     from .noise_model import NoiseModel
     from .state import State
-
-
-def _observable_sites(observable: Observable) -> tuple[int, ...]:
-    """Return an observable's target sites in a comparable form."""
-    sites = getattr(observable, "sites", None)
-    if sites is None:
-        return ()
-    if isinstance(sites, int):
-        return (sites,)
-    return tuple(sites)
-
-
-def _observables_match(left: Observable, right: Observable) -> bool:
-    """Return whether two observables have the same measurement semantics."""
-    return (
-        left.gate.name == right.gate.name
-        and _observable_sites(left) == _observable_sites(right)
-        and getattr(left.gate, "bitstring", None) == getattr(right.gate, "bitstring", None)
-        and np.array_equal(left.gate.matrix, right.gate.matrix)
-    )
 
 
 def allocate_observable_buffers(
@@ -173,114 +152,21 @@ def aggregate_counts(result: Result) -> None:
     result.counts = dict(sorted(counts.items()))
 
 
-def _segment_times(
-    segment: Result,
-    value_count: int,
-    *,
-    is_digital: bool,
-    is_program_result: bool,
-    segment_label: int,
-) -> NDArray[np.float64]:
-    """Build one segment's physical-time coordinates.
-
-    Returns:
-        The segment coordinates on the physical program timeline.
-
-    Raises:
-        ValueError: If required time metadata is missing or malformed.
-    """
-    if is_digital:
-        if is_program_result and segment.time_offset is None:
-            msg = f"Digital segment {segment_label} has no time_offset."
-            raise ValueError(msg)
-        offset = segment.time_offset if segment.time_offset is not None else 0.0
-        return np.full(value_count, offset, dtype=np.float64)
-
-    if segment.times is None:
-        msg = f"Analog segment {segment_label} has no time data."
-        raise ValueError(msg)
-    if is_program_result and segment.time_offset is None:
-        msg = f"Analog segment {segment_label} has no time_offset."
-        raise ValueError(msg)
-    times = np.asarray(segment.times, dtype=np.float64)
-    if times.ndim != 1 or len(times) != value_count:
-        msg = f"Observable in analog segment {segment_label} is not a scalar time series aligned with times."
-        raise ValueError(msg)
-    offset = segment.time_offset if segment.time_offset is not None else 0.0
-    return np.asarray(times + offset, dtype=np.float64)
-
-
-def _segment_trace(
-    segment: Result,
-    observable: Observable,
-    *,
-    is_program_result: bool,
-    position: int,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
-    """Return one segment's trace, or ``None`` for an absent digital observable.
-
-    Raises:
-        ValueError: If the segment metadata or stored trace data is invalid.
-    """
-    segment_label = segment.segment_index if segment.segment_index is not None else position
-    is_digital = segment.segment_type == "digital" or (
-        not is_program_result and isinstance(segment.sim_params, DigitalSimParams)
-    )
-    segment_kind = "digital" if is_digital else "analog"
-    if is_program_result and segment.segment_type not in {"analog", "digital"}:
-        msg = f"Program segment {segment_label} has no valid segment_type."
-        raise ValueError(msg)
-    if not is_program_result and segment.times is None and not is_digital:
-        msg = "Result has no observable trace data."
-        raise ValueError(msg)
-
-    matches = [
-        index for index, candidate in enumerate(segment.observables) if _observables_match(candidate, observable)
-    ]
-    if not matches:
-        if is_digital:
-            return None
-        msg = f"Observable is not recorded in analog segment {segment_label}."
-        raise ValueError(msg)
-    if len(matches) > 1:
-        msg = f"Observable is recorded more than once in {segment_kind} segment {segment_label}."
-        raise ValueError(msg)
-
-    observable_index = matches[0]
-    if observable_index >= len(segment.expectation_values):
-        msg = f"Observable in {segment_kind} segment {segment_label} has no expectation values."
-        raise ValueError(msg)
-    values = np.asarray(segment.expectation_values[observable_index])
-    if values.ndim != 1:
-        msg = f"Observable in {segment_kind} segment {segment_label} is not a scalar series."
-        raise ValueError(msg)
-
-    times = _segment_times(
-        segment,
-        len(values),
-        is_digital=is_digital,
-        is_program_result=is_program_result,
-        segment_label=segment_label,
-    )
-
-    return times, np.asarray(np.real(values), dtype=np.float64)
-
-
 @dataclass
 class Result:
     """Result of a :meth:`~mqt.yaqs.Simulator.run` call.
 
     Holds all simulation outputs. For standalone runs, :attr:`sim_params` is the
-    read-only configuration object the user passed in. An outer program result uses
-    ``sim_params=None`` and stores its ordered segment outputs in
-    :attr:`segment_results`. :attr:`observables` preserves the user-supplied
-    ordering from ``sim_params.observables`` (deep-copied from the configuration);
-    :attr:`expectation_values` and
-    :attr:`trajectories` hold the corresponding data in lock-step by index.
-    For MPS-backed analog and digital runs with observables, :attr:`runtime_cost`,
-    :attr:`max_bond`, and :attr:`total_bond` are populated automatically.
-    Nested program results use :attr:`segment_index`, :attr:`segment_type`, and
-    :attr:`time_offset` to identify their position and analog-time boundary.
+    read-only configuration object the user passed in. For a
+    :class:`~mqt.yaqs.SimulationProgram`, the outer result uses ``sim_params=None``
+    and exposes stitched :attr:`expectation_values`, :attr:`times`, and
+    :attr:`counts` like a normal run; :attr:`segment_results` retains per-segment
+    detail. :attr:`observables` preserves the user-supplied ordering;
+    :attr:`expectation_values` and :attr:`trajectories` hold the corresponding
+    data in lock-step by index. For MPS-backed runs with observables,
+    :attr:`runtime_cost`, :attr:`max_bond`, and :attr:`total_bond` are populated
+    automatically. Nested segment results use :attr:`segment_index`,
+    :attr:`segment_type`, and :attr:`time_offset`.
     """
 
     sim_params: AnalogSimParams | DigitalSimParams | None = None
@@ -301,64 +187,3 @@ class Result:
     segment_index: int | None = None
     segment_type: Literal["analog", "digital"] | None = None
     time_offset: float | None = None
-
-    def observable_trace(self, observable: Observable) -> tuple[NDArray[float64], NDArray[float64]]:
-        """Return an observable's expectation values on the physical timeline.
-
-        For a program result, segment outputs are inspected in program order.
-        Analog local time grids are shifted by ``time_offset``. Every observation
-        from a digital segment is placed at that segment's ``time_offset`` because
-        digital operations are instantaneous on the physical program timeline.
-        Repeated times are preserved so their array order retains the state order
-        within and around digital operations. Digital segments that did not record
-        the requested observable are skipped.
-
-        A standalone digital result has no elapsed analog time, so all of its
-        observations are returned at time zero. For circuit-depth analysis, use
-        the returned values with an application-defined circuit coordinate such as
-        ``np.arange(len(values))``.
-
-        Observable matching is structural because simulation results contain
-        deep-copied observable metadata. A match requires equal target sites,
-        gate name, operator matrix, and PVM bitstring where applicable.
-
-        Args:
-            observable: Observable whose aggregated expectation trace to return.
-
-        Returns:
-            Newly allocated arrays ``(times, expectation_values)``.
-
-        Raises:
-            TypeError: If ``observable`` is not an :class:`Observable`.
-            ValueError: If there is no trace data, an analog program interval
-                lacks the observable, matching is ambiguous, a program offset is
-                missing, or the stored values are not a scalar series aligned
-                with its coordinate.
-        """
-        if not isinstance(observable, Observable):
-            msg = f"observable must be Observable, got {type(observable).__name__}."
-            raise TypeError(msg)
-
-        is_program_result = bool(self.segment_results)
-        segments = self.segment_results if is_program_result else [self]
-
-        time_parts: list[NDArray[np.float64]] = []
-        value_parts: list[NDArray[np.float64]] = []
-        for position, segment in enumerate(segments):
-            trace = _segment_trace(
-                segment,
-                observable,
-                is_program_result=is_program_result,
-                position=position,
-            )
-            if trace is None:
-                continue
-            times, values = trace
-            time_parts.append(times)
-            value_parts.append(values)
-
-        if not time_parts:
-            msg = "Result has no observable trace data."
-            raise ValueError(msg)
-
-        return np.concatenate(time_parts), np.concatenate(value_parts)

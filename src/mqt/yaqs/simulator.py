@@ -62,7 +62,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from .core.data_structures.mpo import MPO
     from .core.data_structures.noise_model import NoiseModel
@@ -109,14 +109,17 @@ from .core.data_structures.result import (
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
+    Observable,
     _prepare_observable_ordering,
 )
 from .core.data_structures.simulation_program import (
+    SegmentInput,
     SimulationProgram,
     _compile_program,
     _CompiledAnalogInstruction,
     _CompiledDigitalInstruction,
     _CompiledProgram,
+    flatten_program_results,
 )
 from .core.data_structures.state import State
 from .core.parallel_utils import (
@@ -442,9 +445,9 @@ def _allocate_program_segment_results(
     segment_results: list[Result] = []
     diagnostic_buffers: list[NDArray[np.float64] | None] = []
     for instruction in compiled.instructions:
-        sim_params = instruction.sim_params
+        execution_params = instruction.execution_params
         segment_result = Result(
-            sim_params=sim_params,
+            sim_params=execution_params,
             noise_model=instruction.noise_model,
             segment_index=instruction.index,
             segment_type="analog" if isinstance(instruction, _CompiledAnalogInstruction) else "digital",
@@ -453,17 +456,18 @@ def _allocate_program_segment_results(
         if isinstance(instruction, _CompiledAnalogInstruction):
             _prepare_result_observables(
                 segment_result,
-                sim_params,
+                execution_params,
                 num_traj=effective_num_traj,
-                buffer_params=instruction.execution_params,
+                buffer_params=execution_params,
             )
-            segment_result.times = np.asarray(instruction.execution_params.times, dtype=np.float64)
+            # Keep the sampling-aware time grid from ``_prepare_result_observables``
+            # (full ``sim_params.times`` when ``sample_timesteps``, else final time only).
             diag_per_traj, _ = allocate_diagnostic_buffers(
-                instruction.execution_params,
+                execution_params,
                 num_traj=effective_num_traj,
             )
         else:
-            digital_params = instruction.sim_params
+            digital_params = cast("DigitalSimParams", execution_params)
             wants_observables = bool(digital_params.observables)
             wants_shots = digital_params.shots is not None
             shots_only = wants_shots and not wants_observables
@@ -472,7 +476,7 @@ def _allocate_program_segment_results(
                     segment_result,
                     digital_params,
                     num_traj=effective_num_traj,
-                    num_mid_measurements=instruction.execution_params.num_mid_measurements,
+                    num_mid_measurements=digital_params.num_mid_measurements,
                 )
             if wants_shots:
                 segment_result.measurements = [None] * effective_num_traj
@@ -480,7 +484,7 @@ def _allocate_program_segment_results(
                 diag_per_traj = None
             else:
                 diag_per_traj, _ = allocate_diagnostic_buffers(
-                    instruction.execution_params,
+                    digital_params,
                     num_traj=effective_num_traj,
                 )
         segment_results.append(segment_result)
@@ -747,9 +751,14 @@ class Simulator:
     def run(
         self,
         initial_state: State | list[State],
-        operator: Hamiltonian | QuantumCircuit | SimulationProgram | str | Path,
+        operator: Hamiltonian | QuantumCircuit | SimulationProgram | Sequence[SegmentInput] | str | Path,
         sim_params: AnalogSimParams | DigitalSimParams | None = None,
         noise_model: NoiseModel | None = None,
+        *,
+        observables: Sequence[Observable] | None = None,
+        num_traj: int | None = None,
+        random_seed: int | None = None,
+        get_state: bool = False,
     ) -> Result:
         """Execute the common simulation routine for Hamiltonian (analog) and circuit simulations.
 
@@ -766,13 +775,18 @@ class Simulator:
                 (``AnalogSimParams`` only).
             operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
                 simulations; a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
-                ``Path`` for digital simulation; or a :class:`~mqt.yaqs.SimulationProgram`.
+                ``Path`` for digital simulation; a :class:`~mqt.yaqs.SimulationProgram`; or a
+                sequence of ``(operator, params)`` pairs that is wrapped as a program.
             sim_params: Simulation parameters specifying a standalone simulation's mode
-                and settings. Must be omitted for a ``SimulationProgram``.
+                and settings. Must be omitted for a ``SimulationProgram`` or pair list.
             noise_model: The run-level noise model. For a standalone simulation
                 or program, distribution-valued strengths are sampled once at
                 the beginning of the run. Program segments inherit this model
                 unless they provide an explicit override.
+            observables: Program-wide observables when ``operator`` is a pair list.
+            num_traj: Program-wide trajectory count when ``operator`` is a pair list.
+            random_seed: Program-wide seed when ``operator`` is a pair list.
+            get_state: Retain the final state when ``operator`` is a pair list.
 
         Returns:
             A :class:`~mqt.yaqs.core.data_structures.result.Result` holding all
@@ -784,6 +798,27 @@ class Simulator:
             TypeError: If ``sim_params`` is missing for a standalone run, supplied for a
                 program, or the initial state is incompatible with the selected mode.
         """
+        program_kwargs_set = observables is not None or num_traj is not None or random_seed is not None or get_state
+        if isinstance(operator, list) or (
+            isinstance(operator, tuple) and operator and isinstance(operator[0], tuple) and len(operator[0]) in {2, 3}
+        ):
+            if sim_params is not None:
+                msg = "sim_params must be None when operator is a segment pair list."
+                raise TypeError(msg)
+            operator = SimulationProgram(
+                cast("Sequence[SegmentInput]", operator),
+                observables=observables,
+                num_traj=num_traj,
+                random_seed=random_seed,
+                get_state=get_state,
+            )
+        elif program_kwargs_set and not isinstance(operator, SimulationProgram):
+            msg = (
+                "observables=, num_traj=, random_seed=, and get_state= are only valid "
+                "for a SimulationProgram or a segment pair list."
+            )
+            raise TypeError(msg)
+
         if isinstance(operator, SimulationProgram):
             if sim_params is not None:
                 msg = "sim_params must be None when operator is a SimulationProgram."
@@ -876,13 +911,15 @@ class Simulator:
             RuntimeError: If stochastic compilation does not resolve a trajectory count.
         """
         compiled = _compile_program(program, initial_state, noise_model)
-        has_noise_processes = any(
-            instruction.noise_model is not None and bool(instruction.noise_model.processes)
+        has_observables = bool(compiled.observables)
+        has_shots = any(
+            isinstance(instruction, _CompiledDigitalInstruction) and instruction.execution_params.shots is not None
             for instruction in compiled.instructions
         )
-        if compiled.random_seed_conflict and has_noise_processes:
-            msg = "Noisy SimulationProgram segment sim_params contain conflicting random_seed values."
+        if not has_observables and not has_shots and not compiled.get_state:
+            msg = "No output specified: set observables=, shots on a digital segment, and/or get_state=."
             raise ValueError(msg)
+
         compiled = _sample_program_noise_models(compiled)
         for instruction in compiled.instructions:
             if instruction.noise_model is None:
@@ -897,23 +934,18 @@ class Simulator:
                 sim_params=None if is_digital else instruction.execution_params,
             )
         stochastic = any(_noise_model_is_stochastic(instruction.noise_model) for instruction in compiled.instructions)
-        if stochastic and compiled.num_traj_conflict:
-            msg = "Noisy SimulationProgram segment sim_params must use one shared num_traj value."
-            raise ValueError(msg)
-        if stochastic and (
-            compiled.get_state or any(instruction.sim_params.get_state for instruction in compiled.instructions)
-        ):
+        if stochastic and compiled.get_state:
             msg = "Cannot return state from a noisy SimulationProgram due to stochastic trajectories."
             raise ValueError(msg)
         if stochastic:
-            if compiled.num_traj is None:  # pragma: no cover - guarded by conflict validation
+            if compiled.num_traj is None:  # pragma: no cover
                 msg = "Noisy SimulationProgram has no resolved trajectory count."
                 raise RuntimeError(msg)
-            has_observables = any(instruction.sim_params.observables for instruction in compiled.instructions)
             shot_budgets = [
-                instruction.sim_params.shots
+                instruction.execution_params.shots
                 for instruction in compiled.instructions
-                if isinstance(instruction, _CompiledDigitalInstruction) and instruction.sim_params.shots is not None
+                if isinstance(instruction, _CompiledDigitalInstruction)
+                and instruction.execution_params.shots is not None
             ]
             effective_num_traj = max(shot_budgets) if shot_budgets and not has_observables else compiled.num_traj
         else:
@@ -942,7 +974,7 @@ class Simulator:
                 if traj_data is not None and segment_result.observables:
                     _store_observable_trajectory(
                         segment_result,
-                        instruction.sim_params,
+                        instruction.execution_params,
                         traj_index=traj_index,
                         sorted_traj_data=traj_data,
                     )
@@ -994,7 +1026,15 @@ class Simulator:
             if segment_result.measurements:
                 aggregate_counts(segment_result)
 
-        result = Result(noise_model=compiled.default_noise_model, segment_results=segment_results)
+        expectation_values, times, counts = flatten_program_results(segment_results, compiled.observables)
+        result = Result(
+            observables=[copy.deepcopy(obs) for obs in compiled.observables],
+            expectation_values=expectation_values,
+            times=times,
+            counts=counts,
+            noise_model=compiled.default_noise_model,
+            segment_results=segment_results,
+        )
         if final_mps is not None:
             result.output_state = State.from_mps(final_mps)
         return result

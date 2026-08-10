@@ -16,98 +16,129 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs import (
-    AnalogSegment,
     AnalogSimParams,
-    DigitalSegment,
     DigitalSimParams,
     Hamiltonian,
     NoiseModel,
+    Observable,
     SimulationProgram,
+)
+from mqt.yaqs.core.data_structures.simulation_program import (
+    _AnalogSegment,  # ruff: ignore[import-private-name]  # private normalized segment type
+    _DigitalSegment,  # ruff: ignore[import-private-name]  # private normalized segment type
 )
 
 
-def test_segments_store_typed_specifications() -> None:
-    """Analog and digital segments retain their corresponding inputs."""
+def test_program_normalizes_pair_segments() -> None:
+    """``(operator, params[, noise])`` pairs become typed private segments."""
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
     circuit = QuantumCircuit(2)
     digital_params = DigitalSimParams(get_state=True)
     noise_model = NoiseModel()
 
-    analog = AnalogSegment(hamiltonian, sim_params=analog_params, noise_model=noise_model)
-    digital = DigitalSegment(circuit, sim_params=digital_params, noise_model=noise_model)
+    program = SimulationProgram([
+        (hamiltonian, analog_params, noise_model),
+        (circuit, digital_params, noise_model),
+    ])
 
-    assert analog.hamiltonian is hamiltonian
-    assert analog.sim_params is analog_params
-    assert analog.noise_model is noise_model
-    assert digital.circuit is circuit
-    assert digital.sim_params is digital_params
-    assert digital.noise_model is noise_model
-
-
-def test_segment_parameters_and_noise_are_optional() -> None:
-    """Program execution may resolve omitted per-segment configuration later."""
-    analog = AnalogSegment(Hamiltonian.ising(2, J=1.0, g=0.5))
-    digital = DigitalSegment(QuantumCircuit(2))
-
-    assert analog.sim_params is None
-    assert analog.noise_model is None
-    assert digital.sim_params is None
-    assert digital.noise_model is None
+    assert isinstance(program.segments[0], _AnalogSegment)
+    assert isinstance(program.segments[1], _DigitalSegment)
+    assert program.segments[0].hamiltonian is hamiltonian
+    assert program.segments[0].sim_params is analog_params
+    assert program.segments[0].noise_model is noise_model
+    assert program.segments[1].circuit is circuit
+    assert program.segments[1].sim_params is digital_params
+    assert program.segments[1].noise_model is noise_model
 
 
-def test_segments_reject_wrong_operator_types() -> None:
-    """Each public segment accepts only its corresponding operator type."""
-    with pytest.raises(TypeError, match="hamiltonian must be Hamiltonian"):
-        AnalogSegment(object())  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-    with pytest.raises(TypeError, match="circuit must be QuantumCircuit"):
-        DigitalSegment(object())  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+def test_segment_noise_is_optional() -> None:
+    """A two-tuple inherits the run-level noise model later."""
+    program = SimulationProgram([
+        (Hamiltonian.ising(2, J=1.0, g=0.5), AnalogSimParams()),
+        (QuantumCircuit(2), DigitalSimParams()),
+    ])
+
+    assert program.segments[0].noise_model is None
+    assert program.segments[1].noise_model is None
 
 
-def test_segments_reject_mismatched_parameters() -> None:
-    """Analog and digital simulation parameters cannot be interchanged."""
-    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
-    digital_params = DigitalSimParams(get_state=True)
+def test_program_rejects_wrong_operator_or_params_types() -> None:
+    """Each pair must combine a matching operator and parameter type."""
+    with pytest.raises(TypeError, match=r"segments\[0\] operator must be Hamiltonian or QuantumCircuit"):
+        SimulationProgram([(object(), AnalogSimParams())])  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match=r"segments\[0\].*expected AnalogSimParams"):
+        SimulationProgram([
+            (
+                Hamiltonian.ising(2, J=1.0, g=0.5),
+                DigitalSimParams(),  # ty: ignore[invalid-argument-type]
+            )
+        ])
+    with pytest.raises(TypeError, match=r"segments\[0\].*expected DigitalSimParams"):
+        SimulationProgram([
+            (
+                QuantumCircuit(2),
+                AnalogSimParams(),  # ty: ignore[invalid-argument-type]
+            )
+        ])
 
-    with pytest.raises(TypeError, match="sim_params must be AnalogSimParams"):
-        AnalogSegment(
-            Hamiltonian.ising(2, J=1.0, g=0.5),
-            sim_params=digital_params,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-        )
-    with pytest.raises(TypeError, match="sim_params must be DigitalSimParams"):
-        DigitalSegment(
-            QuantumCircuit(2),
-            sim_params=analog_params,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-        )
+
+def test_program_rejects_wrong_noise_model_type() -> None:
+    """The optional third entry must be a NoiseModel when provided."""
+    with pytest.raises(TypeError, match=r"segments\[0\] noise_model must be NoiseModel"):
+        SimulationProgram([
+            (
+                Hamiltonian.ising(2, J=1.0, g=0.5),
+                AnalogSimParams(),
+                object(),  # ty: ignore[invalid-argument-type]
+            )
+        ])
+    with pytest.raises(TypeError, match=r"segments\[0\] noise_model must be NoiseModel"):
+        SimulationProgram([
+            (
+                QuantumCircuit(2),
+                DigitalSimParams(),
+                object(),  # ty: ignore[invalid-argument-type]
+            )
+        ])
 
 
-def test_segments_reject_wrong_noise_model_type() -> None:
-    """The reserved noise slot has the existing YAQS NoiseModel type."""
-    with pytest.raises(TypeError, match="noise_model must be NoiseModel"):
-        AnalogSegment(
-            Hamiltonian.ising(2, J=1.0, g=0.5),
-            noise_model=object(),  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-        )
-    with pytest.raises(TypeError, match="noise_model must be NoiseModel"):
-        DigitalSegment(
-            QuantumCircuit(2),
-            noise_model=object(),  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-        )
+def test_program_rejects_program_owned_fields_on_segment_params() -> None:
+    """Observables and random_seed belong on SimulationProgram, not segment params."""
+    with pytest.raises(ValueError, match=r"segments\[0\] sim_params.observables must be empty"):
+        SimulationProgram([(Hamiltonian.ising(2, J=1.0, g=0.5), AnalogSimParams(observables=[Observable("z", 0)]))])
+    with pytest.raises(ValueError, match=r"segments\[0\] sim_params.random_seed must be None"):
+        SimulationProgram([(QuantumCircuit(2), DigitalSimParams(random_seed=1))])
 
 
 def test_program_preserves_order_and_defensively_copies_input() -> None:
     """A program stores a stable tuple independent of the caller's list."""
-    analog = AnalogSegment(Hamiltonian.ising(2, J=1.0, g=0.5))
-    digital = DigitalSegment(QuantumCircuit(2))
-    source = [analog, digital]
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    circuit = QuantumCircuit(2)
+    analog_params = AnalogSimParams()
+    digital_params = DigitalSimParams()
+    source: list[tuple[object, object]] = [
+        (hamiltonian, analog_params),
+        (circuit, digital_params),
+    ]
 
-    program = SimulationProgram(source, num_traj=17, get_state=True)
+    program = SimulationProgram(
+        source,  # ty: ignore[invalid-argument-type]
+        observables=[Observable("z", 0)],
+        num_traj=17,
+        random_seed=3,
+        get_state=True,
+    )
     source.reverse()
 
-    assert program.segments == (analog, digital)
-    assert list(program) == [analog, digital]
     assert len(program) == 2
+    assert list(program) == list(program.segments)
+    assert program.segments[0].hamiltonian is hamiltonian
+    assert program.segments[1].circuit is circuit
+    assert len(program.observables) == 1
+    assert program.observables[0].gate.name == "z"
     assert program.num_traj == 17
+    assert program.random_seed == 3
     assert program.get_state
     with pytest.raises(FrozenInstanceError):
         program.get_state = False  # ty: ignore[invalid-assignment]  # exercise frozen dataclass
@@ -117,9 +148,9 @@ def test_program_rejects_empty_or_invalid_segments() -> None:
     """Programs are non-empty and report an invalid item's exact index."""
     with pytest.raises(ValueError, match="at least one segment"):
         SimulationProgram([])
-    with pytest.raises(TypeError, match=r"segments\[1\].*got object"):
+    with pytest.raises(TypeError, match=r"segments\[1\] must be a \(operator, params\)"):
         SimulationProgram(
-            [DigitalSegment(QuantumCircuit(2)), object()]  # ty: ignore[invalid-argument-type]
+            [(QuantumCircuit(2), DigitalSimParams()), object()]  # ty: ignore[invalid-argument-type]
         )
     with pytest.raises(TypeError, match="segments must be an iterable"):
         SimulationProgram(None)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
@@ -128,11 +159,25 @@ def test_program_rejects_empty_or_invalid_segments() -> None:
             SimulationProgram(invalid_segments)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
 
 
+def test_program_rejects_invalid_observables_sequence() -> None:
+    """Program-wide observables must be a sequence of Observable."""
+    with pytest.raises(TypeError, match="observables must be a sequence"):
+        SimulationProgram(
+            [(QuantumCircuit(2), DigitalSimParams())],
+            observables="z",  # ty: ignore[invalid-argument-type]
+        )
+    with pytest.raises(TypeError, match=r"observables\[0\] must be Observable"):
+        SimulationProgram(
+            [(QuantumCircuit(2), DigitalSimParams())],
+            observables=[object()],  # ty: ignore[invalid-argument-type]
+        )
+
+
 def test_program_rejects_non_boolean_get_state() -> None:
     """The program-level output switch does not silently accept integers."""
     with pytest.raises(TypeError, match="get_state must be bool"):
         SimulationProgram(
-            [DigitalSegment(QuantumCircuit(2))],
+            [(QuantumCircuit(2), DigitalSimParams())],
             get_state=1,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
         )
 
@@ -142,7 +187,7 @@ def test_program_rejects_non_integer_num_traj(num_traj: object) -> None:
     """The program-wide trajectory count does not accept integer-like values."""
     with pytest.raises(TypeError, match="num_traj must be int or None"):
         SimulationProgram(
-            [DigitalSegment(QuantumCircuit(2))],
+            [(QuantumCircuit(2), DigitalSimParams())],
             num_traj=num_traj,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
         )
 
@@ -150,27 +195,47 @@ def test_program_rejects_non_integer_num_traj(num_traj: object) -> None:
 def test_program_rejects_non_positive_num_traj() -> None:
     """A stochastic ensemble must contain at least one trajectory."""
     with pytest.raises(ValueError, match="num_traj must be at least 1"):
-        SimulationProgram([DigitalSegment(QuantumCircuit(2))], num_traj=0)
+        SimulationProgram([(QuantumCircuit(2), DigitalSimParams())], num_traj=0)
+
+
+@pytest.mark.parametrize("random_seed", [True, 1.5, "2"])
+def test_program_rejects_non_integer_random_seed(random_seed: object) -> None:
+    """The program-wide seed does not accept integer-like values."""
+    with pytest.raises(TypeError, match="random_seed must be int or None"):
+        SimulationProgram(
+            [(QuantumCircuit(2), DigitalSimParams())],
+            random_seed=random_seed,  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_program_rejects_negative_random_seed() -> None:
+    """A program seed must be non-negative when provided."""
+    with pytest.raises(ValueError, match="random_seed must be non-negative"):
+        SimulationProgram([(QuantumCircuit(2), DigitalSimParams())], random_seed=-1)
 
 
 def test_program_specification_is_pickleable() -> None:
     """A mixed program specification round-trips for future worker execution."""
     program = SimulationProgram(
         [
-            DigitalSegment(QuantumCircuit(2), sim_params=DigitalSimParams(get_state=True)),
-            AnalogSegment(
+            (QuantumCircuit(2), DigitalSimParams(get_state=True)),
+            (
                 Hamiltonian.ising(2, J=1.0, g=0.5),
-                sim_params=AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True),
+                AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True),
             ),
         ],
+        observables=[Observable("z", 0)],
         num_traj=7,
+        random_seed=11,
         get_state=True,
     )
 
     restored = pickle.loads(pickle.dumps(program))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
 
     assert len(restored) == 2
-    assert isinstance(restored.segments[0], DigitalSegment)
-    assert isinstance(restored.segments[1], AnalogSegment)
+    assert isinstance(restored.segments[0], _DigitalSegment)
+    assert isinstance(restored.segments[1], _AnalogSegment)
     assert restored.num_traj == 7
+    assert restored.random_seed == 11
     assert restored.get_state
+    assert len(restored.observables) == 1

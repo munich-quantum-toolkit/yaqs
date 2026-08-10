@@ -189,11 +189,10 @@ fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 ```
 
 The checkpoint index is a circuit-analysis coordinate rather than physical time.
-Accordingly, `layer_result.observable_trace(observable)` would assign time zero
-to every checkpoint of this standalone digital result. In a digital–analog
-`SimulationProgram`, the same accessor instead inserts recorded digital
-checkpoints at their segment's physical-time offset, preserving their order as
-coincident samples.
+Standalone digital results leave `result.times` as `None`; plot against
+`np.arange(len(values))` for circuit depth. In a digital–analog
+`SimulationProgram`, digital checkpoints are placed on `result.times` at their
+segment's physical-time offset, preserving order as coincident samples.
 
 ## 4. OpenQASM inputs
 
