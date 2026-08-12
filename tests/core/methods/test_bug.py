@@ -40,7 +40,7 @@ def crandn(
     elif isinstance(size, int):
         size = (size,)
     rng = np.random.default_rng(seed)
-    return np.asarray(rng.standard_normal(size) + 1j * rng.standard_normal(size) / np.sqrt(2), dtype=np.complex128)
+    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
 
 
 def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:

@@ -323,8 +323,12 @@ def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
         The validated truncation mode.
 
     Raises:
-        ValueError: If ``trunc_mode`` is not a supported value.
+        ValueError: If ``trunc_mode`` is not a string or not a supported value.
     """
+    if not isinstance(trunc_mode, str):
+        # Public contract documents ValueError for any unsupported trunc_mode value.
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
     if trunc_mode not in _ALLOWED_TRUNC_MODES:
         msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
         raise ValueError(msg)
@@ -645,7 +649,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
             ``krylov_tol``. Explicit values override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-        trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
         svd_threshold: SVD truncation threshold for bond dimension control.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
@@ -699,7 +704,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
                 ``krylov_tol``. Default is ``"balanced"``.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.

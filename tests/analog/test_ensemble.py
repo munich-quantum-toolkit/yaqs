@@ -513,19 +513,25 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
     assert val_worker == pytest.approx(expected, rel=0, abs=1e-6)
 
 
-def test_unitary_ensemble_bug_evolution() -> None:
-    """Ensemble path accepts EvolutionMode.BUG through Simulator."""
+def test_bug_ensemble_correlator_preserves_scaled_probe_amplitude() -> None:
+    """BUG correlator evolution retains the amplitude of a non-unitary probe B=2I."""
     length = 2
-    hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
-    states = [State(length, initial="zeros"), State(length, initial="ones")]
+    hamiltonian = Hamiltonian.ising(length, J=0.0, g=0.0)
+    z0 = Observable(Z(), 0)
+    probe_b = Observable(np.eye(2, dtype=np.complex128) * 2.0, 0)
+    states = [State(length, initial="zeros")]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
-        elapsed_time=0.1,
+        observables=[z0],
+        elapsed_time=0.2,
         dt=0.1,
         evolution_mode=EvolutionMode.BUG,
+        multi_time_observables=[(z0, probe_b)],
         max_bond_dim=16,
         svd_threshold=1e-10,
+        sample_timesteps=True,
     )
     result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
-    assert result.expectation_values[0] is not None
-    assert len(sim_params.times) == 2
+    assert result.multi_time_results is not None
+    assert result.multi_time_results.shape == (1, len(sim_params.times))
+    # |00> with Z0 and B=2I: <psi|Z|phi> = 2 at every sampled time under H=0.
+    np.testing.assert_allclose(result.multi_time_results[0], 2.0 + 0.0j, atol=1e-8)

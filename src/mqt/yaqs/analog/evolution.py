@@ -21,13 +21,23 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def apply_unitary_evolution(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams) -> None:
+def apply_unitary_evolution(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams,
+    *,
+    normalize: bool = True,
+) -> None:
     """Advance one unitary time step according to ``sim_params.evolution_mode``.
 
     Args:
         state: MPS to evolve in place.
         hamiltonian: Hamiltonian as an MPO.
         sim_params: Analog simulation parameters (time step, bond limits, etc.).
+        normalize: When ``evolution_mode`` is BUG, renormalize after compression.
+            Ordinary physical states keep the default ``True``. Auxiliary correlator
+            states (``B|ψ⟩``) should pass ``False`` so non-unitary probe amplitudes
+            are preserved. TDVP ignores this flag.
 
     Raises:
         ValueError: If ``evolution_mode`` is not supported.
@@ -35,7 +45,7 @@ def apply_unitary_evolution(state: MPS, hamiltonian: MPO, sim_params: AnalogSimP
     if sim_params.evolution_mode == EvolutionMode.TDVP:
         tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(state, hamiltonian, sim_params)
+        bug(state, hamiltonian, sim_params, normalize=normalize)
     else:
         msg = f"Unsupported evolution_mode: {sim_params.evolution_mode!r}"
         raise ValueError(msg)

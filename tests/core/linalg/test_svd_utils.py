@@ -65,9 +65,10 @@ def test_truncate_relative_discarded_weight_known_rank() -> None:
 def test_truncate_relative_discarded_weight_scale_invariant() -> None:
     """Multiplying all singular values by a constant does not change retained rank."""
     s = np.array([4.0, 2.0, 0.5, 0.1], dtype=np.float64)
-    keep_a = linalg.truncate(s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
-    keep_b = linalg.truncate(3.7 * s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
-    assert keep_a == keep_b
+    keep_ref = linalg.truncate(s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
+    for scale in (3.7, 1e200, 1e-200):
+        keep = linalg.truncate(scale * s, mode="relative_discarded_weight", threshold=0.05, min_keep=1)
+        assert keep == keep_ref
 
 
 def test_truncate_relative_discarded_weight_edge_cases() -> None:

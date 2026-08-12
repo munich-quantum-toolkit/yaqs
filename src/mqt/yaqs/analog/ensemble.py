@@ -24,15 +24,17 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def _unitary_step(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams) -> None:
+def _unitary_step(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams, *, normalize: bool = True) -> None:
     """Advance one unitary time step according to ``sim_params.evolution_mode`` (TDVP or BUG).
 
     Args:
         state (MPS): MPS to evolve in-place.
         hamiltonian (MPO): Hamiltonian as an MPO.
         sim_params (AnalogSimParams): Analog simulation parameters (time step, bond limits, etc.).
+        normalize: Forwarded to BUG post-processing; keep ``True`` for physical states and
+            ``False`` for auxiliary correlator states with non-unitary probe amplitudes.
     """
-    apply_unitary_evolution(state, hamiltonian, sim_params)
+    apply_unitary_evolution(state, hamiltonian, sim_params, normalize=normalize)
 
 
 def _step_correlator_phis(
@@ -48,7 +50,8 @@ def _step_correlator_phis(
         phis: One auxiliary state per ``(A, B)`` pair (each ``B|psi⟩``).
     """
     for phi in phis:
-        _unitary_step(phi, hamiltonian, sim_params)
+        # Preserve non-unitary probe amplitudes under BUG (TDVP ignores normalize).
+        _unitary_step(phi, hamiltonian, sim_params, normalize=False)
 
 
 def ensemble_member_worker(
@@ -97,6 +100,9 @@ def ensemble_member_worker(
         for _probe_a, b_op in pairs:
             phi_b = copy.deepcopy(state)
             phi_b.apply_local(b_op)
+            # Local application can invalidate gauge metadata; BUG requires center 0.
+            phi_b.set_canonical_form(0, decomposition="QR")
+            phi_b.set_center(0)
             phis.append(phi_b)
 
     if sim_params.sample_timesteps:

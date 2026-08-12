@@ -382,7 +382,8 @@ def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default order-1 TJM honors EvolutionMode.BUG for each unitary interval."""
     calls = {"bug": 0, "tdvp": 0}
 
-    def fake_bug(state: MPS, _hamiltonian: MPO, _sim_params: AnalogSimParams) -> None:
+    def fake_bug(state: MPS, _hamiltonian: MPO, _sim_params: AnalogSimParams, *, normalize: bool = True) -> None:
+        del normalize
         calls["bug"] += 1
         state.set_center(0)
 

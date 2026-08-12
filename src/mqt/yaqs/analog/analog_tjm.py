@@ -9,9 +9,9 @@
 
 This module implements the Tensor Jump Method (TJM) for simulating the dynamics of quantum many-body systems.
 It provides functions for initializing the sampling state with noise (via dissipation and stochastic processes),
-evolving the state through single-site and two-site TDVP updates, and sampling observable measurements over time.
-The functions analog_tjm_2 and analog_tjm_1 correspond to second-order and first-order evolution schemes,
-respectively, and return trajectories of expectation values for further analysis.
+evolving the state with the configured unitary evolution mode (TDVP or BUG), and sampling observable
+measurements over time. The functions analog_tjm_2 and analog_tjm_1 correspond to second-order and
+first-order TJM schemes, respectively, and return trajectories of expectation values for further analysis.
 """
 
 from __future__ import annotations
@@ -71,8 +71,8 @@ def step_through(
 ) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
-    Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
-    dissipation, and a stochastic process in sequence.
+    Corresponding to Fj in the TJM paper, this function evolves the state by applying the configured
+    unitary evolution mode (TDVP or BUG), dissipation, and a stochastic process in sequence.
 
     Args:
         state (MPS): The current state of the system.
@@ -160,11 +160,12 @@ def analog_tjm_2(
     return_trajectory_state: bool = False,
     continue_trajectory: bool = False,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using a two-site evolution scheme.
+    """Run a single trajectory of the TJM using the configured unitary evolution mode.
 
     This function executes a full trajectory by evolving the initial state,
     sampling observable measurements over time, and recording the results.
-    It corresponds to the two-site evolution method presented in the TJM paper.
+    It corresponds to the second-order TJM scheme; unitary intervals use
+    ``sim_params.evolution_mode`` (TDVP or BUG).
 
     Args:
         args: A tuple containing:

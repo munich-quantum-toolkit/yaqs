@@ -185,27 +185,41 @@ def bug_sweep(
     state.set_center(0)
 
 
-def _postprocess_bug_state(state: MPS, sim_params: AnalogSimParams | DigitalSimParams) -> None:
-    """Apply SVD compression and renormalization after a full BUG step."""
+def _postprocess_bug_state(
+    state: MPS,
+    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    normalize: bool = True,
+) -> None:
+    """Apply SVD compression and optional renormalization after a full BUG step."""
     state.compress(
         sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
         trunc_mode=sim_params.trunc_mode,
     )
-    state.normalize()
-    state.set_center(0)
+    if normalize:
+        state.normalize()
 
 
-def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
+def bug(
+    state: MPS,
+    mpo: MPO,
+    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    normalize: bool = True,
+) -> None:
     """Perform one BUG physical step according to ``sim_params``.
 
     Uses center-augmented alternating endpoints (two half-sweeps of ``dt / 2``),
-    then one SVD compression and renormalization.
+    then one SVD compression and optional renormalization.
 
     Args:
         state: The MPS to evolve in place.
         mpo: Hamiltonian represented as an MPO.
         sim_params: Simulation parameters (``dt``, truncation, Krylov tolerance).
+        normalize: If ``True`` (default), renormalize after compression. Pass
+            ``False`` for auxiliary correlator states so non-unitary probe
+            amplitudes are preserved.
 
     Raises:
         ValueError: If lengths differ or the gauge contract fails.
@@ -231,4 +245,4 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) ->
             state.set_canonical_form(0, decomposition="QR")
             state.set_center(0)
 
-    _postprocess_bug_state(state, sim_params)
+    _postprocess_bug_state(state, sim_params, normalize=normalize)

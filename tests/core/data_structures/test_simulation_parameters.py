@@ -473,8 +473,25 @@ def test_evolution_mode_validation() -> None:
 
     with pytest.raises(ValueError, match="evolution_mode"):
         _ = AnalogSimParams(evolution_mode="not-a-mode")
+
+
+@pytest.mark.parametrize(
+    "trunc_mode",
+    ["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"],
+)
+def test_trunc_mode_accepted_by_analog_and_digital(trunc_mode: str) -> None:
+    """Analog and digital params accept every mode validated by _validate_trunc_mode."""
+    assert AnalogSimParams(trunc_mode=trunc_mode).trunc_mode == trunc_mode
+    assert DigitalSimParams(get_state=True, trunc_mode=trunc_mode).trunc_mode == trunc_mode
+
+
+@pytest.mark.parametrize("bad", ["nope", ["discarded_weight"], 1, None])
+def test_trunc_mode_rejects_unsupported_values(bad: object) -> None:
+    """Non-supported trunc_mode values raise ValueError for analog and digital params."""
     with pytest.raises(ValueError, match="trunc_mode"):
-        _ = AnalogSimParams(trunc_mode="nope")
+        _ = AnalogSimParams(trunc_mode=cast("Any", bad))
+    with pytest.raises(ValueError, match="trunc_mode"):
+        _ = DigitalSimParams(get_state=True, trunc_mode=cast("Any", bad))
 
 
 def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:

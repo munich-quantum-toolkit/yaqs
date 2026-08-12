@@ -79,11 +79,12 @@ def truncate(
                 keep = max(n - idx, min_keep)
                 break
     elif mode == "relative_discarded_weight":
-        weights = np.asarray(s_vec, dtype=np.float64) ** 2
-        total = float(np.sum(weights))
-        if total <= 0.0:
+        smax = float(s_vec[0]) if s_vec.size else 0.0
+        if smax <= 0.0:
             keep = 0
         else:
+            weights = (np.asarray(s_vec, dtype=np.float64) / smax) ** 2
+            total = float(np.sum(weights))
             keep = n
             discard = 0.0
             for idx, w in enumerate(reversed(weights)):
