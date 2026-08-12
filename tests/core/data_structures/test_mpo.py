@@ -1497,13 +1497,28 @@ def test_mpo_add_two_site_matches_dense_sum() -> None:
     assert summed.physical_dimension == mpo_a.physical_dimension
 
 
-def test_mpo_add_single_site_bond_stacking() -> None:
-    """Single-site __add__ stacks bond dimensions on the only tensor."""
-    mpo_a = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
-    mpo_b = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+def test_mpo_add_single_site_matches_dense_sum() -> None:
+    """Single-site __add__ preserves unit boundaries and the dense sum."""
+    matrix_a = np.eye(2, dtype=np.complex128)
+    matrix_b = np.diag([1.0, -1.0]).astype(np.complex128)
+    mpo_a = MPO.from_local_ops([matrix_a])
+    mpo_b = MPO.from_local_ops([matrix_b])
     summed = mpo_a + mpo_b
     assert summed.length == 1
-    assert summed.tensors[0].shape == (2, 2, 2, 2)
+    assert summed.tensors[0].shape == (2, 2, 1, 1)
+    np.testing.assert_allclose(summed.to_matrix(), matrix_a + matrix_b, atol=1e-12)
+
+
+def test_mpo_sum_single_site_matches_dense_sum() -> None:
+    """mpo_sum produces a materializable one-site sum."""
+    matrices = [
+        np.eye(2, dtype=np.complex128),
+        np.diag([1.0, -1.0]).astype(np.complex128),
+        np.asarray([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128),
+    ]
+    summed = MPO.mpo_sum([MPO.from_local_ops([matrix]) for matrix in matrices])
+    assert summed.tensors[0].shape == (2, 2, 1, 1)
+    np.testing.assert_allclose(summed.to_matrix(), sum(matrices), atol=1e-12)
 
 
 def test_mpo_sum_matches_iterated_addition() -> None:

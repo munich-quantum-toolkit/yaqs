@@ -1998,12 +1998,10 @@ class MPO:
         if length == 1:
             a = self.tensors[0]
             b = other.tensors[0]
-            p_out, p_in, la, ra = a.shape
-            _, _, lb, rb = b.shape
-            new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
-            new_t[:, :, :la, :ra] = a
-            new_t[:, :, la:, ra:] = b
-            new_tensors.append(new_t)
+            if a.shape[2:] != (1, 1) or b.shape[2:] != (1, 1):
+                msg = "Single-site MPOs must have unit boundary bonds before addition."
+                raise ValueError(msg)
+            new_tensors.append(np.asarray(a + b, dtype=np.complex128))
         else:
             for i in range(length):
                 a = self.tensors[i]
