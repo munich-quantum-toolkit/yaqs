@@ -24,8 +24,7 @@ releases may include breaking changes.
 
 ### Changed
 
-- updated BUG to use alternating endpoint root ([#539])
-  ([**@aaronleesander**])
+- updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
 - tested and documented the multi-qubit local noise rule ([#529])
   ([**@Pouri96**])
 - hardened stability of noise model, timestep selection, and RNG ([#527])
