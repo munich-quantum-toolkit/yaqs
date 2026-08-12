@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from .noise_model import NoiseModel
     from .state import State
+    from .stochastic_noise_model import StochasticNoiseModel
 
 
 def allocate_observable_buffers(
@@ -177,7 +178,7 @@ class Result:
     runtime_cost: NDArray[float64] | None = None
     max_bond: NDArray[float64] | None = None
     total_bond: NDArray[float64] | None = None
-    noise_model: NoiseModel | None = None
+    noise_model: NoiseModel | StochasticNoiseModel | None = None
     output_state: State | None = None
     multi_time_times: NDArray[float64] | None = None
     multi_time_results: NDArray[complex128] | None = None

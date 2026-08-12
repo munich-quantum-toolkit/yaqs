@@ -31,6 +31,10 @@ from .core.data_structures.simulation_parameters import (
 )
 from .core.data_structures.simulation_program import SimulationProgram
 from .core.data_structures.state import State
+from .core.data_structures.stochastic_noise_model import (
+    XBasisDissipativeNoiseModel,
+    XYZPauliNoiseModel,
+)
 from .equivalence_checker import EquivalenceChecker
 from .memory_characterizer import MemoryCharacterizer
 from .noise_characterizer import NoiseCharacterizer
@@ -53,6 +57,8 @@ __all__ = [
     "SimulationProgram",
     "Simulator",
     "State",
+    "XBasisDissipativeNoiseModel",
+    "XYZPauliNoiseModel",
     "__version__",
     "simulator",
     "version_info",

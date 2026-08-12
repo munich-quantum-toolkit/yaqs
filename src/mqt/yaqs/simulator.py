@@ -66,7 +66,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .core.data_structures.mpo import MPO
-    from .core.data_structures.noise_model import NoiseModel
     from .core.parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
@@ -99,7 +98,7 @@ from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mps import MPS
-from .core.data_structures.noise_model import validate_noise_model_for_run
+from .core.data_structures.noise_model import NoiseModel, validate_noise_model_for_run
 from .core.data_structures.result import (
     Result,
     aggregate_counts,
@@ -124,6 +123,7 @@ from .core.data_structures.simulation_program import (
     stitch_program_results,
 )
 from .core.data_structures.state import State
+from .core.data_structures.stochastic_noise_model import StochasticNoiseModel, _is_stochastic_noise_model
 from .core.parallel_utils import (
     WORKER_CTX,
     ExecutionConfig,
@@ -237,11 +237,13 @@ _ProgramSegmentTrajectory = tuple[
 _ProgramTrajectory = tuple[tuple[_ProgramSegmentTrajectory, ...], MPS | None]
 
 
-def _noise_model_is_stochastic(noise_model: NoiseModel | None) -> bool:
+def _noise_model_is_stochastic(noise_model: NoiseModel | StochasticNoiseModel | None) -> bool:
     """Return whether a sampled model contains a nonzero stochastic process."""
     if noise_model is None:
         return False
-    return any(float(process["strength"]) > 0 for process in noise_model.processes)
+    if isinstance(noise_model, NoiseModel):
+        return any(float(process["strength"]) > 0 for process in noise_model.processes)
+    return not noise_model.is_noiseless
 
 
 def _sample_program_noise_models(compiled: _CompiledProgram) -> _CompiledProgram:
@@ -949,7 +951,7 @@ class Simulator:
         initial_state: State | list[State],
         operator: Hamiltonian | QuantumCircuit | SimulationProgram | Sequence[SegmentInput] | str | Path,
         sim_params: AnalogSimParams | DigitalSimParams | None = None,
-        noise_model: NoiseModel | None = None,
+        noise_model: NoiseModel | StochasticNoiseModel | None = None,
         *,
         observables: Sequence[Observable] | None = None,
         num_traj: int | None = None,
@@ -975,10 +977,13 @@ class Simulator:
                 sequence of ``(operator, params)`` pairs that is wrapped as a program.
             sim_params: Simulation parameters specifying a standalone simulation's mode
                 and settings. Must be omitted for a ``SimulationProgram`` or pair list.
-            noise_model: The run-level noise model. For a standalone simulation
-                or program, distribution-valued strengths are sampled once at
-                the beginning of the run. Program segments inherit this model
-                unless they provide an explicit override.
+            noise_model: The run-level noise model. ``NoiseModel`` describes
+                continuous Lindblad processes. The stochastic gate-local models
+                ``XYZPauliNoiseModel`` and ``XBasisDissipativeNoiseModel`` are
+                supported for standalone circuit simulation. For a standalone
+                simulation or program, distribution-valued Lindblad strengths
+                are sampled once at the beginning of the run. Program segments
+                inherit this model unless they provide an explicit override.
             observables: Program-wide observables when ``operator`` is a pair list.
             num_traj: Program-wide trajectory count when ``operator`` is a pair list.
             random_seed: Program-wide seed when ``operator`` is a pair list.
@@ -1024,6 +1029,12 @@ class Simulator:
             if not isinstance(initial_state, State):
                 msg = "SimulationProgram execution requires a single State initial_state."
                 raise TypeError(msg)
+            if _is_stochastic_noise_model(noise_model):
+                msg = (
+                    "Stochastic gate-local noise models are currently supported only for standalone circuit simulation."
+                )
+                raise TypeError(msg)
+            assert noise_model is None or isinstance(noise_model, NoiseModel)
             return self._run_program(initial_state, operator, noise_model)
 
         if sim_params is None:
@@ -1040,9 +1051,13 @@ class Simulator:
             msg = "initial_state list must contain only State objects."
             raise TypeError(msg)
 
-        if noise_model is not None:
+        if isinstance(noise_model, NoiseModel):
             sample_seed = getattr(sim_params, "random_seed", None)
             noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=sample_seed))
+
+        if isinstance(sim_params, AnalogSimParams) and _is_stochastic_noise_model(noise_model):
+            msg = "Stochastic gate-local noise models are supported only for digital circuit simulation."
+            raise TypeError(msg)
 
         result = Result(sim_params=sim_params, noise_model=noise_model)
 
@@ -1064,6 +1079,7 @@ class Simulator:
             raise ValueError(msg)
 
         if isinstance(sim_params, AnalogSimParams):
+            assert noise_model is None or isinstance(noise_model, NoiseModel)
             if not isinstance(operator, Hamiltonian):
                 msg = "Analog simulation requires a Hamiltonian operator."
                 raise TypeError(msg)
@@ -1435,7 +1451,7 @@ class Simulator:
         initial_state: MPS,
         operator: QuantumCircuit,
         sim_params: DigitalSimParams,
-        noise_model: NoiseModel | None,
+        noise_model: NoiseModel | StochasticNoiseModel | None,
         result: Result,
     ) -> None:
         """Run digital circuit simulation trajectories.
@@ -1454,14 +1470,14 @@ class Simulator:
             ValueError: If ``get_state`` is ``True`` with a non-trivial noise model.
         """
         backend: Callable[
-            [tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]],
+            [tuple[int, MPS, NoiseModel | StochasticNoiseModel | None, DigitalSimParams, QuantumCircuit]],
             Any,
         ] = digital_tjm
 
         wants_obs = bool(sim_params.observables)
         wants_shots = sim_params.shots is not None
         shots_only = wants_shots and not wants_obs
-        noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
+        noisy = _noise_model_is_stochastic(noise_model)
 
         if noisy and sim_params.get_state:
             msg = "Cannot return state in noisy circuit simulation due to stochastics."
@@ -1562,9 +1578,9 @@ class Simulator:
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
             else:
                 n_threads = available_cpus()
-                args: list[tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]] = [
-                    (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
-                ]
+                args: list[
+                    tuple[int, MPS, NoiseModel | StochasticNoiseModel | None, DigitalSimParams, QuantumCircuit]
+                ] = [(i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)]
                 iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
                 for i, arg in enumerate(iterator):
                     traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(
@@ -1588,7 +1604,7 @@ class Simulator:
         initial_state: State,
         operator: QuantumCircuit,
         sim_params: DigitalSimParams,
-        noise_model: NoiseModel | None,
+        noise_model: NoiseModel | StochasticNoiseModel | None,
         result: Result,
     ) -> None:
         """Run circuit-based simulation trajectories.
@@ -1612,7 +1628,7 @@ class Simulator:
             msg = "State and circuit qubit counts do not match."
             raise ValueError(msg)
 
-        if noise_model is not None:
+        if isinstance(noise_model, NoiseModel):
             validate_noise_model_for_run(
                 noise_model,
                 length=mps.length,

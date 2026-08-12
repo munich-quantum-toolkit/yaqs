@@ -405,13 +405,13 @@ def test_program_noise_default_and_empty_segment_override() -> None:
         noise_model=distributed_noise,
     )
 
-    assert result.noise_model is not None
+    assert isinstance(result.noise_model, NoiseModel)
     assert isinstance(result.noise_model.processes[0]["strength"], float)
     assert isinstance(distributed_noise.processes[0]["strength"], dict)
     assert result.segment_results[0].noise_model is result.noise_model
     assert result.segment_results[2].noise_model is result.noise_model
     assert result.segment_results[1].noise_model is not result.noise_model
-    assert result.segment_results[1].noise_model is not None
+    assert isinstance(result.segment_results[1].noise_model, NoiseModel)
     assert result.segment_results[1].noise_model.processes == []
     assert result.segment_results[0].trajectories[0].shape == (3, 3)
     times = result.segment_results[0].times
@@ -1154,7 +1154,7 @@ def test_empty_noise_override_disables_analog_and_digital_segments() -> None:
     noisy_z = np.asarray(noisy_digital.segment_results[0].trajectories[0][:, 0]).real
     np.testing.assert_allclose(quiet, np.ones_like(quiet), atol=1e-10)
     assert abs(float(noisy[-1])) < 0.9
-    assert disabled_digital.segment_results[0].noise_model is not None
+    assert isinstance(disabled_digital.segment_results[0].noise_model, NoiseModel)
     assert disabled_digital.segment_results[0].noise_model.processes == []
     # Empty override makes the digital-only program non-stochastic and unitary (X+CX -> |11>).
     np.testing.assert_allclose(disabled_z, [-1.0], atol=1e-10)

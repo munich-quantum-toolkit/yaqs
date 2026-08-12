@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- Add reusable stochastic gate-local XYZ Pauli and X-basis dissipative noise
+  models for digital circuit simulation
 - added infrastructure for analog-digital simulation ([#525])
   ([**@linusschulte**])
 - added native support for gates acting on three or more qubits in circuit

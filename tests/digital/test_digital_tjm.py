@@ -25,7 +25,17 @@ from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
 from scipy.linalg import expm
 
 import mqt.yaqs.digital.digital_tjm as digital_module
-from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
+from mqt.yaqs import (
+    AnalogSimParams,
+    DigitalSimParams,
+    Hamiltonian,
+    NoiseModel,
+    Observable,
+    Simulator,
+    State,
+    XBasisDissipativeNoiseModel,
+    XYZPauliNoiseModel,
+)
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -74,6 +84,24 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
+
+
+class _StochasticScriptedRng:
+    """Minimal deterministic RNG for stochastic-noise integration tests."""
+
+    def __init__(self, randoms: list[float], integers: list[int] | None = None) -> None:
+        self.randoms = iter(randoms)
+        self.integer_values = iter(integers or [])
+
+    def random(self) -> float:
+        """Return the next scripted uniform value."""
+        return next(self.randoms)
+
+    def integers(self, high: int) -> int:
+        """Return the next scripted integer below ``high``."""
+        value = next(self.integer_values)
+        assert 0 <= value < high
+        return value
 
 
 # --- create_local_noise_model ---
@@ -2873,3 +2901,105 @@ def test_noise_sites_generator_path() -> None:
     assert list(sites) == [0, 1, 2]
     assert results is not None
     assert np.all(np.isfinite(results))
+
+
+# ---------------------------------------------------------------------------
+# stochastic gate-local noise
+# ---------------------------------------------------------------------------
+
+
+def test_xyz_noise_is_applied_after_single_qubit_gates() -> None:
+    """A forced X event follows a noncommuting ideal H gate."""
+    circuit = QuantumCircuit(1)
+    circuit.h(0)
+    params = DigitalSimParams(get_state=True, preset="exact")
+    rng = cast("np.random.Generator", _StochasticScriptedRng([0.0], [0]))
+    _, _, _, final = digital_tjm((0, MPS(1, state="zeros"), XYZPauliNoiseModel(1.0), params, circuit), rng=rng)
+    assert final is not None
+    np.testing.assert_allclose(final.to_vec(), MPS(1, state="x+").to_vec(), atol=1e-14)
+
+
+def test_dissipative_noise_is_applied_after_single_qubit_gates() -> None:
+    """Full X-basis damping follows a noncommuting ideal Z gate."""
+    circuit = QuantumCircuit(1)
+    circuit.z(0)
+    params = DigitalSimParams(get_state=True, preset="exact")
+    rng = cast("np.random.Generator", _StochasticScriptedRng([0.1]))
+    _, _, _, final = digital_tjm(
+        (0, MPS(1, state="x+"), XBasisDissipativeNoiseModel(1.0), params, circuit),
+        rng=rng,
+    )
+    assert final is not None
+    np.testing.assert_allclose(final.to_vec(), MPS(1, state="x+").to_vec(), atol=1e-14)
+
+
+def test_xyz_two_qubit_noise_samples_each_touched_qubit_and_preserves_spectator() -> None:
+    """Forced local X events affect both gate qubits and leave a spectator unchanged."""
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 1)
+    params = DigitalSimParams(get_state=True, preset="exact")
+    rng = cast("np.random.Generator", _StochasticScriptedRng([0.0, 0.0], [0, 0]))
+    _, _, _, final = digital_tjm((0, MPS(3, state="zeros"), XYZPauliNoiseModel(1.0), params, circuit), rng=rng)
+    assert final is not None
+    expected = np.zeros(8, dtype=np.complex128)
+    expected[3] = 1.0
+    np.testing.assert_allclose(final.to_vec(), expected, atol=1e-14)
+
+
+def test_dissipative_two_qubit_gate_channels_each_touched_qubit() -> None:
+    """At p=1, both qubits touched by a two-qubit gate are independently reset to plus."""
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 1)
+    params = DigitalSimParams(get_state=True, preset="exact")
+    rng = cast("np.random.Generator", _StochasticScriptedRng([0.1, 0.9]))
+    _, _, _, final = digital_tjm(
+        (0, MPS(3, state="zeros"), XBasisDissipativeNoiseModel(1.0), params, circuit),
+        rng=rng,
+    )
+    assert final is not None
+    expected = np.zeros(8, dtype=np.complex128)
+    expected[:4] = 0.5
+    np.testing.assert_allclose(final.to_vec(), expected, atol=1e-14)
+
+
+def test_stochastic_p_zero_matches_ideal_digital_simulation() -> None:
+    """A p=0 stochastic model follows the exact existing ideal circuit path."""
+    circuit = QuantumCircuit(2)
+    circuit.h(0)
+    circuit.cx(0, 1)
+    params = DigitalSimParams(get_state=True, preset="exact")
+    _, _, _, ideal = digital_tjm((0, MPS(2), None, params, circuit))
+    _, _, _, zero_noise = digital_tjm((0, MPS(2), XYZPauliNoiseModel(0.0), params, circuit))
+    assert ideal is not None
+    assert zero_noise is not None
+    np.testing.assert_array_equal(zero_noise.to_vec(), ideal.to_vec())
+
+
+def test_simulator_runs_dissipative_model_with_seeded_reproducibility() -> None:
+    """The public Simulator accepts the stochastic model and reproduces seeded trajectories."""
+    circuit = QuantumCircuit(1)
+    circuit.id(0)
+    params = DigitalSimParams(
+        observables=[Observable(X(), 0)],
+        num_traj=4,
+        random_seed=23,
+        preset="exact",
+    )
+    model = XBasisDissipativeNoiseModel(0.6)
+    simulator = Simulator(parallel=False, show_progress=False)
+    first = simulator.run(State(1, initial="x-"), circuit, params, model)
+    second = simulator.run(State(1, initial="x-"), circuit, params, model)
+    np.testing.assert_array_equal(first.trajectories[0], second.trajectories[0])
+    np.testing.assert_array_equal(first.expectation_values[0], second.expectation_values[0])
+
+
+def test_simulator_rejects_stochastic_model_for_analog_simulation() -> None:
+    """Stochastic p models cannot be confused with analog Lindblad gamma models."""
+    params = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.1, dt=0.1)
+    with pytest.raises(TypeError, match="only for digital"):
+        Simulator(show_progress=False).run(
+            State(1),
+            Hamiltonian(matrix=np.zeros((2, 2), dtype=np.complex128)),
+            params,
+            XYZPauliNoiseModel(0.1),
+        )
