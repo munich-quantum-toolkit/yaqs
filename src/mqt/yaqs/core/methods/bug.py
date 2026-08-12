@@ -191,7 +191,16 @@ def _postprocess_bug_state(
     *,
     normalize: bool = True,
 ) -> None:
-    """Apply SVD compression and optional renormalization after a full BUG step."""
+    """Apply SVD compression and optional renormalization after a full BUG step.
+
+    Args:
+        state: MPS to compress (and optionally normalize) in place.
+        sim_params: Simulation parameters supplying ``svd_threshold``,
+            ``max_bond_dim``, and ``trunc_mode`` for compression.
+        normalize: If ``True`` (default), call ``state.normalize()`` after
+            compression. If ``False``, leave the post-compression norm unchanged
+            (used for auxiliary correlator states).
+    """
     state.compress(
         sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
