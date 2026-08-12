@@ -31,7 +31,6 @@ from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories,
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
-    BUGConfig,
     DigitalSimParams,
     EvolutionMode,
     Observable,
@@ -466,23 +465,16 @@ def test_simparams_allows_zero_svd_threshold() -> None:
     assert params.svd_threshold == pytest.approx(0.0)
 
 
-def test_bug_config_defaults_and_validation() -> None:
-    """BUGConfig defaults preserve the single-endpoint center-augmented kernel."""
+def test_evolution_mode_validation() -> None:
+    """AnalogSimParams accepts BUG and rejects unknown evolution modes."""
     params = AnalogSimParams(evolution_mode=EvolutionMode.BUG)
-    assert params.bug_config == BUGConfig()
-    assert params.bug_config.basis_mode == "center"
-    assert params.bug_config.schedule == "single_endpoint"
-    assert params.bug_config.compression == "after_sweep"
-    assert params.bug_config.normalize_after_compression is False
+    assert params.evolution_mode is EvolutionMode.BUG
+    assert AnalogSimParams(evolution_mode="bug").evolution_mode is EvolutionMode.BUG
 
     with pytest.raises(ValueError, match="evolution_mode"):
         _ = AnalogSimParams(evolution_mode="not-a-mode")
     with pytest.raises(ValueError, match="trunc_mode"):
         _ = AnalogSimParams(trunc_mode="nope")
-    with pytest.raises(TypeError, match="bug_config"):
-        _ = AnalogSimParams(bug_config=cast("Any", "bad"))
-    with pytest.raises(ValueError, match="basis_mode"):
-        _ = AnalogSimParams(bug_config=BUGConfig(basis_mode=cast("Any", "nope")))
 
 
 def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:

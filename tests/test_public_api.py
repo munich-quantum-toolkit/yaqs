@@ -30,7 +30,6 @@ EXPECTED_PUBLIC_API = frozenset({
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
-    "BUGConfig",
     "DigitalSimParams",
     "EquivalenceChecker",
     "EvolutionMode",

@@ -18,7 +18,6 @@ dimension limits, and thresholds. Simulation outputs are stored on
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
@@ -33,9 +32,6 @@ if TYPE_CHECKING:
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
 TDVPMode = Literal["1site", "2site", "dynamic"]
-BUGBasisMode = Literal["center", "explicit_old_basis", "fixed_profile"]
-BUGSchedule = Literal["single_endpoint", "alternating_endpoints"]
-BUGCompression = Literal["after_sweep", "after_step", "none"]
 
 
 class PresetTypes(TypedDict):
@@ -309,32 +305,6 @@ class EvolutionMode(Enum):
     BUG = "bug"
 
 
-@dataclass(frozen=True)
-class BUGConfig:
-    """Advanced options for analog BUG evolution.
-
-    Ordinary runs only need ``evolution_mode=EvolutionMode.BUG``. Defaults match
-    the historical single left-endpoint, center-augmented sweep of duration
-    ``dt`` followed by one compression.
-
-    Attributes:
-        basis_mode: Trial-basis construction (default ``"center"``).
-            ``"fixed_profile"`` means the trial-basis sweep does not enlarge bonds
-            (predictor-only LQ). It is a fixed-cap / non-enlarging comparator, not
-            a guarantee that post-compression SVD returns exactly the entry profile;
-            compression may still shrink bonds.
-        schedule: ``"single_endpoint"`` (default) or ``"alternating_endpoints"``
-            (two half-sweeps of ``dt / 2``; not claimed to be second order).
-        compression: ``"after_sweep"`` (default), ``"after_step"``, or ``"none"``.
-        normalize_after_compression: Normalize after compression (default ``False``).
-    """
-
-    basis_mode: BUGBasisMode = "center"
-    schedule: BUGSchedule = "single_endpoint"
-    compression: BUGCompression = "after_sweep"
-    normalize_after_compression: bool = False
-
-
 _ALLOWED_TRUNC_MODES = frozenset({
     "discarded_weight",
     "relative",
@@ -381,36 +351,6 @@ def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMo
         allowed = tuple(mode.value for mode in EvolutionMode)
         msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
         raise ValueError(msg) from exc
-
-
-def _validate_bug_config(bug_config: BUGConfig) -> BUGConfig:
-    """Validate a :class:`BUGConfig` instance.
-
-    Args:
-        bug_config: BUG configuration object.
-
-    Returns:
-        The validated configuration.
-
-    Raises:
-        TypeError: If ``bug_config`` is not a :class:`BUGConfig`.
-        ValueError: If any field has an unsupported value.
-    """
-    if not isinstance(bug_config, BUGConfig):
-        msg = f"bug_config must be BUGConfig, got {type(bug_config).__name__}."
-        raise TypeError(msg)
-    # Literals are not enforced at runtime; reject unsupported strings early.
-    allowed = {
-        "basis_mode": ("center", "explicit_old_basis", "fixed_profile"),
-        "schedule": ("single_endpoint", "alternating_endpoints"),
-        "compression": ("after_sweep", "after_step", "none"),
-    }
-    for field, choices in allowed.items():
-        value = getattr(bug_config, field)
-        if value not in choices:
-            msg = f"bug_config.{field} must be one of {choices!r}, got {value!r}."
-            raise ValueError(msg)
-    return bug_config
 
 
 class Observable:
@@ -554,9 +494,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
             strict reference/debug settings (still subject to timestep and sampling error).
             Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-            Smaller values are more accurate but may require more Krylov vectors. Explicit values
-            override the preset.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+            TDVP and BUG local updates. Smaller values are more accurate but may require
+            more Krylov vectors. Explicit values override the preset.
         trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
             ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
         svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
@@ -571,8 +511,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
             Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
             Default is ``"2site"``.
-        bug_config: BUG integrator options (augmentation, schedule, compression). Used only
-            when ``evolution_mode`` is :attr:`EvolutionMode.BUG`.
     """
 
     def __init__(
@@ -590,7 +528,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
-        bug_config: BUGConfig | None = None,
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -615,17 +552,17 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
                 strict reference/debug settings (still subject to timestep and sampling error).
                 Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-                Smaller values are more accurate but may require more Krylov vectors. Explicit values
-                override the preset.
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+                TDVP and BUG local updates. Smaller values are more accurate but may require
+                more Krylov vectors. Explicit values override the preset.
             trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
                 ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
-            bug_config: BUG options when ``evolution_mode`` is :attr:`EvolutionMode.BUG`.
-                Defaults preserve the single-endpoint center-augmented kernel.
+                ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
+                one compression and renormalization after each ``dt`` step.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
@@ -663,7 +600,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = order
         self.evolution_mode = _validate_evolution_mode(evolution_mode)
-        self.bug_config = _validate_bug_config(BUGConfig() if bug_config is None else bug_config)
         self.get_state = get_state
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (

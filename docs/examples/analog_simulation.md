@@ -92,10 +92,8 @@ bug_params = AnalogSimParams(
 )
 ```
 
-That uses the default single left-endpoint, center-augmented BUG sweep with one
-post-root compression. Advanced schedule/augmentation options are available via
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.BUGConfig` on
-`AnalogSimParams.bug_config` when needed.
+That uses center-augmented alternating-endpoint BUG composition with one
+compression and renormalization after each ``dt`` step.
 
 ## 4. Reproducible stochastic runs
 

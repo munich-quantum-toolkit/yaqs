@@ -25,7 +25,6 @@ from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
-    BUGConfig,
     DigitalSimParams,
     EvolutionMode,
     Observable,
@@ -42,7 +41,6 @@ __all__ = [
     "MPS",
     "SIMULATION_PRESETS",
     "AnalogSimParams",
-    "BUGConfig",
     "DigitalSimParams",
     "EquivalenceChecker",
     "EvolutionMode",

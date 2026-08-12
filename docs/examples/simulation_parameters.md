@@ -77,8 +77,8 @@ TDVP updates. These are independent: tightening one does not change the other.
 chosen preset name is stored on the object as `params.preset`.
 
 For analog BUG evolution, set `evolution_mode=EvolutionMode.BUG` (exported from
-`mqt.yaqs`). Defaults keep the historical single-endpoint, center-augmented
-sweep with one post-root compression; see {doc}`analog_simulation`.
+`mqt.yaqs`). BUG uses center-augmented alternating endpoints with one compression
+and renormalization after each `dt` step; see {doc}`analog_simulation`.
 
 ## Override only what you need
 

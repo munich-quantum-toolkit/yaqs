@@ -8,8 +8,9 @@
 """Implements the Basis-Update and Galerkin Method (BUG) for MPS.
 
 Refer to Ceruti et al. (2023) doi:10.1137/22M1473790 for details of the method
-for TTN. Ordinary users select BUG with ``EvolutionMode.BUG``; advanced options
-live on :class:`~mqt.yaqs.core.data_structures.simulation_parameters.BUGConfig`.
+for TTN. Select BUG with ``EvolutionMode.BUG``. Each physical step uses
+center-augmented alternating endpoints, one SVD compression after the full
+``dt`` composition, and renormalization after compression.
 """
 
 from __future__ import annotations
@@ -19,7 +20,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..data_structures.simulation_parameters import BUGBasisMode, BUGConfig
 from .decompositions import left_qr, right_qr
 from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
@@ -67,29 +67,15 @@ def build_trial_basis(
     predictor: NDArray[np.complex128],
     deeper_overlap: NDArray[np.complex128],
     is_endpoint: bool,
-    basis_mode: BUGBasisMode,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Build a new right-isometric trial basis and the block-overlap factor.
+    """Build a center-augmented right-isometric trial basis and block-overlap factor.
 
     Returns:
         ``(new_q, new_overlap)`` with MPS leg order on ``new_q``.
-
-    Raises:
-        ValueError: If ``basis_mode`` is not recognized.
     """
     old_basis_current = np.asarray(np.tensordot(old_q, deeper_overlap, axes=(2, 0)), dtype=np.complex128)
-
-    if basis_mode == "center":
-        retained = old_q if is_endpoint else working_center
-        stacked = np.concatenate((retained, predictor), axis=1)
-    elif basis_mode == "explicit_old_basis":
-        stacked = np.concatenate((old_basis_current, predictor), axis=1)
-    elif basis_mode == "fixed_profile":
-        stacked = predictor
-    else:
-        msg = f"Unknown BUG basis mode: {basis_mode!r}"
-        raise ValueError(msg)
-
+    retained = old_q if is_endpoint else working_center
+    stacked = np.concatenate((retained, predictor), axis=1)
     new_q, _ = left_qr(stacked)
     new_overlap = np.asarray(
         np.tensordot(old_basis_current, new_q.conj(), axes=([0, 2], [0, 2])),
@@ -109,7 +95,6 @@ def _local_update(
     *,
     dt: float,
     krylov_tol: float,
-    basis_mode: BUGBasisMode,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Evolve one non-root site, form a trial basis, and transport the left center.
 
@@ -131,7 +116,6 @@ def _local_update(
         predictor=predictor,
         deeper_overlap=right_m_block,
         is_endpoint=(site == state.length - 1),
-        basis_mode=basis_mode,
     )
     state.tensors[site] = new_q
     canon_center_tensors[site - 1] = np.asarray(
@@ -147,7 +131,6 @@ def bug_sweep(
     *,
     dt: float,
     krylov_tol: float,
-    basis_mode: BUGBasisMode = "center",
 ) -> None:
     """Apply one uncompressed left-root endpoint BUG sweep in place.
 
@@ -163,7 +146,6 @@ def bug_sweep(
         mpo: Time-independent Hermitian Hamiltonian as an MPO.
         dt: Sweep duration.
         krylov_tol: Krylov tolerance for local exponentials.
-        basis_mode: Trial-basis construction mode.
 
     Raises:
         ValueError: If lengths differ or the center is not at site ``0``.
@@ -190,7 +172,6 @@ def bug_sweep(
             right_m_block,
             dt=dt,
             krylov_tol=krylov_tol,
-            basis_mode=basis_mode,
         )
 
     state.tensors[0] = update_site(
@@ -204,54 +185,38 @@ def bug_sweep(
     state.set_center(0)
 
 
-def _resolve_bug_config(sim_params: AnalogSimParams | DigitalSimParams) -> BUGConfig:
-    """Return the BUG configuration, defaulting when digital params omit it."""
-    bug_config = getattr(sim_params, "bug_config", None)
-    return BUGConfig() if bug_config is None else bug_config
-
-
-def _postprocess_bug_state(state: MPS, sim_params: AnalogSimParams | DigitalSimParams, config: BUGConfig) -> None:
-    """Apply configured SVD compression and optional normalization."""
+def _postprocess_bug_state(state: MPS, sim_params: AnalogSimParams | DigitalSimParams) -> None:
+    """Apply SVD compression and renormalization after a full BUG step."""
     state.compress(
         sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
         trunc_mode=sim_params.trunc_mode,
     )
-    if config.normalize_after_compression:
-        state.normalize()
+    state.normalize()
     state.set_center(0)
 
 
-def _run_single_endpoint(
-    state: MPS,
-    mpo: MPO,
-    sim_params: AnalogSimParams | DigitalSimParams,
-    config: BUGConfig,
-    *,
-    dt: float,
-) -> None:
-    """Run one left-root endpoint sweep and optional after-sweep postprocessing."""
-    bug_sweep(
-        state,
-        mpo,
-        dt=dt,
-        krylov_tol=sim_params.krylov_tol,
-        basis_mode=config.basis_mode,
-    )
-    if config.compression == "after_sweep":
-        _postprocess_bug_state(state, sim_params, config)
+def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
+    """Perform one BUG physical step according to ``sim_params``.
 
+    Uses center-augmented alternating endpoints (two half-sweeps of ``dt / 2``),
+    then one SVD compression and renormalization.
 
-def _run_alternating_endpoints(
-    state: MPS,
-    mpo: MPO,
-    sim_params: AnalogSimParams | DigitalSimParams,
-    config: BUGConfig,
-) -> None:
-    """Apply two reflected half-sweeps of duration ``dt / 2``."""
+    Args:
+        state: The MPS to evolve in place.
+        mpo: Hamiltonian represented as an MPO.
+        sim_params: Simulation parameters (``dt``, truncation, Krylov tolerance).
+
+    Raises:
+        ValueError: If lengths differ or the gauge contract fails.
+    """
+    if mpo.length != state.length:
+        msg = "MPS and Hamiltonian must have the same number of sites"
+        raise ValueError(msg)
+
     half_dt = sim_params.dt / 2.0
     state.assert_center(0, context="bug")
-    _run_single_endpoint(state, mpo, sim_params, config, dt=half_dt)
+    bug_sweep(state, mpo, dt=half_dt, krylov_tol=sim_params.krylov_tol)
 
     flipped = False
     try:
@@ -259,60 +224,11 @@ def _run_alternating_endpoints(
         flipped = True
         state.set_canonical_form(0, decomposition="QR")
         state.set_center(0)
-        _run_single_endpoint(state, mpo.reflected(), sim_params, config, dt=half_dt)
+        bug_sweep(state, mpo.reflected(), dt=half_dt, krylov_tol=sim_params.krylov_tol)
     finally:
         if flipped:
             state.flip_network()
             state.set_canonical_form(0, decomposition="QR")
             state.set_center(0)
 
-    if config.compression == "after_step":
-        _postprocess_bug_state(state, sim_params, config)
-    elif config.compression == "none":
-        state.set_center(0)
-
-
-def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
-    """Perform one BUG physical step according to ``sim_params``.
-
-    Defaults match the historical single left-endpoint, center-augmented sweep of
-    duration ``sim_params.dt`` followed by one compression.
-
-    Args:
-        state: The MPS to evolve in place.
-        mpo: Hamiltonian represented as an MPO.
-        sim_params: Simulation parameters (``dt``, truncation, optional ``bug_config``).
-
-    Raises:
-        ValueError: If lengths differ, the gauge contract fails, or the schedule is invalid.
-        RuntimeError: If ``fixed_profile`` enlarges bonds when compression is disabled.
-    """
-    if mpo.length != state.length:
-        msg = "MPS and Hamiltonian must have the same number of sites"
-        raise ValueError(msg)
-
-    config = _resolve_bug_config(sim_params)
-    entry_profile = (
-        [int(state.tensors[i].shape[2]) for i in range(state.length - 1)]
-        if config.basis_mode == "fixed_profile"
-        else None
-    )
-
-    if config.schedule == "single_endpoint":
-        state.assert_center(0, context="bug")
-        _run_single_endpoint(state, mpo, sim_params, config, dt=sim_params.dt)
-        if config.compression == "after_step":
-            _postprocess_bug_state(state, sim_params, config)
-        elif config.compression == "none":
-            state.set_center(0)
-    elif config.schedule == "alternating_endpoints":
-        _run_alternating_endpoints(state, mpo, sim_params, config)
-    else:
-        msg = f"Unknown BUG schedule: {config.schedule!r}"
-        raise ValueError(msg)
-
-    if entry_profile is not None and config.compression == "none":
-        exit_profile = [int(state.tensors[i].shape[2]) for i in range(state.length - 1)]
-        if any(out > inp for out, inp in zip(exit_profile, entry_profile, strict=True)):
-            msg = f"fixed_profile BUG enlarged the bond profile: entry={entry_profile}, exit={exit_profile}."
-            raise RuntimeError(msg)
+    _postprocess_bug_state(state, sim_params)

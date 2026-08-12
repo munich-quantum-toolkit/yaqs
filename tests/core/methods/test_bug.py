@@ -18,9 +18,9 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, BUGConfig, EvolutionMode
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode
 from mqt.yaqs.core.methods.bug import bug, bug_sweep, build_trial_basis, prepare_canonical_site_tensors
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr
+from mqt.yaqs.core.methods.decompositions import right_qr
 from mqt.yaqs.core.methods.tdvp.primitives import update_left_environment
 
 if TYPE_CHECKING:
@@ -63,18 +63,6 @@ def _is_right_isometric(tensor: NDArray[np.complex128], *, atol: float = 1e-10) 
     left = tensor.shape[1]
     gram = np.tensordot(tensor, tensor.conj(), axes=([0, 2], [0, 2]))
     return bool(np.allclose(gram, np.eye(left), atol=atol))
-
-
-def _row_space_projector(rows: NDArray[np.complex128], *, tol: float = 1e-10) -> NDArray[np.complex128]:
-    """Orthogonal projector onto the row space of ``rows``.
-
-    Returns:
-        The Hermitian projector onto the numerical row space.
-    """
-    _u, s, vh = np.linalg.svd(rows, full_matrices=False)
-    rank = int(np.sum(s > tol * max(float(s[0]), 1.0)))
-    basis = vh[:rank, :]
-    return basis.conj().T @ basis
 
 
 def test_prepare_canonical_site_tensors_single_site() -> None:
@@ -138,14 +126,14 @@ def test_prepare_does_not_alias_physical_tensors() -> None:
     ],
 )
 def test_bug_dense_reference(shapes: list[tuple[int, int, int]], length: int) -> None:
-    """BUG matches dense exact evolution on small systems."""
+    """BUG matches dense exact evolution on small systems (up to global phase)."""
     mps = random_mps(shapes)
     ref = mps.to_vec().copy()
     mpo = MPO.ising(length, 1.0, 0.5)
     sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1, dt=0.05)
     bug(mps, mpo, sim_params)
     exact = expm(-1j * sim_params.dt * mpo.to_matrix_mps_order()) @ ref
-    np.testing.assert_allclose(mps.to_vec(), exact, rtol=1e-8, atol=1e-10)
+    assert abs(np.vdot(exact, mps.to_vec())) == pytest.approx(1.0, abs=1e-8)
     assert mps.orthogonality_center == 0
 
 
@@ -232,52 +220,6 @@ def test_bug_forwards_trunc_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen["max_bond_dim"] == 4
 
 
-def test_proposition1_full_rank_row_spaces_agree() -> None:
-    """Full-rank center and explicit stacks supply the same row space before QR."""
-    rng = np.random.default_rng(0)
-    b0 = np.linalg.qr(rng.standard_normal((4, 2)) + 1j * rng.standard_normal((4, 2)))[0].T
-    s_mat = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
-    c_pred = rng.standard_normal((2, 4)) + 1j * rng.standard_normal((2, 4))
-    p_c = _row_space_projector(np.vstack([s_mat @ b0, c_pred]))
-    p_e = _row_space_projector(np.vstack([b0, c_pred]))
-    assert np.allclose(p_c, p_e, atol=1e-10)
-
-
-def test_proposition1_rank_deficient_counterexample() -> None:
-    """Center stacking can miss an old direction that explicit retention keeps."""
-    b0 = np.eye(2, dtype=np.complex128)
-    s_mat = np.diag([1.0, 0.0]).astype(np.complex128)
-    c_pred = s_mat.copy()
-    p_c = _row_space_projector(np.vstack([s_mat @ b0, c_pred]))
-    p_e = _row_space_projector(np.vstack([b0, c_pred]))
-    e2 = np.array([0.0, 1.0], dtype=np.complex128)
-    assert np.linalg.norm(p_e @ e2) == pytest.approx(1.0, abs=1e-10)
-    assert np.linalg.norm(p_c @ e2) == pytest.approx(0.0, abs=1e-10)
-
-
-def test_proposition1_explicit_old_basis_retains_old_space() -> None:
-    """build_trial_basis(explicit_old_basis) retains the transported old block space."""
-    old_q = crandn((2, 3, 4), seed=1)
-    phys, left, right = old_q.shape
-    q_mat, _ = np.linalg.qr(old_q.transpose(0, 2, 1).reshape(phys * right, left))
-    old_q = np.asarray(q_mat[:, :left].reshape(phys, right, left).transpose(0, 2, 1), dtype=np.complex128)
-    deeper = np.eye(right, dtype=np.complex128)
-    new_q, _overlap = build_trial_basis(
-        old_q=old_q,
-        working_center=crandn((2, 3, 4), seed=3),
-        predictor=crandn((2, 3, 4), seed=2),
-        deeper_overlap=deeper,
-        is_endpoint=False,
-        basis_mode="explicit_old_basis",
-    )
-    old_basis = np.tensordot(old_q, deeper, axes=(2, 0))
-    old_rows = old_basis.transpose(1, 0, 2).reshape(old_basis.shape[1], -1)
-    new_rows = new_q.transpose(1, 0, 2).reshape(new_q.shape[1], -1)
-    projector = _row_space_projector(new_rows)
-    for row in old_rows:
-        assert np.linalg.norm(row - row @ projector) == pytest.approx(0.0, abs=1e-8)
-
-
 def test_proposition2_overlap_frobenius_identity() -> None:
     """Overlap transport satisfies the local Frobenius identity."""
     rng = np.random.default_rng(4)
@@ -307,7 +249,6 @@ def test_proposition2_build_trial_basis_overlap_is_block_contraction() -> None:
         predictor=predictor,
         deeper_overlap=deeper,
         is_endpoint=False,
-        basis_mode="center",
     )
     old_basis_current = np.tensordot(old_q, deeper, axes=(2, 0))
     direct = np.tensordot(old_basis_current, new_q.conj(), axes=([0, 2], [0, 2]))
@@ -329,49 +270,8 @@ def test_proposition2_transported_center_matches_projection() -> None:
     assert np.linalg.norm(x @ overlap, "fro") == pytest.approx(np.linalg.norm(x, "fro"), abs=1e-10)
 
 
-def test_build_trial_basis_fixed_profile_no_concat() -> None:
-    """fixed_profile factorizes the predictor without concatenating old tensors."""
-    predictor = crandn((2, 3, 4), seed=8)
-    new_q, overlap = build_trial_basis(
-        old_q=crandn((2, 3, 4), seed=6),
-        working_center=crandn((2, 3, 4), seed=7),
-        predictor=predictor,
-        deeper_overlap=np.eye(4, dtype=np.complex128),
-        is_endpoint=False,
-        basis_mode="fixed_profile",
-    )
-    ref_q, _ = left_qr(predictor)
-    assert np.allclose(new_q, ref_q)
-    assert overlap.shape == (3, new_q.shape[1])
-
-
-def test_fixed_profile_zero_h_preserves_profile() -> None:
-    """fixed_profile with compression none preserves state and bond profile for zero H."""
-    mps = random_mps([(2, 1, 2), (2, 2, 3), (2, 3, 1)])
-    entry = [int(mps.tensors[i].shape[2]) for i in range(mps.length - 1)]
-    ref = mps.to_vec().copy()
-    zero = MPO()
-    zero.tensors = [np.zeros((2, 2, 1, 1), dtype=np.complex128) for _ in range(3)]
-    zero.length = 3
-    zero.physical_dimension = 2
-    bug(
-        mps,
-        zero,
-        AnalogSimParams(
-            preset="exact",
-            get_state=True,
-            elapsed_time=1,
-            evolution_mode=EvolutionMode.BUG,
-            bug_config=BUGConfig(basis_mode="fixed_profile", compression="none"),
-        ),
-    )
-    exit_profile = [int(mps.tensors[i].shape[2]) for i in range(mps.length - 1)]
-    assert exit_profile == entry
-    assert abs(np.vdot(ref, mps.to_vec())) == pytest.approx(1.0, abs=1e-10)
-
-
 def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Alternating schedule applies two positive half-steps of dt/2."""
+    """BUG applies two positive half-steps of dt/2."""
     dts: list[float] = []
 
     def capture_sweep(
@@ -380,9 +280,8 @@ def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> 
         *,
         dt: float,
         krylov_tol: float,
-        basis_mode: str = "center",
     ) -> None:
-        del krylov_tol, basis_mode
+        del krylov_tol
         dts.append(dt)
         state.set_center(0)
 
@@ -398,7 +297,6 @@ def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> 
             elapsed_time=1,
             dt=0.2,
             evolution_mode=EvolutionMode.BUG,
-            bug_config=BUGConfig(schedule="alternating_endpoints", compression="none"),
         ),
     )
     assert dts == pytest.approx([0.1, 0.1])
@@ -406,8 +304,8 @@ def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> 
         assert np.allclose(a, b)
 
 
-def test_compression_call_counts(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Compression placement controls how often MPS.compress is invoked."""
+def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG compresses once after the full alternating composition."""
     counts = {"n": 0}
 
     def counting_compress(
@@ -422,30 +320,21 @@ def test_compression_call_counts(monkeypatch: pytest.MonkeyPatch) -> None:
         self.set_center(0)
 
     monkeypatch.setattr(MPS, "compress", counting_compress)
-
-    def run(config: BUGConfig) -> int:
-        counts["n"] = 0
-        bug(
-            random_mps([(2, 1, 2), (2, 2, 1)]),
-            MPO.ising(2, 1.0, 0.5),
-            AnalogSimParams(
-                preset="exact",
-                get_state=True,
-                elapsed_time=1,
-                evolution_mode=EvolutionMode.BUG,
-                bug_config=config,
-            ),
-        )
-        return counts["n"]
-
-    assert run(BUGConfig(schedule="single_endpoint", compression="after_sweep")) == 1
-    assert run(BUGConfig(schedule="single_endpoint", compression="none")) == 0
-    assert run(BUGConfig(schedule="alternating_endpoints", compression="after_sweep")) == 2
-    assert run(BUGConfig(schedule="alternating_endpoints", compression="after_step")) == 1
+    bug(
+        random_mps([(2, 1, 2), (2, 2, 1)]),
+        MPO.ising(2, 1.0, 0.5),
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            evolution_mode=EvolutionMode.BUG,
+        ),
+    )
+    assert counts["n"] == 1
 
 
-def test_normalize_after_compression_opt_in() -> None:
-    """normalize_after_compression=True returns unit norm."""
+def test_normalize_after_compression() -> None:
+    """BUG returns a unit-norm state after compression."""
     mps = random_mps([(2, 1, 3), (2, 3, 1)])
     bug(
         mps,
@@ -455,7 +344,6 @@ def test_normalize_after_compression_opt_in() -> None:
             get_state=True,
             elapsed_time=1,
             evolution_mode=EvolutionMode.BUG,
-            bug_config=BUGConfig(normalize_after_compression=True),
         ),
     )
     assert abs(mps.norm()) == pytest.approx(1.0, abs=1e-10)
@@ -483,7 +371,6 @@ def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:
             elapsed_time=1,
             dt=dt,
             evolution_mode=EvolutionMode.BUG,
-            bug_config=BUGConfig(compression="none"),
             max_bond_dim=None,
             krylov_tol=1e-12,
         ),
@@ -516,10 +403,6 @@ def test_alternating_asymmetric_matches_dense_without_mock() -> None:
         elapsed_time=total_time,
         dt=dt,
         evolution_mode=EvolutionMode.BUG,
-        bug_config=BUGConfig(
-            schedule="alternating_endpoints",
-            compression="none",
-        ),
         max_bond_dim=None,
         krylov_tol=1e-12,
     )
@@ -528,32 +411,3 @@ def test_alternating_asymmetric_matches_dense_without_mock() -> None:
     assert abs(np.vdot(reference, state.to_vec())) == pytest.approx(1.0, abs=1e-8)
     assert state.orthogonality_center == 0
     assert state.flipped is False
-
-
-def test_fixed_profile_compression_may_shrink_bonds() -> None:
-    """fixed_profile forbids enlargement only; post-step compression may shrink χ."""
-    mps = random_mps([(2, 1, 2), (2, 2, 4), (2, 4, 2), (2, 2, 1)])
-    entry = [int(mps.tensors[i].shape[2]) for i in range(mps.length - 1)]
-    bug(
-        mps,
-        MPO.ising(4, 1.0, 0.5),
-        AnalogSimParams(
-            preset="exact",
-            get_state=True,
-            elapsed_time=1,
-            dt=0.05,
-            evolution_mode=EvolutionMode.BUG,
-            bug_config=BUGConfig(
-                basis_mode="fixed_profile",
-                schedule="alternating_endpoints",
-                compression="after_step",
-                normalize_after_compression=True,
-            ),
-            trunc_mode="hard_cutoff",
-            svd_threshold=0.0,
-            max_bond_dim=2,
-            krylov_tol=1e-12,
-        ),
-    )
-    exit_profile = [int(mps.tensors[i].shape[2]) for i in range(mps.length - 1)]
-    assert max(exit_profile) <= min(2, max(entry))
