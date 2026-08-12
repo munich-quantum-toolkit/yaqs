@@ -9,9 +9,9 @@
 
 This module implements the Tensor Jump Method (TJM) for simulating the dynamics of quantum many-body systems.
 It provides functions for initializing the sampling state with noise (via dissipation and stochastic processes),
-evolving the state through single-site and two-site TDVP updates, and sampling observable measurements over time.
-The functions analog_tjm_2 and analog_tjm_1 correspond to second-order and first-order evolution schemes,
-respectively, and return trajectories of expectation values for further analysis.
+evolving the state with the configured unitary evolution mode (TDVP or BUG), and sampling observable
+measurements over time. The functions analog_tjm_2 and analog_tjm_1 correspond to second-order and
+first-order TJM schemes, respectively, and return trajectories of expectation values for further analysis.
 """
 
 from __future__ import annotations
@@ -21,13 +21,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..core.data_structures.simulation_parameters import EvolutionMode
-from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import tdvp
 from ..core.random_utils import make_sample_rng, make_trajectory_rng
+from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -73,8 +71,8 @@ def step_through(
 ) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
-    Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
-    dissipation, and a stochastic process in sequence.
+    Corresponding to Fj in the TJM paper, this function evolves the state by applying the configured
+    unitary evolution mode (TDVP or BUG), dissipation, and a stochastic process in sequence.
 
     Args:
         state (MPS): The current state of the system.
@@ -87,10 +85,7 @@ def step_through(
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(state, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(state, hamiltonian, sim_params)
+    apply_unitary_evolution(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
 
     if has_scheduled_jump(noise_model, current_time, sim_params.dt):
@@ -130,10 +125,7 @@ def sample(
         The evolved MPS when this is the final time step and ``get_state=True``, else ``None``.
     """
     psi = copy.deepcopy(phi)
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(psi, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
-        bug(psi, hamiltonian, sim_params)
+    apply_unitary_evolution(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
 
     current_time = sim_params.times[j]
@@ -168,11 +160,12 @@ def analog_tjm_2(
     return_trajectory_state: bool = False,
     continue_trajectory: bool = False,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using a two-site evolution scheme.
+    """Run a single trajectory of the TJM using the configured unitary evolution mode.
 
     This function executes a full trajectory by evolving the initial state,
     sampling observable measurements over time, and recording the results.
-    It corresponds to the two-site evolution method presented in the TJM paper.
+    It corresponds to the second-order TJM scheme; unitary intervals use
+    ``sim_params.evolution_mode`` (TDVP or BUG).
 
     Args:
         args: A tuple containing:
@@ -319,10 +312,11 @@ def analog_tjm_1(
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using a one-site evolution scheme.
+    """Run a single trajectory of the TJM using a first-order evolution scheme.
 
-    This function evolves the state with a one-site TDVP update, applying noise (if provided)
-    and taking observable measurements over time. It corresponds to the one-site evolution method in the TJM paper.
+    This function evolves the state with one unitary update per interval
+    (TDVP or BUG according to ``sim_params.evolution_mode``), applying noise
+    (if provided) and taking observable measurements over time.
 
     Args:
         args (tuple): A tuple containing:
@@ -363,7 +357,7 @@ def analog_tjm_1(
         state.evaluate_observables(sim_params, results, 0)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        tdvp(state, hamiltonian, sim_params)
+        apply_unitary_evolution(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt, sim_params)
             current_time = sim_params.times[j]

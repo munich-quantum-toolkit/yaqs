@@ -80,9 +80,20 @@ physical step `dt`, improving unitary accuracy without changing the noise
 timestep.
 
 **Evolution integrator:** analog simulations default to `EvolutionMode.TDVP`
-(two-site TDVP sweeps). `EvolutionMode.BUG` is available as an alternative on
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
-when you want the BUG integrator instead.
+(two-site TDVP sweeps). Switch to BUG with:
+
+```{code-cell} ipython3
+from mqt.yaqs import AnalogSimParams, EvolutionMode
+
+bug_params = AnalogSimParams(
+    evolution_mode=EvolutionMode.BUG,
+    elapsed_time=0.1,
+    dt=0.1,
+)
+```
+
+That uses center-augmented alternating-endpoint BUG composition with one
+compression and renormalization after each ``dt`` step.
 
 ## 4. Reproducible stochastic runs
 

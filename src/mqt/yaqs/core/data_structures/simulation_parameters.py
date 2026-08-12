@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 import numpy as np
 
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
+from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -257,16 +258,19 @@ def _validate_svd_threshold(svd_threshold: float) -> float:
 
     Args:
         svd_threshold: Tolerance for SVD-based bond truncation during simulation.
+            Zero is allowed: it disables tolerance-based truncation for discarded-
+            weight modes and removes only exact zeros for ``hard_cutoff``, while a
+            hard bond cap may still reduce rank.
 
     Returns:
         The validated threshold as a float.
 
     Raises:
-        ValueError: If ``svd_threshold`` is non-finite or not strictly positive.
+        ValueError: If ``svd_threshold`` is non-finite or negative.
     """
     svd_threshold = float(svd_threshold)
-    if not np.isfinite(svd_threshold) or svd_threshold <= 0.0:
-        msg = f"svd_threshold must be a finite positive float, got {svd_threshold!r}."
+    if not np.isfinite(svd_threshold) or svd_threshold < 0.0:
+        msg = f"svd_threshold must be a finite non-negative float, got {svd_threshold!r}."
         raise ValueError(msg)
     return svd_threshold
 
@@ -299,6 +303,58 @@ class EvolutionMode(Enum):
 
     TDVP = "tdvp"
     BUG = "bug"
+
+
+_ALLOWED_TRUNC_MODES = frozenset({
+    "discarded_weight",
+    "relative",
+    "hard_cutoff",
+    "relative_discarded_weight",
+})
+
+
+def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
+    """Validate the SVD truncation mode name.
+
+    Args:
+        trunc_mode: Truncation mode string.
+
+    Returns:
+        The validated truncation mode.
+
+    Raises:
+        ValueError: If ``trunc_mode`` is not a string or not a supported value.
+    """
+    if not isinstance(trunc_mode, str):
+        # Public contract documents ValueError for any unsupported trunc_mode value.
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
+    if trunc_mode not in _ALLOWED_TRUNC_MODES:
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
+        raise ValueError(msg)
+    return cast("TruncMode", trunc_mode)
+
+
+def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
+    """Validate and coerce the analog evolution mode.
+
+    Args:
+        evolution_mode: Evolution mode enum or string value.
+
+    Returns:
+        The validated :class:`EvolutionMode`.
+
+    Raises:
+        ValueError: If ``evolution_mode`` is not a supported value.
+    """
+    if isinstance(evolution_mode, EvolutionMode):
+        return evolution_mode
+    try:
+        return EvolutionMode(evolution_mode)
+    except ValueError as exc:
+        allowed = tuple(mode.value for mode in EvolutionMode)
+        msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
+        raise ValueError(msg) from exc
 
 
 class Observable:
@@ -442,11 +498,13 @@ class AnalogSimParams(_ObservableOrderingMixin):
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
             strict reference/debug settings (still subject to timestep and sampling error).
             Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-            Smaller values are more accurate but may require more Krylov vectors. Explicit values
-            override the preset.
-        trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
-        svd_threshold: SVD truncation threshold for bond dimension control.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+            TDVP and BUG local updates. Smaller values are more accurate but may require
+            more Krylov vectors. Explicit values override the preset.
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
+        svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
+            tolerance-based truncation for discarded-weight modes.
         order: Integration order.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
@@ -473,7 +531,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         *,
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
-        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
+        evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -498,14 +556,17 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
                 strict reference/debug settings (still subject to timestep and sampling error).
                 Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-                Smaller values are more accurate but may require more Krylov vectors. Explicit values
-                override the preset.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+                TDVP and BUG local updates. Smaller values are more accurate but may require
+                more Krylov vectors. Explicit values override the preset.
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
+                ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
+                one compression and renormalization after each ``dt`` step.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
@@ -536,13 +597,13 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = order
-        self.evolution_mode = evolution_mode
+        self.evolution_mode = _validate_evolution_mode(evolution_mode)
         self.get_state = get_state
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
@@ -588,7 +649,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
             ``krylov_tol``. Explicit values override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-        trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
         svd_threshold: SVD truncation threshold for bond dimension control.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
@@ -642,7 +704,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
                 ``krylov_tol``. Default is ``"balanced"``.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
@@ -673,7 +736,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
         # :class:`~mqt.yaqs.SimulationProgram` can inject program-wide observables later.
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )

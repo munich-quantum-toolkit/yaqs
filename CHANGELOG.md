@@ -24,6 +24,7 @@ releases may include breaking changes.
 
 ### Changed
 
+- updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
 - tested and documented the multi-qubit local noise rule ([#529])
   ([**@Pouri96**])
 - hardened stability of noise model, timestep selection, and RNG ([#527])
@@ -244,6 +245,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
 [#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
 [#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
 [#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527

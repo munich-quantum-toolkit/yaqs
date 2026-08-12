@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -39,8 +39,6 @@ from mqt.yaqs.core.methods.tdvp.primitives import (
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.methods.decompositions import TruncMode
-
 rng = np.random.default_rng()
 
 
@@ -61,7 +59,7 @@ def test_split_two_site_invalid_shape() -> None:
             A,
             physical_dimensions,
             svd_distribution="left",
-            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+            trunc_mode=sim_params.trunc_mode,
             threshold=sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
         )

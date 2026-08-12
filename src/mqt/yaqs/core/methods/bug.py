@@ -7,8 +7,10 @@
 
 """Implements the Basis-Update and Galerkin Method (BUG) for MPS.
 
-Refer to Ceruti et al. (2021) doi:10.1137/22M1473790 for details of the method
-for TTN.
+Refer to Ceruti et al. (2023) doi:10.1137/22M1473790 for details of the method
+for TTN. Select BUG with ``EvolutionMode.BUG``. Each physical step uses
+center-augmented alternating endpoints, one SVD compression after the full
+``dt`` composition, and renormalization after compression.
 """
 
 from __future__ import annotations
@@ -32,9 +34,9 @@ if TYPE_CHECKING:
 def prepare_canonical_site_tensors(
     state: MPS, mpo: MPO
 ) -> tuple[list[NDArray[np.complex128]], list[NDArray[np.complex128]]]:
-    """We need to get the original tensor when every site is the canonical form.
+    """Build coefficient-bearing centers and left MPO environments on a copied list.
 
-    Assumes the MPS is in the left-canonical form.
+    Performs one left-to-right QR preparation without mutating the physical MPS.
 
     Args:
         state: The MPS.
@@ -43,9 +45,7 @@ def prepare_canonical_site_tensors(
     Returns:
         canon_tensors: The list of the canonical site tensors.
         left_blocks: The list of the left environments.
-
     """
-    # This will merely do a shallow copy of the MPS.
     canon_tensors = copy(state.tensors)
     left_end_dimension = state.tensors[0].shape[1]
     left_blocks: list[NDArray[np.complex128]] = [
@@ -54,83 +54,37 @@ def prepare_canonical_site_tensors(
     for i, old_local_tensor in enumerate(canon_tensors[1:], start=1):
         left_tensor = canon_tensors[i - 1]
         left_q, left_r = right_qr(left_tensor)
-        # Legs of right_r: (new, old_right)
-        local_tensor = np.tensordot(left_r, old_local_tensor, axes=(1, 1))
-        # Leg order of local_tensor: (left, phys, right)
-        local_tensor = local_tensor.transpose(1, 0, 2)
-        # Correct leg order: (phys, left, right) and orth center
+        local_tensor = np.tensordot(left_r, old_local_tensor, axes=(1, 1)).transpose(1, 0, 2)
         canon_tensors[i] = np.asarray(local_tensor, dtype=np.complex128)
-        new_env = update_left_environment(left_q, left_q, mpo.tensors[i - 1], left_blocks[i - 1])
-        left_blocks.append(new_env)
+        left_blocks.append(update_left_environment(left_q, left_q, mpo.tensors[i - 1], left_blocks[i - 1]))
     return canon_tensors, left_blocks
 
 
-def choose_stack_tensor(
-    site: int, canon_center_tensors: list[NDArray[np.complex128]], state: MPS
-) -> NDArray[np.complex128]:
-    """Return the non-update tensor that should be used for the stacking step.
-
-    If the site is the last one and thus the leaf site, we need to choose the
-    MPS tensor, when the MPS was in left-canonical form. Otherwise, we choose
-    the MPS tensor, when the local site was the orthognality center.
-
-    Args:
-        site: The site to be updated.
-        canon_center_tensors: The canonical site tensors.
-        state: The MPS.
+def build_trial_basis(
+    *,
+    old_q: NDArray[np.complex128],
+    working_center: NDArray[np.complex128],
+    predictor: NDArray[np.complex128],
+    deeper_overlap: NDArray[np.complex128],
+    is_endpoint: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Build a center-augmented right-isometric trial basis and block-overlap factor.
 
     Returns:
-        NDArray[np.complex128]: The tensor to be stacked.
-
+        ``(new_q, new_overlap)`` with MPS leg order on ``new_q``.
     """
-    if site == state.length - 1:  # ruff:ignore[if-else-block-instead-of-if-exp]
-        # This is the only leaf case.
-        old_stack_tensor = state.tensors[site]
-    else:
-        old_stack_tensor = canon_center_tensors[site]
-    return old_stack_tensor
+    old_basis_current = np.asarray(np.tensordot(old_q, deeper_overlap, axes=(2, 0)), dtype=np.complex128)
+    retained = old_q if is_endpoint else working_center
+    stacked = np.concatenate((retained, predictor), axis=1)
+    new_q, _ = left_qr(stacked)
+    new_overlap = np.asarray(
+        np.tensordot(old_basis_current, new_q.conj(), axes=([0, 2], [0, 2])),
+        dtype=np.complex128,
+    )
+    return new_q, new_overlap
 
 
-def find_new_q(
-    old_stack_tensor: NDArray[np.complex128], updated_tensor: NDArray[np.complex128]
-) -> NDArray[np.complex128]:
-    """Finds the new Q tensor after the update with enlarged left virtual leg.
-
-    Args:
-        old_stack_tensor: The tensor to be stacked with the updated tensor.
-        updated_tensor: The tensor after the update.
-
-    Returns:
-        new_q: The new Q tensor with MPS leg order (phys, left, right).
-
-    """
-    stacked_tensor = np.concatenate((old_stack_tensor, updated_tensor), axis=1)
-    new_q, _ = left_qr(stacked_tensor)
-    return new_q
-
-
-def build_basis_change_tensor(
-    old_q: NDArray[np.complex128], new_q: NDArray[np.complex128], old_m: NDArray[np.complex128]
-) -> NDArray[np.complex128]:
-    """Build a new basis change tensor M.
-
-    Args:
-        old_q: The old tensor of the site, when the MPS was in left-canonical
-            form. The leg order is (phys, left, right).
-        new_q: The extended local base tensor after the update. Same leg order
-            as an MPS tensor. The leg order is (phys, left, right).
-        old_m: The basis change matrix of the site to the right. The leg order
-            is (old,new).
-
-    Returns:
-        new_m: The basis change tensor M. The leg order is (old,new).
-
-    """
-    new_m = np.tensordot(old_q, old_m, axes=(2, 0))
-    return np.asarray(np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2])), dtype=np.complex128)
-
-
-def local_update(
+def _local_update(
     state: MPS,
     mpo: MPO,
     left_blocks: list[NDArray[np.complex128]],
@@ -138,91 +92,166 @@ def local_update(
     canon_center_tensors: list[NDArray[np.complex128]],
     site: int,
     right_m_block: NDArray[np.complex128],
-    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    dt: float,
+    krylov_tol: float,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Single Site bug algorithm update.
-
-    Updates a single site of the MPS.
-
-    Args:
-        state: The MPS.
-        mpo: The MPO.
-        left_blocks: The left environments.
-        right_block: The right environment.
-        canon_center_tensors: The canonical site tensors.
-        site: The site to be updated.
-        right_m_block: The basis update matrix of the site to the right.
-        sim_params: Simulation parameters.
+    """Evolve one non-root site, form a trial basis, and transport the left center.
 
     Returns:
-        basis_change_m: The basis update matrix of this site.
-        new_right_block: The right environment of this site.
+        The site overlap matrix and the updated right MPO environment.
     """
-    old_tensor = canon_center_tensors[site]
-    updated_tensor = update_site(
+    working_center = canon_center_tensors[site]
+    predictor = update_site(
         left_blocks[site],
         right_block,
         mpo.tensors[site],
-        old_tensor,
-        sim_params.dt,
-        krylov_tol=sim_params.krylov_tol,
+        working_center,
+        dt,
+        krylov_tol=krylov_tol,
     )
-    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
-    new_q = find_new_q(old_stack_tensor, updated_tensor)
-    old_q = state.tensors[site]
-    basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
+    new_q, basis_change_m = build_trial_basis(
+        old_q=state.tensors[site],
+        working_center=working_center,
+        predictor=predictor,
+        deeper_overlap=right_m_block,
+        is_endpoint=(site == state.length - 1),
+    )
     state.tensors[site] = new_q
     canon_center_tensors[site - 1] = np.asarray(
         np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0)),
         dtype=np.complex128,
     )
-    new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
-    return basis_change_m, new_right_block
+    return basis_change_m, update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
 
 
-def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | DigitalSimParams) -> None:
-    """Performs the Basis-Update and Galerkin Method for an MPS.
+def bug_sweep(
+    state: MPS,
+    mpo: MPO,
+    *,
+    dt: float,
+    krylov_tol: float,
+) -> None:
+    """Apply one uncompressed left-root endpoint BUG sweep in place.
 
-    The state is updated in place.
+    Requires a known orthogonality center at site ``0``. The caller is responsible
+    for supplying an endpoint-canonical MPS in that gauge (typically via
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.set_canonical_form` /
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.set_center`); this routine checks
+    the tracked center metadata but does not re-validate full right-canonicality
+    of every tensor. Performs no compression or normalization.
 
     Args:
-        mpo: Hamiltonian represented as an MPO.
-        state: The initial state represented as an MPS.
-        sim_params: Simulation parameters containing time step 'dt' and SVD
-            threshold.
+        state: MPS to evolve in place.
+        mpo: Time-independent Hermitian Hamiltonian as an MPO.
+        dt: Sweep duration.
+        krylov_tol: Krylov tolerance for local exponentials.
 
     Raises:
-        ValueError: If the state and Hamiltonian have different numbers of
-            sites.
-
+        ValueError: If lengths differ or the center is not at site ``0``.
     """
-    num_sites = mpo.length
-    if num_sites != state.length:
+    if mpo.length != state.length:
         msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
 
-    if state.orthogonality_center is not None:
-        state.assert_center(0, context="bug")
+    state.assert_center(0, context="bug_sweep")
 
     canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)
     right_end_dimension = state.tensors[-1].shape[2]
     right_block = np.eye(right_end_dimension, dtype=np.complex128).reshape(right_end_dimension, 1, right_end_dimension)
     right_m_block = np.eye(right_end_dimension, dtype=np.complex128)
-    # Sweep from right to left.
-    for site in range(num_sites - 1, 0, -1):
-        right_m_block, right_block = local_update(
-            state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params
+
+    for site in range(mpo.length - 1, 0, -1):
+        right_m_block, right_block = _local_update(
+            state,
+            mpo,
+            left_envs,
+            right_block,
+            canon_center_tensors,
+            site,
+            right_m_block,
+            dt=dt,
+            krylov_tol=krylov_tol,
         )
-    # Update the first site.
-    updated_tensor = update_site(
+
+    state.tensors[0] = update_site(
         left_envs[0],
         right_block,
         mpo.tensors[0],
         canon_center_tensors[0],
-        sim_params.dt,
-        krylov_tol=sim_params.krylov_tol,
+        dt,
+        krylov_tol=krylov_tol,
     )
-    state.tensors[0] = updated_tensor
-    # Truncation
-    state.compress(sim_params.svd_threshold, max_bond_dim=sim_params.max_bond_dim)
     state.set_center(0)
+
+
+def _postprocess_bug_state(
+    state: MPS,
+    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    normalize: bool = True,
+) -> None:
+    """Apply SVD compression and optional renormalization after a full BUG step.
+
+    Args:
+        state: MPS to compress (and optionally normalize) in place.
+        sim_params: Simulation parameters supplying ``svd_threshold``,
+            ``max_bond_dim``, and ``trunc_mode`` for compression.
+        normalize: If ``True`` (default), call ``state.normalize()`` after
+            compression. If ``False``, leave the post-compression norm unchanged
+            (used for auxiliary correlator states).
+    """
+    state.compress(
+        sim_params.svd_threshold,
+        max_bond_dim=sim_params.max_bond_dim,
+        trunc_mode=sim_params.trunc_mode,
+    )
+    if normalize:
+        state.normalize()
+
+
+def bug(
+    state: MPS,
+    mpo: MPO,
+    sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    normalize: bool = True,
+) -> None:
+    """Perform one BUG physical step according to ``sim_params``.
+
+    Uses center-augmented alternating endpoints (two half-sweeps of ``dt / 2``),
+    then one SVD compression and optional renormalization.
+
+    Args:
+        state: The MPS to evolve in place.
+        mpo: Hamiltonian represented as an MPO.
+        sim_params: Simulation parameters (``dt``, truncation, Krylov tolerance).
+        normalize: If ``True`` (default), renormalize after compression. Pass
+            ``False`` for auxiliary correlator states so non-unitary probe
+            amplitudes are preserved.
+
+    Raises:
+        ValueError: If lengths differ or the gauge contract fails.
+    """
+    if mpo.length != state.length:
+        msg = "MPS and Hamiltonian must have the same number of sites"
+        raise ValueError(msg)
+
+    half_dt = sim_params.dt / 2.0
+    state.assert_center(0, context="bug")
+    bug_sweep(state, mpo, dt=half_dt, krylov_tol=sim_params.krylov_tol)
+
+    flipped = False
+    try:
+        state.flip_network()
+        flipped = True
+        state.set_canonical_form(0, decomposition="QR")
+        state.set_center(0)
+        bug_sweep(state, mpo.reflected(), dt=half_dt, krylov_tol=sim_params.krylov_tol)
+    finally:
+        if flipped:
+            state.flip_network()
+            state.set_canonical_form(0, decomposition="QR")
+            state.set_center(0)
+
+    _postprocess_bug_state(state, sim_params, normalize=normalize)

@@ -13,7 +13,7 @@ during an analog simulation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams
-    from ..methods.decompositions import TruncMode
 
 
 def _scheduled_jump_matches_time(jump_time: float, time: float, dt: float) -> bool:
@@ -99,7 +98,7 @@ def apply_scheduled_jumps(
                     merged,
                     [state.physical_dimensions[i], state.physical_dimensions[j]],
                     svd_distribution="right",
-                    trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+                    trunc_mode=sim_params.trunc_mode,
                     threshold=sim_params.svd_threshold,
                     max_bond_dim=sim_params.max_bond_dim,
                 )

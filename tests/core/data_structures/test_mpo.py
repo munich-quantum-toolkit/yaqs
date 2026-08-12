@@ -1511,3 +1511,61 @@ def test_mpo_sum_matches_iterated_addition() -> None:
     mpos = [MPO.identity(2), MPO.identity(2), MPO.identity(2)]
     ref = 3.0 * MPO.identity(2).to_matrix()
     np.testing.assert_allclose(MPO.mpo_sum(mpos).to_matrix(), ref, atol=1e-12)
+
+
+def test_mpo_reflected_involution_and_dense_equivalence() -> None:
+    """Reflecting an MPO twice restores tensors; dense matches site-reversed conjugation."""
+    mpo = MPO.ising(3, 1.0, 0.5)
+    original = [t.copy() for t in mpo.tensors]
+    reflected = mpo.reflected()
+    assert reflected is not mpo
+    for a, b in zip(original, mpo.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    # Reflected tensors are independent copies (safe if a caller mutates them).
+    reflected.tensors[0][0, 0, 0, 0] += 1.0
+    assert np.allclose(mpo.tensors[-1], original[-1])
+    reflected = mpo.reflected()
+
+    twice = reflected.reflected()
+    for a, b in zip(original, twice.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    # Physical legs are not swapped by reflection.
+    for tensor in reflected.tensors:
+        assert tensor.shape[0] == tensor.shape[1] == 2
+
+    dense = mpo.to_matrix()
+    dense_reflected = reflected.to_matrix()
+    # Site-reversal permutation on a 3-qubit computational basis (site 0 = LSB).
+    n = 2**3
+    perm = np.empty(n, dtype=int)
+    for i in range(n):
+        bits = [(i >> b) & 1 for b in range(3)]
+        rev = 0
+        for b, bit in enumerate(reversed(bits)):
+            rev |= bit << b
+        perm[i] = rev
+    p = np.eye(n, dtype=complex)[perm]
+    np.testing.assert_allclose(dense_reflected, p @ dense @ p.T, atol=1e-12)
+
+
+def test_to_matrix_mps_order_matches_sparse_asymmetric() -> None:
+    """MPS-ordered dense conversion matches sparse and site-0-LSB embeddings."""
+    mpo = MPO()
+    mpo.from_pauli_sum(
+        terms=[(1.0, "Z0"), (0.3, "X1"), (0.7, "Y2")],
+        length=3,
+        tol=0.0,
+        n_sweeps=0,
+    )
+    dense_mps = mpo.to_matrix_mps_order()
+    sparse = mpo.to_sparse_matrix().toarray()
+    np.testing.assert_allclose(dense_mps, sparse, atol=1e-12)
+    z0 = _embed_one_body(_Z2, 3, 0)
+    x1 = _embed_one_body(_X2, 3, 1)
+    y2 = _embed_one_body(_Y2, 3, 2)
+    expected = z0 + 0.3 * x1 + 0.7 * y2
+    np.testing.assert_allclose(dense_mps, expected, atol=1e-12)
+    # Historical to_matrix keeps site-0 MSB and disagrees for asymmetric H.
+    assert not np.allclose(mpo.to_matrix(), expected, atol=1e-6)

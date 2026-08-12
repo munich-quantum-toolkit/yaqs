@@ -16,7 +16,7 @@ to simulate noise-induced evolution in quantum many-body systems.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
-    from ..methods.decompositions import TruncMode
 
 
 def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
@@ -74,7 +73,7 @@ def _adjacent_jump_weight(
         merged,
         [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
         svd_distribution="right",
-        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        trunc_mode=sim_params.trunc_mode,
         threshold=0.0,
         max_bond_dim=None,
     )
@@ -280,7 +279,7 @@ def stochastic_process(
                 merged,
                 [state.physical_dimensions[i], state.physical_dimensions[j]],
                 svd_distribution="right",
-                trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+                trunc_mode=sim_params.trunc_mode,
                 threshold=sim_params.svd_threshold,
                 max_bond_dim=sim_params.max_bond_dim,
             )

@@ -26,6 +26,7 @@ from .core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
+    EvolutionMode,
     Observable,
 )
 from .core.data_structures.simulation_program import SimulationProgram
@@ -42,6 +43,7 @@ __all__ = [
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
+    "EvolutionMode",
     "Hamiltonian",
     "MemoryCharacterizer",
     "NoiseCharacterizer",

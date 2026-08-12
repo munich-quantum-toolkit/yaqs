@@ -19,12 +19,21 @@ import numpy as np
 import opt_einsum as oe
 
 from .. import linalg
+from ..linalg.svd_utils import TruncMode
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 SvdDistribution = Literal["left", "right", "sqrt"]
-TruncMode = Literal["discarded_weight", "relative"]
+
+__all__ = [
+    "SvdDistribution",
+    "TruncMode",
+    "left_qr",
+    "merge_two_site",
+    "right_qr",
+    "split_two_site",
+]
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -112,7 +121,7 @@ def split_two_site(
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values: ``"left"``, ``"right"``, or ``"sqrt"``.
-        trunc_mode: ``"discarded_weight"`` or ``"relative"`` (see :func:`mqt.yaqs.core.linalg.truncate`).
+        trunc_mode: Truncation mode forwarded to :func:`mqt.yaqs.core.linalg.truncate`.
         threshold: Truncation threshold for the chosen mode.
         max_bond_dim: Optional hard cap on bond dimension passed to
             :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
@@ -145,25 +154,13 @@ def split_two_site(
     )
     u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
-    if trunc_mode == "discarded_weight":
-        keep = linalg.truncate(
-            s_vec,
-            mode="discarded_weight",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    elif trunc_mode == "relative":
-        keep = linalg.truncate(
-            s_vec,
-            mode="relative",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    else:
-        msg = f"Unknown truncation mode: {trunc_mode!r}"
-        raise ValueError(msg)
+    keep = linalg.truncate(
+        s_vec,
+        mode=trunc_mode,
+        threshold=threshold,
+        max_bond_dim=max_bond_dim,
+        min_keep=min_keep,
+    )
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]

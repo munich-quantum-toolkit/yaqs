@@ -15,7 +15,7 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
-    from ..methods.decompositions import TruncMode
 
 __all__ = ["apply_dissipation", "is_adjacent", "is_longrange", "is_pauli"]
 
@@ -164,7 +163,7 @@ def apply_dissipation(
                         merged_tensor,
                         [dim_left, dim_right],
                         svd_distribution="right",
-                        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+                        trunc_mode=sim_params.trunc_mode,
                         threshold=sim_params.svd_threshold,
                         max_bond_dim=sim_params.max_bond_dim,
                     )

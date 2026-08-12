@@ -32,6 +32,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
+    "EvolutionMode",
     "Hamiltonian",
     "MemoryCharacterizer",
     "NoiseCharacterizer",

@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import math
 import re
-from typing import TYPE_CHECKING, ClassVar, cast, overload
+from typing import TYPE_CHECKING, ClassVar, overload
 
 import numpy as np
 import opt_einsum as oe
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from ..libraries.gate_library import BaseGate
-    from ..methods.decompositions import TruncMode
     from .simulation_parameters import DigitalSimParams
 
 ComplexTensor = NDArray[np.complex128]
@@ -1546,7 +1545,7 @@ class MPO:
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
-            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+            trunc_mode=sim_params.trunc_mode,
         )
 
     def _multiply_mpo(
@@ -1609,6 +1608,26 @@ class MPO:
                 self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
             else:
                 self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+
+    def reflected(self) -> MPO:
+        """Return a site-reflected MPO with left and right virtual legs exchanged.
+
+        Sites are reversed and each tensor is permuted as
+        ``(phys_out, phys_in, left, right) -> (phys_out, phys_in, right, left)``.
+        Physical input/output legs are not exchanged. The original MPO is unchanged.
+
+        Returns:
+            A new :class:`MPO` representing the spatially reflected operator.
+        """
+        reflected_tensors = [
+            np.asarray(np.transpose(tensor, (0, 1, 3, 2)), dtype=np.complex128).copy()
+            for tensor in reversed(self.tensors)
+        ]
+        out = MPO()
+        out.tensors = reflected_tensors
+        out.length = self.length
+        out.physical_dimension = self.physical_dimension
+        return out
 
     def to_mps(self) -> MPS:
         """MPO to MPS conversion.
@@ -1734,13 +1753,13 @@ class MPO:
         return float(np.abs(trace) / hilbert_dim)
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """MPO to matrix conversion.
+        """MPO to matrix conversion (site 0 = MSB Kronecker layout).
 
-        Converts a list of tensors into a matrix using Einstein summation convention.
-        This method iterates over the list of tensors and performs tensor contractions
-        using the Einstein summation convention (`oe.constrain`). The resulting tensor is
-        then reshaped accordingly. The final matrix is squeezed to ensure the left and
-        right bonds are 1.
+        Contracts MPO tensors left-to-right with Einstein summation. The resulting
+        dense layout treats site ``0`` as the most-significant bit. For operators
+        that must act on :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`
+        (site 0 = LSB), use :meth:`to_matrix_mps_order` or
+        :meth:`to_sparse_matrix` instead.
 
         Returns:
             The resulting matrix after tensor contractions and reshaping.
@@ -1760,6 +1779,19 @@ class MPO:
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    def to_matrix_mps_order(self) -> NDArray[np.complex128]:
+        """Dense matrix in MPS ``to_vec`` order (site 0 = LSB).
+
+        Matches :meth:`to_sparse_matrix` and
+        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`. Prefer this (or the
+        sparse converter) for dense state-vector references under asymmetric
+        Hamiltonians; :meth:`to_matrix` keeps the historical site-0-MSB layout.
+
+        Returns:
+            Dense operator matrix acting on vectors from :meth:`MPS.to_vec`.
+        """
+        return np.asarray(self.to_sparse_matrix().toarray(), dtype=np.complex128)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
         """MPO to sparse matrix conversion.

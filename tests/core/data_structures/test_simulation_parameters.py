@@ -32,6 +32,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
+    EvolutionMode,
     Observable,
     _validate_tdvp_sweeps,
 )
@@ -451,11 +452,46 @@ def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
         _ = AnalogSimParams(krylov_tol=bad_tol)
 
 
-@pytest.mark.parametrize("bad_threshold", [0.0, -1.0, float("inf"), float("nan")])
+@pytest.mark.parametrize("bad_threshold", [-1.0, float("inf"), float("nan")])
 def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
-    """svd_threshold must be finite and strictly positive."""
-    with pytest.raises(ValueError, match="svd_threshold must be a finite positive float"):
+    """svd_threshold must be finite and non-negative."""
+    with pytest.raises(ValueError, match="svd_threshold must be a finite non-negative float"):
         _ = AnalogSimParams(svd_threshold=bad_threshold)
+
+
+def test_simparams_allows_zero_svd_threshold() -> None:
+    """Zero SVD threshold is allowed for exact-zero / hard-cap truncation protocols."""
+    params = AnalogSimParams(svd_threshold=0.0)
+    assert params.svd_threshold == pytest.approx(0.0)
+
+
+def test_evolution_mode_validation() -> None:
+    """AnalogSimParams accepts BUG and rejects unknown evolution modes."""
+    params = AnalogSimParams(evolution_mode=EvolutionMode.BUG)
+    assert params.evolution_mode is EvolutionMode.BUG
+    assert AnalogSimParams(evolution_mode="bug").evolution_mode is EvolutionMode.BUG
+
+    with pytest.raises(ValueError, match="evolution_mode"):
+        _ = AnalogSimParams(evolution_mode="not-a-mode")
+
+
+@pytest.mark.parametrize(
+    "trunc_mode",
+    ["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"],
+)
+def test_trunc_mode_accepted_by_analog_and_digital(trunc_mode: str) -> None:
+    """Analog and digital params accept every mode validated by _validate_trunc_mode."""
+    assert AnalogSimParams(trunc_mode=trunc_mode).trunc_mode == trunc_mode
+    assert DigitalSimParams(get_state=True, trunc_mode=trunc_mode).trunc_mode == trunc_mode
+
+
+@pytest.mark.parametrize("bad", ["nope", ["discarded_weight"], 1, None])
+def test_trunc_mode_rejects_unsupported_values(bad: object) -> None:
+    """Non-supported trunc_mode values raise ValueError for analog and digital params."""
+    with pytest.raises(ValueError, match="trunc_mode"):
+        _ = AnalogSimParams(trunc_mode=cast("Any", bad))
+    with pytest.raises(ValueError, match="trunc_mode"):
+        _ = DigitalSimParams(get_state=True, trunc_mode=cast("Any", bad))
 
 
 def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:

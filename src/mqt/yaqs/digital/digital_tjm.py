@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.simulation_parameters import DigitalSimParams, GateMode
-    from ..core.methods.decompositions import TruncMode
 
 
 @dataclass(frozen=True)
@@ -523,7 +522,7 @@ def apply_two_qubit_gate_tebd(
         merged_new,
         [d_left, d_right],
         svd_distribution="right",
-        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        trunc_mode=sim_params.trunc_mode,
         threshold=sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
         min_keep=get_min_keep(sim_params),
