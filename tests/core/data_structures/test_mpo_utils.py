@@ -80,6 +80,69 @@ def test_get_support_mpo_reextends_when_cache_length_mismatches() -> None:
     assert len(wide) == 3
 
 
+def test_get_support_mpo_rejects_wrong_homogeneous_dimension_count() -> None:
+    """All-qubit metadata must still describe every site in the gate support."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 2)
+
+    with pytest.raises(ValueError, match="Expected 3 physical dimensions"):
+        get_support_mpo(gate, first_site=0, last_site=2, physical_dimensions=[2, 2])
+
+
+def test_get_support_mpo_allows_dim3_spectator_between_two_qubit_effective_targets() -> None:
+    """Two-qubit support validates first/last sites, so mid-span spectators may be qudits."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    support = get_support_mpo(
+        gate,
+        first_site=0,
+        last_site=2,
+        physical_dimensions=[2, 3, 2],
+    )
+
+    assert len(support) == 3
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in support] == [(2, 2), (3, 3), (2, 2)]
+
+
+def test_get_support_mpo_rejects_dim3_two_qubit_effective_target() -> None:
+    """A non-qubit first_site/last_site endpoint is rejected for two-qubit gates."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    with pytest.raises(ValueError, match="Gate MPO target site 2 must have physical dimension 2"):
+        get_support_mpo(
+            gate,
+            first_site=0,
+            last_site=2,
+            physical_dimensions=[2, 2, 3],
+        )
+
+
+def test_get_support_mpo_preserves_multi_qubit_targets_with_heterogeneous_spectator() -> None:
+    """A multi-qubit support inserts heterogeneous identities without dropping target tensors."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 1, 3)
+
+    support = get_support_mpo(
+        gate,
+        first_site=0,
+        last_site=3,
+        physical_dimensions=[2, 2, 3, 2],
+    )
+
+    assert len(support) == 4
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in support] == [(2, 2), (2, 2), (3, 3), (2, 2)]
+    spectator = support[2]
+    bond = spectator.shape[3]
+    assert spectator.shape == (3, 3, bond, bond)
+    for slot in range(bond):
+        np.testing.assert_allclose(spectator[:, :, slot, slot], np.eye(3, dtype=np.complex128))
+        for other in range(bond):
+            if other != slot:
+                np.testing.assert_allclose(spectator[:, :, slot, other], np.zeros((3, 3), dtype=np.complex128))
+
+
 def test_get_support_mpo_calls_extend_gate_without_cache() -> None:
     """Gates without ``mpo_tensors`` build support tensors via ``extend_gate``."""
     gate = GateLibrary.cx()

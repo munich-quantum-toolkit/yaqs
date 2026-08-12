@@ -164,6 +164,7 @@ def get_support_mpo(
     *,
     first_site: int,
     last_site: int,
+    physical_dimensions: list[int] | tuple[int, ...] | None = None,
 ) -> list[NDArray[np.complex128]]:
     """MPO tensors for the gate support ``[first_site, last_site]`` in library order.
 
@@ -172,20 +173,46 @@ def get_support_mpo(
             two-qubit gates.
         first_site: First site of the support interval (inclusive).
         last_site: Last site of the support interval (inclusive).
+        physical_dimensions: Optional local dimensions for the support interval.
+            Effective gate targets must be qubits (``first_site``/``last_site`` for
+            two-qubit gates, otherwise ``gate.sites``); intermediate dimensions
+            determine the identity tensor at each spectator site.
 
     Returns:
         Support MPO tensors from the gate cache or :func:`~mqt.yaqs.core.libraries.gate_library.extend_gate`.
+
+    Raises:
+        ValueError: If explicit dimensions do not match the support or a gate target is not a qubit.
     """
     support_len = last_site - first_site + 1
-    try:
-        cached = gate.mpo_tensors
-    except AttributeError:
-        cached = None
-    if cached is not None and len(cached) == support_len:
-        return list(cached)
+    dimensions = tuple(physical_dimensions) if physical_dimensions is not None else None
+    if dimensions is not None and len(dimensions) != support_len:
+        msg = f"Expected {support_len} physical dimensions for gate support, got {len(dimensions)}."
+        raise ValueError(msg)
+    target_sites = (first_site, last_site) if gate.interaction == 2 else tuple(gate.sites)
+    if dimensions is not None:
+        for site in target_sites:
+            if dimensions[site - first_site] != 2:
+                msg = f"Gate MPO target site {site} must have physical dimension 2."
+                raise ValueError(msg)
+    if dimensions is None or all(dimension == 2 for dimension in dimensions):
+        try:
+            cached = gate.mpo_tensors
+        except AttributeError:
+            cached = None
+        if cached is not None and len(cached) == support_len:
+            return list(cached)
+
+    if gate.interaction == 2:
+        tensor = resolve_lr_tensor(gate)
+        site_list = [first_site, last_site]
+    else:
+        tensor = np.asarray(gate.tensor, dtype=np.complex128)
+        site_list = list(gate.sites)
     return extend_gate(
-        resolve_lr_tensor(gate),
-        [first_site, last_site],
+        tensor,
+        site_list,
+        physical_dimensions=None if dimensions is None else list(dimensions),
     )
 
 

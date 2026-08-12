@@ -159,9 +159,14 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
 
     evolved_time = n_steps * dt_f
     residual = abs(elapsed_f - evolved_time)
-    # Scale with max(elapsed, dt): residuals from long fine grids sit near ulp(elapsed),
-    # which can exceed a fixed fraction of a tiny dt alone.
-    tol = max(1e-12, 1e-9 * max(elapsed_f, dt_f))
+    # Account only for accumulated float64 roundoff and keep the tolerance well
+    # below half a step so a genuinely fractional duration cannot be relabeled.
+    roundoff_tol = max(
+        np.spacing(elapsed_f),
+        abs(n_steps) * np.spacing(dt_f),
+        8 * np.finfo(np.float64).eps * max(elapsed_f, evolved_time, dt_f),
+    )
+    tol = min(roundoff_tol, 0.25 * dt_f)
     if n_steps <= 0 or residual > tol:
         msg = (
             f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
@@ -673,7 +678,10 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
     Configures MPS circuit simulation. Outputs are selected by which fields are set:
     non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
-    counts, and ``get_state`` yields the final state. At least one of these must be set.
+    counts, and ``get_state`` yields the final state. A standalone
+    :meth:`~mqt.yaqs.Simulator.run` requires at least one of these outputs, while an
+    output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
+    state propagation is itself meaningful there.
     Observables and shots may be requested together; shots sample bitstrings from amplitudes
     and do not projectively measure the configured observables.
 
@@ -766,8 +774,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
         Raises:
-            ValueError: If no output is specified, ``sample_layers`` is set without observables,
-                or ``shots`` is not a positive integer when provided.
+            ValueError: If ``shots`` is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -783,13 +790,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
             raise ValueError(msg)
         self.shots = shots
 
-        if sample_layers and not obs_list:
-            msg = "sample_layers requires a non-empty observables list."
-            raise ValueError(msg)
-        if not obs_list and shots is None and not get_state:
-            msg = "No output specified: set observables, shots, and/or get_state."
-            raise ValueError(msg)
-
+        # ``sample_layers`` may be set without observables here so a
+        # :class:`~mqt.yaqs.SimulationProgram` can inject program-wide observables later.
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = _validate_trunc_mode(trunc_mode)

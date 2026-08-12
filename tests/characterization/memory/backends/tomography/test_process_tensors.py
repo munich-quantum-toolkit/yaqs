@@ -271,7 +271,10 @@ def test_encode_cptp_choi_identity() -> None:
 
 def test_trace_partial_dense_and_entropy_edge_cases() -> None:
     """Partial trace and entropy helpers cover validation and degenerate inputs."""
-    rho = np.kron(np.eye(2, dtype=np.complex128), np.eye(2, dtype=np.complex128)) * 0.25
+    rho = np.asarray(
+        np.kron(np.eye(2, dtype=np.complex128), np.eye(2, dtype=np.complex128)) * 0.25,
+        dtype=np.complex128,
+    )
     reduced = trace_partial_dense(rho, dims=[2, 2], keep=[0])
     assert reduced.shape == (2, 2)
 
