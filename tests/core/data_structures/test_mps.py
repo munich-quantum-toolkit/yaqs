@@ -1293,6 +1293,46 @@ def test_compress_single_site_returns_immediately() -> None:
         np.testing.assert_allclose(before_tensor, after_tensor)
 
 
+def test_compress_forwards_min_keep_to_every_bond() -> None:
+    """``compress`` honors its retained-rank floor on all feasible bonds."""
+    mps = MPS(3, state="x+")
+    mps.pad_bond_dimension(2)
+    mps.compress(
+        threshold=1.0,
+        max_bond_dim=2,
+        trunc_mode="relative_discarded_weight",
+        min_keep=2,
+    )
+    assert [tensor.shape[2] for tensor in mps.tensors[:-1]] == [2, 2]
+
+
+def test_compress_known_gauge_can_leave_center_at_sweep_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compression can reuse a known canonical gauge and retain its exit center."""
+    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+
+    def reject_recanonicalization(*_args: object, **_kwargs: object) -> None:
+        msg = "known canonical gauge should be reused"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mps, "set_canonical_form", reject_recanonicalization)
+    mps.compress(
+        threshold=1e-12,
+        max_bond_dim=4,
+        canonicalize=False,
+        restore_center=False,
+    )
+    assert mps.orthogonality_center == mps.length - 1
+    assert mps.check_canonical_form() == [mps.length - 1]
+
+
+def test_compress_without_canonicalization_requires_center_zero() -> None:
+    """The fast compression path rejects an incompatible entry center."""
+    mps = random_mps([(2, 1, 2), (2, 2, 1)])
+    mps.shift_orthogonality_center_right(0)
+    with pytest.raises(ValueError, match=r"compress\(canonicalize=False\)"):
+        mps.compress(1e-12, canonicalize=False, restore_center=False)
+
+
 def _bell_pair_mps() -> MPS:
     """Auxiliary function to create a Bell-pair MPS.
 

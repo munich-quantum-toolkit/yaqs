@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import opt_einsum as oe
 
 from .. import linalg
 from ..linalg.svd_utils import TruncMode
@@ -97,9 +96,11 @@ def merge_two_site(left_tensor: NDArray[np.complex128], right_tensor: NDArray[np
     Returns:
         Merged tensor of shape ``(d_left * d_right, D0, D2)``.
     """
-    merged_tensor = np.asarray(oe.contract("abc,dce->adbe", left_tensor, right_tensor), dtype=np.complex128)
-    merged_shape = merged_tensor.shape
-    return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
+    # The contraction has only one possible pairwise path.  ``tensordot`` avoids
+    # asking opt_einsum to rediscover that path for every bond update.
+    merged_tensor = np.tensordot(left_tensor, right_tensor, axes=(2, 1)).transpose(0, 2, 1, 3)
+    phys_left, phys_right, left, right = merged_tensor.shape
+    return np.asarray(merged_tensor.reshape(phys_left * phys_right, left, right), dtype=np.complex128)
 
 
 def split_two_site(

@@ -9,19 +9,20 @@
 
 Refer to Ceruti et al. (2023) doi:10.1137/22M1473790 for details of the method
 for TTN. Select BUG with ``EvolutionMode.BUG``. Each physical step uses
-center-augmented alternating endpoints, one SVD compression after the full
-``dt`` composition, and renormalization after compression.
+center-augmented alternating endpoints and applies SVD compression after each
+half-sweep, with optional renormalization after both compressions.
 """
 
 from __future__ import annotations
 
 from copy import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
 from .decompositions import left_qr, right_qr
 from .tdvp.primitives import update_left_environment, update_right_environment, update_site
+from .tdvp.sweep_utils import get_min_keep
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -29,6 +30,41 @@ if TYPE_CHECKING:
     from ..data_structures.mpo import MPO
     from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
+
+
+class BUGCheckpoint(Protocol):
+    """Callback used to inspect the four stages of an alternating BUG step."""
+
+    def __call__(self, name: str, state: MPS, *, reflected: bool) -> None:
+        """Observe ``state`` without mutating it."""
+
+
+def _move_center_to_zero(state: MPS) -> None:
+    """Recover the public center-at-exit contract after an interrupted BUG step."""
+    center = state.orthogonality_center
+    if center is None:
+        state.set_canonical_form(0, decomposition="QR")
+        return
+    while center > 0:
+        state.shift_orthogonality_center_left(center, decomposition="QR")
+        center -= 1
+    state.set_center(0)
+
+
+def _normalize_center_tensor(state: MPS) -> None:
+    """Normalize a canonical MPS by scaling only its orthogonality center.
+
+    Raises:
+        ValueError: If the state has no tracked orthogonality center.
+    """
+    center = state.orthogonality_center
+    if center is None:
+        msg = "BUG normalization requires a known orthogonality center."
+        raise ValueError(msg)
+    center_tensor = state.tensors[center]
+    norm = float(np.linalg.norm(center_tensor))
+    if norm > 1e-13:
+        state.tensors[center] = center_tensor / norm
 
 
 def prepare_canonical_site_tensors(
@@ -191,23 +227,29 @@ def _postprocess_bug_state(
     *,
     normalize: bool = True,
 ) -> None:
-    """Apply SVD compression and optional renormalization after a full BUG step.
+    """Apply SVD compression and optional renormalization after one BUG half-sweep.
 
     Args:
         state: MPS to compress (and optionally normalize) in place.
         sim_params: Simulation parameters supplying ``svd_threshold``,
             ``max_bond_dim``, and ``trunc_mode`` for compression.
-        normalize: If ``True`` (default), call ``state.normalize()`` after
-            compression. If ``False``, leave the post-compression norm unchanged
-            (used for auxiliary correlator states).
+        normalize: If ``True`` (default), rescale the canonical center tensor
+            after compression. If ``False``, leave the post-compression norm
+            unchanged (used for auxiliary correlator states).
     """
+    # ``bug_sweep`` already leaves a right-canonical MPS rooted at site 0.
+    # Compress directly from that gauge and retain the opposite endpoint as the
+    # center. Reflection then turns it into site 0 for the next half-sweep.
     state.compress(
         sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
         trunc_mode=sim_params.trunc_mode,
+        min_keep=get_min_keep(sim_params),
+        canonicalize=False,
+        restore_center=False,
     )
     if normalize:
-        state.normalize()
+        _normalize_center_tensor(state)
 
 
 def bug(
@@ -216,11 +258,13 @@ def bug(
     sim_params: AnalogSimParams | DigitalSimParams,
     *,
     normalize: bool = True,
+    checkpoint: BUGCheckpoint | None = None,
 ) -> None:
     """Perform one BUG physical step according to ``sim_params``.
 
-    Uses center-augmented alternating endpoints (two half-sweeps of ``dt / 2``),
-    then one SVD compression and optional renormalization.
+    Uses center-augmented alternating endpoints (two half-sweeps of ``dt / 2``).
+    Each half-sweep is followed by SVD compression and optional renormalization,
+    so the reflected half-sweep runs on the retained rank profile.
 
     Args:
         state: The MPS to evolve in place.
@@ -229,6 +273,9 @@ def bug(
         normalize: If ``True`` (default), renormalize after compression. Pass
             ``False`` for auxiliary correlator states so non-unitary probe
             amplitudes are preserved.
+        checkpoint: Optional diagnostic callback invoked after each half-sweep
+            and its compression. The callback receives a stage name and whether
+            the network is currently reflected.
 
     Raises:
         ValueError: If lengths differ or the gauge contract fails.
@@ -240,18 +287,25 @@ def bug(
     half_dt = sim_params.dt / 2.0
     state.assert_center(0, context="bug")
     bug_sweep(state, mpo, dt=half_dt, krylov_tol=sim_params.krylov_tol)
+    if checkpoint is not None:
+        checkpoint("first_half_sweep", state, reflected=False)
+    _postprocess_bug_state(state, sim_params, normalize=normalize)
+    if checkpoint is not None:
+        checkpoint("first_compression", state, reflected=False)
 
     flipped = False
     try:
         state.flip_network()
         flipped = True
-        state.set_canonical_form(0, decomposition="QR")
-        state.set_center(0)
+        state.assert_center(0, context="bug reflected half-sweep entry")
         bug_sweep(state, mpo.reflected(), dt=half_dt, krylov_tol=sim_params.krylov_tol)
+        if checkpoint is not None:
+            checkpoint("second_half_sweep", state, reflected=True)
+        _postprocess_bug_state(state, sim_params, normalize=normalize)
+        if checkpoint is not None:
+            checkpoint("second_compression", state, reflected=True)
     finally:
         if flipped:
             state.flip_network()
-            state.set_canonical_form(0, decomposition="QR")
-            state.set_center(0)
-
-    _postprocess_bug_state(state, sim_params, normalize=normalize)
+            if state.orthogonality_center != 0:
+                _move_center_to_zero(state)

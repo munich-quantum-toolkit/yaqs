@@ -24,7 +24,9 @@ releases may include breaking changes.
 
 ### Changed
 
-- updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
+- updated BUG to use alternating endpoint roots, compress with the TDVP rank
+  floor after each half-sweep, reuse its canonical gauge, and carry the
+  compression endpoint through reflection ([#539]) ([**@aaronleesander**])
 - tested and documented the multi-qubit local noise rule ([#529])
   ([**@Pouri96**])
 - hardened stability of noise model, timestep selection, and RNG ([#527])

@@ -29,6 +29,24 @@ if TYPE_CHECKING:
 # Removed eager Numba import - now using lazy import inside expm_krylov
 NUMBA_THRESHOLD = 4096  # Optimal based on benchmarks
 
+_KRYLOV_STATS = {"enabled": False, "calls": 0, "operator_applications": 0}
+
+
+def enable_krylov_stats(*, enabled: bool = True) -> None:
+    """Enable or disable lightweight Krylov work counters."""
+    _KRYLOV_STATS["enabled"] = enabled
+
+
+def reset_krylov_stats() -> None:
+    """Reset Krylov call and operator-application counters."""
+    _KRYLOV_STATS["calls"] = 0
+    _KRYLOV_STATS["operator_applications"] = 0
+
+
+def get_krylov_stats() -> dict[str, int]:
+    """Return the accumulated Krylov call and operator-application counts."""
+    return {"calls": _KRYLOV_STATS["calls"], "operator_applications": _KRYLOV_STATS["operator_applications"]}
+
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
@@ -64,6 +82,19 @@ def expm_krylov(
         NDArray[np.complex128]:
             The approximate result of applying exp(-1j * dt * A) to vec.
     """
+    if _KRYLOV_STATS["enabled"]:
+        _KRYLOV_STATS["calls"] += 1
+
+    def counted_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        """Apply the local operator and count the application when requested.
+
+        Returns:
+            Image of ``x`` under ``matrix_free_operator``.
+        """
+        if _KRYLOV_STATS["enabled"]:
+            _KRYLOV_STATS["operator_applications"] += 1
+        return matrix_free_operator(x)
+
     vec_norm = np.linalg.norm(vec)
     if vec_norm == 0:
         return vec
@@ -99,7 +130,7 @@ def expm_krylov(
     cached_k = None
     for j in range(m_max):
         vj = v[:, j]
-        w = matrix_free_operator(vj)
+        w = counted_operator(vj)
 
         if use_numba:
             # Use JIT-compiled kernel for orthogonalization

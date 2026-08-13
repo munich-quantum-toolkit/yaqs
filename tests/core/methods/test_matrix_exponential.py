@@ -100,6 +100,19 @@ def test_expm_krylov_zero_norm() -> None:
     mock_op.assert_not_called()
 
 
+def test_expm_krylov_stats_count_calls_and_operator_applications() -> None:
+    """Optional Krylov counters report calls and effective-operator work."""
+    matrix_exponential.reset_krylov_stats()
+    matrix_exponential.enable_krylov_stats()
+    try:
+        expm_krylov(lambda x: x, np.ones(3, dtype=np.complex128), 0.1)
+        stats = matrix_exponential.get_krylov_stats()
+    finally:
+        matrix_exponential.enable_krylov_stats(enabled=False)
+    assert stats["calls"] == 1
+    assert stats["operator_applications"] >= 1
+
+
 def test_expm_krylov_numba_execution() -> None:
     """Test execution path when Numba is enabled (large vector)."""
     # Verify Numba module is available
