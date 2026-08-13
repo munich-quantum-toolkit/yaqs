@@ -33,6 +33,7 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.data_structures.simulation_program import (
     _compile_program,  # ruff: ignore[import-private-name]  # validate private compiler invariant
 )
@@ -50,6 +51,33 @@ if TYPE_CHECKING:
 def _zero_hamiltonian(length: int) -> Hamiltonian:
     """Return a static zero Ising Hamiltonian."""
     return Hamiltonian.ising(length, J=0.0, g=0.0)
+
+
+def test_bug_program_distinguishes_rounding_dust_from_a_final_remainder() -> None:
+    """Program compilation shares the canonical final-remainder classification."""
+    fixed_grid = SimulationProgram(
+        [
+            (
+                _zero_hamiltonian(1),
+                AnalogSimParams(elapsed_time=0.3, dt=0.1, evolution_mode=EvolutionMode.BUG),
+            )
+        ],
+        get_state=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(State(1), fixed_grid)
+    assert result.output_state is not None
+
+    remainder = SimulationProgram(
+        [
+            (
+                _zero_hamiltonian(1),
+                AnalogSimParams(elapsed_time=0.25, dt=0.1, evolution_mode=EvolutionMode.BUG),
+            )
+        ],
+        get_state=True,
+    )
+    with pytest.raises(ValueError, match="BUG evolution does not support a final remainder interval"):
+        Simulator(parallel=False, show_progress=False).run(State(1), remainder)
 
 
 def test_mixed_program_matches_manual_state_handoff() -> None:

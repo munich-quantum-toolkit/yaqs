@@ -47,7 +47,7 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, initialize, step_through
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -123,9 +123,43 @@ def test_step_through() -> None:
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
         step_through(state, H, noise_model, sim_params, current_time=0.2)
-        mock_unitary.assert_called_once_with(state, H, sim_params)
+        mock_unitary.assert_called_once_with(state, H, sim_params, step_duration=sim_params.dt)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
+
+
+def test_order_two_unequal_interval_noise_bridge_uses_mean_duration() -> None:
+    """Order-2 TJM centers dissipation between unequal adjacent intervals."""
+    state = MPS(1)
+    hamiltonian = MPO.ising(1, J=0.0, g=0.0)
+    noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
+    sim_params = AnalogSimParams(
+        elapsed_time=0.25,
+        dt=0.1,
+        order=2,
+        sample_timesteps=False,
+        get_state=True,
+    )
+
+    def preserve_state(
+        current_state: MPS,
+        _noise_model: NoiseModel | None,
+        _duration: float,
+        _sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        _ = rng
+        return current_state
+
+    with (
+        patch("mqt.yaqs.analog.analog_tjm._evolve_interval"),
+        patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
+        patch("mqt.yaqs.analog.analog_tjm.stochastic_process", side_effect=preserve_state),
+    ):
+        analog_tjm_2((0, state, noise_model, sim_params, hamiltonian))
+
+    durations = [float(call.args[2]) for call in mock_dissipation.call_args_list]
+    np.testing.assert_allclose(durations, [0.05, 0.1, 0.075, 0.025], rtol=0.0, atol=1e-15)
 
 
 @pytest.mark.parametrize("order", [1, 2])

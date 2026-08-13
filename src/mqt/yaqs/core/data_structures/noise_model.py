@@ -764,7 +764,8 @@ def validate_noise_model_for_run(
         raise ValueError(msg)
 
     times = np.asarray(sim_params.times, dtype=float)
-    atol = sim_params.dt * 1e-3
+    durations = np.diff(times)
+    atol = (float(np.min(durations)) if durations.size else sim_params.dt) * 1e-3
     for jump in noise_model.scheduled_jumps:
         _check_operator_dims(jump, "Scheduled jump")
         jump_time = float(jump["time"])

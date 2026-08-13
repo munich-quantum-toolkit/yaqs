@@ -111,7 +111,9 @@ from .core.data_structures.result import (
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
+    EvolutionMode,
     Observable,
+    _has_final_remainder,
     _prepare_observable_ordering,
 )
 from .core.data_structures.simulation_program import (
@@ -310,6 +312,8 @@ def _order2_chain_continues(
         and len(next_params.times) > 1
         and current_params.dt == next_params.dt
         and current_params.sample_timesteps == next_params.sample_timesteps
+        and not _has_final_remainder(current_params)
+        and not _has_final_remainder(next_params)
         and _same_order2_operator(current, nxt)
     )
 
@@ -1248,6 +1252,9 @@ class Simulator:
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
+            if _has_final_remainder(sim_params):
+                msg = "Unitary ensemble evolution does not support a final remainder interval."
+                raise ValueError(msg)
             if any(spec.representation != "mps" for spec in initial_state_list):
                 msg = "list[State] analog ensemble currently supports only State.representation='mps'."
                 raise ValueError(msg)
@@ -1277,6 +1284,14 @@ class Simulator:
         mps = _materialized_mps(initial_state)
         state_rep = initial_state.representation
         _validate_state_hamiltonian_pairing(initial_state, operator)
+        if _has_final_remainder(sim_params) and (
+            state_rep in {"vector", "density_matrix"} or sim_params.evolution_mode == EvolutionMode.BUG
+        ):
+            msg = (
+                "This analog backend does not support a final remainder interval; "
+                "use an MPS state with TDVP or choose elapsed_time divisible by dt."
+            )
+            raise ValueError(msg)
         if noise_model is not None:
             validate_noise_model_for_run(
                 noise_model,

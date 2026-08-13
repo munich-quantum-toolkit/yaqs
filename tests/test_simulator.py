@@ -1841,6 +1841,29 @@ def test_scheduled_jump_at_t0_final_only_elapsed_zero() -> None:
     assert z == pytest.approx(final_z)
 
 
+def test_scheduled_jump_matches_exact_remainder_boundary() -> None:
+    """A jump at the exact elapsed time is applied after a short final interval."""
+    hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.25, "sites": [0], "name": "x"}])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        dt=0.1,
+        elapsed_time=0.25,
+        order=1,
+        get_state=True,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        hamiltonian,
+        sim_params,
+        noise,
+    )
+
+    assert float(result.expectation_values[0][-1]) == pytest.approx(-1.0, abs=1e-10)
+    assert result.output_state is not None
+
+
 @pytest.mark.parametrize(
     ("elapsed_time", "sample_timesteps"),
     [

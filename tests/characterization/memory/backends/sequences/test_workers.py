@@ -73,8 +73,9 @@ def test_get_times_cached_zero_and_distinct_durations() -> None:
     assert short[-1] == pytest.approx(0.1)
     assert long[-1] == pytest.approx(0.2)
     assert len(cache) == 3
-    with pytest.raises(ValueError, match="integer multiple"):
-        _get_times_cached(cache, dt=0.1, duration=0.15)
+    remainder = _get_times_cached(cache, dt=0.1, duration=0.15)
+    np.testing.assert_allclose(remainder, np.array([0.0, 0.1, 0.15]))
+    assert len(cache) == 4
 
 
 def test_reshape_choi_feature_rows_rejects_malformed_inputs() -> None:

@@ -75,9 +75,15 @@ sim_params = AnalogSimParams(
 )
 ```
 
+`dt` is the nominal maximum interval. If `elapsed_time` is not divisible by
+`dt`, `AnalogSimParams.times` ends with one shorter interval so the simulation
+reaches the requested final time exactly. This remainder behavior is supported
+by single-state MPS TDVP; BUG, MCWF, Lindblad, and deterministic MPS ensembles
+currently require a divisible duration.
+
 Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per
-physical step `dt`, improving unitary accuracy without changing the noise
-timestep.
+physical interval, improving unitary accuracy without changing the noise
+interval.
 
 **Evolution integrator:** analog simulations default to `EvolutionMode.TDVP`
 (two-site TDVP sweeps). Switch to BUG with:

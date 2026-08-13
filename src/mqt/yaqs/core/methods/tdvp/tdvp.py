@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
+from ...data_structures.simulation_parameters import DigitalSimParams
 from . import integrators
 
 if TYPE_CHECKING:
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
 
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
-    from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
+    from ...data_structures.simulation_parameters import AnalogSimParams
 
 
 def _run_sweeps(
@@ -28,6 +30,7 @@ def _run_sweeps(
     sim_params: AnalogSimParams | DigitalSimParams,
     /,
     *args: object,
+    step_duration: float | None = None,
     **kwargs: object,
 ) -> None:
     """Run ``sim_params.tdvp_sweeps`` TDVP substeps per evolution step.
@@ -45,6 +48,8 @@ def _run_sweeps(
         operator: Generator MPO.
         sim_params: Supplies ``tdvp_sweeps`` and evolution settings.
         *args: Extra positional arguments forwarded to ``evolve_once``.
+        step_duration: Optional explicit analog evolution duration. When
+            omitted, use ``sim_params.dt``. Digital evolution does not accept it.
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
     Raises:
@@ -54,7 +59,17 @@ def _run_sweeps(
     if sim_params.tdvp_sweeps < 1:
         msg = f"tdvp_sweeps must be >= 1, got {sim_params.tdvp_sweeps}."
         raise ValueError(msg)
-    step_scale = 1.0 / sim_params.tdvp_sweeps
+    if step_duration is None:
+        step_scale = 1.0 / sim_params.tdvp_sweeps
+    else:
+        if isinstance(sim_params, DigitalSimParams):
+            msg = "step_duration is only supported for analog TDVP evolution."
+            raise ValueError(msg)
+        duration = float(step_duration)
+        if not math.isfinite(duration) or duration <= 0.0:
+            msg = f"step_duration must be finite and positive, got {duration}."
+            raise ValueError(msg)
+        step_scale = duration / float(sim_params.dt) / sim_params.tdvp_sweeps
     sweep_plan = [step_scale] * sim_params.tdvp_sweeps
     evolve_once(
         state,
@@ -70,6 +85,8 @@ def tdvp(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    step_duration: float | None = None,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -81,6 +98,7 @@ def tdvp(
         operator: MPO defining the local generator at each site.
         sim_params: Simulation parameters including ``dt`` or gate time,
             ``tdvp_sweeps``, ``tdvp_mode``, truncation, and Krylov settings.
+        step_duration: Optional explicit analog duration for this call.
 
     Raises:
         ValueError: If ``state`` and ``operator`` lengths mismatch or if
@@ -101,11 +119,29 @@ def tdvp(
         raise ValueError(msg)
 
     if tdvp_mode == "1site":
-        _run_sweeps(integrators.sweep_1site, state, operator, sim_params)
+        _run_sweeps(
+            integrators.sweep_1site,
+            state,
+            operator,
+            sim_params,
+            step_duration=step_duration,
+        )
     elif tdvp_mode == "2site":
-        _run_sweeps(integrators.sweep_2site, state, operator, sim_params)
+        _run_sweeps(
+            integrators.sweep_2site,
+            state,
+            operator,
+            sim_params,
+            step_duration=step_duration,
+        )
     elif tdvp_mode == "dynamic":
-        _run_sweeps(integrators.sweep_dynamic, state, operator, sim_params)
+        _run_sweeps(
+            integrators.sweep_dynamic,
+            state,
+            operator,
+            sim_params,
+            step_duration=step_duration,
+        )
     else:
         msg = f'tdvp_mode must be one of ("1site", "2site", "dynamic"), got {tdvp_mode!r}.'
         raise ValueError(msg)

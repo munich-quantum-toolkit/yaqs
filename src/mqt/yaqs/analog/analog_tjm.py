@@ -36,8 +36,29 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
+def _interval_duration(sim_params: AnalogSimParams, interval_index: int) -> float:
+    """Return the exact duration of one physical interval."""
+    return float(sim_params.times[interval_index + 1] - sim_params.times[interval_index])
+
+
+def _evolve_interval(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams,
+    interval_index: int,
+) -> None:
+    """Apply one static unitary interval in place."""
+    duration = _interval_duration(sim_params, interval_index)
+    apply_unitary_evolution(state, hamiltonian, sim_params, step_duration=duration)
+
+
 def initialize(
-    state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSimParams, rng: np.random.Generator | None = None
+    state: MPS,
+    noise_model: NoiseModel | None,
+    sim_params: AnalogSimParams,
+    rng: np.random.Generator | None = None,
+    *,
+    step_duration: float | None = None,
 ) -> MPS:
     """Initialize the sampling MPS for second-order Trotterization.
 
@@ -49,16 +70,18 @@ def initialize(
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (AnalogSimParams): Simulation parameters including the time step (dt).
         rng: The random number generator to use.
+        step_duration: Exact duration represented by this half-step initialization.
 
     Returns:
         MPS: The initialized sampling MPS Phi(0).
     """
-    apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
+    duration = sim_params.dt if step_duration is None else step_duration
+    apply_dissipation(state, noise_model, duration / 2, sim_params)
     # Check for scheduled jumps at start time
     current_time = sim_params.times[0]
-    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
-        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
-    return stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
+    if has_scheduled_jump(noise_model, current_time, duration):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params, dt=duration)
+    return stochastic_process(state, noise_model, duration, sim_params, rng=rng)
 
 
 def step_through(
@@ -68,6 +91,9 @@ def step_through(
     sim_params: AnalogSimParams,
     current_time: float,
     rng: np.random.Generator | None = None,
+    *,
+    interval_index: int = 0,
+    next_interval_index: int | None = None,
 ) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
@@ -81,16 +107,22 @@ def step_through(
         sim_params (AnalogSimParams): Simulation parameters including the time step and measurement settings.
         current_time (float): The current simulation time.
         rng: The random number generator to use.
+        interval_index: Interval evolved before applying noise.
+        next_interval_index: Optional following interval used to center the
+            order-2 noise bridge across unequal durations.
 
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    apply_unitary_evolution(state, hamiltonian, sim_params)
-    apply_dissipation(state, noise_model, sim_params.dt, sim_params)
+    _evolve_interval(state, hamiltonian, sim_params, interval_index)
+    duration = _interval_duration(sim_params, interval_index)
+    if next_interval_index is not None:
+        duration = 0.5 * (duration + _interval_duration(sim_params, next_interval_index))
+    apply_dissipation(state, noise_model, duration, sim_params)
 
-    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
-        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
-    return stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
+    if has_scheduled_jump(noise_model, current_time, duration):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params, dt=duration)
+    return stochastic_process(state, noise_model, duration, sim_params, rng=rng)
 
 
 def sample(
@@ -102,6 +134,8 @@ def sample(
     j: int,
     rng: np.random.Generator | None = None,
     diagnostics: NDArray[np.float64] | None = None,
+    *,
+    interval_index: int | None = None,
 ) -> MPS | None:
     """Sample the quantum state and record observable measurements from the sampling MPS.
 
@@ -120,19 +154,22 @@ def sample(
             trajectory RNG used for ``initialize`` / ``step_through`` so intermediate
             sampling does not alter subsequent evolution.
         diagnostics: Optional ``(3, T)`` buffer for runtime cost, max bond, and total bond.
+        interval_index: Exact interval evolved on the measurement copy.
 
     Returns:
         The evolved MPS when this is the final time step and ``get_state=True``, else ``None``.
     """
     psi = copy.deepcopy(phi)
-    apply_unitary_evolution(psi, hamiltonian, sim_params)
-    apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
+    resolved_interval_index = max(j - 1, 0) if interval_index is None else interval_index
+    _evolve_interval(psi, hamiltonian, sim_params, resolved_interval_index)
+    duration = _interval_duration(sim_params, resolved_interval_index)
+    apply_dissipation(psi, noise_model, duration / 2, sim_params)
 
     current_time = sim_params.times[j]
-    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
-        psi = apply_scheduled_jumps(psi, noise_model, current_time, sim_params)
+    if has_scheduled_jump(noise_model, current_time, duration):
+        psi = apply_scheduled_jumps(psi, noise_model, current_time, sim_params, dt=duration)
     else:
-        psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params, rng=rng)
+        psi = stochastic_process(psi, noise_model, duration, sim_params, rng=rng)
     col = j if sim_params.sample_timesteps else 0
     if diagnostics is not None:
         psi.record_diagnostics(diagnostics, col)
@@ -267,7 +304,11 @@ def analog_tjm_2(
             state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results, 0)
 
-        phi = initialize(state, noise_model, sim_params, rng=rng)
+        first_duration = _interval_duration(sim_params, 0)
+        if np.isclose(first_duration, sim_params.dt, rtol=0.0, atol=np.spacing(sim_params.dt) * 8):
+            phi = initialize(state, noise_model, sim_params, rng=rng)
+        else:
+            phi = initialize(state, noise_model, sim_params, rng=rng, step_duration=first_duration)
 
         # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).
         # Per-timestep sample RNGs so intermediate draws cannot change the final measurement.
@@ -281,12 +322,22 @@ def analog_tjm_2(
                 j=1,
                 rng=measurement_rng(1),
                 diagnostics=diagnostics,
+                interval_index=0,
             )
             if sampled_state is not None:
                 final_state = sampled_state
 
         for j, _ in enumerate(sim_params.times[2:], start=2):
-            phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
+            phi = step_through(
+                phi,
+                hamiltonian,
+                noise_model,
+                sim_params,
+                sim_params.times[j],
+                rng=rng,
+                interval_index=j - 2,
+                next_interval_index=j - 1,
+            )
             if sim_params.sample_timesteps or j == n_times - 1:
                 sampled_state = sample(
                     phi,
@@ -297,6 +348,7 @@ def analog_tjm_2(
                     j,
                     rng=measurement_rng(j),
                     diagnostics=diagnostics,
+                    interval_index=j - 1,
                 )
                 if sampled_state is not None:
                     final_state = sampled_state
@@ -349,22 +401,31 @@ def analog_tjm_1(
 
     # Apply scheduled jumps at t=times[0] before the initial sample so observables
     # and get_state agree (later timesteps also sample after the jump event).
-    if noise_model is not None and has_scheduled_jump(noise_model, sim_params.times[0], sim_params.dt):
-        state = apply_scheduled_jumps(state, noise_model, sim_params.times[0], sim_params)
+    initial_match_duration = _interval_duration(sim_params, 0) if len(sim_params.times) > 1 else sim_params.dt
+    if noise_model is not None and has_scheduled_jump(noise_model, sim_params.times[0], initial_match_duration):
+        state = apply_scheduled_jumps(
+            state,
+            noise_model,
+            sim_params.times[0],
+            sim_params,
+            dt=initial_match_duration,
+        )
 
     if sim_params.sample_timesteps:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        apply_unitary_evolution(state, hamiltonian, sim_params)
+        interval_index = j - 1
+        duration = _interval_duration(sim_params, interval_index)
+        _evolve_interval(state, hamiltonian, sim_params, interval_index)
         if noise_model is not None:
-            apply_dissipation(state, noise_model, sim_params.dt, sim_params)
+            apply_dissipation(state, noise_model, duration, sim_params)
             current_time = sim_params.times[j]
-            if has_scheduled_jump(noise_model, current_time, sim_params.dt):
-                state = apply_scheduled_jumps(state, noise_model, current_time, sim_params)
+            if has_scheduled_jump(noise_model, current_time, duration):
+                state = apply_scheduled_jumps(state, noise_model, current_time, sim_params, dt=duration)
             else:
-                state = stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
+                state = stochastic_process(state, noise_model, duration, sim_params, rng=rng)
 
         if sim_params.sample_timesteps:
             state.record_diagnostics(diagnostics, j)

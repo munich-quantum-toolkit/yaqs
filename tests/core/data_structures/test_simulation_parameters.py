@@ -34,6 +34,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     DigitalSimParams,
     EvolutionMode,
     Observable,
+    _has_final_remainder,
     _validate_tdvp_sweeps,
 )
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X
@@ -191,22 +192,37 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
     params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
 
     assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
+    assert not _has_final_remainder(params)
+
+
+def test_analog_simparams_detects_a_genuine_final_remainder() -> None:
+    """Shared remainder detection distinguishes a short final interval from rounding dust."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.25, dt=0.1)
+
+    assert _has_final_remainder(params)
 
 
 @pytest.mark.parametrize(
-    ("elapsed_time", "dt"),
+    ("elapsed_time", "dt", "expected"),
     [
-        (0.15, 0.1),
-        (0.25, 0.1),
-        (5e-13, 1e-12),
-        (1.5e-12, 1e-12),
-        (1.0, 1e9),
+        (0.15, 0.1, [0.0, 0.1, 0.15]),
+        (0.25, 0.1, [0.0, 0.1, 0.2, 0.25]),
+        (5e-13, 1e-12, [0.0, 5e-13]),
+        (1.5e-12, 1e-12, [0.0, 1e-12, 1.5e-12]),
+        (1.0, 1e9, [0.0, 1.0]),
     ],
 )
-def test_analog_simparams_rejects_nonintegral_duration(elapsed_time: float, dt: float) -> None:
-    """Non-integral ``elapsed_time/dt`` must raise rather than mislabel the final time."""
-    with pytest.raises(ValueError, match="integer multiple"):
-        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+def test_analog_simparams_uses_final_remainder(
+    elapsed_time: float,
+    dt: float,
+    expected: list[float],
+) -> None:
+    """Non-integral durations end exactly after one shorter final interval."""
+    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+    np.testing.assert_allclose(params.times, expected, rtol=0.0, atol=np.spacing(elapsed_time))
+    assert params.times[-1] == elapsed_time
+    assert np.all(np.diff(params.times) > 0.0)
+    assert np.all(np.diff(params.times) <= dt)
 
 
 @pytest.mark.parametrize(

@@ -22,7 +22,7 @@ from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode, Observable, _has_final_remainder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -478,6 +478,9 @@ def _compile_analog_segment(
         raise ValueError(msg)
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
+        raise ValueError(msg)
+    if _has_final_remainder(sim_params) and sim_params.evolution_mode == EvolutionMode.BUG:
+        msg = f"segments[{index}] BUG evolution does not support a final remainder interval."
         raise ValueError(msg)
     execution_params = _apply_program_settings(
         sim_params,
