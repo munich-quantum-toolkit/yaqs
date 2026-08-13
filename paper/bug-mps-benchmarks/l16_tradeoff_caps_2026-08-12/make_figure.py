@@ -8,7 +8,6 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_rgb
 from matplotlib.lines import Line2D
 from matplotlib.ticker import NullFormatter
 
@@ -23,18 +22,12 @@ DT_STYLES = {
     0.005: {"marker": "s", "label": r"$h=0.005$"},
     0.0025: {"marker": "^", "label": r"$h=0.0025$"},
 }
-EPSILON_STRENGTHS = {
-    1e-8: 0.32,
-    1e-10: 0.52,
-    1e-12: 0.74,
-    1e-14: 1.0,
+EPSILON_SIZES = {
+    1e-8: 18,
+    1e-10: 31,
+    1e-12: 48,
+    1e-14: 69,
 }
-
-
-def tint(color: str, strength: float) -> tuple[float, float, float]:
-    """Mix a method color with white; darker shades mean tighter tolerances."""
-    red, green, blue = to_rgb(color)
-    return tuple(1 - strength * (1 - channel) for channel in (red, green, blue))
 
 
 def load_rows() -> list[dict[str, object]]:
@@ -93,34 +86,26 @@ def main() -> None:
                 [row for row in candidates if row["is_pareto"]],
                 key=lambda row: row["runtime"],
             )
-            runtimes = [row["runtime"] for row in pareto]
-            axis.errorbar(
-                runtimes,
+            axis.plot(
+                [row["runtime"] for row in pareto],
                 [row["infidelity"] for row in pareto],
-                xerr=[
-                    [row["runtime"] - row["runtime_minimum"] for row in pareto],
-                    [row["runtime_maximum"] - row["runtime"] for row in pareto],
-                ],
                 color=style["color"],
                 linestyle=style["linestyle"],
-                marker="none",
-                capsize=1.8,
-                elinewidth=0.7,
                 zorder=2,
             )
             for row in candidates:
                 pareto_point = bool(row["is_pareto"])
                 marker = DT_STYLES[float(row["dt"])]["marker"]
-                strength = EPSILON_STRENGTHS[float(row["epsilon"])]
+                size = EPSILON_SIZES[float(row["epsilon"])]
                 axis.scatter(
                     [row["runtime"]],
                     [row["infidelity"]],
                     marker=marker,
-                    s=29 if pareto_point else 24,
-                    facecolors=[tint(style["color"], strength)],
+                    s=size,
+                    facecolors=style["color"] if pareto_point else "none",
                     edgecolors=style["color"],
-                    alpha=1.0 if pareto_point else 0.34,
-                    linewidths=0.8 if pareto_point else 0.65,
+                    alpha=1.0 if pareto_point else 0.52,
+                    linewidths=0.75,
                     zorder=4 if pareto_point else 1,
                 )
         axis.set_xscale("log")
@@ -146,23 +131,35 @@ def main() -> None:
         )
         for style in styles.values()
     ]
-    method_handles.append(
-        Line2D(
-            [0],
-            [0],
-            color="#777777",
-            marker="o",
-            markerfacecolor="#BBBBBB",
-            linestyle="none",
-            alpha=0.4,
-            label="dominated point",
-        )
+    method_handles.extend(
+        [
+            Line2D(
+                [0],
+                [0],
+                color="#555555",
+                marker="o",
+                markerfacecolor="#555555",
+                linestyle="none",
+                markersize=4.8,
+                label="Pareto",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color="#777777",
+                marker="o",
+                markerfacecolor="none",
+                linestyle="none",
+                markersize=4.8,
+                label="dominated",
+            ),
+        ]
     )
     figure.legend(
         handles=method_handles,
         loc="upper center",
         bbox_to_anchor=(0.5, 0.995),
-        ncols=3,
+        ncols=4,
         frameon=False,
         handlelength=1.8,
         columnspacing=1.4,
@@ -187,9 +184,9 @@ def main() -> None:
             [0],
             color="#555555",
             marker="o",
-            markerfacecolor=tint("#222222", EPSILON_STRENGTHS[epsilon]),
+            markerfacecolor="#777777",
             linestyle="none",
-            markersize=4.8,
+            markersize=EPSILON_SIZES[epsilon] ** 0.5,
             label=label,
         )
         for epsilon, label in (
