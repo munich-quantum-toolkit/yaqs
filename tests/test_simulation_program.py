@@ -13,7 +13,7 @@ import contextlib
 import copy
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -51,6 +51,11 @@ if TYPE_CHECKING:
 def _zero_hamiltonian(length: int) -> Hamiltonian:
     """Return a static zero Ising Hamiltonian."""
     return Hamiltonian.ising(length, J=0.0, g=0.0)
+
+
+def _program_scaled_x_hamiltonian(value: object) -> Hamiltonian:
+    """Return a one-site X term used by parameterized program tests."""
+    return Hamiltonian.pauli(length=1, one_body=[(float(cast("Any", value)), "X")])
 
 
 def test_bug_program_distinguishes_rounding_dust_from_a_final_remainder() -> None:
@@ -1902,3 +1907,30 @@ def test_hahn_echo_refocuses_detuning_but_not_markovian_dephasing() -> None:
     assert 0.3 < echo_magnetization < 0.9
     assert no_pulse_magnetization < 0.2
     assert echo_magnetization > no_pulse_magnetization + 0.3
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_program_executes_parameterized_analog_segment(order: int) -> None:
+    """A program carries a compiled parameter table through analog execution."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_program_scaled_x_hamiltonian, lambda time: 1.0 + time)],
+    )
+    analog_params = AnalogSimParams(
+        elapsed_time=0.25,
+        dt=0.1,
+        tdvp_sweeps=2,
+        order=order,
+        sample_timesteps=True,
+    )
+    program = SimulationProgram(
+        [(hamiltonian, analog_params)],
+        observables=[Observable("z", 0)],
+        get_state=True,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    expected = np.cos(2 * (analog_params.times + analog_params.times**2 / 2))
+    np.testing.assert_allclose(result.segment_results[0].expectation_values[0], expected, atol=1e-11)
+    assert result.output_state is not None

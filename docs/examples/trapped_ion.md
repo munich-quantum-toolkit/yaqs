@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Trapped-Ion Position-Grid Emulation
+# Static and Moving Trapped-Ion Position-Grid Emulation
 
 This example evolves a **single ion** on a finite position grid with
 {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion`. Each ion is one MPO
@@ -20,8 +20,8 @@ site; the local Hilbert space is the grid itself. The Hamiltonian combines a
 finite-difference kinetic term and a harmonic trap—see {doc}`hamiltonians` for
 the factory API and two-ion Coulomb extensions.
 
-We initialize a displaced harmonic-oscillator wavepacket in a static central
-well. In the continuum limit, its center follows
+We first initialize a displaced harmonic-oscillator wavepacket in a static
+central well. In the continuum limit, its center follows
 $\langle x(t)\rangle = x_0 \cos(\omega t)$, so after half a trap period it
 reaches the opposite turning point.
 
@@ -114,6 +114,105 @@ ax.legend(loc="upper right")
 fig.colorbar(image, ax=ax, label=r"$|\psi(x,t)|^2$")
 plt.show()
 ```
+
+## 4. Transport in a moving harmonic well
+
+A time-dependent trap uses the same static `MPO.trapped_ion` builder as a
+parameterized factory. The paired schedule supplies the trap center $q(t)$. Here
+a linear trajectory transports the well from $q\nobreak=\nobreak-1$ to
+$q\nobreak=\nobreak1$. The trap then remains at its target so that residual
+motion of the ion remains visible.
+
+```{code-cell} ipython3
+transport_positions = np.linspace(-6.0, 6.0, 25)
+transport_grid_dim = len(transport_positions)
+start_center = -1.0
+target_center = 1.0
+transport_duration = 10.0
+hold_duration = 5.0
+
+
+def moving_trap(trap_center: object) -> Hamiltonian:
+    return Hamiltonian.from_mpo(
+        MPO.trapped_ion(
+            transport_positions,
+            masses=[1.0],
+            omega=omega,
+            trap_center=float(trap_center),
+        )
+    )
+
+
+def trap_trajectory(time: float) -> float:
+    fraction = np.clip(time / transport_duration, 0.0, 1.0)
+    return start_center + (target_center - start_center) * fraction
+
+
+moving_hamiltonian = Hamiltonian(
+    length=1,
+    parameterized_terms=[(moving_trap, trap_trajectory)],
+)
+
+transport_wavepacket = np.exp(-0.5 * (transport_positions - start_center) ** 2).astype(np.complex128)
+transport_wavepacket /= np.linalg.norm(transport_wavepacket)
+transport_state = State(
+    length=1,
+    tensors=[transport_wavepacket.reshape(transport_grid_dim, 1, 1)],
+    physical_dimensions=[transport_grid_dim],
+)
+transport_position = Observable("position", 0, positions=transport_positions)
+transport_params = AnalogSimParams(
+    observables=[transport_position],
+    elapsed_time=transport_duration + hold_duration,
+    dt=0.25,
+    tdvp_sweeps=2,
+    max_bond_dim=None,
+    svd_threshold=1e-12,
+    krylov_tol=1e-12,
+    preset="exact",
+    sample_timesteps=True,
+)
+
+transport_result = Simulator(parallel=False, show_progress=False).run(
+    transport_state,
+    moving_hamiltonian,
+    transport_params,
+)
+transport_expectation = np.real(transport_result.expectation_values[0])
+scheduled_centers = np.asarray([trap_trajectory(time) for time in transport_params.times])
+hold_mask = transport_params.times >= transport_duration
+residual_motion = np.max(np.abs(transport_expectation[hold_mask] - target_center))
+assert residual_motion > 0.1
+print(f"Maximum displacement from the target during the hold: {residual_motion:.3f}")
+```
+
+The public time grid contains physical boundaries. Internally, YAQS evaluates
+`trap_trajectory` at the midpoint of each of the two TDVP substeps and resolves
+the matching static MPO through a bounded cache.
+
+```{code-cell} ipython3
+fig, ax = plt.subplots(figsize=(7.2, 3.4), layout="constrained")
+ax.plot(transport_params.times, scheduled_centers, "--", label=r"trap center $q(t)$")
+ax.plot(transport_params.times, transport_expectation, label=r"ion $\langle x(t)\rangle$")
+ax.axvline(transport_duration, color="0.6", ls=":", label="end of transport")
+ax.set_xlabel(r"$t$")
+ax.set_ylabel(r"$x$")
+ax.set_title("Residual motion after linear trap transport")
+ax.legend()
+plt.show()
+```
+
+The ion does not end at rest: during the hold, $q(t)$ remains fixed while
+$\langle x(t)\rangle$ oscillates around the target. This linear protocol is
+intentionally idealized and highly suboptimal: although the trap position is
+continuous, its velocity changes discontinuously at the start and end. The
+resulting residual motion can degrade the fidelity of subsequent operations in
+practice, illustrating the importance of smooth, optimized control ramps.
+
+This example uses dimensionless units with $hbar=m=omega=1$. For dimensional
+inputs, use compatible time and energy units or make the factory return
+$H(t)/\hbar$. A finer grid, smaller `dt`, and slower trajectory reduce spatial,
+midpoint, and non-adiabatic transport errors respectively.
 
 ## Related topics
 

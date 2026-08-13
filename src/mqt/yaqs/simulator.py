@@ -58,6 +58,7 @@ import copy
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from dataclasses import replace
+from multiprocessing.reduction import ForkingPickler
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -98,6 +99,7 @@ from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
+from .core.data_structures.hamiltonian_schedule import HamiltonianSchedule, compile_hamiltonian_schedule
 from .core.data_structures.mps import MPS
 from .core.data_structures.noise_model import validate_noise_model_for_run
 from .core.data_structures.result import (
@@ -283,11 +285,29 @@ def _same_order2_operator(
         return False
     left_mpo = left.hamiltonian
     right_mpo = right.hamiltonian
+    if isinstance(left_mpo, HamiltonianSchedule) or isinstance(right_mpo, HamiltonianSchedule):
+        return False
     if left_mpo is right_mpo:
         return True
     if len(left_mpo.tensors) != len(right_mpo.tensors):
         return False
     return all(starmap(np.array_equal, zip(left_mpo.tensors, right_mpo.tensors, strict=True)))
+
+
+def _validate_parameterized_parallel_payload(schedule: HamiltonianSchedule) -> None:
+    """Fail before pool startup when parameter factories cannot cross a process boundary.
+
+    Raises:
+        ValueError: If the factories cannot be serialized for multiprocessing.
+    """
+    try:
+        ForkingPickler.dumps(schedule.factories)
+    except (TypeError, AttributeError, RuntimeError) as error:
+        msg = (
+            "Parameterized Hamiltonian factories must be pickleable for parallel execution; "
+            "use module-level functions or run with parallel=False."
+        )
+        raise ValueError(msg) from error
 
 
 def _order2_chain_continues(
@@ -1135,6 +1155,12 @@ class Simulator:
             "compiled_program": compiled,
             "effective_num_traj": effective_num_traj,
         }
+        if self.parallel and effective_num_traj > 1:
+            for instruction in compiled.instructions:
+                if isinstance(instruction, _CompiledAnalogInstruction) and isinstance(
+                    instruction.hamiltonian, HamiltonianSchedule
+                ):
+                    _validate_parameterized_parallel_payload(instruction.hamiltonian)
         final_mps: MPS | None = None
 
         def consume(traj_index: int, trajectory: _ProgramTrajectory) -> None:
@@ -1252,6 +1278,9 @@ class Simulator:
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
+            if operator.is_parameterized:
+                msg = "Parameterized Hamiltonians do not support list[State] ensemble execution."
+                raise ValueError(msg)
             if _has_final_remainder(sim_params):
                 msg = "Unitary ensemble evolution does not support a final remainder interval."
                 raise ValueError(msg)
@@ -1284,7 +1313,17 @@ class Simulator:
         mps = _materialized_mps(initial_state)
         state_rep = initial_state.representation
         _validate_state_hamiltonian_pairing(initial_state, operator)
-        if _has_final_remainder(sim_params) and (
+        if operator.is_parameterized:
+            if state_rep != "mps":
+                msg = "Parameterized Hamiltonians currently require State.representation='mps'."
+                raise ValueError(msg)
+            if sim_params.evolution_mode != EvolutionMode.TDVP:
+                msg = "Parameterized Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+                raise ValueError(msg)
+            if sim_params.multi_time_observables:
+                msg = "Parameterized Hamiltonians do not support multi_time_observables."
+                raise ValueError(msg)
+        elif _has_final_remainder(sim_params) and (
             state_rep in {"vector", "density_matrix"} or sim_params.evolution_mode == EvolutionMode.BUG
         ):
             msg = (
@@ -1300,7 +1339,15 @@ class Simulator:
                 representation=state_rep,
                 sim_params=sim_params,
             )
-        mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
+        if operator.is_parameterized:
+            mpo_op: MPO | HamiltonianSchedule | None = compile_hamiltonian_schedule(
+                operator,
+                sim_params,
+                physical_dimensions=mps.physical_dimensions if mps is not None else (),
+            )
+            h_sparse = None
+        else:
+            mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
         backend: Callable[..., tuple[NDArray[np.float64], Any, Any]]
         if state_rep == "density_matrix":
@@ -1335,6 +1382,7 @@ class Simulator:
         worker_fn: Callable[[int], Any]
 
         if state_rep == "vector":
+            assert h_sparse is not None
             ctx = preprocess_mcwf(
                 psi_initial=initial_state.vector,
                 h_sparse=h_sparse,
@@ -1346,6 +1394,7 @@ class Simulator:
             payload = {"ctx": ctx}
             worker_fn = _mcwf_worker
         elif state_rep == "density_matrix":
+            assert h_sparse is not None
             lindblad_ctx = preprocess_lindblad(
                 rho_initial=initial_state.density_matrix,
                 h_sparse=h_sparse,
@@ -1373,6 +1422,8 @@ class Simulator:
         final_rho: np.ndarray | None = None
 
         if self.parallel and effective_num_traj > 1:
+            if isinstance(mpo_op, HamiltonianSchedule):
+                _validate_parameterized_parallel_payload(mpo_op)
             for i, traj_payload in run_backend_parallel(
                 worker_fn=worker_fn,
                 payload=payload,

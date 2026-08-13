@@ -65,10 +65,77 @@ Typical patterns:
 - **Manual data** — `Hamiltonian(tensors=...)`, `Hamiltonian(matrix=...)`, or
   `Hamiltonian(sparse_matrix=...)`. Any of these can drive TJM, MCWF, or
   Lindblad once paired with the matching `State.representation`.
+- **Time-dependent terms** — `Hamiltonian(length=..., parameterized_terms=...)`
+  pairs an operator factory with each scalar or array-valued time schedule.
 
 Access the materialized MPO with `H.mpo` (after a TJM run or `H.ensure_mpo()`)
 and the sparse form with `H.sparse_matrix` (after an MCWF / Lindblad run or
 `H.ensure_sparse()`). Both can coexist on one instance.
+
+## Time-dependent Hamiltonians
+
+YAQS allows time-dependent Hamiltonians of the form
+
+```{math}
+H(t)=\sum_k H_k\!\left(p_{k,1}(t),p_{k,2}(t),\ldots,p_{k,m_k}(t)\right)
+```
+
+Each time-dependent Hamiltonian term $H_k$ must be provided as a
+`(factory, schedule)` pair. The term may depend on one or more parameter
+functions $p_{k,1}(t), p_{k,2}(t), \ldots$. At the midpoint $t_i$ of every
+timestep, the schedule evaluates these parameters, and the factory uses their
+current values to construct the corresponding static Hamiltonian term
+$H_k(p_{k,1}(t_i),p_{k,2}(t_i),\ldots)$ for that substep. For a term with one
+parameter, the schedule may return that value directly as a scalar. For a term
+with several parameters, it returns their values together as a tuple or numeric
+array. The following example describes a drive whose amplitude increases
+linearly in time:
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+
+
+def x_drive(amplitude: object) -> Hamiltonian:
+    return Hamiltonian.pauli(length=1, one_body=[(float(amplitude), "X")])
+
+
+def drive_amplitude(time: float) -> float:
+    return 1.0 + time
+
+
+drive = Hamiltonian(
+    length=1,
+    parameterized_terms=[(x_drive, drive_amplitude)],
+)
+params = AnalogSimParams(
+    observables=[Observable("z", 0)],
+    elapsed_time=0.25,
+    dt=0.1,
+    tdvp_sweeps=2,
+    sample_timesteps=True,
+)
+result = Simulator(parallel=False).run(State(1, initial="zeros"), drive, params)
+```
+
+YAQS evaluates each schedule at the midpoint of every TDVP substep and uses the
+factory to construct the Hamiltonian term at that instant. Lambda expressions
+are not required: any callable taking the time and returning the term's current
+physical parameters is accepted. Named functions are generally clearer and
+easier to reuse.
+
+Each factory may depend arbitrarily and nonlinearly on its parameter bundle, but
+must return a static `Hamiltonian` or `MPO` of the declared `length`. Multiple
+factory-schedule pairs are additive terms. Schedule values must be finite
+numeric scalars or arrays, and resolved operators must have compatible physical
+legs and be Hermitian.
+
+Parameterized Hamiltonians currently support a single MPS `State` with TDVP,
+including order-1 and order-2 TJM and `SimulationProgram` analog tuples. MCWF,
+Lindblad, BUG, deterministic `list[State]` ensembles, and multi-time observables
+reject them before execution. When running parallel trajectories with
+`Simulator(parallel=True)`, factories must be pickleable so that Python can send
+them to worker processes. Define them as named functions at module level rather
+than as lambdas or nested functions. Schedules do not have this restriction.
 
 ## Built-in models (quick reference)
 

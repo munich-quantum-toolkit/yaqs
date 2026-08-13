@@ -21,19 +21,23 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core.data_structures.hamiltonian_schedule import HamiltonianSchedule
+from ..core.data_structures.mpo import MPO
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
+from ..core.methods.tdvp import tdvp
 from ..core.random_utils import make_sample_rng, make_trajectory_rng
 from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.mpo import MPO
     from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
+
+HamiltonianOperator = MPO | HamiltonianSchedule
 
 
 def _interval_duration(sim_params: AnalogSimParams, interval_index: int) -> float:
@@ -43,12 +47,23 @@ def _interval_duration(sim_params: AnalogSimParams, interval_index: int) -> floa
 
 def _evolve_interval(
     state: MPS,
-    hamiltonian: MPO,
+    hamiltonian: HamiltonianOperator,
     sim_params: AnalogSimParams,
     interval_index: int,
 ) -> None:
-    """Apply one static unitary interval in place."""
+    """Apply one static or midpoint-resolved unitary interval in place."""
     duration = _interval_duration(sim_params, interval_index)
+    if isinstance(hamiltonian, HamiltonianSchedule):
+        interval = hamiltonian.intervals[interval_index]
+        for substep in interval.substeps:
+            tdvp(
+                state,
+                hamiltonian.resolve(substep),
+                sim_params,
+                step_duration=substep.duration,
+                num_sweeps=1,
+            )
+        return
     apply_unitary_evolution(state, hamiltonian, sim_params, step_duration=duration)
 
 
@@ -86,7 +101,7 @@ def initialize(
 
 def step_through(
     state: MPS,
-    hamiltonian: MPO,
+    hamiltonian: HamiltonianOperator,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
     current_time: float,
@@ -127,7 +142,7 @@ def step_through(
 
 def sample(
     phi: MPS,
-    hamiltonian: MPO,
+    hamiltonian: HamiltonianOperator,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
     results: NDArray[np.float64],
@@ -188,7 +203,7 @@ def _diagnostic_num_columns(sim_params: AnalogSimParams) -> int:
 
 
 def analog_tjm_2(
-    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, HamiltonianOperator],
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
@@ -359,7 +374,7 @@ def analog_tjm_2(
 
 
 def analog_tjm_1(
-    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, HamiltonianOperator],
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,

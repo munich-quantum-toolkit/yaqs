@@ -34,3 +34,4 @@ def attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
     wrapped._matrix = None  # ruff:ignore[private-member-access]
     wrapped._sparse_matrix = None  # ruff:ignore[private-member-access]
     wrapped._mpo = mpo  # ruff:ignore[private-member-access]
+    wrapped._parameterized_terms = None  # ruff:ignore[private-member-access]

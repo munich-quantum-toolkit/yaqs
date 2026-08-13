@@ -83,7 +83,8 @@ currently require a divisible duration.
 
 Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per
 physical interval, improving unitary accuracy without changing the noise
-interval.
+interval. For a parameterized Hamiltonian, YAQS resolves the operator at every
+substep midpoint; see {doc}`hamiltonians`.
 
 **Evolution integrator:** analog simulations default to `EvolutionMode.TDVP`
 (two-site TDVP sweeps). Switch to BUG with:

@@ -18,7 +18,7 @@ qubit counts.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -26,6 +26,7 @@ import pytest
 import scipy.sparse
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
+from scipy.integrate import solve_ivp
 
 from mqt.yaqs import (
     MPO,
@@ -36,11 +37,13 @@ from mqt.yaqs import (
     NoiseModel,
     Observable,
     Result,
+    SimulationProgram,
     Simulator,
     State,
     simulator,
 )
 from mqt.yaqs.analog.analog_tjm import analog_tjm_2
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.core.random_utils import make_sample_rng
@@ -54,6 +57,11 @@ from tests.conftest import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _scaled_x_hamiltonian(value: object) -> Hamiltonian:
+    """Return a one-site X Hamiltonian for parameterized integration tests."""
+    return Hamiltonian.pauli(length=1, one_body=[(float(cast("Any", value)), "X")])
 
 
 def test_simulator_defaults() -> None:
@@ -2102,3 +2110,340 @@ def test_analog_longrange_crosstalk_xy_mps_runs() -> None:
     )
     result = Simulator(show_progress=False).run(State(3), hamiltonian, sim_params, noise)
     assert result.expectation_values[0].shape[0] >= 1
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_parameterized_hamiltonian_uses_midpoints_and_exact_remainder(order: int) -> None:
+    """Parameterized TDVP integrates every sweep midpoint through the exact end time."""
+    elapsed_time = 0.25
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda time: 1.0 + time)],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        tdvp_sweeps=2,
+        order=order,
+        sample_timesteps=True,
+        get_state=True,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), hamiltonian, sim_params)
+
+    expected = np.cos(2 * (sim_params.times + sim_params.times**2 / 2))
+    np.testing.assert_allclose(result.expectation_values[0], expected, atol=1e-11)
+    assert result.output_state is not None
+    np.testing.assert_allclose(sim_params.times, [0.0, 0.1, 0.2, 0.25])
+
+
+@pytest.mark.parametrize("representation", ["vector", "density_matrix"])
+def test_parameterized_hamiltonian_rejects_dense_backends(
+    representation: Literal["vector", "density_matrix"],
+) -> None:
+    """Parameterized evolution fails before trying unsupported dense backends."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda _time: 1.0)],
+    )
+    sim_params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.1, dt=0.1)
+
+    with pytest.raises(ValueError, match=r"require State\.representation='mps'"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros", representation=representation),
+            hamiltonian,
+            sim_params,
+        )
+
+
+def test_parameterized_hamiltonian_rejects_unpickleable_parallel_factory() -> None:
+    """Parallel trajectories reject a local factory before starting worker processes."""
+
+    def local_factory(value: object) -> Hamiltonian:
+        return _scaled_x_hamiltonian(value)
+
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(local_factory, lambda _time: 1.0)],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=2,
+    )
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+
+    with pytest.raises(ValueError, match="factories must be pickleable"):
+        Simulator(parallel=True, max_workers=2, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            sim_params,
+            noise_model,
+        )
+
+
+def test_parameterized_hamiltonian_rejects_bug_and_ensemble_paths() -> None:
+    """Parameterized sources are limited to single-state MPS TDVP execution."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda _time: 1.0)],
+    )
+    bug_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        evolution_mode=EvolutionMode.BUG,
+    )
+    with pytest.raises(ValueError, match=r"require evolution_mode=EvolutionMode\.TDVP"):
+        Simulator(parallel=False, show_progress=False).run(State(1), hamiltonian, bug_params)
+
+    params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.1, dt=0.1)
+    with pytest.raises(ValueError, match=r"do not support list\[State\]"):
+        Simulator(parallel=False, show_progress=False).run([State(1), State(1)], hamiltonian, params)
+
+
+@pytest.mark.parametrize("representation", ["vector", "density_matrix"])
+def test_static_dense_backends_reject_final_remainder(
+    representation: Literal["vector", "density_matrix"],
+) -> None:
+    """Backends without interval-aware stepping reject a non-divisible end time."""
+    hamiltonian = Hamiltonian.pauli(length=1, one_body=[(1.0, "X")])
+    sim_params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.25, dt=0.1)
+
+    with pytest.raises(ValueError, match="does not support a final remainder interval"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros", representation=representation),
+            hamiltonian,
+            sim_params,
+        )
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_bug_accepts_fixed_grid_with_float64_rounding_dust(order: int) -> None:
+    """BUG does not mistake accumulated float64 boundary dust for a final remainder."""
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        Hamiltonian.ising(1, J=0.0, g=0.1),
+        AnalogSimParams(
+            elapsed_time=0.3,
+            dt=0.1,
+            order=order,
+            evolution_mode=EvolutionMode.BUG,
+            get_state=True,
+        ),
+    )
+
+    assert result.output_state is not None
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_constant_parameterized_hamiltonian_matches_static(order: int) -> None:
+    """A constant parameter schedule is equivalent to one materialized Hamiltonian."""
+    parameterized = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda _time: 0.7)],
+    )
+    static = _scaled_x_hamiltonian(0.7)
+
+    def run(hamiltonian: Hamiltonian) -> Result:
+        return Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.25,
+                dt=0.1,
+                tdvp_sweeps=2,
+                order=order,
+                sample_timesteps=True,
+                get_state=True,
+            ),
+        )
+
+    parameterized_result = run(parameterized)
+    static_result = run(static)
+    np.testing.assert_allclose(
+        parameterized_result.expectation_values[0],
+        static_result.expectation_values[0],
+        atol=1e-12,
+    )
+    assert parameterized_result.output_state is not None
+    assert static_result.output_state is not None
+    overlap = np.vdot(parameterized_result.output_state.mps.to_vec(), static_result.output_state.mps.to_vec())
+    assert abs(overlap) ** 2 == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_piecewise_parameterized_hamiltonian_matches_explicit_program(order: int) -> None:
+    """Internal parameter intervals agree with equivalent explicit analog tuples."""
+    parameterized = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda time: 1.0 if time < 0.1 else 2.0)],
+    )
+    parameterized_result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        parameterized,
+        AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order, get_state=True),
+    )
+    program = SimulationProgram(
+        [
+            (_scaled_x_hamiltonian(1.0), AnalogSimParams(elapsed_time=0.1, dt=0.1, order=order)),
+            (_scaled_x_hamiltonian(2.0), AnalogSimParams(elapsed_time=0.1, dt=0.1, order=order)),
+        ],
+        get_state=True,
+    )
+    program_result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
+
+    assert parameterized_result.output_state is not None
+    assert program_result.output_state is not None
+    overlap = np.vdot(parameterized_result.output_state.mps.to_vec(), program_result.output_state.mps.to_vec())
+    assert abs(overlap) ** 2 == pytest.approx(1.0, abs=1e-12)
+    assert len(program_result.segment_results) == 2
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_parameterized_midpoint_evolution_has_second_order_convergence(order: int) -> None:
+    """A noncommuting driven qubit exhibits the expected global midpoint order."""
+    pauli_x = np.asarray([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    pauli_z = np.asarray([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
+    elapsed_time = 0.8
+
+    def driven_factory(value: object) -> Hamiltonian:
+        coefficient = float(cast("Any", value))
+        return Hamiltonian(matrix=pauli_x + coefficient * pauli_z, length=1)
+
+    reference_solution = solve_ivp(
+        lambda time, vector: -1j * (pauli_x + time * pauli_z) @ vector,
+        (0.0, elapsed_time),
+        np.asarray([1.0, 0.0], dtype=np.complex128),
+        rtol=1e-12,
+        atol=1e-14,
+    ).y[:, -1]
+    reference_solution /= np.linalg.norm(reference_solution)
+
+    errors: list[float] = []
+    for dt in (0.2, 0.1, 0.05):
+        hamiltonian = Hamiltonian(
+            length=1,
+            parameterized_terms=[(driven_factory, lambda time: time)],
+        )
+        result = Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            AnalogSimParams(elapsed_time=elapsed_time, dt=dt, order=order, get_state=True, preset="exact"),
+        )
+        assert result.output_state is not None
+        actual = result.output_state.mps.to_vec()
+        phase = np.vdot(reference_solution, actual)
+        phase_aligned = actual * np.exp(-1j * np.angle(phase))
+        errors.append(float(np.linalg.norm(phase_aligned - reference_solution)))
+
+    assert errors[0] / errors[1] == pytest.approx(4.0, rel=0.03)
+    assert errors[1] / errors[2] == pytest.approx(4.0, rel=0.03)
+
+
+def test_parameterized_hamiltonian_supports_heterogeneous_physical_dimensions() -> None:
+    """Resolved MPOs preserve different local dimensions across sites."""
+    qubit_z = np.diag([1.0, -1.0]).astype(np.complex128)
+    qutrit_z = np.diag([1.0, 0.0, -1.0]).astype(np.complex128)
+
+    def heterogeneous_factory(value: object) -> MPO:
+        coefficient = float(cast("Any", value))
+        mpo = MPO()
+        mpo.custom(
+            [
+                (coefficient * qubit_z)[:, :, None, None],
+                qutrit_z[:, :, None, None],
+            ],
+            transpose=False,
+        )
+        return mpo
+
+    hamiltonian = Hamiltonian(
+        length=2,
+        parameterized_terms=[(heterogeneous_factory, lambda time: 1.0 + time)],
+    )
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros", physical_dimensions=[2, 3]),
+        hamiltonian,
+        AnalogSimParams(
+            observables=[Observable("z", 0)],
+            elapsed_time=0.15,
+            dt=0.1,
+            get_state=True,
+        ),
+    )
+
+    assert result.output_state is not None
+    assert result.output_state.mps.physical_dimensions == [2, 3]
+    assert float(result.expectation_values[0][-1]) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_seeded_parameterized_noise_is_reproducible(order: int) -> None:
+    """Parameterized trajectories preserve the existing seeded noise streams."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda time: 0.5 + time)],
+    )
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.4}])
+
+    def run() -> Result:
+        return Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.25,
+                dt=0.1,
+                order=order,
+                num_traj=6,
+                sample_timesteps=True,
+                random_seed=2026,
+            ),
+            noise_model,
+        )
+
+    first = run()
+    second = run()
+    np.testing.assert_array_equal(first.trajectories[0], second.trajectories[0])
+    np.testing.assert_array_equal(first.expectation_values[0], second.expectation_values[0])
+
+
+def test_parameterized_intervals_reuse_one_trajectory_rng() -> None:
+    """Resolving a new operator never recreates the order-1 trajectory RNG."""
+    observed_rngs: list[np.random.Generator | None] = []
+
+    def record_stochastic_process(
+        state: MPS,
+        _noise_model: NoiseModel | None,
+        _dt: float,
+        _sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        observed_rngs.append(rng)
+        return state
+
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_scaled_x_hamiltonian, lambda time: 0.5 + time)],
+    )
+    with patch("mqt.yaqs.analog.analog_tjm.stochastic_process", side_effect=record_stochastic_process):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.25,
+                dt=0.1,
+                order=1,
+                random_seed=7,
+            ),
+            NoiseModel([]),
+        )
+
+    assert len(observed_rngs) == 3
+    assert observed_rngs[0] is not None
+    assert all(rng is observed_rngs[0] for rng in observed_rngs)
