@@ -78,6 +78,43 @@ def test_get_times_cached_zero_and_distinct_durations() -> None:
     assert len(cache) == 4
 
 
+def test_simulate_sequences_handles_remainder_by_solver() -> None:
+    """TJM evolves a final remainder while MCWF rejects its fixed-step incompatibility."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+    interventions = [[(psi0, psi0)]]
+
+    tjm_finals = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.0, 0.15],
+        intervention_steps_list=interventions,
+        initial_psis=_initial_psis_for_sequences(op, "TJM", 1),
+        static_ctx=None,
+        parallel=False,
+        show_progress=False,
+        record_step_states=False,
+        solver="TJM",
+    )
+    assert isinstance(tjm_finals, np.ndarray)
+    assert tjm_finals.shape == (1, 8)
+
+    with pytest.raises(ValueError, match="MCWF evolution does not support a final remainder interval"):
+        simulate_sequences(
+            operator=op,
+            sim_params=params,
+            timesteps=[0.0, 0.15],
+            intervention_steps_list=interventions,
+            initial_psis=[psi0.copy()],
+            static_ctx=make_mcwf_static_context(op, params, noise_model=None),
+            parallel=False,
+            show_progress=False,
+            record_step_states=False,
+            solver="MCWF",
+        )
+
+
 def test_reshape_choi_feature_rows_rejects_malformed_inputs() -> None:
     """Malformed Choi feature storage raises before silent reshaping."""
     with pytest.raises(ValueError, match="divisible"):

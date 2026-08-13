@@ -765,10 +765,14 @@ def validate_noise_model_for_run(
 
     times = np.asarray(sim_params.times, dtype=float)
     durations = np.diff(times)
-    atol = (float(np.min(durations)) if durations.size else sim_params.dt) * 1e-3
+    boundary_durations = np.concatenate(([durations[0]], durations)) if durations.size else np.asarray([sim_params.dt])
     for jump in noise_model.scheduled_jumps:
         _check_operator_dims(jump, "Scheduled jump")
         jump_time = float(jump["time"])
-        if not np.any(np.isclose(times, jump_time, atol=atol, rtol=0.0)):
-            msg = f"Scheduled jump time {jump_time} is not on the simulation time grid (atol={atol}, rtol=0)."
+        matches_boundary = any(
+            np.isclose(boundary, jump_time, atol=duration * 1e-3, rtol=0.0)
+            for boundary, duration in zip(times, boundary_durations, strict=True)
+        )
+        if not matches_boundary:
+            msg = f"Scheduled jump time {jump_time} is not on the simulation time grid."
             raise ValueError(msg)

@@ -905,3 +905,16 @@ def test_validate_noise_model_for_run_success_and_errors() -> None:
         is_ensemble=False,
         sim_params=sim_params,
     )
+
+    mixed_grid = AnalogSimParams(dt=0.1, elapsed_time=0.15, order=1, get_state=True)
+    near_full_interval_boundary = NoiseModel(
+        scheduled_jumps=[{"time": 0.100075, "sites": [0], "name": "x"}],
+    )
+    validate_noise_model_for_run(
+        near_full_interval_boundary,
+        length=2,
+        representation="mps",
+        is_digital=False,
+        is_ensemble=False,
+        sim_params=mixed_grid,
+    )

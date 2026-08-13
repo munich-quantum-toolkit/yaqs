@@ -391,7 +391,8 @@ def analog_tjm_1(
             - MPS: The initial state of the system.
             - NoiseModel | None: The noise model to be applied (if any).
             - AnalogSimParams: Simulation parameters including the time step and measurement settings.
-            - MPO: The Hamiltonian operator represented as an MPO.
+            - HamiltonianOperator: A static MPO or compiled time-dependent
+              Hamiltonian schedule.
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
         rng: Optional externally managed trajectory RNG. When omitted, the
             standalone trajectory seed behavior is preserved.

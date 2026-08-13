@@ -62,7 +62,8 @@ def _run_sweeps(
     """
     sweep_count = sim_params.tdvp_sweeps if num_sweeps is None else num_sweeps
     if sweep_count < 1:
-        msg = f"tdvp_sweeps must be >= 1, got {sweep_count}."
+        sweep_name = "tdvp_sweeps" if num_sweeps is None else "num_sweeps"
+        msg = f"{sweep_name} must be >= 1, got {sweep_count}."
         raise ValueError(msg)
     if step_duration is None:
         step_scale = 1.0 / sweep_count

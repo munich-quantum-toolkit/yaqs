@@ -220,9 +220,14 @@ class Hamiltonian:
             msg = f"parameterized_terms[{term_index}] factory returned an MPO with invalid virtual bonds."
             raise ValueError(msg)
 
-        total_dimension = int(np.prod([tensor.shape[0] for tensor in mpo.tensors]))
         # Dense reconstruction scales exponentially; above this cutoff the factory
         # remains responsible for satisfying the Hermiticity contract.
+        total_dimension = 1
+        for tensor in mpo.tensors:
+            # exact Python-integer multiplication to avoid overflow in np.prod for large MPOs
+            total_dimension *= int(tensor.shape[0])
+            if total_dimension > _PARAMETERIZED_HERMITICITY_MAX_DIM:
+                break
         if check_hermiticity and total_dimension <= _PARAMETERIZED_HERMITICITY_MAX_DIM:
             matrix = mpo.to_matrix()
             if not np.allclose(matrix, matrix.conj().T, rtol=1e-10, atol=1e-12):

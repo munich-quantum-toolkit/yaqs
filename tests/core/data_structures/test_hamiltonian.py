@@ -218,6 +218,18 @@ def test_parameterized_hamiltonian_rejects_malformed_tensor_before_bond_access()
         hamiltonian._resolve_at(0.0)  # ruff: ignore[private-member-access]
 
 
+def test_parameterized_hamiltonian_skips_dense_validation_above_cutoff() -> None:
+    """Oversized resolved MPOs never materialize a dense matrix for validation."""
+    mpo = MPO.identity(13)
+
+    with patch.object(mpo, "to_matrix", side_effect=AssertionError("must not materialize")):
+        Hamiltonian._validate_resolved_mpo(  # ruff: ignore[private-member-access]
+            mpo,
+            expected_length=13,
+            term_index=0,
+        )
+
+
 def test_parameterized_hamiltonian_rejects_static_materialization() -> None:
     """A parameterized source has no single MPO or sparse matrix."""
     hamiltonian = Hamiltonian(
