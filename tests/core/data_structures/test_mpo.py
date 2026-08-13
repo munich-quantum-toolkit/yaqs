@@ -1518,6 +1518,15 @@ def test_mpo_add_single_site_rejects_mismatched_physical_dimensions() -> None:
         _ = mpo_a + mpo_b
 
 
+def test_mpo_add_single_site_rejects_non_unit_boundary_bonds() -> None:
+    """Single-site addition rejects structurally invalid boundary bonds."""
+    invalid = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    invalid.tensors[0] = np.zeros((2, 2, 2, 1), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="unit boundary bonds"):
+        _ = invalid + MPO.identity(1)
+
+
 def test_mpo_sum_single_site_matches_dense_sum() -> None:
     """mpo_sum produces a materializable one-site sum."""
     matrices = [

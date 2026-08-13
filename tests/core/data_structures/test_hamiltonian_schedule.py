@@ -36,6 +36,16 @@ def test_compile_hamiltonian_schedule_samples_substep_midpoints() -> None:
     assert factory.call_count == 1
 
 
+def test_compile_hamiltonian_schedule_rejects_static_hamiltonian() -> None:
+    """Schedule compilation is reserved for parameterized Hamiltonians."""
+    with pytest.raises(ValueError, match="requires a parameterized Hamiltonian"):
+        compile_hamiltonian_schedule(
+            Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]),
+            AnalogSimParams(elapsed_time=0.1, dt=0.1),
+            physical_dimensions=[2],
+        )
+
+
 def test_parameterized_schedule_validates_once_and_caches_repeated_values() -> None:
     """Constant parameters validate once and resolve once per worker cache."""
     factory = Mock(side_effect=lambda value: Hamiltonian.pauli(length=1, one_body=[(float(value), "Z")]))

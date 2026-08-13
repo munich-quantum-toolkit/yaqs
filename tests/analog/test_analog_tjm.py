@@ -48,6 +48,7 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
+from mqt.yaqs.analog.evolution import apply_unitary_evolution
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -126,6 +127,16 @@ def test_step_through() -> None:
         mock_unitary.assert_called_once_with(state, H, sim_params, step_duration=sim_params.dt)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
+
+
+def test_bug_dispatch_rejects_final_remainder() -> None:
+    """The shared unitary dispatcher protects direct BUG callers from fractional intervals."""
+    with pytest.raises(ValueError, match="BUG evolution does not support a final remainder interval"):
+        apply_unitary_evolution(
+            MPS(1),
+            MPO.identity(1),
+            AnalogSimParams(elapsed_time=0.15, dt=0.1, evolution_mode=EvolutionMode.BUG),
+        )
 
 
 def test_order_two_unequal_interval_noise_bridge_uses_mean_duration() -> None:

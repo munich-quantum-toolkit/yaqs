@@ -96,6 +96,12 @@ def test_parameterized_hamiltonian_validates_pairs(
         Hamiltonian(length=1, parameterized_terms=cast("Any", terms))
 
 
+def test_parameterized_hamiltonian_rejects_non_sequence_terms() -> None:
+    """The outer parameterized-term container must be a sequence."""
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian(length=1, parameterized_terms=cast("Any", 1.0))
+
+
 def test_parameterized_hamiltonian_requires_explicit_positive_length() -> None:
     """Parameterized construction never invokes a factory to infer length."""
     pair = (lambda _value: Hamiltonian.ising(1, J=0.0, g=0.0), lambda _time: 0.0)
@@ -112,6 +118,23 @@ def test_parameterized_hamiltonian_rejects_invalid_schedule_values(value: object
         length=1,
         parameterized_terms=[
             (lambda _value: Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]), lambda _time: value),
+        ],
+    )
+    with pytest.raises(ValueError, match="non-finite numeric value"):
+        hamiltonian._parameters_at(0.0)  # ruff: ignore[private-member-access]
+
+
+def test_parameterized_hamiltonian_translates_unconvertible_schedule_values() -> None:
+    """Array-conversion errors from schedule values become the public ValueError."""
+
+    class Unconvertible:
+        def __array__(self) -> np.ndarray:  # ruff: ignore[bad-dunder-method-name]  # NumPy conversion protocol.
+            raise TypeError
+
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[
+            (lambda _value: Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]), lambda _time: Unconvertible()),
         ],
     )
     with pytest.raises(ValueError, match="non-finite numeric value"):
@@ -141,6 +164,47 @@ def test_parameterized_hamiltonian_validates_factory_outputs() -> None:
     )
     with pytest.raises(ValueError, match="non-Hermitian"):
         invalid._resolve_at(0.0)  # ruff: ignore[private-member-access]
+
+    invalid_bonds = MPO()
+    invalid_bonds.length = 1
+    invalid_bonds.tensors = [np.zeros((2, 2, 2, 1), dtype=np.complex128)]
+    invalid = Hamiltonian(
+        length=1,
+        parameterized_terms=[(lambda _value: invalid_bonds, lambda _time: 0.0)],
+    )
+    with pytest.raises(ValueError, match="invalid virtual bonds"):
+        invalid._resolve_at(0.0)  # ruff: ignore[private-member-access]
+
+
+def test_parameterized_hamiltonian_rejects_invalid_resolution_contracts() -> None:
+    """Resolution rejects static callers, wrong arity, nested schedules, and incompatible terms."""
+    static = Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")])
+    with pytest.raises(ValueError, match="Static Hamiltonians cannot resolve"):
+        static._resolve_parameters([1.0])  # ruff: ignore[private-member-access]
+
+    parameterized = Hamiltonian(
+        length=1,
+        parameterized_terms=[(lambda _value: static, lambda _time: 0.0)],
+    )
+    with pytest.raises(ValueError, match="Expected 1 parameter values, got 0"):
+        parameterized._resolve_parameters([])  # ruff: ignore[private-member-access]
+
+    nested = Hamiltonian(
+        length=1,
+        parameterized_terms=[(lambda _value: parameterized, lambda _time: 0.0)],
+    )
+    with pytest.raises(ValueError, match="must return a static Hamiltonian"):
+        nested._resolve_at(0.0)  # ruff: ignore[private-member-access]
+
+    incompatible = Hamiltonian(
+        length=1,
+        parameterized_terms=[
+            (lambda _value: MPO.identity(1, physical_dimension=2), lambda _time: 0.0),
+            (lambda _value: MPO.identity(1, physical_dimension=3), lambda _time: 0.0),
+        ],
+    )
+    with pytest.raises(ValueError, match="physical dimensions incompatible"):
+        incompatible._resolve_at(0.0)  # ruff: ignore[private-member-access]
 
 
 def test_parameterized_hamiltonian_rejects_malformed_tensor_before_bond_access() -> None:

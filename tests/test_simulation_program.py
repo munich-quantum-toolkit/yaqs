@@ -85,6 +85,23 @@ def test_bug_program_distinguishes_rounding_dust_from_a_final_remainder() -> Non
         Simulator(parallel=False, show_progress=False).run(State(1), remainder)
 
 
+def test_program_rejects_parameterized_bug_evolution() -> None:
+    """Program compilation enforces the parameterized TDVP-only contract."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[(_program_scaled_x_hamiltonian, lambda _time: 1.0)],
+    )
+    program = SimulationProgram([
+        (
+            hamiltonian,
+            AnalogSimParams(elapsed_time=0.1, dt=0.1, evolution_mode=EvolutionMode.BUG),
+        )
+    ])
+
+    with pytest.raises(ValueError, match=r"require evolution_mode=EvolutionMode\.TDVP"):
+        Simulator(parallel=False, show_progress=False).run(State(1), program)
+
+
 def test_mixed_program_matches_manual_state_handoff() -> None:
     """Digital-analog-digital execution matches explicit standalone calls."""
     length = 2

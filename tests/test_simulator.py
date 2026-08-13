@@ -2228,6 +2228,24 @@ def test_parameterized_hamiltonian_rejects_bug_and_ensemble_paths() -> None:
     with pytest.raises(ValueError, match=r"do not support list\[State\]"):
         Simulator(parallel=False, show_progress=False).run([State(1), State(1)], hamiltonian, params)
 
+    multi_time_params = AnalogSimParams(
+        elapsed_time=0.1,
+        dt=0.1,
+        multi_time_observables=[(Observable("z", 0), Observable("z", 0))],
+    )
+    with pytest.raises(ValueError, match="do not support multi_time_observables"):
+        Simulator(parallel=False, show_progress=False).run(State(1), hamiltonian, multi_time_params)
+
+
+def test_unitary_ensemble_rejects_final_remainder() -> None:
+    """The unitary MPS ensemble cannot evolve a fractional final interval."""
+    with pytest.raises(ValueError, match="Unitary ensemble evolution does not support a final remainder interval"):
+        Simulator(parallel=False, show_progress=False).run(
+            [State(1), State(1)],
+            Hamiltonian.pauli(length=1, one_body=[(1.0, "X")]),
+            AnalogSimParams(elapsed_time=0.15, dt=0.1, get_state=True),
+        )
+
 
 @pytest.mark.parametrize("representation", ["vector", "density_matrix"])
 def test_static_dense_backends_reject_final_remainder(
