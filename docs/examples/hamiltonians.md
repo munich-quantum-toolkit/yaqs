@@ -129,8 +129,8 @@ easier to reuse.
 Each factory may depend arbitrarily and nonlinearly on its parameter bundle, but
 must return a static `Hamiltonian` or `MPO` of the declared `length`. Multiple
 factory-schedule pairs are additive terms. Schedule values must be finite
-numeric scalars or array-like values, and resolved operators must have compatible physical
-legs and be Hermitian.
+numeric scalars or array-like values, and resolved operators must have
+compatible physical legs and be Hermitian.
 
 Parameterized Hamiltonians currently support a single MPS `State` with TDVP,
 including order-1 and order-2 TJM and `SimulationProgram` analog tuples. MCWF,
