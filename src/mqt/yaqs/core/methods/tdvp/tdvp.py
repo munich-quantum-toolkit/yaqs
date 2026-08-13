@@ -56,7 +56,8 @@ def _run_sweeps(
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
     Raises:
-        ValueError: If ``sim_params.tdvp_sweeps`` is less than 1.
+        ValueError: If the sweep count is less than 1, if ``step_duration`` is
+            used with digital parameters, or if it is non-finite or non-positive.
 
     """
     sweep_count = sim_params.tdvp_sweeps if num_sweeps is None else num_sweeps
@@ -107,9 +108,10 @@ def tdvp(
         num_sweeps: Optional internal override of ``sim_params.tdvp_sweeps``.
 
     Raises:
-        ValueError: If ``state`` and ``operator`` lengths mismatch or if
-            ``tdvp_mode="2site"`` with fewer than two sites (except a one-site
-            chain, which falls back to 1TDVP).
+        ValueError: If ``state`` and ``operator`` lengths mismatch, if
+            ``tdvp_mode="2site"`` has fewer than two sites (except a one-site
+            chain, which falls back to 1TDVP), if the sweep count is less than
+            1, or if ``step_duration`` is invalid or used for digital evolution.
 
     """
     if operator.length != state.length:

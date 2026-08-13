@@ -2184,6 +2184,31 @@ def test_parameterized_hamiltonian_rejects_unpickleable_parallel_factory() -> No
         )
 
 
+def test_parameterized_hamiltonian_rejects_lambda_parallel_factory() -> None:
+    """Parallel preflight translates a lambda PicklingError into an actionable ValueError."""
+    hamiltonian = Hamiltonian(
+        length=1,
+        parameterized_terms=[
+            (lambda value: _scaled_x_hamiltonian(float(cast("Any", value))), lambda _time: 1.0),
+        ],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=2,
+    )
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+
+    with pytest.raises(ValueError, match="factories must be pickleable"):
+        Simulator(parallel=True, max_workers=2, show_progress=False).run(
+            State(1, initial="zeros"),
+            hamiltonian,
+            sim_params,
+            noise_model,
+        )
+
+
 def test_parameterized_hamiltonian_rejects_bug_and_ensemble_paths() -> None:
     """Parameterized sources are limited to single-state MPS TDVP execution."""
     hamiltonian = Hamiltonian(

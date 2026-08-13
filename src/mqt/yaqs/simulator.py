@@ -46,6 +46,7 @@ references it unchanged.
 from __future__ import annotations
 
 import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # Exception type only; this module never deserializes data.
 
 # ruff:file-ignore[module-import-not-at-top-of-file]
 # ---------------------------------------------------------------------------
@@ -302,7 +303,7 @@ def _validate_parameterized_parallel_payload(schedule: HamiltonianSchedule) -> N
     """
     try:
         ForkingPickler.dumps(schedule.factories)
-    except (TypeError, AttributeError, RuntimeError) as error:
+    except (pickle.PicklingError, TypeError, AttributeError, RuntimeError) as error:
         msg = (
             "Parameterized Hamiltonian factories must be pickleable for parallel execution; "
             "use module-level functions or run with parallel=False."

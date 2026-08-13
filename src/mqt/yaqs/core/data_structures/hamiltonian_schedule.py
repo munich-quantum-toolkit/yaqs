@@ -45,11 +45,16 @@ class HamiltonianInterval:
 
 @dataclass
 class HamiltonianSchedule:
-    """Compact sampled parameters plus a bounded worker-local MPO cache."""
+    """Compact sampled parameters plus a bounded worker-local MPO cache.
+
+    Factory outputs receive cheap structural and state-dimension checks when
+    resolved. Compilation additionally checks the first output's Hermiticity.
+    """
 
     length: int
     factories: tuple[_TermFactory, ...]
     intervals: tuple[HamiltonianInterval, ...]
+    physical_dimensions: tuple[int, ...]
     _cache: OrderedDict[tuple[object, ...], MPO] = field(default_factory=OrderedDict, init=False, repr=False)
 
     @staticmethod
@@ -78,7 +83,9 @@ class HamiltonianSchedule:
             self.factories,
             substep.parameters,
             length=self.length,
+            check_hermiticity=False,
         )
+        _validate_physical_dimensions(mpo, self.physical_dimensions)
         if key is not None:
             self._cache[key] = mpo
             if len(self._cache) > _CACHE_SIZE:
@@ -107,7 +114,7 @@ def compile_hamiltonian_schedule(
     *,
     physical_dimensions: Sequence[int],
 ) -> HamiltonianSchedule:
-    """Sample schedules and validate every distinct resolved factory input.
+    """Sample schedules and fully validate the first resolved factory input.
 
     Returns:
         Compact interval schedule containing parameters but no retained MPOs.
@@ -123,7 +130,7 @@ def compile_hamiltonian_schedule(
     assert terms is not None
     factories = tuple(factory for factory, _schedule in terms)
     interval_specs: list[HamiltonianInterval] = []
-    validated: set[tuple[object, ...]] = set()
+    first_parameters: tuple[object, ...] | None = None
 
     for start_raw, end_raw in zip(sim_params.times[:-1], sim_params.times[1:], strict=True):
         start = float(start_raw)
@@ -136,12 +143,15 @@ def compile_hamiltonian_schedule(
             parameters = hamiltonian._parameters_at(midpoint)  # ruff: ignore[private-member-access]
             substep = HamiltonianSubstep(midpoint, substep_duration, parameters)
             substeps.append(substep)
-            key = HamiltonianSchedule._cache_key(parameters)  # ruff: ignore[private-member-access]
-            if key is None or key not in validated:
+            if first_parameters is None:
                 mpo = Hamiltonian._resolve_factories(factories, parameters, length=hamiltonian.length)  # ruff: ignore[private-member-access]
                 _validate_physical_dimensions(mpo, physical_dimensions)
-                if key is not None:
-                    validated.add(key)
+                first_parameters = parameters
         interval_specs.append(HamiltonianInterval(start, end, duration, tuple(substeps)))
 
-    return HamiltonianSchedule(hamiltonian.length, factories, tuple(interval_specs))
+    return HamiltonianSchedule(
+        hamiltonian.length,
+        factories,
+        tuple(interval_specs),
+        tuple(physical_dimensions),
+    )

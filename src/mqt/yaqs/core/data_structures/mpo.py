@@ -1983,7 +1983,8 @@ class MPO:
             A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
 
         Raises:
-            ValueError: If the MPO lengths do not match.
+            ValueError: If the MPO lengths or physical dimensions do not match,
+                or a single-site MPO has non-unit boundary bonds.
         """
         if self.length != other.length:
             msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
@@ -1998,6 +1999,9 @@ class MPO:
         if length == 1:
             a = self.tensors[0]
             b = other.tensors[0]
+            if a.shape[:2] != b.shape[:2]:
+                msg = f"Cannot add MPOs with mismatched physical dimensions: {a.shape[:2]} != {b.shape[:2]}"
+                raise ValueError(msg)
             if a.shape[2:] != (1, 1) or b.shape[2:] != (1, 1):
                 msg = "Single-site MPOs must have unit boundary bonds before addition."
                 raise ValueError(msg)

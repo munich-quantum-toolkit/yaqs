@@ -6,6 +6,16 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Added: parameterized time-dependent Hamiltonians
+
+Use `Hamiltonian(length=..., parameterized_terms=[(factory, schedule), ...])` to
+describe time-dependent Hamiltonian terms. YAQS samples each schedule at
+TDVP-substep midpoints and asks its paired factory for the corresponding static
+Hamiltonian term. This currently supports a single MPS state with TDVP; MCWF,
+Lindblad, BUG, deterministic state ensembles, and multi-time observables are not
+supported. See the
+[Hamiltonian guide](docs/examples/hamiltonians.md#time-dependent-hamiltonians).
+
 ### Changed: analog simulations may end with a shorter timestep
 
 If `elapsed_time` is not an integer multiple of `dt`, the simulation now uses a

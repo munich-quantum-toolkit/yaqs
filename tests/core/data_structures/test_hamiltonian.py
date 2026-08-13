@@ -143,6 +143,17 @@ def test_parameterized_hamiltonian_validates_factory_outputs() -> None:
         invalid._resolve_at(0.0)  # ruff: ignore[private-member-access]
 
 
+def test_parameterized_hamiltonian_rejects_malformed_tensor_before_bond_access() -> None:
+    """Malformed factory tensors raise ValueError rather than an indexing error."""
+    malformed = MPO()
+    malformed.length = 1
+    malformed.tensors = [np.zeros((2, 2, 1), dtype=np.complex128)]
+    hamiltonian = Hamiltonian(length=1, parameterized_terms=[(lambda _value: malformed, lambda _time: 0.0)])
+
+    with pytest.raises(ValueError, match="invalid MPO tensor at site 0"):
+        hamiltonian._resolve_at(0.0)  # ruff: ignore[private-member-access]
+
+
 def test_parameterized_hamiltonian_rejects_static_materialization() -> None:
     """A parameterized source has no single MPO or sparse matrix."""
     hamiltonian = Hamiltonian(

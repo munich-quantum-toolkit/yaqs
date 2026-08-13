@@ -68,9 +68,12 @@ Typical patterns:
 - **Time-dependent terms** — `Hamiltonian(length=..., parameterized_terms=...)`
   pairs an operator factory with each scalar or array-valued time schedule.
 
-Access the materialized MPO with `H.mpo` (after a TJM run or `H.ensure_mpo()`)
-and the sparse form with `H.sparse_matrix` (after an MCWF / Lindblad run or
-`H.ensure_sparse()`). Both can coexist on one instance.
+For a static Hamiltonian, access the materialized MPO with `H.mpo` (after a TJM
+run or `H.ensure_mpo()`) and the sparse form with `H.sparse_matrix` (after an
+MCWF / Lindblad run or `H.ensure_sparse()`). Both can coexist on one instance. A
+parameterized Hamiltonian does not represent one static operator, so it cannot
+be materialized with `ensure_mpo()` or `ensure_sparse()`. During a supported
+MPS-TDVP run, YAQS instead resolves a static MPO at each substep midpoint.
 
 ## Time-dependent Hamiltonians
 
@@ -126,7 +129,7 @@ easier to reuse.
 Each factory may depend arbitrarily and nonlinearly on its parameter bundle, but
 must return a static `Hamiltonian` or `MPO` of the declared `length`. Multiple
 factory-schedule pairs are additive terms. Schedule values must be finite
-numeric scalars or arrays, and resolved operators must have compatible physical
+numeric scalars or array-like values, and resolved operators must have compatible physical
 legs and be Hermitian.
 
 Parameterized Hamiltonians currently support a single MPS `State` with TDVP,

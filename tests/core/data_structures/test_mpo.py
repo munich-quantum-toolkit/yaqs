@@ -1509,6 +1509,15 @@ def test_mpo_add_single_site_matches_dense_sum() -> None:
     np.testing.assert_allclose(summed.to_matrix(), matrix_a + matrix_b, atol=1e-12)
 
 
+def test_mpo_add_single_site_rejects_mismatched_physical_dimensions() -> None:
+    """Single-site addition rejects different physical legs before NumPy can broadcast."""
+    mpo_a = MPO.from_local_ops([np.eye(2, dtype=np.complex128)])
+    mpo_b = MPO.from_local_ops([np.eye(3, dtype=np.complex128)])
+
+    with pytest.raises(ValueError, match="mismatched physical dimensions"):
+        _ = mpo_a + mpo_b
+
+
 def test_mpo_sum_single_site_matches_dense_sum() -> None:
     """mpo_sum produces a materializable one-site sum."""
     matrices = [

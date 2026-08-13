@@ -197,8 +197,14 @@ class Hamiltonian:
         )
 
     @staticmethod
-    def _validate_resolved_mpo(mpo: MPO, *, expected_length: int, term_index: int) -> None:
-        """Validate one factory's resolved MPO structure and small-system Hermiticity.
+    def _validate_resolved_mpo(
+        mpo: MPO,
+        *,
+        expected_length: int,
+        term_index: int,
+        check_hermiticity: bool = True,
+    ) -> None:
+        """Validate one factory's resolved MPO structure and optional Hermiticity.
 
         Raises:
             ValueError: If length, tensor structure, boundaries, or Hermiticity is invalid.
@@ -206,18 +212,18 @@ class Hamiltonian:
         if mpo.length != expected_length or len(mpo.tensors) != expected_length:
             msg = f"parameterized_terms[{term_index}] factory returned length {mpo.length}; expected {expected_length}."
             raise ValueError(msg)
-        if mpo.tensors[0].shape[2] != 1 or mpo.tensors[-1].shape[3] != 1 or not mpo.check_if_valid_mpo():
-            msg = f"parameterized_terms[{term_index}] factory returned an MPO with invalid virtual bonds."
-            raise ValueError(msg)
         for site, tensor in enumerate(mpo.tensors):
             if tensor.ndim != 4 or tensor.shape[0] != tensor.shape[1] or not np.all(np.isfinite(tensor)):
                 msg = f"parameterized_terms[{term_index}] factory returned an invalid MPO tensor at site {site}."
                 raise ValueError(msg)
+        if mpo.tensors[0].shape[2] != 1 or mpo.tensors[-1].shape[3] != 1 or not mpo.check_if_valid_mpo():
+            msg = f"parameterized_terms[{term_index}] factory returned an MPO with invalid virtual bonds."
+            raise ValueError(msg)
 
         total_dimension = int(np.prod([tensor.shape[0] for tensor in mpo.tensors]))
         # Dense reconstruction scales exponentially; above this cutoff the factory
         # remains responsible for satisfying the Hermiticity contract.
-        if total_dimension <= _PARAMETERIZED_HERMITICITY_MAX_DIM:
+        if check_hermiticity and total_dimension <= _PARAMETERIZED_HERMITICITY_MAX_DIM:
             matrix = mpo.to_matrix()
             if not np.allclose(matrix, matrix.conj().T, rtol=1e-10, atol=1e-12):
                 msg = f"parameterized_terms[{term_index}] factory returned a non-Hermitian operator."
@@ -248,6 +254,7 @@ class Hamiltonian:
         parameters: Sequence[object],
         *,
         length: int,
+        check_hermiticity: bool = True,
     ) -> MPO:
         """Resolve factory callables and parameters into one validated MPO.
 
@@ -283,7 +290,12 @@ class Hamiltonian:
                     f"got {type(resolved).__name__}."
                 )
                 raise TypeError(msg)
-            cls._validate_resolved_mpo(mpo, expected_length=length, term_index=index)
+            cls._validate_resolved_mpo(
+                mpo,
+                expected_length=length,
+                term_index=index,
+                check_hermiticity=check_hermiticity,
+            )
             current_legs = tuple((tensor.shape[0], tensor.shape[1]) for tensor in mpo.tensors)
             if physical_legs is not None and current_legs != physical_legs:
                 msg = f"parameterized_terms[{index}] factory returned physical dimensions incompatible with term 0."

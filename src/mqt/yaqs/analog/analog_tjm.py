@@ -117,7 +117,7 @@ def step_through(
 
     Args:
         state (MPS): The current state of the system.
-        hamiltonian (MPO): The Hamiltonian operator for the system.
+        hamiltonian: A static MPO or compiled time-dependent Hamiltonian schedule.
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (AnalogSimParams): Simulation parameters including the time step and measurement settings.
         current_time (float): The current simulation time.
@@ -160,7 +160,7 @@ def sample(
 
     Args:
         phi (MPS): The sampling MPS prior to measurement.
-        hamiltonian (MPO): The Hamiltonian operator for the system.
+        hamiltonian: A static MPO or compiled time-dependent Hamiltonian schedule.
         noise_model (NoiseModel | None): The noise model to apply during evolution.
         sim_params (AnalogSimParams): Simulation parameters including time step and measurement settings.
         results (NDArray[np.float64]): An array to store the measured observable values.
@@ -225,7 +225,7 @@ def analog_tjm_2(
             - The initial MPS.
             - Optional noise model.
             - Simulation parameters (time step, SVD threshold, etc.).
-            - Hamiltonian MPO.
+            - Static MPO or compiled time-dependent Hamiltonian schedule.
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
         rng: Optional externally managed trajectory RNG. When omitted, the
             standalone trajectory seed behavior is preserved.
