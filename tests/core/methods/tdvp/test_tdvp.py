@@ -215,6 +215,18 @@ def test_tdvp_names_invalid_sweep_override() -> None:
         )
 
 
+@pytest.mark.parametrize("num_sweeps", [1.5, True])
+def test_tdvp_rejects_non_integer_sweep_override(num_sweeps: object) -> None:
+    """An explicit sweep override must be a true integer, not a float or bool."""
+    with pytest.raises(TypeError, match=f"num_sweeps must be int, got {type(num_sweeps).__name__}"):
+        tdvp(
+            MPS(1),
+            MPO.identity(1),
+            AnalogSimParams(elapsed_time=0.1, dt=0.1),
+            num_sweeps=cast("Any", num_sweeps),
+        )
+
+
 def test_tdvp_rejects_unknown_tdvp_mode_at_runtime() -> None:
     """Mutated tdvp_mode outside the supported set raises instead of falling through."""
     state = MPS(4, state="zeros")

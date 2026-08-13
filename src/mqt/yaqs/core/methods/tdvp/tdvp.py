@@ -56,10 +56,14 @@ def _run_sweeps(
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
     Raises:
+        TypeError: If an explicit ``num_sweeps`` override is not an integer.
         ValueError: If the sweep count is less than 1, if ``step_duration`` is
             used with digital parameters, or if it is non-finite or non-positive.
 
     """
+    if num_sweeps is not None and (isinstance(num_sweeps, bool) or not isinstance(num_sweeps, int)):
+        msg = f"num_sweeps must be int, got {type(num_sweeps).__name__}."
+        raise TypeError(msg)
     sweep_count = sim_params.tdvp_sweeps if num_sweeps is None else num_sweeps
     if sweep_count < 1:
         sweep_name = "tdvp_sweeps" if num_sweeps is None else "num_sweeps"
