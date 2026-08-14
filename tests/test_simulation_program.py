@@ -31,6 +31,7 @@ from mqt.yaqs import (
     SimulationProgram,
     Simulator,
     State,
+    XYZPauliNoiseModel,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_program import (
@@ -1241,6 +1242,22 @@ def test_noisy_program_rejects_requested_trajectory_state() -> None:
             State(2, initial="zeros"),
             program,
             noise_model=noise_model,
+        )
+
+
+def test_program_rejects_gate_local_stochastic_noise_model() -> None:
+    """SimulationProgram rejects models supported only by standalone circuits."""
+    circuit = QuantumCircuit(1)
+    program = SimulationProgram(
+        [(circuit, DigitalSimParams())],
+        observables=[Observable("z", 0)],
+    )
+
+    with pytest.raises(TypeError, match="only for standalone circuit simulation"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(1, initial="zeros"),
+            program,
+            noise_model=XYZPauliNoiseModel(0.1),
         )
 
 

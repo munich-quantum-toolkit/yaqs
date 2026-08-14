@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import cast
 
 import numpy as np
@@ -140,6 +141,40 @@ def test_dissipative_trajectory_stays_normalized_on_entangled_state() -> None:
     state = MPS(2, tensors=[left, right])
     apply_stochastic_noise(state, XBasisDissipativeNoiseModel(0.4), [0, 1], np.random.default_rng(17))
     assert float(state.norm()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_dissipative_noise_rejects_zero_total_kraus_weight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A malformed Kraus pair with no normalizable branch is rejected."""
+    zeros = np.zeros((2, 2), dtype=np.complex128)
+    monkeypatch.setattr(XBasisDissipativeNoiseModel, "kraus_operators", lambda _model: (zeros, zeros))
+
+    with pytest.raises(ValueError, match="zero or non-finite total weight"):
+        apply_stochastic_noise(MPS(1), XBasisDissipativeNoiseModel(0.5), [0], _rng(randoms=[]))
+
+
+def test_dissipative_noise_rejects_non_complete_kraus_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kraus weights that do not preserve the incoming norm are rejected."""
+    identity = np.eye(2, dtype=np.complex128)
+    monkeypatch.setattr(XBasisDissipativeNoiseModel, "kraus_operators", lambda _model: (identity, identity))
+
+    with pytest.raises(ValueError, match="do not reproduce the incoming squared norm"):
+        apply_stochastic_noise(MPS(1), XBasisDissipativeNoiseModel(0.5), [0], _rng(randoms=[]))
+
+
+def test_dissipative_noise_rejects_selected_tiny_weight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A sampled numerically negligible branch is not divided by its tiny norm."""
+    tiny_weight = np.finfo(np.float64).tiny / 2.0
+    identity = np.eye(2, dtype=np.complex128)
+    tiny_branch = math.sqrt(tiny_weight) * identity
+    dominant_branch = math.sqrt(1.0 - tiny_weight) * identity
+    monkeypatch.setattr(
+        XBasisDissipativeNoiseModel,
+        "kraus_operators",
+        lambda _model: (tiny_branch, dominant_branch),
+    )
+
+    with pytest.raises(ValueError, match="not numerically normalizable"):
+        apply_stochastic_noise(MPS(1), XBasisDissipativeNoiseModel(0.5), [0], _rng(randoms=[0.0]))
 
 
 def test_seeded_stochastic_noise_application_is_reproducible() -> None:
