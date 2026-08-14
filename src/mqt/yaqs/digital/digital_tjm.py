@@ -26,11 +26,9 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.data_structures.stochastic_noise_model import StochasticNoiseModel, _is_stochastic_noise_model
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.stochastic_noise import apply_stochastic_noise
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
 from ..core.methods.tdvp.tdvp import evolve_window
@@ -204,6 +202,41 @@ def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> N
 
     local_processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
     return NoiseModel(local_processes)
+
+
+def apply_noise_after_gate(
+    state: MPS,
+    noise_model: NoiseModel,
+    sites: Sequence[int],
+    sim_params: DigitalSimParams,
+    rng: np.random.Generator,
+) -> tuple[MPS, bool]:
+    """Apply one standard TJM noise step for the processes supported on a gate.
+
+    The standard :class:`~mqt.yaqs.NoiseModel` remains the source of the
+    process sites, strengths, and resolved operator matrices or factors. A
+    circuit gate defines the local support: after the ideal gate is applied,
+    the relevant processes undergo the existing no-jump evolution followed by
+    the existing state-dependent jump sampling with a unit circuit timestep.
+
+    Args:
+        state: Circuit trajectory, updated in place.
+        noise_model: Standard YAQS noise model for the full system.
+        sites: Sites touched by the immediately preceding ideal gate.
+        sim_params: Digital simulation parameters used by two-site operations.
+        rng: Trajectory-local random generator.
+
+    Returns:
+        The updated state and whether at least one nonzero process was relevant
+        to the gate.
+    """
+    local_noise_model = create_local_noise_model(noise_model, sites)
+    if not any(process["strength"] != 0 for process in local_noise_model.processes):
+        return state, False
+
+    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+    return state, True
 
 
 def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
@@ -636,7 +669,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
 
 
 def digital_tjm(
-    args: tuple[int, MPS, NoiseModel | StochasticNoiseModel | None, DigitalSimParams, QuantumCircuit],
+    args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
@@ -680,11 +713,7 @@ def digital_tjm(
     wants_obs = bool(sim_params.observables)
     wants_shots = sim_params.shots is not None
     shots_only = wants_shots and not wants_obs
-    lindblad_noise = isinstance(noise_model, NoiseModel) and any(
-        proc["strength"] != 0 for proc in noise_model.processes
-    )
-    stochastic_noise = _is_stochastic_noise_model(noise_model) and not noise_model.is_noiseless
-    noisy = lindblad_noise or stochastic_noise
+    noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
 
     # Observable / get-state path allocates diagnostics (shots-only leaves them None).
     # Prefer the compiled circuit's barrier count so every layer.sample_points entry fits.
@@ -708,24 +737,20 @@ def digital_tjm(
     for layer in compiled.layers:
         for gate in layer.single_qubit_gates:
             _apply_single_qubit_gate(state, gate)
-            if stochastic_noise:
-                assert _is_stochastic_noise_model(noise_model)
-                apply_stochastic_noise(state, noise_model, gate.sites, rng)
+            if noisy:
+                assert noise_model is not None
+                state, _noise_applied = apply_noise_after_gate(state, noise_model, gate.sites, sim_params, rng)
 
         for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
             for gate in group:
                 _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
 
-                if lindblad_noise:
-                    assert isinstance(noise_model, NoiseModel)
-                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
-                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
-                else:
+                noise_applied = False
+                if noisy:
+                    assert noise_model is not None
+                    state, noise_applied = apply_noise_after_gate(state, noise_model, gate.sites, sim_params, rng)
+                if not noise_applied:
                     state.normalize(form="B", decomposition="QR")
-                    if stochastic_noise:
-                        assert _is_stochastic_noise_model(noise_model)
-                        apply_stochastic_noise(state, noise_model, gate.sites, rng)
 
         if sim_params.sample_layers:
             for _ in range(layer.sample_points):

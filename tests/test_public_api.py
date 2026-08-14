@@ -22,8 +22,6 @@ from mqt.yaqs import (
     SimulationProgram,
     Simulator,
     State,
-    XBasisDissipativeNoiseModel,
-    XYZPauliNoiseModel,
 )
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
@@ -44,8 +42,6 @@ EXPECTED_PUBLIC_API = frozenset({
     "Simulator",
     "SimulationProgram",
     "State",
-    "XBasisDissipativeNoiseModel",
-    "XYZPauliNoiseModel",
     "__version__",
     "simulator",
     "version_info",
@@ -86,8 +82,6 @@ def test_top_level_import_smoke() -> None:
 
     assert MemoryCharacterizer is not None
     assert NoiseCharacterizer is not None
-    assert XYZPauliNoiseModel(0).is_noiseless
-    assert XBasisDissipativeNoiseModel(0).is_noiseless
 
 
 def test_program_specifications_are_available_from_top_level() -> None:

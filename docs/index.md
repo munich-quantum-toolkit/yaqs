@@ -71,7 +71,7 @@ flowchart LR
 | Build a Markovian noise digital twin from measured trajectories            | {doc}`examples/digital_twin`                                                |
 | Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
 | Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
-| Apply stochastic gate-local Pauli or dissipative noise                     | {doc}`examples/stochastic_noise_models`                                     |
+| Apply standard noise processes in digital circuit trajectories             | {doc}`examples/circuit_noise`                                               |
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
 | Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
@@ -132,7 +132,7 @@ examples/digital_twin
 :titlesonly:
 
 examples/circuit_observables
-examples/stochastic_noise_models
+examples/circuit_noise
 examples/circuit_shots
 examples/custom_gates
 examples/equivalence_checking

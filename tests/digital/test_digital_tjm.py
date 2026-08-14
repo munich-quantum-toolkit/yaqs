@@ -26,15 +26,11 @@ from scipy.linalg import expm
 
 import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import (
-    AnalogSimParams,
     DigitalSimParams,
-    Hamiltonian,
     NoiseModel,
     Observable,
     Simulator,
     State,
-    XBasisDissipativeNoiseModel,
-    XYZPauliNoiseModel,
 )
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -46,6 +42,7 @@ from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
 from mqt.yaqs.core.methods.tdvp.tdvp import evolve_window
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
+    apply_noise_after_gate,
     apply_single_qubit_gate,
     apply_two_qubit_gate,
     apply_two_qubit_gate_tdvp,
@@ -86,21 +83,22 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
 
 
-class _StochasticScriptedRng:
-    """Minimal deterministic RNG for stochastic-noise integration tests."""
+class _ScriptedRng:
+    """Minimal deterministic RNG for gate-local NoiseModel tests."""
 
-    def __init__(self, randoms: list[float], integers: list[int] | None = None) -> None:
+    def __init__(self, randoms: list[float], choices: list[int] | None = None) -> None:
         self.randoms = iter(randoms)
-        self.integer_values = iter(integers or [])
+        self.choices = iter(choices or [])
 
     def random(self) -> float:
         """Return the next scripted uniform value."""
         return next(self.randoms)
 
-    def integers(self, high: int) -> int:
-        """Return the next scripted integer below ``high``."""
-        value = next(self.integer_values)
-        assert 0 <= value < high
+    def choice(self, size: int, p: list[float] | None = None) -> int:
+        """Return the next scripted categorical choice."""
+        del p
+        value = next(self.choices)
+        assert 0 <= value < size
         return value
 
 
@@ -2733,8 +2731,6 @@ def test_noisy_ccx_trajectory_convergence() -> None:
     n, num_traj, gamma = 3, 1024, 0.4
     angles = [1.9, 2.1, 0.9]
     qc = QuantumCircuit(n)
-    for q, theta in enumerate(angles):
-        qc.ry(theta, q)
     qc.ccx(0, 1, 2)
 
     nm = NoiseModel([{"name": "lowering", "sites": [q], "strength": gamma} for q in range(n)])
@@ -2745,12 +2741,12 @@ def test_noisy_ccx_trajectory_convergence() -> None:
         random_seed=7,
     )
 
-    # dense reference
-    v = np.eye(2**n, dtype=np.complex128)[:, 0]
+    # Prepare the rotated input outside the circuit so this remains a reference
+    # for exactly one ideal gate followed by one gate-local noise layer.
+    v_pre = np.eye(2**n, dtype=np.complex128)[:, 0]
     for q, theta in enumerate(angles):
-        v = _embed_le(_ry(theta), q, n) @ v
-    v_pre = v
-    v_post = np.asarray(Operator(qc).data) @ np.eye(2**n)[:, 0]
+        v_pre = _embed_le(_ry(theta), q, n) @ v_pre
+    v_post = np.asarray(Operator(qc).data) @ v_pre
     overlap = abs(np.vdot(v_pre, v_post))
     assert overlap < 0.9, "CCX acts trivially on this input; test would be vacuous"
 
@@ -2769,7 +2765,7 @@ def test_noisy_ccx_trajectory_convergence() -> None:
     tol = 5.0 / np.sqrt(num_traj)
     assert np.max(np.abs(z_ref - z_noiseless)) > 2 * tol, "noise effect below the statistical floor; vacuous"
 
-    initial = MPS(n, state="zeros")
+    initial = _dense_to_mps(v_pre)
     acc = np.zeros(n)
     for traj in range(num_traj):
         results, _diag, _counts, _final = digital_tjm((traj, initial, nm, sim_params, qc))
@@ -2867,8 +2863,8 @@ def test_noise_sites_end_to_end(builder: Callable[[QuantumCircuit], object], exp
         wraps=create_local_noise_model,
     ) as mock_local:
         results, _diag, _counts, _final = digital_tjm((0, MPS(n, state="zeros"), nm, sim_params, qc))
-    mock_local.assert_called_once()
-    _model, sites = mock_local.call_args.args
+    assert mock_local.call_count == n + 1
+    _model, sites = mock_local.call_args_list[-1].args
     assert list(sites) == expected_sites
     local = create_local_noise_model(nm, sites)
     assert {tuple(p["sites"]) for p in local.processes} == {(s,) for s in expected_sites}
@@ -2896,110 +2892,128 @@ def test_noise_sites_generator_path() -> None:
         wraps=create_local_noise_model,
     ) as mock_local:
         results, _diag, _counts, _final = digital_tjm((0, MPS(n, state="zeros"), nm, sim_params, qc))
-    mock_local.assert_called_once()
-    _model, sites = mock_local.call_args.args
+    assert mock_local.call_count == n + 1
+    _model, sites = mock_local.call_args_list[-1].args
     assert list(sites) == [0, 1, 2]
     assert results is not None
     assert np.all(np.isfinite(results))
 
 
 # ---------------------------------------------------------------------------
-# stochastic gate-local noise
+# standard NoiseModel gate-local infrastructure
 # ---------------------------------------------------------------------------
 
 
-def test_xyz_noise_is_applied_after_single_qubit_gates() -> None:
-    """A forced X event follows a noncommuting ideal H gate."""
+def test_standard_pauli_noise_is_applied_after_single_qubit_gate() -> None:
+    """A standard Pauli process follows a noncommuting ideal H gate."""
     circuit = QuantumCircuit(1)
     circuit.h(0)
     params = DigitalSimParams(get_state=True, preset="exact")
-    rng = cast("np.random.Generator", _StochasticScriptedRng([0.0], [0]))
-    _, _, _, final = digital_tjm((0, MPS(1, state="zeros"), XYZPauliNoiseModel(1.0), params, circuit), rng=rng)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 1.0}])
+    rng = cast("np.random.Generator", _ScriptedRng([0.0], [0]))
+
+    _, _, _, final = digital_tjm((0, MPS(1, state="zeros"), noise_model, params, circuit), rng=rng)
+
     assert final is not None
-    np.testing.assert_allclose(final.to_vec(), MPS(1, state="x+").to_vec(), atol=1e-14)
+    actual = final.to_vec()
+    assert _fidelity(actual, MPS(1, state="x-").to_vec()) == pytest.approx(1.0, abs=1e-14)
+    assert _fidelity(actual, MPS(1, state="x+").to_vec()) == pytest.approx(0.0, abs=1e-14)
 
 
-def test_dissipative_noise_is_applied_after_single_qubit_gates() -> None:
-    """Full X-basis damping follows a noncommuting ideal Z gate."""
+def test_standard_dissipative_noise_is_applied_after_single_qubit_gate() -> None:
+    """A standard lowering process uses the generic post-gate TJM path."""
     circuit = QuantumCircuit(1)
-    circuit.z(0)
+    circuit.x(0)
     params = DigitalSimParams(get_state=True, preset="exact")
-    rng = cast("np.random.Generator", _StochasticScriptedRng([0.1]))
+    noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 1.0}])
+    rng = cast("np.random.Generator", _ScriptedRng([0.0], [0]))
+
     _, _, _, final = digital_tjm(
-        (0, MPS(1, state="x+"), XBasisDissipativeNoiseModel(1.0), params, circuit),
+        (0, MPS(1, state="zeros"), noise_model, params, circuit),
         rng=rng,
     )
+
     assert final is not None
-    np.testing.assert_allclose(final.to_vec(), MPS(1, state="x+").to_vec(), atol=1e-14)
+    np.testing.assert_allclose(final.to_vec(), MPS(1, state="zeros").to_vec(), atol=1e-14)
 
 
-def test_xyz_two_qubit_noise_samples_each_touched_qubit_and_preserves_spectator() -> None:
-    """Forced local X events affect both gate qubits and leave a spectator unchanged."""
+def test_standard_two_site_process_follows_two_qubit_gate_and_preserves_spectator() -> None:
+    """A standard two-site process acts after the gate without affecting an idle site."""
     circuit = QuantumCircuit(3)
     circuit.cx(0, 1)
     params = DigitalSimParams(get_state=True, preset="exact")
-    rng = cast("np.random.Generator", _StochasticScriptedRng([0.0, 0.0], [0, 0]))
-    _, _, _, final = digital_tjm((0, MPS(3, state="zeros"), XYZPauliNoiseModel(1.0), params, circuit), rng=rng)
+    noise_model = NoiseModel([{"name": "crosstalk_xx", "sites": [0, 1], "strength": 1.0}])
+    rng = cast("np.random.Generator", _ScriptedRng([0.0], [0]))
+
+    _, _, _, final = digital_tjm((0, MPS(3, state="zeros"), noise_model, params, circuit), rng=rng)
+
     assert final is not None
     expected = np.zeros(8, dtype=np.complex128)
     expected[3] = 1.0
-    np.testing.assert_allclose(final.to_vec(), expected, atol=1e-14)
+    np.testing.assert_allclose(np.abs(final.to_vec()) ** 2, np.abs(expected) ** 2, atol=1e-14)
 
 
-def test_dissipative_two_qubit_gate_channels_each_touched_qubit() -> None:
-    """At p=1, both qubits touched by a two-qubit gate are independently reset to plus."""
-    circuit = QuantumCircuit(3)
-    circuit.cx(0, 1)
+def test_gate_local_noise_excludes_processes_on_untouched_sites() -> None:
+    """An unrelated process neither changes a spectator nor consumes a jump choice."""
+    circuit = QuantumCircuit(2)
+    circuit.id(0)
     params = DigitalSimParams(get_state=True, preset="exact")
-    rng = cast("np.random.Generator", _StochasticScriptedRng([0.1, 0.9]))
-    _, _, _, final = digital_tjm(
-        (0, MPS(3, state="zeros"), XBasisDissipativeNoiseModel(1.0), params, circuit),
-        rng=rng,
-    )
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 1.0},
+        {"name": "pauli_x", "sites": [1], "strength": 1.0},
+    ])
+    rng = cast("np.random.Generator", _ScriptedRng([0.0], [0]))
+
+    _, _, _, final = digital_tjm((0, MPS(2, state="zeros"), noise_model, params, circuit), rng=rng)
+
     assert final is not None
-    expected = np.zeros(8, dtype=np.complex128)
-    expected[:4] = 0.5
-    np.testing.assert_allclose(final.to_vec(), expected, atol=1e-14)
+    expected = np.zeros(4, dtype=np.complex128)
+    expected[1] = 1.0
+    np.testing.assert_allclose(np.abs(final.to_vec()) ** 2, np.abs(expected) ** 2, atol=1e-14)
 
 
-def test_stochastic_p_zero_matches_ideal_digital_simulation() -> None:
-    """A p=0 stochastic model follows the exact existing ideal circuit path."""
+def test_zero_strength_standard_noise_model_matches_ideal_circuit() -> None:
+    """A zero-strength standard model follows the exact ideal-circuit path."""
     circuit = QuantumCircuit(2)
     circuit.h(0)
     circuit.cx(0, 1)
     params = DigitalSimParams(get_state=True, preset="exact")
     _, _, _, ideal = digital_tjm((0, MPS(2), None, params, circuit))
-    _, _, _, zero_noise = digital_tjm((0, MPS(2), XYZPauliNoiseModel(0.0), params, circuit))
+    zero_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.0}])
+    _, _, _, zero_noise = digital_tjm((0, MPS(2), zero_model, params, circuit))
     assert ideal is not None
     assert zero_noise is not None
     np.testing.assert_array_equal(zero_noise.to_vec(), ideal.to_vec())
 
 
-def test_simulator_runs_dissipative_model_with_seeded_reproducibility() -> None:
-    """The public Simulator accepts the stochastic model and reproduces seeded trajectories."""
+def test_simulator_standard_noise_model_is_seeded_reproducibly() -> None:
+    """The public Simulator reuses its trajectory RNG for standard circuit noise."""
     circuit = QuantumCircuit(1)
-    circuit.id(0)
+    for _ in range(4):
+        circuit.id(0)
     params = DigitalSimParams(
-        observables=[Observable(X(), 0)],
-        num_traj=4,
+        observables=[Observable(Z(), 0)],
+        num_traj=8,
         random_seed=23,
         preset="exact",
     )
-    model = XBasisDissipativeNoiseModel(0.6)
+    model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.3}])
     simulator = Simulator(parallel=False, show_progress=False)
-    first = simulator.run(State(1, initial="x-"), circuit, params, model)
-    second = simulator.run(State(1, initial="x-"), circuit, params, model)
+    first = simulator.run(State(1, initial="ones"), circuit, params, model)
+    second = simulator.run(State(1, initial="ones"), circuit, params, model)
     np.testing.assert_array_equal(first.trajectories[0], second.trajectories[0])
     np.testing.assert_array_equal(first.expectation_values[0], second.expectation_values[0])
 
 
-def test_simulator_rejects_stochastic_model_for_analog_simulation() -> None:
-    """Stochastic p models cannot be confused with analog Lindblad gamma models."""
-    params = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.1, dt=0.1)
-    with pytest.raises(TypeError, match="only for digital"):
-        Simulator(show_progress=False).run(
-            State(1),
-            Hamiltonian(matrix=np.zeros((2, 2), dtype=np.complex128)),
-            params,
-            XYZPauliNoiseModel(0.1),
-        )
+def test_apply_noise_after_gate_skips_irrelevant_processes_without_rng_draw() -> None:
+    """The infrastructure reports no operation when the gate support is unrelated."""
+    state = MPS(2, state="zeros")
+    model = NoiseModel([{"name": "pauli_x", "sites": [1], "strength": 1.0}])
+    params = DigitalSimParams(get_state=True, preset="exact")
+    rng = cast("np.random.Generator", _ScriptedRng([]))
+
+    actual, applied = apply_noise_after_gate(state, model, [0], params, rng)
+
+    assert actual is state
+    assert not applied
+    np.testing.assert_array_equal(state.to_vec(), MPS(2, state="zeros").to_vec())

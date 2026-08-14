@@ -31,7 +31,6 @@ from mqt.yaqs import (
     SimulationProgram,
     Simulator,
     State,
-    XYZPauliNoiseModel,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_program import (
@@ -406,13 +405,13 @@ def test_program_noise_default_and_empty_segment_override() -> None:
         noise_model=distributed_noise,
     )
 
-    assert isinstance(result.noise_model, NoiseModel)
+    assert result.noise_model is not None
     assert isinstance(result.noise_model.processes[0]["strength"], float)
     assert isinstance(distributed_noise.processes[0]["strength"], dict)
     assert result.segment_results[0].noise_model is result.noise_model
     assert result.segment_results[2].noise_model is result.noise_model
     assert result.segment_results[1].noise_model is not result.noise_model
-    assert isinstance(result.segment_results[1].noise_model, NoiseModel)
+    assert result.segment_results[1].noise_model is not None
     assert result.segment_results[1].noise_model.processes == []
     assert result.segment_results[0].trajectories[0].shape == (3, 3)
     times = result.segment_results[0].times
@@ -1155,7 +1154,7 @@ def test_empty_noise_override_disables_analog_and_digital_segments() -> None:
     noisy_z = np.asarray(noisy_digital.segment_results[0].trajectories[0][:, 0]).real
     np.testing.assert_allclose(quiet, np.ones_like(quiet), atol=1e-10)
     assert abs(float(noisy[-1])) < 0.9
-    assert isinstance(disabled_digital.segment_results[0].noise_model, NoiseModel)
+    assert disabled_digital.segment_results[0].noise_model is not None
     assert disabled_digital.segment_results[0].noise_model.processes == []
     # Empty override makes the digital-only program non-stochastic and unitary (X+CX -> |11>).
     np.testing.assert_allclose(disabled_z, [-1.0], atol=1e-10)
@@ -1242,22 +1241,6 @@ def test_noisy_program_rejects_requested_trajectory_state() -> None:
             State(2, initial="zeros"),
             program,
             noise_model=noise_model,
-        )
-
-
-def test_program_rejects_gate_local_stochastic_noise_model() -> None:
-    """SimulationProgram rejects models supported only by standalone circuits."""
-    circuit = QuantumCircuit(1)
-    program = SimulationProgram(
-        [(circuit, DigitalSimParams())],
-        observables=[Observable("z", 0)],
-    )
-
-    with pytest.raises(TypeError, match="only for standalone circuit simulation"):
-        Simulator(parallel=False, show_progress=False).run(
-            State(1, initial="zeros"),
-            program,
-            noise_model=XYZPauliNoiseModel(0.1),
         )
 
 
