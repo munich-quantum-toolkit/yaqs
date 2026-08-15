@@ -1867,10 +1867,12 @@ def _run_noisy_spin_echo(*, include_pulse: bool) -> float:
 
 
 def test_hahn_echo_refocuses_detuning_but_not_markovian_dephasing() -> None:
-    """The pulse restores phase while the existing Lindblad envelope remains."""
+    """The pulse restores phase while analog and gate-local dephasing remain."""
     echo_magnetization = _run_noisy_spin_echo(include_pulse=True)
     no_pulse_magnetization = _run_noisy_spin_echo(include_pulse=False)
 
-    assert 0.3 < echo_magnetization < 0.9
+    # Each ideal X pulse is followed by its own dt=1 TJM noise step, so the
+    # refocused signal includes both the analog envelope and pulse-local noise.
+    assert 0.15 < echo_magnetization < 0.3
     assert no_pulse_magnetization < 0.2
     assert echo_magnetization > no_pulse_magnetization + 0.3

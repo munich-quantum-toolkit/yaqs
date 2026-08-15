@@ -537,12 +537,14 @@ def test_digital_observables() -> None:
 
     result = Simulator(show_progress=False).run(state, circuit, sim_params, noise_model)
 
+    # The seeded reference includes one gate-local TJM noise step after every
+    # relevant RX and RZZ gate in the circuit.
     expected_z = [
-        0.6733214071546825,
-        0.8502664720526317,
-        0.8709639049732125,
-        0.8628627940961556,
-        0.6730350827430835,
+        0.6748128576028825,
+        0.8592184170744979,
+        0.8707262927986105,
+        0.8650684088150588,
+        0.681944924633051,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
@@ -607,12 +609,14 @@ def test_digital_observables_parallel_off() -> None:
 
     result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, noise_model)
 
+    # The seeded reference includes one gate-local TJM noise step after every
+    # relevant RX and RZZ gate in the circuit.
     expected_z = [
-        0.6733214071546825,
-        0.8502664720526317,
-        0.8709639049732125,
-        0.8628627940961556,
-        0.6730350827430835,
+        0.6748128576028825,
+        0.8592184170744979,
+        0.8707262927986105,
+        0.8650684088150588,
+        0.681944924633051,
     ]
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
