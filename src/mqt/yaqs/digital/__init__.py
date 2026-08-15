@@ -6,3 +6,7 @@
 # Licensed under the MIT License
 
 """YAQS's TDVP-based quantum circuit simulator."""
+
+from .stochastic_circuit import sample_stochastic_circuit
+
+__all__ = ["sample_stochastic_circuit"]

@@ -89,6 +89,44 @@ all belong to the gate's qubits. Single-qubit gates and idle sites between the
 gate qubits receive no noise. Each gate counts as one unit of noise time; to
 model compiled depth, simulate the transpiled circuit.
 
+### Explicit stochastic circuit trajectories
+
+For Pauli jump studies that need the noise realization as a Qiskit circuit,
+{func}`~mqt.yaqs.digital.sample_stochastic_circuit` provides a preprocessing
+path based on the standard {class}`~mqt.yaqs.NoiseModel`. It considers one- and
+two-qubit quantum gates. A one-qubit gate sees only processes fully supported on
+its target qubit. A two-qubit gate sees processes fully supported on either
+touched qubit or both. For the relevant processes on one gate support, let
+
+\[ \Gamma = \sum_i \gamma_i. \]
+
+An event occurs with probability $1 - \exp(-\Gamma)$. Conditional on an event,
+exactly one process is selected with probability $\gamma_i / \Gamma$. Its
+support may be either gate qubit or both; a two-site Pauli product is inserted
+as one Pauli gate on each declared site. The `strength` values remain
+nonnegative Lindblad rates $\gamma_i$, not Bernoulli probabilities.
+
+```{code-cell} ipython3
+from mqt.yaqs.core.random_utils import make_trajectory_rng
+from mqt.yaqs.digital import sample_stochastic_circuit
+
+pauli_noise = NoiseModel([
+    {"name": "pauli_x", "sites": [0], "strength": 0.05},
+    {"name": "pauli_z", "sites": [1], "strength": 0.05},
+    {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.02},
+])
+rng = make_trajectory_rng(0, base_seed=7)
+realized_circuit = sample_stochastic_circuit(qc, pauli_noise, rng)
+```
+
+The ideal instructions are copied without decomposition. An `RX` remains one
+`RX` noise opportunity, and an `RZZ` remains one native `RZZ` noise opportunity.
+Distribution-valued strengths are sampled once per builder call, before the
+circuit is scanned. Each returned circuit is one trajectory; use a
+trajectory-specific generator for each realization and run the realized circuit
+without passing the noise model again. This keeps stochasticity in circuit
+construction and avoids applying the same noise twice.
+
 ## 2. Noise-strength sweep
 
 On a longer chain, sweep a global relaxation rate $\gamma$ and track how each
