@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import math
 import re
-from typing import TYPE_CHECKING, ClassVar, cast, overload
+from typing import TYPE_CHECKING, ClassVar, overload
 
 import numpy as np
 import opt_einsum as oe
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from ..libraries.gate_library import BaseGate
-    from ..methods.decompositions import TruncMode
     from .simulation_parameters import DigitalSimParams
 
 ComplexTensor = NDArray[np.complex128]
@@ -1028,8 +1027,14 @@ class MPO:
         return mpo
 
     @classmethod
-    def from_gate(cls, gate: BaseGate, chain_length: int) -> MPO:
-        """Build an MPO for a two-qubit gate on a chain.
+    def from_gate(
+        cls,
+        gate: BaseGate,
+        chain_length: int,
+        *,
+        physical_dimensions: list[int] | tuple[int, ...] | None = None,
+    ) -> MPO:
+        """Build an MPO for a gate on two or more qubits on a chain.
 
         When ``chain_length`` equals the gate support size, the MPO contains only the
         extended gate tensors. When ``chain_length`` is larger, identity MPO sites are
@@ -1039,39 +1044,54 @@ class MPO:
         already populated for the gate support.
 
         Args:
-            gate: Two-qubit gate with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
+            gate: Gate on two or more qubits with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
             chain_length: Total number of MPO sites (support length or full MPS length).
+            physical_dimensions: Optional local dimension for every chain site.
+                This permits qubit gates whose support crosses non-qubit spectators.
 
         Returns:
             MPO ready for :meth:`multiply` on an MPS or another MPO.
 
         Raises:
-            ValueError: If the gate is not two-qubit or ``chain_length`` is too small.
+            ValueError: If the gate acts on fewer than two qubits, the number of sites does not
+                match the interaction level, ``chain_length`` is too small, or the sites lie
+                outside the chain.
         """
-        if gate.interaction != 2:
-            msg = f"from_gate requires a two-qubit gate, got interaction {gate.interaction}."
+        if gate.interaction < 2:
+            msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
             raise ValueError(msg)
-        if len(gate.sites) != 2:
-            msg = f"from_gate requires exactly two sites, got {len(gate.sites)}."
+        if len(gate.sites) != gate.interaction:
+            msg = f"from_gate requires {gate.interaction} sites, got {len(gate.sites)}."
             raise ValueError(msg)
 
-        first_site = min(gate.sites[0], gate.sites[1])
-        last_site = max(gate.sites[0], gate.sites[1])
+        first_site = min(gate.sites)
+        last_site = max(gate.sites)
         support_len = last_site - first_site + 1
         if chain_length < support_len:
             msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
             raise ValueError(msg)
+        if chain_length > support_len and (first_site < 0 or last_site >= chain_length):
+            msg = f"gate sites {gate.sites} are outside the chain of length {chain_length}."
+            raise ValueError(msg)
 
-        support = get_support_mpo(gate, first_site=first_site, last_site=last_site)
+        dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * chain_length
+        if len(dimensions) != chain_length:
+            msg = f"Expected {chain_length} physical dimensions, got {len(dimensions)}."
+            raise ValueError(msg)
+        support_dimensions = dimensions if chain_length == support_len else dimensions[first_site : last_site + 1]
+        support = get_support_mpo(
+            gate,
+            first_site=first_site,
+            last_site=last_site,
+            physical_dimensions=support_dimensions,
+        )
         if chain_length == support_len:
             tensors = support
         else:
-            phys_dim = support[0].shape[0]
-            identity_site = make_identity_site(phys_dim)
             tensors = []
             for site in range(chain_length):
                 if site < first_site or site > last_site:
-                    tensors.append(np.array(identity_site, copy=True))
+                    tensors.append(make_identity_site(dimensions[site]))
                 else:
                     tensors.append(support[site - first_site])
 
@@ -1525,7 +1545,7 @@ class MPO:
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
-            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+            trunc_mode=sim_params.trunc_mode,
         )
 
     def _multiply_mpo(
@@ -1588,6 +1608,26 @@ class MPO:
                 self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
             else:
                 self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+
+    def reflected(self) -> MPO:
+        """Return a site-reflected MPO with left and right virtual legs exchanged.
+
+        Sites are reversed and each tensor is permuted as
+        ``(phys_out, phys_in, left, right) -> (phys_out, phys_in, right, left)``.
+        Physical input/output legs are not exchanged. The original MPO is unchanged.
+
+        Returns:
+            A new :class:`MPO` representing the spatially reflected operator.
+        """
+        reflected_tensors = [
+            np.asarray(np.transpose(tensor, (0, 1, 3, 2)), dtype=np.complex128).copy()
+            for tensor in reversed(self.tensors)
+        ]
+        out = MPO()
+        out.tensors = reflected_tensors
+        out.length = self.length
+        out.physical_dimension = self.physical_dimension
+        return out
 
     def to_mps(self) -> MPS:
         """MPO to MPS conversion.
@@ -1713,13 +1753,13 @@ class MPO:
         return float(np.abs(trace) / hilbert_dim)
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """MPO to matrix conversion.
+        """MPO to matrix conversion (site 0 = MSB Kronecker layout).
 
-        Converts a list of tensors into a matrix using Einstein summation convention.
-        This method iterates over the list of tensors and performs tensor contractions
-        using the Einstein summation convention (`oe.constrain`). The resulting tensor is
-        then reshaped accordingly. The final matrix is squeezed to ensure the left and
-        right bonds are 1.
+        Contracts MPO tensors left-to-right with Einstein summation. The resulting
+        dense layout treats site ``0`` as the most-significant bit. For operators
+        that must act on :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`
+        (site 0 = LSB), use :meth:`to_matrix_mps_order` or
+        :meth:`to_sparse_matrix` instead.
 
         Returns:
             The resulting matrix after tensor contractions and reshaping.
@@ -1739,6 +1779,19 @@ class MPO:
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    def to_matrix_mps_order(self) -> NDArray[np.complex128]:
+        """Dense matrix in MPS ``to_vec`` order (site 0 = LSB).
+
+        Matches :meth:`to_sparse_matrix` and
+        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`. Prefer this (or the
+        sparse converter) for dense state-vector references under asymmetric
+        Hamiltonians; :meth:`to_matrix` keeps the historical site-0-MSB layout.
+
+        Returns:
+            Dense operator matrix acting on vectors from :meth:`MPS.to_vec`.
+        """
+        return np.asarray(self.to_sparse_matrix().toarray(), dtype=np.complex128)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
         """MPO to sparse matrix conversion.

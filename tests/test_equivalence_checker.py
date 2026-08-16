@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
@@ -296,6 +296,25 @@ def test_equivalence_checker_rejects_mid_circuit_measurements() -> None:
         _issue_checker(representation="matrix").check(qc1, qc2)
 
 
+def test_matrix_backend_descending_cx_equivalence() -> None:
+    """The matrix backend accepts the H-conjugation identity for a descending cx.
+
+    ``(H ⊗ H) · cx(1, 2) · (H ⊗ H)`` equals ``cx(2, 1)``; both backends must agree.
+    """
+    qa = QuantumCircuit(3)
+    qa.cx(2, 1)
+
+    qb = QuantumCircuit(3)
+    qb.h(1)
+    qb.h(2)
+    qb.cx(1, 2)
+    qb.h(1)
+    qb.h(2)
+
+    assert EquivalenceChecker(representation="matrix").check(qa, qb)["equivalent"] is True
+    assert EquivalenceChecker(representation="mpo").check(qa, qb)["equivalent"] is True
+
+
 def test_equivalence_checker_matrix_backend_strips_measurements_once() -> None:
     """The matrix backend should strip final measurements only inside ``compose_operator_tensor``."""
     qc1 = QuantumCircuit(1, 1)
@@ -352,6 +371,29 @@ def test_global_phase_equivalence(representation: str) -> None:
     result = checker.check(qc1, qc2)
     assert result["equivalent"] is True
     assert result["representation"] == representation
+
+
+def test_mpo_backend_rejects_multi_qubit_gates() -> None:
+    """The MPO backend rejects circuits containing gates on more than two qubits."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+
+    checker = EquivalenceChecker(representation="mpo")
+    with pytest.raises(ValueError, match="more than two qubits"):
+        checker.check(qc, qc)
+
+
+def test_matrix_backend_supports_multi_qubit_gates() -> None:
+    """The matrix backend checks equivalence of circuits containing three-qubit gates."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    decomposed = transpile(qc, basis_gates=["cx", "u"], optimization_level=0)
+    assert all(len(instruction.qubits) <= 2 for instruction in decomposed.data)
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qc, decomposed)
+    assert result["equivalent"] is True
+    assert result["representation"] == "matrix"
 
 
 def test_auto_representation_selects_by_qubit_count() -> None:

@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 import numpy as np
 
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
+from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -90,6 +91,85 @@ def _validate_random_seed(random_seed: int | None) -> None:
     if random_seed < 0:
         msg = f"random_seed must be non-negative, got {random_seed}."
         raise ValueError(msg)
+
+
+def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
+    """Validate analog time parameters and return the integer number of steps.
+
+    Backends evolve every interval with the full ``dt``, so ``elapsed_time`` must be an
+    integer multiple of ``dt`` within a scale-aware tolerance. Relabeling the final
+    timestamp without a fractional step would otherwise disagree with the evolution.
+
+    Args:
+        elapsed_time: Total simulation time (must be finite and ``>= 0``).
+        dt: Fixed time step (must be finite and ``> 0``).
+
+    Returns:
+        Non-negative integer step count ``n`` such that ``times = dt * arange(n + 1)``.
+
+    Raises:
+        TypeError: If ``elapsed_time`` or ``dt`` is a bool or non-numeric.
+        ValueError: If values are non-finite, ``dt <= 0``, ``elapsed_time < 0``, or
+            ``elapsed_time`` is not an integer multiple of ``dt``.
+    """
+    if isinstance(elapsed_time, bool) or not isinstance(elapsed_time, (int, float, np.floating, np.integer)):
+        msg = f"elapsed_time must be a real number, got {type(elapsed_time).__name__}."
+        raise TypeError(msg)
+    if isinstance(dt, bool) or not isinstance(dt, (int, float, np.floating, np.integer)):
+        msg = f"dt must be a real number, got {type(dt).__name__}."
+        raise TypeError(msg)
+
+    try:
+        elapsed_f = float(elapsed_time)
+        dt_f = float(dt)
+    except OverflowError as exc:
+        msg = "elapsed_time and dt must be representable as finite floats."
+        raise ValueError(msg) from exc
+
+    if not np.isfinite(elapsed_f):
+        msg = f"elapsed_time must be finite, got {elapsed_time!r}."
+        raise ValueError(msg)
+    if not np.isfinite(dt_f):
+        msg = f"dt must be finite, got {dt!r}."
+        raise ValueError(msg)
+    if dt_f <= 0.0:
+        msg = f"dt must be positive, got {dt_f}."
+        raise ValueError(msg)
+    if elapsed_f < 0.0:
+        msg = f"elapsed_time must be non-negative, got {elapsed_f}."
+        raise ValueError(msg)
+    if not elapsed_f > 0.0:
+        return 0
+
+    n_float = elapsed_f / dt_f
+    if not np.isfinite(n_float):
+        msg = f"elapsed_time / dt must be finite, got {n_float}."
+        raise ValueError(msg)
+
+    n_steps = round(n_float)
+    # Bound by a float64 times-grid allocation: nbytes must fit in a platform size index.
+    max_steps = np.iinfo(np.intp).max // np.dtype(np.float64).itemsize - 1
+    if n_steps > max_steps:
+        msg = f"elapsed_time / dt yields too many time steps ({n_steps})."
+        raise ValueError(msg)
+
+    evolved_time = n_steps * dt_f
+    residual = abs(elapsed_f - evolved_time)
+    # Account only for accumulated float64 roundoff and keep the tolerance well
+    # below half a step so a genuinely fractional duration cannot be relabeled.
+    roundoff_tol = max(
+        np.spacing(elapsed_f),
+        abs(n_steps) * np.spacing(dt_f),
+        8 * np.finfo(np.float64).eps * max(elapsed_f, evolved_time, dt_f),
+    )
+    tol = min(roundoff_tol, 0.25 * dt_f)
+    if n_steps <= 0 or residual > tol:
+        msg = (
+            f"elapsed_time ({elapsed_f}) must be an integer multiple of dt ({dt_f}); "
+            f"got elapsed_time/dt = {n_float} (nearest integer {n_steps}, time residual {residual})."
+        )
+        raise ValueError(msg)
+    return n_steps
 
 
 def _validate_gate_mode(mode: GateMode) -> GateMode:
@@ -178,16 +258,19 @@ def _validate_svd_threshold(svd_threshold: float) -> float:
 
     Args:
         svd_threshold: Tolerance for SVD-based bond truncation during simulation.
+            Zero is allowed: it disables tolerance-based truncation for discarded-
+            weight modes and removes only exact zeros for ``hard_cutoff``, while a
+            hard bond cap may still reduce rank.
 
     Returns:
         The validated threshold as a float.
 
     Raises:
-        ValueError: If ``svd_threshold`` is non-finite or not strictly positive.
+        ValueError: If ``svd_threshold`` is non-finite or negative.
     """
     svd_threshold = float(svd_threshold)
-    if not np.isfinite(svd_threshold) or svd_threshold <= 0.0:
-        msg = f"svd_threshold must be a finite positive float, got {svd_threshold!r}."
+    if not np.isfinite(svd_threshold) or svd_threshold < 0.0:
+        msg = f"svd_threshold must be a finite non-negative float, got {svd_threshold!r}."
         raise ValueError(msg)
     return svd_threshold
 
@@ -220,6 +303,58 @@ class EvolutionMode(Enum):
 
     TDVP = "tdvp"
     BUG = "bug"
+
+
+_ALLOWED_TRUNC_MODES = frozenset({
+    "discarded_weight",
+    "relative",
+    "hard_cutoff",
+    "relative_discarded_weight",
+})
+
+
+def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
+    """Validate the SVD truncation mode name.
+
+    Args:
+        trunc_mode: Truncation mode string.
+
+    Returns:
+        The validated truncation mode.
+
+    Raises:
+        ValueError: If ``trunc_mode`` is not a string or not a supported value.
+    """
+    if not isinstance(trunc_mode, str):
+        # Public contract documents ValueError for any unsupported trunc_mode value.
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
+    if trunc_mode not in _ALLOWED_TRUNC_MODES:
+        msg = f"trunc_mode must be one of {sorted(_ALLOWED_TRUNC_MODES)!r}, got {trunc_mode!r}."
+        raise ValueError(msg)
+    return cast("TruncMode", trunc_mode)
+
+
+def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
+    """Validate and coerce the analog evolution mode.
+
+    Args:
+        evolution_mode: Evolution mode enum or string value.
+
+    Returns:
+        The validated :class:`EvolutionMode`.
+
+    Raises:
+        ValueError: If ``evolution_mode`` is not a supported value.
+    """
+    if isinstance(evolution_mode, EvolutionMode):
+        return evolution_mode
+    try:
+        return EvolutionMode(evolution_mode)
+    except ValueError as exc:
+        allowed = tuple(mode.value for mode in EvolutionMode)
+        msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
+        raise ValueError(msg) from exc
 
 
 class Observable:
@@ -350,9 +485,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
             from the current :attr:`observables` list).
         observable_sorted_indices: Maps each user-list index to the corresponding row in
             sorted worker buffers (computed from the current :attr:`observables` list).
-        elapsed_time: Total simulation time.
-        dt: Simulation time step.
-        times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
+        elapsed_time: Total simulation time (finite, ``>= 0``); must be an integer multiple of ``dt``.
+        dt: Fixed simulation time step (finite, ``> 0``).
+        times: Array of sampled times ``dt * arange(n + 1)`` from ``0`` to ``elapsed_time`` inclusive.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
@@ -363,11 +498,13 @@ class AnalogSimParams(_ObservableOrderingMixin):
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
             strict reference/debug settings (still subject to timestep and sampling error).
             Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-            Smaller values are more accurate but may require more Krylov vectors. Explicit values
-            override the preset.
-        trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
-        svd_threshold: SVD truncation threshold for bond dimension control.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+            TDVP and BUG local updates. Smaller values are more accurate but may require
+            more Krylov vectors. Explicit values override the preset.
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
+        svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
+            tolerance-based truncation for discarded-weight modes.
         order: Integration order.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
@@ -394,7 +531,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         *,
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
-        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
+        evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -407,8 +544,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
 
         Args:
             observables: List of observables to measure during the simulation.
-            elapsed_time: Total simulation time.
-            dt: Time step interval.
+            elapsed_time: Total simulation time (finite, ``>= 0``). Must be an integer
+                multiple of ``dt`` because backends evolve with fixed ``dt``.
+            dt: Fixed time step interval (finite, ``> 0``).
             num_traj: Number of simulation samples.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
@@ -418,14 +556,17 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
                 strict reference/debug settings (still subject to timestep and sampling error).
                 Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
-                Smaller values are more accurate but may require more Krylov vectors. Explicit values
-                override the preset.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
+                TDVP and BUG local updates. Smaller values are more accurate but may require
+                more Krylov vectors. Explicit values override the preset.
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
+                ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
+                one compression and renormalization after each ``dt`` step.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
@@ -444,19 +585,25 @@ class AnalogSimParams(_ObservableOrderingMixin):
         )
         self.observables = obs_list
 
-        self.elapsed_time = elapsed_time
-        self.dt = dt
-        self.times = np.arange(0, elapsed_time + dt, dt)
+        n_steps = _validate_analog_time_grid(elapsed_time, dt)
+        self.elapsed_time = float(elapsed_time)
+        self.dt = float(dt)
+        # Fixed-dt grid: backends evolve ``n_steps`` intervals of ``dt``. Pin the final
+        # stamp to ``elapsed_time`` only after the integer-multiple check (avoids float dust
+        # such as ``0.1 * 3 != 0.3`` without mislabeling non-integral durations).
+        self.times = self.dt * np.arange(n_steps + 1, dtype=np.float64)
+        if n_steps > 0:
+            self.times[-1] = self.elapsed_time
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = order
-        self.evolution_mode = evolution_mode
+        self.evolution_mode = _validate_evolution_mode(evolution_mode)
         self.get_state = get_state
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
@@ -471,7 +618,10 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
     Configures MPS circuit simulation. Outputs are selected by which fields are set:
     non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
-    counts, and ``get_state`` yields the final state. At least one of these must be set.
+    counts, and ``get_state`` yields the final state. A standalone
+    :meth:`~mqt.yaqs.Simulator.run` requires at least one of these outputs, while an
+    output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
+    state propagation is itself meaningful there.
     Observables and shots may be requested together; shots sample bitstrings from amplitudes
     and do not projectively measure the configured observables.
 
@@ -499,13 +649,16 @@ class DigitalSimParams(_ObservableOrderingMixin):
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
             ``krylov_tol``. Explicit values override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-        trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
         svd_threshold: SVD truncation threshold for bond dimension control.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
         num_mid_measurements: Mid-circuit barrier count when sampling layers.
-        gate_mode: Two-qubit gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
-            ``"mpo"``). Default is ``"mpo"``.
+        gate_mode: Gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
+            ``"mpo"``). Default is ``"mpo"``. Gates on three or more qubits use the
+            generator MPO and TDVP window in the TDVP modes when a generator is
+            available, and the gate-MPO path otherwise (including ``"swaps"``).
         tdvp_sweeps: Number of symmetric TDVP substeps per gate. Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
             Default is ``"2site"``.
@@ -551,19 +704,19 @@ class DigitalSimParams(_ObservableOrderingMixin):
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
                 ``krylov_tol``. Default is ``"balanced"``.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            gate_mode: Gate update mode (default ``"mpo"``).
             tdvp_sweeps: Number of symmetric TDVP substeps per gate (default ``1``).
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
         Raises:
-            ValueError: If no output is specified, ``sample_layers`` is set without observables,
-                or ``shots`` is not a positive integer when provided.
+            ValueError: If ``shots`` is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -579,16 +732,11 @@ class DigitalSimParams(_ObservableOrderingMixin):
             raise ValueError(msg)
         self.shots = shots
 
-        if sample_layers and not obs_list:
-            msg = "sample_layers requires a non-empty observables list."
-            raise ValueError(msg)
-        if not obs_list and shots is None and not get_state:
-            msg = "No output specified: set observables, shots, and/or get_state."
-            raise ValueError(msg)
-
+        # ``sample_layers`` may be set without observables here so a
+        # :class:`~mqt.yaqs.SimulationProgram` can inject program-wide observables later.
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.trunc_mode = trunc_mode
+        self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )

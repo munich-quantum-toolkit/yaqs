@@ -12,15 +12,23 @@ releases may include breaking changes.
 
 ### Added
 
-- added custom one-site matrix observables for non-qubit local dimensions
-
-  , including named position observables ([#497]) ([**@linusschulte**])
-
+- added infrastructure for analog-digital simulation ([#525])
+  ([**@linusschulte**])
+- added native support for gates acting on three or more qubits in circuit
+  simulation, including hardcoded CCX, CCZ, and CSWAP gates ([#524])
+  ([**@Pouri96**])
+- added custom one-site matrix observables for non-qubit local dimensions,
+  including named position observables ([#497]) ([**@linusschulte**])
 - added direct MPO Process Tensor construction and temporal entanglement
   ([#508]) ([**@aaronleesander**])
 
 ### Changed
 
+- updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
+- tested and documented the multi-qubit local noise rule ([#529])
+  ([**@Pouri96**])
+- hardened stability of noise model, timestep selection, and RNG ([#527])
+  ([**@aaronleesander**])
 - State.representation set as sole backend selector ([#519])
   ([**@aaronleesander**])
 - added QR canonicalization before compression sweep for stability ([#518])
@@ -35,6 +43,10 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed descending-site two-qubit gate application in the dense equivalence
+  backend ([#528]) ([**@Pouri96**])
+- fixed the CZ and CPhase generators used on the TDVP gate application path
+  ([#526]) ([**@Pouri96**])
 - fixed TJM jump selection to align processes with site-sweep probabilities
   ([#506]) ([**@Pouri96**])
 
@@ -217,9 +229,9 @@ _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#032)._
 
 ## [0.3.1] - 2025-08-29
 
-_📚 Refer to the [GitHub Release
-Notes](https://github.com/munich-quantum-toolkit/yaqs/releases) for previous
-changelogs._
+_📚 Refer to the
+[GitHub Release Notes](https://github.com/munich-quantum-toolkit/yaqs/releases)
+for previous changelogs._
 
 <!-- Version links -->
 
@@ -233,12 +245,19 @@ changelogs._
 
 <!-- PR links -->
 
+[#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
+[#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
+[#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525
+[#527]: https://github.com/munich-quantum-toolkit/yaqs/pull/527
+[#524]: https://github.com/munich-quantum-toolkit/yaqs/pull/524
 [#497]: https://github.com/munich-quantum-toolkit/yaqs/pull/497
 [#519]: https://github.com/munich-quantum-toolkit/yaqs/pull/519
 [#518]: https://github.com/munich-quantum-toolkit/yaqs/pull/518
 [#516]: https://github.com/munich-quantum-toolkit/yaqs/pull/516
 [#514]: https://github.com/munich-quantum-toolkit/yaqs/pull/514
 [#508]: https://github.com/munich-quantum-toolkit/yaqs/pull/508
+[#528]: https://github.com/munich-quantum-toolkit/yaqs/pull/528
+[#526]: https://github.com/munich-quantum-toolkit/yaqs/pull/526
 [#506]: https://github.com/munich-quantum-toolkit/yaqs/pull/506
 [#288]: https://github.com/munich-quantum-toolkit/yaqs/pull/288
 [#482]: https://github.com/munich-quantum-toolkit/yaqs/pull/482

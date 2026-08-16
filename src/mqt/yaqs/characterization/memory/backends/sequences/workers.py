@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.parallel_utils import resolve_worker_ctx, unpack_flat_job
+from mqt.yaqs.core.random_utils import make_trajectory_rng
 
 from ...shared.encoding import normalize_backend_rho, pack_rho8
 from ...shared.intervention_steps import apply_intervention_to_backend
@@ -45,26 +47,13 @@ def _get_times_cached(times_cache: dict[tuple[float, float], np.ndarray], *, dt:
     Returns:
         A 1D float array suitable for ``AnalogSimParams.times``.
 
-    Raises:
-        ValueError: If ``duration`` is not a positive integer multiple of ``dt``.
     """
     dt_f = float(dt)
     dur_f = float(duration)
-    if abs(dur_f) < 1e-15:
-        key = (dt_f, 0.0)
-        out = times_cache.get(key)
-        if out is None:
-            out = np.array([0.0], dtype=np.float64)
-            times_cache[key] = out
-        return out
-    n_steps = round(dur_f / dt_f)
-    if n_steps < 1 or abs(n_steps * dt_f - dur_f) > 1e-9 * max(1.0, dur_f):
-        msg = f"duration={dur_f} must be a positive integer multiple of dt={dt_f}."
-        raise ValueError(msg)
     key = (dt_f, dur_f)
     out = times_cache.get(key)
     if out is None:
-        out = np.linspace(0.0, dur_f, n_steps + 1)
+        out = AnalogSimParams(elapsed_time=dur_f, dt=dt_f).times
         times_cache[key] = out
     return out
 
@@ -341,6 +330,7 @@ def _simulate_seq_core(
 
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
+    rng = make_trajectory_rng(trajectory_idx, base_seed=sim_params.random_seed)
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
@@ -373,6 +363,7 @@ def _simulate_seq_core(
         solver,
         traj_idx=trajectory_idx,
         static_ctx=mcwf_ctxs[0],
+        rng=rng,
     )
 
     break_step: int | None = None
@@ -403,6 +394,7 @@ def _simulate_seq_core(
             solver,
             traj_idx=trajectory_idx,
             static_ctx=mcwf_ctxs[step_idx + 1],
+            rng=rng,
         )
         num_evolutions_in_loop += 1
 
@@ -542,6 +534,7 @@ def _seq_record_worker(
         raise ValueError(msg)
     solver = resolve_stochastic_solver(sim_params, solver=worker_ctx.get("solver"))
     state = _copy_initial_backend_state(initial_states[sequence_idx])
+    rng = make_trajectory_rng(trajectory_idx, base_seed=sim_params.random_seed)
     times_cache: dict[tuple[float, float], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
     step_params = copy.copy(sim_params)
     step_params.num_traj = 1
@@ -578,6 +571,7 @@ def _seq_record_worker(
         solver,
         traj_idx=trajectory_idx,
         static_ctx=mcwf_ctxs[0],
+        rng=rng,
     )
 
     rho0_raw = extract_site0_rho(state)
@@ -613,6 +607,7 @@ def _seq_record_worker(
             solver,
             traj_idx=trajectory_idx,
             static_ctx=mcwf_ctxs[step_idx + 1],
+            rng=rng,
         )
 
         rho_step = extract_site0_rho(state)

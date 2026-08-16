@@ -1003,6 +1003,57 @@ def test_multiply_mps_with_compression() -> None:
     assert state.orthogonality_center is not None
 
 
+def test_from_gate_uses_heterogeneous_spectator_identities() -> None:
+    """A long-range qubit gate MPO preserves actual spectator dimensions."""
+    dimensions = [2, 3, 2]
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 2)
+
+    gate_mpo = MPO.from_gate(gate, 3, physical_dimensions=dimensions)
+
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in gate_mpo.tensors] == [
+        (2, 2),
+        (3, 3),
+        (2, 2),
+    ]
+
+
+def test_from_gate_pads_interior_support_with_heterogeneous_outer_identities() -> None:
+    """Interior gate support keeps spectator dims outside and inside the support."""
+    dimensions = [3, 2, 2, 4]
+    gate = GateLibrary.cx()
+    gate.set_sites(1, 2)
+
+    gate_mpo = MPO.from_gate(gate, 4, physical_dimensions=dimensions)
+
+    assert [(tensor.shape[0], tensor.shape[1]) for tensor in gate_mpo.tensors] == [
+        (3, 3),
+        (2, 2),
+        (2, 2),
+        (4, 4),
+    ]
+
+
+def test_from_gate_rejects_wrong_physical_dimension_count() -> None:
+    """Explicit chain metadata must describe every MPO site."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+
+    with pytest.raises(ValueError, match="Expected 2 physical dimensions"):
+        MPO.from_gate(gate, 2, physical_dimensions=[2])
+
+
+def test_from_gate_support_only_accepts_nonzero_site_labels() -> None:
+    """Support-only MPO dimensions are local even when gate site labels are nonzero."""
+    gate = GateLibrary.cx()
+    gate.set_sites(2, 3)
+
+    gate_mpo = MPO.from_gate(gate, 2, physical_dimensions=[2, 2])
+
+    assert gate_mpo.length == 2
+    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix, atol=1e-12)
+
+
 def test_multiply_mps_invalidates_then_restores_center() -> None:
     """``multiply(MPS)`` clears gauge during apply and ``compress`` restores tracking."""
     length = 3
@@ -1044,6 +1095,62 @@ def test_multiply_mps_length_mismatch_raises() -> None:
     gate_mpo = MPO.from_gate(gate, 3)
     with pytest.raises(ValueError, match="does not match MPS length"):
         gate_mpo.multiply(state, compress=False)
+
+
+def _embed_gate_matrix(gate_matrix: np.ndarray, gate_sites: list[int], chain_length: int) -> np.ndarray:
+    """Embed a gate matrix in declared-site order into a dense chain operator.
+
+    Args:
+        gate_matrix: Gate matrix whose qubit axes follow ``gate_sites`` order (site-0-MSB layout).
+        gate_sites: Chain sites the gate acts on, in the gate's declared order.
+        chain_length: Total number of chain sites.
+
+    Returns:
+        Dense operator on the full chain with site 0 as the most significant bit.
+    """
+    num_gate_sites = len(gate_sites)
+    order = sorted(range(num_gate_sites), key=lambda idx: gate_sites[idx])
+    tensor = gate_matrix.reshape((2,) * (2 * num_gate_sites))
+    tensor = np.transpose(tensor, [*order, *[num_gate_sites + idx for idx in order]])
+    matrix = tensor.reshape(2**num_gate_sites, 2**num_gate_sites)
+    ascending_sites = sorted(gate_sites)
+
+    dim = 2**chain_length
+    embedded = np.zeros((dim, dim), dtype=complex)
+    for row in range(dim):
+        row_bits = [(row >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+        for col in range(dim):
+            col_bits = [(col >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+            if any(row_bits[k] != col_bits[k] for k in range(chain_length) if k not in ascending_sites):
+                continue
+            gate_row = 0
+            gate_col = 0
+            for k in ascending_sites:
+                gate_row = (gate_row << 1) | row_bits[k]
+                gate_col = (gate_col << 1) | col_bits[k]
+            embedded[row, col] = matrix[gate_row, gate_col]
+    return embedded
+
+
+def test_from_gate_three_qubit_matches_dense() -> None:
+    """``from_gate`` embeds a three-qubit gate with identity padding inside and outside the support."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 2, 3)
+    gate_mpo = MPO.from_gate(gate, 5)
+    assert gate_mpo.length == 5
+
+    expected = _embed_gate_matrix(gate.matrix, [0, 2, 3], 5)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_from_gate_three_qubit_permuted_sites() -> None:
+    """``from_gate`` handles a three-qubit gate whose sites are given in permuted order."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(3, 0, 2)
+    gate_mpo = MPO.from_gate(gate, 4)
+
+    expected = _embed_gate_matrix(gate.matrix, [3, 0, 2], 4)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), expected, atol=1e-12)
 
 
 def test_multiply_invalid_target_type_raises() -> None:
@@ -1404,3 +1511,61 @@ def test_mpo_sum_matches_iterated_addition() -> None:
     mpos = [MPO.identity(2), MPO.identity(2), MPO.identity(2)]
     ref = 3.0 * MPO.identity(2).to_matrix()
     np.testing.assert_allclose(MPO.mpo_sum(mpos).to_matrix(), ref, atol=1e-12)
+
+
+def test_mpo_reflected_involution_and_dense_equivalence() -> None:
+    """Reflecting an MPO twice restores tensors; dense matches site-reversed conjugation."""
+    mpo = MPO.ising(3, 1.0, 0.5)
+    original = [t.copy() for t in mpo.tensors]
+    reflected = mpo.reflected()
+    assert reflected is not mpo
+    for a, b in zip(original, mpo.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    # Reflected tensors are independent copies (safe if a caller mutates them).
+    reflected.tensors[0][0, 0, 0, 0] += 1.0
+    assert np.allclose(mpo.tensors[-1], original[-1])
+    reflected = mpo.reflected()
+
+    twice = reflected.reflected()
+    for a, b in zip(original, twice.tensors, strict=True):
+        assert np.allclose(a, b)
+
+    # Physical legs are not swapped by reflection.
+    for tensor in reflected.tensors:
+        assert tensor.shape[0] == tensor.shape[1] == 2
+
+    dense = mpo.to_matrix()
+    dense_reflected = reflected.to_matrix()
+    # Site-reversal permutation on a 3-qubit computational basis (site 0 = LSB).
+    n = 2**3
+    perm = np.empty(n, dtype=int)
+    for i in range(n):
+        bits = [(i >> b) & 1 for b in range(3)]
+        rev = 0
+        for b, bit in enumerate(reversed(bits)):
+            rev |= bit << b
+        perm[i] = rev
+    p = np.eye(n, dtype=complex)[perm]
+    np.testing.assert_allclose(dense_reflected, p @ dense @ p.T, atol=1e-12)
+
+
+def test_to_matrix_mps_order_matches_sparse_asymmetric() -> None:
+    """MPS-ordered dense conversion matches sparse and site-0-LSB embeddings."""
+    mpo = MPO()
+    mpo.from_pauli_sum(
+        terms=[(1.0, "Z0"), (0.3, "X1"), (0.7, "Y2")],
+        length=3,
+        tol=0.0,
+        n_sweeps=0,
+    )
+    dense_mps = mpo.to_matrix_mps_order()
+    sparse = mpo.to_sparse_matrix().toarray()
+    np.testing.assert_allclose(dense_mps, sparse, atol=1e-12)
+    z0 = _embed_one_body(_Z2, 3, 0)
+    x1 = _embed_one_body(_X2, 3, 1)
+    y2 = _embed_one_body(_Y2, 3, 2)
+    expected = z0 + 0.3 * x1 + 0.7 * y2
+    np.testing.assert_allclose(dense_mps, expected, atol=1e-12)
+    # Historical to_matrix keeps site-0 MSB and disagrees for asymmetric H.
+    assert not np.allclose(mpo.to_matrix(), expected, atol=1e-6)

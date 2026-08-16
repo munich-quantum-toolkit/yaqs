@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ...data_structures.mps import MPS
-    from ..decompositions import SvdDistribution, TruncMode
+    from ..decompositions import SvdDistribution
 
 
 # --- Truncation policy ---
@@ -62,7 +62,7 @@ def split_tdvp(
         merged,
         physical_dimensions,
         svd_distribution=cast("SvdDistribution", svd_distribution),
-        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        trunc_mode=sim_params.trunc_mode,
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic else sim_params.max_bond_dim,
         min_keep=1,
@@ -129,7 +129,7 @@ def _sync_bond_dim(
         if chi_out == target_dim and chi_in == target_dim:
             return
     if chi_out > target_dim or chi_in > target_dim:
-        trunc_mode = cast("TruncMode", sim_params.trunc_mode) if sim_params is not None else "relative"
+        trunc_mode = sim_params.trunc_mode if sim_params is not None else "relative"
         threshold = sim_params.svd_threshold if sim_params is not None else 0.0
         merged = merge_two_site(left, right)
         phys_dims = [int(left.shape[0]), int(right.shape[0])]

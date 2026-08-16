@@ -21,13 +21,17 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Pauli, Statevector
+from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
+from scipy.linalg import expm
 
+import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import CCX, GateLibrary, X, Y, Z
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.methods.stochastic_process import create_probability_distribution
 from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
 from mqt.yaqs.core.methods.tdvp.tdvp import evolve_window
 from mqt.yaqs.digital.digital_tjm import (
@@ -65,6 +69,8 @@ from tests.core.methods.tdvp.conftest import (
 from tests.digital.conftest import _physical_second_schmidt, _run_digital_observables_noiseless
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
@@ -118,11 +124,10 @@ def _assert_noise_processes_match(
 
 
 @pytest.mark.parametrize(
-    ("start", "end", "expected_processes"),
+    ("sites", "expected_processes"),
     [
         (
-            1,
-            2,
+            [1, 2],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
@@ -131,8 +136,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            0,
-            1,
+            [0, 1],
             [
                 {"name": "pauli_x", "sites": [0], "strength": 0.01},
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
@@ -141,8 +145,7 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            2,
-            3,
+            [2, 3],
             [
                 {"name": "pauli_x", "sites": [2], "strength": 0.03},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
@@ -150,30 +153,46 @@ def _assert_noise_processes_match(
             ],
         ),
         (
-            1,
-            1,
+            [1],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
             ],
         ),
         (
-            1,
-            3,
+            [1, 3],
             [
                 {"name": "pauli_x", "sites": [1], "strength": 0.02},
                 {"name": "pauli_x", "sites": [3], "strength": 0.04},
                 {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
             ],
         ),
+        (
+            [0, 1, 2],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+                {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
+                {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
+                {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
+                {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
+            ],
+        ),
+        (
+            [0, 2, 4],
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+            ],
+        ),
     ],
 )
 def test_create_local_noise_model(
-    start: int,
-    end: int,
+    sites: list[int],
     expected_processes: list[dict[str, object]],
 ) -> None:
-    """Local noise models retain only processes overlapping the gate site range."""
-    local_model = create_local_noise_model(_sample_global_noise_model(), start, end)
+    """Local noise models retain only processes whose sites lie in the gate support."""
+    local_model = create_local_noise_model(_sample_global_noise_model(), sites)
     _assert_noise_processes_match(local_model, expected_processes)
 
 
@@ -243,19 +262,27 @@ def test_process_layer_rejects_mid_circuit_measure() -> None:
         process_layer(dag)
 
 
-def test_process_layer_unsupported_gate() -> None:
-    """Test that process_layer raises an exception when encountering an unsupported gate.
+def test_process_layer_multi_qubit_gates() -> None:
+    """Test that process_layer groups gates on three or more qubits by their lowest qubit index.
 
-    This test creates a 3-qubit circuit with a CCX gate, which is not supported by process_layer.
-    It verifies that an exception is raised.
+    This test creates a circuit with two CCX gates acting on disjoint qubits in the same layer
+    and verifies that they are grouped into the even and odd lists by the parity of their lowest
+    qubit index, ordered by that index.
     """
-    qc = QuantumCircuit(3)
+    qc = QuantumCircuit(8)
+    qc.ccx(3, 5, 7)
     qc.ccx(0, 1, 2)
 
     dag = circuit_to_dag(qc)
+    single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
-    with pytest.raises(NotImplementedError):
-        process_layer(dag)
+    assert single_qubit_nodes == []
+    assert measure_barriers == []
+    assert len(even_nodes) == 1
+    assert len(odd_nodes) == 1
+    assert even_nodes[0].op.name == "ccx"
+    assert {dag.find_bit(qubit).index for qubit in even_nodes[0].qargs} == {0, 1, 2}
+    assert {dag.find_bit(qubit).index for qubit in odd_nodes[0].qargs} == {3, 5, 7}
 
 
 # --- apply_single_qubit_gate ---
@@ -306,6 +333,27 @@ def test_construct_generator_mpo() -> None:
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
     for i in range(length):
         if i not in {1, 3}:
+            np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
+
+
+def test_construct_generator_mpo_three_qubit() -> None:
+    """Test the construction of a generator MPO from a three-qubit gate with permuted sites.
+
+    This test retrieves a CCX gate from the GateLibrary, sets its sites in permuted order, and
+    verifies that each generator factor is placed on its declared site and that all other tensors
+    are the identity.
+    """
+    gate = GateLibrary.ccx()
+    gate.set_sites(4, 1, 3)
+    length = 6
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    assert first_site == 1
+    assert last_site == 4
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[4], (2, 3, 0, 1))), np.complex128(gate.generator[0]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[1], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
+    np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[2]))
+    for i in range(length):
+        if i not in {1, 3, 4}:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
 
@@ -1693,6 +1741,30 @@ def test_apply_two_qubit_gate() -> None:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-15)
 
 
+def test_standalone_swap_routing_rejects_non_qubit_spectator() -> None:
+    """Standalone gate application enforces the same safe SWAP route as compilation."""
+    state = MPS(3, state="zeros", physical_dimensions=[2, 3, 2])
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 2)
+    node = next(node for node in circuit_to_dag(circuit).front_layer() if node.op.name == "cx")
+    params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="swaps")
+
+    with pytest.raises(ValueError, match=r"cannot route.*non-qubit spectator"):
+        apply_two_qubit_gate(state, node, params)
+
+
+def test_freeze_gate_arrays_protects_array_generator() -> None:
+    """Compiled gates make an array-valued generator read-only."""
+    gate = X()
+    gate.generator = np.eye(2, dtype=np.complex128)
+
+    frozen = digital_module._freeze_gate_arrays(gate)  # ruff: ignore[private-member-access]
+
+    assert isinstance(frozen.generator, np.ndarray)
+    with pytest.raises(ValueError, match="read-only"):
+        frozen.generator[0, 0] = 0.0
+
+
 def test_unknown_gate_mode_raises() -> None:
     """Invalid gate_mode names are rejected at gate-application time."""
     mps = MPS(2, state="zeros")
@@ -1796,12 +1868,12 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     num_qubits = 3
     noise_factor = 0.01
 
-    # Seeded TJM reference (random_seed=7, num_traj=100); re-recorded after jump-order fix
+    # Seeded TJM reference (random_seed=7, num_traj=100); re-recorded after SeedSequence coordinates
     reference = np.array(
         [
-            [1.0, 0.9400000000000001, 0.9400000000000001, 0.96, 0.88, 0.8200000000000001],
-            [1.0, 0.76, 0.64, 0.6, 0.52, 0.34],
-            [1.0, 0.96, 0.88, 0.74, 0.72, 0.7000000000000001],
+            [1.0, 0.94, 0.82, 0.7, 0.52, 0.5],
+            [1.0, 0.96, 0.86, 0.72, 0.46, 0.5],
+            [1.0, 1.0, 0.94, 0.88, 0.82, 0.76],
         ],
         dtype=float,
     )
@@ -2069,6 +2141,187 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     assert result.expectation_values[0] is not None
 
 
+def _ccx_circuit() -> QuantumCircuit:
+    """Return a three-qubit circuit whose CCX gate acts nontrivially on the state.
+
+    The target qubit is rotated away from the ``X`` eigenbasis so the Toffoli is not a no-op.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.h(1)
+    qc.ry(0.9, 2)
+    qc.ccx(0, 1, 2)
+    qc.rz(0.3, 0)
+    qc.cx(0, 1)
+    return qc
+
+
+def _ccx_long_range_circuit() -> QuantumCircuit:
+    """Return a five-qubit circuit with a long-range CCX gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(5)
+    qc.h(0)
+    qc.ry(0.7, 1)
+    qc.h(2)
+    qc.ry(0.4, 3)
+    qc.ry(0.2, 4)
+    qc.ccx(0, 2, 4)
+    return qc
+
+
+def _ccz_circuit() -> QuantumCircuit:
+    """Return a four-qubit circuit with a long-range CCZ gate acting nontrivially.
+
+    Returns:
+        The circuit.
+    """
+    qc = QuantumCircuit(4)
+    for qubit in range(4):
+        qc.h(qubit)
+    qc.ccz(0, 1, 3)
+    qc.cx(1, 2)
+    return qc
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_ccx_statevector_vs_qiskit(gate_mode: GateMode) -> None:
+    """A circuit with a CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccx_long_range_statevector() -> None:
+    """A long-range CCX gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccx_long_range_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_ccz_statevector_mpo() -> None:
+    """A CCZ gate should match the Qiskit statevector on the gate-MPO path."""
+    qc = _ccz_circuit()
+    vec = _run_digital_observables_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_cswap_statevector(gate_mode: GateMode) -> None:
+    """A CSWAP gate applied through the gate-MPO path should match the Qiskit statevector."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.x(1)
+    qc.ry(0.5, 2)
+    qc.cswap(0, 1, 2)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("circuit_factory", "gate_mode"),
+    [
+        (_ccx_long_range_circuit, "tdvp"),
+        (_ccz_circuit, "full-tdvp"),
+    ],
+)
+def test_multi_qubit_generator_window_converges(
+    circuit_factory: Callable[[], QuantumCircuit],
+    gate_mode: GateMode,
+) -> None:
+    """The generator-window path converges with the number of TDVP substeps.
+
+    The single-substep result carries the state-dependent time-discretization error of the
+    windowed 2TDVP update, so the fidelity is asserted against a floor rather than machine
+    precision; increasing ``tdvp_sweeps`` reduces the error. The floor leaves headroom for
+    the spread of the single-substep error across supported dependency versions (0.89-0.93
+    observed for the ccz case between the minimum and the latest resolutions) and stays
+    above the overlap with the gate-skipped state, which the test pins below 0.7 so that
+    the floor separates an approximate gate application from a gate that was not applied.
+    """
+    qc = circuit_factory()
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    no_gate = QuantumCircuit(qc.num_qubits)
+    for instruction in qc.data:
+        if len(instruction.qubits) <= 2:
+            no_gate.append(instruction.operation, instruction.qubits, instruction.clbits)
+    ref_no_gate = np.asarray(Statevector(no_gate).data, dtype=np.complex128)
+    assert _fidelity(ref, ref_no_gate) < 0.7
+
+    vec_single = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=1)
+    assert isinstance(vec_single, np.ndarray)
+    fidelity_single = _fidelity(ref, vec_single)
+    assert fidelity_single >= 0.85
+
+    vec_many = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True, tdvp_sweeps=16)
+    assert isinstance(vec_many, np.ndarray)
+    fidelity_many = _fidelity(ref, vec_many)
+    assert fidelity_many >= 0.995
+    assert 1.0 - fidelity_many <= 1.0 - fidelity_single
+
+
+def test_noisy_ccx_smoke() -> None:
+    """Noisy digital simulation still runs with a CCX gate in the circuit."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    state = State(3, initial="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="tdvp",
+        num_traj=4,
+        random_seed=0,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert np.all(np.isfinite(expectation))
+
+
+def test_noisy_ccx_local_noise_uses_all_gate_sites() -> None:
+    """After a CCX, ``create_local_noise_model`` receives all three gate qubits."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.01},
+        {"name": "pauli_x", "sites": [2], "strength": 0.01},
+    ])
+    mps = MPS(3, state="zeros")
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="mpo",
+        num_traj=1,
+        random_seed=0,
+    )
+
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        digital_tjm((0, mps, noise_model, sim_params, qc))
+
+    mock_local.assert_called_once()
+    _noise, sites = mock_local.call_args.args
+    assert list(sites) == [0, 1, 2]
+
+
 def test_bell_state_sanity() -> None:
     """|00> + H(0) + CNOT(0,1) yields (|00> + |11>)/sqrt(2) under TEBD/hybrid."""
     qc = QuantumCircuit(2)
@@ -2235,3 +2488,491 @@ def test_obs_order_aligned() -> None:
         expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
+
+
+# ---- TEBD truncation gauge --------------------------------------------------------------
+
+GAUGE_LENGTH = 8
+GAUGE_CHI = 4
+GAUGE_SEED = 7
+GAUGE_OPT_RTOL = 0.05
+
+
+def _random_capped_mps(length: int, chi: int, seed: int) -> MPS:
+    """Random right-canonical MPS with every bond at its maximal value capped by ``chi``.
+
+    Args:
+        length: Number of sites.
+        chi: Bond-dimension cap.
+        seed: RNG seed.
+
+    Returns:
+        Right-canonical MPS with the orthogonality center at site 0.
+    """
+    rng = np.random.default_rng(seed)
+    bonds = [1] + [min(chi, 2**i, 2 ** (length - i)) for i in range(1, length)] + [1]
+    tensors = [
+        rng.standard_normal((2, bonds[i], bonds[i + 1])) + 1j * rng.standard_normal((2, bonds[i], bonds[i + 1]))
+        for i in range(length)
+    ]
+    state = MPS(length=length, tensors=tensors)
+    state.normalize(form="B", decomposition="QR")
+    return state
+
+
+def _dense_state(state: MPS) -> np.ndarray:
+    """Contract an MPS into a dense array in site order.
+
+    Args:
+        state: MPS to contract.
+
+    Returns:
+        Dense state of shape ``[2] * length`` with axes in site order.
+    """
+    acc = state.tensors[0].transpose(1, 0, 2)
+    for tensor in state.tensors[1:]:
+        acc = np.tensordot(acc, tensor.transpose(1, 0, 2), axes=([acc.ndim - 1], [0]))
+    return np.asarray(acc, dtype=np.complex128).reshape([2] * state.length)
+
+
+@pytest.mark.parametrize("gauge_known", [True, False])
+@pytest.mark.parametrize("left_site", [2, 3, 4])
+def test_tebd_truncation_schmidt_optimal(left_site: int, *, gauge_known: bool) -> None:
+    """Capped TEBD must realize the optimal truncation error at the gate bond.
+
+    One nearest-neighbor gate on a state whose bonds all sit at the cap can only
+    exceed the cap at the gate bond, so the best reachable infidelity is exactly the
+    discarded Schmidt weight of the exact post-gate state at that cut. This holds only
+    if the two-site split truncates in a canonical gauge; a right-canonical chain with
+    the center at site 0 (the state every gate sees in the circuit loop) is *not* in
+    that gauge for ``left_site > 0``, and truncating anyway lands far above the optimum.
+    """
+    params = DigitalSimParams(observables=[], num_traj=1, max_bond_dim=GAUGE_CHI, svd_threshold=1e-14, get_state=True)
+
+    state = _random_capped_mps(GAUGE_LENGTH, GAUGE_CHI, GAUGE_SEED)
+    if not gauge_known:
+        state.set_center(None)
+
+    gate = GateLibrary.cx()
+    gate.set_sites(left_site, left_site + 1)
+    u_gate = resolve_lr_tensor(gate, left_site, left_site + 1)
+
+    exact = np.tensordot(u_gate, _dense_state(state), axes=([2, 3], [left_site, left_site + 1]))
+    exact = np.moveaxis(exact, [0, 1], [left_site, left_site + 1])
+
+    singular_values = np.linalg.svd(exact.reshape(2 ** (left_site + 1), -1), compute_uv=False)
+    weights = singular_values**2 / np.sum(singular_values**2)
+    optimal_infidelity = float(np.sum(weights[GAUGE_CHI:]))
+    assert optimal_infidelity > 1e-8  # non-vacuous: the cap truncates
+
+    apply_two_qubit_gate_tebd(state, gate, params)
+
+    truncated = _dense_state(state).reshape(-1)
+    exact_vec = exact.reshape(-1)
+    overlap = np.abs(np.vdot(exact_vec, truncated)) ** 2
+    achieved = float(abs(1.0 - overlap / (np.vdot(exact_vec, exact_vec).real * np.vdot(truncated, truncated).real)))
+
+    assert achieved <= optimal_infidelity * (1.0 + GAUGE_OPT_RTOL) + 1e-12
+    assert state.orthogonality_center == left_site + 1
+
+
+def test_tebd_establishes_canonical_gauge() -> None:
+    """TEBD leaves a valid mixed-canonical state with the center on the gate pair."""
+    params = DigitalSimParams(observables=[], num_traj=1, max_bond_dim=GAUGE_CHI, svd_threshold=1e-14, get_state=True)
+    state = _random_capped_mps(GAUGE_LENGTH, GAUGE_CHI, GAUGE_SEED)
+
+    gate = GateLibrary.cx()
+    gate.set_sites(4, 5)
+    apply_two_qubit_gate_tebd(state, gate, params)
+
+    assert state.orthogonality_center == 5
+    assert state.check_canonical_form()[0] == 5
+
+
+# --- multi-qubit local noise -------------------------------------------------
+
+I2 = np.eye(2, dtype=np.complex128)
+PAULI_Z_MAT = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+
+
+def _embed_le(op: np.ndarray, qubit: int, n: int) -> np.ndarray:
+    """Embed a one-qubit operator at ``qubit`` on ``n`` qubits (little-endian kron).
+
+    Returns:
+        The embedded operator as a dense matrix.
+    """
+    ops = [I2] * n
+    ops[qubit] = op
+    full = ops[n - 1]
+    for q in range(n - 2, -1, -1):
+        full = np.kron(full, ops[q])
+    return full
+
+
+def _ry(theta: float) -> np.ndarray:
+    """Real Y-rotation matrix.
+
+    Returns:
+        The 2x2 rotation matrix.
+    """
+    c, s = np.cos(theta / 2), np.sin(theta / 2)
+    return np.array([[c, -s], [s, c]], dtype=np.complex128)
+
+
+def _dense_to_mps(vec: np.ndarray) -> MPS:
+    """Exact (untruncated) MPS from a dense state vector in ``MPS.to_vec`` order.
+
+    Returns:
+        The MPS whose ``to_vec`` reproduces ``vec``.
+    """
+    n = int(np.log2(vec.size))
+    psi = vec.reshape([2] * n)
+    # MPS.to_vec is little-endian (site 0 = least significant bit): axis i of the
+    # big-endian reshape corresponds to site n-1-i, so reverse to site order.
+    psi = np.transpose(psi, axes=list(range(n))[::-1])
+    tensors = []
+    chi_l = 1
+    m = psi.reshape(chi_l * 2, -1)
+    for site in range(n):
+        if site < n - 1:
+            u, s, vh = np.linalg.svd(m, full_matrices=False)
+            chi_r = len(s)
+            tensors.append(u.reshape(chi_l, 2, chi_r).transpose(1, 0, 2))
+            m = (np.diag(s) @ vh).reshape(chi_r * 2, -1)
+            chi_l = chi_r
+        else:
+            tensors.append(m.reshape(chi_l, 2, 1).transpose(1, 0, 2))
+    return MPS(n, tensors=tensors)
+
+
+def _sample_processes() -> list[dict[str, object]]:
+    """Global noise model spanning five sites with one- and two-site processes.
+
+    Returns:
+        The list of process dictionaries.
+    """
+    return [
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [2], "strength": 0.03},
+        {"name": "pauli_x", "sites": [3], "strength": 0.04},
+        {"name": "pauli_x", "sites": [4], "strength": 0.05},
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.06},
+        {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.07},
+        {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.08},
+        {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.09},
+        {"name": "crosstalk_xx", "sites": [0, 4], "strength": 0.10},
+    ]
+
+
+def _process_keys(model: NoiseModel) -> set[tuple[str, tuple[int, ...], float]]:
+    """Hashable (name, sites, strength) triples of a noise model.
+
+    Returns:
+        The set of process triples.
+    """
+    return {(str(p["name"]), tuple(p["sites"]), float(p["strength"])) for p in model.processes}
+
+
+# ---------------------------------------------------------------------------
+# which processes a gate's noise layer retains
+# ---------------------------------------------------------------------------
+
+
+def test_local_noise_model_contiguous_three_qubit() -> None:
+    """A contiguous 3q gate keeps all 1q and in-support 2q processes, nothing else."""
+    local = create_local_noise_model(NoiseModel(_sample_processes()), [0, 1, 2])
+    expected = {
+        ("pauli_x", (0,), 0.01),
+        ("pauli_x", (1,), 0.02),
+        ("pauli_x", (2,), 0.03),
+        ("crosstalk_xx", (0, 1), 0.06),
+        ("crosstalk_xx", (1, 2), 0.07),
+    }
+    assert _process_keys(local) == expected
+
+
+def test_local_noise_model_long_range_interior_dropped() -> None:
+    """ccx(0, 2, 4) support: idle sites 1 and 3 between the gate qubits get no noise."""
+    local = create_local_noise_model(NoiseModel(_sample_processes()), [0, 2, 4])
+    expected = {
+        ("pauli_x", (0,), 0.01),
+        ("pauli_x", (2,), 0.03),
+        ("pauli_x", (4,), 0.05),
+        ("crosstalk_xx", (0, 4), 0.10),
+    }
+    assert _process_keys(local) == expected
+
+
+def test_local_noise_model_qarg_order_irrelevant() -> None:
+    """The retained set depends on the site set, not on the qarg order."""
+    model = NoiseModel(_sample_processes())
+    assert _process_keys(create_local_noise_model(model, [2, 0, 1])) == _process_keys(
+        create_local_noise_model(model, [0, 1, 2])
+    )
+
+
+def test_local_noise_model_two_qubit_unchanged() -> None:
+    """For 2q gates the rule retains exactly what the earlier endpoint filter did.
+
+    ``NoiseModel.__init__`` sorts two-site process sites, so the earlier
+    ordered-equality filter and the current subset filter cannot disagree;
+    this includes a process the user specified with descending sites.
+    """
+    processes = [*_sample_processes(), {"name": "crosstalk_xx", "sites": [3, 1], "strength": 0.11}]
+    model = NoiseModel(processes)
+
+    def endpoint_filter(first_site: int, last_site: int) -> set[tuple[str, tuple[int, ...], float]]:
+        affected = [first_site, last_site]
+        kept = [
+            p
+            for p in model.processes
+            if p["sites"] == affected or p["sites"] == [first_site] or p["sites"] == [last_site]
+        ]
+        return {(str(p["name"]), tuple(p["sites"]), float(p["strength"])) for p in kept}
+
+    for first, last in [(0, 1), (1, 2), (2, 3), (1, 3), (0, 4)]:
+        assert endpoint_filter(first, last) == _process_keys(create_local_noise_model(model, [first, last]))
+
+
+# ---------------------------------------------------------------------------
+# operator content of the noise layer
+# ---------------------------------------------------------------------------
+
+_LAYER_PROCS: list[tuple[str, np.ndarray, int, float]] = [
+    ("lowering", np.asarray(NoiseModel.get_operator("lowering"), dtype=np.complex128), 0, 0.013),
+    ("pauli_z", PAULI_Z_MAT, 1, 0.007),
+    ("pauli_x", np.array([[0, 1], [1, 0]], dtype=np.complex128), 2, 0.005),
+]
+
+
+def _layer_state() -> np.ndarray:
+    """Rotated product state with strong control weight (the gate must act).
+
+    Returns:
+        The dense state vector.
+    """
+    v = np.eye(8, dtype=np.complex128)[:, 0]
+    for q, theta in enumerate([1.9, 2.1, 0.9]):
+        v = _embed_le(_ry(theta), q, 3) @ v
+    return v
+
+
+def test_dissipation_matches_dense_exponential() -> None:
+    """``apply_dissipation`` equals K = expm(-dt/2 * sum_j gamma_j L_j^dag L_j)."""
+    nm = NoiseModel([{"name": name, "sites": [s], "strength": g} for name, _, s, g in _LAYER_PROCS])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", num_traj=1, random_seed=0)
+    v = _layer_state()
+    h_eff = np.zeros((8, 8), dtype=np.complex128)
+    for _, mat, s, g in _LAYER_PROCS:
+        lf = _embed_le(mat, s, 3)
+        h_eff += g * (lf.conj().T @ lf)
+    expected = expm(-0.5 * h_eff) @ v
+
+    mps = _dense_to_mps(v)
+    apply_dissipation(mps, nm, dt=1, sim_params=sim_params)
+    np.testing.assert_allclose(mps.to_vec(), expected, atol=1e-12)
+
+
+def test_jump_probabilities_match_dense() -> None:
+    """The categorical jump weights are gamma_m ||L_m K psi||^2, normalized."""
+    nm = NoiseModel([{"name": name, "sites": [s], "strength": g} for name, _, s, g in _LAYER_PROCS])
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", num_traj=1, random_seed=0)
+    v = _layer_state()
+    mps = _dense_to_mps(v)
+    apply_dissipation(mps, nm, dt=1, sim_params=sim_params)
+    phi = mps.to_vec()
+
+    dense = np.array([g * np.linalg.norm(_embed_le(mat, s, 3) @ phi) ** 2 for _, mat, s, g in _LAYER_PROCS])
+    dense /= dense.sum()
+    ordered, probs = create_probability_distribution(copy.deepcopy(mps), nm, 1.0, sim_params)
+    order = [(str(p["name"]), p["sites"][0]) for p in ordered]
+    perm = [order.index((name, s)) for name, _, s, _ in _LAYER_PROCS]
+    np.testing.assert_allclose(np.asarray(probs)[perm], dense, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# sampled trajectories converge to the exact expected channel
+# ---------------------------------------------------------------------------
+
+
+def test_noisy_ccx_trajectory_convergence() -> None:
+    """Trajectory-averaged <Z_q> converges to the exact expected channel.
+
+    The reference is the exact ensemble average of the noise layer (dissipation
+    K, then one jump draw), composed by hand behind the CCX; the tolerance is a
+    statistical floor ~5/sqrt(N_traj).  Guards: the CCX must change the
+    pre-gate state and the noise effect must exceed the tolerance, so the test
+    cannot pass with the gate or the noise silently inactive.
+    """
+    n, num_traj, gamma = 3, 1024, 0.4
+    angles = [1.9, 2.1, 0.9]
+    qc = QuantumCircuit(n)
+    for q, theta in enumerate(angles):
+        qc.ry(theta, q)
+    qc.ccx(0, 1, 2)
+
+    nm = NoiseModel([{"name": "lowering", "sites": [q], "strength": gamma} for q in range(n)])
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), q) for q in range(n)],
+        preset="exact",
+        num_traj=num_traj,
+        random_seed=7,
+    )
+
+    # dense reference
+    v = np.eye(2**n, dtype=np.complex128)[:, 0]
+    for q, theta in enumerate(angles):
+        v = _embed_le(_ry(theta), q, n) @ v
+    v_pre = v
+    v_post = np.asarray(Operator(qc).data) @ np.eye(2**n)[:, 0]
+    overlap = abs(np.vdot(v_pre, v_post))
+    assert overlap < 0.9, "CCX acts trivially on this input; test would be vacuous"
+
+    lower = np.asarray(NoiseModel.get_operator("lowering"), dtype=np.complex128)
+    h_eff = sum(gamma * (_embed_le(lower, q, n).conj().T @ _embed_le(lower, q, n)) for q in range(n))
+    phi = expm(-0.5 * h_eff) @ v_post
+    rho = np.outer(phi, phi.conj())
+    weights, jumps = [], []
+    for q in range(n):
+        lphi = _embed_le(lower, q, n) @ phi
+        weights.append(gamma * np.linalg.norm(lphi) ** 2)
+        jumps.append(gamma * np.outer(lphi, lphi.conj()))
+    rho += ((1.0 - np.linalg.norm(phi) ** 2) / np.sum(weights)) * np.sum(jumps, axis=0)
+    z_ref = np.array([np.real(np.trace(_embed_le(PAULI_Z_MAT, q, n) @ rho)) for q in range(n)])
+    z_noiseless = np.array([np.real(np.vdot(v_post, _embed_le(PAULI_Z_MAT, q, n) @ v_post)) for q in range(n)])
+    tol = 5.0 / np.sqrt(num_traj)
+    assert np.max(np.abs(z_ref - z_noiseless)) > 2 * tol, "noise effect below the statistical floor; vacuous"
+
+    initial = MPS(n, state="zeros")
+    acc = np.zeros(n)
+    for traj in range(num_traj):
+        results, _diag, _counts, _final = digital_tjm((traj, initial, nm, sim_params, qc))
+        assert results is not None
+        acc += results[:, -1]
+    z_traj = acc / num_traj
+    np.testing.assert_allclose(z_traj, z_ref, atol=tol)
+
+
+# ---------------------------------------------------------------------------
+# one noise layer after the gate approximates continuous noisy evolution
+# ---------------------------------------------------------------------------
+
+
+def test_noise_layer_matches_continuous_evolution() -> None:
+    """One noise layer on all gate qubits tracks the continuous noisy evolution.
+
+    Reference: the exact Lindblad evolution generated by the CCX generator plus
+    dephasing on all three qubits over one time unit.  The simulator's rule
+    (perfect CCX, then exp(D) on the gate qubits) stays within a small splitting
+    error of it (measured 5.5e-4 at gamma=1e-3, asserted with 2x headroom).
+    Restricting the noise to the outer two qubits — the behavior before the
+    noise model covered all gate qubits — is strictly worse, which is what
+    makes covering every gate qubit the right choice.
+    """
+    n, gamma = 3, 1e-3
+    qc = QuantumCircuit(n)
+    qc.ccx(0, 1, 2)
+    u_super = SuperOp(Operator(qc))
+
+    # dephasing channel on one qubit (column stacking): D = gamma (Z (x) Z - id)
+    dmat_1q = gamma * (np.kron(PAULI_Z_MAT.conj(), PAULI_Z_MAT) - np.eye(4))
+    ch_1q = SuperOp(expm(dmat_1q))
+
+    def with_noise(qubits: list[int]) -> SuperOp:
+        ch = u_super
+        for q in qubits:
+            ch = ch.compose(ch_1q, qargs=[q])
+        return ch
+
+    # continuous reference: generator from the gate library, mapped little-endian
+    gate = CCX()
+    gate.set_sites(0, 1, 2)
+    f0, f1, f2 = (np.asarray(f, dtype=np.complex128) for f in gate.generator)
+    gmat = np.kron(f2, np.kron(f1, f0))
+    np.testing.assert_allclose(expm(-1j * gmat), np.asarray(Operator(qc).data), atol=1e-12)
+    eye = np.eye(2**n)
+    liou = -1j * (np.kron(eye, gmat) - np.kron(gmat.T, eye))
+    for q in range(n):
+        zf = _embed_le(PAULI_Z_MAT, q, n)
+        liou += gamma * (np.kron(zf.conj(), zf) - np.eye(4**n))
+    continuous = SuperOp(expm(liou), input_dims=(2,) * n, output_dims=(2,) * n)
+
+    def distance(a: SuperOp, b: SuperOp) -> float:
+        delta = np.asarray(Choi(a).data - Choi(b).data)
+        return 0.5 * float(np.sum(np.abs(np.linalg.eigvalsh((delta + delta.conj().T) / 2)))) / 2**n
+
+    all_gate_qubits = distance(with_noise([0, 1, 2]), continuous)
+    outer_only = distance(with_noise([0, 2]), continuous)
+    assert all_gate_qubits < 1.1e-3  # measured 5.5e-4, 2x headroom
+    assert outer_only > all_gate_qubits
+
+
+# ---------------------------------------------------------------------------
+# end to end: every gate shape hands its qubits to the noise layer
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("builder", "expected_sites"),
+    [
+        pytest.param(lambda qc: qc.ccx(0, 1, 2), [0, 1, 2], id="contiguous-3q"),
+        pytest.param(lambda qc: qc.ccx(0, 2, 4), [0, 2, 4], id="long-range-3q"),
+        pytest.param(lambda qc: qc.ccx(2, 0, 1), [2, 0, 1], id="permuted-qargs-3q"),
+        pytest.param(lambda qc: qc.cx(0, 1), [0, 1], id="nearest-neighbor-2q"),
+        pytest.param(lambda qc: qc.cx(0, 3), [0, 3], id="long-range-2q"),
+    ],
+)
+def test_noise_sites_end_to_end(builder: Callable[[QuantumCircuit], object], expected_sites: list[int]) -> None:
+    """Each gate shape hands exactly its qarg indices to the local noise model."""
+    n = 5
+    qc = QuantumCircuit(n)
+    for q in range(n):
+        qc.ry(1.9 - 0.2 * q, q)
+    builder(qc)
+    nm = NoiseModel([{"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(n)])
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        preset="exact",
+        num_traj=1,
+        random_seed=0,
+    )
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        results, _diag, _counts, _final = digital_tjm((0, MPS(n, state="zeros"), nm, sim_params, qc))
+    mock_local.assert_called_once()
+    _model, sites = mock_local.call_args.args
+    assert list(sites) == expected_sites
+    local = create_local_noise_model(nm, sites)
+    assert {tuple(p["sites"]) for p in local.processes} == {(s,) for s in expected_sites}
+    assert results is not None
+    assert np.all(np.isfinite(results))
+
+
+def test_noise_sites_generator_path() -> None:
+    """The TDVP/generator path uses the same noise sites as the MPO path."""
+    n = 3
+    qc = QuantumCircuit(n)
+    for q, theta in enumerate([1.9, 2.1, 0.9]):
+        qc.ry(theta, q)
+    qc.ccx(0, 1, 2)
+    nm = NoiseModel([{"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(n)])
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="tdvp",
+        preset="exact",
+        num_traj=1,
+        random_seed=0,
+    )
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        results, _diag, _counts, _final = digital_tjm((0, MPS(n, state="zeros"), nm, sim_params, qc))
+    mock_local.assert_called_once()
+    _model, sites = mock_local.call_args.args
+    assert list(sites) == [0, 1, 2]
+    assert results is not None
+    assert np.all(np.isfinite(results))

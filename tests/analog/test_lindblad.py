@@ -83,8 +83,8 @@ def test_lindblad_unitary_rabi() -> None:
     # MPO.ising returns H = -J ZZ - g X.
     # We want H = +1.0 * X. So set g = -1.0.
 
-    t_max = 2.0 * np.pi
     dt = 0.05
+    t_max = round(2.0 * np.pi / dt) * dt
     obs = Observable("z", sites=[0])
 
     sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt)
@@ -464,8 +464,8 @@ def test_rho_vec_at_elapsed_time_returns_initial_state_at_zero() -> None:
     np.testing.assert_allclose(rho_vec, ctx.rho_initial)
 
 
-def test_rho_vec_at_elapsed_time_fractional_step() -> None:
-    """Fractional elapsed times use an extra ``expm(L * remainder)`` after full ``dt`` steps."""
+def test_rho_vec_at_elapsed_time_matches_fixed_dt_grid() -> None:
+    """``_rho_vec_at_elapsed_time`` matches amplitude damping at an integral ``elapsed_time``."""
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
     h = MPO.identity(n_sites)
@@ -473,7 +473,7 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
         h.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(h)
     gamma = 1.0
-    elapsed_time = 0.25
+    elapsed_time = 0.3
     noise = NoiseModel(
         processes=[
             {"name": "destroy", "sites": [0], "strength": gamma, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
@@ -485,6 +485,7 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
         dt=0.1,
         get_state=True,
     )
+    assert sim_params.times[-1] == elapsed_time
     ctx = preprocess_lindblad(
         rho_initial=initial_state.density_matrix,
         h_sparse=hamiltonian.to_sparse_matrix(),

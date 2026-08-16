@@ -18,15 +18,8 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.bug import (
-    bug,
-    build_basis_change_tensor,
-    choose_stack_tensor,
-    find_new_q,
-    local_update,
-    prepare_canonical_site_tensors,
-)
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode
+from mqt.yaqs.core.methods.bug import bug, bug_sweep, build_trial_basis, prepare_canonical_site_tensors
 from mqt.yaqs.core.methods.decompositions import right_qr
 from mqt.yaqs.core.methods.tdvp.primitives import update_left_environment
 
@@ -39,269 +32,382 @@ def crandn(
 ) -> NDArray[np.complex128]:
     """Draw random samples from the standard complex normal distribution.
 
-    Args:
-        size: The size/shape of the output array.
-        args: Additional dimensions for the output array.
-        seed: The seed for the random number generator.
-
     Returns:
-        The array of random complex numbers.
+        Complex array with the requested shape.
     """
     if isinstance(size, int) and len(args) > 0:
         size = (size, *list(args))
     elif isinstance(size, int):
         size = (size,)
     rng = np.random.default_rng(seed)
-    # 1 / sqrt(2) is a normalization factor
-    return np.asarray(rng.standard_normal(size) + 1j * rng.standard_normal(size) / np.sqrt(2), dtype=np.complex128)
+    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
 
 
 def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:
-    """Create a random MPS with the given shapes.
-
-    Args:
-        shapes: The shapes of the tensors in the MPS.
+    """Create a normalized random MPS with the given shapes.
 
     Returns:
-        The random MPS.
+        A normalized :class:`MPS`.
     """
-    tensors = [crandn(shape) for shape in shapes]
-    mps = MPS(len(shapes), tensors=tensors)
+    mps = MPS(len(shapes), tensors=[crandn(shape) for shape in shapes])
     mps.normalize()
     return mps
 
 
-def random_mpo(shapes: list[tuple[int, int, int, int]]) -> MPO:
-    """Create a random MPO with the given shapes.
-
-    Args:
-        shapes (List[Tuple[int, int, int, int]]): The shapes of the tensors in
-            the MPO.
+def _is_right_isometric(tensor: NDArray[np.complex128], *, atol: float = 1e-10) -> bool:
+    """Return True if contracting phys+right yields identity on the left bond.
 
     Returns:
-        MPO: The random MPO.
+        Whether the tensor is right-isometric within ``atol``.
     """
-    tensors = [crandn(shape) for shape in shapes]
-    mpo = MPO()
-    mpo.custom(tensors, transpose=False)
-    return mpo
+    left = tensor.shape[1]
+    gram = np.tensordot(tensor, tensor.conj(), axes=([0, 2], [0, 2]))
+    return bool(np.allclose(gram, np.eye(left), atol=atol))
 
 
 def test_prepare_canonical_site_tensors_single_site() -> None:
-    """Tests the preparation for a single site MPS.
-
-    The the preparation of the canonical sites tensors and left envs for a
-    length 1 MPS.
-    """
+    """Preparation for a length-1 MPS leaves the physical tensor unchanged."""
     mps_tensor = crandn(2, 3, 4)
     mps = MPS(1, tensors=[mps_tensor])
     ref_mps = deepcopy(mps)
-    mpo_tensor = crandn(2, 2, 1, 1)
     mpo = MPO()
-    mpo.custom([mpo_tensor])
+    mpo.custom([crandn(2, 2, 1, 1)])
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
-    assert len(left_envs) == 1
-    assert len(canon_sites) == 1
-    correct_env = np.eye(3).reshape(3, 1, 3)
-    assert np.allclose(correct_env, left_envs[0])
-    correct_canon = mps_tensor
-    assert np.allclose(correct_canon, canon_sites[0])
+    assert np.allclose(left_envs[0], np.eye(3).reshape(3, 1, 3))
+    assert np.allclose(canon_sites[0], mps_tensor)
 
 
 def test_prepare_canonical_site_tensors_three_sites() -> None:
-    """Tests the preparation for a three site MPS.
-
-    The preparation of the canonical sites tensors and left envs for a
-    length 3 MPS.
-    """
-    shapes = [(2, 3, 4), (2, 4, 5), (2, 5, 3)]
-    mps_tensors = [crandn(shape) for shape in shapes]
+    """Preparation for a length-3 MPS matches the explicit QR reference."""
+    mps_tensors = [crandn(shape) for shape in [(2, 3, 4), (2, 4, 5), (2, 5, 3)]]
     mps = MPS(3, tensors=mps_tensors)
     ref_mps = deepcopy(mps)
-    shapes2 = [(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)]
-    mpo_tensors = [crandn(shape) for shape in shapes2]
+    mpo_tensors = [crandn(shape) for shape in [(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)]]
     mpo = MPO()
     mpo.custom(mpo_tensors, transpose=False)
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
-    assert len(left_envs) == 3
-    assert len(canon_sites) == 3
-    # Correct envs and canon sites
-    # Site 0
-    correct_env = np.eye(3, dtype=np.complex128).reshape(3, 1, 3)
-    correct_canon = mps_tensors[0]
-    assert np.allclose(correct_env, left_envs[0])
-    assert np.allclose(correct_canon, canon_sites[0])
-    # Site 1
+
+    assert np.allclose(left_envs[0], np.eye(3, dtype=np.complex128).reshape(3, 1, 3))
+    assert np.allclose(canon_sites[0], mps_tensors[0])
+
     q_last, r_matrix = right_qr(mps_tensors[0])
     correct_canon = np.tensordot(r_matrix, mps_tensors[1], axes=(1, 1)).transpose(1, 0, 2)
     correct_env = update_left_environment(q_last, q_last, mpo_tensors[0], left_envs[0])
     assert np.allclose(correct_env, left_envs[1])
     assert np.allclose(correct_canon, canon_sites[1])
-    # Site 2
+
     q_last, r_matrix = right_qr(np.asarray(correct_canon, dtype=np.complex128))
     correct_canon = np.tensordot(r_matrix, mps_tensors[2], axes=(1, 1)).transpose(1, 0, 2)
     correct_env = update_left_environment(q_last, q_last, mpo_tensors[1], left_envs[1])
     assert np.allclose(correct_env, left_envs[2])
-    assert np.allclose(correct_canon, correct_canon)
+    assert np.allclose(correct_canon, canon_sites[2])
 
 
-def test_choose_stack_tensor_last_site() -> None:
-    """Tests the choice of the stack tensor for the last site.
-
-    In case of the last site, the stack tensor should be the MPS tensor, when
-    the state was in left-canonical form.
-    """
-    num_sites = 3
-    mps_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
-    mps = MPS(num_sites, tensors=mps_tensors)
-    canon_center_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
-    # Found tensor
-    found_tensor = choose_stack_tensor(num_sites - 1, canon_center_tensors, mps)
-    assert np.allclose(mps_tensors[-1], found_tensor)
+def test_prepare_does_not_alias_physical_tensors() -> None:
+    """Preparation must not mutate non-root physical tensors."""
+    mps = random_mps([(2, 1, 3), (2, 3, 2), (2, 2, 1)])
+    originals = [t.copy() for t in mps.tensors]
+    ids = [id(t) for t in mps.tensors]
+    canon_sites, _left = prepare_canonical_site_tensors(mps, MPO.ising(3, 1.0, 0.5))
+    for orig, live in zip(originals, mps.tensors, strict=True):
+        assert np.allclose(orig, live)
+    assert id(canon_sites[0]) == ids[0]
+    assert id(canon_sites[1]) != ids[1]
 
 
-def test_choose_stack_tensor_middle_site() -> None:
-    """Test the choice of the stack tensor for a middle site.
-
-    For any site that is not the last, the tensor chosen should be the MPS
-    tensor, when this site was the canonical center.
-    """
-    num_sites = 3
-    mps_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
-    mps = MPS(num_sites, tensors=mps_tensors)
-    canon_center_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
-    # Found tensor
-    found_tensor = choose_stack_tensor(1, canon_center_tensors, mps)
-    assert np.allclose(canon_center_tensors[1], found_tensor)
-
-
-def test_find_new_q() -> None:
-    """Tests finding the new q tensor.
-
-    The new q should be 'left-canonical' and the left leg should be the
-    addition of the input tensors.
-    """
-    old_tensor = crandn(2, 3, 5)
-    new_tensor = crandn(2, 4, 5)
-    q_tensor = find_new_q(old_tensor, new_tensor)
-    # Test shape
-    assert q_tensor.ndim == 3
-    assert q_tensor.shape[0] == 2
-    assert q_tensor.shape[2] == 5
-    assert q_tensor.shape[1] == 7
-    # Check that q_tensor is unitary
-    iden = np.eye(q_tensor.shape[1])
-    q_prod = np.tensordot(q_tensor, q_tensor.conj(), axes=([0, 2], [0, 2]))
-    assert np.allclose(q_prod, iden)
-
-
-def test_build_basis_change_tensor() -> None:
-    """The basis change tensor construction.
-
-    The basis change tensor should have the old basis as first leg and the new
-    basis as its last leg.
-    """
-    old_q = crandn(2, 3, 4)
-    new_q = crandn(2, 7, 5)
-    old_m = crandn(4, 5)
-    basis_change = build_basis_change_tensor(old_q, new_q, old_m)
-    assert basis_change.ndim == 2
-    assert basis_change.shape[0] == 3
-    assert basis_change.shape[1] == 7
-    # Reference
-    ref_basis_change = np.tensordot(old_q, old_m, axes=(2, 0))
-    ref_basis_change = np.tensordot(ref_basis_change, new_q.conj(), axes=([0, 2], [0, 2]))
-    assert np.allclose(ref_basis_change, basis_change)
-
-
-def test_local_update() -> None:
-    """Test the local update.
-
-    Tests that it correctly changes input lists and returns the
-        updated environment blocks.
-
-    """
-    mps = random_mps([(2, 5, 4), (2, 4, 3), (2, 3, 5)])
-    mps.set_canonical_form(0)
-    ref_mps = deepcopy(mps)
-    mpo = random_mpo([(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)])
-    canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
-    ref_canon_sites = deepcopy(canon_sites)
-    right_block = np.eye(5, dtype=np.complex128).reshape(5, 1, 5)
-    site = 2
-    right_m_block = np.eye(5, dtype=np.complex128)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1)
-    # Perform the local update
-    result = local_update(mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params)
-    # General Change Check
-    assert not mps.almost_equal(ref_mps)
-    assert canon_sites[site - 1].shape != ref_canon_sites[site - 1].shape
-    # Check for correct shapes
-    # Last left leg dimension should be doubled
-    assert mps.tensors[site].shape == (2, 6, 5)
-    assert canon_sites[site - 1].shape == (2, 4, 6)
-    # Check results
-    assert len(result) == 2
-    assert result[0].shape == (3, 6)
-    assert result[1].shape == (6, 4, 6)
-
-
-def test_bug_single_site() -> None:
-    """Tests the BUG on a single site MPS against an exact time evolution."""
-    mps = random_mps([(2, 1, 1)])
-    ref_mps = deepcopy(mps)
-    mpo = MPO.ising(1, 1, 0.5)
-    ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
-
-    # Perform BUG
+@pytest.mark.parametrize(
+    ("shapes", "length"),
+    [
+        ([(2, 1, 1)], 1),
+        ([(2, 1, 3), (2, 3, 1)], 2),
+        ([(2, 1, 4), (2, 4, 4), (2, 4, 1)], 3),
+    ],
+)
+def test_bug_dense_reference(shapes: list[tuple[int, int, int]], length: int) -> None:
+    """BUG matches dense exact evolution on small systems (up to global phase)."""
+    mps = random_mps(shapes)
+    ref = mps.to_vec().copy()
+    mpo = MPO.ising(length, 1.0, 0.5)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1, dt=0.05)
     bug(mps, mpo, sim_params)
-    # Check against exact evolution
-    state_vec = ref_mps.to_vec()
-    ham_matrix = ref_mpo.to_matrix()
-    time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
-    new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.to_vec(), new_state_vec)
-
-
-def test_bug_three_sites() -> None:
-    """Tests the BUG on a three site MPS against an exact time evolution."""
-    mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
-    ref_mps = deepcopy(mps)
-    mpo = MPO.ising(3, 1, 0.5)
-    ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
-
-    # Perform BUG
-    bug(mps, mpo, sim_params)
-    # Check against exact evolution
-    state_vec = ref_mps.to_vec()
-    ham_matrix = ref_mpo.to_matrix()
-    time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
-    new_state_vec = time_evo_op @ state_vec
-    # Check the result
-    assert mps.check_canonical_form() == [0]
+    exact = expm(-1j * sim_params.dt * mpo.to_matrix_mps_order()) @ ref
+    assert abs(np.vdot(exact, mps.to_vec())) == pytest.approx(1.0, abs=1e-8)
     assert mps.orthogonality_center == 0
-    np.testing.assert_allclose(mps.to_vec(), new_state_vec, rtol=1e-10, atol=1e-12)
 
 
 def test_bug_requires_center_at_zero() -> None:
     """BUG rejects an MPS whose tracked center is not at site 0."""
     mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
     mps.set_center(1)
-    mpo = MPO.ising(3, 1, 0.5)
-    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
     with pytest.raises(ValueError, match="bug"):
-        bug(mps, mpo, sim_params)
+        bug(mps, MPO.ising(3, 1, 0.5), AnalogSimParams(preset="exact", get_state=True, elapsed_time=1))
+
+
+def test_bug_sweep_rejects_unknown_center() -> None:
+    """The uncompressed kernel rejects a missing orthogonality center."""
+    mps = random_mps([(2, 1, 4), (2, 4, 1)])
+    mps.set_center(None)
+    with pytest.raises(ValueError, match="bug_sweep"):
+        bug_sweep(mps, MPO.ising(2, 1, 0.5), dt=0.1, krylov_tol=1e-10)
 
 
 def test_bug_length_mismatch_raises() -> None:
     """BUG rejects Hamiltonians whose site count differs from the MPS."""
-    mps = MPS(2, state="zeros")
-    mpo = MPO.ising(3, 1, 0.5)
-    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
-
     with pytest.raises(ValueError, match="same number of sites"):
-        bug(mps, mpo, sim_params)
+        bug(MPS(2, state="zeros"), MPO.ising(3, 1, 0.5), AnalogSimParams(preset="exact", elapsed_time=1))
+
+
+def test_bug_sweep_no_compression_and_isometric_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """bug_sweep never compresses and leaves non-root sites right-isometric."""
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        msg = "compress should not be called from bug_sweep"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(MPS, "compress", boom)
+    mps = random_mps([(2, 1, 3), (2, 3, 4), (2, 4, 1)])
+    bug_sweep(mps, MPO.ising(3, 1.0, 0.5), dt=0.05, krylov_tol=1e-12)
+    assert mps.orthogonality_center == 0
+    assert _is_right_isometric(mps.tensors[1])
+    assert _is_right_isometric(mps.tensors[2])
+
+
+def test_bug_sweep_zero_hamiltonian_preserves_state() -> None:
+    """A zero Hamiltonian leaves the physical state unchanged up to gauge."""
+    mps = random_mps([(2, 1, 3), (2, 3, 1)])
+    ref = mps.to_vec().copy()
+    zero = MPO()
+    zero.tensors = [np.zeros((2, 2, 1, 1), dtype=np.complex128) for _ in range(2)]
+    zero.length = 2
+    zero.physical_dimension = 2
+    bug_sweep(mps, zero, dt=0.2, krylov_tol=1e-12)
+    assert abs(np.vdot(ref, mps.to_vec())) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_bug_forwards_trunc_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """bug() forwards sim_params.trunc_mode into MPS.compress."""
+    seen: dict[str, object] = {}
+
+    def fake_compress(
+        self: MPS,
+        threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        trunc_mode: str = "discarded_weight",
+    ) -> None:
+        seen["threshold"] = threshold
+        seen["max_bond_dim"] = max_bond_dim
+        seen["trunc_mode"] = trunc_mode
+        self.set_center(0)
+
+    monkeypatch.setattr(MPS, "compress", fake_compress)
+    bug(
+        random_mps([(2, 1, 2), (2, 2, 1)]),
+        MPO.ising(2, 1.0, 0.5),
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            trunc_mode="relative",
+            svd_threshold=1e-8,
+            max_bond_dim=4,
+        ),
+    )
+    assert seen["trunc_mode"] == "relative"
+    assert seen["threshold"] == pytest.approx(1e-8)
+    assert seen["max_bond_dim"] == 4
+
+
+def test_proposition2_overlap_frobenius_identity() -> None:
+    """Overlap transport satisfies the local Frobenius identity."""
+    rng = np.random.default_rng(4)
+    b0 = np.linalg.qr(rng.standard_normal((5, 3)) + 1j * rng.standard_normal((5, 3)))[0].T
+    b1 = np.linalg.qr(rng.standard_normal((5, 4)) + 1j * rng.standard_normal((5, 4)))[0].T
+    overlap = b0 @ b1.conj().T
+    x = rng.standard_normal((2, 3)) + 1j * rng.standard_normal((2, 3))
+    defect = np.eye(b0.shape[1]) - b1.conj().T @ b1
+    left = np.linalg.norm(x @ overlap, "fro") ** 2
+    right = np.linalg.norm(x, "fro") ** 2 - np.linalg.norm(x @ b0 @ defect, "fro") ** 2
+    assert left == pytest.approx(right, abs=1e-10)
+
+
+def test_proposition2_build_trial_basis_overlap_is_block_contraction() -> None:
+    """Implemented overlap factor equals the old/new right-block contraction."""
+    old_q = crandn((2, 3, 4), seed=11)
+    phys, left, right = old_q.shape
+    q_mat, _ = np.linalg.qr(old_q.transpose(0, 2, 1).reshape(phys * right, left))
+    old_q = np.asarray(q_mat[:, :left].reshape(phys, right, left).transpose(0, 2, 1), dtype=np.complex128)
+    deeper = np.linalg.qr(crandn((right, right), seed=12))[0]
+    # Concatenation is on the left bond; right bond must match the retained tensor.
+    predictor = crandn((2, 3, 4), seed=13)
+    working = crandn((2, 3, 4), seed=14)
+    new_q, overlap = build_trial_basis(
+        old_q=old_q,
+        working_center=working,
+        predictor=predictor,
+        deeper_overlap=deeper,
+        is_endpoint=False,
+    )
+    old_basis_current = np.tensordot(old_q, deeper, axes=(2, 0))
+    direct = np.tensordot(old_basis_current, new_q.conj(), axes=([0, 2], [0, 2]))
+    assert np.allclose(overlap, direct, atol=1e-12)
+
+
+def test_proposition2_transported_center_matches_projection() -> None:
+    """Coefficient transport X↦XM matches projection into the new block space."""
+    rng = np.random.default_rng(15)
+    b0 = np.linalg.qr(rng.standard_normal((6, 3)) + 1j * rng.standard_normal((6, 3)))[0].T
+    extra = rng.standard_normal((2, 6)) + 1j * rng.standard_normal((2, 6))
+    b1 = np.linalg.qr(np.vstack([b0, extra]).T)[0].T
+    overlap = b0 @ b1.conj().T
+    x = rng.standard_normal((4, 3)) + 1j * rng.standard_normal((4, 3))
+    transported = (x @ overlap) @ b1
+    projected = x @ b0 @ (b1.conj().T @ b1)
+    assert np.allclose(transported, projected, atol=1e-10)
+    # Inclusion ⇒ norm preservation for this X.
+    assert np.linalg.norm(x @ overlap, "fro") == pytest.approx(np.linalg.norm(x, "fro"), abs=1e-10)
+
+
+def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG applies two positive half-steps of dt/2."""
+    dts: list[float] = []
+
+    def capture_sweep(
+        state: MPS,
+        _mpo: MPO,
+        *,
+        dt: float,
+        krylov_tol: float,
+    ) -> None:
+        del krylov_tol
+        dts.append(dt)
+        state.set_center(0)
+
+    monkeypatch.setattr("mqt.yaqs.core.methods.bug.bug_sweep", capture_sweep)
+    mpo = MPO.ising(2, 1.0, 0.5)
+    ref_tensors = [t.copy() for t in mpo.tensors]
+    bug(
+        random_mps([(2, 1, 2), (2, 2, 1)]),
+        mpo,
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            dt=0.2,
+            evolution_mode=EvolutionMode.BUG,
+        ),
+    )
+    assert dts == pytest.approx([0.1, 0.1])
+    for a, b in zip(ref_tensors, mpo.tensors, strict=True):
+        assert np.allclose(a, b)
+
+
+def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG compresses once after the full alternating composition."""
+    counts = {"n": 0}
+
+    def counting_compress(
+        self: MPS,
+        threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        trunc_mode: str = "discarded_weight",
+    ) -> None:
+        del threshold, max_bond_dim, trunc_mode
+        counts["n"] += 1
+        self.set_center(0)
+
+    monkeypatch.setattr(MPS, "compress", counting_compress)
+    bug(
+        random_mps([(2, 1, 2), (2, 2, 1)]),
+        MPO.ising(2, 1.0, 0.5),
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            evolution_mode=EvolutionMode.BUG,
+        ),
+    )
+    assert counts["n"] == 1
+
+
+def test_normalize_after_compression() -> None:
+    """BUG returns a unit-norm state after compression."""
+    mps = random_mps([(2, 1, 3), (2, 3, 1)])
+    bug(
+        mps,
+        MPO.ising(2, 1.0, 0.5),
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            evolution_mode=EvolutionMode.BUG,
+        ),
+    )
+    assert abs(mps.norm()) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:
+    """BUG agrees with dense evolution for an asymmetric Hamiltonian in MPS order."""
+    length = 3
+    mpo = MPO()
+    mpo.from_pauli_sum(
+        terms=[(1.0, "Z0"), (0.3, "X1"), (0.7, "Y2")],
+        length=length,
+        tol=0.0,
+        n_sweeps=0,
+    )
+    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    ref = mps.to_vec().copy()
+    dt = 0.05
+    bug(
+        mps,
+        mpo,
+        AnalogSimParams(
+            preset="exact",
+            get_state=True,
+            elapsed_time=1,
+            dt=dt,
+            evolution_mode=EvolutionMode.BUG,
+            max_bond_dim=None,
+            krylov_tol=1e-12,
+        ),
+    )
+    exact = expm(-1j * dt * mpo.to_matrix_mps_order()) @ ref
+    exact_msb = expm(-1j * dt * mpo.to_matrix()) @ ref
+    assert abs(np.vdot(exact, mps.to_vec())) == pytest.approx(1.0, abs=1e-8)
+    # Historical MSB dense layout must not be used as an MPS reference here.
+    assert abs(np.vdot(exact_msb, mps.to_vec())) < 1.0 - 1e-3
+
+
+def test_alternating_asymmetric_matches_dense_without_mock() -> None:
+    """Alternating endpoints evolves an asymmetric H without mocking sweeps."""
+    length = 3
+    mpo = MPO()
+    mpo.from_pauli_sum(
+        terms=[(1.1, "Z0"), (0.4, "X1"), (0.8, "Y2")],
+        length=length,
+        tol=0.0,
+        n_sweeps=0,
+    )
+    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    total_time = 0.2
+    dt = 0.05
+    reference = expm(-1j * total_time * mpo.to_matrix_mps_order()) @ mps.to_vec()
+    state = deepcopy(mps)
+    params = AnalogSimParams(
+        preset="exact",
+        get_state=True,
+        elapsed_time=total_time,
+        dt=dt,
+        evolution_mode=EvolutionMode.BUG,
+        max_bond_dim=None,
+        krylov_tol=1e-12,
+    )
+    for _ in range(round(total_time / dt)):
+        bug(state, mpo, params)
+    assert abs(np.vdot(reference, state.to_vec())) == pytest.approx(1.0, abs=1e-8)
+    assert state.orthogonality_center == 0
+    assert state.flipped is False

@@ -4,7 +4,7 @@ kernelspec:
   name: python3
 mystnb:
   number_source_lines: true
-  execution_timeout: 300
+  execution_timeout: 600
 ---
 
 ```{code-cell} ipython3
@@ -64,7 +64,7 @@ psi0 = State(L, initial="haar-random", pad=2)
 
 primer_params = AnalogSimParams(
     observables=[Observable("z", mid)],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -118,7 +118,7 @@ sx_mid = Observable("x", mid)
 
 single_state_params = AnalogSimParams(
     observables=[],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -162,12 +162,12 @@ member evolves independently, which, when parallelized by the unitary backend,
 offers computational advantage to calculate these variables.
 
 ```{code-cell} ipython3
-num_states = 8
+num_states = 4
 ensemble_states = [State(L, initial="haar-random", pad=2) for _ in range(num_states)]
 
 ensemble_params = AnalogSimParams(
     observables=[],
-    elapsed_time=5.0,
+    elapsed_time=5.1,
     dt=0.15,
     max_bond_dim=64,
     svd_threshold=1e-10,
@@ -243,14 +243,16 @@ def current_observables(length: int, j_coupling: float) -> list[Observable]:
 ```{code-cell} ipython3
 Ltr = 6
 Jxx = 1.0
-deltas = [0.1, 0.5, 1.5]
-t_final = 5.0
-dt = 0.15
-n_transport_states = 4
+# Keep the docs build light: two anisotropies and bond autocorrelations only
+# (full J_i–J_j cross terms are L^2 correlators and time out on Read the Docs).
+deltas = [0.1, 1.5]
+t_final = 3.0
+dt = 0.2
+n_transport_states = 2
 
 states_transport = [State(Ltr, initial="haar-random", pad=2) for _ in range(n_transport_states)]
 bond_obs = current_observables(Ltr, Jxx)
-pairs_jj = [(a, b) for a in bond_obs for b in bond_obs]
+pairs_jj = [(obs, obs) for obs in bond_obs]
 
 transport_curves: dict[float, np.ndarray] = {}
 t_transport = None
@@ -265,7 +267,7 @@ for d in deltas:
         observables=[],
         elapsed_time=t_final,
         dt=dt,
-        max_bond_dim=64,
+        max_bond_dim=32,
         svd_threshold=1e-10,
         sample_timesteps=True,
         multi_time_observables=pairs_jj,

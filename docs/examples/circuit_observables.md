@@ -83,6 +83,12 @@ ax.set_title("Optional noise model on the fourth `run` argument")
 ax.legend(frameon=False)
 ```
 
+In digital simulation the noise model is applied once per gate on two or more
+qubits: after the unitary update, one noise layer acts on processes whose sites
+all belong to the gate's qubits. Single-qubit gates and idle sites between the
+gate qubits receive no noise. Each gate counts as one unit of noise time; to
+model compiled depth, simulate the transpiled circuit.
+
 ## 2. Noise-strength sweep
 
 On a longer chain, sweep a global relaxation rate $\gamma$ and track how each
@@ -188,6 +194,12 @@ ax.set_title(r"Mid-circuit $\langle Z \rangle$ under damping")
 fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
 ```
 
+The checkpoint index is a circuit-analysis coordinate rather than physical time.
+Standalone digital results leave `result.times` as `None`; plot against
+`np.arange(len(values))` for circuit depth. In a digital–analog
+`SimulationProgram`, digital checkpoints are placed on `result.times` at their
+segment's physical-time offset, preserving order as coincident samples.
+
 ## 4. OpenQASM inputs
 
 Pass an OpenQASM 2 source string (or file path) directly to
@@ -219,7 +231,7 @@ qasm_result = sim.run(
 )
 ```
 
-OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`.
+OpenQASM 3 requires `uv pip install mqt-yaqs[qasm3]`.
 {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms;
 see {doc}`equivalence_checking`.
 
@@ -255,6 +267,8 @@ print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 
 ## 6. Related topics
 
+- {doc}`digital_analog_simulation` — combine digital operations with analog
+  evolution in one program
 - {doc}`circuit_shots` — computational-basis shot histograms with
   {class}`~mqt.yaqs.DigitalSimParams`
 - {doc}`custom_gates` — custom unitaries and gate translation

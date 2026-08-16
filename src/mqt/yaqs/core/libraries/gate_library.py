@@ -27,46 +27,47 @@ if TYPE_CHECKING:
 
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
-    """Splits a two-qubit tensor into two tensors using Singular Value Decomposition (SVD).
+    """Splits a multi-qubit gate tensor into one tensor per site using Singular Value Decomposition (SVD).
 
     Args:
-        tensor: A 4-dimensional tensor with shape (2, 2, 2, 2).
+        tensor: A gate tensor of shape ``(2,) * (2 * n)`` for ``n >= 2`` sites, with index
+            order ``(out_1, ..., out_n, in_1, ..., in_n)``.
 
     Returns:
-        list[NDArray[np.complex128]]: A list containing two tensors resulting from the split.
-            - The first tensor has shape (2, 2, bond_dimension, 1).
-            - The second tensor has shape (2, 2, bond_dimension, 1).
+        list[NDArray[np.complex128]]: A list containing one tensor per site resulting from the split.
+            Each tensor has shape (2, 2, bond_left, bond_right); the outer bonds are 1.
     """
-    assert tensor.shape == (2, 2, 2, 2)
+    num_sites = tensor.ndim // 2
+    assert num_sites >= 2
+    assert tensor.shape == (2,) * (2 * num_sites)
 
-    # Splits two-qubit matrix
-    matrix = np.transpose(tensor, (0, 2, 1, 3))
-    dims = matrix.shape
-    matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
-    u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
-    # Keep Schmidt weight down to numerical noise so tiny-angle gates do not
-    # spuriously collapse to bond dimension 1 (which made MPO×MPS appear exact
-    # for θ/(2π)≲10⁻⁷ and then jump when the second singular value exceeded 1e-6).
-    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-14, min_keep=1)
-    s_list = s_list[:keep]
-    u_mat = u_mat[:, :keep]
-    v_mat = v_mat[:keep, :]
+    # Group the output and input leg of each site: (out_1, in_1, ..., out_n, in_n)
+    matrix = np.transpose(tensor, [axis for site in range(num_sites) for axis in (site, num_sites + site)])
 
-    tensor1 = u_mat
-    tensor2 = np.diag(s_list) @ v_mat
+    # Split site by site with SVDs, carrying the singular values to the right
+    tensors = []
+    left_bond = 1
+    remaining = np.reshape(matrix, (left_bond * 4, 4 ** (num_sites - 1)))
+    for _ in range(num_sites - 1):
+        u_mat, s_list, v_mat = linalg.svd(remaining, full_matrices=False)
+        keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+        s_list = s_list[:keep]
+        u_mat = u_mat[:, :keep]
+        v_mat = v_mat[:keep, :]
+        tensors.append(np.transpose(np.reshape(u_mat, (left_bond, 2, 2, keep)), (1, 2, 0, 3)))
+        left_bond = keep
+        remaining = np.reshape(np.diag(s_list) @ v_mat, (left_bond * 4, remaining.shape[1] // 4))
 
-    # Reshape into physical dimensions and bond dimension
-    tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
-    tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
-    tensor2 = np.transpose(tensor2, (1, 2, 0))
-
-    # Add dummy dimension to boundaries
-    tensor1 = np.expand_dims(tensor1, axis=2)
-    tensor2 = np.expand_dims(tensor2, axis=3)
-    return [tensor1, tensor2]
+    last_tensor = np.transpose(np.reshape(remaining, (left_bond, 2, 2)), (1, 2, 0))
+    tensors.append(np.expand_dims(last_tensor, axis=3))
+    return tensors
 
 
-def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArray[np.complex128]]:
+def extend_gate(
+    tensor: NDArray[np.complex128],
+    sites: list[int],
+    physical_dimensions: list[int] | tuple[int, ...] | None = None,
+) -> list[NDArray[np.complex128]]:
     """Extends gate to long-range MPO.
 
     Extends a given gate tensor to a Matrix Product Operator (MPO) by adding identity tensors
@@ -75,49 +76,52 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
     Args:
         tensor: The input gate tensor to be extended.
         sites: A list of site indices where the gate tensor is to be applied.
+        physical_dimensions: Optional local dimensions for the contiguous span from
+            ``min(sites)`` to ``max(sites)``. When omitted, every site uses dimension 2.
 
     Returns:
         MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
 
+    Raises:
+        ValueError: If ``physical_dimensions`` does not match the site span length.
+
     Notes:
-        - The function handles cases where the input tensor is split into either 2 or 3 tensors.
-        - Identity tensors are inserted between the specified sites.
-        - If the sites are provided in reverse order, the resulting MPO tensors are reversed and
-          transposed accordingly.
+        - The gate axes are permuted to ascending site order before the split, so the sites may
+          be given in any order; the returned tensors are ordered by ascending site index.
+        - Identity tensors are inserted between non-adjacent sites.
     """
+    num_sites = len(sites)
+    order = sorted(range(num_sites), key=lambda idx: sites[idx])
+    if order != list(range(num_sites)):
+        # Permute the gate axes from the declared site order to ascending site order.
+        tensor = np.transpose(tensor, [*order, *[num_sites + idx for idx in order]])
+    sorted_sites = sorted(sites)
+    span_start = sorted_sites[0]
+    span_len = sorted_sites[-1] - span_start + 1
+    if physical_dimensions is None:
+        dimensions = (2,) * span_len
+    else:
+        dimensions = tuple(physical_dimensions)
+        if len(dimensions) != span_len:
+            msg = f"Expected {span_len} physical dimensions for gate support, got {len(dimensions)}."
+            raise ValueError(msg)
+
     tensors = split_tensor(tensor)
-    if len(tensors) == 2:
-        # Adds identity tensors between sites
-        mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0] - sites[1]) - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2)
-            mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[1])
 
-        if sites[1] < sites[0]:
-            mpo_tensors.reverse()
-            for idx in range(len(mpo_tensors)):
-                mpo_tensors[idx] = np.transpose(mpo_tensors[idx], (0, 1, 3, 2))
-
-    elif len(tensors) == 3:
-        mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0] - sites[1]) - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
+    # Adds identity tensors between sites
+    mpo_tensors = [tensors[0]]
+    for idx in range(1, num_sites):
+        previous_right_bond = mpo_tensors[-1].shape[3]
+        for site in range(sorted_sites[idx - 1] + 1, sorted_sites[idx]):
+            dimension = dimensions[site - span_start]
+            identity_tensor = np.zeros(
+                (dimension, dimension, previous_right_bond, previous_right_bond),
+                dtype=np.complex128,
+            )
+            for bond in range(previous_right_bond):
+                identity_tensor[:, :, bond, bond] = np.eye(dimension, dtype=np.complex128)
             mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[1])
-        for _ in range(np.abs(sites[1] - sites[2]) - 1):
-            previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
-            for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
-            mpo_tensors.append(identity_tensor)
-        mpo_tensors.append(tensors[2])
+        mpo_tensors.append(tensors[idx])
 
     return mpo_tensors
 
@@ -195,8 +199,8 @@ class BaseGate:
 
         # store as the proper type
         self.sites = sites_list
-        if self.interaction == 2:
-            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        if self.interaction >= 2:
+            self.tensor = np.reshape(self.matrix, (2,) * (2 * self.interaction))
             self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
     def __add__(self, other: BaseGate) -> BaseGate:
@@ -488,6 +492,24 @@ class BaseGate:
         return CZ()
 
     @classmethod
+    def ccx(cls) -> CCX:
+        """Returns the CCX gate.
+
+        Returns:
+            An instance of the CCX gate.
+        """
+        return CCX()
+
+    @classmethod
+    def ccz(cls) -> CCZ:
+        """Returns the CCZ gate.
+
+        Returns:
+            An instance of the CCZ gate.
+        """
+        return CCZ()
+
+    @classmethod
     def cp(cls, params: list[Parameter]) -> CPhase:
         """Returns the CPhase gate.
 
@@ -507,6 +529,15 @@ class BaseGate:
             An instance of the SWAP gate.
         """
         return SWAP()
+
+    @classmethod
+    def cswap(cls) -> CSWAP:
+        """Returns the CSWAP gate.
+
+        Returns:
+            An instance of the CSWAP gate.
+        """
+        return CSWAP()
 
     @classmethod
     def rxx(cls, params: list[Parameter]) -> Rxx:
@@ -1214,14 +1245,101 @@ class CZ(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        # Generator: π/4 * ((I - Z) ⊗ (I - X))
+        # Generator: π/4 * ((I - Z) ⊗ (I - Z))
         self.generator = [
             (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
-            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 2]], dtype=np.complex128),
         ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
+
+
+class CCX(BaseGate):
+    """Class representing the double-controlled NOT (Toffoli, CCX) gate.
+
+    Attributes:
+        name: The name of the gate ("ccx").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        generator: The generator for the gate.
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The two control sites and the target site.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "ccx"
+
+    def __init__(self) -> None:
+        """Initializes the double-controlled NOT (CCX) gate."""
+        mat = np.array([
+            [1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 1, 0],
+        ])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate and assigns the product-form generator.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+        """
+        super().set_sites(*sites)
+        # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - X))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+        ]
+
+
+class CCZ(BaseGate):
+    """Class representing the double-controlled Z (CCZ) gate.
+
+    Attributes:
+        name: The name of the gate ("ccz").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        generator: The generator for the gate.
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The two control sites and the target site.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "ccz"
+
+    def __init__(self) -> None:
+        """Initializes the double-controlled Z (CCZ) gate."""
+        mat = np.diag([1, 1, 1, 1, 1, 1, 1, -1])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate and assigns the product-form generator.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+        """
+        super().set_sites(*sites)
+        # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - Z))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 2]], dtype=np.complex128),
+        ]
 
 
 class CPhase(BaseGate):
@@ -1276,7 +1394,11 @@ class CPhase(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+        # Generator: -θ * (P1 ⊗ P1)
+        self.generator = [
+            -self.theta * np.array([[0, 0], [0, 1]], dtype=np.complex128),
+            np.array([[0, 0], [0, 1]], dtype=np.complex128),
+        ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
@@ -1325,6 +1447,42 @@ class SWAP(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
+
+
+class CSWAP(BaseGate):
+    """Class representing the controlled-SWAP (Fredkin, CSWAP) gate.
+
+    The SWAP part of the gate has no single-product generator, so the gate carries no
+    ``generator`` attribute and is applied via its MPO representation.
+
+    Attributes:
+        name: The name of the gate ("cswap").
+        matrix: The 8x8 matrix representation of the gate.
+        interaction: The interaction level (3 for three-qubit gates).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
+        mpo_tensors: An MPO representation generated from the gate tensor.
+        sites: The control site and the two swapped sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "cswap"
+
+    def __init__(self) -> None:
+        """Initializes the controlled-SWAP (CSWAP) gate."""
+        mat = np.array([
+            [1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1],
+        ])
+        super().__init__(mat)
 
 
 class Rxx(BaseGate):
@@ -1804,7 +1962,10 @@ class GateLibrary:
 
         cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
+        ccx: Class for the double-controlled NOT (Toffoli) gate.
+        ccz: Class for the double-controlled Z gate.
         swap: Class for the SWAP gate.
+        cswap: Class for the controlled-SWAP (Fredkin) gate.
 
         rxx: Class for two-qubit rotation about XX.
         ryy: Class for two-qubit rotation about YY.
@@ -1856,7 +2017,10 @@ class GateLibrary:
 
     cx = CX
     cz = CZ
+    ccx = CCX
+    ccz = CCZ
     swap = SWAP
+    cswap = CSWAP
 
     rxx = Rxx
     ryy = Ryy

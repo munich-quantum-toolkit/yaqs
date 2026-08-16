@@ -681,7 +681,8 @@ class MPS:
         """Flip MPS.
 
         Flips the bond dimensions in the network so that we can do operations
-        from right to left rather than coding it twice.
+        from right to left rather than coding it twice. Also reverses
+        ``physical_dimensions`` so mixed-dimensional states remain consistent.
 
         """
         new_tensors = []
@@ -691,6 +692,7 @@ class MPS:
 
         new_tensors.reverse()
         self.tensors = new_tensors
+        self.physical_dimensions = list(reversed(self.physical_dimensions))
         self.flipped = not self.flipped
         if self._orthogonality_center is not None:
             self._orthogonality_center = self.length - 1 - self._orthogonality_center
@@ -857,7 +859,9 @@ class MPS:
         Args:
             threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
             max_bond_dim: Optional cap on bond dimension.
-            trunc_mode: ``"discarded_weight"`` or ``"relative"``.
+            trunc_mode: Truncation mode forwarded to the two-site SVD split
+                (``"discarded_weight"``, ``"relative"``, ``"hard_cutoff"``, or
+                ``"relative_discarded_weight"``).
         """
         if self.length == 1:
             return

@@ -15,19 +15,21 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
 
 from .. import linalg
+from ..data_structures.noise_model import is_pauli
 from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
-    from ..methods.decompositions import TruncMode
+
+__all__ = ["apply_dissipation", "is_adjacent", "is_longrange", "is_pauli"]
 
 
 def is_adjacent(proc: dict[str, Any]) -> bool:
@@ -43,27 +45,6 @@ def is_longrange(proc: dict[str, Any]) -> bool:
     """Return True if the two-site process is long-range (non-neighbor)."""
     s = proc["sites"]
     return bool(abs(s[1] - s[0]) > 1)
-
-
-def is_pauli(proc: dict[str, Any]) -> bool:
-    """Return True if the process is a Pauli process."""
-    return bool(
-        proc["name"]
-        in {
-            "pauli_x",
-            "pauli_y",
-            "pauli_z",
-            "crosstalk_xx",
-            "crosstalk_yy",
-            "crosstalk_zz",
-            "crosstalk_xy",
-            "crosstalk_yx",
-            "crosstalk_zy",
-            "crosstalk_zx",
-            "crosstalk_yz",
-            "crosstalk_xz",
-        }
-    )
 
 
 def apply_dissipation(
@@ -110,49 +91,79 @@ def apply_dissipation(
     else:
         state.set_canonical_form(state.length - 1, decomposition="SVD")
 
+    # Index processes once; cache Pauli flags for reuse in the site sweep.
+    one_site_by_site: list[list[int]] = [[] for _ in range(state.length)]
+    two_site_by_right: list[list[int]] = [[] for _ in range(state.length)]
+    processes = noise_model.processes
+    pauli_flags = [is_pauli(process) for process in processes]
+    for idx, process in enumerate(processes):
+        sites = process["sites"]
+        if len(sites) == 1:
+            one_site_by_site[sites[0]].append(idx)
+        elif len(sites) == 2:
+            two_site_by_right[sites[1]].append(idx)
+
     for i in reversed(range(state.length)):
-        # 1. Apply all 1-site dissipators on site i
-        for process in noise_model.processes:
-            if len(process["sites"]) == 1 and process["sites"][0] == i:
+        # 1. One-site dissipators on site i: expm(-0.5 dt * sum_k gamma_k L_k^dagger L_k)
+        one_idxs = one_site_by_site[i]
+        if one_idxs:
+            dim = state.physical_dimensions[i]
+            generator = np.zeros((dim, dim), dtype=np.complex128)
+            all_pauli = True
+            for idx in one_idxs:
+                process = processes[idx]
                 gamma = process["strength"]
-                if is_pauli(process):
-                    dissipative_factor = np.exp(-0.5 * dt * gamma)
-                    state.tensors[i] *= dissipative_factor
+                if pauli_flags[idx]:
+                    generator += gamma * np.eye(dim, dtype=np.complex128)
                 else:
+                    all_pauli = False
                     jump_op_mat = process["matrix"]
-                    mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
-                    state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
+                    generator += gamma * (np.conj(jump_op_mat).T @ jump_op_mat)
+            if all_pauli:
+                state.tensors[i] *= np.exp(-0.5 * dt * float(np.real(generator[0, 0])))
+            else:
+                dissipative_op = linalg.expm(-0.5 * dt * generator)
+                state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
-        processes_here = [
-            process for process in noise_model.processes if len(process["sites"]) == 2 and process["sites"][1] == i
-        ]
-        # 2. Apply all 2-site dissipators acting on sites (i-1, i)
-        if i != 0:
-            for process in processes_here:
-                gamma = process["strength"]
-                if is_pauli(process):
-                    dissipative_factor = np.exp(-0.5 * dt * gamma)
-                    state.tensors[i] *= dissipative_factor
+        # 2. Two-site dissipators ending at i: sum generators, one expm (Pauli long-range: scalar)
+        two_idxs = two_site_by_right[i]
+        if i != 0 and two_idxs:
+            longrange_idxs = [idx for idx in two_idxs if is_longrange(processes[idx])]
+            adjacent_idxs = [idx for idx in two_idxs if not is_longrange(processes[idx])]
 
-                elif is_longrange(process):
+            for idx in longrange_idxs:
+                process = processes[idx]
+                if not pauli_flags[idx]:
                     msg = "Non-Pauli Long-range processes are not implemented yet"
                     raise NotImplementedError(msg)
-                else:
-                    jump_op_mat = process["matrix"]
-                    mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
+                state.tensors[i] *= np.exp(-0.5 * dt * process["strength"])
 
+            if adjacent_idxs:
+                dim_left = state.physical_dimensions[i - 1]
+                dim_right = state.physical_dimensions[i]
+                dim = dim_left * dim_right
+                generator = np.zeros((dim, dim), dtype=np.complex128)
+                all_pauli = True
+                for idx in adjacent_idxs:
+                    process = processes[idx]
+                    gamma = process["strength"]
+                    if pauli_flags[idx]:
+                        generator += gamma * np.eye(dim, dtype=np.complex128)
+                    else:
+                        all_pauli = False
+                        jump_op_mat = process["matrix"]
+                        generator += gamma * (np.conj(jump_op_mat).T @ jump_op_mat)
+                if all_pauli:
+                    state.tensors[i] *= np.exp(-0.5 * dt * float(np.real(generator[0, 0])))
+                else:
+                    dissipative_op = linalg.expm(-0.5 * dt * generator)
                     merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
                     merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)
-
-                    # singular values always contracted right
-                    # since ortho center is shifted to the left after loop
                     tensor_left, tensor_right = split_two_site(
                         merged_tensor,
-                        [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
+                        [dim_left, dim_right],
                         svd_distribution="right",
-                        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+                        trunc_mode=sim_params.trunc_mode,
                         threshold=sim_params.svd_threshold,
                         max_bond_dim=sim_params.max_bond_dim,
                     )

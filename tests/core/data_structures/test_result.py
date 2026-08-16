@@ -16,9 +16,11 @@ read-only ``*SimParams`` configuration object and can be pickled.
 
 from __future__ import annotations
 
-import pickle  # ruff:ignore[suspicious-pickle-import]  # test-only: controlled Result round-trip; no untrusted input deserialized
+import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 
 import numpy as np
+import pytest
 
 from mqt.yaqs import (
     AnalogSimParams,
@@ -31,6 +33,7 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.core.data_structures.result import aggregate_counts
+from mqt.yaqs.core.data_structures.simulation_program import stitch_program_results
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import Z
 
@@ -151,7 +154,7 @@ def test_result_is_pickleable() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     blob = pickle.dumps(result)
-    restored = pickle.loads(blob)  # ruff:ignore[suspicious-pickle-usage]  # test-only: bytes are produced one line above (round-trip)
+    restored = pickle.loads(blob)  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip of bytes produced above
 
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)
@@ -161,6 +164,183 @@ def test_result_is_pickleable() -> None:
     assert restored_results is not None
     assert original_results is not None
     np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))
+
+
+def test_result_supports_ordered_nested_segment_results() -> None:
+    """An outer program result reuses Result for ordered segment outputs."""
+    analog_params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
+    digital_params = DigitalSimParams(get_state=True)
+    outer = Result(
+        segment_results=[
+            Result(sim_params=analog_params),
+            Result(sim_params=digital_params),
+        ]
+    )
+
+    restored = pickle.loads(pickle.dumps(outer))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sim_params is None
+    assert len(restored.segment_results) == 2
+    assert isinstance(restored.segment_results[0].sim_params, AnalogSimParams)
+    assert isinstance(restored.segment_results[1].sim_params, DigitalSimParams)
+
+
+def test_stitch_program_results_combines_analog_and_digital_samples() -> None:
+    """Digital checkpoints appear at their physical program offset without deduplication."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0, 0.8])],
+            times=np.array([0.0, 0.1]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        ),
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([0.8, 0.0, -0.8])],
+            segment_index=1,
+            segment_type="digital",
+            time_offset=0.1,
+        ),
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([-0.8, -0.6])],
+            times=np.array([0.0, 0.2]),
+            segment_index=2,
+            segment_type="analog",
+            time_offset=0.1,
+        ),
+    ]
+
+    expectation_values, times, counts = stitch_program_results(segment_results, [observable])
+
+    assert counts is None
+    assert times is not None
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3]))
+    np.testing.assert_array_equal(expectation_values[0], np.array([1.0, 0.8, 0.8, 0.0, -0.8, -0.8, -0.6]))
+
+
+def test_stitch_program_results_shifts_adjacent_analog_grids() -> None:
+    """Local grids are shifted onto one program timeline."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0, 0.8])],
+            times=np.array([0.0, 0.1]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        ),
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([0.4])],
+            times=np.array([0.2]),
+            segment_index=1,
+            segment_type="analog",
+            time_offset=0.1,
+        ),
+    ]
+
+    expectation_values, times, _ = stitch_program_results(segment_results, [observable])
+
+    assert times is not None
+    np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.3]))
+    np.testing.assert_array_equal(expectation_values[0], np.array([1.0, 0.8, 0.4]))
+
+
+def test_stitch_program_results_keeps_final_segment_counts() -> None:
+    """Outer counts come from the last shot segment, not a sum across segments."""
+    segment_results = [
+        Result(counts={0: 2, 1: 1}, segment_index=0, segment_type="digital", time_offset=0.0),
+        Result(counts={1: 3}, segment_index=1, segment_type="digital", time_offset=0.0),
+    ]
+
+    expectation_values, times, counts = stitch_program_results(segment_results, [])
+
+    assert expectation_values == []
+    assert times is None
+    assert counts == {1: 3}
+
+
+def test_stitch_program_results_rejects_mismatched_observable_counts() -> None:
+    """Every segment must record the shared program observable set."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0])],
+            times=np.array([0.0]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        ),
+        Result(
+            observables=[],
+            expectation_values=[],
+            segment_index=1,
+            segment_type="digital",
+            time_offset=0.0,
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="recorded 0 observables, expected 1"):
+        stitch_program_results(segment_results, [observable])
+
+
+def test_stitch_program_results_rejects_analog_segment_without_times() -> None:
+    """Analog intervals need time data aligned with recorded values."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0])],
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="has no time data"):
+        stitch_program_results(segment_results, [observable])
+
+
+def test_stitch_program_results_rejects_misaligned_analog_times() -> None:
+    """Analog expectation buffers must match the segment time grid length."""
+    observable = Observable("z", 0)
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(observable)],
+            expectation_values=[np.array([1.0, -1.0])],
+            times=np.array([0.0]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="is not aligned with times"):
+        stitch_program_results(segment_results, [observable])
+
+
+def test_stitch_program_results_rejects_inconsistent_observable_shapes() -> None:
+    """Every observable in a segment must share the same sample count."""
+    observables = [Observable("z", 0), Observable("x", 0)]
+    segment_results = [
+        Result(
+            observables=[copy.deepcopy(obs) for obs in observables],
+            expectation_values=[np.array([1.0, -1.0]), np.array([0.5])],
+            times=np.array([0.0, 0.1]),
+            segment_index=0,
+            segment_type="analog",
+            time_offset=0.0,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="has inconsistent shape"):
+        stitch_program_results(segment_results, observables)
 
 
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:

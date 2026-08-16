@@ -15,7 +15,7 @@ terminology.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -292,7 +292,7 @@ def _reprepare_backend_state_forced(
         if not isinstance(state, np.ndarray):
             msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
             raise TypeError(msg)
-        state_vec = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
+        state_vec = np.asarray(state, dtype=np.complex128)
         return _reprepare_site_zero_vector_forced(state_vec, proj_state, new_state)
     assert isinstance(state, MPS)
     new_mps = copy.deepcopy(state)
@@ -398,20 +398,25 @@ def _evolve_backend_state(
     solver: str,
     traj_idx: int = 0,
     static_ctx: MCWFContext | None = None,
+    rng: np.random.Generator | None = None,
 ) -> MPS | NDArray[np.complex128]:
     """Evolve a backend state forward in time by one segment.
 
     Args:
-        state: Current backend state (dense vector for MCWF, MPS for TJM).
+        state: Current backend state (dense vector for MCWF, MPS for TJM). TJM
+            calls pass ``copy_initial_state=False`` and may evolve the supplied
+            MPS in place, so callers must provide an exclusively owned state.
         operator: Hamiltonian MPO.
         noise_model: Optional noise model; ``None`` for deterministic evolution.
         step_params: Simulation parameters for this step (duration and time grid are read here).
         solver: Backend solver name.
         traj_idx: MCWF trajectory index (used for deterministic seeding in the backend).
         static_ctx: Optional preprocessed MCWF context.
+        rng: Optional trajectory RNG reused across consecutive TJM segments.
 
     Returns:
-        Updated backend state after evolution.
+        The evolved backend state returned by the selected solver. For TJM, this
+        may be the same MPS object passed in after in-place evolution.
 
     Raises:
         TypeError: If ``state`` is incompatible with ``solver``.
@@ -424,7 +429,7 @@ def _evolve_backend_state(
         if static_ctx is None:
             static_ctx = make_mcwf_static_context(operator, step_params, noise_model=noise_model)
         dynamic_ctx = copy.copy(static_ctx)
-        dynamic_ctx.psi_initial = cast("NDArray[np.complex128]", np.asarray(state, dtype=np.complex128))
+        dynamic_ctx.psi_initial = np.asarray(state, dtype=np.complex128)
         dynamic_ctx.sim_params = step_params
         _, _, out = mcwf((traj_idx, dynamic_ctx))
         if out is None:
@@ -438,7 +443,11 @@ def _evolve_backend_state(
     step_params_tjm = copy.copy(step_params)
     step_params_tjm.get_state = True
     backend = analog_tjm_1 if step_params_tjm.order == 1 else analog_tjm_2
-    _, _, out = backend((traj_idx, state, noise_model, step_params_tjm, operator))
+    _, _, out = backend(
+        (traj_idx, state, noise_model, step_params_tjm, operator),
+        copy_initial_state=False,
+        rng=rng,
+    )
     if out is None:
         msg = "TJM backend returned None state."
         raise RuntimeError(msg)

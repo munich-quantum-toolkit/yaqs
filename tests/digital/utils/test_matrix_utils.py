@@ -14,10 +14,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
+from qiskit.converters import circuit_to_dag
+from qiskit.quantum_info import Operator
 
 from mqt.yaqs import EquivalenceChecker
 from mqt.yaqs.core.libraries.gate_library import BaseGate
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from mqt.yaqs.digital.utils.matrix_utils import (
     apply_gate_left,
     check_matrix_equivalence,
@@ -161,6 +164,29 @@ def test_check_matrix_equivalence_cx_with_swapped_sites() -> None:
     assert check_matrix_equivalence(qc, qc, fidelity=1 - 1e-12) is True
 
 
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda qc: qc.cx(1, 2),
+        lambda qc: qc.cx(2, 1),
+        lambda qc: qc.crx(0.7, 1, 2),
+        lambda qc: qc.crx(0.7, 2, 1),
+    ],
+    ids=["cx_ascending", "cx_descending", "crx_ascending", "crx_descending"],
+)
+def test_apply_gate_left_two_qubit_matches_operator(build: Callable[[QuantumCircuit], None]) -> None:
+    """Two-qubit gates apply with the backend's site-mirrored convention for either site order.
+
+    The reference is built with qiskit's ``Operator`` directly rather than through the
+    backend itself, so a systematic per-gate error cannot cancel.
+    """
+    qc = QuantumCircuit(3)
+    build(qc)
+    gate = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))[0]
+    dense = apply_gate_left(make_identity_tensor(3), gate, 3).reshape(8, 8)
+    np.testing.assert_allclose(dense, Operator(qc.reverse_bits()).data, atol=1e-12)
+
+
 def testapply_gate_left_three_qubit_embedding() -> None:
     """Multi-qubit gates use the dense embedding path in ``apply_gate_left``."""
     swap = np.array(
@@ -184,6 +210,37 @@ def testapply_gate_left_three_qubit_embedding() -> None:
     updated = apply_gate_left(op, gate, 3, dagger=False)
     round_trip = apply_gate_left(updated, gate, 3, dagger=True)
     assert is_identity_tensor(round_trip, fidelity=1 - 1e-12) is True
+
+
+def test_apply_gate_left_translated_ccx_consistent_with_decomposition() -> None:
+    """A translated CCX gate agrees with its two-qubit decomposition inside the dense backend.
+
+    Both operators are built through ``apply_gate_left``, so the test pins the consistency of
+    the multi-qubit embedding branch with the one- and two-qubit branches.
+    """
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    decomposed = transpile(qc, basis_gates=["cx", "u"], optimization_level=0)
+
+    def dense_operator(circuit: QuantumCircuit) -> np.ndarray:
+        op = make_identity_tensor(circuit.num_qubits)
+        for gate in convert_dag_to_tensor_algorithm(circuit_to_dag(circuit)):
+            op = apply_gate_left(op, gate, circuit.num_qubits, dagger=False)
+        return op.reshape(8, 8)
+
+    dense_ccx = dense_operator(qc)
+    dense_decomposed = dense_operator(decomposed)
+    global_phase = np.exp(1j * decomposed.global_phase)
+    np.testing.assert_allclose(dense_ccx, global_phase * dense_decomposed, atol=1e-12)
+
+
+def test_check_matrix_equivalence_ccx_vs_decomposition() -> None:
+    """A CCX circuit is matrix-equivalent to its two-qubit-gate decomposition."""
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    decomposed = transpile(qc, basis_gates=["cx", "u"], optimization_level=0)
+
+    assert check_matrix_equivalence(qc, decomposed, fidelity=1 - 1e-12) is True
 
 
 def test_compose_operator_tensor_is_identity_for_matching_circuits() -> None:

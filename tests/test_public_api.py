@@ -9,13 +9,17 @@
 
 from __future__ import annotations
 
+from qiskit.circuit import QuantumCircuit
+
 from mqt import yaqs
 from mqt.yaqs import (
     AnalogSimParams,
+    DigitalSimParams,
     Hamiltonian,
     MemoryCharacterizer,
     NoiseCharacterizer,
     Observable,
+    SimulationProgram,
     Simulator,
     State,
 )
@@ -28,6 +32,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
+    "EvolutionMode",
     "Hamiltonian",
     "MemoryCharacterizer",
     "NoiseCharacterizer",
@@ -35,6 +40,7 @@ EXPECTED_PUBLIC_API = frozenset({
     "Observable",
     "Result",
     "Simulator",
+    "SimulationProgram",
     "State",
     "__version__",
     "simulator",
@@ -51,6 +57,8 @@ def test_characterization_result_not_top_level() -> None:
     """CharacterizationResult is returned by MemoryCharacterizer, not a top-level import."""
     assert "CharacterizationResult" not in yaqs.__all__
     assert "ProbeResult" not in yaqs.__all__
+    assert "_AnalogSegment" not in yaqs.__all__
+    assert "_DigitalSegment" not in yaqs.__all__
 
 
 def test_top_level_import_smoke() -> None:
@@ -74,3 +82,19 @@ def test_top_level_import_smoke() -> None:
 
     assert MemoryCharacterizer is not None
     assert NoiseCharacterizer is not None
+
+
+def test_program_specifications_are_available_from_top_level() -> None:
+    """Mixed program specifications use the documented top-level imports."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    circuit = QuantumCircuit(2)
+    program = SimulationProgram(
+        [(hamiltonian, AnalogSimParams()), (circuit, DigitalSimParams())],
+        observables=[Observable("z", 0)],
+        num_traj=8,
+        get_state=True,
+    )
+
+    assert tuple(program) == program.segments
+    assert program.num_traj == 8
+    assert program.get_state
