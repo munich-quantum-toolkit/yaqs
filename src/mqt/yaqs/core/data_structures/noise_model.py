@@ -614,31 +614,66 @@ def _factors_for_sorted_sites(
     return left, right
 
 
-_PAULI_1 = (PAULI_MAP["x"], PAULI_MAP["y"], PAULI_MAP["z"])
-_PAULI_2 = tuple(np.kron(a, b) for a in _PAULI_1 for b in _PAULI_1)
+_PAULI_1 = {name: PAULI_MAP[name] for name in ("x", "y", "z")}
+_PAULI_2 = {
+    (left_name, right_name): np.kron(left, right)
+    for left_name, left in _PAULI_1.items()
+    for right_name, right in _PAULI_1.items()
+}
 
 
-def _matches_up_to_unit_phase(mat: NDArray[np.complex128], reference: NDArray[np.complex128]) -> bool:
-    """Return True if ``mat`` equals ``exp(i φ) * reference`` for real φ (not a scale)."""
+def _unit_phase_angle(mat: NDArray[np.complex128], reference: NDArray[np.complex128]) -> float | None:
+    """Return the phase angle relating two matrices, if it has unit modulus."""
     if mat.shape != reference.shape:
-        return False
+        return None
     idx = np.unravel_index(int(np.argmax(np.abs(reference))), reference.shape)
     ref_val = reference[idx]
     mat_val = mat[idx]
     if abs(ref_val) < 1e-14 or abs(mat_val) < 1e-14:
-        return bool(np.allclose(mat, reference, atol=1e-10, rtol=0.0))
+        return 0.0 if np.allclose(mat, reference, atol=1e-10, rtol=0.0) else None
     phase = mat_val / ref_val
     if not np.isclose(abs(phase), 1.0, atol=1e-10, rtol=0.0):
-        return False
-    return bool(np.allclose(mat, phase * reference, atol=1e-10, rtol=0.0))
+        return None
+    if not np.allclose(mat, phase * reference, atol=1e-10, rtol=0.0):
+        return None
+    return float(np.angle(phase))
 
 
-def _is_unit_phase_pauli(mat: NDArray[np.complex128]) -> bool:
-    return any(_matches_up_to_unit_phase(mat, p) for p in _PAULI_1)
+def _identify_pauli_process(process: dict[str, Any]) -> tuple[tuple[str, ...], float] | None:
+    """Return the Pauli labels and phase of a process, if applicable."""
+    sites = process["sites"]
+    if len(sites) == 1 and "matrix" in process:
+        matrix = np.asarray(process["matrix"], dtype=np.complex128)
+        for name, pauli in _PAULI_1.items():
+            if (phase := _unit_phase_angle(matrix, pauli)) is not None:
+                return (name,), phase
+        return None
 
-
-def _is_unit_phase_pauli_kron(mat: NDArray[np.complex128]) -> bool:
-    return any(_matches_up_to_unit_phase(mat, p) for p in _PAULI_2)
+    if len(sites) != 2:
+        return None
+    if abs(sites[1] - sites[0]) == 1 and "matrix" in process:
+        matrix = np.asarray(process["matrix"], dtype=np.complex128)
+        for names, pauli in _PAULI_2.items():
+            if (phase := _unit_phase_angle(matrix, pauli)) is not None:
+                return names, phase
+        return None
+    if abs(sites[1] - sites[0]) > 1 and "factors" in process:
+        matches: list[tuple[str, float]] = []
+        for factor in process["factors"]:
+            matrix = np.asarray(factor, dtype=np.complex128)
+            match = next(
+                (
+                    (name, phase)
+                    for name, pauli in _PAULI_1.items()
+                    if (phase := _unit_phase_angle(matrix, pauli)) is not None
+                ),
+                None,
+            )
+            if match is None:
+                return None
+            matches.append(match)
+        return tuple(name for name, _phase in matches), math.fsum(phase for _name, phase in matches)
+    return None
 
 
 def is_pauli(proc: dict[str, Any]) -> bool:
@@ -648,21 +683,7 @@ def is_pauli(proc: dict[str, Any]) -> bool:
     factor pairs that are each Pauli. Scaled operators such as ``2 * X`` are not Pauli
     for TJM's scalar dissipator shortcut, which assumes ``L^† L = I``.
     """
-    sites = proc["sites"]
-    if len(sites) == 1:
-        if "matrix" not in proc:
-            return False
-        return _is_unit_phase_pauli(np.asarray(proc["matrix"], dtype=np.complex128))
-    if len(sites) != 2:
-        return False
-    if abs(sites[1] - sites[0]) == 1 and "matrix" in proc:
-        return _is_unit_phase_pauli_kron(np.asarray(proc["matrix"], dtype=np.complex128))
-    if abs(sites[1] - sites[0]) > 1 and "factors" in proc:
-        f0, f1 = proc["factors"]
-        return _is_unit_phase_pauli(np.asarray(f0, dtype=np.complex128)) and _is_unit_phase_pauli(
-            np.asarray(f1, dtype=np.complex128)
-        )
-    return False
+    return _identify_pauli_process(proc) is not None
 
 
 def validate_noise_model_for_run(

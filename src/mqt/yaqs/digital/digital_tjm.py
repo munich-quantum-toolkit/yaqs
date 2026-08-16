@@ -633,6 +633,23 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     return _apply_two_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0], sim_params)
 
 
+def _apply_noise_opportunity(
+    state: MPS,
+    noise_model: NoiseModel,
+    gate: BaseGate,
+    sim_params: DigitalSimParams,
+    rng: np.random.Generator,
+) -> MPS:
+    """Apply one gate-local noise realization after an ideal gate.
+
+    Returns:
+        Updated MPS.
+    """
+    local_noise_model = create_local_noise_model(noise_model, gate.sites)
+    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+    return stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+
+
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
     *,
@@ -669,6 +686,28 @@ def digital_tjm(
         runs that follow the observable path). Counts are populated when ``shots`` is set
         (possibly an empty dict when this trajectory's allocation is zero).
     """
+    return _digital_tjm_impl(
+        args,
+        copy_initial_state=copy_initial_state,
+        rng=rng,
+        compiled_circuit=compiled_circuit,
+        post_gate_noise=False,
+    )
+
+
+def _digital_tjm_impl(
+    args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+    *,
+    copy_initial_state: bool,
+    rng: np.random.Generator | None,
+    compiled_circuit: _CompiledCircuit | None,
+    post_gate_noise: bool,
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
+    """Execute one digital trajectory with the selected gate-noise placement.
+
+    Returns:
+        Unaggregated trajectory outputs.
+    """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
@@ -702,6 +741,9 @@ def digital_tjm(
     for layer in compiled.layers:
         for gate in layer.single_qubit_gates:
             _apply_single_qubit_gate(state, gate)
+            if noisy and post_gate_noise:
+                assert noise_model is not None
+                state = _apply_noise_opportunity(state, noise_model, gate, sim_params, rng)
 
         for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
             for gate in group:
@@ -709,10 +751,11 @@ def digital_tjm(
 
                 if not noisy:
                     state.normalize(form="B", decomposition="QR")
+                elif not post_gate_noise or len(gate.sites) == 2:
+                    assert noise_model is not None
+                    state = _apply_noise_opportunity(state, noise_model, gate, sim_params, rng)
                 else:
-                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
-                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+                    state.normalize(form="B", decomposition="QR")
 
         if sim_params.sample_layers:
             for _ in range(layer.sample_points):

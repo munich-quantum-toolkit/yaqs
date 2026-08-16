@@ -137,6 +137,7 @@ from .core.parallel_utils import (
 )
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
 from .digital.digital_tjm import digital_tjm
+from .digital.stochastic_circuit import _sample_and_run_stochastic_trajectory
 from .digital.utils.qasm_utils import load_circuit
 
 __all__ = ["Simulator", "available_cpus"]
@@ -219,7 +220,8 @@ def _digital_worker(
     Returns:
         Observable data, diagnostics, shot counts, and optional final MPS (any may be ``None``).
     """
-    return digital_tjm((
+    backend = WORKER_CTX.get("digital_backend", digital_tjm)
+    return backend((
         traj_idx,
         WORKER_CTX["initial_state"],
         WORKER_CTX["noise_model"],
@@ -242,6 +244,28 @@ def _noise_model_is_stochastic(noise_model: NoiseModel | None) -> bool:
     if noise_model is None:
         return False
     return any(float(process["strength"]) > 0 for process in noise_model.processes)
+
+
+def _sample_noise_model_for_run(noise_model: NoiseModel | None, *, base_seed: int | None) -> NoiseModel | None:
+    """Resolve distribution-valued strengths once for a standalone run.
+
+    Returns:
+        Concrete noise model, or ``None`` when no model was supplied.
+    """
+    if noise_model is None:
+        return None
+    return noise_model.sample(rng=make_disorder_rng(base_seed=base_seed))
+
+
+def _validate_digital_output(sim_params: DigitalSimParams) -> None:
+    """Require at least one circuit output.
+
+    Raises:
+        ValueError: If no output is specified.
+    """
+    if not sim_params.get_state and not sim_params.observables and sim_params.shots is None:
+        msg = "No output specified: set observables, shots, and/or get_state."
+        raise ValueError(msg)
 
 
 def _sample_program_noise_models(compiled: _CompiledProgram) -> _CompiledProgram:
@@ -944,6 +968,42 @@ class Simulator:
     # -----------------------------------------------------------------------
     # Public API
     # -----------------------------------------------------------------------
+    def run_stochastic_circuit(
+        self,
+        initial_state: State,
+        circuit: QuantumCircuit,
+        sim_params: DigitalSimParams,
+        noise_model: NoiseModel | None = None,
+    ) -> Result:
+        """Run a post-gate stochastic circuit ensemble.
+
+        Distribution-valued strengths are sampled once per run. Each trajectory
+        uses an independent stochastic realization and the standard digital
+        result aggregation.
+
+        Args:
+            initial_state: Initial MPS-backed state.
+            circuit: Circuit to execute.
+            sim_params: Digital simulation parameters.
+            noise_model: Noise model for post-gate processes.
+
+        Returns:
+            Aggregated simulation result.
+
+        """
+        noise_model = _sample_noise_model_for_run(noise_model, base_seed=sim_params.random_seed)
+        result = Result(sim_params=sim_params, noise_model=noise_model)
+        _validate_digital_output(sim_params)
+        self._run_circuit(
+            initial_state,
+            circuit,
+            sim_params,
+            noise_model,
+            result,
+            stochastic_circuit=True,
+        )
+        return result
+
     def run(
         self,
         initial_state: State | list[State],
@@ -1032,7 +1092,6 @@ class Simulator:
         if not isinstance(sim_params, (AnalogSimParams, DigitalSimParams)):
             msg = f"sim_params must be AnalogSimParams or DigitalSimParams, got {type(sim_params).__name__}."
             raise TypeError(msg)
-
         if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
             operator = load_circuit(operator)
 
@@ -1040,9 +1099,7 @@ class Simulator:
             msg = "initial_state list must contain only State objects."
             raise TypeError(msg)
 
-        if noise_model is not None:
-            sample_seed = getattr(sim_params, "random_seed", None)
-            noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=sample_seed))
+        noise_model = _sample_noise_model_for_run(noise_model, base_seed=getattr(sim_params, "random_seed", None))
 
         result = Result(sim_params=sim_params, noise_model=noise_model)
 
@@ -1054,14 +1111,8 @@ class Simulator:
         ):
             msg = "No output specified: either observables or get_state must be set."
             raise ValueError(msg)
-        if (
-            isinstance(sim_params, DigitalSimParams)
-            and not sim_params.get_state
-            and not sim_params.observables
-            and sim_params.shots is None
-        ):
-            msg = "No output specified: set observables, shots, and/or get_state."
-            raise ValueError(msg)
+        if isinstance(sim_params, DigitalSimParams):
+            _validate_digital_output(sim_params)
 
         if isinstance(sim_params, AnalogSimParams):
             if not isinstance(operator, Hamiltonian):
@@ -1081,7 +1132,13 @@ class Simulator:
             if not isinstance(initial_state, State):
                 msg = "Circuit simulation requires a State initial_state."
                 raise TypeError(msg)
-            self._run_circuit(initial_state, operator, sim_params, noise_model, result)
+            self._run_circuit(
+                initial_state,
+                operator,
+                sim_params,
+                noise_model,
+                result,
+            )
 
         return result
 
@@ -1437,6 +1494,8 @@ class Simulator:
         sim_params: DigitalSimParams,
         noise_model: NoiseModel | None,
         result: Result,
+        *,
+        stochastic_circuit: bool = False,
     ) -> None:
         """Run digital circuit simulation trajectories.
 
@@ -1456,7 +1515,7 @@ class Simulator:
         backend: Callable[
             [tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]],
             Any,
-        ] = digital_tjm
+        ] = _sample_and_run_stochastic_trajectory if stochastic_circuit else digital_tjm
 
         wants_obs = bool(sim_params.observables)
         wants_shots = sim_params.shots is not None
@@ -1506,6 +1565,7 @@ class Simulator:
                 result.measurements = [None] * (effective_num_traj if noisy else 1)
 
         payload: dict[str, Any] = {
+            "digital_backend": backend,
             "initial_state": initial_state,
             "noise_model": noise_model,
             "sim_params": worker_params,
@@ -1568,7 +1628,9 @@ class Simulator:
                 iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
                 for i, arg in enumerate(iterator):
                     traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(
-                        backend, arg, n_threads=n_threads
+                        backend,
+                        arg,
+                        n_threads=n_threads,
                     )
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
         finally:
@@ -1590,6 +1652,8 @@ class Simulator:
         sim_params: DigitalSimParams,
         noise_model: NoiseModel | None,
         result: Result,
+        *,
+        stochastic_circuit: bool = False,
     ) -> None:
         """Run circuit-based simulation trajectories.
 
@@ -1621,7 +1685,14 @@ class Simulator:
                 is_digital=True,
             )
 
-        self._run_digital_sim(mps, operator, sim_params, noise_model, result)
+        self._run_digital_sim(
+            mps,
+            operator,
+            sim_params,
+            noise_model,
+            result,
+            stochastic_circuit=stochastic_circuit,
+        )
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)

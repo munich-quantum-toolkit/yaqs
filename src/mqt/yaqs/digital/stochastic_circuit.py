@@ -10,69 +10,39 @@
 from __future__ import annotations
 
 import math
-from itertools import product
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from qiskit.circuit import Gate, QuantumCircuit
 from qiskit.circuit.library import XGate, YGate, ZGate
 
-from ..core.data_structures.noise_model import NoiseModel, is_pauli
-from .digital_tjm import create_local_noise_model
+from ..core.data_structures.noise_model import NoiseModel, _identify_pauli_process
+from ..core.random_utils import make_trajectory_rng
+from .digital_tjm import _digital_tjm_impl, create_local_noise_model
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from numpy.typing import NDArray
 
+    from ..core.data_structures.mps import MPS
+    from ..core.data_structures.simulation_parameters import DigitalSimParams
 
-_PAULI_MATRICES = {
-    "x": NoiseModel.get_operator("pauli_x"),
-    "y": NoiseModel.get_operator("pauli_y"),
-    "z": NoiseModel.get_operator("pauli_z"),
-}
+
 _PAULI_GATES = {"x": XGate(), "y": YGate(), "z": ZGate()}
 
 
-def _match_pauli_matrix(matrix: NDArray[np.complex128]) -> tuple[str, float]:
-    """Identify a one-qubit Pauli matrix and its unit-modulus phase.
+@dataclass(frozen=True)
+class _StochasticCircuitSchedule:
+    """Pair a circuit realization with any execution-time noise.
 
-    Returns:
-        The Pauli name and phase angle.
-
-    Raises:
-        ValueError: If the matrix does not match a Pauli matrix up to a unit-modulus phase.
+    Pauli noise is materialized in ``circuit``. Models containing dissipative
+    processes remain in ``post_gate_noise_model`` for state-dependent execution.
     """
-    for name, reference in _PAULI_MATRICES.items():
-        index = np.unravel_index(int(np.argmax(np.abs(reference))), reference.shape)
-        phase = complex(matrix[index] / reference[index])
-        if np.isclose(abs(phase), 1.0, atol=1e-10, rtol=0.0) and np.allclose(
-            matrix, phase * reference, atol=1e-10, rtol=0.0
-        ):
-            return name, float(np.angle(phase))
-    msg = "Operator does not match a one-qubit Pauli up to a unit-modulus phase."
-    raise ValueError(msg)
 
-
-def _match_pauli_product(matrix: NDArray[np.complex128]) -> tuple[tuple[str, str], float]:
-    """Identify a two-qubit Pauli product and its unit-modulus phase.
-
-    Returns:
-        The Pauli names and phase angle.
-
-    Raises:
-        ValueError: If the matrix does not match a Pauli product up to a unit-modulus phase.
-    """
-    for first, second in product(_PAULI_MATRICES, repeat=2):
-        reference = np.kron(_PAULI_MATRICES[first], _PAULI_MATRICES[second])
-        index = np.unravel_index(int(np.argmax(np.abs(reference))), reference.shape)
-        phase = complex(matrix[index] / reference[index])
-        if np.isclose(abs(phase), 1.0, atol=1e-10, rtol=0.0) and np.allclose(
-            matrix, phase * reference, atol=1e-10, rtol=0.0
-        ):
-            return (first, second), float(np.angle(phase))
-    msg = "Operator does not match a two-qubit Pauli product up to a unit-modulus phase."
-    raise ValueError(msg)
+    circuit: QuantumCircuit
+    post_gate_noise_model: NoiseModel | None
 
 
 def _unsupported_process_message(process: dict[str, Any]) -> str:
@@ -82,37 +52,17 @@ def _unsupported_process_message(process: dict[str, Any]) -> str:
     )
 
 
-def _match_pauli_process(process: dict[str, Any], num_sites: int) -> tuple[tuple[str, ...], float]:
-    """Identify the Pauli gates and phase for a process.
-
-    Returns:
-        The Pauli names and phase angle.
-    """
-    if num_sites == 1:
-        name, phase = _match_pauli_matrix(np.asarray(process["matrix"], dtype=np.complex128))
-        return (name,), phase
-    if "factors" in process:
-        matches = [_match_pauli_matrix(np.asarray(factor, dtype=np.complex128)) for factor in process["factors"]]
-        names = tuple(name for name, _phase in matches)
-        phase = math.fsum(match_phase for _name, match_phase in matches)
-        return names, phase
-    return _match_pauli_product(np.asarray(process["matrix"], dtype=np.complex128))
-
-
 def _append_pauli_process(circuit: QuantumCircuit, process: dict[str, Any]) -> None:
     """Append one sampled Pauli process as explicit single-qubit gates.
 
     Raises:
         ValueError: If the process cannot be represented by explicit Pauli gates.
     """
-    if not is_pauli(process):
-        raise ValueError(_unsupported_process_message(process))
-
     sites = [int(site) for site in process["sites"]]
-    try:
-        names, phase = _match_pauli_process(process, len(sites))
-    except (KeyError, ValueError) as error:
-        raise ValueError(_unsupported_process_message(process)) from error
+    match = _identify_pauli_process(process)
+    if match is None:
+        raise ValueError(_unsupported_process_message(process))
+    names, phase = match
 
     for name, site in zip(names, sites, strict=True):
         circuit.append(_PAULI_GATES[name], [site])
@@ -133,7 +83,7 @@ def _sample_process(processes: Sequence[dict[str, Any]], rng: np.random.Generato
 
     rates = np.asarray([float(process["strength"]) for process in processes], dtype=np.float64)
     for process, rate in zip(processes, rates, strict=True):
-        if rate > 0.0 and not is_pauli(process):
+        if rate > 0.0 and _identify_pauli_process(process) is None:
             raise ValueError(_unsupported_process_message(process))
 
     max_rate = float(np.max(rates))
@@ -159,39 +109,36 @@ def _sample_process(processes: Sequence[dict[str, Any]], rng: np.random.Generato
     return processes[last_positive_index]
 
 
+def _sample_concrete_noise_model(noise_model: NoiseModel, rng: np.random.Generator) -> NoiseModel:
+    """Resolve distribution-valued strengths for one circuit realization.
+
+    Returns:
+        A model with concrete strengths, or the original concrete model.
+    """
+    has_distributed_strength = any(isinstance(process["strength"], dict) for process in noise_model.processes)
+    return noise_model.sample(rng=rng) if has_distributed_strength else noise_model
+
+
 def sample_stochastic_circuit(
     circuit: QuantumCircuit,
     noise_model: NoiseModel,
     rng: np.random.Generator,
 ) -> QuantumCircuit:
-    """Sample one stochastic circuit realization from an ideal circuit.
+    """Sample one Pauli-noise circuit realization.
 
-    Distribution-valued process strengths are sampled once when construction
-    starts, yielding one concrete noise-model realization for the returned
-    trajectory. After each gate acting on one or two qubits, processes whose
-    complete support is contained in that gate's qubit support are considered.
-    If their rates are ``gamma_i``, an event occurs with probability
-    ``1 - exp(-sum(gamma_i))`` and exactly one process is then selected with
-    conditional probability ``gamma_i / sum(gamma_i)``.
-
-    Only Pauli processes representable as explicit X, Y, or Z circuit gates are
-    supported. The input circuit is not mutated, and native two-qubit gates are
-    copied without decomposition. Scheduled jumps are not part of this
-    gate-local preprocessing convention.
+    After every one- or two-qubit gate, processes supported on the gate qubits
+    are sampled using the same rate convention as digital TJM with ``dt=1``.
+    The input circuit is copied without decomposition.
 
     Args:
-        circuit: Ideal Qiskit circuit.
-        noise_model: Standard YAQS noise model. Process strengths retain their
-            meaning as nonnegative Lindblad rates.
-        rng: Generator used for both one-time strength sampling and gate-level
-            event/process sampling.
+        circuit: Circuit to sample.
+        noise_model: Noise model containing Pauli processes.
+        rng: Random-number generator.
 
     Returns:
-        A new circuit representing one stochastic trajectory.
-
+        Sampled circuit realization.
     """
-    has_distributed_strength = any(isinstance(process["strength"], dict) for process in noise_model.processes)
-    concrete_noise_model = noise_model.sample(rng=rng) if has_distributed_strength else noise_model
+    concrete_noise_model = _sample_concrete_noise_model(noise_model, rng)
     stochastic_circuit = circuit.copy_empty_like()
 
     for instruction in circuit.data:
@@ -209,3 +156,83 @@ def sample_stochastic_circuit(
             _append_pauli_process(stochastic_circuit, sampled_process)
 
     return stochastic_circuit
+
+
+def _sample_stochastic_schedule(
+    circuit: QuantumCircuit,
+    noise_model: NoiseModel,
+    rng: np.random.Generator,
+) -> _StochasticCircuitSchedule:
+    """Construct one post-gate stochastic realization.
+
+    Pauli-only models are sampled into explicit gates. Models containing a
+    positive-rate dissipative process remain intact for digital TJM execution.
+
+    Args:
+        circuit: Circuit to sample.
+        noise_model: Concrete noise model for the run.
+        rng: Trajectory random-number generator.
+
+    Returns:
+        Circuit realization and optional execution-time noise model.
+    """
+    requires_state_dependent_execution = any(
+        float(process["strength"]) > 0.0 and _identify_pauli_process(process) is None
+        for process in noise_model.processes
+    )
+    if requires_state_dependent_execution:
+        return _StochasticCircuitSchedule(circuit.copy(), noise_model)
+
+    return _StochasticCircuitSchedule(sample_stochastic_circuit(circuit, noise_model, rng), None)
+
+
+def _run_stochastic_trajectory(
+    initial_state: MPS,
+    schedule: _StochasticCircuitSchedule,
+    sim_params: DigitalSimParams,
+    trajectory_index: int = 0,
+    *,
+    copy_initial_state: bool = True,
+    rng: np.random.Generator | None = None,
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
+    """Execute one stochastic circuit trajectory with digital TJM.
+
+    Args:
+        initial_state: Initial MPS for this trajectory.
+        schedule: Sampled stochastic realization.
+        sim_params: Digital simulation parameters.
+        trajectory_index: Index used for trajectory seeding and shot allocation.
+        copy_initial_state: Whether to copy the initial MPS.
+        rng: Optional trajectory random-number generator.
+
+    Returns:
+        Observable values, diagnostics, counts, and an optional final MPS.
+    """
+    execution_noise_model = schedule.post_gate_noise_model
+    return _digital_tjm_impl(
+        (trajectory_index, initial_state, execution_noise_model, sim_params, schedule.circuit),
+        copy_initial_state=copy_initial_state,
+        rng=rng,
+        compiled_circuit=None,
+        post_gate_noise=execution_noise_model is not None,
+    )
+
+
+def _sample_and_run_stochastic_trajectory(
+    args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
+    """Construct and execute one schedule for the simulator's ensemble loop.
+
+    Returns:
+        The unaggregated output of one digital trajectory.
+    """
+    trajectory_index, initial_state, noise_model, sim_params, circuit = args
+    rng = make_trajectory_rng(trajectory_index, base_seed=sim_params.random_seed)
+    schedule = _sample_stochastic_schedule(circuit, noise_model or NoiseModel(), rng)
+    return _run_stochastic_trajectory(
+        initial_state,
+        schedule,
+        sim_params,
+        trajectory_index,
+        rng=rng,
+    )
