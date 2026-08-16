@@ -61,6 +61,31 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     last_tensor = np.transpose(np.reshape(remaining, (left_bond, 2, 2)), (1, 2, 0))
     tensors.append(np.expand_dims(last_tensor, axis=3))
     return tensors
+    # Splits two-qubit matrix
+    matrix = np.transpose(tensor, (0, 2, 1, 3))
+    dims = matrix.shape
+    matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
+    u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
+    # Keep Schmidt weight down to numerical noise so tiny-angle gates do not
+    # spuriously collapse to bond dimension 1 (which made MPO×MPS appear exact
+    # for θ/(2π)≲10⁻⁷ and then jump when the second singular value exceeded 1e-6).
+    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-14, min_keep=1)
+    s_list = s_list[:keep]
+    u_mat = u_mat[:, :keep]
+    v_mat = v_mat[:keep, :]
+
+    tensor1 = u_mat
+    tensor2 = np.diag(s_list) @ v_mat
+
+    # Reshape into physical dimensions and bond dimension
+    tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
+    tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
+    tensor2 = np.transpose(tensor2, (1, 2, 0))
+
+    # Add dummy dimension to boundaries
+    tensor1 = np.expand_dims(tensor1, axis=2)
+    tensor2 = np.expand_dims(tensor2, axis=3)
+    return [tensor1, tensor2]
 
 
 def extend_gate(
