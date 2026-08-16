@@ -92,16 +92,18 @@ def test_tdvp_splits_are_reconstructed_on_the_full_parent_chain() -> None:
     gate = GateLibrary.rxx([0.17])
     gate.set_sites(2, 5)
 
-    with ResourceTracer() as tracer:
-        with tracer.gate_scope(method="gate_local_2tdvp", step=0, gate_index=0, gate_name="rxx", sites=[2, 5]):
-            digital_tjm.apply_two_qubit_gate_tdvp(state, gate, _params(cap=4))
+    with (
+        ResourceTracer() as tracer,
+        tracer.gate_scope(method="gate_local_2tdvp", step=0, gate_index=0, gate_name="rxx", sites=[2, 5]),
+    ):
+        digital_tjm.apply_two_qubit_gate_tdvp(state, gate, _params(cap=4))
 
-    # The one-site halo makes the TDVP window [1, 6], whose symmetric 2TDVP
-    # sweep performs 2*6-3 state-changing two-site SVDs.
-    assert len(tracer.rows) == 9
+    # The gate-support window [2, 5] has four sites, so its symmetric 2TDVP
+    # sweep performs 2*4-3 state-changing two-site SVDs.
+    assert len(tracer.rows) == 5
     assert all(row["checkpoint"] == "tdvp_split" for row in tracer.rows)
     assert all(row["n_sites"] == state.length for row in tracer.rows)
-    assert all(min(row["updated_sites"]) >= 1 and max(row["updated_sites"]) <= 6 for row in tracer.rows)
+    assert all(min(row["updated_sites"]) >= 2 and max(row["updated_sites"]) <= 5 for row in tracer.rows)
     assert all(len(row["bond_dimensions"]) == state.length + 1 for row in tracer.rows)
     for row in tracer.rows:
         _assert_resource_identity(row)

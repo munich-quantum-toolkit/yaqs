@@ -317,16 +317,11 @@ def localized_p1_action(x: np.ndarray, q0: int, q1: int, sch: SchmidtData) -> np
 
 
 def localized_p2_action(x: np.ndarray, q0: int, q1: int, sch: SchmidtData) -> np.ndarray:
-    """Two-site enlarged-window action on ``X = H|ψ⟩``."""
-    n = sch.n
-    k_lo = max(0, q0 - 1)
-    k_hi = min(q1, n - 2)
-    s_lo = max(1, q0)
-    s_hi = min(q1, n - 2)
+    """Two-site gate-window action on ``X = H|ψ⟩``."""
     out = np.zeros_like(x)
-    for k in range(k_lo, k_hi + 1):
+    for k in range(q0, q1):
         out += apply_k_contract(x, k, sch)
-    for k in range(s_lo, s_hi + 1):
+    for k in range(q0 + 1, q1):
         out -= apply_s_contract(x, k, sch)
     return out
 
@@ -335,8 +330,8 @@ def fixed_rank_window(q0: int, q1: int) -> tuple[int, int]:
     return q0, q1
 
 
-def two_site_window(q0: int, q1: int, *, n: int = N) -> tuple[int, int]:
-    return max(0, q0 - 1), min(n - 1, q1 + 1)
+def two_site_window(q0: int, q1: int) -> tuple[int, int]:
+    return q0, q1
 
 
 def relative_residual(full: np.ndarray, windowed: np.ndarray) -> tuple[float, float, float]:

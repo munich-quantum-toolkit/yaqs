@@ -10,6 +10,8 @@ import pytest
 from .config import CHI, GENERATOR_SEED, REL_TOL, N
 from .dense_projectors import (
     FixtureError,
+    apply_k_contract,
+    apply_s_contract,
     apply_two_site_op,
     build_p1_full,
     build_p2_full,
@@ -19,6 +21,7 @@ from .dense_projectors import (
     make_generic_generator,
     projector_diagnostics,
     random_exact_rank_state,
+    two_site_window,
 )
 
 
@@ -69,6 +72,34 @@ def test_two_site_locality_separated() -> None:
     windowed = localized_p2_action(x, q0, q1, sch)
     rel = float(np.linalg.norm(full - windowed) / np.linalg.norm(full))
     assert rel < REL_TOL
+
+
+def test_two_site_locality_adjacent_reduces_to_gate_pair() -> None:
+    psi = random_exact_rank_state(101, n=N, chi=CHI)
+    sch = compute_schmidt(psi, n=N, chi=CHI)
+    h = make_generic_generator()
+    q0, q1 = 3, 4
+    x = apply_two_site_op(psi, h, q0, q1, n=N)
+    windowed = localized_p2_action(x, q0, q1, sch)
+
+    np.testing.assert_allclose(windowed, apply_k_contract(x, q0, sch), atol=REL_TOL)
+    assert two_site_window(q0, q1) == (q0, q1)
+
+
+def test_two_site_boundary_straddling_terms_cancel() -> None:
+    psi = random_exact_rank_state(101, n=N, chi=CHI)
+    sch = compute_schmidt(psi, n=N, chi=CHI)
+    h = make_generic_generator()
+    q0, q1 = 2, 5
+    x = apply_two_site_op(psi, h, q0, q1, n=N)
+    x_norm = np.linalg.norm(x)
+
+    for pair, site in ((q0 - 1, q0), (q1, q1)):
+        k_term = apply_k_contract(x, pair, sch)
+        s_term = apply_s_contract(x, site, sch)
+        assert np.linalg.norm(k_term) > 1e-6 * x_norm
+        assert np.linalg.norm(s_term) > 1e-6 * x_norm
+        assert np.linalg.norm(k_term - s_term) / x_norm < REL_TOL
 
 
 def test_bad_seed_raises_rather_than_resampling() -> None:

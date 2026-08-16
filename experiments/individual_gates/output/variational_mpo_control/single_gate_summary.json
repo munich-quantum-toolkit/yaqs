@@ -28,12 +28,12 @@
       "variational_infidelity": 0.07959123026261716
     }
   },
-  "control_source_sha256": "ff78982f7c0a0703787f4d4d317b00cfb3e5a39a29e46d5077ad927ba8f6791d",
-  "core_source_sha256": "2d33f4b11b74317e4c5fe921b98a6d7186a9cb308641f0bcbca58636d6042e1c",
+  "control_source_sha256": "c9cbe228dddac0b50f915f969a89cce29e7da28a5a452229dc3d6ce05c3eb07c",
+  "core_source_sha256": "5de656faaffffcfdfed32d8e2aab4060ce960fca436c40ed5eb5e13c5a72579d",
   "equal_within_1e-12": 20,
   "git": {
-    "git_commit": "2df89739fab8b33530f176547eb23ed65b259bc7",
-    "git_diff_hash": "3fd2b466a80460124036f52434e2df874153d4eb99bb1ac9746d92116e040e93",
+    "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "git_diff_hash": "190bb881bc155ad5c712d4238d4c847e7b44f759fe8518c2db846ae525e2585b",
     "git_dirty": "true"
   },
   "improved_beyond_1e-12": 67,
@@ -61,6 +61,6 @@
       "variational_infidelity": 0.0006655136638904491
     }
   },
-  "source_data": "experiments/individual_gates/output/variational_mpo_control/single_gate_rows.csv",
+  "source_data": "/home/aaron/Github/yaqs/experiments/individual_gates/output/variational_mpo_control/single_gate_rows.csv",
   "worse_beyond_1e-12": 0
 }

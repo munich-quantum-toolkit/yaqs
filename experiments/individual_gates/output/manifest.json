@@ -7,16 +7,16 @@
     "validation_report": "/home/aaron/Github/yaqs/experiments/individual_gates/output/validation_report.json"
   },
   "campaign_id": "individual_gates_v2_sites_1_10",
-  "completed_utc": "2026-08-07T15:59:19.776456+00:00",
+  "completed_utc": "2026-08-16T13:03:25.767766+00:00",
   "cx_generator_branch": "H_CX = (pi/4)(I-Z_c)\u2297(I-X_t) = (pi/2)(I-U_CX); U_CX(s)=expm(-i s H_CX) for s in [0,1]; expm(-i H_CX)=CX",
   "git": {
-    "git_commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
-    "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
+    "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
     "git_dirty": "true"
   },
-  "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
+  "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
   "versions": {
-    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
+    "mqt.yaqs": "0.6.1.dev171+g9078631c0.d20260812",
     "numpy": "2.4.6",
     "qiskit": "2.5.1",
     "scipy": "1.18.0"

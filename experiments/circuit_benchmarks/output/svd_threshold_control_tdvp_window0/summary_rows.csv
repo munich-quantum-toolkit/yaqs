@@ -1,0 +1,5 @@
+campaign_id,case,method,chi_max,n_sub,svd_threshold,target_step,endpoint_infidelity,max_infidelity_through_target,endpoint_parameter_count,max_completed_step_parameter_count,endpoint_max_bond_dim,max_completed_step_bond_dim,single_trajectory_runtime_s
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-14,15,0.008106035277034684,0.008106035277034684,11880,11880,28,28,17.433353019179776
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-13,15,0.009389777111383113,0.009389777111383113,11880,11880,28,28,16.855427738046274
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-12,15,0.009715021255179423,0.009715021255179423,11880,11880,28,28,16.26613030768931
+svd_threshold_control_final_protocol_v1,ising_2d,gate_local_2tdvp,28,2,1e-09,15,0.014420737805300177,0.014420737805300177,11880,11880,28,28,13.331015643198043

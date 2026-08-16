@@ -1,18 +1,18 @@
 {
   "case": "heisenberg_1d",
-  "completed_utc": "2026-08-07T17:30:45.705810+00:00",
-  "elapsed_wall_s": 173.1679536800366,
+  "completed_utc": "2026-08-16T13:46:30.850899+00:00",
+  "elapsed_wall_s": 161.4217594009824,
   "endpoint_metrics": {
-    "fidelity_normalized": 0.39730094555200096,
-    "infidelity_normalized": 0.6026990544479991,
-    "norm_approx": 0.9999999999999996,
-    "norm_drift": -1.1679546219056647e-13,
+    "fidelity_normalized": 0.38840540893459236,
+    "infidelity_normalized": 0.6115945910654077,
+    "norm_approx": 1.0000000000000009,
+    "norm_drift": -1.1546319456101628e-13,
     "norm_exact": 1.0000000000001164
   },
   "environment": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "packages": {
-      "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+      "mqt.yaqs": "0.6.1.dev195+g724ef9179.d20260816",
       "numpy": "2.4.6",
       "qiskit": "2.5.1",
       "scipy": "1.18.0",
@@ -27,7 +27,7 @@
       "VECLIB_MAXIMUM_THREADS": "1"
     }
   },
-  "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+  "source_hash": "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e",
   "status": "success",
   "stop_step": 37
 }

@@ -1,8 +1,8 @@
 {
   "csv": "/home/aaron/Github/yaqs/experiments/individual_gates/output/campaign_rows.csv",
   "git": {
-    "git_commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
-    "git_diff_hash": "c89bb20b3e406bfe28b24eba7f754766aaa8716e2ac17264e9f5e17d3a537e72",
+    "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
     "git_dirty": "true"
   },
   "n_new": 468,

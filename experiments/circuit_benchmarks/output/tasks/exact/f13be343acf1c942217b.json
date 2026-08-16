@@ -1,0 +1,32 @@
+{
+  "artifact": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/exact/heisenberg_2d.npy",
+  "artifact_sha256": "08562741f411f408a40b9756f31d3288bca2d5e20941a8a4b03eaafbed5ab3db",
+  "completed_utc": "2026-08-16T14:28:23.859710+00:00",
+  "elapsed_s": 0.8814243949018419,
+  "max_norm_error": 1.5343282200319663e-13,
+  "payload": {
+    "campaign_id": "circuit_benchmarks_v1",
+    "case": "heisenberg_2d",
+    "family": "exact",
+    "protocol": {
+      "case": "heisenberg_2d",
+      "circuit_fingerprint": "2f06dff7eba9fdb28bde9cfaa84fd0adbe1327f0cefd4a7bbab482e746b9b707",
+      "cols": 4,
+      "geometry": "2d",
+      "initial_basis_string": "0101010101010101",
+      "model": "heisenberg",
+      "n_edges": 24,
+      "n_qubits": 16,
+      "n_steps": 30,
+      "rows": 4
+    },
+    "source_hash": "141f153a6140118308f3b6d9d40c2d747224327c75da0b7a148516d7d58d49e1",
+    "steps": 30
+  },
+  "shape": [
+    31,
+    65536
+  ],
+  "status": "success",
+  "task_id": "f13be343acf1c942217b"
+}

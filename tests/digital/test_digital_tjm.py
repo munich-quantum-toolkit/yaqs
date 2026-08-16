@@ -406,6 +406,25 @@ def test_apply_two_qubit_gate_tdvp_rejects_non_2site_mode() -> None:
         apply_two_qubit_gate_tdvp(state, gate, params)
 
 
+def test_apply_two_qubit_gate_tdvp_uses_exact_gate_window() -> None:
+    """Production 2TDVP evolves only the contiguous gate-support window."""
+    length = 6
+    gate = GateLibrary.rzz([0.2])
+    gate.set_sites(1, 4)
+    state = State(length, initial="x+").mps
+    params = _tdvp_params(max_bond_dim=None, tdvp_sweeps=1)
+
+    with (
+        patch.object(digital_module, "apply_window", wraps=apply_window) as mock_apply_window,
+        patch.object(digital_module, "evolve_window") as mock_evolve_window,
+    ):
+        apply_two_qubit_gate_tdvp(state, gate, params)
+
+    assert mock_apply_window.call_args.args[-1] == 0
+    short_state = mock_evolve_window.call_args.args[0]
+    assert short_state.length == 4
+
+
 _RZZ_ANGLE = 0.3
 
 
@@ -657,7 +676,7 @@ def _apply_no_support_baseline(
     gate.set_sites(0, length - 1)
     prep = copy.deepcopy(State(length, initial="x+").mps)
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
-    short_state, short_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
+    short_state, short_mpo, window = apply_window(prep, mpo, first_site, last_site, 0)
     params = _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps)
     evolve_window(short_state, short_mpo, params)
     for i in range(window[0], window[1] + 1):

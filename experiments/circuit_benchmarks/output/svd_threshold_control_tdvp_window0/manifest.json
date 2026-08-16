@@ -1,0 +1,79 @@
+{
+  "campaign_id": "svd_threshold_control_final_protocol_v1",
+  "case": "ising_2d",
+  "circuit_fingerprint": "9be9e5b82b0a025611a50340eeb034e4f8fbb0f6713ca1f49b0f703537fee7ed",
+  "control_source_sha256": "c2248e9a28ab5d81779bcb62ae8db7e8eed51b9240c78557cfeb83afff5df82a",
+  "created_utc": "2026-08-16T14:43:44.854030+00:00",
+  "dense_reference_sha256": "ea22e7ae19c4293f7a369816c03bd452f170bf5a1dddee9fdb3a2d2cc49f4e6e",
+  "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+  "git_dirty_for_relevant_paths": true,
+  "implementation_sha256": "33bc0f36453eb57602ca467040e7c0a90748d22959f2a48e737bc5c7020d6124",
+  "krylov_tolerance": 1e-12,
+  "method_caps": {
+    "gate_local_2tdvp": 28
+  },
+  "method_substeps": {
+    "gate_local_2tdvp": 2
+  },
+  "numerical_precision": "complex128",
+  "output_sha256": {
+    "summary_rows": "ad1ff9a102962fc37ffa1a5107fffd0d62dc85ef3154b08420489f5de1238de1",
+    "trajectory_rows": "5b83e2f56e30ce6b5affa8eb75f31f5de2e5bf432afbb8cd387786a2c3d3c12e"
+  },
+  "outputs": {
+    "summary_rows": "experiments/circuit_benchmarks/output/svd_threshold_control_tdvp_window0/summary_rows.csv",
+    "trajectory_rows": "experiments/circuit_benchmarks/output/svd_threshold_control_tdvp_window0/trajectory_rows.csv"
+  },
+  "relevant_diff_sha256": "e069ce6273c9c8366ea668e010c65d522dd6835919aafdd7b03fba6e33c168fa",
+  "resource_sampling": "Step 0 and completed Trotter-step endpoints only; these values are not the transient P_max traced after every state-changing factorization in Figure 4.",
+  "schema_version": 1,
+  "scope": "bounded current-code SVD-threshold validation; not a timing campaign",
+  "svd_thresholds": [
+    1e-14,
+    1e-13,
+    1e-12,
+    1e-09
+  ],
+  "target_step": 15,
+  "thread_environment": {
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  },
+  "threadpools": [
+    {
+      "architecture": "Haswell",
+      "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "user_api": "blas",
+      "version": "0.3.31.188.0"
+    },
+    {
+      "architecture": "Haswell",
+      "filepath": "/home/aaron/Github/yaqs/.venv/lib/python3.14/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libscipy_openblas",
+      "threading_layer": "pthreads",
+      "user_api": "blas",
+      "version": "0.3.31.dev"
+    }
+  ],
+  "threads": 1,
+  "timing_repeats": 0,
+  "timings_for_publication_comparison": false,
+  "trajectory_repeats": 1,
+  "truncation": {
+    "cap_applied_after_cutoff_rank": true,
+    "exact_zero_padding": false,
+    "gate_mpo_hard_split_cutoff": 1e-14,
+    "minimum_retained_rank": 1,
+    "mode": "discarded_weight",
+    "threshold_meaning": "unnormalized cumulative discarded squared singular-value weight"
+  }
+}

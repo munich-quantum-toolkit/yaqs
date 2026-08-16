@@ -1,10 +1,12 @@
 # Structural checks
 
 This deterministic suite supplies Table I. It evaluates the summed
-instantaneous fixed-rank and two-site projector actions, their exterior
-cancellations, nearest-neighbor exactness, and the minimal-support long-range
-obstruction. It does not claim that a finite full-chain projector-splitting
-sweep equals a windowed sweep.
+instantaneous fixed-rank and two-site projector actions on the same contiguous
+gate-support window, their exterior cancellations, nearest-neighbor exactness,
+and the minimal-support long-range obstruction. The exterior diagnostic includes
+the individually nonzero two-site terms that straddle the window boundaries.
+It does not claim that a finite full-chain projector-splitting sweep equals a
+windowed sweep.
 
 The dense projector fixtures are independent of the production TDVP
 implementation. The production updater is invoked only for the

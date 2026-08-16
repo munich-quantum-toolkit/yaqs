@@ -1,0 +1,32 @@
+{
+  "artifact": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/exact/ising_2d.npy",
+  "artifact_sha256": "ea22e7ae19c4293f7a369816c03bd452f170bf5a1dddee9fdb3a2d2cc49f4e6e",
+  "completed_utc": "2026-08-16T14:28:22.967186+00:00",
+  "elapsed_s": 0.4581655429210514,
+  "max_norm_error": 7.704947790898586e-14,
+  "payload": {
+    "campaign_id": "circuit_benchmarks_v1",
+    "case": "ising_2d",
+    "family": "exact",
+    "protocol": {
+      "case": "ising_2d",
+      "circuit_fingerprint": "5eef7d8270326154d9beb7eba59f93fd898ed30351f583530400f345de741b2f",
+      "cols": 4,
+      "geometry": "2d",
+      "initial_basis_string": "0000000000000000",
+      "model": "ising",
+      "n_edges": 24,
+      "n_qubits": 16,
+      "n_steps": 30,
+      "rows": 4
+    },
+    "source_hash": "141f153a6140118308f3b6d9d40c2d747224327c75da0b7a148516d7d58d49e1",
+    "steps": 30
+  },
+  "shape": [
+    31,
+    65536
+  ],
+  "status": "success",
+  "task_id": "f9b01a50723590abb179"
+}

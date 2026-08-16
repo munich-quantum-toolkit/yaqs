@@ -1,27 +1,27 @@
 {
   "accuracy_task_source_hashes": [
-    "81be240cd543b7b55c4bddb9811f7995f91237a6e41388754d27d8241951456a"
+    "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e"
   ],
   "artifacts": {
     "bond_profiles": {
       "bytes": 69018,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/bond_profiles.csv",
-      "sha256": "f6e4c9c2212b1319a417affcac934a9f8b6b3cb3319aafe9064e07de38757502"
+      "sha256": "48659f75ca90504ca838cebcca1db85903e5bfb6b0803819aa83a544ab4e1bd8"
     },
     "timing_rows": {
-      "bytes": 74387,
+      "bytes": 74429,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_rows.csv",
-      "sha256": "ac39095a8a8b3272cbd930ae6edfe354ec9d0108961f50a3aa5cd6ae9e0f6481"
+      "sha256": "f3b12f6e202a53f16b02b8368734c52fef3fb05e435999f01d00b705fe17018e"
     },
     "timing_summary": {
-      "bytes": 28702,
+      "bytes": 28708,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_summary.csv",
-      "sha256": "d7dee4d89f9ee7f38b15a58e252378fc3ca4e5b92293f5c31230d353aaed2707"
+      "sha256": "20f29b573db5893761ee16ec9d9a0796ca4a6ecb3ff6a38531ddee4f72aa13eb"
     },
     "trajectory_rows": {
-      "bytes": 42174,
+      "bytes": 42178,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/trajectory_rows.csv",
-      "sha256": "a91cb6550588f482c0967321bbe03b0ed36a3f0de28c4bd60d902462a55d250d"
+      "sha256": "75cb0d50c400f75222c56a1e95dd57f664301eb290afef8bda219581862cf37d"
     }
   },
   "base_provenance": {
@@ -36,34 +36,34 @@
   "cases": {
     "heisenberg_1d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.6026990544479991,
+      "endpoint_infidelity": 0.6115945910654077,
       "stop_step": 37,
       "timing_repeats_complete": 3
     },
     "heisenberg_2d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.6765037659855362,
+      "endpoint_infidelity": 0.6392033097332774,
       "stop_step": 33,
       "timing_repeats_complete": 3
     },
     "ising_1d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.1534132287865002,
+      "endpoint_infidelity": 0.15141721551092757,
       "stop_step": 62,
       "timing_repeats_complete": 3
     },
     "ising_2d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.09440729697595562,
+      "endpoint_infidelity": 0.09008673229573172,
       "stop_step": 74,
       "timing_repeats_complete": 3
     }
   },
-  "created_utc": "2026-08-07T18:14:24.125856+00:00",
+  "created_utc": "2026-08-16T14:27:50.231116+00:00",
   "environment": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "packages": {
-      "mqt.yaqs": "0.6.1.dev86+ge28535e35.d20260807",
+      "mqt.yaqs": "0.6.1.dev195+g724ef9179.d20260816",
       "numpy": "2.4.6",
       "qiskit": "2.5.1",
       "scipy": "1.18.0",
@@ -79,8 +79,8 @@
     }
   },
   "git": {
-    "commit": "9a236a41dec23a3b25e48e95644eecc30aff4095",
-    "diff_hash": "0f0fcb273465cb67f6ca48323180c716f1a475de54e00a3d9e04625cf5d1db29",
+    "commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "diff_hash": "274e88df16aeb6b656ee5f85fc0d373cd7674c151edecabca1c7f3b819750f6a",
     "dirty": true
   },
   "protocol": {
@@ -99,7 +99,7 @@
     "threads": 1,
     "truncation_mode": "discarded_weight"
   },
-  "source_hash": "f6a972dc3f00aa6e47fbd4220db0ceb3ff4de4f418bce5d70da4f2971ee9dfc5",
+  "source_hash": "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e",
   "timing_scope": {
     "excluded": "schedule compilation, MPS initialization, dense evolution, endpoint fidelity, resource diagnostics, serialization, and plotting",
     "included": "apply_mps_step for every gate in each complete Trotter step",

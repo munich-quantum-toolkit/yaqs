@@ -9,14 +9,14 @@
   "circuit_fingerprint": "9be9e5b82b0a025611a50340eeb034e4f8fbb0f6713ca1f49b0f703537fee7ed",
   "complete": true,
   "completed_points": 16,
-  "control_source_sha256": "4cb0fae47f12481de8f9d92634742d3f6cf2d6fc44394bdfa94a4e6d355d2662",
+  "control_source_sha256": "957d5432d19cceb637af3c65d29196967344a28bf499aefa81187bcdb97409f9",
   "dense_reference_sha256": "fbcba3d7b57ba44f3f0836e471fd433e2df90c2aedcacbad65c2a21401c8c98f",
   "dense_reference_shape": [
     16,
     65536
   ],
-  "git_commit": "9a236a41dec23a3b25e48e95644eecc30aff4095",
-  "git_dirty_for_relevant_paths": false,
+  "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+  "git_dirty_for_relevant_paths": true,
   "hardware": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "thread_environment": {
@@ -50,17 +50,17 @@
     ],
     "threads": 1
   },
-  "implementation_sha256": "8cb872779db2f456d585e25d0b5872e2de1b9aac475f907d014b4234d95942ed",
+  "implementation_sha256": "1eda0d4ff195caa2dedc75557b5b6faa87733e6f5932502e4b0b1db39b7bb4e2",
   "method": "gate_local_2tdvp",
   "n_sub": 2,
   "numerical_precision": "complex128",
   "output_sha256": {
-    "accuracy": "0802a6827c25544abf0bec923d009ce4880fc363f1f9f52f6154d8bdcd88e953",
-    "summary": "e9105bb5f16d3fc0e531217d5478ccd3b26e81033c0ae4716999a0f804701f5a",
-    "timing_rows": "4a5bfeec79ba0543a9834d3e269b92b269b9edc61b706ea371baccea1db3c1f0"
+    "accuracy": "4462797a3a34ac6dc42510278ec738e15ad78c5c5c90da5c7e41f6c75a2e7560",
+    "summary": "6693ab55d04920d151dcf94fa1e27bfc1312e600b484ca53e5d970b377e7b5c1",
+    "timing_rows": "54ac23eed689584384f551da797675de39b79b3878b4cb68a54c56f114b1cfb5"
   },
-  "protocol_sha256": "77d07bff350ec8f6ce58ed964ea722603c0c5f1a5948cbd83f682cb864bdaf18",
-  "relevant_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "protocol_sha256": "38d4c956a77e00a2e58284c67dd0b9bfc4c88ba16306e8883ab75e6566d67332",
+  "relevant_diff_sha256": "a0b3b93e0f687fe4cba83296e07c0fa728d2b6cceca0aba4910430a1cc84bc27",
   "requested_points": [
     {
       "chi_max": 28,
@@ -142,5 +142,5 @@
   "timing_scope": "MPS gate application through the complete n=15 circuit; initialization, compilation, fidelity, resource tracing, and serialization excluded",
   "timing_warmups_per_point": 1,
   "truncation_mode": "discarded_weight",
-  "updated_utc": "2026-08-07T16:56:55.750980+00:00"
+  "updated_utc": "2026-08-16T14:57:09.234805+00:00"
 }

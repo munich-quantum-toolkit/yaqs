@@ -12,97 +12,97 @@
     {
       "chi_max": 8,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0008954989640276124,
+      "phase_aligned_distance_n128_n256": 0.0008954989640097783,
       "seed": 11
     },
     {
       "chi_max": 8,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0008197813898923519,
+      "phase_aligned_distance_n128_n256": 0.0008197813899045348,
       "seed": 22
     },
     {
       "chi_max": 8,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0008017677261636056,
+      "phase_aligned_distance_n128_n256": 0.0008017677261512657,
       "seed": 33
     },
     {
       "chi_max": 10,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.004102962953187991,
+      "phase_aligned_distance_n128_n256": 0.004102962953190819,
       "seed": 11
     },
     {
       "chi_max": 10,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.003912933196101194,
+      "phase_aligned_distance_n128_n256": 0.003912933196100726,
       "seed": 22
     },
     {
       "chi_max": 10,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.004696587041418282,
+      "phase_aligned_distance_n128_n256": 0.004696587041427029,
       "seed": 33
     },
     {
       "chi_max": 12,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0030796358896217377,
+      "phase_aligned_distance_n128_n256": 0.003079635889645719,
       "seed": 11
     },
     {
       "chi_max": 12,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0036991591674706685,
+      "phase_aligned_distance_n128_n256": 0.003699159167470762,
       "seed": 22
     },
     {
       "chi_max": 12,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0037471710608544028,
+      "phase_aligned_distance_n128_n256": 0.0037471710608582916,
       "seed": 33
     },
     {
       "chi_max": 14,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0016259392505662475,
+      "phase_aligned_distance_n128_n256": 0.001625939250565579,
       "seed": 11
     },
     {
       "chi_max": 14,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0008506750113195252,
+      "phase_aligned_distance_n128_n256": 0.0008506750113207652,
       "seed": 22
     },
     {
       "chi_max": 14,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 0.0024201700521612524,
+      "phase_aligned_distance_n128_n256": 0.0024201700521599844,
       "seed": 33
     },
     {
       "chi_max": 16,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 1.3710027154502072e-12,
+      "phase_aligned_distance_n128_n256": 1.3459742751934324e-12,
       "seed": 11
     },
     {
       "chi_max": 16,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 2.0458927942687137e-13,
+      "phase_aligned_distance_n128_n256": 1.6129064527332947e-13,
       "seed": 22
     },
     {
       "chi_max": 16,
       "note": "Fine-resolution control only; small distance does not imply convergence.",
-      "phase_aligned_distance_n128_n256": 3.5590025652522155e-13,
+      "phase_aligned_distance_n128_n256": 2.64254383927439e-13,
       "seed": 33
     }
   ],
   "git": {
-    "git_commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
-    "git_diff_hash": "9958d73fc281a47c217f37cfee977e1327086bf512c1a7234ead00fcce87f77e",
+    "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
     "git_dirty": "true"
   },
   "matched_table": {

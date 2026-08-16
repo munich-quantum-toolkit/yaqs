@@ -191,7 +191,7 @@ def check_two_site(
         assert_nonvacuous_action(full, x)
         windowed = localized_p2_action(x, q0, q1, sch)
         abs_res, rel, full_norm = relative_residual(full, windowed)
-        w0, w1 = two_site_window(q0, q1, n=sch.n)
+        w0, w1 = two_site_window(q0, q1)
         ok = rel < REL_TOL
         rows.append(
             {
@@ -345,7 +345,7 @@ def check_exterior_cancellation(sch, generator: np.ndarray) -> list[dict[str, An
 
     # Two-site exterior pairs
     p2_exterior = np.zeros_like(x)
-    for k in range(q0 - 1):
+    for k in range(q0):
         k_term = apply_k_contract(x, k, sch)
         s_term = apply_s_contract(x, k + 1, sch)
         diff = k_term - s_term
@@ -375,7 +375,7 @@ def check_exterior_cancellation(sch, generator: np.ndarray) -> list[dict[str, An
                 "pass": ok,
             }
         )
-    for k in range(q1 + 1, sch.n - 1):
+    for k in range(q1, sch.n - 1):
         k_term = apply_k_contract(x, k, sch)
         s_term = apply_s_contract(x, k, sch)
         diff = k_term - s_term
@@ -637,7 +637,7 @@ def write_table(
     )
     r2 = max_rel(
         "two_site_locality",
-        {"adjacent_interior", "separated_interior", "left_clipped", "right_clipped"},
+        {"adjacent_interior", "separated_interior", "left_boundary", "right_boundary"},
     )
     nn = max_rel("nearest_neighbor_exactness")
     p1_min_term, p1_ext = exterior_summary("exterior_cancellation_P1")
@@ -672,8 +672,8 @@ def write_table(
             f"${sci_tex(r1)}$ \\\\"
         ),
         (
-            r"Two-site update-window locality & "
-            r"$\max r_2$ (adjacent, separated, clipped) & "
+            r"Two-site gate-window locality & "
+            r"$\max r_2$ (adjacent, separated, boundary) & "
             f"${sci_tex(r2)}$ \\\\"
         ),
         (

@@ -1,0 +1,87 @@
+{
+  "checkpoint_count": 0,
+  "checkpoint_path": null,
+  "completed_utc": "2026-08-16T14:30:01.192447+00:00",
+  "elapsed_s": 2.9934380860067904,
+  "final_state_path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/output/states/15a1b8366fefcc116baa.npy",
+  "payload": {
+    "campaign_id": "circuit_benchmarks_v1",
+    "family": "resolution",
+    "numerical": {
+      "krylov_tol": 1e-12,
+      "svd_threshold": 1e-13,
+      "trunc_mode": "discarded_weight"
+    },
+    "protocol": {
+      "case": "heisenberg_2d",
+      "circuit_fingerprint": "86abe0c02bbc9e89e9360370c49e7aac2299a102c1878787eee1ab86acf25ec1",
+      "cols": 4,
+      "geometry": "2d",
+      "initial_basis_string": "0101010101010101",
+      "model": "heisenberg",
+      "n_edges": 24,
+      "n_qubits": 16,
+      "n_steps": 1,
+      "rows": 4
+    },
+    "source_hash": "141f153a6140118308f3b6d9d40c2d747224327c75da0b7a148516d7d58d49e1",
+    "spec": {
+      "case": "heisenberg_2d",
+      "chi_max": 32,
+      "method": "gate_local_2tdvp",
+      "n_sub": 1,
+      "run_family": "resolution",
+      "save_final_state": true,
+      "steps": 1,
+      "trace_resources": false
+    }
+  },
+  "rows": [
+    {
+      "case": "heisenberg_2d",
+      "chi_max": 32,
+      "current_parameter_count": 32,
+      "current_peak_bond_dim": 1,
+      "failed": false,
+      "fidelity_normalized": 1.0,
+      "infidelity_normalized": 0.0,
+      "method": "gate_local_2tdvp",
+      "n_sub": 1,
+      "norm_approx": 1.0,
+      "norm_drift": 0.0,
+      "norm_exact": 1.0,
+      "peak_bond_dim": 1,
+      "peak_parameter_count": 32,
+      "run_family": "resolution",
+      "step": 0,
+      "step_peak_bond_dim": 1,
+      "step_peak_parameter_count": 32,
+      "step_runtime_instrumented_s": 0.0,
+      "time": 0.0
+    },
+    {
+      "case": "heisenberg_2d",
+      "chi_max": 32,
+      "current_parameter_count": 15016,
+      "current_peak_bond_dim": 32,
+      "failed": false,
+      "fidelity_normalized": 0.9790265166407232,
+      "infidelity_normalized": 0.020973483359276845,
+      "method": "gate_local_2tdvp",
+      "n_sub": 1,
+      "norm_approx": 1.0000000000000016,
+      "norm_drift": -3.9968028886505635e-15,
+      "norm_exact": 1.0000000000000056,
+      "peak_bond_dim": 32,
+      "peak_parameter_count": 15016,
+      "run_family": "resolution",
+      "step": 1,
+      "step_peak_bond_dim": 32,
+      "step_peak_parameter_count": 15016,
+      "step_runtime_instrumented_s": 2.989212272223085,
+      "time": 0.1
+    }
+  ],
+  "status": "success",
+  "task_id": "15a1b8366fefcc116baa"
+}

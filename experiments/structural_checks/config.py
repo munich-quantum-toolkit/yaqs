@@ -47,8 +47,8 @@ FIXED_RANK_GEOMETRIES = {
 TWO_SITE_GEOMETRIES = {
     "adjacent_interior": (3, 4),
     "separated_interior": (2, 5),
-    "left_clipped": (0, 4),
-    "right_clipped": (3, 7),
+    "left_boundary": (0, 4),
+    "right_boundary": (3, 7),
 }
 
 NN_GEOMETRIES = {

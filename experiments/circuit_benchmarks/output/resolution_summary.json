@@ -1,6 +1,6 @@
 {
   "confirmed": true,
-  "created_utc": "2026-08-07T13:45:43.379010+00:00",
+  "created_utc": "2026-08-16T14:30:08.510935+00:00",
   "criterion": "Confirm the fixed production choice n_sub=2 when doubling it changes the endpoint by normalized infidelity at most 0.0005, preserves the reliability classification, and preserves endpoint rank and stored parameter count. This is a fixed-cap stability criterion, not a monotonic-convergence claim.",
   "global_n_sub": 2,
   "per_case": {
@@ -10,15 +10,15 @@
           "coarse_n_sub": 1,
           "fine_n_sub": 2,
           "passes": true,
-          "phase_aligned_distance": 0.0178701945621268,
-          "refinement_infidelity": 0.0003193183585616932
+          "phase_aligned_distance": 0.01779244210234563,
+          "refinement_infidelity": 0.000316545941666746
         },
         {
           "coarse_n_sub": 2,
           "fine_n_sub": 4,
           "passes": true,
-          "phase_aligned_distance": 0.00918813995175072,
-          "refinement_infidelity": 8.44201339967876e-05
+          "phase_aligned_distance": 0.009341977303015081,
+          "refinement_infidelity": 8.727063580671324e-05
         }
       ],
       "confirmed": true,
@@ -45,16 +45,16 @@
         {
           "coarse_n_sub": 1,
           "fine_n_sub": 2,
-          "passes": true,
-          "phase_aligned_distance": 0.018568469821096962,
-          "refinement_infidelity": 0.0003447583517979247
+          "passes": false,
+          "phase_aligned_distance": 0.050547670826029394,
+          "refinement_infidelity": 0.0025534349340528006
         },
         {
           "coarse_n_sub": 2,
           "fine_n_sub": 4,
           "passes": true,
-          "phase_aligned_distance": 0.015425798940027682,
-          "refinement_infidelity": 0.0002379411172496182
+          "phase_aligned_distance": 0.016601112490790305,
+          "refinement_infidelity": 0.0002755779475149822
         }
       ],
       "confirmed": true,

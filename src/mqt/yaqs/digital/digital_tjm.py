@@ -435,7 +435,7 @@ def apply_two_qubit_gate_tdvp(
         raise ValueError(msg)
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length, state.physical_dimensions)
 
-    window_size = 1
+    window_size = 0
     gauge_known = state.orthogonality_center is not None
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 

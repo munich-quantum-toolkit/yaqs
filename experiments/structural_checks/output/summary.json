@@ -109,11 +109,11 @@
         3,
         4
       ],
-      "left_clipped": [
+      "left_boundary": [
         0,
         4
       ],
-      "right_clipped": [
+      "right_boundary": [
         3,
         7
       ],
@@ -127,19 +127,19 @@
   "dtype": "complex128",
   "experiment_dir": "experiments/structural_checks",
   "fixture_error": null,
-  "generated_utc": "2026-08-07T10:16:04.864423+00:00",
+  "generated_utc": "2026-08-16T12:44:32.722172+00:00",
   "maximum_residual_by_family": {
     "analytical_obstruction": 0.0,
     "exterior_cancellation_P1": 4.869232756717637e-16,
-    "exterior_cancellation_P2": 2.29803009844118e-16,
+    "exterior_cancellation_P2": 7.978042339236959e-16,
     "fixed_rank_locality": 8.40166968283472e-16,
     "nearest_neighbor_exactness": 8.204383645081037e-16,
     "projector_algebra": 9.16211337771552e-16,
-    "two_site_locality": 1.0680081513363372e-15
+    "two_site_locality": 9.97331161903062e-16
   },
-  "n_cases": 49,
+  "n_cases": 51,
   "n_failed": 0,
-  "n_passed": 49,
+  "n_passed": 51,
   "numpy": "2.4.6",
   "production_product_sweep": [
     {
@@ -215,5 +215,5 @@
     "production_stall_infidelity": 1e-12,
     "relative_residual": 1e-10
   },
-  "yaqs": "0.6.1.dev85+g2df89739f.d20260807"
+  "yaqs": "0.6.1.dev171+g9078631c0.d20260812"
 }

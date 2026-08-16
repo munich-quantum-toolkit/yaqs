@@ -6,11 +6,11 @@
   "effective_zero_svd_threshold": 1e-300,
   "failures": [],
   "git": {
-    "git_commit": "e28535e357cab667ff495301cc1c3c098c5b9496",
-    "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
+    "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+    "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
     "git_dirty": "true"
   },
-  "git_diff_hash": "1fc3b7861762afb16faf71124d430cd6f621e8ed9f30a9d616db38dffa58692e",
+  "git_diff_hash": "004ec68aadd3d3108195d617ae178ce96cf96301cf5f90ee80404b345eda37ce",
   "n_failures": 0,
   "pass": true,
   "production_svd_threshold": 1e-13,
@@ -36,91 +36,91 @@
       {
         "chi_max": 8,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0008954989640276124,
+        "phase_aligned_distance_n128_n256": 0.0008954989640097783,
         "seed": 11
       },
       {
         "chi_max": 8,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0008197813898923519,
+        "phase_aligned_distance_n128_n256": 0.0008197813899045348,
         "seed": 22
       },
       {
         "chi_max": 8,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0008017677261636056,
+        "phase_aligned_distance_n128_n256": 0.0008017677261512657,
         "seed": 33
       },
       {
         "chi_max": 10,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.004102962953187991,
+        "phase_aligned_distance_n128_n256": 0.004102962953190819,
         "seed": 11
       },
       {
         "chi_max": 10,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.003912933196101194,
+        "phase_aligned_distance_n128_n256": 0.003912933196100726,
         "seed": 22
       },
       {
         "chi_max": 10,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.004696587041418282,
+        "phase_aligned_distance_n128_n256": 0.004696587041427029,
         "seed": 33
       },
       {
         "chi_max": 12,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0030796358896217377,
+        "phase_aligned_distance_n128_n256": 0.003079635889645719,
         "seed": 11
       },
       {
         "chi_max": 12,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0036991591674706685,
+        "phase_aligned_distance_n128_n256": 0.003699159167470762,
         "seed": 22
       },
       {
         "chi_max": 12,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0037471710608544028,
+        "phase_aligned_distance_n128_n256": 0.0037471710608582916,
         "seed": 33
       },
       {
         "chi_max": 14,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0016259392505662475,
+        "phase_aligned_distance_n128_n256": 0.001625939250565579,
         "seed": 11
       },
       {
         "chi_max": 14,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0008506750113195252,
+        "phase_aligned_distance_n128_n256": 0.0008506750113207652,
         "seed": 22
       },
       {
         "chi_max": 14,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 0.0024201700521612524,
+        "phase_aligned_distance_n128_n256": 0.0024201700521599844,
         "seed": 33
       },
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 1.3710027154502072e-12,
+        "phase_aligned_distance_n128_n256": 1.3459742751934324e-12,
         "seed": 11
       },
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 2.0458927942687137e-13,
+        "phase_aligned_distance_n128_n256": 1.6129064527332947e-13,
         "seed": 22
       },
       {
         "chi_max": 16,
         "note": "Fine-resolution control only; small distance does not imply convergence.",
-        "phase_aligned_distance_n128_n256": 3.5590025652522155e-13,
+        "phase_aligned_distance_n128_n256": 2.64254383927439e-13,
         "seed": 33
       }
     ],
@@ -149,8 +149,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.13995993444401655,
-        "infidelity_production": 0.13995993444401655,
+        "infidelity_effective_zero": 0.139959934444015,
+        "infidelity_production": 0.139959934444015,
         "method": "gate_local_2tdvp",
         "production_svd_threshold": 1e-13,
         "seed": 11
@@ -179,8 +179,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.17274173923903213,
-        "infidelity_production": 0.17274173923903213,
+        "infidelity_effective_zero": 0.17274173923903302,
+        "infidelity_production": 0.17274173923903302,
         "method": "gate_local_2tdvp",
         "production_svd_threshold": 1e-13,
         "seed": 22
@@ -209,8 +209,8 @@
         "abs_diff": 0.0,
         "chi_max": 8,
         "effective_zero_svd_threshold": 1e-300,
-        "infidelity_effective_zero": 0.2077373944211538,
-        "infidelity_production": 0.2077373944211538,
+        "infidelity_effective_zero": 0.20773739442115335,
+        "infidelity_production": 0.20773739442115335,
         "method": "gate_local_2tdvp",
         "production_svd_threshold": 1e-13,
         "seed": 33
@@ -373,7 +373,7 @@
   ],
   "stage": "validate",
   "versions": {
-    "mqt.yaqs": "0.6.1.dev85+g2df89739f.d20260807",
+    "mqt.yaqs": "0.6.1.dev171+g9078631c0.d20260812",
     "numpy": "2.4.6",
     "qiskit": "2.5.1",
     "scipy": "1.18.0"
