@@ -190,9 +190,7 @@ def test_event_probability_is_one_minus_exp_of_total_gamma() -> None:
     ])
     event_probability = -math.expm1(-0.5)
 
-    event = sample_stochastic_circuit(
-        circuit, noise_model, _rng(float(np.nextafter(event_probability, 0.0)), 0.0)
-    )
+    event = sample_stochastic_circuit(circuit, noise_model, _rng(float(np.nextafter(event_probability, 0.0)), 0.0))
     no_event = sample_stochastic_circuit(circuit, noise_model, _rng(event_probability))
 
     assert _operation_names(event) == ["rzz", "x"]

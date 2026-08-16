@@ -79,9 +79,7 @@ def _append_pauli_process(circuit: QuantumCircuit, process: dict[str, Any]) -> N
             name, phase = _match_pauli_matrix(np.asarray(process["matrix"], dtype=np.complex128))
             names = (name,)
         elif "factors" in process:
-            matches = [
-                _match_pauli_matrix(np.asarray(factor, dtype=np.complex128)) for factor in process["factors"]
-            ]
+            matches = [_match_pauli_matrix(np.asarray(factor, dtype=np.complex128)) for factor in process["factors"]]
             names = tuple(name for name, _phase in matches)
             phase = math.fsum(match_phase for _name, match_phase in matches)
         else:
@@ -94,9 +92,7 @@ def _append_pauli_process(circuit: QuantumCircuit, process: dict[str, Any]) -> N
     circuit.global_phase += phase
 
 
-def _sample_process(
-    processes: Sequence[dict[str, Any]], rng: np.random.Generator
-) -> dict[str, Any] | None:
+def _sample_process(processes: Sequence[dict[str, Any]], rng: np.random.Generator) -> dict[str, Any] | None:
     """Sample at most one process using the support-level jump convention."""
     if not processes:
         return None
