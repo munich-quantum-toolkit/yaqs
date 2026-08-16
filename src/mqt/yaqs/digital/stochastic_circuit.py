@@ -35,7 +35,14 @@ _PAULI_GATES = {"x": XGate(), "y": YGate(), "z": ZGate()}
 
 
 def _match_pauli_matrix(matrix: NDArray[np.complex128]) -> tuple[str, float]:
-    """Identify a one-qubit Pauli matrix and its unit-modulus phase."""
+    """Identify a one-qubit Pauli matrix and its unit-modulus phase.
+
+    Returns:
+        The Pauli name and phase angle.
+
+    Raises:
+        ValueError: If the matrix does not match a Pauli matrix up to a unit-modulus phase.
+    """
     for name, reference in _PAULI_MATRICES.items():
         index = np.unravel_index(int(np.argmax(np.abs(reference))), reference.shape)
         phase = complex(matrix[index] / reference[index])
@@ -48,7 +55,14 @@ def _match_pauli_matrix(matrix: NDArray[np.complex128]) -> tuple[str, float]:
 
 
 def _match_pauli_product(matrix: NDArray[np.complex128]) -> tuple[tuple[str, str], float]:
-    """Identify a two-qubit Pauli product and its unit-modulus phase."""
+    """Identify a two-qubit Pauli product and its unit-modulus phase.
+
+    Returns:
+        The Pauli names and phase angle.
+
+    Raises:
+        ValueError: If the matrix does not match a Pauli product up to a unit-modulus phase.
+    """
     for first, second in product(_PAULI_MATRICES, repeat=2):
         reference = np.kron(_PAULI_MATRICES[first], _PAULI_MATRICES[second])
         index = np.unravel_index(int(np.argmax(np.abs(reference))), reference.shape)
@@ -68,22 +82,35 @@ def _unsupported_process_message(process: dict[str, Any]) -> str:
     )
 
 
+def _match_pauli_process(process: dict[str, Any], num_sites: int) -> tuple[tuple[str, ...], float]:
+    """Identify the Pauli gates and phase for a process.
+
+    Returns:
+        The Pauli names and phase angle.
+    """
+    if num_sites == 1:
+        name, phase = _match_pauli_matrix(np.asarray(process["matrix"], dtype=np.complex128))
+        return (name,), phase
+    if "factors" in process:
+        matches = [_match_pauli_matrix(np.asarray(factor, dtype=np.complex128)) for factor in process["factors"]]
+        names = tuple(name for name, _phase in matches)
+        phase = math.fsum(match_phase for _name, match_phase in matches)
+        return names, phase
+    return _match_pauli_product(np.asarray(process["matrix"], dtype=np.complex128))
+
+
 def _append_pauli_process(circuit: QuantumCircuit, process: dict[str, Any]) -> None:
-    """Append one sampled Pauli process as explicit single-qubit gates."""
+    """Append one sampled Pauli process as explicit single-qubit gates.
+
+    Raises:
+        ValueError: If the process cannot be represented by explicit Pauli gates.
+    """
     if not is_pauli(process):
         raise ValueError(_unsupported_process_message(process))
 
     sites = [int(site) for site in process["sites"]]
     try:
-        if len(sites) == 1:
-            name, phase = _match_pauli_matrix(np.asarray(process["matrix"], dtype=np.complex128))
-            names = (name,)
-        elif "factors" in process:
-            matches = [_match_pauli_matrix(np.asarray(factor, dtype=np.complex128)) for factor in process["factors"]]
-            names = tuple(name for name, _phase in matches)
-            phase = math.fsum(match_phase for _name, match_phase in matches)
-        else:
-            names, phase = _match_pauli_product(np.asarray(process["matrix"], dtype=np.complex128))
+        names, phase = _match_pauli_process(process, len(sites))
     except (KeyError, ValueError) as error:
         raise ValueError(_unsupported_process_message(process)) from error
 
@@ -93,7 +120,14 @@ def _append_pauli_process(circuit: QuantumCircuit, process: dict[str, Any]) -> N
 
 
 def _sample_process(processes: Sequence[dict[str, Any]], rng: np.random.Generator) -> dict[str, Any] | None:
-    """Sample at most one process using the support-level jump convention."""
+    """Sample at most one process using the support-level jump convention.
+
+    Returns:
+        The selected process, or ``None`` if no event occurs.
+
+    Raises:
+        ValueError: If a positive-rate process cannot be represented by explicit Pauli gates.
+    """
     if not processes:
         return None
 
@@ -103,7 +137,7 @@ def _sample_process(processes: Sequence[dict[str, Any]], rng: np.random.Generato
             raise ValueError(_unsupported_process_message(process))
 
     max_rate = float(np.max(rates))
-    if max_rate == 0.0:
+    if not max_rate:
         return None
 
     scaled_rates = rates / max_rate
@@ -155,9 +189,6 @@ def sample_stochastic_circuit(
     Returns:
         A new circuit representing one stochastic trajectory.
 
-    Raises:
-        ValueError: If a relevant positive-rate process is not a Pauli jump that
-            can be represented by explicit X, Y, or Z gates.
     """
     has_distributed_strength = any(isinstance(process["strength"], dict) for process in noise_model.processes)
     concrete_noise_model = noise_model.sample(rng=rng) if has_distributed_strength else noise_model
