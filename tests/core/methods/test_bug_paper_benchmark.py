@@ -17,21 +17,14 @@ from typing import Any
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-RUNNER = (
-    PROJECT_ROOT
-    / "paper"
-    / "bug-mps-benchmarks"
-    / "six_site_dense_reference_2026-08-17"
-    / "run_benchmark.py"
-)
+RUNNER = PROJECT_ROOT / "paper" / "bug-mps-benchmarks" / "six_site_dense_reference_2026-08-17" / "run_benchmark.py"
 
 
 def test_six_site_dense_reference_published_row(tmp_path: Path) -> None:
     """The public runner reproduces the first row and its structural guards."""
     output = tmp_path / "six_site.json"
-    subprocess.run(  # noqa: S603
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
         [sys.executable, str(RUNNER), "--dts", "0.1", "--output", str(output)],
         cwd=PROJECT_ROOT,
         check=True,
