@@ -739,10 +739,10 @@ class MPS:
 
             # If normalizing, we just throw away the R
             if current_orthogonality_center + 1 < self.length:
-                self.tensors[current_orthogonality_center + 1] = oe.contract(
-                    "ij, ajc->aic",
-                    bond_tensor,
-                    self.tensors[current_orthogonality_center + 1],
+                next_tensor = self.tensors[current_orthogonality_center + 1]
+                self.tensors[current_orthogonality_center + 1] = np.asarray(
+                    np.tensordot(bond_tensor, next_tensor, axes=(1, 1)).transpose(1, 0, 2),
+                    dtype=np.complex128,
                 )
         elif decomposition == "SVD":
             a, b = (
@@ -844,6 +844,9 @@ class MPS:
         *,
         max_bond_dim: int | None = None,
         trunc_mode: TruncMode = "discarded_weight",
+        min_keep: int = 1,
+        canonicalize: bool = True,
+        restore_center: bool = True,
     ) -> None:
         """Compress in place by right-canonicalizing, then truncating left-to-right.
 
@@ -862,6 +865,14 @@ class MPS:
             trunc_mode: Truncation mode forwarded to the two-site SVD split
                 (``"discarded_weight"``, ``"relative"``, ``"hard_cutoff"``, or
                 ``"relative_discarded_weight"``).
+            min_keep: Minimum number of singular values retained on every bond,
+                subject to the available rank and ``max_bond_dim``.
+            canonicalize: Whether to establish right-canonical form before the
+                truncation sweep. If ``False``, the caller guarantees that the
+                MPS is already right-canonical with center at site ``0``.
+            restore_center: Whether to move the center back to its entry site
+                after compression. If ``False``, leave it at the final site of
+                the left-to-right SVD sweep.
         """
         if self.length == 1:
             return
@@ -873,7 +884,10 @@ class MPS:
             orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length // 2
 
         # Right-canonical form without χ truncation (center at site 0).
-        self.set_canonical_form(0, decomposition="QR")
+        if canonicalize:
+            self.set_canonical_form(0, decomposition="QR")
+        else:
+            self.assert_center(0, context="compress(canonicalize=False)")
 
         for site in range(self.length - 1):
             left_tensor = self.tensors[site]
@@ -886,10 +900,14 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
+                min_keep=min_keep,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new
             self._orthogonality_center = site + 1
+
+        if not restore_center:
+            return
 
         # Restore the caller's center without additional truncation.
         assert self._orthogonality_center is not None

@@ -1,0 +1,16 @@
+**/__pycache__/
+**/*.pyc
+
+# Generated benchmark data and reports
+**/raw_results.json
+**/summary.csv
+**/RESULTS.md
+**/VALIDATION.md
+**/MANIFEST.json
+**/*.npz
+**/*.csv
+**/*.xlsx
+**/runtime_accuracy_tradeoff.pdf
+**/runtime_accuracy_tradeoff.png
+**/provenance/
+**/outputs/

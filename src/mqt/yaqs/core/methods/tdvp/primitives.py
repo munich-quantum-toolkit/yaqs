@@ -424,7 +424,7 @@ def _evolve_local_tensor_krylov(
     tensor: NDArray[np.complex128],
     dt: float,
     proj_args: tuple[NDArray[np.complex128], ...],
-    dense_threshold: int = DENSE_THRESHOLD,
+    dense_threshold: int | None = None,
     *,
     krylov_tol: float,
 ) -> NDArray[np.complex128]:
@@ -437,7 +437,8 @@ def _evolve_local_tensor_krylov(
         dt: Time step for evolution.
         proj_args: Extra arguments passed to ``projector`` before the tensor.
         dense_threshold: Maximum flattened size for building a dense effective
-            operator instead of a matrix-free projector.
+            operator instead of a matrix-free projector. ``None`` reads the
+            module-level ``DENSE_THRESHOLD`` at call time.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
@@ -447,8 +448,9 @@ def _evolve_local_tensor_krylov(
     tensor_shape = tensor.shape
     tensor_flat = tensor.reshape(-1)
     n_loc = tensor_flat.size
+    resolved_dense_threshold = DENSE_THRESHOLD if dense_threshold is None else dense_threshold
 
-    if n_loc <= dense_threshold:
+    if n_loc <= resolved_dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_operator(projector, proj_args, tensor_shape)
 

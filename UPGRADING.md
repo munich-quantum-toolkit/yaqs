@@ -6,6 +6,17 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### BUG compression now occurs after each half-sweep
+
+Alternating-endpoint BUG evolution now compresses and optionally normalizes the
+MPS after both half-sweeps. The second half-sweep therefore runs on the retained
+bond profile. BUG compression also uses the same minimum retained rank as TDVP:
+``min(2, max_bond_dim)``. Compression now leaves the center at its sweep
+endpoint; network reflection converts it directly into the next entry center.
+Normalization rescales that center tensor instead of canonicalizing the full MPS
+again. Runs that depend on the former single compression at the end of a full
+step must be regenerated.
+
 ### Breaking: analog durations must contain a whole number of fixed time steps
 
 `AnalogSimParams` now requires a finite, positive `dt` and a finite,

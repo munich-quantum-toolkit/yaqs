@@ -14,6 +14,9 @@ ci:
   autofix_commit_msg: "🎨 pre-commit fixes"
   skip: [ty]
 
+# Keep the paper-specific benchmark scripts outside the package lint scope.
+exclude: ^paper/bug-mps-benchmarks/
+
 repos:
   ## Standard hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

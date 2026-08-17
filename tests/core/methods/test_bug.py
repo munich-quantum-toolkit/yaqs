@@ -196,11 +196,17 @@ def test_bug_forwards_trunc_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         *,
         max_bond_dim: int | None = None,
         trunc_mode: str = "discarded_weight",
+        min_keep: int = 1,
+        canonicalize: bool = True,
+        restore_center: bool = True,
     ) -> None:
         seen["threshold"] = threshold
         seen["max_bond_dim"] = max_bond_dim
         seen["trunc_mode"] = trunc_mode
-        self.set_center(0)
+        seen["min_keep"] = min_keep
+        seen["canonicalize"] = canonicalize
+        seen["restore_center"] = restore_center
+        self.set_center(self.length - 1)
 
     monkeypatch.setattr(MPS, "compress", fake_compress)
     bug(
@@ -218,6 +224,9 @@ def test_bug_forwards_trunc_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen["trunc_mode"] == "relative"
     assert seen["threshold"] == pytest.approx(1e-8)
     assert seen["max_bond_dim"] == 4
+    assert seen["min_keep"] == 2
+    assert seen["canonicalize"] is False
+    assert seen["restore_center"] is False
 
 
 def test_proposition2_overlap_frobenius_identity() -> None:
@@ -304,8 +313,8 @@ def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> 
         assert np.allclose(a, b)
 
 
-def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
-    """BUG compresses once after the full alternating composition."""
+def test_compression_after_each_half_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG compresses after both halves of the alternating composition."""
     counts = {"n": 0}
 
     def counting_compress(
@@ -314,10 +323,16 @@ def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
         *,
         max_bond_dim: int | None = None,
         trunc_mode: str = "discarded_weight",
+        min_keep: int = 1,
+        canonicalize: bool = True,
+        restore_center: bool = True,
     ) -> None:
         del threshold, max_bond_dim, trunc_mode
+        assert min_keep == 2
+        assert canonicalize is False
+        assert restore_center is False
         counts["n"] += 1
-        self.set_center(0)
+        self.set_center(self.length - 1)
 
     monkeypatch.setattr(MPS, "compress", counting_compress)
     bug(
@@ -330,7 +345,31 @@ def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
             evolution_mode=EvolutionMode.BUG,
         ),
     )
-    assert counts["n"] == 1
+    assert counts["n"] == 2
+
+
+def test_bug_checkpoint_order_and_orientation() -> None:
+    """BUG exposes the two sweeps and two compressions in execution order."""
+    observed: list[tuple[str, bool, int | None]] = []
+
+    def checkpoint(name: str, state: MPS, *, reflected: bool) -> None:
+        observed.append((name, reflected, state.orthogonality_center))
+
+    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    bug(
+        mps,
+        MPO.ising(3, 1.0, 0.5),
+        AnalogSimParams(preset="exact", elapsed_time=0.1, dt=0.1, max_bond_dim=4),
+        checkpoint=checkpoint,
+    )
+    assert observed == [
+        ("first_half_sweep", False, 0),
+        ("first_compression", False, 2),
+        ("second_half_sweep", True, 0),
+        ("second_compression", True, 2),
+    ]
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
 
 
 def test_normalize_after_compression() -> None:
@@ -347,6 +386,40 @@ def test_normalize_after_compression() -> None:
         ),
     )
     assert abs(mps.norm()) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_bug_normalizes_without_full_chain_normalize(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG rescales the canonical center instead of normalizing the full MPS."""
+    mps = random_mps([(2, 1, 3), (2, 3, 1)])
+
+    def reject_full_normalize(*_args: object, **_kwargs: object) -> None:
+        msg = "BUG should normalize only its canonical center tensor"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(MPS, "normalize", reject_full_normalize)
+    bug(
+        mps,
+        MPO.ising(2, 1.0, 0.5),
+        AnalogSimParams(preset="exact", get_state=True, elapsed_time=0.1, dt=0.1),
+    )
+    assert abs(mps.norm()) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_bug_reuses_compression_endpoint_after_reflection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Normal BUG execution needs no gauge sweep between compression and reflection."""
+
+    def reject_center_recovery(*_args: object, **_kwargs: object) -> None:
+        msg = "endpoint-aware BUG should not need center recovery"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr("mqt.yaqs.core.methods.bug._move_center_to_zero", reject_center_recovery)
+    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    bug(
+        mps,
+        MPO.ising(3, 1.0, 0.5),
+        AnalogSimParams(preset="exact", get_state=True, elapsed_time=0.1, dt=0.1),
+    )
+    assert mps.orthogonality_center == 0
 
 
 def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:

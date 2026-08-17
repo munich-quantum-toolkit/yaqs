@@ -127,6 +127,7 @@ extra-paths = ["tests"]
 exclude = [
     "docs/**",
     "experiments/**",
+    "paper/**",
 ]
 
 

@@ -566,7 +566,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
                 ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
-                one compression and renormalization after each ``dt`` step.
+                compression and renormalization after each half-sweep.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
