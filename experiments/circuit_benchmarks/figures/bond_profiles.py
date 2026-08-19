@@ -50,8 +50,8 @@ DPI = 600
 
 PROFILE_METHOD_ORDER = ("gate_local_2tdvp", "mpo_contract_compress", "tebd_swap")
 PROFILE_METHOD_LABELS = {
-    "gate_local_2tdvp": "TDVP",
-    "mpo_contract_compress": "MPO",
+    "gate_local_2tdvp": "Projection",
+    "mpo_contract_compress": "Direct MPO",
     "tebd_swap": "TEBD+SWAP",
 }
 PROFILE_ROW_LABELS = {
@@ -452,13 +452,13 @@ def caption(*, tdvp_override_manifest: Mapping[str, object] | None = None) -> st
     control_note = ""
     if tdvp_override_manifest is not None:
         control_note = (
-            "The TDVP profiles are recomputed in the isolated Krylov control at tolerance $10^{-5}$; "
-            "the MPO and TEBD+SWAP profiles retain the frozen original data. "
+            "The Projection profiles are recomputed in the isolated Krylov control at tolerance $10^{-5}$; "
+            "the Direct MPO and TEBD+SWAP profiles retain the frozen original data. "
         )
     return (
         "MPS bond profiles during fixed-cap circuit evolution at chi_max=32. Rows (a)--(d) show the four "
-        "model and geometry combinations; columns show TDVP, MPO, and TEBD+SWAP. TDVP denotes gate-local "
-        "two-site TDVP, and MPO denotes routing-free MPO contract-and-truncate. "
+        "model and geometry combinations; columns show Projection, Direct MPO, and TEBD+SWAP. Projection denotes "
+        "gate-local two-site TDVP, and Direct MPO denotes routing-free MPO contract-and-truncate. "
         f"{control_note}"
         "The displayed step ranges end at n=27, 6, "
         "6, and 1 from top to bottom. Colors encode the retained bond dimensions linearly, with the terminal "
@@ -466,8 +466,8 @@ def caption(*, tdvp_override_manifest: Mapping[str, object] | None = None) -> st
         "steps, not exact Schmidt ranks or transient working ranks, and do not by themselves establish "
         "accuracy. For the two-dimensional systems, b "
         "indexes cuts of the snake-ordered MPS. All three methods fill the available bond space at the "
-        "same step in 1D Ising and in both Heisenberg cases. In 4x4 Ising, TDVP fills it alongside "
-        "TEBD+SWAP, one step after MPO."
+        "same step in 1D Ising and in both Heisenberg cases. In 4x4 Ising, Projection fills it alongside "
+        "TEBD+SWAP, one step after Direct MPO."
     )
 
 

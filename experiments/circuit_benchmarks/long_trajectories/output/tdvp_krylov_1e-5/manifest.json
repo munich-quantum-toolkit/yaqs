@@ -1,27 +1,27 @@
 {
   "accuracy_task_source_hashes": [
-    "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e"
+    "31a14929aa1c164c2094ad2e9f63c5a25e4a628627a03ae32cae52d3b6dd5002"
   ],
   "artifacts": {
     "bond_profiles": {
-      "bytes": 69018,
+      "bytes": 69027,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/bond_profiles.csv",
-      "sha256": "48659f75ca90504ca838cebcca1db85903e5bfb6b0803819aa83a544ab4e1bd8"
+      "sha256": "441f135c212aa93b1530889a9be032c7182aaf1c841a5391e3a4f1b75609669e"
     },
     "timing_rows": {
-      "bytes": 74429,
+      "bytes": 74929,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_rows.csv",
-      "sha256": "f3b12f6e202a53f16b02b8368734c52fef3fb05e435999f01d00b705fe17018e"
+      "sha256": "8a8d92b9389fcd836feb49185f3c89e3b6d2f9bb01e3c3e2bae180a65843edef"
     },
     "timing_summary": {
-      "bytes": 28708,
+      "bytes": 28719,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/timing_summary.csv",
-      "sha256": "20f29b573db5893761ee16ec9d9a0796ca4a6ecb3ff6a38531ddee4f72aa13eb"
+      "sha256": "520dbb1bb6131bae13d531f04c3703d284e63dd4bbbbfc1bbdd86ac579b4f94c"
     },
     "trajectory_rows": {
-      "bytes": 42178,
+      "bytes": 42167,
       "path": "/home/aaron/Github/yaqs/experiments/circuit_benchmarks/long_trajectories/output/tdvp_krylov_1e-5/trajectory_rows.csv",
-      "sha256": "75cb0d50c400f75222c56a1e95dd57f664301eb290afef8bda219581862cf37d"
+      "sha256": "27c6244c6eefee6e680529cf8bfec3ca177823b2cc5517d9714b8bc783eeec42"
     }
   },
   "base_provenance": {
@@ -36,30 +36,30 @@
   "cases": {
     "heisenberg_1d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.6115945910654077,
+      "endpoint_infidelity": 0.5608109232653635,
       "stop_step": 37,
       "timing_repeats_complete": 3
     },
     "heisenberg_2d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.6392033097332774,
+      "endpoint_infidelity": 0.6330650477144976,
       "stop_step": 33,
       "timing_repeats_complete": 3
     },
     "ising_1d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.15141721551092757,
+      "endpoint_infidelity": 0.1537368894077411,
       "stop_step": 62,
       "timing_repeats_complete": 3
     },
     "ising_2d": {
       "accuracy_status": "success",
-      "endpoint_infidelity": 0.09008673229573172,
+      "endpoint_infidelity": 0.08454263387621264,
       "stop_step": 74,
       "timing_repeats_complete": 3
     }
   },
-  "created_utc": "2026-08-16T14:27:50.231116+00:00",
+  "created_utc": "2026-08-18T14:11:41.620196+00:00",
   "environment": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
     "packages": {
@@ -79,8 +79,8 @@
     }
   },
   "git": {
-    "commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
-    "diff_hash": "274e88df16aeb6b656ee5f85fc0d373cd7674c151edecabca1c7f3b819750f6a",
+    "commit": "be91beec9fd8faeebde05385f2083dd47fe42273",
+    "diff_hash": "0c3056b6be65a4a0804e4a0901ad838f239cc98f0870d6d6cba932c91c9bbca9",
     "dirty": true
   },
   "protocol": {
@@ -92,6 +92,7 @@
       "ising_1d": 62,
       "ising_2d": 74
     },
+    "gate_mode": "tdvp",
     "krylov_tolerance": 1e-05,
     "method": "gate_local_2tdvp",
     "n_sub": 2,
@@ -99,7 +100,7 @@
     "threads": 1,
     "truncation_mode": "discarded_weight"
   },
-  "source_hash": "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e",
+  "source_hash": "31a14929aa1c164c2094ad2e9f63c5a25e4a628627a03ae32cae52d3b6dd5002",
   "timing_scope": {
     "excluded": "schedule compilation, MPS initialization, dense evolution, endpoint fidelity, resource diagnostics, serialization, and plotting",
     "included": "apply_mps_step for every gate in each complete Trotter step",

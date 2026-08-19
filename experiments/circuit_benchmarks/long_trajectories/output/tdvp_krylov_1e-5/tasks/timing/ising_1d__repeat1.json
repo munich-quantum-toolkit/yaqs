@@ -1,9 +1,9 @@
 {
-  "completed_utc": "2026-08-16T13:42:20.212965+00:00",
-  "elapsed_wall_s": 71.9002574600745,
+  "completed_utc": "2026-08-18T13:56:39.447557+00:00",
+  "elapsed_wall_s": 3.0580938211642206,
   "endpoint_metrics": {
-    "fidelity_normalized": 0.8485827844890724,
-    "infidelity_normalized": 0.15141721551092757,
+    "fidelity_normalized": 0.8462631105922589,
+    "infidelity_normalized": 0.1537368894077411,
     "norm_approx": 1.0000000000000004,
     "norm_drift": -1.212363542890671e-13,
     "norm_exact": 1.0000000000001217
@@ -32,12 +32,13 @@
         "VECLIB_MAXIMUM_THREADS": "1"
       }
     },
-    "expected_endpoint_infidelity": 0.15141721551092757,
+    "expected_endpoint_infidelity": 0.1537368894077411,
+    "gate_mode": "tdvp",
     "krylov_tolerance": 1e-05,
     "method": "gate_local_2tdvp",
     "n_sub": 2,
     "repeat": 1,
-    "source_hash": "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e",
+    "source_hash": "31a14929aa1c164c2094ad2e9f63c5a25e4a628627a03ae32cae52d3b6dd5002",
     "stop_step": 62,
     "svd_threshold": 1e-13,
     "threads": 1,
@@ -56,560 +57,560 @@
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.06723689590580761,
+      "cumulative_runtime_s": 0.029014681931585073,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 1,
-      "step_runtime_s": 0.06723689590580761
+      "step_runtime_s": 0.029014681931585073
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.17321711499243975,
+      "cumulative_runtime_s": 0.05874020792543888,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 2,
-      "step_runtime_s": 0.10598021908663213
+      "step_runtime_s": 0.029725525993853807
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.24308866495266557,
+      "cumulative_runtime_s": 0.08912767190486193,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 3,
-      "step_runtime_s": 0.06987154996022582
+      "step_runtime_s": 0.030387463979423046
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.3144685148727149,
+      "cumulative_runtime_s": 0.12005152180790901,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 4,
-      "step_runtime_s": 0.07137984992004931
+      "step_runtime_s": 0.030923849903047085
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.386067965766415,
+      "cumulative_runtime_s": 0.15091674076393247,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 5,
-      "step_runtime_s": 0.07159945089370012
+      "step_runtime_s": 0.030865218956023455
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.45989741291850805,
+      "cumulative_runtime_s": 0.18197870580479503,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 6,
-      "step_runtime_s": 0.07382944715209305
+      "step_runtime_s": 0.03106196504086256
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.5339580369181931,
+      "cumulative_runtime_s": 0.2136660509277135,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 7,
-      "step_runtime_s": 0.07406062399968505
+      "step_runtime_s": 0.03168734512291849
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.6068149688653648,
+      "cumulative_runtime_s": 0.24576870491728187,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 8,
-      "step_runtime_s": 0.07285693194717169
+      "step_runtime_s": 0.03210265398956835
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.6797420347575098,
+      "cumulative_runtime_s": 0.2782282019034028,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 9,
-      "step_runtime_s": 0.07292706589214504
+      "step_runtime_s": 0.03245949698612094
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.7522251147311181,
+      "cumulative_runtime_s": 0.311402051942423,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 10,
-      "step_runtime_s": 0.07248307997360826
+      "step_runtime_s": 0.03317385003902018
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.8346252606716007,
+      "cumulative_runtime_s": 0.34444891288876534,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 11,
-      "step_runtime_s": 0.08240014594048262
+      "step_runtime_s": 0.03304686094634235
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.9114948357455432,
+      "cumulative_runtime_s": 0.37772959587164223,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 12,
-      "step_runtime_s": 0.07686957507394254
+      "step_runtime_s": 0.0332806829828769
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 0.990228314884007,
+      "cumulative_runtime_s": 0.41192824579775333,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 13,
-      "step_runtime_s": 0.07873347913846374
+      "step_runtime_s": 0.0341986499261111
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.0719268878456205,
+      "cumulative_runtime_s": 0.44659911771304905,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 14,
-      "step_runtime_s": 0.08169857296161354
+      "step_runtime_s": 0.03467087191529572
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.1622975477948785,
+      "cumulative_runtime_s": 0.48174690757878125,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 15,
-      "step_runtime_s": 0.09037065994925797
+      "step_runtime_s": 0.03514778986573219
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.2486859536729753,
+      "cumulative_runtime_s": 0.5175437005236745,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 16,
-      "step_runtime_s": 0.08638840587809682
+      "step_runtime_s": 0.03579679294489324
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.3439662088640034,
+      "cumulative_runtime_s": 0.5546271905768663,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 17,
-      "step_runtime_s": 0.09528025519102812
+      "step_runtime_s": 0.03708349005319178
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.4500435849186033,
+      "cumulative_runtime_s": 0.5936275117564946,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 18,
-      "step_runtime_s": 0.10607737605459988
+      "step_runtime_s": 0.03900032117962837
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.5812513760756701,
+      "cumulative_runtime_s": 0.6336877958383411,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 19,
-      "step_runtime_s": 0.13120779115706682
+      "step_runtime_s": 0.040060284081846476
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.7365990050602704,
+      "cumulative_runtime_s": 0.6749365718569607,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 20,
-      "step_runtime_s": 0.1553476289846003
+      "step_runtime_s": 0.04124877601861954
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 1.9507254902273417,
+      "cumulative_runtime_s": 0.7342353230342269,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 21,
-      "step_runtime_s": 0.21412648516707122
+      "step_runtime_s": 0.05929875117726624
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 2.21119237318635,
+      "cumulative_runtime_s": 0.7787129068747163,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 22,
-      "step_runtime_s": 0.2604668829590082
+      "step_runtime_s": 0.04447758384048939
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 2.566095211310312,
+      "cumulative_runtime_s": 0.8238064979668707,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 23,
-      "step_runtime_s": 0.3549028381239623
+      "step_runtime_s": 0.045093591092154384
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 2.9934076794888824,
+      "cumulative_runtime_s": 0.8714096068870276,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 24,
-      "step_runtime_s": 0.42731246817857027
+      "step_runtime_s": 0.047603108920156956
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 3.853530932450667,
+      "cumulative_runtime_s": 0.9230859058443457,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 25,
-      "step_runtime_s": 0.8601232529617846
+      "step_runtime_s": 0.05167629895731807
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 5.518899058457464,
+      "cumulative_runtime_s": 0.978305438766256,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 26,
-      "step_runtime_s": 1.665368126006797
+      "step_runtime_s": 0.055219532921910286
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 7.303248588461429,
+      "cumulative_runtime_s": 1.0333761246874928,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 27,
-      "step_runtime_s": 1.784349530003965
+      "step_runtime_s": 0.05507068592123687
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 9.191506235627457,
+      "cumulative_runtime_s": 1.088517636526376,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 28,
-      "step_runtime_s": 1.8882576471660286
+      "step_runtime_s": 0.05514151183888316
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 11.086888472549617,
+      "cumulative_runtime_s": 1.1503960744012147,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 29,
-      "step_runtime_s": 1.8953822369221598
+      "step_runtime_s": 0.06187843787483871
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 13.011835974408314,
+      "cumulative_runtime_s": 1.205716411350295,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 30,
-      "step_runtime_s": 1.9249475018586963
+      "step_runtime_s": 0.05532033694908023
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 14.805472924606875,
+      "cumulative_runtime_s": 1.2612812924198806,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 31,
-      "step_runtime_s": 1.793636950198561
+      "step_runtime_s": 0.05556488106958568
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 16.603325131582096,
+      "cumulative_runtime_s": 1.3166816756129265,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 32,
-      "step_runtime_s": 1.7978522069752216
+      "step_runtime_s": 0.055400383193045855
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 18.433194189565256,
+      "cumulative_runtime_s": 1.3721335865557194,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 33,
-      "step_runtime_s": 1.82986905798316
+      "step_runtime_s": 0.05545191094279289
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 20.294783224584535,
+      "cumulative_runtime_s": 1.4278029433917254,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 34,
-      "step_runtime_s": 1.8615890350192785
+      "step_runtime_s": 0.055669356836006045
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 22.125249839387834,
+      "cumulative_runtime_s": 1.4821402754168957,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 35,
-      "step_runtime_s": 1.8304666148032993
+      "step_runtime_s": 0.054337332025170326
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 23.896109625464305,
+      "cumulative_runtime_s": 1.537341955350712,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 36,
-      "step_runtime_s": 1.7708597860764712
+      "step_runtime_s": 0.055201679933816195
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 25.66540732141584,
+      "cumulative_runtime_s": 1.592995562357828,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 37,
-      "step_runtime_s": 1.7692976959515363
+      "step_runtime_s": 0.05565360700711608
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 27.493078752420843,
+      "cumulative_runtime_s": 1.648399808211252,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 38,
-      "step_runtime_s": 1.827671431005001
+      "step_runtime_s": 0.05540424585342407
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 29.363900282420218,
+      "cumulative_runtime_s": 1.7041164643596858,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 39,
-      "step_runtime_s": 1.8708215299993753
+      "step_runtime_s": 0.055716656148433685
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 31.15042931237258,
+      "cumulative_runtime_s": 1.7598233143799007,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 40,
-      "step_runtime_s": 1.7865290299523622
+      "step_runtime_s": 0.055706850020214915
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 32.98989996849559,
+      "cumulative_runtime_s": 1.8154915154445916,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 41,
-      "step_runtime_s": 1.8394706561230123
+      "step_runtime_s": 0.05566820106469095
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 34.807090047514066,
+      "cumulative_runtime_s": 1.8712348823901266,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 42,
-      "step_runtime_s": 1.8171900790184736
+      "step_runtime_s": 0.055743366945534945
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 36.60648752958514,
+      "cumulative_runtime_s": 1.9272490933071822,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 43,
-      "step_runtime_s": 1.7993974820710719
+      "step_runtime_s": 0.05601421091705561
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 38.3817374475766,
+      "cumulative_runtime_s": 1.9828997782897204,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 44,
-      "step_runtime_s": 1.7752499179914594
+      "step_runtime_s": 0.05565068498253822
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 40.17051466368139,
+      "cumulative_runtime_s": 2.03747380618006,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 45,
-      "step_runtime_s": 1.7887772161047906
+      "step_runtime_s": 0.054574027890339494
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 41.9624660895206,
+      "cumulative_runtime_s": 2.0931578390300274,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 46,
-      "step_runtime_s": 1.7919514258392155
+      "step_runtime_s": 0.05568403284996748
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 43.75408960552886,
+      "cumulative_runtime_s": 2.1489098290912807,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 47,
-      "step_runtime_s": 1.7916235160082579
+      "step_runtime_s": 0.05575199006125331
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 45.69861643854529,
+      "cumulative_runtime_s": 2.2050561539363116,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 48,
-      "step_runtime_s": 1.9445268330164254
+      "step_runtime_s": 0.056146324845030904
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 47.5461475327611,
+      "cumulative_runtime_s": 2.2607881729491055,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 49,
-      "step_runtime_s": 1.8475310942158103
+      "step_runtime_s": 0.0557320190127939
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 49.470184683799744,
+      "cumulative_runtime_s": 2.316664124839008,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 50,
-      "step_runtime_s": 1.9240371510386467
+      "step_runtime_s": 0.05587595188990235
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 51.51491394289769,
+      "cumulative_runtime_s": 2.3726467748638242,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 51,
-      "step_runtime_s": 2.0447292590979487
+      "step_runtime_s": 0.055982650024816394
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 53.63831998803653,
+      "cumulative_runtime_s": 2.4285331738647074,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 52,
-      "step_runtime_s": 2.123406045138836
+      "step_runtime_s": 0.0558863990008831
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 55.440337785054,
+      "cumulative_runtime_s": 2.484247867949307,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 53,
-      "step_runtime_s": 1.80201779701747
+      "step_runtime_s": 0.055714694084599614
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 57.23147441400215,
+      "cumulative_runtime_s": 2.540334208868444,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 54,
-      "step_runtime_s": 1.791136628948152
+      "step_runtime_s": 0.056086340919137
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 59.015512871788815,
+      "cumulative_runtime_s": 2.594739257823676,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 55,
-      "step_runtime_s": 1.7840384577866644
+      "step_runtime_s": 0.054405048955231905
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 60.96961464360356,
+      "cumulative_runtime_s": 2.6505945788230747,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 56,
-      "step_runtime_s": 1.9541017718147486
+      "step_runtime_s": 0.05585532099939883
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 62.85025100666098,
+      "cumulative_runtime_s": 2.7067003319971263,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 57,
-      "step_runtime_s": 1.8806363630574197
+      "step_runtime_s": 0.05610575317405164
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 64.65263222251087,
+      "cumulative_runtime_s": 2.762538203969598,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 58,
-      "step_runtime_s": 1.8023812158498913
+      "step_runtime_s": 0.055837871972471476
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 66.45541977556422,
+      "cumulative_runtime_s": 2.8182283379137516,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 59,
-      "step_runtime_s": 1.8027875530533493
+      "step_runtime_s": 0.055690133944153786
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 68.23036809056066,
+      "cumulative_runtime_s": 2.87374988081865,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 60,
-      "step_runtime_s": 1.7749483149964362
+      "step_runtime_s": 0.055521542904898524
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 70.06534406961873,
+      "cumulative_runtime_s": 2.9293878797907382,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 61,
-      "step_runtime_s": 1.834975979058072
+      "step_runtime_s": 0.0556379989720881
     },
     {
       "campaign_id": "circuit-long-trajectory-tdvp-krylov-override-v1",
       "case": "ising_1d",
-      "cumulative_runtime_s": 71.82721709366888,
+      "cumulative_runtime_s": 2.984994363738224,
       "method": "gate_local_2tdvp",
       "repeat": 1,
       "step": 62,
-      "step_runtime_s": 1.7618730240501463
+      "step_runtime_s": 0.055606483947485685
     }
   ],
   "status": "success"

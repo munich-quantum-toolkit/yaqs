@@ -77,6 +77,7 @@ if TYPE_CHECKING:
 CAMPAIGN_ID = "circuit-long-trajectory-tdvp-krylov-override-v1"
 BASE_CAMPAIGN_ID = "circuit-infidelity-until-saturation-v2"
 METHOD = "gate_local_2tdvp"
+GATE_MODE = "tdvp"
 CHI_CAP = 32
 N_SUB = 2
 KRYLOV_TOLERANCE = 1e-5
@@ -259,6 +260,7 @@ def _base_provenance() -> tuple[dict[str, int], dict[str, Any]]:
 def _params() -> Any:
     """Construct TDVP settings while overriding only the Krylov tolerance."""
     params = digital_params(METHOD, CHI_CAP, n_sub=N_SUB)
+    params.gate_mode = GATE_MODE
     params.krylov_tol = KRYLOV_TOLERANCE
     return params
 
@@ -273,6 +275,7 @@ def _accuracy_payload(case_key: str, endpoint: int, provenance: Mapping[str, Any
         "base_manifest_sha256": provenance["manifest_sha256"],
         "base_trajectory_sha256": provenance["trajectory_sha256"],
         "case": case_key,
+        "gate_mode": GATE_MODE,
         "circuit_fingerprint": circuit_fingerprint(case, schedule),
         "stop_step": endpoint,
         "chi_cap": CHI_CAP,
@@ -560,6 +563,7 @@ def _timing_payload(
         "environment": _environment_identity(),
         "case": case_key,
         "method": METHOD,
+        "gate_mode": GATE_MODE,
         "stop_step": endpoint,
         "expected_endpoint_infidelity": expected_infidelity,
         "chi_cap": CHI_CAP,
@@ -811,6 +815,7 @@ def _write_manifest(
         "base_provenance": dict(provenance),
         "protocol": {
             "method": METHOD,
+            "gate_mode": GATE_MODE,
             "chi_cap": CHI_CAP,
             "n_sub": N_SUB,
             "krylov_tolerance": KRYLOV_TOLERANCE,

@@ -1,11 +1,12 @@
 # Copyright (c) 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
-"""Run an isolated TDVP-only Krylov-tolerance control at the fixed horizon.
+"""Run an isolated hybrid-Projection Krylov control at the fixed horizon.
 
 The control holds the Figure 4 protocol fixed at the 4x4 Ising circuit through
-``n=15`` and varies only the TDVP bond cap and Krylov stopping tolerance.  It
-never invokes either direct gate-application baseline and writes only to its
-own output directory.
+``n=15`` and varies only the Projection bond cap and Krylov stopping tolerance.
+Adjacent gates use the common direct update, while separated generator gates
+use TDVP.  The control never invokes either baseline and writes only to its own
+output directory.
 
 Examples:
     uv run python -m experiments.circuit_benchmarks.extensions.krylov_tolerance_control
@@ -59,6 +60,7 @@ CAMPAIGN_ID = "circuit_tdvp_krylov_tolerance_control_v1"
 SCHEMA_VERSION = 1
 CASE_KEY = "ising_2d"
 METHOD = "gate_local_2tdvp"
+GATE_MODE = "tdvp"
 TARGET_STEP = 15
 N_SUB = 2
 THREADS = 1
@@ -372,7 +374,7 @@ def _params(point: ControlPoint) -> DigitalSimParams:
         trunc_mode=benchmark_config.TRUNC_MODE,
         svd_threshold=benchmark_config.SVD_THRESHOLD,
         krylov_tol=point.krylov_tolerance,
-        gate_mode=benchmark_config.METHOD_TO_GATE_MODE[METHOD],
+        gate_mode=GATE_MODE,
         tdvp_sweeps=N_SUB,
         tdvp_mode=benchmark_config.TDVP_MODE,
     )
@@ -587,6 +589,7 @@ def _protocol_payload(exact: np.ndarray, schedule: Sequence[Any]) -> dict[str, A
         "schema_version": SCHEMA_VERSION,
         "case": CASE_KEY,
         "method": METHOD,
+        "gate_mode": GATE_MODE,
         "target_step": TARGET_STEP,
         "n_sub": N_SUB,
         "svd_threshold": benchmark_config.SVD_THRESHOLD,
@@ -672,7 +675,7 @@ def _manifest(
         **protocol,
         "protocol_sha256": protocol_sha256,
         "updated_utc": datetime.now(timezone.utc).isoformat(),
-        "scope": "isolated TDVP-only Krylov-tolerance control; no MPO or TEBD tasks",
+        "scope": "isolated hybrid-Projection Krylov control; no MPO or TEBD baseline tasks",
         "requested_points": [asdict(point) for point in sorted(points)],
         "timing_scope": (
             "MPS gate application through the complete n=15 circuit; initialization, "

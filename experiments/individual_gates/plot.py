@@ -72,9 +72,9 @@ COLOR_VARIATIONAL = "#CC79A7"
 
 METHODS = ("gate_local_2tdvp", "variational_mpo", "mpo_zipup", "tebd_swap")
 METHOD_LABELS = {
-    "gate_local_2tdvp": "TDVP",
+    "gate_local_2tdvp": "Projection",
     "variational_mpo": "Variational MPO",
-    "mpo_zipup": "MPO",
+    "mpo_zipup": "Direct MPO",
     "tebd_swap": "TEBD+SWAP",
 }
 METHOD_STYLES = {
@@ -793,7 +793,7 @@ def write_main_caption(path: Path) -> None:
                 "separately because $\\theta=0$ cannot lie on the logarithmic axis; TEBD+SWAP",
                 "still executes the routing sequence in this diagnostic. (b) CNOT infidelity",
                 "versus $\\chi_{\\max}$ with an effectively zero SVD threshold and",
-                "$n_{\\mathrm{sub}}=1$ for TDVP. Symbols show three-state medians and bands",
+                "$n_{\\mathrm{sub}}=1$ for Projection. Symbols show three-state medians and bands",
                 "their full ranges. Variational MPO is the locally converged alternating-sweep",
                 "endpoint fit; all 87 controls converged without fallback. Markers in (a,b)",
                 "are offset where needed to expose overlapping medians. Curves and bands",
@@ -806,7 +806,7 @@ def write_main_caption(path: Path) -> None:
                 "with full-range bands. Panels (d,f) show",
                 "$D(n)=\\min_\\phi\\|\\Psi_n-e^{i\\phi}\\Psi_{2n}\\|_2$, where $n$ is the",
                 "number of substeps. Refinement stabilizes",
-                "the cap-constrained TDVP path without driving it to the exact gate endpoint.",
+                "the cap-constrained projected path without driving it to the exact gate endpoint.",
                 "The states are normalized to roundoff, so",
                 "$D(n)=\\sqrt{2-2|\\langle\\Psi_n|\\Psi_{2n}\\rangle|}$; this is a",
                 "phase-aligned state-vector distance, not an infidelity.",

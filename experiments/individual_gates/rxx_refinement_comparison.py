@@ -200,7 +200,7 @@ def plot_comparison(rows: list[dict[str, object] | dict[str, str]]) -> None:
     ticks = (1, 4, 16, 64, 256, 1024)
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(v) for v in ticks])
-    ax.set_xlabel(r"TDVP substeps $n_{\mathrm{sub}}$")
+    ax.set_xlabel(r"Projection substeps $n_{\mathrm{sub}}$")
     ax.set_ylabel(r"Infidelity $1-F$ (Rotation)")
     ax.yaxis.set_major_locator(LogLocator(base=10.0))
     ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)))
@@ -213,9 +213,9 @@ def plot_comparison(rows: list[dict[str, object] | dict[str, str]]) -> None:
     label_x = 900.0
     ax.text(label_x, endpoint["tebd_swap"][0] * 1.03, "TEBD+SWAP", color=COLOR_TEBD, fontsize=5.8,
             ha="right", va="bottom", bbox=label_box)
-    ax.text(label_x, endpoint["mpo_zipup"][0] * 1.08, "MPO", color=COLOR_MPO, fontsize=5.8,
+    ax.text(label_x, endpoint["mpo_zipup"][0] * 1.08, "Direct MPO", color=COLOR_MPO, fontsize=5.8,
             ha="right", va="bottom", bbox=label_box)
-    ax.text(label_x, med[-1] * 0.92, "TDVP", color=COLOR_TDVP, fontsize=5.8,
+    ax.text(label_x, med[-1] * 0.92, "Projection", color=COLOR_TDVP, fontsize=5.8,
             ha="right", va="top", bbox=label_box)
 
     fig.subplots_adjust(left=0.19, right=0.985, bottom=0.17, top=0.96)

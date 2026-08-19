@@ -27,13 +27,14 @@ from experiments.circuit_benchmarks.long_trajectories.plot import (
     TDVP_OVERRIDE_CAMPAIGN_ID,
     TDVP_OVERRIDE_METHOD,
     TDVP_OVERRIDE_TOLERANCE,
+    TWO_DIMENSIONAL_CASES,
     VARIATIONAL_CAMPAIGN_ID,
     VARIATIONAL_CENSOR_RECORD_TYPE,
     VARIATIONAL_CENSOR_SCHEMA_VERSION,
     VARIATIONAL_RUNTIME_BUDGET_S,
+    _display_methods,
     _marker_indices,
     _parameter_transient_stop,
-    _plateau_window,
     _plot_variational_runtime_censor,
     _validate_case_rows,
     _validate_runtime_rows,
@@ -91,14 +92,6 @@ def test_markers_include_final_variable_length_sample() -> None:
     assert np.all(np.diff(indices) > 0)
 
 
-def test_plateau_inset_uses_exact_trailing_window() -> None:
-    """The inset must contain exactly the samples defining the endpoint."""
-    points = [{"step": str(step), "infidelity_normalized": str(0.2 + step / 1000)} for step in range(15)]
-    steps, errors = _plateau_window(points, stop_step=14)
-    assert np.array_equal(steps, np.arange(5, 15))
-    assert errors.shape == (SATURATION_WINDOW_STEPS,)
-
-
 def test_parameter_inset_covers_the_last_growth_step() -> None:
     """The early-step crop must include the slowest retained-size transient."""
     trajectories = {
@@ -132,6 +125,13 @@ def test_parameter_inset_keeps_a_confirmation_step_after_immediate_growth() -> N
         for step, value in enumerate((32, 100, 100, 100))
     ]
     assert _parameter_transient_stop(rows, "heisenberg_2d", stop_step=3) == 2
+
+
+def test_one_dimensional_panels_omit_redundant_mpo_curves() -> None:
+    """The chain panels retain full Projection and one direct-update curve."""
+    assert _display_methods("ising_1d") == ("gate_local_2tdvp", "tebd_swap")
+    assert _display_methods("heisenberg_1d") == ("gate_local_2tdvp", "tebd_swap")
+    assert _display_methods("ising_2d") == METHODS
 
 
 @pytest.mark.parametrize(
@@ -295,7 +295,9 @@ def test_variational_caption_distinguishes_single_censored_observation() -> None
     text = caption(primary, {"repeats": 3}, control)
     assert "one complete one-thread observation" in text
     assert "computational censoring, not accuracy saturation" in text
-    assert "reduces to and overlaps" in text
+    assert "redundant one-dimensional curves are omitted" in text
+    assert "Projection applies two-site TDVP to every two-qubit gate" in text
+    assert "applies adjacent gates directly" in text
 
 
 def test_incomplete_variational_step_is_runtime_only() -> None:
@@ -516,6 +518,7 @@ def _write_tdvp_override_manifest_fixture(tmp_path: Path) -> tuple[Path, Path]:
         },
         "protocol": {
             "method": TDVP_OVERRIDE_METHOD,
+            "gate_mode": "tdvp",
             "chi_cap": 32,
             "n_sub": 2,
             "krylov_tolerance": TDVP_OVERRIDE_TOLERANCE,
@@ -570,31 +573,56 @@ def test_tdvp_override_manifest_rejects_a_loose_or_incomplete_protocol(tmp_path:
         load_validated_tdvp_override_manifest(override_dir, base_dir)
 
 
-def test_tdvp_row_override_preserves_every_comparator_row() -> None:
-    """Only TDVP data may change when the isolated control is overlaid."""
+def test_tdvp_row_override_changes_only_selected_tdvp_cases() -> None:
+    """Use full TDVP in 1D and the isolated hybrid control only in 2D."""
     base = [
-        {"case": "ising_1d", "method": method, "step": str(step), "value": f"base-{method}-{step}"}
+        {
+            "case": case,
+            "method": method,
+            "step": str(step),
+            "value": f"base-{case}-{method}-{step}",
+        }
+        for case in ("ising_1d", "ising_2d")
         for method in METHODS
         for step in range(2)
     ]
     override = [
         {
-            "case": "ising_1d",
+            "case": case,
             "method": TDVP_OVERRIDE_METHOD,
             "step": str(step),
-            "value": f"control-{step}",
+            "value": f"control-{case}-{step}",
         }
+        for case in ("ising_1d", "ising_2d")
         for step in range(2)
     ]
-    combined = apply_tdvp_row_override(base, override, table="accuracy")
-    assert [row for row in combined if row["method"] == TDVP_OVERRIDE_METHOD] == override
+    combined = apply_tdvp_row_override(
+        base,
+        override,
+        table="accuracy",
+        case_keys=TWO_DIMENSIONAL_CASES,
+    )
+    assert [
+        row
+        for row in combined
+        if row["case"] == "ising_1d" and row["method"] == TDVP_OVERRIDE_METHOD
+    ] == [
+        row
+        for row in base
+        if row["case"] == "ising_1d" and row["method"] == TDVP_OVERRIDE_METHOD
+    ]
+    assert [
+        row
+        for row in combined
+        if row["case"] == "ising_2d" and row["method"] == TDVP_OVERRIDE_METHOD
+    ] == [row for row in override if row["case"] == "ising_2d"]
     assert [row for row in combined if row["method"] != TDVP_OVERRIDE_METHOD] == [
         row for row in base if row["method"] != TDVP_OVERRIDE_METHOD
     ]
 
 
 def test_tdvp_override_caption_does_not_reassert_the_flatness_criterion() -> None:
-    """Frozen control windows must not be described as newly satisfying the stop rule."""
+    """Control windows must not be described as newly satisfying the stop rule."""
     _, control, primary = _variational_plot_fixture()
     text = caption(
         primary,
@@ -602,6 +630,7 @@ def test_tdvp_override_caption_does_not_reassert_the_flatness_criterion() -> Non
         control,
         tdvp_override_manifest={"protocol": {"krylov_tolerance": TDVP_OVERRIDE_TOLERANCE}},
     )
-    assert "selected and frozen by the original strict-Krylov campaign" in text
+    assert "selected by the original strict-Krylov campaign" in text
     assert "do not assert that the control itself re-satisfies" in text
-    assert "control at tolerance $10^{-5}$" in text
+    assert "hybrid control at tolerance $10^{-5}$" in text
+    assert "full-TDVP data at tolerance $10^{-12}$" in text

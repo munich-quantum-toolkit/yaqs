@@ -58,6 +58,7 @@ TDVP_METHOD = "gate_local_2tdvp"
 CONTROL_CASE = "ising_2d"
 CONTROL_N_SUB = 2
 CONTROL_SVD_THRESHOLD = 1e-13
+CONTROL_GATE_MODE = "tdvp"
 VARIATIONAL_CAPS = (4, 8, 16)
 VARIATIONAL_TIMING_REPEATS = 1
 EXPECTED_VARIATIONAL_FITS = 270
@@ -74,8 +75,8 @@ VARIATIONAL_POINT_GID = "variational-control-point"
 SHARED_MARKER_OFFSET_PT = 2.0
 
 METHOD_LABELS = {
-    "gate_local_2tdvp": "TDVP",
-    "mpo_contract_compress": "MPO",
+    "gate_local_2tdvp": "Projection",
+    "mpo_contract_compress": "Direct MPO",
     "tebd_swap": "TEBD+SWAP",
 }
 VARIATIONAL_LABEL = "Variational MPO"
@@ -222,6 +223,7 @@ def prepare_tdvp_krylov_overlay(
         "campaign_id": KRYLOV_CAMPAIGN_ID,
         "case": CONTROL_CASE,
         "method": TDVP_METHOD,
+        "gate_mode": CONTROL_GATE_MODE,
         "n_sub": CONTROL_N_SUB,
         "target_step": TARGET_STEP,
         "timing_repeats": TIMING_REPEATS,
@@ -873,7 +875,7 @@ def create_figure(
     runtime_axis.xaxis.set_major_formatter(ScalarFormatter())
     runtime_axis.xaxis.set_minor_formatter(NullFormatter())
     accuracy_axis.set_ylabel("Infidelity")
-    parameter_axis.set_ylabel(r"Peak MPS parameters $P_{\max}$")
+    parameter_axis.set_ylabel(r"Peak MPS coefficients $P_{\max}$")
     runtime_axis.set_ylabel("Runtime (s)")
     runtime_axis.set_xlabel(r"$\chi_{\max}$")
     parameter_axis.legend(
@@ -929,21 +931,22 @@ def caption(
     return (
         "\\textbf{Fixed-horizon cap sweep.} For the $4\\times4$ Ising circuit through "
         "$n_\\star=15$, (a) the worst prefix infidelity "
-        "$E_\\star=\\max_{k\\leq n_\\star}(1-F_k)$, (b) the maximum observed MPS tensor "
-        "parameter count $P_{\\max}$ through $n_\\star=15$, and (c) runtime are shown "
-        "against the configured bond-dimension cap. For MPO, $P_{\\max}$ includes the "
-        "precompression MPO--MPS intermediate; temporary working arrays are excluded. Runtime "
-        "markers for TDVP, MPO, and TEBD+SWAP are medians of three one-thread "
+        "$E_\\star=\\max_{k\\leq n_\\star}(1-F_k)$, (b) the peak MPS coefficient "
+        "count $P_{\\max}$ through $n_\\star=15$, and (c) runtime are shown "
+        "against the configured bond-dimension cap. For Direct MPO, $P_{\\max}$ includes the "
+        "uncompressed MPO--MPS target; temporary working arrays are excluded. Runtime "
+        "markers for Projection, Direct MPO, and TEBD+SWAP are medians of three one-thread "
         "repetitions at every timed cap, with bars spanning their full range. Variational-MPO "
         "diamonds at $\\chi_{\\max}=4,8,$ and $16$ are one complete one-thread run per cap, "
         "without timing repeats; their $P_{\\max}$ values include the largest uncompressed target MPS. "
         "The dotted curve shows only the observed cap dependence and is not a fitted scaling law. "
-        f"The TDVP series uses the isolated Krylov control at tolerance ${tolerance}$; the direct-method "
-        "series retain the frozen cap-sweep data. Black rings mark "
+        f"Projection applies adjacent gates directly and uses gate-local two-site TDVP at tolerance ${tolerance}$ "
+        "only for separated gates; the direct-method "
+        "series retain the original cap-sweep data. Black rings mark "
         f"the first caps satisfying $E_\\star\\leq10^{{-2}}$: "
         f"$\\chi_{{\\max}}={selected[TDVP_METHOD]}$, "
         f"{selected['mpo_contract_compress']}, and {selected['tebd_swap']} for "
-        "TDVP, MPO, and TEBD+SWAP, respectively. Coincident TDVP and TEBD+SWAP markers at shared "
+        "Projection, Direct MPO, and TEBD+SWAP, respectively. Coincident Projection and TEBD+SWAP markers at shared "
         "caps in (b) are offset horizontally in display space only for visibility; their guide "
         "curves remain at identical data coordinates. Thin lines only guide the eye between raw "
         "tested caps and are not fits."

@@ -8,14 +8,15 @@
   "case": "ising_2d",
   "circuit_fingerprint": "9be9e5b82b0a025611a50340eeb034e4f8fbb0f6713ca1f49b0f703537fee7ed",
   "complete": true,
-  "completed_points": 16,
-  "control_source_sha256": "957d5432d19cceb637af3c65d29196967344a28bf499aefa81187bcdb97409f9",
+  "completed_points": 8,
+  "control_source_sha256": "2285ae3ba3fd56976ad0ad1896f6189714d62f39a24e2c24de64e06e5ff9f3d0",
   "dense_reference_sha256": "fbcba3d7b57ba44f3f0836e471fd433e2df90c2aedcacbad65c2a21401c8c98f",
   "dense_reference_shape": [
     16,
     65536
   ],
-  "git_commit": "724ef9179e6c47d81d15f4bed538ea5d7163eb8b",
+  "gate_mode": "tdvp",
+  "git_commit": "be91beec9fd8faeebde05385f2083dd47fe42273",
   "git_dirty_for_relevant_paths": true,
   "hardware": {
     "cpu_model": "13th Gen Intel(R) Core(TM) i5-13600KF",
@@ -50,34 +51,18 @@
     ],
     "threads": 1
   },
-  "implementation_sha256": "1eda0d4ff195caa2dedc75557b5b6faa87733e6f5932502e4b0b1db39b7bb4e2",
+  "implementation_sha256": "3231554540a34d0f206da26723c12985f6a77c5fade44d29295b373329b5d40d",
   "method": "gate_local_2tdvp",
   "n_sub": 2,
   "numerical_precision": "complex128",
   "output_sha256": {
-    "accuracy": "4462797a3a34ac6dc42510278ec738e15ad78c5c5c90da5c7e41f6c75a2e7560",
-    "summary": "6693ab55d04920d151dcf94fa1e27bfc1312e600b484ca53e5d970b377e7b5c1",
-    "timing_rows": "54ac23eed689584384f551da797675de39b79b3878b4cb68a54c56f114b1cfb5"
+    "accuracy": "9c7c12a9e5ab66eac59af7a24c7ccd5d6ac60f952063e0c4e2622150df78b3fc",
+    "summary": "fffbbe0c86b800dc689932e8030d4703c72de54196853a8eede2fc756f165fab",
+    "timing_rows": "85af7f8b501c479d2f41ce839faa8c8c25dd1ae94f93929a020b636984882945"
   },
-  "protocol_sha256": "38d4c956a77e00a2e58284c67dd0b9bfc4c88ba16306e8883ab75e6566d67332",
-  "relevant_diff_sha256": "a0b3b93e0f687fe4cba83296e07c0fa728d2b6cceca0aba4910430a1cc84bc27",
+  "protocol_sha256": "63c4df6d3cfc024c0173b83701c615a068887e00a0a36dd471a6632f0174aa85",
+  "relevant_diff_sha256": "a90ad5740aa496d2a065bd990c0cf16364996854ef36592d1e766e9f379eaa23",
   "requested_points": [
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 1e-12
-    },
-    {
-      "chi_max": 32,
-      "krylov_tolerance": 1e-12
-    },
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 1e-08
-    },
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 1e-06
-    },
     {
       "chi_max": 4,
       "krylov_tolerance": 1e-05
@@ -109,32 +94,16 @@
     {
       "chi_max": 32,
       "krylov_tolerance": 1e-05
-    },
-    {
-      "chi_max": 26,
-      "krylov_tolerance": 0.0001
-    },
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 0.0001
-    },
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 0.001
-    },
-    {
-      "chi_max": 28,
-      "krylov_tolerance": 0.01
     }
   ],
   "resource_scope": "peak retained full-chain MPS parameters sampled after every state-changing factorization and at step endpoints",
   "row_counts": {
-    "accuracy": 16,
-    "summary": 16,
-    "timing_rows": 48
+    "accuracy": 8,
+    "summary": 8,
+    "timing_rows": 24
   },
   "schema_version": 1,
-  "scope": "isolated TDVP-only Krylov-tolerance control; no MPO or TEBD tasks",
+  "scope": "isolated hybrid-Projection Krylov control; no MPO or TEBD baseline tasks",
   "svd_threshold": 1e-13,
   "target_step": 15,
   "tdvp_mode": "2site",
@@ -142,5 +111,5 @@
   "timing_scope": "MPS gate application through the complete n=15 circuit; initialization, compilation, fidelity, resource tracing, and serialization excluded",
   "timing_warmups_per_point": 1,
   "truncation_mode": "discarded_weight",
-  "updated_utc": "2026-08-16T14:57:09.234805+00:00"
+  "updated_utc": "2026-08-18T14:17:39.190308+00:00"
 }

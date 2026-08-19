@@ -1,10 +1,10 @@
 {
   "case": "ising_1d",
-  "completed_utc": "2026-08-16T13:39:51.371362+00:00",
-  "elapsed_wall_s": 78.08376848092303,
+  "completed_utc": "2026-08-18T13:56:33.130597+00:00",
+  "elapsed_wall_s": 3.080354591133073,
   "endpoint_metrics": {
-    "fidelity_normalized": 0.8485827844890724,
-    "infidelity_normalized": 0.15141721551092757,
+    "fidelity_normalized": 0.8462631105922589,
+    "infidelity_normalized": 0.1537368894077411,
     "norm_approx": 1.0000000000000004,
     "norm_drift": -1.212363542890671e-13,
     "norm_exact": 1.0000000000001217
@@ -27,7 +27,7 @@
       "VECLIB_MAXIMUM_THREADS": "1"
     }
   },
-  "source_hash": "fc8f8cf3fef7add8b9fa773a9506b02a22a8e6c895f4971ce7c0b1e9eb79785e",
+  "source_hash": "31a14929aa1c164c2094ad2e9f63c5a25e4a628627a03ae32cae52d3b6dd5002",
   "status": "success",
   "stop_step": 62
 }

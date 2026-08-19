@@ -9,7 +9,7 @@ import csv
 import hashlib
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 import matplotlib as mpl
@@ -62,6 +62,7 @@ VARIATIONAL_CENSOR_RECORD_TYPE = "incomplete_variational_step_runtime_lower_boun
 TDVP_OVERRIDE_CAMPAIGN_ID = "circuit-long-trajectory-tdvp-krylov-override-v1"
 TDVP_OVERRIDE_METHOD = "gate_local_2tdvp"
 TDVP_OVERRIDE_TOLERANCE = 1e-5
+TDVP_OVERRIDE_GATE_MODE = "tdvp"
 TDVP_OVERRIDE_CHI_CAP = 32
 TDVP_OVERRIDE_N_SUB = 2
 TDVP_OVERRIDE_SVD_THRESHOLD = 1e-13
@@ -80,13 +81,20 @@ VARIATIONAL_STYLE = {
     "linestyle": ":",
 }
 
-PLATEAU_INSET_Y = {
-    "ising_1d": ((0.135, 0.16), (0.14, 0.15, 0.16)),
-    "heisenberg_1d": ((0.50, 0.61), (0.52, 0.56, 0.60)),
-    "ising_2d": ((0.055, 0.10), (0.06, 0.08, 0.10)),
-    "heisenberg_2d": ((0.50, 0.69), (0.52, 0.60, 0.68)),
-}
+ONE_DIMENSIONAL_CASES = frozenset({"ising_1d", "heisenberg_1d"})
+TWO_DIMENSIONAL_CASES = frozenset({"ising_2d", "heisenberg_2d"})
 
+
+def _display_methods(case_key: str) -> tuple[str, ...]:
+    """Return the nonredundant primary curves for one circuit."""
+    if case_key in ONE_DIMENSIONAL_CASES:
+        return ("gate_local_2tdvp", "tebd_swap")
+    return METHODS
+
+
+def _display_variational(case_key: str) -> bool:
+    """Show the variational control only where it differs from direct updates."""
+    return case_key not in ONE_DIMENSIONAL_CASES
 
 def _read_rows(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
@@ -198,6 +206,7 @@ def load_validated_tdvp_override_manifest(
         raise RuntimeError(msg)
     expected_protocol: dict[str, object] = {
         "method": TDVP_OVERRIDE_METHOD,
+        "gate_mode": TDVP_OVERRIDE_GATE_MODE,
         "chi_cap": TDVP_OVERRIDE_CHI_CAP,
         "n_sub": TDVP_OVERRIDE_N_SUB,
         "krylov_tolerance": TDVP_OVERRIDE_TOLERANCE,
@@ -377,15 +386,27 @@ def apply_tdvp_row_override(
     override_rows: Sequence[dict[str, str]],
     *,
     table: str,
+    case_keys: Collection[str] | None = None,
 ) -> list[dict[str, str]]:
-    """Replace TDVP rows in memory while preserving every comparator row."""
+    """Replace selected TDVP cases while preserving all other rows."""
+
+    selected_cases = set(CASE_ORDER if case_keys is None else case_keys)
+    if not selected_cases or not selected_cases.issubset(CASE_ORDER):
+        msg = f"Invalid TDVP override cases for {table}: {sorted(selected_cases)}."
+        raise RuntimeError(msg)
 
     def key(row: Mapping[str, str]) -> tuple[str, int]:
         return str(row["case"]), int(row["step"])
 
-    base_tdvp = [row for row in base_rows if row.get("method") == TDVP_OVERRIDE_METHOD]
+    base_tdvp = [
+        row
+        for row in base_rows
+        if row.get("method") == TDVP_OVERRIDE_METHOD and row.get("case") in selected_cases
+    ]
     replacement: dict[tuple[str, int], dict[str, str]] = {}
     for row in override_rows:
+        if row.get("case") not in selected_cases:
+            continue
         row_key = key(row)
         if row_key in replacement:
             msg = f"Duplicate TDVP override row {row_key} in {table}."
@@ -396,7 +417,12 @@ def apply_tdvp_row_override(
         msg = f"The TDVP override keys do not match the frozen {table} trajectory."
         raise RuntimeError(msg)
 
-    combined = [replacement[key(row)] if row.get("method") == TDVP_OVERRIDE_METHOD else row for row in base_rows]
+    combined = [
+        replacement[key(row)]
+        if row.get("method") == TDVP_OVERRIDE_METHOD and row.get("case") in selected_cases
+        else row
+        for row in base_rows
+    ]
     base_comparators = [row for row in base_rows if row.get("method") != TDVP_OVERRIDE_METHOD]
     combined_comparators = [row for row in combined if row.get("method") != TDVP_OVERRIDE_METHOD]
     if combined_comparators != base_comparators:
@@ -740,72 +766,6 @@ def _plot_variational_runtime_censor(
     )
 
 
-def _plateau_window(
-    points: list[dict[str, str]],
-    stop_step: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return exactly the trailing samples used by the plateau criterion."""
-    start_step = stop_step - SATURATION_WINDOW_STEPS + 1
-    selected = [point for point in points if start_step <= int(point["step"]) <= stop_step]
-    steps = np.asarray([int(point["step"]) for point in selected], dtype=int)
-    expected = np.arange(start_step, stop_step + 1, dtype=int)
-    if not np.array_equal(steps, expected):
-        msg = f"Expected plateau steps {expected.tolist()}, received {steps.tolist()}."
-        raise RuntimeError(msg)
-    errors = np.asarray([max(float(point["infidelity_normalized"]), DISPLAY_FLOOR) for point in selected])
-    return steps, errors
-
-
-def _plot_plateau_inset(
-    axis: plt.Axes,
-    rows: list[dict[str, str]],
-    case_key: str,
-    stop_step: int,
-) -> plt.Axes:
-    """Add a linear-scale view of the final plateau window."""
-    inset = axis.inset_axes((0.56, 0.14, 0.40, 0.34), zorder=10)
-    for method_index, method in enumerate(METHODS):
-        points = _case_method_rows(rows, case_key, method)
-        steps, errors = _plateau_window(points, stop_step)
-        style = METHOD_STYLES[method]
-        inset.plot(
-            steps,
-            errors,
-            color=style["color"],
-            linestyle=style["linestyle"],
-            linewidth=1.35,
-            marker=style["marker"],
-            markersize=3.3,
-            markeredgewidth=0.75,
-            markeredgecolor=style["color"],
-            markerfacecolor="white" if method == "tebd_swap" else style["color"],
-            markevery=(method_index, 3),
-            zorder=2 + method_index,
-        )
-
-    start_step = stop_step - SATURATION_WINDOW_STEPS + 1
-    inset.set_xlim(start_step - 0.5, stop_step + 0.5)
-    inset.set_xticks((stop_step - 8, stop_step - 4, stop_step))
-    y_limits, y_ticks = PLATEAU_INSET_Y[case_key]
-    inset.set_ylim(*y_limits)
-    inset.set_yticks(y_ticks)
-    inset.set_xlabel(r"$n$", fontsize=6.3, labelpad=0.5)
-    if case_key != "ising_1d":
-        inset.set_ylabel(r"$1-F$", fontsize=6.3, labelpad=0.8)
-    inset.tick_params(
-        which="both",
-        direction="out",
-        width=0.55,
-        length=1.7,
-        labelsize=6.3,
-        pad=1.0,
-    )
-    inset.grid(False)
-    for spine in inset.spines.values():
-        spine.set_linewidth(0.55)
-    return inset
-
-
 def _plot_case(
     axis: plt.Axes,
     rows: list[dict[str, str]],
@@ -814,7 +774,7 @@ def _plot_case(
     variational_rows: list[dict[str, str]] | None = None,
 ) -> None:
     stop_step = _validate_case_rows(rows, case_key)
-    for method_index, method in enumerate(METHODS):
+    for method_index, method in enumerate(_display_methods(case_key)):
         points = _case_method_rows(rows, case_key, method)
         steps = np.asarray([int(row["step"]) for row in points], dtype=int)
         errors = np.asarray([max(float(row["infidelity_normalized"]), DISPLAY_FLOOR) for row in points])
@@ -841,7 +801,7 @@ def _plot_case(
             zorder=6 + method_index,
         )
 
-    if variational_rows:
+    if variational_rows and _display_variational(case_key):
         _plot_variational_series(
             axis,
             variational_rows,
@@ -889,7 +849,6 @@ def _plot_case(
         },
     )
     _style_axis(axis)
-    _plot_plateau_inset(axis, rows, case_key, stop_step)
 
 
 def _plot_parameters(
@@ -901,7 +860,7 @@ def _plot_parameters(
     variational_rows: list[dict[str, str]] | None = None,
 ) -> None:
     """Plot retained step-end MPS tensor entries for one circuit."""
-    for method_index, method in enumerate(METHODS):
+    for method_index, method in enumerate(_display_methods(case_key)):
         points = _case_method_rows(rows, case_key, method)
         steps = np.asarray([int(row["step"]) for row in points], dtype=int)
         parameters = np.asarray(
@@ -930,7 +889,7 @@ def _plot_parameters(
             markerfacecolor="white" if method == "tebd_swap" else style["color"],
             zorder=6 + method_index,
         )
-    if variational_rows:
+    if variational_rows and _display_variational(case_key):
         _plot_variational_series(
             axis,
             variational_rows,
@@ -975,7 +934,7 @@ def _parameter_transient_stop(
 ) -> int:
     """Return the last step needed to show every parameter-growth transient."""
     stable_steps: list[int] = []
-    for method in METHODS:
+    for method in _display_methods(case_key):
         points = _case_method_rows(rows, case_key, method)
         steps = np.asarray([int(row["step"]) for row in points], dtype=int)
         parameters = np.asarray(
@@ -998,7 +957,7 @@ def _plot_parameter_inset(
     """Expand the early steps containing the retained-size growth."""
     transient_stop = _parameter_transient_stop(rows, case_key, stop_step)
     inset = axis.inset_axes((0.50, 0.14, 0.46, 0.50), zorder=10)
-    for method_index, method in enumerate(METHODS):
+    for method_index, method in enumerate(_display_methods(case_key)):
         points = [point for point in _case_method_rows(rows, case_key, method) if int(point["step"]) <= transient_stop]
         steps = np.asarray([int(point["step"]) for point in points], dtype=int)
         parameters = np.asarray(
@@ -1021,7 +980,7 @@ def _plot_parameter_inset(
             zorder=2 + method_index,
         )
 
-    if variational_rows:
+    if variational_rows and _display_variational(case_key):
         _plot_variational_series(
             inset,
             variational_rows,
@@ -1072,7 +1031,7 @@ def _plot_runtime(
 ) -> None:
     """Plot median cumulative update time with min--max repeat bands."""
     _validate_runtime_rows(rows, case_key, stop_step)
-    for method_index, method in enumerate(METHODS):
+    for method_index, method in enumerate(_display_methods(case_key)):
         points = _runtime_method_rows(rows, case_key, method)
         steps = np.asarray([int(row["step"]) for row in points], dtype=int)
         median = np.asarray([float(row["median_cumulative_runtime_s"]) for row in points])
@@ -1114,7 +1073,7 @@ def _plot_runtime(
             markerfacecolor="white" if method == "tebd_swap" else style["color"],
             zorder=7 + method_index,
         )
-    if variational_rows:
+    if variational_rows and _display_variational(case_key):
         _plot_variational_series(
             axis,
             variational_rows,
@@ -1122,7 +1081,8 @@ def _plot_runtime(
             "cumulative_runtime_s",
             omit_initial=True,
         )
-    _plot_variational_runtime_censor(axis, variational_runtime_censor, case_key)
+    if _display_variational(case_key):
+        _plot_variational_runtime_censor(axis, variational_runtime_censor, case_key)
     axis.set_yscale("log")
     axis.set_ylim(*RUNTIME_Y_LIMITS)
     axis.set_xlim(-0.5, stop_step + 0.5)
@@ -1271,11 +1231,11 @@ def create_figure(
         runtime_axes.append(runtime_axis)
 
     infidelity_axes[0].set_ylabel(r"Infidelity $1-F$")
-    parameter_axes[0].set_ylabel(r"Total parameters $P$")
+    parameter_axes[0].set_ylabel(r"Stored MPS coefficients $P$")
     runtime_axes[0].set_ylabel("Runtime (s)")
     figure.supxlabel(r"Trotter steps $n$", y=0.025)
     legend_handles = list(_legend_handles())
-    legend_labels = ["TDVP", "MPO", "TEBD+SWAP"]
+    legend_labels = ["Projection", "Direct MPO", "TEBD+SWAP"]
     if variational_rows is not None:
         variational_handle = Line2D(
             [0],
@@ -1330,8 +1290,7 @@ def caption(
             "Variational MPO is one complete one-thread observation without a warm-up rather than a repeated timing "
             "baseline. Its curves stop after the first completed step at which cumulative update time "
             "reaches $10^2$ s, or at the primary panel endpoint if that occurs first; their endpoints are "
-            "computational censoring, not accuracy saturation. In one dimension every two-site gate is "
-            "adjacent, so variational MPO reduces to and overlaps the common direct two-site update."
+            "computational censoring, not accuracy saturation. Its redundant one-dimensional curves are omitted."
         )
     if variational_runtime_censor is not None:
         lower_bound = float(variational_runtime_censor["runtime_lower_bound_s"])
@@ -1350,37 +1309,38 @@ def caption(
     )
     tdvp_note = ""
     window_note = (
-        "The shaded region and linear-scale inset show the final ten-sample window satisfying the "
-        "local-flatness criterion; the inset vertical range is chosen separately for each circuit. "
+        "The shaded region marks the final ten-sample window satisfying the local-flatness criterion. "
     )
     if tdvp_override_manifest is not None:
         endpoint_note = (
-            "The endpoints were selected and frozen by the original strict-Krylov campaign at the first "
+            "The endpoints were selected by the original strict-Krylov campaign at the first "
             "Trotter step for which each of its three primary trajectories maintained $1-F>10^{-2}$ and "
             f"varied by at most {SATURATION_LOG_RANGE_DECADES:g} decades over the trailing "
-            f"{SATURATION_WINDOW_STEPS} steps. They are held fixed when TDVP is recomputed for the Krylov "
-            "control; the shaded final windows and insets therefore do not assert that the control itself "
+            f"{SATURATION_WINDOW_STEPS} steps. They are held fixed when Projection is recomputed for the Krylov "
+            "two-dimensional control; the shaded final windows therefore do not assert that the control itself "
             "re-satisfies the endpoint-selection rule. The rule sets only the displayed time range and "
             "does not establish asymptotic long-time saturation. "
         )
         tdvp_note = (
-            "The displayed TDVP accuracy, retained-size, and runtime curves use the isolated Krylov "
-            "control at tolerance $10^{-5}$; the MPO, TEBD+SWAP, and variational-MPO curves retain their "
-            "frozen data. "
+            "The two-dimensional Projection curves use the isolated hybrid control at tolerance $10^{-5}$; "
+            "the one-dimensional Projection curves retain the original full-TDVP data at tolerance $10^{-12}$, "
+            "and the Direct MPO, TEBD+SWAP, and variational-MPO curves retain their original data. "
         )
         window_note = (
-            "The shaded region and linear-scale inset show the same frozen final ten-sample window; "
-            "the inset vertical range is chosen separately for each circuit. "
+            "The shaded region marks the final ten-sample display window, not an asymptotic plateau. "
         )
     return (
         "Fixed-cap circuit accuracy, retained MPS size, and cumulative update runtime for four 16-site open "
         "systems at $\\chi_{\\max}=32$ and physical step size $\\Delta t=0.1$. Here $n=0$ denotes the initial "
-        "MPS before any Trotter step. TDVP denotes gate-local two-site TDVP, and MPO denotes the routing-free "
-        "MPO update. Rows (a)--(d) show normalized infidelity "
+        "MPS before any Trotter step. In the chain columns, Projection applies two-site TDVP to every two-qubit "
+        "gate; "
+        "in the square-lattice columns, it applies adjacent gates directly and uses gate-local two-site TDVP "
+        "only for separated gates. Direct MPO denotes the routing-free MPO update. Rows (a)--(d) show "
+        "normalized infidelity "
         "relative to dense execution of the identical ordered second-order Trotter circuit. "
         f"{endpoint_note}"
-        "In the 1D panels, MPO and TEBD+SWAP "
-        "coincide because every gate is nearest-neighbor and both baselines use the same adjacent-gate update. "
+        "In the one-dimensional panels, Direct MPO and Variational MPO coincide with TEBD+SWAP and are omitted; "
+        "Projection remains the full two-site-TDVP update. "
         f"{window_note}"
         "The dotted line marks the reliability tolerance $\\epsilon=10^{-2}$, and values at or below $10^{-13}$ are "
         "shown at that plotting floor. Rows (e)--(h) show the total number of retained MPS tensor entries "
@@ -1397,8 +1357,9 @@ def caption(
         "construction, initialization, "
         "dense evolution, fidelity and resource diagnostics, and plotting. They are fixed-cap costs, not a "
         "matched-accuracy efficiency comparison. Runtime curves should therefore be compared within a column; "
-        "the columns contain different gate counts and endpoint step counts. TDVP uses "
-        "$n_{\\mathrm{sub}}=2$; the direct methods use $n_{\\mathrm{sub}}=1$. "
+        "the columns contain different gate counts and endpoint step counts. Projection uses "
+        "$n_{\\mathrm{sub}}=2$ for every chain gate and for separated square-lattice gates; adjacent "
+        "square-lattice gates use the common direct update. "
         f"{tdvp_note}"
         f"{variational_note} "
         f"Panel endpoints are {endpoints}."
@@ -1442,11 +1403,17 @@ def main(argv: list[str] | None = None) -> None:
             override_runtime_rows,
             tdvp_override_manifest,
         )
-        rows = apply_tdvp_row_override(rows, override_rows, table="accuracy")
+        rows = apply_tdvp_row_override(
+            rows,
+            override_rows,
+            table="accuracy",
+            case_keys=TWO_DIMENSIONAL_CASES,
+        )
         runtime_rows = apply_tdvp_row_override(
             runtime_rows,
             override_runtime_rows,
             table="timing",
+            case_keys=TWO_DIMENSIONAL_CASES,
         )
     variational_dir = args.variational_dir or args.output_dir / VARIATIONAL_DIRNAME
     variational_rows_path = variational_dir / "trajectory_rows.csv"

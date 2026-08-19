@@ -99,7 +99,7 @@ def test_bond_edges_bound_all_internal_cuts() -> None:
 def test_publication_figure_uses_single_column_layout() -> None:
     """The publication heatmap should use the requested single-column layout."""
     expected_methods = ("gate_local_2tdvp", "mpo_contract_compress", "tebd_swap")
-    expected_method_labels = ("TDVP", "MPO", "TEBD+SWAP")
+    expected_method_labels = ("Projection", "Direct MPO", "TEBD+SWAP")
     expected_row_labels = (
         "(a)\n1D\nIsing",
         "(b)\n1D\nHeisenberg",
@@ -181,5 +181,5 @@ def test_tdvp_profile_table_requires_every_step_and_bond(tmp_path: Path) -> None
 def test_bond_profile_caption_identifies_the_tdvp_control() -> None:
     """Distinguish the recomputed TDVP column from both frozen comparators."""
     text = caption(tdvp_override_manifest={"protocol": {"krylov_tolerance": 1e-5}})
-    assert "TDVP profiles are recomputed" in text
-    assert "MPO and TEBD+SWAP profiles retain the frozen original data" in text
+    assert "Projection profiles are recomputed" in text
+    assert "Direct MPO and TEBD+SWAP profiles retain the frozen original data" in text

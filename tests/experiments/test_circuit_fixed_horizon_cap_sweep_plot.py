@@ -112,6 +112,7 @@ def _krylov_control() -> tuple[list[dict[str, str]], dict[str, object]]:
         "campaign_id": KRYLOV_CAMPAIGN_ID,
         "case": "ising_2d",
         "method": METHODS[0],
+        "gate_mode": "tdvp",
         "n_sub": 2,
         "target_step": 15,
         "timing_repeats": 3,
@@ -286,7 +287,7 @@ def test_cap_sweep_figure_dimensions_scales_labels_and_rings() -> None:
     assert not axes[1].get_xlabel()
     assert axes[2].get_xlabel() == r"$\chi_{\max}$"
     assert axes[0].get_ylabel() == "Infidelity"
-    assert axes[1].get_ylabel() == r"Peak MPS parameters $P_{\max}$"
+    assert axes[1].get_ylabel() == r"Peak MPS coefficients $P_{\max}$"
     assert axes[2].get_ylabel() == "Runtime (s)"
     assert axes[0].get_legend() is None
     assert axes[2].get_legend() is None
@@ -302,7 +303,7 @@ def test_cap_sweep_figure_dimensions_scales_labels_and_rings() -> None:
     assert variational_counts == [1, 1, 1]
     assert variational_x == [[4.0, 8.0, 16.0]] * 3
     assert variational_linestyles == [":", ":", ":"]
-    assert legend_labels == ["TDVP", "Variational MPO", "MPO", "TEBD+SWAP"]
+    assert legend_labels == ["Projection", "Variational MPO", "Direct MPO", "TEBD+SWAP"]
 
 
 def test_cap_sweep_caption_is_concise_and_explicit() -> None:
@@ -319,11 +320,12 @@ def test_cap_sweep_caption_is_concise_and_explicit() -> None:
     assert "without timing repeats" in text
     assert "not a fitted scaling law" in text
     assert "largest uncompressed target MPS" in text
-    assert "maximum observed MPS tensor" in text
-    assert "precompression MPO--MPS intermediate" in text
+    assert "peak MPS coefficient count" in text
+    assert "uncompressed MPO--MPS target" in text
     assert "temporary working arrays are excluded" in text
-    assert "isolated Krylov control at tolerance $10^{-5}$" in text
-    assert "direct-method series retain the frozen cap-sweep data" in text
+    assert "applies adjacent gates directly" in text
+    assert "tolerance $10^{-5}$" in text
+    assert "direct-method series retain the original cap-sweep data" in text
     assert "offset horizontally in display space only for visibility" in text
     assert "guide curves remain at identical data coordinates" in text
     assert "$\\chi_{\\max}=28$, 26, and 32" in text

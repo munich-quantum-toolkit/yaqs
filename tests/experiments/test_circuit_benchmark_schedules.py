@@ -27,7 +27,12 @@ from experiments.circuit_benchmarks.common import (
     parameter_count,
     parameter_count_from_profile,
 )
-from experiments.circuit_benchmarks.config import CASE_KEYS, CASES, DT, N_STEPS, BenchmarkCase, N
+from experiments.circuit_benchmarks.config import CASE_KEYS, CASES, DT, METHOD_TO_GATE_MODE, N_STEPS, BenchmarkCase, N
+
+
+def test_projection_benchmark_default_uses_full_tdvp() -> None:
+    """The baseline Projection campaign sends every supported gate through TDVP."""
+    assert METHOD_TO_GATE_MODE["gate_local_2tdvp"] == "full-tdvp"
 
 
 def test_four_frozen_cases_have_sixteen_sites() -> None:

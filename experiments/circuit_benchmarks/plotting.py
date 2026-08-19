@@ -17,8 +17,8 @@ CASE_LABELS = {
 }
 METHOD_ORDER = ("gate_local_2tdvp", "mpo_contract_compress", "tebd_swap")
 METHOD_LABELS = {
-    "gate_local_2tdvp": "TDVP",
-    "mpo_contract_compress": "MPO",
+    "gate_local_2tdvp": "Projection",
+    "mpo_contract_compress": "Direct MPO",
     "tebd_swap": "TEBD+SWAP",
 }
 METHOD_STYLES = {
