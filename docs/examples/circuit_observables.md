@@ -92,16 +92,18 @@ model compiled depth, simulate the transpiled circuit.
 ### Stochastic circuit trajectories
 
 {func}`~mqt.yaqs.digital.sample_stochastic_circuit` materializes one Pauli-noise
-realization from a {class}`~mqt.yaqs.NoiseModel`. After each one- or two-qubit
-gate, it considers processes supported entirely on that gate's qubits. For the
-eligible processes, let
+realization from an existing {class}`~mqt.yaqs.NoiseModel`. Unlike the existing
+direct TJM path, this explicit path intentionally uses both one- and two-qubit
+gates as noise opportunities. Processes are eligible when their complete support
+is contained in the gate's qubits. For those processes, let
 
 \[ \Gamma = \sum_i \gamma_i. \]
 
 An event occurs with probability $1 - \exp(-\Gamma)$. Conditional on an event,
-exactly one process is selected with probability $\gamma_i / \Gamma$. A two-site
-Pauli product is represented by one Pauli gate on each process site. The
-`strength` values remain Lindblad rates, not Bernoulli probabilities.
+exactly one Pauli process is selected with probability $\gamma_i / \Gamma$ and
+appended after the original gate. The input circuit is copied without
+decomposing its native gates. Distribution-valued strengths are resolved once
+per helper call.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.random_utils import make_trajectory_rng
@@ -116,43 +118,17 @@ rng = make_trajectory_rng(0, base_seed=7)
 realized_circuit = sample_stochastic_circuit(qc, pauli_noise, rng)
 ```
 
-The input circuit is copied without decomposition, and distribution-valued
-strengths are sampled once per call. Run the returned realization without the
-noise model because its Pauli processes are already part of the circuit.
-
 Use {meth}`~mqt.yaqs.Simulator.run_stochastic_circuit` to execute and aggregate
-multiple trajectories. Pauli-only models are materialized separately for every
-trajectory. Dissipative and mixed models use YAQS's existing dissipation and
-state-dependent stochastic-process methods after each eligible gate.
-
-```{code-cell} ipython3
-from qiskit.circuit import QuantumCircuit
-
-post_gate_circuit = QuantumCircuit(2)
-post_gate_circuit.h(0)
-post_gate_circuit.cx(0, 1)
-post_gate_noise = NoiseModel([
-    {"name": "pauli_z", "sites": [0], "strength": 0.03},
-    {"name": "lowering", "sites": [1], "strength": 0.04},
-])
-post_gate_params = DigitalSimParams(
-    observables=[Observable("z", 0), Observable("z", 1)],
-    num_traj=8,
-    random_seed=7,
-    preset="fast",
-)
-
-ensemble_result = sim.run_stochastic_circuit(
-    State(2, initial="zeros"),
-    post_gate_circuit,
-    post_gate_params,
-    post_gate_noise,
-)
-```
-
-Distribution-valued strengths are resolved once per run with the static-disorder
-stream. Each trajectory uses its own trajectory stream. Observable values,
+multiple trajectories. It resolves distribution-valued strengths once per run,
+samples one complete circuit independently per trajectory, and executes each
+circuit once without passing the noise model again. Observable values,
 diagnostics, and counts use the standard {class}`~mqt.yaqs.Result` aggregation.
+
+Explicit circuit sampling supports recognized YAQS Pauli processes only.
+Positive-rate dissipative processes such as `raising` and `lowering` are
+rejected by this API because their jump probabilities depend on the evolving
+state. They remain available through the existing direct
+{meth}`~mqt.yaqs.Simulator.run` TJM path.
 
 ## 2. Noise-strength sweep
 

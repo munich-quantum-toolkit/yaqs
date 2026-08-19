@@ -12,8 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
-- added post-gate stochastic circuit trajectories for Pauli and dissipative
-  `NoiseModel` processes ([#545]) ([**@yiranwang-phys**])
+- Add stochastic circuit sampling from NoiseModel ([#545])
+  ([**@yiranwang-phys**])
 - added infrastructure for analog-digital simulation ([#525])
   ([**@linusschulte**])
 - added native support for gates acting on three or more qubits in circuit
