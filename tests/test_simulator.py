@@ -2083,6 +2083,14 @@ def test_analog_longrange_crosstalk_xy_mps_runs() -> None:
 
 
 def _x_drive(amplitude: float) -> Hamiltonian:
+    """Create a one-qubit Hamiltonian with an X drive.
+
+    Args:
+        amplitude: Coefficient of the Pauli-X term.
+
+    Returns:
+        A one-qubit static Hamiltonian.
+    """
     return Hamiltonian.pauli(length=1, one_body=[(amplitude, "X")])
 
 

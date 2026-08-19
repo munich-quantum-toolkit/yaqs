@@ -63,6 +63,10 @@ def _count_analog_tjm_1_calls(
 ) -> Callable[..., tuple[np.ndarray, np.ndarray, MPS | None]]:
     """Wrap ``analog_tjm_1`` and increment ``counter[0]`` on each call.
 
+    Args:
+        original: The unwrapped ``analog_tjm_1`` function.
+        counter: A mutable single-item call counter.
+
     Returns:
         A drop-in replacement for ``analog_tjm_1``.
     """
@@ -910,6 +914,84 @@ def test_order_two_continuation_requires_matching_dt(monkeypatch: pytest.MonkeyP
     )
 
     assert initialize_calls == 2
+
+
+def test_pending_order2_handoff_blocks_analog_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pending mid-Trotter ``phi`` is consumed by a single analog, not a merged run."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    first = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, max_bond_dim=4)
+    later = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, max_bond_dim=8)
+    program = SimulationProgram(
+        [
+            (hamiltonian, first),
+            (hamiltonian, later),
+            (hamiltonian, later),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=7,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert initialize_calls == 1
+
+
+def test_merged_order2_run_hands_off_to_unmergeable_next(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A merged order-2 run still hands off ``phi`` when the next analog cannot join."""
+    initialize_calls = 0
+    original_initialize = analog_module.initialize
+
+    def count_initialize(
+        state: MPS,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        rng: np.random.Generator | None = None,
+    ) -> MPS:
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(state, noise_model, sim_params, rng=rng)
+
+    monkeypatch.setattr(analog_module, "initialize", count_initialize)
+    hamiltonian = _zero_hamiltonian(1)
+    merged = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, max_bond_dim=8)
+    later = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, max_bond_dim=4)
+    program = SimulationProgram(
+        [
+            (hamiltonian, merged),
+            (hamiltonian, merged),
+            (hamiltonian, later),
+        ],
+        observables=[Observable("z", 0)],
+        num_traj=1,
+        random_seed=7,
+    )
+
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        program,
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
+    )
+
+    assert initialize_calls == 1
 
 
 def test_order_two_hamiltonian_quench_matches_piecewise() -> None:

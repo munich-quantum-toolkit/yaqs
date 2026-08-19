@@ -320,6 +320,22 @@ def _order2_chain_continues(
     )
 
 
+def _order2_hand_off(
+    instructions: tuple[_CompiledAnalogInstruction | _CompiledDigitalInstruction, ...],
+    current: _CompiledAnalogInstruction,
+) -> bool:
+    """Return whether this analog segment should return mid-Trotter ``phi``.
+
+    ``get_state`` on this or the next segment needs a physical checkpoint, so
+    the handoff is suppressed and the next analog starts a new Trotter chain.
+    """
+    if not _order2_chain_continues(instructions, current, current.index):
+        return False
+    nxt = instructions[current.index + 1]
+    assert isinstance(nxt, _CompiledAnalogInstruction)
+    return not current.sim_params.get_state and not nxt.sim_params.get_state
+
+
 def _execute_analog_instruction(
     traj_idx: int,
     current_state: MPS,
@@ -344,13 +360,7 @@ def _execute_analog_instruction(
     """
     backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
     if backend is analog_tjm_2:
-        # Hand off mid-Trotter ``phi`` only when neither this nor the next segment
-        # needs a physical checkpoint (sample-state), so get_state never sees ``phi``.
-        hand_off_trajectory = _order2_chain_continues(instructions, instruction, instruction.index)
-        if hand_off_trajectory:
-            nxt = instructions[instruction.index + 1]
-            if instruction.sim_params.get_state or nxt.sim_params.get_state:
-                hand_off_trajectory = False
+        hand_off_trajectory = _order2_hand_off(instructions, instruction)
         traj_data, traj_diag, next_state = backend(
             (
                 traj_idx,
@@ -506,8 +516,15 @@ def _execute_merged_analog_run(
     current_state: MPS,
     run: Sequence[_CompiledAnalogInstruction],
     rng: np.random.Generator,
+    *,
+    return_trajectory_state: bool = False,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, MPS | None]:
-    """Return the analog_tjm payload for one merged analog run."""
+    """Return the analog_tjm payload for one merged analog run.
+
+    Merged runs always start a fresh Trotter chain. A pending mid-Trotter
+    ``phi`` is consumed on the single-instruction path before any merge.
+    ``return_trajectory_state`` hands ``phi`` to a later analog that cannot join.
+    """
     merged_params = _merged_analog_execution_params(run)
     operator = _merged_analog_operator(run)
     user_sample = run[0].execution_params.sample_timesteps
@@ -527,7 +544,7 @@ def _execute_merged_analog_run(
             rng=rng,
             sample_timestep_offset=0,
             use_trajectory_rng_for_final_sample=False,
-            return_trajectory_state=False,
+            return_trajectory_state=return_trajectory_state,
             continue_trajectory=False,
             sample_at=sample_at,
         )
@@ -626,7 +643,9 @@ def _execute_program_trajectory(
             raise TypeError(msg)
 
         run: list[_CompiledAnalogInstruction] = [instruction]
-        while index + len(run) < len(instructions):
+        # A pending order-2 handoff supplies a mid-Trotter ``phi``; the merged path
+        # cannot consume it (and analog_tjm_2 continuation is static-MPO only).
+        while not continue_order2_trajectory and index + len(run) < len(instructions):
             nxt = instructions[index + len(run)]
             if not isinstance(nxt, _CompiledAnalogInstruction) or not _analog_runs_can_merge(run[-1], nxt):
                 break
@@ -655,13 +674,25 @@ def _execute_program_trajectory(
             )
             segment_payloads.append((traj_data, traj_diag, None, checkpoint))
         else:
-            traj_data, traj_diag, next_state = _execute_merged_analog_run(traj_idx, current_state, run, rng)
+            hand_off_trajectory = _order2_hand_off(instructions, run[-1])
+            traj_data, traj_diag, next_state = _execute_merged_analog_run(
+                traj_idx,
+                current_state,
+                run,
+                rng,
+                return_trajectory_state=hand_off_trajectory,
+            )
             if next_state is None:
                 msg = f"Program segment {instruction.index} did not return its propagated state."
                 raise RuntimeError(msg)
             current_state = next_state
-            sample_timestep_offset = 0
-            continue_order2_trajectory = False
+            if hand_off_trajectory:
+                n_steps = sum(max(len(analog.execution_params.times) - 1, 0) for analog in run)
+                sample_timestep_offset = n_steps
+                continue_order2_trajectory = True
+            else:
+                sample_timestep_offset = 0
+                continue_order2_trajectory = False
             for analog_instruction, (seg_data, seg_diag) in zip(
                 run,
                 _split_merged_analog_results(

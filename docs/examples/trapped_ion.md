@@ -209,7 +209,7 @@ continuous, its velocity changes discontinuously at the start and end. The
 resulting residual motion can degrade the fidelity of subsequent operations in
 practice, illustrating the importance of smooth, optimized control ramps.
 
-This example uses dimensionless units with $hbar=m=omega=1$. For dimensional
+This example uses dimensionless units with $\hbar=m=\omega=1$. For dimensional
 inputs, use compatible time and energy units. A finer grid, smaller `dt`, and
 slower trajectory reduce spatial and non-adiabatic transport errors.
 
