@@ -21,9 +21,8 @@ from qiskit.circuit import QuantumCircuit
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
-from .hamiltonian_schedule import HamiltonianSchedule, compile_hamiltonian_schedule
 from .noise_model import NoiseModel
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode, Observable, _has_final_remainder
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -305,7 +304,7 @@ class _CompiledAnalogInstruction:
     """Validated analog instruction used by the private program executor."""
 
     index: int
-    hamiltonian: MPO | HamiltonianSchedule
+    hamiltonian: MPO
     sim_params: AnalogSimParams
     execution_params: AnalogSimParams
     noise_model: NoiseModel | None
@@ -480,8 +479,11 @@ def _compile_analog_segment(
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
-    if _has_final_remainder(sim_params) and sim_params.evolution_mode == EvolutionMode.BUG:
-        msg = f"segments[{index}] BUG evolution does not support a final remainder interval."
+    if segment.hamiltonian.is_piecewise:
+        msg = (
+            f"segments[{index}] piecewise Hamiltonians are not supported in program execution; "
+            "use multiple analog segments."
+        )
         raise ValueError(msg)
     execution_params = _apply_program_settings(
         sim_params,
@@ -490,30 +492,19 @@ def _compile_analog_segment(
         random_seed=random_seed,
     )
     assert isinstance(execution_params, AnalogSimParams)
-    if segment.hamiltonian.is_parameterized:
-        if sim_params.evolution_mode != EvolutionMode.TDVP:
-            msg = f"segments[{index}] parameterized Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+    segment.hamiltonian.ensure_mpo()
+    for site, (tensor, dimension) in enumerate(
+        zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
+    ):
+        if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
+            msg = (
+                f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
+                f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
+            )
             raise ValueError(msg)
-        compiled_hamiltonian: MPO | HamiltonianSchedule = compile_hamiltonian_schedule(
-            segment.hamiltonian,
-            execution_params,
-            physical_dimensions=signature.physical_dimensions,
-        )
-    else:
-        segment.hamiltonian.ensure_mpo()
-        for site, (tensor, dimension) in enumerate(
-            zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
-        ):
-            if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
-                msg = (
-                    f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
-                    f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
-                )
-                raise ValueError(msg)
-        compiled_hamiltonian = segment.hamiltonian.mpo
     return _CompiledAnalogInstruction(
         index=index,
-        hamiltonian=compiled_hamiltonian,
+        hamiltonian=segment.hamiltonian.mpo,
         sim_params=sim_params,
         execution_params=execution_params,
         noise_model=noise_model,

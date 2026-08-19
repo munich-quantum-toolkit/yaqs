@@ -47,8 +47,7 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
-from mqt.yaqs.analog.evolution import apply_unitary_evolution
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -124,53 +123,9 @@ def test_step_through() -> None:
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
         step_through(state, H, noise_model, sim_params, current_time=0.2)
-        mock_unitary.assert_called_once_with(state, H, sim_params, step_duration=sim_params.dt)
+        mock_unitary.assert_called_once_with(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
-
-
-def test_bug_dispatch_rejects_final_remainder() -> None:
-    """The shared unitary dispatcher protects direct BUG callers from fractional intervals."""
-    with pytest.raises(ValueError, match="BUG evolution does not support a final remainder interval"):
-        apply_unitary_evolution(
-            MPS(1),
-            MPO.identity(1),
-            AnalogSimParams(elapsed_time=0.15, dt=0.1, evolution_mode=EvolutionMode.BUG),
-        )
-
-
-def test_order_two_unequal_interval_noise_bridge_uses_mean_duration() -> None:
-    """Order-2 TJM centers dissipation between unequal adjacent intervals."""
-    state = MPS(1)
-    hamiltonian = MPO.ising(1, J=0.0, g=0.0)
-    noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
-    sim_params = AnalogSimParams(
-        elapsed_time=0.25,
-        dt=0.1,
-        order=2,
-        sample_timesteps=False,
-        get_state=True,
-    )
-
-    def preserve_state(
-        current_state: MPS,
-        _noise_model: NoiseModel | None,
-        _duration: float,
-        _sim_params: AnalogSimParams,
-        rng: np.random.Generator | None = None,
-    ) -> MPS:
-        _ = rng
-        return current_state
-
-    with (
-        patch("mqt.yaqs.analog.analog_tjm._evolve_interval"),
-        patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
-        patch("mqt.yaqs.analog.analog_tjm.stochastic_process", side_effect=preserve_state),
-    ):
-        analog_tjm_2((0, state, noise_model, sim_params, hamiltonian))
-
-    durations = [float(call.args[2]) for call in mock_dissipation.call_args_list]
-    np.testing.assert_allclose(durations, [0.05, 0.1, 0.075, 0.025], rtol=0.0, atol=1e-15)
 
 
 @pytest.mark.parametrize("order", [1, 2])
@@ -475,3 +430,26 @@ def test_simulator_order1_honors_bug_evolution_mode() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
     assert result.expectation_values is not None
     assert result.expectation_values[0].shape == (len(sim_params.times),)
+
+
+def test_analog_tjm_1_uses_operator_for_each_interval() -> None:
+    """Order-1 TJM applies the matching MPO on each analog interval."""
+    first = MPO.ising(2, 1.0, 0.5)
+    second = MPO.ising(2, 1.0, 2.0)
+    state = MPS(2)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=1,
+        sample_timesteps=False,
+        num_traj=1,
+    )
+    seen: list[MPO] = []
+
+    def capture(_state: MPS, hamiltonian: MPO, _sim_params: AnalogSimParams) -> None:
+        seen.append(hamiltonian)
+
+    with patch("mqt.yaqs.analog.analog_tjm.apply_unitary_evolution", side_effect=capture):
+        analog_tjm_1((0, state, None, sim_params, (first, second)))
+    assert seen == [first, second]

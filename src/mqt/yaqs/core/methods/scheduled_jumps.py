@@ -53,8 +53,6 @@ def apply_scheduled_jumps(
     noise_model: NoiseModel | None,
     time: float,
     sim_params: AnalogSimParams,
-    *,
-    dt: float | None = None,
 ) -> MPS:
     """Apply scheduled jumps to the state.
 
@@ -63,8 +61,6 @@ def apply_scheduled_jumps(
         noise_model: The noise model containing scheduled jumps.
         time: The current simulation time.
         sim_params: Simulation parameters.
-        dt: Local interval scale used for time matching. Defaults to the nominal
-            ``sim_params.dt`` for backward compatibility.
 
     Returns:
         The updated Matrix Product State (MPS).
@@ -76,10 +72,9 @@ def apply_scheduled_jumps(
     if noise_model is None or not noise_model.scheduled_jumps:
         return state
 
-    match_dt = sim_params.dt if dt is None else dt
     applied = False
     for jump in noise_model.scheduled_jumps:
-        if _scheduled_jump_matches_time(jump["time"], time, match_dt):
+        if _scheduled_jump_matches_time(jump["time"], time, sim_params.dt):
             applied = True
             sites = jump["sites"]
             jump_op = jump["matrix"]

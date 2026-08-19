@@ -117,11 +117,9 @@ plt.show()
 
 ## 4. Transport in a moving harmonic well
 
-A time-dependent trap uses the same static `MPO.trapped_ion` builder as a
-parameterized factory. The paired schedule supplies the trap center $q(t)$. Here
-a linear trajectory transports the well from $q\nobreak=\nobreak-1$ to
-$q\nobreak=\nobreak1$. The trap then remains at its target so that residual
-motion of the ion remains visible.
+A moving trap is a piecewise Hamiltonian: one static well per transport step,
+then a hold at the target. Here a linear trajectory transports the well from
+$q\nobreak=\nobreak-1$ to $q\nobreak=\nobreak1$.
 
 ```{code-cell} ipython3
 transport_positions = np.linspace(-6.0, 6.0, 25)
@@ -130,28 +128,29 @@ start_center = -1.0
 target_center = 1.0
 transport_duration = 10.0
 hold_duration = 5.0
+dt = 0.25
 
 
-def moving_trap(trap_center: object) -> Hamiltonian:
+def trap_at(trap_center: float) -> Hamiltonian:
     return Hamiltonian.from_mpo(
         MPO.trapped_ion(
             transport_positions,
             masses=[1.0],
             omega=omega,
-            trap_center=float(trap_center),
+            trap_center=trap_center,
         )
     )
 
 
-def trap_trajectory(time: float) -> float:
-    fraction = np.clip(time / transport_duration, 0.0, 1.0)
-    return start_center + (target_center - start_center) * fraction
-
-
-moving_hamiltonian = Hamiltonian(
-    length=1,
-    parameterized_terms=[(moving_trap, trap_trajectory)],
-)
+n_transport = round(transport_duration / dt)
+transport_pieces = [
+    (trap_at(start_center + (target_center - start_center) * (step / n_transport)), dt)
+    for step in range(n_transport)
+]
+moving_hamiltonian = Hamiltonian.piecewise([
+    *transport_pieces,
+    (trap_at(target_center), hold_duration),
+])
 
 transport_wavepacket = np.exp(-0.5 * (transport_positions - start_center) ** 2).astype(np.complex128)
 transport_wavepacket /= np.linalg.norm(transport_wavepacket)
@@ -164,7 +163,7 @@ transport_position = Observable("position", 0, positions=transport_positions)
 transport_params = AnalogSimParams(
     observables=[transport_position],
     elapsed_time=transport_duration + hold_duration,
-    dt=0.25,
+    dt=dt,
     tdvp_sweeps=2,
     max_bond_dim=None,
     svd_threshold=1e-12,
@@ -179,16 +178,17 @@ transport_result = Simulator(parallel=False, show_progress=False).run(
     transport_params,
 )
 transport_expectation = np.real(transport_result.expectation_values[0])
-scheduled_centers = np.asarray([trap_trajectory(time) for time in transport_params.times])
+scheduled_centers = np.asarray(
+    [start_center + (target_center - start_center) * min(time / transport_duration, 1.0) for time in transport_params.times]
+)
 hold_mask = transport_params.times >= transport_duration
 residual_motion = np.max(np.abs(transport_expectation[hold_mask] - target_center))
 assert residual_motion > 0.1
 print(f"Maximum displacement from the target during the hold: {residual_motion:.3f}")
 ```
 
-The public time grid contains physical boundaries. Internally, YAQS evaluates
-`trap_trajectory` at the midpoint of each of the two TDVP substeps and resolves
-the matching static MPO through a bounded cache.
+Each transport interval uses a fixed trap center. During the hold the well stays
+at the target while the ion continues to move.
 
 ```{code-cell} ipython3
 fig, ax = plt.subplots(figsize=(7.2, 3.4), layout="constrained")
@@ -210,9 +210,8 @@ resulting residual motion can degrade the fidelity of subsequent operations in
 practice, illustrating the importance of smooth, optimized control ramps.
 
 This example uses dimensionless units with $hbar=m=omega=1$. For dimensional
-inputs, use compatible time and energy units or make the factory return
-$H(t)/\hbar$. A finer grid, smaller `dt`, and slower trajectory reduce spatial,
-midpoint, and non-adiabatic transport errors respectively.
+inputs, use compatible time and energy units. A finer grid, smaller `dt`, and
+slower trajectory reduce spatial and non-adiabatic transport errors.
 
 ## Related topics
 

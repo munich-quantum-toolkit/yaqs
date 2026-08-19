@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -37,211 +36,13 @@ def _blank_hamiltonian(**attrs: object) -> Hamiltonian:
 
 def test_hamiltonian_requires_exactly_one_manual_source() -> None:
     """Constructor rejects zero or multiple manual data sources."""
-    with pytest.raises(ValueError, match="exactly one of tensors, matrix, sparse_matrix, or parameterized_terms"):
+    with pytest.raises(ValueError, match="exactly one of tensors, matrix, or sparse_matrix"):
         Hamiltonian()
-    with pytest.raises(ValueError, match="exactly one of tensors, matrix, sparse_matrix, or parameterized_terms"):
+    with pytest.raises(ValueError, match="exactly one of tensors, matrix, or sparse_matrix"):
         Hamiltonian(
             matrix=np.eye(2, dtype=np.complex128),
             sparse_matrix=scipy.sparse.eye(2, dtype=np.complex128),
         )
-
-
-def test_parameterized_hamiltonian_resolves_paired_factories() -> None:
-    """Schedules remain paired with factories and additive terms resolve to one MPO."""
-    seen: list[tuple[str, float]] = []
-
-    def x_factory(value: object) -> Hamiltonian:
-        coefficient = float(cast("Any", value))
-        seen.append(("x", coefficient))
-        return Hamiltonian.pauli(length=1, one_body=[(coefficient, "X")])
-
-    def z_factory(value: object) -> MPO:
-        coefficient = float(cast("Any", value))
-        seen.append(("z", coefficient))
-        return Hamiltonian.pauli(length=1, one_body=[(coefficient, "Z")]).mpo
-
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[
-            (x_factory, lambda time: 2.0 * time),
-            (z_factory, lambda time: 1.0 - time),
-        ],
-    )
-
-    assert hamiltonian.is_parameterized
-    parameters = hamiltonian._parameters_at(0.25)  # ruff: ignore[private-member-access]
-    np.testing.assert_allclose(np.asarray(parameters, dtype=float), [0.5, 0.75])
-    resolved = hamiltonian._resolve_parameters(parameters)  # ruff: ignore[private-member-access]
-    expected = np.asarray([[0.75, 0.5], [0.5, -0.75]], dtype=np.complex128)
-    np.testing.assert_allclose(resolved.to_matrix(), expected, atol=1e-12)
-    assert seen == [("x", 0.5), ("z", 0.75)]
-
-
-@pytest.mark.parametrize(
-    ("terms", "error", "match"),
-    [
-        ([], ValueError, "non-empty sequence"),
-        ([lambda _value: Hamiltonian.ising(1, J=0.0, g=0.0)], TypeError, "must be a .* tuple"),
-        ([(1.0, lambda _time: 0.0)], TypeError, "factory must be callable"),
-        ([(lambda _value: Hamiltonian.ising(1, J=0.0, g=0.0), 1.0)], TypeError, "schedule must be callable"),
-    ],
-)
-def test_parameterized_hamiltonian_validates_pairs(
-    terms: object,
-    error: type[Exception],
-    match: str,
-) -> None:
-    """Malformed paired terms fail without invoking user callables."""
-    with pytest.raises(error, match=match):
-        Hamiltonian(length=1, parameterized_terms=cast("Any", terms))
-
-
-def test_parameterized_hamiltonian_rejects_non_sequence_terms() -> None:
-    """The outer parameterized-term container must be a sequence."""
-    with pytest.raises(TypeError, match="non-empty sequence"):
-        Hamiltonian(length=1, parameterized_terms=cast("Any", 1.0))
-
-
-def test_parameterized_hamiltonian_requires_explicit_positive_length() -> None:
-    """Parameterized construction never invokes a factory to infer length."""
-    pair = (lambda _value: Hamiltonian.ising(1, J=0.0, g=0.0), lambda _time: 0.0)
-    with pytest.raises(TypeError, match="positive integer"):
-        Hamiltonian(parameterized_terms=[pair])
-    with pytest.raises(ValueError, match="positive integer"):
-        Hamiltonian(length=0, parameterized_terms=[pair])
-
-
-@pytest.mark.parametrize("value", [np.inf, np.nan, [], "not numeric"])
-def test_parameterized_hamiltonian_rejects_invalid_schedule_values(value: object) -> None:
-    """Schedule outputs must contain finite numeric values."""
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[
-            (lambda _value: Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]), lambda _time: value),
-        ],
-    )
-    with pytest.raises(ValueError, match="non-finite numeric value"):
-        hamiltonian._parameters_at(0.0)  # ruff: ignore[private-member-access]
-
-
-def test_parameterized_hamiltonian_translates_unconvertible_schedule_values() -> None:
-    """Array-conversion errors from schedule values become the public ValueError."""
-
-    class Unconvertible:
-        def __array__(self) -> np.ndarray:  # ruff: ignore[bad-dunder-method-name]  # NumPy conversion protocol.
-            raise TypeError
-
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[
-            (lambda _value: Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]), lambda _time: Unconvertible()),
-        ],
-    )
-    with pytest.raises(ValueError, match="non-finite numeric value"):
-        hamiltonian._parameters_at(0.0)  # ruff: ignore[private-member-access]
-
-
-def test_parameterized_hamiltonian_validates_factory_outputs() -> None:
-    """Factories must return compatible, finite, Hermitian static operators."""
-    wrong_length = Hamiltonian(
-        length=1,
-        parameterized_terms=[(lambda _value: MPO.identity(2), lambda _time: 0.0)],
-    )
-    with pytest.raises(ValueError, match="returned length 2; expected 1"):
-        wrong_length._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-    wrong_type = Hamiltonian(
-        length=1,
-        parameterized_terms=cast("Any", [(lambda _value: object(), lambda _time: 0.0)]),
-    )
-    with pytest.raises(TypeError, match="must return Hamiltonian or MPO"):
-        wrong_type._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-    non_hermitian = np.asarray([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
-    invalid = Hamiltonian(
-        length=1,
-        parameterized_terms=[(lambda _value: MPO.from_local_ops([non_hermitian]), lambda _time: 0.0)],
-    )
-    with pytest.raises(ValueError, match="non-Hermitian"):
-        invalid._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-    invalid_bonds = MPO()
-    invalid_bonds.length = 1
-    invalid_bonds.tensors = [np.zeros((2, 2, 2, 1), dtype=np.complex128)]
-    invalid = Hamiltonian(
-        length=1,
-        parameterized_terms=[(lambda _value: invalid_bonds, lambda _time: 0.0)],
-    )
-    with pytest.raises(ValueError, match="invalid virtual bonds"):
-        invalid._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-
-def test_parameterized_hamiltonian_rejects_invalid_resolution_contracts() -> None:
-    """Resolution rejects static callers, wrong arity, nested schedules, and incompatible terms."""
-    static = Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")])
-    with pytest.raises(ValueError, match="Static Hamiltonians cannot resolve"):
-        static._resolve_parameters([1.0])  # ruff: ignore[private-member-access]
-
-    parameterized = Hamiltonian(
-        length=1,
-        parameterized_terms=[(lambda _value: static, lambda _time: 0.0)],
-    )
-    with pytest.raises(ValueError, match="Expected 1 parameter values, got 0"):
-        parameterized._resolve_parameters([])  # ruff: ignore[private-member-access]
-
-    nested = Hamiltonian(
-        length=1,
-        parameterized_terms=[(lambda _value: parameterized, lambda _time: 0.0)],
-    )
-    with pytest.raises(ValueError, match="must return a static Hamiltonian"):
-        nested._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-    incompatible = Hamiltonian(
-        length=1,
-        parameterized_terms=[
-            (lambda _value: MPO.identity(1, physical_dimension=2), lambda _time: 0.0),
-            (lambda _value: MPO.identity(1, physical_dimension=3), lambda _time: 0.0),
-        ],
-    )
-    with pytest.raises(ValueError, match="physical dimensions incompatible"):
-        incompatible._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-
-def test_parameterized_hamiltonian_rejects_malformed_tensor_before_bond_access() -> None:
-    """Malformed factory tensors raise ValueError rather than an indexing error."""
-    malformed = MPO()
-    malformed.length = 1
-    malformed.tensors = [np.zeros((2, 2, 1), dtype=np.complex128)]
-    hamiltonian = Hamiltonian(length=1, parameterized_terms=[(lambda _value: malformed, lambda _time: 0.0)])
-
-    with pytest.raises(ValueError, match="invalid MPO tensor at site 0"):
-        hamiltonian._resolve_at(0.0)  # ruff: ignore[private-member-access]
-
-
-def test_parameterized_hamiltonian_skips_dense_validation_above_cutoff() -> None:
-    """Oversized resolved MPOs never materialize a dense matrix for validation."""
-    mpo = MPO.identity(13)
-
-    with patch.object(mpo, "to_matrix", side_effect=AssertionError("must not materialize")):
-        Hamiltonian._validate_resolved_mpo(  # ruff: ignore[private-member-access]
-            mpo,
-            expected_length=13,
-            term_index=0,
-        )
-
-
-def test_parameterized_hamiltonian_rejects_static_materialization() -> None:
-    """A parameterized source has no single MPO or sparse matrix."""
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[
-            (lambda _value: Hamiltonian.pauli(length=1, one_body=[(1.0, "Z")]), lambda _time: 0.0),
-        ],
-    )
-    with pytest.raises(ValueError, match="resolved at a concrete time"):
-        hamiltonian.ensure_mpo()
-    with pytest.raises(ValueError, match="one static sparse matrix"):
-        hamiltonian.ensure_sparse()
 
 
 def test_hamiltonian_tensors_empty_raises() -> None:
@@ -655,3 +456,38 @@ def test_to_sparse_matrix_called_once_across_two_runs() -> None:
         sim.run(state, h, params, None)
         sim.run(state, h, params, None)
     assert mock_sparse.call_count == 1
+
+
+def test_piecewise_stores_static_pieces() -> None:
+    """piecewise() keeps static Hamiltonians and durations."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.5)
+    second = Hamiltonian.ising(2, J=1.0, g=2.0)
+    hamiltonian = Hamiltonian.piecewise([(first, 0.1), (second, 0.2)])
+    assert hamiltonian.is_piecewise
+    assert hamiltonian.length == 2
+    assert hamiltonian.pieces == ((first, 0.1), (second, 0.2))
+
+
+def test_piecewise_rejects_empty_or_nested_or_mismatched_pieces() -> None:
+    """Construction rejects empty, nested, and length-mismatched pieces."""
+    static = Hamiltonian.ising(2, J=1.0, g=0.5)
+    with pytest.raises(ValueError, match="non-empty sequence"):
+        Hamiltonian.piecewise([])
+    nested = Hamiltonian.piecewise([(static, 0.1)])
+    with pytest.raises(ValueError, match="nested piecewise"):
+        Hamiltonian.piecewise([(nested, 0.1)])
+    with pytest.raises(ValueError, match="does not match piece 0 length"):
+        Hamiltonian.piecewise([(static, 0.1), (Hamiltonian.ising(3, J=1.0, g=0.5), 0.1)])
+    with pytest.raises(ValueError, match="finite and positive"):
+        Hamiltonian.piecewise([(static, 0.0)])
+
+
+def test_piecewise_cannot_materialize_a_single_operator() -> None:
+    """A piecewise Hamiltonian is not one static MPO or sparse matrix."""
+    hamiltonian = Hamiltonian.piecewise([(Hamiltonian.ising(2, J=1.0, g=0.5), 0.1)])
+    with pytest.raises(ValueError, match="no single static operator"):
+        hamiltonian.ensure_mpo()
+    with pytest.raises(ValueError, match="no single static operator"):
+        hamiltonian.ensure_sparse()
+    with pytest.raises(ValueError, match="do not have piecewise durations"):
+        _ = Hamiltonian.ising(2, J=1.0, g=0.5).pieces

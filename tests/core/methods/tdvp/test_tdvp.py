@@ -181,52 +181,6 @@ def test_tdvp_rejects_invalid_tdvp_sweeps_at_runtime() -> None:
         tdvp(state, hamiltonian, sim_params)
 
 
-def test_tdvp_rejects_step_duration_for_digital_parameters() -> None:
-    """Explicit physical durations are meaningful only for analog TDVP."""
-    with pytest.raises(ValueError, match="only supported for analog TDVP"):
-        tdvp(
-            MPS(1),
-            MPO.identity(1),
-            DigitalSimParams(observables=[Observable(Z(), 0)]),
-            step_duration=0.1,
-        )
-
-
-@pytest.mark.parametrize("step_duration", [0.0, -0.1, float("inf"), float("nan")])
-def test_tdvp_rejects_invalid_analog_step_duration(step_duration: float) -> None:
-    """Analog interval overrides must be finite and strictly positive."""
-    with pytest.raises(ValueError, match="step_duration must be finite and positive"):
-        tdvp(
-            MPS(1),
-            MPO.identity(1),
-            AnalogSimParams(elapsed_time=0.1, dt=0.1),
-            step_duration=step_duration,
-        )
-
-
-def test_tdvp_names_invalid_sweep_override() -> None:
-    """An invalid explicit sweep override is identified as num_sweeps."""
-    with pytest.raises(ValueError, match="num_sweeps must be >= 1"):
-        tdvp(
-            MPS(1),
-            MPO.identity(1),
-            AnalogSimParams(elapsed_time=0.1, dt=0.1),
-            num_sweeps=0,
-        )
-
-
-@pytest.mark.parametrize("num_sweeps", [1.5, True])
-def test_tdvp_rejects_non_integer_sweep_override(num_sweeps: object) -> None:
-    """An explicit sweep override must be a true integer, not a float or bool."""
-    with pytest.raises(TypeError, match=f"num_sweeps must be int, got {type(num_sweeps).__name__}"):
-        tdvp(
-            MPS(1),
-            MPO.identity(1),
-            AnalogSimParams(elapsed_time=0.1, dt=0.1),
-            num_sweeps=cast("Any", num_sweeps),
-        )
-
-
 def test_tdvp_rejects_unknown_tdvp_mode_at_runtime() -> None:
     """Mutated tdvp_mode outside the supported set raises instead of falling through."""
     state = MPS(4, state="zeros")

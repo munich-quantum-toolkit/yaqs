@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -18,6 +18,7 @@ import scipy.sparse
 
 from .hamiltonian_utils import (
     attach_mpo,
+    attach_piecewise,
     sparse_to_csr,
 )
 from .mpo import MPO
@@ -30,19 +31,14 @@ __all__ = ["Hamiltonian"]
 
 # Match preprocess_mcwf: warn when full Hilbert-space matrices become expensive.
 _LARGE_HILBERT_DIM = 2**14
-_PARAMETERIZED_HERMITICITY_MAX_DIM = 4096
-
-_TermFactory = Callable[[object], "Hamiltonian | MPO"]
-_ParameterSchedule = Callable[[float], object]
-_ParameterizedTerm = tuple[_TermFactory, _ParameterSchedule]
 
 
 class Hamiltonian:
     """Hamiltonian for :meth:`~mqt.yaqs.Simulator.run` (analog evolution).
 
-    Build via classmethods (``ising``, ``pauli``, …), pass ``tensors`` / ``matrix`` /
-    ``sparse_matrix``, or pair parameterized factories with schedules. These
-    choices describe **source data**, not the simulation backend.
+    Build via classmethods (``ising``, ``pauli``, ``piecewise``, …) or pass
+    ``tensors`` / ``matrix`` / ``sparse_matrix``. These choices describe **source data**,
+    not the simulation backend.
 
     Pair with :class:`~mqt.yaqs.core.data_structures.state.State`: the state's
     ``representation`` alone selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` →
@@ -57,7 +53,6 @@ class Hamiltonian:
         tensors: list[NDArray[np.complex128]] | None = None,
         matrix: NDArray[np.complex128] | None = None,
         sparse_matrix: scipy.sparse.spmatrix | None = None,
-        parameterized_terms: Sequence[_ParameterizedTerm] | None = None,
         physical_dimension: int = 2,
     ) -> None:
         """Build a Hamiltonian from manual tensor or matrix data.
@@ -69,26 +64,19 @@ class Hamiltonian:
             tensors: MPO tensor cores.
             matrix: Dense operator matrix.
             sparse_matrix: Sparse operator.
-            parameterized_terms: Non-empty sequence of ``(factory, schedule)``
-                pairs. At time ``t``, YAQS calls ``factory(schedule(t))``. Each
-                factory must return a static :class:`Hamiltonian` or :class:`MPO`.
             physical_dimension: Local Hilbert-space dimension (uniform sites).
 
         Raises:
-            ValueError: If no source is given, sources are mutually exclusive,
-                shapes are invalid, or parameterized construction has no valid
-                explicit ``length``.
+            ValueError: If no manual data is given, data are mutually exclusive, shapes are invalid,
+                or ``physical_dimension`` is not positive.
         """
         if physical_dimension <= 0:
             msg = "physical_dimension must be a positive integer."
             raise ValueError(msg)
 
-        sources = [tensors is not None, matrix is not None, sparse_matrix is not None, parameterized_terms is not None]
-        if sum(sources) != 1:
-            msg = (
-                "Pass exactly one of tensors, matrix, sparse_matrix, or parameterized_terms, "
-                "or use a classmethod preset."
-            )
+        manual = [tensors is not None, matrix is not None, sparse_matrix is not None]
+        if sum(manual) != 1:
+            msg = "Pass exactly one of tensors, matrix, or sparse_matrix, or use a classmethod preset."
             raise ValueError(msg)
 
         self.physical_dimension = physical_dimension
@@ -96,226 +84,15 @@ class Hamiltonian:
         self._matrix: NDArray[np.complex128] | None = None
         self._sparse_matrix: scipy.sparse.csr_matrix | None = None
         self._mpo: MPO | None = None
-        self._parameterized_terms: tuple[_ParameterizedTerm, ...] | None = None
+        self._pieces: tuple[tuple[Hamiltonian, float], ...] | None = None
 
-        if parameterized_terms is not None:
-            self._init_from_parameterized_terms(parameterized_terms, length)
-        elif tensors is not None:
+        if tensors is not None:
             self._init_from_tensors(tensors, length)
         elif matrix is not None:
             self._init_from_matrix(matrix, length)
         else:
             assert sparse_matrix is not None
             self._init_from_sparse_matrix(sparse_matrix, length)
-
-    def _init_from_parameterized_terms(
-        self,
-        parameterized_terms: Sequence[_ParameterizedTerm],
-        length: int | None,
-    ) -> None:
-        """Validate and store paired parameterized factories and schedules.
-
-        Raises:
-            TypeError: If ``length`` or a pair has the wrong type.
-            ValueError: If ``length`` is not positive or the sequence is empty.
-        """
-        if isinstance(length, bool) or not isinstance(length, int):
-            msg = "length must be a positive integer for parameterized_terms."
-            raise TypeError(msg)
-        if length <= 0:
-            msg = "length must be a positive integer for parameterized_terms."
-            raise ValueError(msg)
-        if isinstance(parameterized_terms, (str, bytes)) or not isinstance(parameterized_terms, Sequence):
-            msg = "parameterized_terms must be a non-empty sequence of (factory, schedule) pairs."
-            raise TypeError(msg)
-        raw_terms = tuple(parameterized_terms)
-        if not raw_terms:
-            msg = "parameterized_terms must be a non-empty sequence of (factory, schedule) pairs."
-            raise ValueError(msg)
-
-        normalized: list[_ParameterizedTerm] = []
-        for index, item in enumerate(raw_terms):
-            if not isinstance(item, tuple) or len(item) != 2:
-                msg = f"parameterized_terms[{index}] must be a (factory, schedule) tuple."
-                raise TypeError(msg)
-            factory, schedule = item
-            if not callable(factory):
-                msg = f"parameterized_terms[{index}] factory must be callable."
-                raise TypeError(msg)
-            if not callable(schedule):
-                msg = f"parameterized_terms[{index}] schedule must be callable."
-                raise TypeError(msg)
-            normalized.append((factory, schedule))
-
-        self.length = length
-        self._parameterized_terms = tuple(normalized)
-
-    @property
-    def is_parameterized(self) -> bool:
-        """Whether this Hamiltonian is defined by paired factories and schedules."""
-        return getattr(self, "_parameterized_terms", None) is not None
-
-    @staticmethod
-    def _validate_parameter_value(value: object, *, term_index: int, time: float) -> object:
-        """Validate one schedule output and return it unchanged.
-
-        Returns:
-            The original validated value.
-
-        Raises:
-            ValueError: If the value is empty, non-numeric, or non-finite.
-        """
-        try:
-            array = np.asarray(value)
-            finite = array.size > 0 and np.issubdtype(array.dtype, np.number) and bool(np.all(np.isfinite(array)))
-        except (TypeError, ValueError):
-            finite = False
-        if not finite:
-            msg = f"parameterized_terms[{term_index}] schedule returned a non-finite numeric value at time {time}."
-            raise ValueError(msg)
-        return value
-
-    def _parameters_at(self, time: float) -> tuple[object, ...]:
-        """Evaluate every paired schedule at ``time``.
-
-        Returns:
-            Validated parameter values in term order.
-
-        Raises:
-            ValueError: If ``time`` or a schedule output is non-finite.
-        """
-        resolved_time = float(time)
-        if not np.isfinite(resolved_time):
-            msg = f"time must be finite, got {resolved_time!r}."
-            raise ValueError(msg)
-        if self._parameterized_terms is None:
-            msg = "Static Hamiltonians do not have parameter schedules."
-            raise ValueError(msg)
-        return tuple(
-            self._validate_parameter_value(schedule(resolved_time), term_index=index, time=resolved_time)
-            for index, (_factory, schedule) in enumerate(self._parameterized_terms)
-        )
-
-    @staticmethod
-    def _validate_resolved_mpo(
-        mpo: MPO,
-        *,
-        expected_length: int,
-        term_index: int,
-        check_hermiticity: bool = True,
-    ) -> None:
-        """Validate one factory's resolved MPO structure and optional Hermiticity.
-
-        Raises:
-            ValueError: If length, tensor structure, boundaries, or Hermiticity is invalid.
-        """
-        if mpo.length != expected_length or len(mpo.tensors) != expected_length:
-            msg = f"parameterized_terms[{term_index}] factory returned length {mpo.length}; expected {expected_length}."
-            raise ValueError(msg)
-        for site, tensor in enumerate(mpo.tensors):
-            if tensor.ndim != 4 or tensor.shape[0] != tensor.shape[1] or not np.all(np.isfinite(tensor)):
-                msg = f"parameterized_terms[{term_index}] factory returned an invalid MPO tensor at site {site}."
-                raise ValueError(msg)
-        if mpo.tensors[0].shape[2] != 1 or mpo.tensors[-1].shape[3] != 1 or not mpo.check_if_valid_mpo():
-            msg = f"parameterized_terms[{term_index}] factory returned an MPO with invalid virtual bonds."
-            raise ValueError(msg)
-
-        # Dense reconstruction scales exponentially; above this cutoff the factory
-        # remains responsible for satisfying the Hermiticity contract.
-        total_dimension = 1
-        for tensor in mpo.tensors:
-            # exact Python-integer multiplication to avoid overflow in np.prod for large MPOs
-            total_dimension *= int(tensor.shape[0])
-            if total_dimension > _PARAMETERIZED_HERMITICITY_MAX_DIM:
-                break
-        if check_hermiticity and total_dimension <= _PARAMETERIZED_HERMITICITY_MAX_DIM:
-            matrix = mpo.to_matrix()
-            if not np.allclose(matrix, matrix.conj().T, rtol=1e-10, atol=1e-12):
-                msg = f"parameterized_terms[{term_index}] factory returned a non-Hermitian operator."
-                raise ValueError(msg)
-
-    def _resolve_parameters(self, parameters: Sequence[object]) -> MPO:
-        """Resolve validated parameter values into one static MPO.
-
-        Returns:
-            Sum of the static MPO terms returned by the paired factories.
-
-        Raises:
-            ValueError: If values, lengths, dimensions, or operators are invalid.
-        """
-        if self._parameterized_terms is None:
-            msg = "Static Hamiltonians cannot resolve parameter values."
-            raise ValueError(msg)
-        return self._resolve_factories(
-            tuple(factory for factory, _schedule in self._parameterized_terms),
-            parameters,
-            length=self.length,
-        )
-
-    @classmethod
-    def _resolve_factories(
-        cls,
-        factories: Sequence[_TermFactory],
-        parameters: Sequence[object],
-        *,
-        length: int,
-        check_hermiticity: bool = True,
-    ) -> MPO:
-        """Resolve factory callables and parameters into one validated MPO.
-
-        Returns:
-            The validated sum of all resolved terms.
-
-        Raises:
-            TypeError: If a factory returns an unsupported type.
-            ValueError: If values, lengths, dimensions, or operators are invalid.
-        """
-        if len(parameters) != len(factories):
-            msg = f"Expected {len(factories)} parameter values, got {len(parameters)}."
-            raise ValueError(msg)
-
-        mpos: list[MPO] = []
-        physical_legs: tuple[tuple[int, int], ...] | None = None
-        for index, (factory, parameter) in enumerate(zip(factories, parameters, strict=True)):
-            resolved = factory(parameter)
-            if isinstance(resolved, Hamiltonian):
-                if resolved.is_parameterized:
-                    msg = (
-                        f"parameterized_terms[{index}] factory must return a static Hamiltonian, "
-                        "not a parameterized one."
-                    )
-                    raise ValueError(msg)
-                resolved.ensure_mpo()
-                mpo = resolved.mpo
-            elif isinstance(resolved, MPO):
-                mpo = resolved
-            else:
-                msg = (
-                    f"parameterized_terms[{index}] factory must return Hamiltonian or MPO, "
-                    f"got {type(resolved).__name__}."
-                )
-                raise TypeError(msg)
-            cls._validate_resolved_mpo(
-                mpo,
-                expected_length=length,
-                term_index=index,
-                check_hermiticity=check_hermiticity,
-            )
-            current_legs = tuple((tensor.shape[0], tensor.shape[1]) for tensor in mpo.tensors)
-            if physical_legs is not None and current_legs != physical_legs:
-                msg = f"parameterized_terms[{index}] factory returned physical dimensions incompatible with term 0."
-                raise ValueError(msg)
-            physical_legs = current_legs
-            mpos.append(mpo)
-        return MPO.mpo_sum(mpos)
-
-    def _resolve_at(self, time: float) -> MPO:
-        """Resolve this parameterized Hamiltonian at one time.
-
-        Returns:
-            The static MPO at ``time``.
-        """
-        return self._resolve_parameters(self._parameters_at(time))
 
     def _init_from_tensors(
         self,
@@ -398,6 +175,80 @@ class Hamiltonian:
         wrapped = cls.__new__(cls)
         attach_mpo(wrapped, mpo)
         return wrapped
+
+    @classmethod
+    def piecewise(cls, pieces: Sequence[tuple[Hamiltonian, float]]) -> Hamiltonian:
+        """Build a Hamiltonian that switches static pieces on the analog ``dt`` grid.
+
+        Each pair is ``(Hamiltonian, duration)``. Durations must be positive integer
+        multiples of ``dt`` and sum to ``elapsed_time`` when passed to
+        :meth:`~mqt.yaqs.Simulator.run`.
+
+        Returns:
+            A piecewise :class:`Hamiltonian`.
+
+        Raises:
+            TypeError: If ``pieces`` is not a sequence of ``(Hamiltonian, duration)`` pairs
+                or a duration is not a real number.
+            ValueError: If ``pieces`` is empty, a piece is itself piecewise, a duration is
+                not finite and positive, or piece lengths disagree.
+        """
+        if isinstance(pieces, (str, bytes)) or not isinstance(pieces, Sequence):
+            msg = "pieces must be a non-empty sequence of (Hamiltonian, duration) pairs."
+            raise TypeError(msg)
+        raw_pieces = tuple(pieces)
+        if not raw_pieces:
+            msg = "pieces must be a non-empty sequence of (Hamiltonian, duration) pairs."
+            raise ValueError(msg)
+
+        normalized: list[tuple[Hamiltonian, float]] = []
+        length: int | None = None
+        for index, item in enumerate(raw_pieces):
+            if not isinstance(item, tuple) or len(item) != 2:
+                msg = f"pieces[{index}] must be a (Hamiltonian, duration) tuple."
+                raise TypeError(msg)
+            hamiltonian, duration = item
+            if not isinstance(hamiltonian, Hamiltonian):
+                msg = f"pieces[{index}] must start with a Hamiltonian, got {type(hamiltonian).__name__}."
+                raise TypeError(msg)
+            if hamiltonian.is_piecewise:
+                msg = "pieces must be static Hamiltonians, not nested piecewise Hamiltonians."
+                raise ValueError(msg)
+            if isinstance(duration, bool) or not isinstance(duration, (int, float, np.floating, np.integer)):
+                msg = f"pieces[{index}] duration must be a real number, got {type(duration).__name__}."
+                raise TypeError(msg)
+            duration_f = float(duration)
+            if not np.isfinite(duration_f) or duration_f <= 0.0:
+                msg = f"pieces[{index}] duration must be finite and positive, got {duration_f}."
+                raise ValueError(msg)
+            if length is None:
+                length = hamiltonian.length
+            elif hamiltonian.length != length:
+                msg = f"pieces[{index}] length {hamiltonian.length} does not match piece 0 length {length}."
+                raise ValueError(msg)
+            normalized.append((hamiltonian, duration_f))
+
+        assert length is not None
+        wrapped = cls.__new__(cls)
+        attach_piecewise(wrapped, tuple(normalized), length)
+        return wrapped
+
+    @property
+    def is_piecewise(self) -> bool:
+        """Whether this Hamiltonian is a sequence of static pieces with durations."""
+        return getattr(self, "_pieces", None) is not None
+
+    @property
+    def pieces(self) -> tuple[tuple[Hamiltonian, float], ...]:
+        """Static pieces and durations for a piecewise Hamiltonian.
+
+        Raises:
+            ValueError: If this Hamiltonian is not piecewise.
+        """
+        if self._pieces is None:
+            msg = "Static Hamiltonians do not have piecewise durations."
+            raise ValueError(msg)
+        return self._pieces
 
     @classmethod
     def ising(
@@ -563,10 +414,10 @@ class Hamiltonian:
             ``self`` for chaining.
 
         Raises:
-            ValueError: If no data is available to build an MPO.
+            ValueError: If no data is available to build an MPO, or this Hamiltonian is piecewise.
         """
-        if self.is_parameterized:
-            msg = "A parameterized Hamiltonian must be resolved at a concrete time before MPO materialization."
+        if self.is_piecewise:
+            msg = "A piecewise Hamiltonian has no single static operator."
             raise ValueError(msg)
         if self._mpo is not None:
             return self
@@ -602,10 +453,10 @@ class Hamiltonian:
             ``self`` for chaining.
 
         Raises:
-            ValueError: If no data is available to build a sparse matrix.
+            ValueError: If no data is available to build a sparse matrix, or this Hamiltonian is piecewise.
         """
-        if self.is_parameterized:
-            msg = "A parameterized Hamiltonian cannot be materialized as one static sparse matrix."
+        if self.is_piecewise:
+            msg = "A piecewise Hamiltonian has no single static operator."
             raise ValueError(msg)
         if self._sparse_matrix is not None:
             return self

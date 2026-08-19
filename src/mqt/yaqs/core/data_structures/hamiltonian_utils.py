@@ -34,4 +34,19 @@ def attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
     wrapped._matrix = None  # ruff:ignore[private-member-access]
     wrapped._sparse_matrix = None  # ruff:ignore[private-member-access]
     wrapped._mpo = mpo  # ruff:ignore[private-member-access]
-    wrapped._parameterized_terms = None  # ruff:ignore[private-member-access]
+    wrapped._pieces = None  # ruff:ignore[private-member-access]
+
+
+def attach_piecewise(
+    wrapped: Hamiltonian,
+    pieces: tuple[tuple[Hamiltonian, float], ...],
+    length: int,
+) -> None:
+    """Initialize ``wrapped`` from static Hamiltonian pieces (factory helper for :meth:`Hamiltonian.piecewise`)."""
+    wrapped.length = length
+    wrapped.physical_dimension = pieces[0][0].physical_dimension
+    wrapped._tensors = None  # ruff:ignore[private-member-access]
+    wrapped._matrix = None  # ruff:ignore[private-member-access]
+    wrapped._sparse_matrix = None  # ruff:ignore[private-member-access]
+    wrapped._mpo = None  # ruff:ignore[private-member-access]
+    wrapped._pieces = pieces  # ruff:ignore[private-member-access]

@@ -9,10 +9,8 @@
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
-from ...data_structures.simulation_parameters import DigitalSimParams
 from . import integrators
 
 if TYPE_CHECKING:
@@ -20,7 +18,7 @@ if TYPE_CHECKING:
 
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
-    from ...data_structures.simulation_parameters import AnalogSimParams
+    from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
 def _run_sweeps(
@@ -30,8 +28,6 @@ def _run_sweeps(
     sim_params: AnalogSimParams | DigitalSimParams,
     /,
     *args: object,
-    step_duration: float | None = None,
-    num_sweeps: int | None = None,
     **kwargs: object,
 ) -> None:
     """Run ``sim_params.tdvp_sweeps`` TDVP substeps per evolution step.
@@ -49,38 +45,17 @@ def _run_sweeps(
         operator: Generator MPO.
         sim_params: Supplies ``tdvp_sweeps`` and evolution settings.
         *args: Extra positional arguments forwarded to ``evolve_once``.
-        step_duration: Optional explicit analog evolution duration. When
-            omitted, use ``sim_params.dt``. Digital evolution does not accept it.
-        num_sweeps: Optional sweep-count override used by interval-resolved
-            parameterized evolution.
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
     Raises:
-        TypeError: If an explicit ``num_sweeps`` override is not an integer.
-        ValueError: If the sweep count is less than 1, if ``step_duration`` is
-            used with digital parameters, or if it is non-finite or non-positive.
+        ValueError: If ``sim_params.tdvp_sweeps`` is less than 1.
 
     """
-    if num_sweeps is not None and (isinstance(num_sweeps, bool) or not isinstance(num_sweeps, int)):
-        msg = f"num_sweeps must be int, got {type(num_sweeps).__name__}."
-        raise TypeError(msg)
-    sweep_count = sim_params.tdvp_sweeps if num_sweeps is None else num_sweeps
-    if sweep_count < 1:
-        sweep_name = "tdvp_sweeps" if num_sweeps is None else "num_sweeps"
-        msg = f"{sweep_name} must be >= 1, got {sweep_count}."
+    if sim_params.tdvp_sweeps < 1:
+        msg = f"tdvp_sweeps must be >= 1, got {sim_params.tdvp_sweeps}."
         raise ValueError(msg)
-    if step_duration is None:
-        step_scale = 1.0 / sweep_count
-    else:
-        if isinstance(sim_params, DigitalSimParams):
-            msg = "step_duration is only supported for analog TDVP evolution."
-            raise ValueError(msg)
-        duration = float(step_duration)
-        if not math.isfinite(duration) or duration <= 0.0:
-            msg = f"step_duration must be finite and positive, got {duration}."
-            raise ValueError(msg)
-        step_scale = duration / float(sim_params.dt) / sweep_count
-    sweep_plan = [step_scale] * sweep_count
+    step_scale = 1.0 / sim_params.tdvp_sweeps
+    sweep_plan = [step_scale] * sim_params.tdvp_sweeps
     evolve_once(
         state,
         operator,
@@ -95,9 +70,6 @@ def tdvp(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | DigitalSimParams,
-    *,
-    step_duration: float | None = None,
-    num_sweeps: int | None = None,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -109,14 +81,11 @@ def tdvp(
         operator: MPO defining the local generator at each site.
         sim_params: Simulation parameters including ``dt`` or gate time,
             ``tdvp_sweeps``, ``tdvp_mode``, truncation, and Krylov settings.
-        step_duration: Optional explicit analog duration for this call.
-        num_sweeps: Optional internal override of ``sim_params.tdvp_sweeps``.
 
     Raises:
-        ValueError: If ``state`` and ``operator`` lengths mismatch, if
-            ``tdvp_mode="2site"`` has fewer than two sites (except a one-site
-            chain, which falls back to 1TDVP), if the sweep count is less than
-            1, or if ``step_duration`` is invalid or used for digital evolution.
+        ValueError: If ``state`` and ``operator`` lengths mismatch or if
+            ``tdvp_mode="2site"`` with fewer than two sites (except a one-site
+            chain, which falls back to 1TDVP).
 
     """
     if operator.length != state.length:
@@ -132,32 +101,11 @@ def tdvp(
         raise ValueError(msg)
 
     if tdvp_mode == "1site":
-        _run_sweeps(
-            integrators.sweep_1site,
-            state,
-            operator,
-            sim_params,
-            step_duration=step_duration,
-            num_sweeps=num_sweeps,
-        )
+        _run_sweeps(integrators.sweep_1site, state, operator, sim_params)
     elif tdvp_mode == "2site":
-        _run_sweeps(
-            integrators.sweep_2site,
-            state,
-            operator,
-            sim_params,
-            step_duration=step_duration,
-            num_sweeps=num_sweeps,
-        )
+        _run_sweeps(integrators.sweep_2site, state, operator, sim_params)
     elif tdvp_mode == "dynamic":
-        _run_sweeps(
-            integrators.sweep_dynamic,
-            state,
-            operator,
-            sim_params,
-            step_duration=step_duration,
-            num_sweeps=num_sweeps,
-        )
+        _run_sweeps(integrators.sweep_dynamic, state, operator, sim_params)
     else:
         msg = f'tdvp_mode must be one of ("1site", "2site", "dynamic"), got {tdvp_mode!r}.'
         raise ValueError(msg)

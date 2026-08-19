@@ -6,31 +6,34 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
-### Added: parameterized time-dependent Hamiltonians
+### Added: piecewise time-dependent Hamiltonians
 
-Use `Hamiltonian(length=..., parameterized_terms=[(factory, schedule), ...])` to
-describe time-dependent Hamiltonian terms. YAQS samples each schedule at
-TDVP-substep midpoints and asks its paired factory for the corresponding static
-Hamiltonian term. This currently supports a single MPS state with TDVP; MCWF,
-Lindblad, BUG, deterministic state ensembles, and multi-time observables are not
-supported. See the
+Use `Hamiltonian.piecewise([(H, duration), ...])` to switch static Hamiltonians
+on the analog `dt` grid. Each duration must be a positive multiple of `dt`, and
+the durations must sum to `elapsed_time`. This currently supports a single MPS
+state with TDVP. See the
 [Hamiltonian guide](docs/examples/hamiltonians.md#time-dependent-hamiltonians).
 
-### Changed: analog simulations may end with a shorter timestep
+### Breaking: analog durations must contain a whole number of fixed time steps
 
-If `elapsed_time` is not an integer multiple of `dt`, the simulation now uses a
-shorter final timestep to reach `elapsed_time` exactly. For example:
+`AnalogSimParams` now requires a finite, positive `dt` and a finite,
+non-negative `elapsed_time` that is an integer multiple of `dt`. Analog backends
+execute only full `dt` steps; rejecting fractional grids prevents the reported
+final timestamp from disagreeing with the physically evolved duration.
+
+Choose an integer step count and derive the duration from it:
 
 ```python
 from mqt.yaqs import AnalogSimParams
 
-params = AnalogSimParams(elapsed_time=0.25, dt=0.1)
-assert params.times.tolist() == [0.0, 0.1, 0.2, 0.25]
+num_steps = 3
+dt = 0.1
+params = AnalogSimParams(elapsed_time=num_steps * dt, dt=dt)
 ```
 
-This shorter final timestep is currently supported for single-state MPS TDVP
-evolution. BUG, MCWF, Lindblad, and deterministic `list[State]` ensembles still
-require `elapsed_time` to be an integer multiple of `dt`.
+Calls such as `AnalogSimParams(elapsed_time=0.25, dt=0.1)` now raise a
+`ValueError`. Use a divisible step size or duration instead; fractional final
+steps are not supported.
 
 ### Breaking: seeded stochastic RNG streams no longer use `base_seed + traj_idx`
 

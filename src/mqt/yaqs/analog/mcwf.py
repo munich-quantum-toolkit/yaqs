@@ -34,7 +34,6 @@ import numpy as np
 import scipy.sparse
 
 from ..core import linalg
-from ..core.data_structures.simulation_parameters import _has_final_remainder
 from ..core.data_structures.state_utils import resolve_physical_dimensions
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
@@ -222,17 +221,9 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
 
     Returns:
         An array of expectation values for each observable over time.
-
-    Raises:
-        ValueError: If the time grid contains a shorter final interval. MCWF
-            currently evolves every interval with its precomputed full-``dt``
-            propagator.
     """
     traj_idx, ctx = args
     sim_params = ctx.sim_params
-    if _has_final_remainder(sim_params):
-        msg = "MCWF evolution does not support a final remainder interval."
-        raise ValueError(msg)
     dt = sim_params.dt
 
     psi = ctx.psi_initial.copy()

@@ -46,7 +46,6 @@ references it unchanged.
 from __future__ import annotations
 
 import copy
-import pickle  # ruff: ignore[suspicious-pickle-import]  # Exception type only; this module never deserializes data.
 
 # ruff:file-ignore[module-import-not-at-top-of-file]
 # ---------------------------------------------------------------------------
@@ -59,7 +58,6 @@ import pickle  # ruff: ignore[suspicious-pickle-import]  # Exception type only; 
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from dataclasses import replace
-from multiprocessing.reduction import ForkingPickler
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -100,7 +98,6 @@ from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
-from .core.data_structures.hamiltonian_schedule import HamiltonianSchedule, compile_hamiltonian_schedule
 from .core.data_structures.mps import MPS
 from .core.data_structures.noise_model import validate_noise_model_for_run
 from .core.data_structures.result import (
@@ -116,7 +113,6 @@ from .core.data_structures.simulation_parameters import (
     DigitalSimParams,
     EvolutionMode,
     Observable,
-    _has_final_remainder,
     _prepare_observable_ordering,
 )
 from .core.data_structures.simulation_program import (
@@ -286,29 +282,11 @@ def _same_order2_operator(
         return False
     left_mpo = left.hamiltonian
     right_mpo = right.hamiltonian
-    if isinstance(left_mpo, HamiltonianSchedule) or isinstance(right_mpo, HamiltonianSchedule):
-        return False
     if left_mpo is right_mpo:
         return True
     if len(left_mpo.tensors) != len(right_mpo.tensors):
         return False
     return all(starmap(np.array_equal, zip(left_mpo.tensors, right_mpo.tensors, strict=True)))
-
-
-def _validate_parameterized_parallel_payload(schedule: HamiltonianSchedule) -> None:
-    """Fail before pool startup when parameter factories cannot cross a process boundary.
-
-    Raises:
-        ValueError: If the factories cannot be serialized for multiprocessing.
-    """
-    try:
-        ForkingPickler.dumps(schedule.factories)
-    except (pickle.PicklingError, TypeError, AttributeError, RuntimeError) as error:
-        msg = (
-            "Parameterized Hamiltonian factories must be pickleable for parallel execution; "
-            "use module-level functions or run with parallel=False."
-        )
-        raise ValueError(msg) from error
 
 
 def _order2_chain_continues(
@@ -333,8 +311,6 @@ def _order2_chain_continues(
         and len(next_params.times) > 1
         and current_params.dt == next_params.dt
         and current_params.sample_timesteps == next_params.sample_timesteps
-        and not _has_final_remainder(current_params)
-        and not _has_final_remainder(next_params)
         and _same_order2_operator(current, nxt)
     )
 
@@ -615,6 +591,70 @@ def _validate_state_hamiltonian_pairing(state: State, hamiltonian: Hamiltonian) 
     if state.length != hamiltonian.length:
         msg = f"State.length={state.length} does not match Hamiltonian.length={hamiltonian.length}."
         raise ValueError(msg)
+
+
+def _duration_to_steps(duration: float, dt: float, *, label: str) -> int:
+    """Return the number of analog ``dt`` steps covered by ``duration``.
+
+    Returns:
+        A positive integer step count.
+
+    Raises:
+        ValueError: If ``duration`` is not a positive integer multiple of ``dt``.
+    """
+    n_float = duration / dt
+    n_steps = round(n_float)
+    evolved = n_steps * dt
+    residual = abs(duration - evolved)
+    roundoff_tol = max(
+        np.spacing(duration),
+        abs(n_steps) * np.spacing(dt),
+        8 * np.finfo(np.float64).eps * max(duration, evolved, dt),
+    )
+    tol = min(roundoff_tol, 0.25 * dt)
+    if n_steps <= 0 or residual > tol:
+        msg = f"{label} ({duration}) must be an integer multiple of dt ({dt})."
+        raise ValueError(msg)
+    return n_steps
+
+
+def _expand_piecewise_operator(
+    hamiltonian: Hamiltonian,
+    sim_params: AnalogSimParams,
+    *,
+    physical_dimensions: Sequence[int],
+) -> tuple[MPO, ...]:
+    """Materialize each piecewise Hamiltonian once and expand to one MPO per interval.
+
+    Returns:
+        One MPO reference per analog interval.
+
+    Raises:
+        ValueError: If a duration is not a multiple of ``dt``, durations do not sum
+            to ``elapsed_time``, or a piece has incompatible physical legs.
+    """
+    dt = float(sim_params.dt)
+    n_intervals = max(len(sim_params.times) - 1, 0)
+    interval_mpos: list[MPO] = []
+    for index, (piece, duration) in enumerate(hamiltonian.pieces):
+        n_steps = _duration_to_steps(duration, dt, label=f"pieces[{index}] duration")
+        piece.ensure_mpo()
+        mpo = piece.mpo
+        for site, (tensor, dimension) in enumerate(zip(mpo.tensors, physical_dimensions, strict=True)):
+            if tensor.shape[:2] != (dimension, dimension):
+                msg = (
+                    f"pieces[{index}] Hamiltonian MPO site {site} has physical legs "
+                    f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
+                )
+                raise ValueError(msg)
+        interval_mpos.extend([mpo] * n_steps)
+    if len(interval_mpos) != n_intervals:
+        msg = (
+            f"piecewise durations must sum to elapsed_time ({sim_params.elapsed_time}); "
+            f"got {len(interval_mpos) * dt}, expected {sim_params.elapsed_time}."
+        )
+        raise ValueError(msg)
+    return tuple(interval_mpos)
 
 
 def _prepare_hamiltonian_for_run(
@@ -1156,12 +1196,6 @@ class Simulator:
             "compiled_program": compiled,
             "effective_num_traj": effective_num_traj,
         }
-        if self.parallel and effective_num_traj > 1:
-            for instruction in compiled.instructions:
-                if isinstance(instruction, _CompiledAnalogInstruction) and isinstance(
-                    instruction.hamiltonian, HamiltonianSchedule
-                ):
-                    _validate_parameterized_parallel_payload(instruction.hamiltonian)
         final_mps: MPS | None = None
 
         def consume(traj_index: int, trajectory: _ProgramTrajectory) -> None:
@@ -1279,11 +1313,8 @@ class Simulator:
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
-            if operator.is_parameterized:
-                msg = "Parameterized Hamiltonians do not support list[State] ensemble execution."
-                raise ValueError(msg)
-            if _has_final_remainder(sim_params):
-                msg = "Unitary ensemble evolution does not support a final remainder interval."
+            if operator.is_piecewise:
+                msg = "Piecewise Hamiltonians do not support list[State] ensemble execution."
                 raise ValueError(msg)
             if any(spec.representation != "mps" for spec in initial_state_list):
                 msg = "list[State] analog ensemble currently supports only State.representation='mps'."
@@ -1314,24 +1345,6 @@ class Simulator:
         mps = _materialized_mps(initial_state)
         state_rep = initial_state.representation
         _validate_state_hamiltonian_pairing(initial_state, operator)
-        if operator.is_parameterized:
-            if state_rep != "mps":
-                msg = "Parameterized Hamiltonians currently require State.representation='mps'."
-                raise ValueError(msg)
-            if sim_params.evolution_mode != EvolutionMode.TDVP:
-                msg = "Parameterized Hamiltonians require evolution_mode=EvolutionMode.TDVP."
-                raise ValueError(msg)
-            if sim_params.multi_time_observables:
-                msg = "Parameterized Hamiltonians do not support multi_time_observables."
-                raise ValueError(msg)
-        elif _has_final_remainder(sim_params) and (
-            state_rep in {"vector", "density_matrix"} or sim_params.evolution_mode == EvolutionMode.BUG
-        ):
-            msg = (
-                "This analog backend does not support a final remainder interval; "
-                "use an MPS state with TDVP or choose elapsed_time divisible by dt."
-            )
-            raise ValueError(msg)
         if noise_model is not None:
             validate_noise_model_for_run(
                 noise_model,
@@ -1340,11 +1353,21 @@ class Simulator:
                 representation=state_rep,
                 sim_params=sim_params,
             )
-        if operator.is_parameterized:
-            mpo_op: MPO | HamiltonianSchedule | None = compile_hamiltonian_schedule(
+        if operator.is_piecewise:
+            if state_rep != "mps":
+                msg = "Piecewise Hamiltonians currently require State.representation='mps'."
+                raise ValueError(msg)
+            if sim_params.evolution_mode != EvolutionMode.TDVP:
+                msg = "Piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+                raise ValueError(msg)
+            if sim_params.multi_time_observables:
+                msg = "Piecewise Hamiltonians do not support multi_time_observables."
+                raise ValueError(msg)
+            assert mps is not None, "MPS representation requires a materialized MPS."
+            mpo_op: MPO | tuple[MPO, ...] | None = _expand_piecewise_operator(
                 operator,
                 sim_params,
-                physical_dimensions=mps.physical_dimensions if mps is not None else (),
+                physical_dimensions=mps.physical_dimensions,
             )
             h_sparse = None
         else:
@@ -1423,8 +1446,6 @@ class Simulator:
         final_rho: np.ndarray | None = None
 
         if self.parallel and effective_num_traj > 1:
-            if isinstance(mpo_op, HamiltonianSchedule):
-                _validate_parameterized_parallel_payload(mpo_op)
             for i, traj_payload in run_backend_parallel(
                 worker_fn=worker_fn,
                 payload=payload,

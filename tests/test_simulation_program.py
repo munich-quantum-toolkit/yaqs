@@ -13,7 +13,7 @@ import contextlib
 import copy
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -33,7 +33,6 @@ from mqt.yaqs import (
     State,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.data_structures.simulation_program import (
     _compile_program,  # ruff: ignore[import-private-name]  # validate private compiler invariant
 )
@@ -51,55 +50,6 @@ if TYPE_CHECKING:
 def _zero_hamiltonian(length: int) -> Hamiltonian:
     """Return a static zero Ising Hamiltonian."""
     return Hamiltonian.ising(length, J=0.0, g=0.0)
-
-
-def _program_scaled_x_hamiltonian(value: object) -> Hamiltonian:
-    """Return a one-site X term used by parameterized program tests."""
-    return Hamiltonian.pauli(length=1, one_body=[(float(cast("Any", value)), "X")])
-
-
-def test_bug_program_distinguishes_rounding_dust_from_a_final_remainder() -> None:
-    """Program compilation shares the canonical final-remainder classification."""
-    fixed_grid = SimulationProgram(
-        [
-            (
-                _zero_hamiltonian(1),
-                AnalogSimParams(elapsed_time=0.3, dt=0.1, evolution_mode=EvolutionMode.BUG),
-            )
-        ],
-        get_state=True,
-    )
-    result = Simulator(parallel=False, show_progress=False).run(State(1), fixed_grid)
-    assert result.output_state is not None
-
-    remainder = SimulationProgram(
-        [
-            (
-                _zero_hamiltonian(1),
-                AnalogSimParams(elapsed_time=0.25, dt=0.1, evolution_mode=EvolutionMode.BUG),
-            )
-        ],
-        get_state=True,
-    )
-    with pytest.raises(ValueError, match="BUG evolution does not support a final remainder interval"):
-        Simulator(parallel=False, show_progress=False).run(State(1), remainder)
-
-
-def test_program_rejects_parameterized_bug_evolution() -> None:
-    """Program compilation enforces the parameterized TDVP-only contract."""
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[(_program_scaled_x_hamiltonian, lambda _time: 1.0)],
-    )
-    program = SimulationProgram([
-        (
-            hamiltonian,
-            AnalogSimParams(elapsed_time=0.1, dt=0.1, evolution_mode=EvolutionMode.BUG),
-        )
-    ])
-
-    with pytest.raises(ValueError, match=r"require evolution_mode=EvolutionMode\.TDVP"):
-        Simulator(parallel=False, show_progress=False).run(State(1), program)
 
 
 def test_mixed_program_matches_manual_state_handoff() -> None:
@@ -377,6 +327,17 @@ def test_program_compilation_rejects_unsupported_analog_parameters(
     program = SimulationProgram([(_zero_hamiltonian(2), params)], get_state=True)
 
     with pytest.raises(ValueError, match=message):
+        Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+
+def test_program_compilation_rejects_piecewise_hamiltonian() -> None:
+    """Analog program segments stay static; switch Hamiltonians with multiple segments."""
+    piecewise = Hamiltonian.piecewise([
+        (Hamiltonian.ising(2, J=1.0, g=0.5), 0.1),
+        (Hamiltonian.ising(2, J=1.0, g=2.0), 0.1),
+    ])
+    program = SimulationProgram([(piecewise, AnalogSimParams(elapsed_time=0.2, dt=0.1))], get_state=True)
+    with pytest.raises(ValueError, match="piecewise Hamiltonians are not supported"):
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
 
 
@@ -1924,30 +1885,3 @@ def test_hahn_echo_refocuses_detuning_but_not_markovian_dephasing() -> None:
     assert 0.3 < echo_magnetization < 0.9
     assert no_pulse_magnetization < 0.2
     assert echo_magnetization > no_pulse_magnetization + 0.3
-
-
-@pytest.mark.parametrize("order", [1, 2])
-def test_program_executes_parameterized_analog_segment(order: int) -> None:
-    """A program carries a compiled parameter table through analog execution."""
-    hamiltonian = Hamiltonian(
-        length=1,
-        parameterized_terms=[(_program_scaled_x_hamiltonian, lambda time: 1.0 + time)],
-    )
-    analog_params = AnalogSimParams(
-        elapsed_time=0.25,
-        dt=0.1,
-        tdvp_sweeps=2,
-        order=order,
-        sample_timesteps=True,
-    )
-    program = SimulationProgram(
-        [(hamiltonian, analog_params)],
-        observables=[Observable("z", 0)],
-        get_state=True,
-    )
-
-    result = Simulator(parallel=False, show_progress=False).run(State(1, initial="zeros"), program)
-
-    expected = np.cos(2 * (analog_params.times + analog_params.times**2 / 2))
-    np.testing.assert_allclose(result.segment_results[0].expectation_values[0], expected, atol=1e-11)
-    assert result.output_state is not None

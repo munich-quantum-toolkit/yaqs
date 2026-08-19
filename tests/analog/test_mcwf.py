@@ -111,21 +111,6 @@ def test_mcwf_unitary_rabi() -> None:
     assert np.all(diff < 1e-4), f"Max diff: {np.max(diff)}"
 
 
-def test_mcwf_backend_rejects_final_remainder() -> None:
-    """Direct MCWF callers cannot silently evolve a short interval with the full-dt propagator."""
-    sim_params = AnalogSimParams(elapsed_time=0.15, dt=0.1)
-    ctx = preprocess_mcwf(
-        psi_initial=np.array([1.0, 0.0], dtype=np.complex128),
-        h_sparse=scipy.sparse.csr_matrix((2, 2), dtype=np.complex128),
-        noise_model=None,
-        sim_params=sim_params,
-        num_sites=1,
-    )
-
-    with pytest.raises(ValueError, match="MCWF evolution does not support a final remainder interval"):
-        mcwf_mod.mcwf((0, ctx))
-
-
 def test_mcwf_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2

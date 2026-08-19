@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..core.data_structures.simulation_parameters import EvolutionMode, _has_final_remainder
+from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.tdvp import tdvp
 
@@ -27,7 +27,6 @@ def apply_unitary_evolution(
     sim_params: AnalogSimParams,
     *,
     normalize: bool = True,
-    step_duration: float | None = None,
 ) -> None:
     """Advance one unitary time step according to ``sim_params.evolution_mode``.
 
@@ -39,18 +38,13 @@ def apply_unitary_evolution(
             Ordinary physical states keep the default ``True``. Auxiliary correlator
             states (``B|ψ⟩``) should pass ``False`` so non-unitary probe amplitudes
             are preserved. TDVP ignores this flag.
-        step_duration: Optional exact TDVP interval duration. When omitted,
-            evolve for the nominal ``sim_params.dt``.
 
     Raises:
         ValueError: If ``evolution_mode`` is not supported.
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        tdvp(state, hamiltonian, sim_params, step_duration=step_duration)
+        tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
-        if _has_final_remainder(sim_params):
-            msg = "BUG evolution does not support a final remainder interval."
-            raise ValueError(msg)
         bug(state, hamiltonian, sim_params, normalize=normalize)
     else:
         msg = f"Unsupported evolution_mode: {sim_params.evolution_mode!r}"
