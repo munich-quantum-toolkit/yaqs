@@ -107,8 +107,11 @@ result = Simulator().run(State(L, initial="zeros"), H, params)
 
 Use a {class}`~mqt.yaqs.SimulationProgram` when analog evolution is part of a
 protocol — digital gates, mixed `dt`, or per-segment noise. Consecutive analog
-segments with the same `dt` are the same evolution as piecewise; a piecewise
-Hamiltonian is also valid on one analog segment.
+segments with the same `dt` match a piecewise Hamiltonian only when their analog
+settings and noise behavior are compatible (evolution mode, order, sampling,
+truncation, and a shared noise model). Mixed `dt` or a digital gate in between
+splits the analog runs. A piecewise Hamiltonian is also valid on one analog
+segment.
 
 ```python
 from mqt.yaqs import (

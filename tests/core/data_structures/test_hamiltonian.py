@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -480,9 +481,23 @@ def test_piecewise_rejects_empty_or_nested_or_mismatched_pieces() -> None:
     static = Hamiltonian.ising(2, J=1.0, g=0.5)
     with pytest.raises(ValueError, match="non-empty sequence"):
         Hamiltonian.piecewise([])
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", 0))
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", "pairs"))
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", b"pairs"))
     nested = Hamiltonian.piecewise([(static, 0.1)])
     with pytest.raises(ValueError, match="nested piecewise"):
         Hamiltonian.piecewise([(nested, 0.1)])
+    with pytest.raises(TypeError, match="must be a \\(Hamiltonian, duration\\) tuple"):
+        Hamiltonian.piecewise(cast("Any", [(static, 0.1, 0.0)]))
+    with pytest.raises(TypeError, match="must start with a Hamiltonian"):
+        Hamiltonian.piecewise(cast("Any", [(object(), 0.1)]))
+    with pytest.raises(TypeError, match="duration must be a real number"):
+        Hamiltonian.piecewise(cast("Any", [(static, "0.1")]))
+    with pytest.raises(TypeError, match="duration must be a real number"):
+        Hamiltonian.piecewise(cast("Any", [(static, True)]))
     with pytest.raises(ValueError, match="does not match piece 0 length"):
         Hamiltonian.piecewise([(static, 0.1), (Hamiltonian.ising(3, J=1.0, g=0.5), 0.1)])
     with pytest.raises(ValueError, match="finite and positive"):

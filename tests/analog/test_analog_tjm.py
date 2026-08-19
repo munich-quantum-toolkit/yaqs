@@ -486,3 +486,16 @@ def test_analog_tjm_2_sample_at_measures_only_requested_indices(monkeypatch: pyt
     )
     analog_tjm_2((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(2, 4))
     assert sampled == [2, 4]
+
+
+def test_sample_at_multiple_indices_require_sample_timesteps() -> None:
+    """Multiple sample_at indices need a full time-grid result buffer."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=1,
+        sample_timesteps=False,
+    )
+    with pytest.raises(ValueError, match="sample_timesteps=True"):
+        analog_tjm_1((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(1, 2))

@@ -64,6 +64,19 @@ def _measure_at(
     return j == n_times - 1
 
 
+def _validate_sample_at(sim_params: AnalogSimParams, sample_at: Sequence[int] | None) -> None:
+    """Reject multi-index ``sample_at`` when the result buffer has one column.
+
+    Raises:
+        ValueError: If more than one index is requested without ``sample_timesteps``.
+    """
+    if sample_at is None or sim_params.sample_timesteps:
+        return
+    if len(frozenset(sample_at)) > 1:
+        msg = "Selecting multiple sample_at indices requires sample_timesteps=True."
+        raise ValueError(msg)
+
+
 def initialize(
     state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSimParams, rng: np.random.Generator | None = None
 ) -> MPS:
@@ -221,8 +234,9 @@ def analog_tjm_2(
             this for order-2 segments after the first.
         sample_at: Optional time-grid indices to measure. When omitted,
             ``sample_timesteps`` selects every time or only the final time.
-            Programs use this for merged ``sample_timesteps=False`` analog runs
-            so order-2 ``sample()`` runs only at segment boundaries.
+            Multiple indices require ``sample_timesteps=True`` so each sample
+            has its own result column. Programs set that flag on the merged
+            buffer and pass boundary indices for user ``sample_timesteps=False``.
 
     Returns:
         Observable data, diagnostics ``(3, T)``, and optional final MPS.
@@ -234,6 +248,7 @@ def analog_tjm_2(
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
     n_times = len(sim_params.times)
+    _validate_sample_at(sim_params, sample_at)
     measure_at = frozenset(sample_at) if sample_at is not None else None
 
     def record(j: int) -> bool:
@@ -382,6 +397,9 @@ def analog_tjm_1(
             standalone trajectory seed behavior is preserved.
         sample_at: Optional time-grid indices to measure. When omitted,
             ``sample_timesteps`` selects every time or only the final time.
+            Multiple indices require ``sample_timesteps=True`` so each sample
+            has its own result column. A single index is valid with
+            ``sample_timesteps=False``.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -393,6 +411,7 @@ def analog_tjm_1(
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     n_times = len(sim_params.times)
+    _validate_sample_at(sim_params, sample_at)
     measure_at = frozenset(sample_at) if sample_at is not None else None
 
     def record(j: int) -> bool:

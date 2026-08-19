@@ -2173,3 +2173,16 @@ def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
             Hamiltonian.piecewise([(first, 0.2)]),
             params,
         )
+    with pytest.raises(ValueError, match="multi_time_observables"):
+        sim.run(
+            State(1, initial="zeros"),
+            Hamiltonian.piecewise([(first, 0.2)]),
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.2,
+                dt=0.1,
+                order=1,
+                tdvp_mode="1site",
+                multi_time_observables=[(Observable("z", 0), Observable("z", 0))],
+            ),
+        )

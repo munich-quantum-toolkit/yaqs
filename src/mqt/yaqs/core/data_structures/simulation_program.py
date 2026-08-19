@@ -209,7 +209,10 @@ class SimulationProgram:
     Observables, RNG seed, and ``get_state`` are program-wide. Segment
     ``sim_params`` must leave ``observables`` empty and keep ``random_seed`` /
     ``get_state`` unset; they carry truncation, timing, ``shots``, gate-mode, and
-    related backend settings. Analog ``scheduled_jumps`` times are segment-local.
+    related backend settings. Analog ``scheduled_jumps`` times are relative to
+    the analog run that carries them. Consecutive analog segments that share one
+    interval schedule share that clock; a digital gate or incompatible analog
+    settings start a new run.
 
     Args:
         segments: Non-empty iterable of ``(operator, params)`` pairs.

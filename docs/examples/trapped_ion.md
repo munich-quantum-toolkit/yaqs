@@ -117,9 +117,9 @@ plt.show()
 
 ## 4. Transport in a moving harmonic well
 
-A moving trap is a piecewise Hamiltonian: one static well per transport step,
-then a hold at the target. Here a linear trajectory transports the well from
-$q\nobreak=\nobreak-1$ to $q\nobreak=\nobreak1$.
+A moving trap is a piecewise Hamiltonian: one static well per ``dt`` interval,
+then a hold at the target. The trap center is a staircase from
+$q\nobreak=\nobreak-1$ to $q\nobreak=\nobreak1$, constant on each analog step.
 
 ```{code-cell} ipython3
 transport_positions = np.linspace(-6.0, 6.0, 25)
@@ -178,9 +178,11 @@ transport_result = Simulator(parallel=False, show_progress=False).run(
     transport_params,
 )
 transport_expectation = np.real(transport_result.expectation_values[0])
-scheduled_centers = np.asarray(
-    [start_center + (target_center - start_center) * min(time / transport_duration, 1.0) for time in transport_params.times]
-)
+transport_centers = [
+    start_center + (target_center - start_center) * (step / n_transport) for step in range(n_transport)
+]
+n_hold_times = len(transport_params.times) - n_transport
+scheduled_centers = np.asarray([*transport_centers, *([target_center] * n_hold_times)])
 hold_mask = transport_params.times >= transport_duration
 residual_motion = np.max(np.abs(transport_expectation[hold_mask] - target_center))
 assert residual_motion > 0.1
@@ -192,7 +194,13 @@ at the target while the ion continues to move.
 
 ```{code-cell} ipython3
 fig, ax = plt.subplots(figsize=(7.2, 3.4), layout="constrained")
-ax.plot(transport_params.times, scheduled_centers, "--", label=r"trap center $q(t)$")
+ax.step(
+    transport_params.times,
+    scheduled_centers,
+    where="post",
+    linestyle="--",
+    label=r"trap center $q(t)$",
+)
 ax.plot(transport_params.times, transport_expectation, label=r"ion $\langle x(t)\rangle$")
 ax.axvline(transport_duration, color="0.6", ls=":", label="end of transport")
 ax.set_xlabel(r"$t$")
@@ -202,12 +210,11 @@ ax.legend()
 plt.show()
 ```
 
-The ion does not end at rest: during the hold, $q(t)$ remains fixed while
-$\langle x(t)\rangle$ oscillates around the target. This linear protocol is
-intentionally idealized and highly suboptimal: although the trap position is
-continuous, its velocity changes discontinuously at the start and end. The
-resulting residual motion can degrade the fidelity of subsequent operations in
-practice, illustrating the importance of smooth, optimized control ramps.
+The ion does not end at rest: during the hold, $q(t)$ stays at the target while
+$\langle x(t)\rangle$ oscillates around it. This staircase protocol is
+intentionally idealized: the trap center is constant on each ``dt`` interval and
+jumps at interval boundaries, so the ion is kicked non-adiabatically. Residual
+motion can degrade later operations; smooth ramps reduce that error.
 
 This example uses dimensionless units with $\hbar=m=\omega=1$. For dimensional
 inputs, use compatible time and energy units. A finer grid, smaller `dt`, and
