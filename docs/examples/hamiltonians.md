@@ -77,8 +77,15 @@ materialized with `ensure_mpo()` or `ensure_sparse()`.
 ## Time-dependent Hamiltonians
 
 Switch between static Hamiltonians at times that land on the analog `dt` grid.
-Each duration must be a positive multiple of `dt`, and the durations must sum to
-`elapsed_time`.
+Each duration must be a positive multiple of `dt`. This path supports a single
+MPS `State` with TDVP.
+
+### Analog quench
+
+Use {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.piecewise`
+when the experiment is analog-only: evolve under one Hamiltonian, then another.
+One {class}`~mqt.yaqs.AnalogSimParams`, one {class}`~mqt.yaqs.Result`, one time
+grid. Durations must sum to `elapsed_time`.
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
@@ -96,10 +103,42 @@ params = AnalogSimParams(
 result = Simulator().run(State(L, initial="zeros"), H, params)
 ```
 
-This path supports a single MPS `State` with TDVP. A
-{class}`~mqt.yaqs.SimulationProgram` of analog segments with the same `dt` is
-the same evolution as piecewise; a piecewise Hamiltonian is also allowed on a
-program analog segment.
+### Switching Hamiltonians in a program
+
+Use a {class}`~mqt.yaqs.SimulationProgram` when analog evolution is part of a
+protocol — digital gates, mixed `dt`, or per-segment noise. Consecutive analog
+segments with the same `dt` are the same evolution as piecewise; a piecewise
+Hamiltonian is also valid on one analog segment.
+
+```python
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    Observable,
+    SimulationProgram,
+    Simulator,
+    State,
+)
+
+L = 4
+program = SimulationProgram(
+    [
+        (
+            Hamiltonian.ising(L, J=1.0, g=0.5),
+            AnalogSimParams(elapsed_time=1.0, dt=0.1),
+        ),
+        (
+            Hamiltonian.ising(L, J=1.0, g=2.0),
+            AnalogSimParams(elapsed_time=1.0, dt=0.1),
+        ),
+    ],
+    observables=[Observable("z", 0)],
+)
+result = Simulator().run(State(L, initial="zeros"), program)
+```
+
+Insert a {class}`~qiskit.circuit.QuantumCircuit` between analog segments when
+the protocol needs a digital operation. See {doc}`digital_analog_simulation`.
 
 ## Built-in models (quick reference)
 
@@ -352,6 +391,7 @@ H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ## Related topics
 
 - {doc}`analog_simulation` — TJM evolution, noise, and observables
+- {doc}`digital_analog_simulation` — analog evolution mixed with digital gates
 - {doc}`transmon_emulation` — multi-level transmon physics
 - {doc}`trapped_ion` — position-grid wavepacket dynamics
 - {doc}`state_initialization` — `physical_dimensions` and representations
