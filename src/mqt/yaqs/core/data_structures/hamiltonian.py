@@ -239,6 +239,20 @@ class Hamiltonian:
         return getattr(self, "_pieces", None) is not None
 
     @property
+    def duration(self) -> float:
+        """Total analog duration of a piecewise Hamiltonian.
+
+        Sum of the piece durations. Pass this as ``AnalogSimParams.elapsed_time``.
+
+        Raises:
+            ValueError: If this Hamiltonian is not piecewise.
+        """
+        if self._pieces is None:
+            msg = "Static Hamiltonians do not have a piecewise duration."
+            raise ValueError(msg)
+        return float(sum(duration for _, duration in self._pieces))
+
+    @property
     def pieces(self) -> tuple[tuple[Hamiltonian, float], ...]:
         """Static pieces and durations for a piecewise Hamiltonian.
 

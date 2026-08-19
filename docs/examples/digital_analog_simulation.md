@@ -283,14 +283,9 @@ recover lost signal contrast.
 ## Useful things to know
 
 - Segments run in the order they appear in `SimulationProgram`.
-- For an analog-only Hamiltonian quench, prefer
-  {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.piecewise`
-  ({doc}`hamiltonians`). Use a program when analog evolution sits in a protocol
-  with digital gates, mixed `dt`, or per-segment noise. Consecutive analog
-  segments that share `dt`, Trotter order, TDVP, sampling, and noise evolve as
-  one analog interval schedule — the same physics as piecewise. A digital gate,
-  or a mismatched analog setting such as a different `dt`, starts a new analog
-  run.
+- Analog-only Hamiltonian quenches belong in {doc}`hamiltonians`
+  (`Hamiltonian.piecewise`). Use a program when analog evolution sits in a
+  protocol with digital gates.
 - Observables, `random_seed`, and `get_state` are program-wide; leave them unset
   on segment params. `num_traj` may be unanimous on segments or set on the
   program. `shots` stay on digital segment params.

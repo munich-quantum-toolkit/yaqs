@@ -43,6 +43,7 @@ from mqt.yaqs.core.random_utils import make_trajectory_rng
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from numpy.typing import NDArray
     from qiskit.dagcircuit import DAGOpNode
 
     from mqt.yaqs.core.data_structures.mps import MPS
@@ -71,9 +72,10 @@ def _count_analog_tjm_1_calls(
         *,
         copy_initial_state: bool = True,
         rng: np.random.Generator | None = None,
+        sample_at: tuple[int, ...] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, MPS | None]:
         counter[0] += 1
-        return original(args, copy_initial_state=copy_initial_state, rng=rng)
+        return original(args, copy_initial_state=copy_initial_state, rng=rng, sample_at=sample_at)
 
     return wrapped
 
@@ -1100,6 +1102,40 @@ def test_order_two_final_only_split_matches_continuous() -> None:
     ).expectation_values[0]
 
     assert full[-1] == pytest.approx(split[-1])
+
+
+def test_merged_final_only_samples_only_segment_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Merged sample_timesteps=False programs sample order-2 copies at segment ends."""
+    sampled: list[int] = []
+    original = analog_module.sample
+
+    def record_sample(
+        phi: MPS,
+        hamiltonian: MPO,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        results: NDArray[np.float64],
+        j: int,
+        rng: np.random.Generator | None = None,
+        diagnostics: NDArray[np.float64] | None = None,
+    ) -> MPS | None:
+        sampled.append(j)
+        return original(phi, hamiltonian, noise_model, sim_params, results, j, rng=rng, diagnostics=diagnostics)
+
+    monkeypatch.setattr(analog_module, "sample", record_sample)
+    hamiltonian = _zero_hamiltonian(1)
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=False)),
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2, sample_timesteps=False)),
+            ],
+            observables=[Observable("z", 0)],
+            num_traj=1,
+        ),
+    )
+    assert sampled == [2, 4]
 
 
 def test_order_two_sample_timesteps_mismatch_breaks_continuation(monkeypatch: pytest.MonkeyPatch) -> None:

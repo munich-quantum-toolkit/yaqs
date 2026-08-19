@@ -47,7 +47,8 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, initialize, step_through
+from mqt.yaqs.analog import analog_tjm as analog_module
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -453,3 +454,35 @@ def test_analog_tjm_1_uses_operator_for_each_interval() -> None:
     with patch("mqt.yaqs.analog.analog_tjm.apply_unitary_evolution", side_effect=capture):
         analog_tjm_1((0, state, None, sim_params, (first, second)))
     assert seen == [first, second]
+
+
+def test_analog_tjm_2_sample_at_measures_only_requested_indices(monkeypatch: pytest.MonkeyPatch) -> None:
+    """sample_at records order-2 measurement copies only at the selected times."""
+    sampled: list[int] = []
+    original = analog_module.sample
+
+    def record_sample(
+        phi: MPS,
+        hamiltonian: MPO,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        results: NDArray[np.float64],
+        j: int,
+        rng: np.random.Generator | None = None,
+        diagnostics: NDArray[np.float64] | None = None,
+    ) -> MPS | None:
+        sampled.append(j)
+        return original(phi, hamiltonian, noise_model, sim_params, results, j, rng=rng, diagnostics=diagnostics)
+
+    monkeypatch.setattr(analog_module, "sample", record_sample)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.4,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    analog_tjm_2((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(2, 4))
+    assert sampled == [2, 4]

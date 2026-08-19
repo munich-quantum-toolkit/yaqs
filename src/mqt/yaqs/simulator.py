@@ -451,6 +451,16 @@ def _merged_analog_execution_params(run: Sequence[_CompiledAnalogInstruction]) -
     return merged
 
 
+def _merged_segment_boundary_indices(run: Sequence[_CompiledAnalogInstruction]) -> tuple[int, ...]:
+    """Return time-grid indices at the end of each merged analog segment."""
+    indices: list[int] = []
+    cursor = 0
+    for instruction in run:
+        cursor += max(len(instruction.execution_params.times) - 1, 0)
+        indices.append(cursor)
+    return tuple(indices)
+
+
 def _slice_trajectory_columns(
     data: NDArray[np.float64] | None,
     start: int,
@@ -500,6 +510,8 @@ def _execute_merged_analog_run(
     """Return the analog_tjm payload for one merged analog run."""
     merged_params = _merged_analog_execution_params(run)
     operator = _merged_analog_operator(run)
+    user_sample = run[0].execution_params.sample_timesteps
+    sample_at = None if user_sample else _merged_segment_boundary_indices(run)
     backend = analog_tjm_1 if merged_params.order == 1 else analog_tjm_2
     args = (
         traj_idx,
@@ -517,8 +529,9 @@ def _execute_merged_analog_run(
             use_trajectory_rng_for_final_sample=False,
             return_trajectory_state=False,
             continue_trajectory=False,
+            sample_at=sample_at,
         )
-    return backend(args, copy_initial_state=False, rng=rng)
+    return backend(args, copy_initial_state=False, rng=rng, sample_at=sample_at)
 
 
 def _execute_digital_instruction(

@@ -85,7 +85,7 @@ MPS `State` with TDVP.
 Use {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.piecewise`
 when the experiment is analog-only: evolve under one Hamiltonian, then another.
 One {class}`~mqt.yaqs.AnalogSimParams`, one {class}`~mqt.yaqs.Result`, one time
-grid. Durations must sum to `elapsed_time`.
+grid. Pass ``elapsed_time=H.duration`` so the total time matches the pieces.
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
@@ -97,7 +97,7 @@ H = Hamiltonian.piecewise([
 ])
 params = AnalogSimParams(
     observables=[Observable("z", 0)],
-    elapsed_time=2.0,
+    elapsed_time=H.duration,
     dt=0.1,
 )
 result = Simulator().run(State(L, initial="zeros"), H, params)

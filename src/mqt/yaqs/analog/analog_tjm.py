@@ -29,6 +29,8 @@ from ..core.random_utils import make_sample_rng, make_trajectory_rng
 from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
 
     from ..core.data_structures.mps import MPS
@@ -45,6 +47,21 @@ def _mpo_for_interval(hamiltonian: HamiltonianOperator, interval_index: int) -> 
     mpo = hamiltonian[interval_index]
     assert isinstance(mpo, MPO)
     return mpo
+
+
+def _measure_at(
+    j: int,
+    *,
+    n_times: int,
+    sample_timesteps: bool,
+    sample_at: frozenset[int] | None,
+) -> bool:
+    """Return whether analog TJM should record observables at time index ``j``."""
+    if sample_at is not None:
+        return j in sample_at
+    if sample_timesteps:
+        return True
+    return j == n_times - 1
 
 
 def initialize(
@@ -170,6 +187,7 @@ def analog_tjm_2(
     use_trajectory_rng_for_final_sample: bool = False,
     return_trajectory_state: bool = False,
     continue_trajectory: bool = False,
+    sample_at: Sequence[int] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using the configured unitary evolution mode.
 
@@ -201,6 +219,10 @@ def analog_tjm_2(
         continue_trajectory: When True, skip ``initialize`` and continue
             ``step_through`` from the handed-off trajectory state. Programs set
             this for order-2 segments after the first.
+        sample_at: Optional time-grid indices to measure. When omitted,
+            ``sample_timesteps`` selects every time or only the final time.
+            Programs use this for merged ``sample_timesteps=False`` analog runs
+            so order-2 ``sample()`` runs only at segment boundaries.
 
     Returns:
         Observable data, diagnostics ``(3, T)``, and optional final MPS.
@@ -212,6 +234,15 @@ def analog_tjm_2(
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
     n_times = len(sim_params.times)
+    measure_at = frozenset(sample_at) if sample_at is not None else None
+
+    def record(j: int) -> bool:
+        return _measure_at(
+            j,
+            n_times=n_times,
+            sample_timesteps=sim_params.sample_timesteps,
+            sample_at=measure_at,
+        )
 
     def measurement_rng(timestep: int) -> np.random.Generator:
         """Return the RNG for one measurement-copy sample at ``timestep``."""
@@ -249,7 +280,7 @@ def analog_tjm_2(
         # Program continuation is static-MPO only; interval 0 is the sole operator.
         phi = state
         continued = _mpo_for_interval(hamiltonian, 0)
-        if sim_params.sample_timesteps:
+        if record(0):
             sample(
                 phi,
                 continued,
@@ -262,7 +293,7 @@ def analog_tjm_2(
             )
         for j, _ in enumerate(sim_params.times[1:], start=1):
             phi = step_through(phi, continued, noise_model, sim_params, sim_params.times[j], rng=rng)
-            if sim_params.sample_timesteps or j == n_times - 1:
+            if record(j):
                 sampled_state = sample(
                     phi,
                     continued,
@@ -276,7 +307,7 @@ def analog_tjm_2(
                 if sampled_state is not None:
                     final_state = sampled_state
     else:
-        if sim_params.sample_timesteps:
+        if record(0):
             state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results, 0)
 
@@ -284,7 +315,7 @@ def analog_tjm_2(
 
         # Sample at times[1] whenever it is requested or is the final time (len==2 final-only).
         # Per-timestep sample RNGs so intermediate draws cannot change the final measurement.
-        if sim_params.sample_timesteps or n_times == 2:
+        if record(1):
             sampled_state = sample(
                 phi,
                 _mpo_for_interval(hamiltonian, 0),
@@ -307,7 +338,7 @@ def analog_tjm_2(
                 sim_params.times[j],
                 rng=rng,
             )
-            if sim_params.sample_timesteps or j == n_times - 1:
+            if record(j):
                 sampled_state = sample(
                     phi,
                     _mpo_for_interval(hamiltonian, j - 1),
@@ -331,6 +362,7 @@ def analog_tjm_1(
     *,
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
+    sample_at: Sequence[int] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a first-order evolution scheme.
 
@@ -348,6 +380,8 @@ def analog_tjm_1(
         copy_initial_state: Whether to deep-copy the input MPS before evolution.
         rng: Optional externally managed trajectory RNG. When omitted, the
             standalone trajectory seed behavior is preserved.
+        sample_at: Optional time-grid indices to measure. When omitted,
+            ``sample_timesteps`` selects every time or only the final time.
 
     Returns:
         tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
@@ -357,6 +391,17 @@ def analog_tjm_1(
 
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+
+    n_times = len(sim_params.times)
+    measure_at = frozenset(sample_at) if sample_at is not None else None
+
+    def record(j: int) -> bool:
+        return _measure_at(
+            j,
+            n_times=n_times,
+            sample_timesteps=sim_params.sample_timesteps,
+            sample_at=measure_at,
+        )
 
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
@@ -372,7 +417,8 @@ def analog_tjm_1(
     if noise_model is not None and has_scheduled_jump(noise_model, sim_params.times[0], sim_params.dt):
         state = apply_scheduled_jumps(state, noise_model, sim_params.times[0], sim_params)
 
-    if sim_params.sample_timesteps:
+    measure_initial = 0 in measure_at if measure_at is not None else sim_params.sample_timesteps
+    if measure_initial:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
@@ -386,15 +432,16 @@ def analog_tjm_1(
             else:
                 state = stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
 
-        if sim_params.sample_timesteps:
-            state.record_diagnostics(diagnostics, j)
-            state.evaluate_observables(sim_params, results, j)
-        elif j == len(sim_params.times) - 1:
-            state.record_diagnostics(diagnostics, 0)
-            state.evaluate_observables(sim_params, results)
+        if record(j):
+            col = j if sim_params.sample_timesteps else 0
+            state.record_diagnostics(diagnostics, col)
+            if sim_params.sample_timesteps:
+                state.evaluate_observables(sim_params, results, j)
+            else:
+                state.evaluate_observables(sim_params, results)
 
     # Final-only runs with elapsed_time=0 never enter the loop above.
-    if not sim_params.sample_timesteps and len(sim_params.times) <= 1:
+    if not measure_initial and not sim_params.sample_timesteps and n_times <= 1:
         state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results)
 

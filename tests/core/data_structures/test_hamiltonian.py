@@ -466,6 +466,13 @@ def test_piecewise_stores_static_pieces() -> None:
     assert hamiltonian.is_piecewise
     assert hamiltonian.length == 2
     assert hamiltonian.pieces == ((first, 0.1), (second, 0.2))
+    assert hamiltonian.duration == pytest.approx(0.3)
+
+
+def test_static_hamiltonian_has_no_piecewise_duration() -> None:
+    """Duration is defined only for piecewise Hamiltonians."""
+    with pytest.raises(ValueError, match="do not have a piecewise duration"):
+        _ = Hamiltonian.ising(2, J=1.0, g=0.5).duration
 
 
 def test_piecewise_rejects_empty_or_nested_or_mismatched_pieces() -> None:
