@@ -25,6 +25,7 @@ import mqt.yaqs.simulator as simulator_module
 from mqt.yaqs import (
     AnalogSimParams,
     DigitalSimParams,
+    EvolutionMode,
     Hamiltonian,
     NoiseModel,
     Observable,
@@ -35,10 +36,13 @@ from mqt.yaqs import (
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_program import (
     _compile_program,  # ruff: ignore[import-private-name]  # validate private compiler invariant
+    _expand_analog_operator,  # ruff: ignore[import-private-name]  # shared analog interval helper
 )
 from mqt.yaqs.core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from qiskit.dagcircuit import DAGOpNode
 
     from mqt.yaqs.core.data_structures.mps import MPS
@@ -50,6 +54,28 @@ if TYPE_CHECKING:
 def _zero_hamiltonian(length: int) -> Hamiltonian:
     """Return a static zero Ising Hamiltonian."""
     return Hamiltonian.ising(length, J=0.0, g=0.0)
+
+
+def _count_analog_tjm_1_calls(
+    original: Callable[..., tuple[np.ndarray, np.ndarray, MPS | None]],
+    counter: list[int],
+) -> Callable[..., tuple[np.ndarray, np.ndarray, MPS | None]]:
+    """Wrap ``analog_tjm_1`` and increment ``counter[0]`` on each call.
+
+    Returns:
+        A drop-in replacement for ``analog_tjm_1``.
+    """
+
+    def wrapped(
+        args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO | tuple[MPO, ...]],
+        *,
+        copy_initial_state: bool = True,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, MPS | None]:
+        counter[0] += 1
+        return original(args, copy_initial_state=copy_initial_state, rng=rng)
+
+    return wrapped
 
 
 def test_mixed_program_matches_manual_state_handoff() -> None:
@@ -330,15 +356,207 @@ def test_program_compilation_rejects_unsupported_analog_parameters(
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
 
 
-def test_program_compilation_rejects_piecewise_hamiltonian() -> None:
-    """Analog program segments stay static; switch Hamiltonians with multiple segments."""
+def test_expand_analog_operator_returns_bare_mpo_for_static() -> None:
+    """A static Hamiltonian expands to one MPO, not a long interval tuple."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+    operator = _expand_analog_operator(
+        hamiltonian,
+        AnalogSimParams(elapsed_time=0.2, dt=0.1),
+        physical_dimensions=(2, 2),
+    )
+    assert not isinstance(operator, tuple)
+    assert operator is hamiltonian.mpo
+
+
+def test_expand_analog_operator_repeats_piecewise_mpos_per_interval() -> None:
+    """A piecewise Hamiltonian expands to one MPO reference per analog interval."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.5)
+    second = Hamiltonian.ising(2, J=0.2, g=1.0)
+    piecewise = Hamiltonian.piecewise([(first, 0.2), (second, 0.1)])
+    operator = _expand_analog_operator(
+        piecewise,
+        AnalogSimParams(elapsed_time=0.3, dt=0.1),
+        physical_dimensions=(2, 2),
+    )
+    assert isinstance(operator, tuple)
+    assert len(operator) == 3
+    assert operator[0] is operator[1]
+    assert operator[0] is first.mpo
+    assert operator[2] is second.mpo
+
+
+def test_piecewise_analog_segment_in_program_matches_standalone() -> None:
+    """A piecewise Hamiltonian is valid on a program analog segment."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.5)
+    second = Hamiltonian.ising(2, J=0.2, g=1.0)
+    piecewise = Hamiltonian.piecewise([(first, 0.1), (second, 0.1)])
+    observables = [Observable("z", 0)]
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)
+    simulator = Simulator(parallel=False, show_progress=False)
+    standalone = simulator.run(
+        State(2, initial="zeros"),
+        piecewise,
+        AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1, observables=observables),
+    )
+    program = simulator.run(
+        State(2, initial="zeros"),
+        SimulationProgram([(piecewise, params)], observables=observables),
+    )
+    np.testing.assert_allclose(
+        np.asarray(program.expectation_values[0], dtype=float),
+        np.asarray(standalone.expectation_values[0], dtype=float),
+        atol=1e-10,
+    )
+
+
+def test_program_compilation_rejects_piecewise_bug_evolution() -> None:
+    """Piecewise analog program segments still require TDVP."""
     piecewise = Hamiltonian.piecewise([
         (Hamiltonian.ising(2, J=1.0, g=0.5), 0.1),
         (Hamiltonian.ising(2, J=1.0, g=2.0), 0.1),
     ])
-    program = SimulationProgram([(piecewise, AnalogSimParams(elapsed_time=0.2, dt=0.1))], get_state=True)
-    with pytest.raises(ValueError, match="piecewise Hamiltonians are not supported"):
+    program = SimulationProgram(
+        [(piecewise, AnalogSimParams(elapsed_time=0.2, dt=0.1, evolution_mode=EvolutionMode.BUG))],
+        get_state=True,
+    )
+    with pytest.raises(ValueError, match=r"evolution_mode=EvolutionMode\.TDVP"):
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_analog_program_matches_piecewise_hamiltonian(order: int) -> None:
+    """Two analog program segments with the same dt match a piecewise Hamiltonian."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.5)
+    second = Hamiltonian.ising(2, J=0.2, g=1.0)
+    observables = [Observable("z", 0)]
+    simulator = Simulator(parallel=False, show_progress=False)
+    piecewise = simulator.run(
+        State(2, initial="zeros"),
+        Hamiltonian.piecewise([(first, 0.2), (second, 0.2)]),
+        AnalogSimParams(elapsed_time=0.4, dt=0.1, order=order, observables=observables),
+    )
+    program = simulator.run(
+        State(2, initial="zeros"),
+        SimulationProgram(
+            [
+                (first, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order)),
+                (second, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order)),
+            ],
+            observables=observables,
+        ),
+    )
+    program_trace = np.concatenate([
+        np.asarray(program.segment_results[0].expectation_values[0]),
+        np.asarray(program.segment_results[1].expectation_values[0][1:]),
+    ])
+    np.testing.assert_allclose(
+        program_trace,
+        np.asarray(piecewise.expectation_values[0]),
+        atol=1e-10,
+    )
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_noisy_analog_program_matches_piecewise_hamiltonian(order: int) -> None:
+    """Merged analog program segments match piecewise evolution under the same noise."""
+    first = Hamiltonian.ising(1, J=0.0, g=0.0)
+    second = Hamiltonian.ising(1, J=0.0, g=1.0)
+    observables = [Observable("z", 0)]
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.2}])
+    simulator = Simulator(parallel=False, show_progress=False)
+    piecewise = simulator.run(
+        State(1, initial="zeros"),
+        Hamiltonian.piecewise([(first, 0.2), (second, 0.2)]),
+        AnalogSimParams(
+            elapsed_time=0.4,
+            dt=0.1,
+            order=order,
+            observables=observables,
+            num_traj=16,
+            random_seed=7,
+        ),
+        noise_model=noise,
+    )
+    program = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (first, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order)),
+                (second, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order)),
+            ],
+            observables=observables,
+            num_traj=16,
+            random_seed=7,
+        ),
+        noise_model=noise,
+    )
+    program_trace = np.concatenate([
+        np.asarray(program.segment_results[0].expectation_values[0]),
+        np.asarray(program.segment_results[1].expectation_values[0][1:]),
+    ])
+    np.testing.assert_allclose(program_trace, np.asarray(piecewise.expectation_values[0]), rtol=0, atol=0)
+
+
+def test_compatible_analog_segments_share_one_analog_tjm_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Matching analog segments compile to one analog_tjm trajectory."""
+    calls = [0]
+    monkeypatch.setattr(
+        simulator_module, "analog_tjm_1", _count_analog_tjm_1_calls(simulator_module.analog_tjm_1, calls)
+    )
+    hamiltonian = _zero_hamiltonian(1)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [(hamiltonian, params), (hamiltonian, params)],
+            observables=[Observable("z", 0)],
+        ),
+    )
+    assert calls[0] == 1
+
+
+def test_digital_between_analog_segments_splits_analog_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A digital gate starts a new analog_tjm call for the following analog segment."""
+    calls = [0]
+    monkeypatch.setattr(
+        simulator_module, "analog_tjm_1", _count_analog_tjm_1_calls(simulator_module.analog_tjm_1, calls)
+    )
+    hamiltonian = _zero_hamiltonian(1)
+    pulse = QuantumCircuit(1)
+    pulse.x(0)
+    params = AnalogSimParams(elapsed_time=0.1, dt=0.1, order=1)
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (hamiltonian, params),
+                (pulse, DigitalSimParams()),
+                (hamiltonian, params),
+            ],
+            observables=[Observable("z", 0)],
+        ),
+    )
+    assert calls[0] == 2
+
+
+def test_mismatched_dt_does_not_merge_analog_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analog segments with different dt stay on the per-segment analog_tjm path."""
+    calls = [0]
+    monkeypatch.setattr(
+        simulator_module, "analog_tjm_1", _count_analog_tjm_1_calls(simulator_module.analog_tjm_1, calls)
+    )
+    hamiltonian = _zero_hamiltonian(1)
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)),
+                (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.05, order=1)),
+            ],
+            observables=[Observable("z", 0)],
+        ),
+    )
+    assert calls[0] == 2
 
 
 def test_program_executor_rejects_corrupted_private_instructions() -> None:
@@ -571,7 +789,7 @@ def test_noisy_order_two_program_matches_standalone_and_split_segments() -> None
 
 
 def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Adjacent order-2 segments continue one global measurement-copy timeline."""
+    """Adjacent order-2 segments share one analog_tjm measurement-copy timeline."""
     timesteps: list[int] = []
     original_make_sample_rng = analog_module.make_sample_rng
 
@@ -611,8 +829,8 @@ def test_order_two_program_uses_global_sample_timestep_offsets(monkeypatch: pyte
         noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.1}]),
     )
 
-    # First segment samples 1,2; continued segment remasures junction at global 2, then 3,4.
-    assert timesteps == [1, 2, 2, 3, 4]
+    # Merged analog run is one analog_tjm_2 trajectory: samples at local j=1,2,3,4.
+    assert timesteps == [1, 2, 3, 4]
 
 
 def test_order_one_segment_resets_order_two_sample_timestep_offset(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -692,8 +910,8 @@ def test_order_two_continuation_requires_matching_dt(monkeypatch: pytest.MonkeyP
     assert initialize_calls == 2
 
 
-def test_order_two_hamiltonian_quench_matches_manual_handoff() -> None:
-    """Different Hamiltonians break order-2 continuation and match sequential get_state runs."""
+def test_order_two_hamiltonian_quench_matches_piecewise() -> None:
+    """Adjacent analog segments with the same dt match a piecewise Hamiltonian."""
     hamiltonian_a = Hamiltonian.ising(2, J=1.0, g=0.5)
     hamiltonian_b = Hamiltonian.ising(2, J=0.2, g=1.0)
     observables = [Observable("z", 0)]
@@ -706,45 +924,20 @@ def test_order_two_hamiltonian_quench_matches_manual_handoff() -> None:
         SimulationProgram(
             [(hamiltonian_a, first_params), (hamiltonian_b, second_params)],
             observables=observables,
-            get_state=True,
         ),
     )
-    first = simulator.run(
+    piecewise = simulator.run(
         State(2, initial="zeros"),
-        hamiltonian_a,
-        AnalogSimParams(
-            elapsed_time=0.2,
-            dt=0.1,
-            order=2,
-            observables=observables,
-            get_state=True,
-        ),
+        Hamiltonian.piecewise([(hamiltonian_a, 0.2), (hamiltonian_b, 0.2)]),
+        AnalogSimParams(elapsed_time=0.4, dt=0.1, order=2, observables=observables),
     )
-    assert first.output_state is not None
-    second = simulator.run(
-        first.output_state,
-        hamiltonian_b,
-        AnalogSimParams(
-            elapsed_time=0.2,
-            dt=0.1,
-            order=2,
-            observables=observables,
-            get_state=True,
-        ),
-    )
-
+    program_trace = np.concatenate([
+        np.asarray(program_result.segment_results[0].expectation_values[0]),
+        np.asarray(program_result.segment_results[1].expectation_values[0][1:]),
+    ])
     np.testing.assert_allclose(
-        program_result.expectation_values[0],
-        np.concatenate([
-            first.expectation_values[0],
-            second.expectation_values[0],
-        ]),
-    )
-    assert program_result.output_state is not None
-    assert second.output_state is not None
-    np.testing.assert_allclose(
-        program_result.output_state.mps.to_vec(),
-        second.output_state.mps.to_vec(),
+        program_trace,
+        np.asarray(piecewise.expectation_values[0]),
         atol=1e-10,
     )
 
@@ -1055,8 +1248,8 @@ def test_multi_digital_shots_keep_last_segment_outer_counts() -> None:
     assert sum(result.counts.values()) == 7
 
 
-def test_scheduled_jumps_fire_on_each_analog_segments_local_clock() -> None:
-    """Inherited scheduled jumps match each analog segment's local time grid."""
+def test_scheduled_jumps_fire_on_merged_analog_run_clock() -> None:
+    """Inherited scheduled jumps use the merged analog run's time grid."""
     jump = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
     program = SimulationProgram(
         [
@@ -1075,11 +1268,9 @@ def test_scheduled_jumps_fire_on_each_analog_segments_local_clock() -> None:
 
     first = np.asarray(result.segment_results[0].expectation_values[0], dtype=float)
     second = np.asarray(result.segment_results[1].expectation_values[0], dtype=float)
-    # Local t=0 starts at +1; jump at local 0.1 flips to -1 for the rest of the first segment.
+    # Jump at t=0.1 fires once on the merged analog clock.
     np.testing.assert_allclose(first, [1.0, -1.0, -1.0], atol=1e-10)
-    # State carries into the next segment, so the second entry starts flipped and the
-    # next local jump at 0.1 returns it to +1.
-    np.testing.assert_allclose(second, [-1.0, 1.0, 1.0], atol=1e-10)
+    np.testing.assert_allclose(second, [-1.0, -1.0, -1.0], atol=1e-10)
 
 
 def test_digital_between_same_hamiltonian_order_two_breaks_continuation(

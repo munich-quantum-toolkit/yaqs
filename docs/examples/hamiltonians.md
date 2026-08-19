@@ -96,8 +96,10 @@ params = AnalogSimParams(
 result = Simulator().run(State(L, initial="zeros"), H, params)
 ```
 
-This path supports a single MPS `State` with TDVP. To switch Hamiltonians inside
-a {class}`~mqt.yaqs.SimulationProgram`, use multiple analog segments.
+This path supports a single MPS `State` with TDVP. A
+{class}`~mqt.yaqs.SimulationProgram` of analog segments with the same `dt` is
+the same evolution as piecewise; a piecewise Hamiltonian is also allowed on a
+program analog segment.
 
 ## Built-in models (quick reference)
 

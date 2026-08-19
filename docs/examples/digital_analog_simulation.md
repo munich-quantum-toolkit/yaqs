@@ -195,10 +195,11 @@ program = SimulationProgram(
 ```
 
 **Scheduled jumps.** Attach them through a {class}`~mqt.yaqs.NoiseModel` as in
-{doc}`scheduled_jumps` (analog MPS TJM, `order=1`, times on that segment's `dt`
-grid). Jump times are relative to the start of the analog segment that carries
-the model. Use a third-tuple noise override when only one segment should fire
-them:
+{doc}`scheduled_jumps` (analog MPS TJM, `order=1`, times on that analog run's
+`dt` grid). Jump times are relative to the start of the analog run that carries
+the model. Consecutive analog segments that share one interval schedule also
+share that clock; a digital gate starts a new analog run. Use a third-tuple
+noise override when only one segment should fire them:
 
 ```python
 jumps = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
@@ -282,6 +283,11 @@ recover lost signal contrast.
 ## Useful things to know
 
 - Segments run in the order they appear in `SimulationProgram`.
+- Consecutive analog segments that share `dt`, Trotter order, TDVP, sampling,
+  and noise evolve as one analog interval schedule — the same physics as
+  `Hamiltonian.piecewise`. A piecewise Hamiltonian is also valid on a single
+  analog segment. A digital gate, or a mismatched analog setting such as a
+  different `dt`, starts a new analog run.
 - Observables, `random_seed`, and `get_state` are program-wide; leave them unset
   on segment params. `num_traj` may be unanimous on segments or set on the
   program. `shots` stay on digital segment params.
