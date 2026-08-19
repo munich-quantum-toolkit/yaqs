@@ -190,6 +190,50 @@ def test_flattened_program_result_preserves_boundary_values_around_digital_pulse
     np.testing.assert_allclose(result.expectation_values[0], np.array([1.0, 1.0, 1.0, -1.0, -1.0, -1.0]), atol=1e-10)
 
 
+def test_order_two_analog_digital_analog_matches_sequential_standalone() -> None:
+    """Order-2 analog segments hand the physical state to a digital pulse, then restart."""
+    drive = Hamiltonian.pauli(length=1, one_body=[(1.0, "X")])
+    pulse = QuantumCircuit(1)
+    pulse.x(0)
+    observables = [Observable("z", 0)]
+    analog = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=2)
+    simulator = Simulator(parallel=False, show_progress=False)
+    program = simulator.run(
+        State(1, initial="zeros"),
+        SimulationProgram(
+            [(drive, analog), (pulse, DigitalSimParams()), (drive, analog)],
+            observables=observables,
+            get_state=True,
+        ),
+    )
+    first = simulator.run(
+        State(1, initial="zeros"),
+        drive,
+        AnalogSimParams(observables=observables, elapsed_time=0.2, dt=0.1, order=2, get_state=True),
+    )
+    assert first.output_state is not None
+    flipped = simulator.run(first.output_state, pulse, DigitalSimParams(observables=observables, get_state=True))
+    assert flipped.output_state is not None
+    second = simulator.run(
+        flipped.output_state,
+        drive,
+        AnalogSimParams(observables=observables, elapsed_time=0.2, dt=0.1, order=2, get_state=True),
+    )
+    assert program.output_state is not None
+    assert second.output_state is not None
+    np.testing.assert_allclose(program.output_state.mps.to_vec(), second.output_state.mps.to_vec(), atol=1e-10)
+    np.testing.assert_allclose(
+        np.asarray(program.segment_results[0].expectation_values[0], dtype=float),
+        np.asarray(first.expectation_values[0], dtype=float),
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        np.asarray(program.segment_results[2].expectation_values[0], dtype=float),
+        np.asarray(second.expectation_values[0], dtype=float),
+        atol=1e-10,
+    )
+
+
 def test_flattened_program_result_preserves_boundary_values_between_adjacent_analog_segments() -> None:
     """Adjacent analog grids remain lossless even without an intervention."""
     observable = Observable("z", 0)
@@ -391,18 +435,19 @@ def test_expand_analog_operator_repeats_piecewise_mpos_per_interval() -> None:
     assert operator[2] is second.mpo
 
 
-def test_piecewise_analog_segment_in_program_matches_standalone() -> None:
+@pytest.mark.parametrize("order", [1, 2])
+def test_piecewise_analog_segment_in_program_matches_standalone(order: int) -> None:
     """A piecewise Hamiltonian is valid on a program analog segment."""
     first = Hamiltonian.ising(2, J=1.0, g=0.5)
     second = Hamiltonian.ising(2, J=0.2, g=1.0)
     piecewise = Hamiltonian.piecewise([(first, 0.1), (second, 0.1)])
     observables = [Observable("z", 0)]
-    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1)
+    params = AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order)
     simulator = Simulator(parallel=False, show_progress=False)
     standalone = simulator.run(
         State(2, initial="zeros"),
         piecewise,
-        AnalogSimParams(elapsed_time=0.2, dt=0.1, order=1, observables=observables),
+        AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order, observables=observables),
     )
     program = simulator.run(
         State(2, initial="zeros"),
