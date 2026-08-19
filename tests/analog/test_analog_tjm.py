@@ -499,3 +499,46 @@ def test_sample_at_multiple_indices_require_sample_timesteps() -> None:
     )
     with pytest.raises(ValueError, match="sample_timesteps=True"):
         analog_tjm_1((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(1, 2))
+
+
+@pytest.mark.parametrize(("backend", "order"), [(analog_tjm_1, 1), (analog_tjm_2, 2)])
+@pytest.mark.parametrize("bad_index", [-1, 5])
+def test_sample_at_rejects_out_of_range_indices(
+    backend: Callable[..., tuple[np.ndarray, np.ndarray, MPS | None]],
+    order: int,
+    bad_index: int,
+) -> None:
+    """sample_at indices must lie on the analog time grid."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=order,
+        sample_timesteps=True,
+    )
+    with pytest.raises(ValueError, match="outside the time grid"):
+        backend((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(bad_index,))
+
+
+def test_analog_tjm_2_get_state_when_sample_at_omits_final_time() -> None:
+    """Order-2 get_state still returns the physical sample if sample_at skips the last time."""
+    hamiltonian = MPO.ising(1, 0.0, 1.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.3,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    args = (0, MPS(1), None, sim_params, hamiltonian)
+    omitted_results, _, omitted_state = analog_tjm_2(args, sample_at=(1,))
+    full_results, _, full_state = analog_tjm_2(
+        (0, MPS(1), None, sim_params, hamiltonian),
+    )
+    assert omitted_state is not None
+    assert full_state is not None
+    np.testing.assert_allclose(omitted_state.to_vec(), full_state.to_vec())
+    np.testing.assert_allclose(omitted_results[0, 1], full_results[0, 1])
+    np.testing.assert_allclose(omitted_results[0, -1], 0.0)
