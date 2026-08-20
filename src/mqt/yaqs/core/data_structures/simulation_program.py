@@ -22,7 +22,7 @@ from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode, Observable
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -209,7 +209,10 @@ class SimulationProgram:
     Observables, RNG seed, and ``get_state`` are program-wide. Segment
     ``sim_params`` must leave ``observables`` empty and keep ``random_seed`` /
     ``get_state`` unset; they carry truncation, timing, ``shots``, gate-mode, and
-    related backend settings. Analog ``scheduled_jumps`` times are segment-local.
+    related backend settings. Analog ``scheduled_jumps`` times are relative to
+    the analog run that carries them. Consecutive analog segments that share one
+    interval schedule share that clock; a digital gate or incompatible analog
+    settings start a new run.
 
     Args:
         segments: Non-empty iterable of ``(operator, params)`` pairs.
@@ -304,7 +307,7 @@ class _CompiledAnalogInstruction:
     """Validated analog instruction used by the private program executor."""
 
     index: int
-    hamiltonian: MPO
+    hamiltonian: MPO | tuple[MPO, ...]
     sim_params: AnalogSimParams
     execution_params: AnalogSimParams
     noise_model: NoiseModel | None
@@ -437,6 +440,113 @@ def _apply_program_settings(
     return execution_params
 
 
+def _duration_to_steps(duration: float, dt: float, *, label: str) -> int:
+    """Convert a duration into a positive number of analog ``dt`` intervals.
+
+    Args:
+        duration: Requested duration.
+        dt: Analog time step.
+        label: Name used in the error message.
+
+    Returns:
+        A positive integer step count.
+
+    Raises:
+        ValueError: If ``duration`` is not a positive integer multiple of ``dt``.
+    """
+    n_float = duration / dt
+    n_steps = round(n_float)
+    evolved = n_steps * dt
+    residual = abs(duration - evolved)
+    roundoff_tol = max(
+        np.spacing(duration),
+        abs(n_steps) * np.spacing(dt),
+        8 * np.finfo(np.float64).eps * max(duration, evolved, dt),
+    )
+    tol = min(roundoff_tol, 0.25 * dt)
+    if n_steps <= 0 or residual > tol:
+        msg = f"{label} ({duration}) must be an integer multiple of dt ({dt})."
+        raise ValueError(msg)
+    return n_steps
+
+
+def _validate_mpo_physical_dimensions(
+    mpo: MPO,
+    physical_dimensions: Sequence[int],
+    *,
+    label: str,
+) -> None:
+    """Reject an MPO whose physical legs do not match the state.
+
+    Raises:
+        ValueError: If a site's physical legs disagree with ``physical_dimensions``.
+    """
+    for site, (tensor, dimension) in enumerate(zip(mpo.tensors, physical_dimensions, strict=True)):
+        if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
+            msg = f"{label} MPO site {site} has physical legs {tensor.shape[:2]}, expected ({dimension}, {dimension})."
+            raise ValueError(msg)
+
+
+def _expand_analog_operator(
+    hamiltonian: Hamiltonian,
+    sim_params: AnalogSimParams,
+    *,
+    physical_dimensions: Sequence[int],
+    label: str = "",
+) -> MPO | tuple[MPO, ...]:
+    """Materialize a static or piecewise Hamiltonian as analog interval MPOs.
+
+    A fully static Hamiltonian returns one ``MPO``. A piecewise Hamiltonian
+    returns one MPO reference per analog interval. Consecutive intervals that
+    share the same MPO object collapse to a bare ``MPO``.
+
+    Args:
+        hamiltonian: Static or piecewise Hamiltonian.
+        sim_params: Analog parameters whose ``dt`` grid defines the intervals.
+        physical_dimensions: Per-site physical dimensions of the MPS.
+        label: Optional prefix for validation error messages.
+
+    Returns:
+        A static MPO, or one MPO per analog interval.
+
+    Raises:
+        ValueError: If a duration is not a multiple of ``dt``, durations do not
+            sum to ``elapsed_time``, or a piece has incompatible physical legs.
+    """
+    prefix = f"{label} " if label else ""
+    if not hamiltonian.is_piecewise:
+        hamiltonian.ensure_mpo()
+        _validate_mpo_physical_dimensions(
+            hamiltonian.mpo,
+            physical_dimensions,
+            label=f"{prefix}Hamiltonian",
+        )
+        return hamiltonian.mpo
+
+    dt = float(sim_params.dt)
+    n_intervals = max(len(sim_params.times) - 1, 0)
+    interval_mpos: list[MPO] = []
+    for index, (piece, duration) in enumerate(hamiltonian.pieces):
+        n_steps = _duration_to_steps(duration, dt, label=f"{prefix}pieces[{index}] duration")
+        piece.ensure_mpo()
+        mpo = piece.mpo
+        _validate_mpo_physical_dimensions(
+            mpo,
+            physical_dimensions,
+            label=f"{prefix}pieces[{index}] Hamiltonian",
+        )
+        interval_mpos.extend([mpo] * n_steps)
+    if len(interval_mpos) != n_intervals:
+        msg = (
+            f"{prefix}piecewise durations must sum to elapsed_time ({sim_params.elapsed_time}); "
+            f"got {len(interval_mpos) * dt}, expected {sim_params.elapsed_time}."
+        )
+        raise ValueError(msg)
+    if interval_mpos and all(mpo is interval_mpos[0] for mpo in interval_mpos):
+        return interval_mpos[0]
+    return tuple(interval_mpos)
+
+
 def _compile_analog_segment(
     segment: _AnalogSegment,
     *,
@@ -479,6 +589,9 @@ def _compile_analog_segment(
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
+    if segment.hamiltonian.is_piecewise and sim_params.evolution_mode != EvolutionMode.TDVP:
+        msg = f"segments[{index}] piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+        raise ValueError(msg)
     execution_params = _apply_program_settings(
         sim_params,
         observables=observables,
@@ -486,19 +599,15 @@ def _compile_analog_segment(
         random_seed=random_seed,
     )
     assert isinstance(execution_params, AnalogSimParams)
-    segment.hamiltonian.ensure_mpo()
-    for site, (tensor, dimension) in enumerate(
-        zip(segment.hamiltonian.mpo.tensors, signature.physical_dimensions, strict=False)
-    ):
-        if tensor.ndim != 4 or tensor.shape[0] != dimension or tensor.shape[1] != dimension:
-            msg = (
-                f"segments[{index}] Hamiltonian MPO site {site} has physical legs "
-                f"{tensor.shape[:2]}, expected ({dimension}, {dimension})."
-            )
-            raise ValueError(msg)
+    operator = _expand_analog_operator(
+        segment.hamiltonian,
+        execution_params,
+        physical_dimensions=signature.physical_dimensions,
+        label=f"segments[{index}]",
+    )
     return _CompiledAnalogInstruction(
         index=index,
-        hamiltonian=segment.hamiltonian.mpo,
+        hamiltonian=operator,
         sim_params=sim_params,
         execution_params=execution_params,
         noise_model=noise_model,

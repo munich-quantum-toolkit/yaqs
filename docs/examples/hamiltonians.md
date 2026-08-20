@@ -65,10 +65,83 @@ Typical patterns:
 - **Manual data** — `Hamiltonian(tensors=...)`, `Hamiltonian(matrix=...)`, or
   `Hamiltonian(sparse_matrix=...)`. Any of these can drive TJM, MCWF, or
   Lindblad once paired with the matching `State.representation`.
+- **Piecewise time dependence** — `Hamiltonian.piecewise([(H, duration), ...])`
+  switches static Hamiltonians on the analog `dt` grid.
 
-Access the materialized MPO with `H.mpo` (after a TJM run or `H.ensure_mpo()`)
-and the sparse form with `H.sparse_matrix` (after an MCWF / Lindblad run or
-`H.ensure_sparse()`). Both can coexist on one instance.
+For a static Hamiltonian, access the materialized MPO with `H.mpo` (after a TJM
+run or `H.ensure_mpo()`) and the sparse form with `H.sparse_matrix` (after an
+MCWF / Lindblad run or `H.ensure_sparse()`). Both can coexist on one instance. A
+piecewise Hamiltonian is a sequence of static pieces, so it cannot be
+materialized with `ensure_mpo()` or `ensure_sparse()`.
+
+## Time-dependent Hamiltonians
+
+Switch between static Hamiltonians at times that land on the analog `dt` grid.
+Each duration must be a positive multiple of `dt`. This path supports a single
+MPS `State` with TDVP.
+
+### Analog quench
+
+Use {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.piecewise`
+when the experiment is analog-only: evolve under one Hamiltonian, then another.
+One {class}`~mqt.yaqs.AnalogSimParams`, one {class}`~mqt.yaqs.Result`, one time
+grid. Pass ``elapsed_time=H.duration`` so the total time matches the pieces.
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+
+L = 4
+H = Hamiltonian.piecewise([
+    (Hamiltonian.ising(L, J=1.0, g=0.5), 1.0),
+    (Hamiltonian.ising(L, J=1.0, g=2.0), 1.0),
+])
+params = AnalogSimParams(
+    observables=[Observable("z", 0)],
+    elapsed_time=H.duration,
+    dt=0.1,
+)
+result = Simulator().run(State(L, initial="zeros"), H, params)
+```
+
+### Switching Hamiltonians in a program
+
+Use a {class}`~mqt.yaqs.SimulationProgram` when analog evolution is part of a
+protocol — digital gates, mixed `dt`, or per-segment noise. Consecutive analog
+segments with the same `dt` match a piecewise Hamiltonian only when their analog
+settings and noise behavior are compatible (evolution mode, order, sampling,
+truncation, and a shared noise model). Mixed `dt` or a digital gate in between
+splits the analog runs. A piecewise Hamiltonian is also valid on one analog
+segment.
+
+```python
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    Observable,
+    SimulationProgram,
+    Simulator,
+    State,
+)
+
+L = 4
+program = SimulationProgram(
+    [
+        (
+            Hamiltonian.ising(L, J=1.0, g=0.5),
+            AnalogSimParams(elapsed_time=1.0, dt=0.1),
+        ),
+        (
+            Hamiltonian.ising(L, J=1.0, g=2.0),
+            AnalogSimParams(elapsed_time=1.0, dt=0.1),
+        ),
+    ],
+    observables=[Observable("z", 0)],
+)
+result = Simulator().run(State(L, initial="zeros"), program)
+```
+
+Insert a {class}`~qiskit.circuit.QuantumCircuit` between analog segments when
+the protocol needs a digital operation. See {doc}`digital_analog_simulation`.
 
 ## Built-in models (quick reference)
 
@@ -321,6 +394,7 @@ H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ## Related topics
 
 - {doc}`analog_simulation` — TJM evolution, noise, and observables
+- {doc}`digital_analog_simulation` — analog evolution mixed with digital gates
 - {doc}`transmon_emulation` — multi-level transmon physics
 - {doc}`trapped_ion` — position-grid wavepacket dynamics
 - {doc}`state_initialization` — `physical_dimensions` and representations

@@ -111,6 +111,7 @@ from .core.data_structures.result import (
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
+    EvolutionMode,
     Observable,
     _prepare_observable_ordering,
 )
@@ -121,6 +122,7 @@ from .core.data_structures.simulation_program import (
     _CompiledAnalogInstruction,
     _CompiledDigitalInstruction,
     _CompiledProgram,
+    _expand_analog_operator,
     stitch_program_results,
 )
 from .core.data_structures.state import State
@@ -281,6 +283,8 @@ def _same_order2_operator(
         return False
     left_mpo = left.hamiltonian
     right_mpo = right.hamiltonian
+    if isinstance(left_mpo, tuple) or isinstance(right_mpo, tuple):
+        return False
     if left_mpo is right_mpo:
         return True
     if len(left_mpo.tensors) != len(right_mpo.tensors):
@@ -296,8 +300,9 @@ def _order2_chain_continues(
     """Return whether the next instruction can continue this order-2 trajectory.
 
     Continuation requires an adjacent order-2 analog segment with the same
-    Hamiltonian, resolved noise model, ``dt``, and ``sample_timesteps``, and a
-    non-trivial current time grid so a mid-Trotter ``phi`` handoff is meaningful.
+    Hamiltonian, resolved noise model, ``dt``, ``evolution_mode``, and
+    ``sample_timesteps``, and a non-trivial current time grid so a mid-Trotter
+    ``phi`` handoff is meaningful.
     """
     nxt = instructions[index + 1] if index + 1 < len(instructions) else None
     next_params = nxt.execution_params if isinstance(nxt, _CompiledAnalogInstruction) else None
@@ -309,9 +314,26 @@ def _order2_chain_continues(
         and len(current_params.times) > 1
         and len(next_params.times) > 1
         and current_params.dt == next_params.dt
+        and current_params.evolution_mode == next_params.evolution_mode
         and current_params.sample_timesteps == next_params.sample_timesteps
         and _same_order2_operator(current, nxt)
     )
+
+
+def _order2_hand_off(
+    instructions: tuple[_CompiledAnalogInstruction | _CompiledDigitalInstruction, ...],
+    current: _CompiledAnalogInstruction,
+) -> bool:
+    """Return whether this analog segment should return mid-Trotter ``phi``.
+
+    ``get_state`` on this or the next segment needs a physical checkpoint, so
+    the handoff is suppressed and the next analog starts a new Trotter chain.
+    """
+    if not _order2_chain_continues(instructions, current, current.index):
+        return False
+    nxt = instructions[current.index + 1]
+    assert isinstance(nxt, _CompiledAnalogInstruction)
+    return not current.sim_params.get_state and not nxt.sim_params.get_state
 
 
 def _execute_analog_instruction(
@@ -338,13 +360,7 @@ def _execute_analog_instruction(
     """
     backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
     if backend is analog_tjm_2:
-        # Hand off mid-Trotter ``phi`` only when neither this nor the next segment
-        # needs a physical checkpoint (sample-state), so get_state never sees ``phi``.
-        hand_off_trajectory = _order2_chain_continues(instructions, instruction, instruction.index)
-        if hand_off_trajectory:
-            nxt = instructions[instruction.index + 1]
-            if instruction.sim_params.get_state or nxt.sim_params.get_state:
-                hand_off_trajectory = False
+        hand_off_trajectory = _order2_hand_off(instructions, instruction)
         traj_data, traj_diag, next_state = backend(
             (
                 traj_idx,
@@ -384,6 +400,155 @@ def _execute_analog_instruction(
         sample_timestep_offset = 0
         continue_order2_trajectory = False
     return traj_data, traj_diag, next_state, sample_timestep_offset, continue_order2_trajectory
+
+
+def _analog_runs_can_merge(left: _CompiledAnalogInstruction, right: _CompiledAnalogInstruction) -> bool:
+    """Return whether two adjacent analog segments share one ``analog_tjm`` schedule."""
+    left_params = left.execution_params
+    right_params = right.execution_params
+    if left_params.evolution_mode != EvolutionMode.TDVP or right_params.evolution_mode != EvolutionMode.TDVP:
+        return False
+    if left.sim_params.get_state or right.sim_params.get_state:
+        return False
+    return (
+        left_params.order == right_params.order
+        and left_params.dt == right_params.dt
+        and left_params.sample_timesteps == right_params.sample_timesteps
+        and left.noise_model is right.noise_model
+        and len(left_params.times) > 1
+        and len(right_params.times) > 1
+        and left_params.max_bond_dim == right_params.max_bond_dim
+        and left_params.svd_threshold == right_params.svd_threshold
+        and left_params.trunc_mode == right_params.trunc_mode
+        and left_params.krylov_tol == right_params.krylov_tol
+        and left_params.tdvp_sweeps == right_params.tdvp_sweeps
+        and left_params.tdvp_mode == right_params.tdvp_mode
+    )
+
+
+def _analog_interval_mpos(instruction: _CompiledAnalogInstruction) -> tuple[MPO, ...]:
+    """Return one MPO per analog interval for a compiled instruction."""
+    n_intervals = max(len(instruction.execution_params.times) - 1, 0)
+    operator = instruction.hamiltonian
+    if isinstance(operator, tuple):
+        assert len(operator) == n_intervals
+        return operator
+    return (operator,) * n_intervals
+
+
+def _merged_analog_operator(run: Sequence[_CompiledAnalogInstruction]) -> MPO | tuple[MPO, ...]:
+    """Return concatenated interval MPOs, collapsing a constant schedule to a bare MPO."""
+    mpos = tuple(mpo for instruction in run for mpo in _analog_interval_mpos(instruction))
+    if not mpos:
+        return run[0].hamiltonian
+    first = mpos[0]
+    if all(mpo is first for mpo in mpos):
+        return first
+    return mpos
+
+
+def _merged_analog_execution_params(run: Sequence[_CompiledAnalogInstruction]) -> AnalogSimParams:
+    """Return analog parameters whose grid spans a merged analog run."""
+    first = run[0].execution_params
+    merged = copy.deepcopy(first)
+    n_steps = sum(max(len(instruction.execution_params.times) - 1, 0) for instruction in run)
+    elapsed = sum(float(instruction.execution_params.elapsed_time) for instruction in run)
+    merged.elapsed_time = elapsed
+    merged.times = merged.dt * np.arange(n_steps + 1, dtype=np.float64)
+    if n_steps > 0:
+        merged.times[-1] = elapsed
+    merged.sample_timesteps = True
+    return merged
+
+
+def _merged_segment_boundary_indices(run: Sequence[_CompiledAnalogInstruction]) -> tuple[int, ...]:
+    """Return time-grid indices at the end of each merged analog segment."""
+    indices: list[int] = []
+    cursor = 0
+    for instruction in run:
+        cursor += max(len(instruction.execution_params.times) - 1, 0)
+        indices.append(cursor)
+    return tuple(indices)
+
+
+def _slice_trajectory_columns(
+    data: NDArray[np.float64] | None,
+    start: int,
+    end: int,
+) -> NDArray[np.float64] | None:
+    """Return a column slice of a ``(n_obs, T)`` trajectory buffer, preserving ``None``."""
+    if data is None:
+        return None
+    return data[:, start:end]
+
+
+def _split_merged_analog_results(
+    traj_data: NDArray[np.float64] | None,
+    traj_diag: NDArray[np.float64] | None,
+    run: Sequence[_CompiledAnalogInstruction],
+    *,
+    sample_timesteps: bool,
+) -> list[tuple[NDArray[np.float64] | None, NDArray[np.float64] | None]]:
+    """Return per-segment slices of one merged analog trajectory."""
+    slices: list[tuple[NDArray[np.float64] | None, NDArray[np.float64] | None]] = []
+    start = 0
+    for instruction in run:
+        n_times = len(instruction.execution_params.times)
+        n_intervals = max(n_times - 1, 0)
+        if sample_timesteps:
+            end = start + n_times
+            slices.append((
+                _slice_trajectory_columns(traj_data, start, end),
+                _slice_trajectory_columns(traj_diag, start, end),
+            ))
+        else:
+            last = start + n_intervals
+            slices.append((
+                _slice_trajectory_columns(traj_data, last, last + 1),
+                _slice_trajectory_columns(traj_diag, last, last + 1),
+            ))
+        start += n_intervals
+    return slices
+
+
+def _execute_merged_analog_run(
+    traj_idx: int,
+    current_state: MPS,
+    run: Sequence[_CompiledAnalogInstruction],
+    rng: np.random.Generator,
+    *,
+    return_trajectory_state: bool = False,
+) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, MPS | None]:
+    """Return the analog_tjm payload for one merged analog run.
+
+    Merged runs always start a fresh Trotter chain. A pending mid-Trotter
+    ``phi`` is consumed on the single-instruction path before any merge.
+    ``return_trajectory_state`` hands ``phi`` to a later analog that cannot join.
+    """
+    merged_params = _merged_analog_execution_params(run)
+    operator = _merged_analog_operator(run)
+    user_sample = run[0].execution_params.sample_timesteps
+    sample_at = None if user_sample else _merged_segment_boundary_indices(run)
+    backend = analog_tjm_1 if merged_params.order == 1 else analog_tjm_2
+    args = (
+        traj_idx,
+        current_state,
+        run[0].noise_model,
+        merged_params,
+        operator,
+    )
+    if backend is analog_tjm_2:
+        return backend(
+            args,
+            copy_initial_state=False,
+            rng=rng,
+            sample_timestep_offset=0,
+            use_trajectory_rng_for_final_sample=False,
+            return_trajectory_state=return_trajectory_state,
+            continue_trajectory=False,
+            sample_at=sample_at,
+        )
+    return backend(args, copy_initial_state=False, rng=rng, sample_at=sample_at)
 
 
 def _execute_digital_instruction(
@@ -447,9 +612,46 @@ def _execute_program_trajectory(
     sample_timestep_offset = 0
     continue_order2_trajectory = False
     instructions = compiled.instructions
+    index = 0
 
-    for instruction in instructions:
-        if isinstance(instruction, _CompiledAnalogInstruction):
+    while index < len(instructions):
+        instruction = instructions[index]
+        if isinstance(instruction, _CompiledDigitalInstruction):
+            continue_order2_trajectory = False
+            sample_timestep_offset = 0
+            traj_data, traj_diag, shot_counts, next_state = _execute_digital_instruction(
+                traj_idx,
+                current_state,
+                instruction,
+                rng,
+                effective_num_traj=effective_num_traj,
+            )
+            if next_state is None:
+                msg = f"Program segment {instruction.index} did not return its propagated state."
+                raise RuntimeError(msg)
+            current_state = next_state
+            checkpoint = (
+                copy.deepcopy(current_state)
+                if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
+                else None
+            )
+            segment_payloads.append((traj_data, traj_diag, shot_counts, checkpoint))
+            index += 1
+            continue
+        if not isinstance(instruction, _CompiledAnalogInstruction):
+            msg = f"Unknown instruction type {type(instruction).__name__} in compiled program."
+            raise TypeError(msg)
+
+        run: list[_CompiledAnalogInstruction] = [instruction]
+        # A pending order-2 handoff supplies a mid-Trotter ``phi``; the merged path
+        # cannot consume it (and analog_tjm_2 continuation is static-MPO only).
+        while not continue_order2_trajectory and index + len(run) < len(instructions):
+            nxt = instructions[index + len(run)]
+            if not isinstance(nxt, _CompiledAnalogInstruction) or not _analog_runs_can_merge(run[-1], nxt):
+                break
+            run.append(nxt)
+
+        if len(run) == 1:
             traj_data, traj_diag, next_state, sample_timestep_offset, continue_order2_trajectory = (
                 _execute_analog_instruction(
                     traj_idx,
@@ -461,32 +663,56 @@ def _execute_program_trajectory(
                     continue_order2_trajectory=continue_order2_trajectory,
                 )
             )
-            shot_counts = None
-        elif isinstance(instruction, _CompiledDigitalInstruction):
-            continue_order2_trajectory = False
-            sample_timestep_offset = 0
-            traj_data, traj_diag, shot_counts, next_state = _execute_digital_instruction(
+            if next_state is None:
+                msg = f"Program segment {instruction.index} did not return its propagated state."
+                raise RuntimeError(msg)
+            current_state = next_state
+            checkpoint = (
+                copy.deepcopy(current_state)
+                if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
+                else None
+            )
+            segment_payloads.append((traj_data, traj_diag, None, checkpoint))
+        else:
+            hand_off_trajectory = _order2_hand_off(instructions, run[-1])
+            traj_data, traj_diag, next_state = _execute_merged_analog_run(
                 traj_idx,
                 current_state,
-                instruction,
+                run,
                 rng,
-                effective_num_traj=effective_num_traj,
+                return_trajectory_state=hand_off_trajectory,
             )
-        else:
-            msg = f"Unknown instruction type {type(instruction).__name__} in compiled program."
-            raise TypeError(msg)
+            if next_state is None:
+                msg = f"Program segment {instruction.index} did not return its propagated state."
+                raise RuntimeError(msg)
+            current_state = next_state
+            if hand_off_trajectory:
+                n_steps = sum(max(len(analog.execution_params.times) - 1, 0) for analog in run)
+                sample_timestep_offset = n_steps
+                continue_order2_trajectory = True
+            else:
+                sample_timestep_offset = 0
+                continue_order2_trajectory = False
+            for analog_instruction, (seg_data, seg_diag) in zip(
+                run,
+                _split_merged_analog_results(
+                    traj_data,
+                    traj_diag,
+                    run,
+                    sample_timesteps=instruction.execution_params.sample_timesteps,
+                ),
+                strict=True,
+            ):
+                checkpoint = (
+                    copy.deepcopy(current_state)
+                    if analog_instruction.sim_params.get_state
+                    and analog_instruction is run[-1]
+                    and not _noise_model_is_stochastic(analog_instruction.noise_model)
+                    else None
+                )
+                segment_payloads.append((seg_data, seg_diag, None, checkpoint))
 
-        if next_state is None:
-            msg = f"Program segment {instruction.index} did not return its propagated state."
-            raise RuntimeError(msg)
-        current_state = next_state
-        # Segment get_state is rejected for noisy instructions before execution.
-        checkpoint = (
-            copy.deepcopy(current_state)
-            if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
-            else None
-        )
-        segment_payloads.append((traj_data, traj_diag, shot_counts, checkpoint))
+        index += len(run)
 
     final_state = current_state if compiled.get_state else None
     return tuple(segment_payloads), final_state
@@ -1248,6 +1474,9 @@ class Simulator:
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
+            if operator.is_piecewise:
+                msg = "Piecewise Hamiltonians do not support list[State] ensemble execution."
+                raise ValueError(msg)
             if any(spec.representation != "mps" for spec in initial_state_list):
                 msg = "list[State] analog ensemble currently supports only State.representation='mps'."
                 raise ValueError(msg)
@@ -1285,7 +1514,27 @@ class Simulator:
                 representation=state_rep,
                 sim_params=sim_params,
             )
-        mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
+        if operator.is_piecewise:
+            if state_rep != "mps":
+                msg = "Piecewise Hamiltonians currently require State.representation='mps'."
+                raise ValueError(msg)
+            if sim_params.evolution_mode != EvolutionMode.TDVP:
+                msg = "Piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+                raise ValueError(msg)
+            if sim_params.multi_time_observables:
+                msg = "Piecewise Hamiltonians do not support multi_time_observables."
+                raise ValueError(msg)
+        mpo_op: MPO | tuple[MPO, ...] | None
+        if state_rep == "mps":
+            assert mps is not None, "MPS representation requires a materialized MPS."
+            mpo_op = _expand_analog_operator(
+                operator,
+                sim_params,
+                physical_dimensions=mps.physical_dimensions,
+            )
+            h_sparse = None
+        else:
+            mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
         backend: Callable[..., tuple[NDArray[np.float64], Any, Any]]
         if state_rep == "density_matrix":
@@ -1320,6 +1569,7 @@ class Simulator:
         worker_fn: Callable[[int], Any]
 
         if state_rep == "vector":
+            assert h_sparse is not None
             ctx = preprocess_mcwf(
                 psi_initial=initial_state.vector,
                 h_sparse=h_sparse,
@@ -1331,6 +1581,7 @@ class Simulator:
             payload = {"ctx": ctx}
             worker_fn = _mcwf_worker
         elif state_rep == "density_matrix":
+            assert h_sparse is not None
             lindblad_ctx = preprocess_lindblad(
                 rho_initial=initial_state.density_matrix,
                 h_sparse=h_sparse,

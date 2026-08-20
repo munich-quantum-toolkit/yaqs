@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -17,6 +18,7 @@ import scipy.sparse
 
 from .hamiltonian_utils import (
     attach_mpo,
+    attach_piecewise,
     sparse_to_csr,
 )
 from .mpo import MPO
@@ -34,8 +36,9 @@ _LARGE_HILBERT_DIM = 2**14
 class Hamiltonian:
     """Hamiltonian for :meth:`~mqt.yaqs.Simulator.run` (analog evolution).
 
-    Build via classmethods (``ising``, ``pauli``, …) or pass ``tensors`` / ``matrix`` /
-    ``sparse_matrix``. These choices describe **source data**, not the simulation backend.
+    Build via classmethods (``ising``, ``pauli``, ``piecewise``, …) or pass
+    ``tensors`` / ``matrix`` / ``sparse_matrix``. These choices describe **source data**,
+    not the simulation backend.
 
     Pair with :class:`~mqt.yaqs.core.data_structures.state.State`: the state's
     ``representation`` alone selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` →
@@ -81,6 +84,7 @@ class Hamiltonian:
         self._matrix: NDArray[np.complex128] | None = None
         self._sparse_matrix: scipy.sparse.csr_matrix | None = None
         self._mpo: MPO | None = None
+        self._pieces: tuple[tuple[Hamiltonian, float], ...] | None = None
 
         if tensors is not None:
             self._init_from_tensors(tensors, length)
@@ -171,6 +175,94 @@ class Hamiltonian:
         wrapped = cls.__new__(cls)
         attach_mpo(wrapped, mpo)
         return wrapped
+
+    @classmethod
+    def piecewise(cls, pieces: Sequence[tuple[Hamiltonian, float]]) -> Hamiltonian:
+        """Build a Hamiltonian that switches static pieces on the analog ``dt`` grid.
+
+        Each pair is ``(Hamiltonian, duration)``. Durations must be positive integer
+        multiples of ``dt`` and sum to ``elapsed_time`` when passed to
+        :meth:`~mqt.yaqs.Simulator.run`.
+
+        Returns:
+            A piecewise :class:`Hamiltonian`.
+
+        Raises:
+            TypeError: If ``pieces`` is not a sequence of ``(Hamiltonian, duration)`` pairs
+                or a duration is not a real number.
+            ValueError: If ``pieces`` is empty, a piece is itself piecewise, a duration is
+                not finite and positive, or piece lengths disagree.
+        """
+        if isinstance(pieces, (str, bytes)) or not isinstance(pieces, Sequence):
+            msg = "pieces must be a non-empty sequence of (Hamiltonian, duration) pairs."
+            raise TypeError(msg)
+        raw_pieces = tuple(pieces)
+        if not raw_pieces:
+            msg = "pieces must be a non-empty sequence of (Hamiltonian, duration) pairs."
+            raise ValueError(msg)
+
+        normalized: list[tuple[Hamiltonian, float]] = []
+        length: int | None = None
+        for index, item in enumerate(raw_pieces):
+            if not isinstance(item, tuple) or len(item) != 2:
+                msg = f"pieces[{index}] must be a (Hamiltonian, duration) tuple."
+                raise TypeError(msg)
+            hamiltonian, duration = item
+            if not isinstance(hamiltonian, Hamiltonian):
+                msg = f"pieces[{index}] must start with a Hamiltonian, got {type(hamiltonian).__name__}."
+                raise TypeError(msg)
+            if hamiltonian.is_piecewise:
+                msg = "pieces must be static Hamiltonians, not nested piecewise Hamiltonians."
+                raise ValueError(msg)
+            if isinstance(duration, bool) or not isinstance(duration, (int, float, np.floating, np.integer)):
+                msg = f"pieces[{index}] duration must be a real number, got {type(duration).__name__}."
+                raise TypeError(msg)
+            duration_f = float(duration)
+            if not np.isfinite(duration_f) or duration_f <= 0.0:
+                msg = f"pieces[{index}] duration must be finite and positive, got {duration_f}."
+                raise ValueError(msg)
+            if length is None:
+                length = hamiltonian.length
+            elif hamiltonian.length != length:
+                msg = f"pieces[{index}] length {hamiltonian.length} does not match piece 0 length {length}."
+                raise ValueError(msg)
+            normalized.append((hamiltonian, duration_f))
+
+        assert length is not None
+        wrapped = cls.__new__(cls)
+        attach_piecewise(wrapped, tuple(normalized), length)
+        return wrapped
+
+    @property
+    def is_piecewise(self) -> bool:
+        """Whether this Hamiltonian is a sequence of static pieces with durations."""
+        return getattr(self, "_pieces", None) is not None
+
+    @property
+    def duration(self) -> float:
+        """Total analog duration of a piecewise Hamiltonian.
+
+        Sum of the piece durations. Pass this as ``AnalogSimParams.elapsed_time``.
+
+        Raises:
+            ValueError: If this Hamiltonian is not piecewise.
+        """
+        if self._pieces is None:
+            msg = "Static Hamiltonians do not have a piecewise duration."
+            raise ValueError(msg)
+        return float(sum(duration for _, duration in self._pieces))
+
+    @property
+    def pieces(self) -> tuple[tuple[Hamiltonian, float], ...]:
+        """Static pieces and durations for a piecewise Hamiltonian.
+
+        Raises:
+            ValueError: If this Hamiltonian is not piecewise.
+        """
+        if self._pieces is None:
+            msg = "Static Hamiltonians do not have piecewise durations."
+            raise ValueError(msg)
+        return self._pieces
 
     @classmethod
     def ising(
@@ -336,8 +428,11 @@ class Hamiltonian:
             ``self`` for chaining.
 
         Raises:
-            ValueError: If no data is available to build an MPO.
+            ValueError: If no data is available to build an MPO, or this Hamiltonian is piecewise.
         """
+        if self.is_piecewise:
+            msg = "A piecewise Hamiltonian has no single static operator."
+            raise ValueError(msg)
         if self._mpo is not None:
             return self
         if self._tensors is not None:
@@ -372,8 +467,11 @@ class Hamiltonian:
             ``self`` for chaining.
 
         Raises:
-            ValueError: If no data is available to build a sparse matrix.
+            ValueError: If no data is available to build a sparse matrix, or this Hamiltonian is piecewise.
         """
+        if self.is_piecewise:
+            msg = "A piecewise Hamiltonian has no single static operator."
+            raise ValueError(msg)
         if self._sparse_matrix is not None:
             return self
         if self._matrix is not None:

@@ -6,6 +6,14 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Added: piecewise time-dependent Hamiltonians
+
+Use `Hamiltonian.piecewise([(H, duration), ...])` to switch static Hamiltonians
+on the analog `dt` grid. Each duration must be a positive multiple of `dt`, and
+the durations must sum to `elapsed_time`. This currently supports a single MPS
+state with TDVP. See the
+[Hamiltonian guide](docs/examples/hamiltonians.md#time-dependent-hamiltonians).
+
 ### Breaking: analog durations must contain a whole number of fixed time steps
 
 `AnalogSimParams` now requires a finite, positive `dt` and a finite,

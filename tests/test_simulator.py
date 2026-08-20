@@ -41,6 +41,7 @@ from mqt.yaqs import (
     simulator,
 )
 from mqt.yaqs.analog.analog_tjm import analog_tjm_2
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.core.random_utils import make_sample_rng
@@ -2079,3 +2080,109 @@ def test_analog_longrange_crosstalk_xy_mps_runs() -> None:
     )
     result = Simulator(show_progress=False).run(State(3), hamiltonian, sim_params, noise)
     assert result.expectation_values[0].shape[0] >= 1
+
+
+def _x_drive(amplitude: float) -> Hamiltonian:
+    """Create a one-qubit Hamiltonian with an X drive.
+
+    Args:
+        amplitude: Coefficient of the Pauli-X term.
+
+    Returns:
+        A one-qubit static Hamiltonian.
+    """
+    return Hamiltonian.pauli(length=1, one_body=[(amplitude, "X")])
+
+
+def test_piecewise_hamiltonian_matches_sequential_static_runs() -> None:
+    """One piecewise analog run matches two sequential static runs."""
+    first = _x_drive(1.0)
+    second = _x_drive(2.0)
+    sim = Simulator(parallel=False, show_progress=False)
+    first_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        order=1,
+        tdvp_mode="1site",
+        get_state=True,
+        sample_timesteps=False,
+    )
+    first_result = sim.run(State(1, initial="zeros"), first, first_params)
+    assert first_result.output_state is not None
+    second_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        order=1,
+        tdvp_mode="1site",
+        sample_timesteps=False,
+    )
+    sequential = sim.run(first_result.output_state, second, second_params)
+
+    piecewise = Hamiltonian.piecewise([(first, 0.1), (second, 0.1)])
+    combined = sim.run(
+        State(1, initial="zeros"),
+        piecewise,
+        AnalogSimParams(
+            observables=[Observable("z", 0)],
+            elapsed_time=0.2,
+            dt=0.1,
+            order=1,
+            tdvp_mode="1site",
+            sample_timesteps=False,
+        ),
+    )
+    np.testing.assert_allclose(
+        np.asarray(combined.expectation_values[0], dtype=np.complex128),
+        np.asarray(sequential.expectation_values[0], dtype=np.complex128),
+        atol=1e-10,
+    )
+
+
+def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
+    """Durations must match the dt grid; unsupported analog backends are rejected."""
+    first = _x_drive(1.0)
+    second = _x_drive(2.0)
+    sim = Simulator(parallel=False, show_progress=False)
+    params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.2, dt=0.1, order=1, tdvp_mode="1site")
+    with pytest.raises(ValueError, match="integer multiple of dt"):
+        sim.run(State(1, initial="zeros"), Hamiltonian.piecewise([(first, 0.15), (second, 0.05)]), params)
+    with pytest.raises(ValueError, match="sum to elapsed_time"):
+        sim.run(State(1, initial="zeros"), Hamiltonian.piecewise([(first, 0.1)]), params)
+    with pytest.raises(ValueError, match="representation='mps'"):
+        sim.run(
+            State(1, initial="zeros", representation="vector"),
+            Hamiltonian.piecewise([(first, 0.2)]),
+            params,
+        )
+    with pytest.raises(ValueError, match=r"evolution_mode=EvolutionMode\.TDVP"):
+        sim.run(
+            State(1, initial="zeros"),
+            Hamiltonian.piecewise([(first, 0.2)]),
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.2,
+                dt=0.1,
+                evolution_mode=EvolutionMode.BUG,
+            ),
+        )
+    with pytest.raises(ValueError, match="list\\[State\\] ensemble"):
+        sim.run(
+            [State(1, initial="zeros"), State(1, initial="zeros")],
+            Hamiltonian.piecewise([(first, 0.2)]),
+            params,
+        )
+    with pytest.raises(ValueError, match="multi_time_observables"):
+        sim.run(
+            State(1, initial="zeros"),
+            Hamiltonian.piecewise([(first, 0.2)]),
+            AnalogSimParams(
+                observables=[Observable("z", 0)],
+                elapsed_time=0.2,
+                dt=0.1,
+                order=1,
+                tdvp_mode="1site",
+                multi_time_observables=[(Observable("z", 0), Observable("z", 0))],
+            ),
+        )

@@ -172,7 +172,7 @@ plt.show()
 
 - {doc}`analog_simulation` — TJM workflow and noise models
 - {doc}`digital_analog_simulation` — scheduled jumps inside a mixed program
-  (times are local to each analog segment)
+  (times are local to each analog run)
 - {doc}`realistic_noise_models` — built-in and custom jump operators,
   distributed strengths
 - {doc}`simulation_parameters` — time grids and `dt` alignment
