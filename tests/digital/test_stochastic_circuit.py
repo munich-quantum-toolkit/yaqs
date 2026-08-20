@@ -22,7 +22,7 @@ from mqt.yaqs.core.random_utils import make_trajectory_rng
 from mqt.yaqs.digital import sample_stochastic_circuit
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from mqt.yaqs.core.data_structures.mps import MPS
 
@@ -273,6 +273,68 @@ def test_scheduled_jumps_are_rejected() -> None:
 
     with pytest.raises(ValueError, match="does not support scheduled jumps"):
         sample_stochastic_circuit(circuit, noise_model, _rng())
+
+
+@pytest.mark.parametrize(
+    ("args", "expected_exception", "match"),
+    [
+        ((None, QuantumCircuit(1), _params()), TypeError, "requires a State initial_state"),
+        ((State(1), None, _params()), TypeError, "requires a QuantumCircuit operator"),
+        ((State(1), QuantumCircuit(1), None), TypeError, "must be DigitalSimParams"),
+        ((State(1), QuantumCircuit(1), DigitalSimParams()), ValueError, "No output specified"),
+    ],
+)
+def test_run_stochastic_circuit_validates_inputs(
+    args: tuple[object, object, object],
+    expected_exception: type[Exception],
+    match: str,
+) -> None:
+    """The stochastic-circuit public API validates its inputs and requested output."""
+    with pytest.raises(expected_exception, match=match):
+        Simulator().run_stochastic_circuit(*cast("tuple[State, QuantumCircuit, DigitalSimParams]", args))
+
+
+@pytest.mark.parametrize(("stochastic_circuit", "expected_backend"), [(True, "stochastic"), (False, "digital")])
+def test_digital_worker_dispatches_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    stochastic_circuit: bool,
+    expected_backend: str,
+) -> None:
+    """The digital worker forwards its context to the selected backend."""
+    initial_state = State(1).mps
+    noise_model = NoiseModel()
+    sim_params = _params()
+    circuit = QuantumCircuit(1)
+    expected_args = (3, initial_state, noise_model, sim_params, circuit)
+    sentinel = object()
+    calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def backend(name: str) -> Callable[[tuple[object, ...]], object]:
+        def record(args: tuple[object, ...]) -> object:
+            calls.append((name, args))
+            return sentinel
+
+        return record
+
+    monkeypatch.setattr(simulator_module, "_sample_and_run_stochastic_trajectory", backend("stochastic"))
+    monkeypatch.setattr(simulator_module, "digital_tjm", backend("digital"))
+    monkeypatch.setattr(
+        simulator_module,
+        "WORKER_CTX",
+        {
+            "initial_state": initial_state,
+            "noise_model": noise_model,
+            "sim_params": sim_params,
+            "operator": circuit,
+            "stochastic_circuit": stochastic_circuit,
+        },
+    )
+
+    result = simulator_module._digital_worker(3)  # ruff: ignore[private-member-access]
+
+    assert calls == [(expected_backend, expected_args)]
+    assert result is sentinel
 
 
 def test_trajectory_pipeline_samples_once_executes_once_and_aggregates(monkeypatch: pytest.MonkeyPatch) -> None:
