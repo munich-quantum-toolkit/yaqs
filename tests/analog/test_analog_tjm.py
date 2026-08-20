@@ -456,6 +456,34 @@ def test_analog_tjm_1_uses_operator_for_each_interval() -> None:
     assert seen == [first, second]
 
 
+def test_analog_tjm_2_uses_operator_for_each_interval() -> None:
+    """Order-2 TJM uses each interval MPO for evolution and measurement."""
+    first = MPO.ising(2, 1.0, 0.5)
+    second = MPO.ising(2, 1.0, 1.0)
+    third = MPO.ising(2, 1.0, 2.0)
+    state = MPS(2)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.3,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        num_traj=1,
+    )
+    with (
+        patch.object(
+            analog_module,
+            "step_through",
+            side_effect=lambda current_state, *_args, **_kwargs: current_state,
+        ) as mock_step,
+        patch.object(analog_module, "sample", return_value=None) as mock_sample,
+    ):
+        analog_tjm_2((0, state, None, sim_params, (first, second, third)))
+
+    assert [call.args[1] for call in mock_step.call_args_list] == [first, second]
+    assert [call.args[1] for call in mock_sample.call_args_list] == [first, second, third]
+
+
 def test_analog_tjm_2_sample_at_measures_only_requested_indices(monkeypatch: pytest.MonkeyPatch) -> None:
     """sample_at records order-2 measurement copies only at the selected times."""
     sampled: list[int] = []
