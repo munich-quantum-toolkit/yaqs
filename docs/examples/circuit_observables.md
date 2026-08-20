@@ -89,6 +89,47 @@ all belong to the gate's qubits. Single-qubit gates and idle sites between the
 gate qubits receive no noise. Each gate counts as one unit of noise time; to
 model compiled depth, simulate the transpiled circuit.
 
+### Stochastic circuit trajectories
+
+{func}`~mqt.yaqs.digital.sample_stochastic_circuit` materializes one Pauli-noise
+realization from an existing {class}`~mqt.yaqs.NoiseModel`. Unlike the existing
+direct TJM path, this explicit path intentionally uses both one- and two-qubit
+gates as noise opportunities. Processes are eligible when their complete support
+is contained in the gate's qubits. For those processes, let
+
+\[ \Gamma = \sum_i \gamma_i. \]
+
+An event occurs with probability $1 - \exp(-\Gamma)$. Conditional on an event,
+exactly one Pauli process is selected with probability $\gamma_i / \Gamma$ and
+appended after the original gate. The input circuit is copied without
+decomposing its native gates. Distribution-valued strengths are resolved once
+per helper call.
+
+```{code-cell} ipython3
+from mqt.yaqs.core.random_utils import make_trajectory_rng
+from mqt.yaqs.digital import sample_stochastic_circuit
+
+pauli_noise = NoiseModel([
+    {"name": "pauli_x", "sites": [0], "strength": 0.05},
+    {"name": "pauli_z", "sites": [1], "strength": 0.05},
+    {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.02},
+])
+rng = make_trajectory_rng(0, base_seed=7)
+realized_circuit = sample_stochastic_circuit(qc, pauli_noise, rng)
+```
+
+Use {meth}`~mqt.yaqs.Simulator.run_stochastic_circuit` to execute and aggregate
+multiple trajectories. It resolves distribution-valued strengths once per run,
+samples one complete circuit independently per trajectory, and executes each
+circuit once without passing the noise model again. Observable values,
+diagnostics, and counts use the standard {class}`~mqt.yaqs.Result` aggregation.
+
+Explicit circuit sampling supports recognized YAQS Pauli processes only.
+Positive-rate dissipative processes such as `raising` and `lowering` are
+rejected by this API because their jump probabilities depend on the evolving
+state. They remain available through the existing direct
+{meth}`~mqt.yaqs.Simulator.run` TJM path.
+
 ## 2. Noise-strength sweep
 
 On a longer chain, sweep a global relaxation rate $\gamma$ and track how each
