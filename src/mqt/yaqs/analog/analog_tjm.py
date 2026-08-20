@@ -314,11 +314,12 @@ def analog_tjm_2(
 
     # Zero-duration runs: evaluate the initial state before any noise/evolution (F0).
     if n_times == 1:
-        state.record_diagnostics(diagnostics, 0)
-        if sim_params.sample_timesteps:
-            state.evaluate_observables(sim_params, results, 0)
-        else:
-            state.evaluate_observables(sim_params, results)
+        if record(0):
+            state.record_diagnostics(diagnostics, 0)
+            if sim_params.sample_timesteps:
+                state.evaluate_observables(sim_params, results, 0)
+            else:
+                state.evaluate_observables(sim_params, results)
         return results, diagnostics, state if (sim_params.get_state or return_trajectory_state) else None
 
     if continue_trajectory:

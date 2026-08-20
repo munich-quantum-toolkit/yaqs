@@ -488,6 +488,46 @@ def test_analog_tjm_2_sample_at_measures_only_requested_indices(monkeypatch: pyt
     assert sampled == [2, 4]
 
 
+def test_analog_tjm_1_sample_at_writes_only_selected_columns() -> None:
+    """Order-1 sample_at fills selected columns and leaves the others untouched."""
+    hamiltonian = MPO.ising(1, 0.0, 1.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.4,
+        dt=0.1,
+        order=1,
+        sample_timesteps=True,
+        num_traj=1,
+    )
+    selected, _, _ = analog_tjm_1((0, MPS(1), None, sim_params, hamiltonian), sample_at=(1, 3))
+    full, _, _ = analog_tjm_1((0, MPS(1), None, sim_params, hamiltonian))
+    selected_z = np.asarray(selected[0], dtype=float)
+    full_z = np.asarray(full[0], dtype=float)
+    np.testing.assert_allclose(selected_z[1], full_z[1])
+    np.testing.assert_allclose(selected_z[3], full_z[3])
+    np.testing.assert_allclose(selected_z[[0, 2, 4]], 0.0)
+
+
+def test_analog_tjm_2_zero_duration_empty_sample_at_writes_nothing() -> None:
+    """A single-time order-2 run with sample_at=() records neither diagnostics nor observables."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.0,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    results, diagnostics, state = analog_tjm_2(
+        (0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)),
+        sample_at=(),
+    )
+    assert state is not None
+    np.testing.assert_allclose(np.asarray(results, dtype=float), 0.0)
+    np.testing.assert_allclose(diagnostics, 0.0)
+
+
 def test_sample_at_multiple_indices_require_sample_timesteps() -> None:
     """Multiple sample_at indices need a full time-grid result buffer."""
     sim_params = AnalogSimParams(
