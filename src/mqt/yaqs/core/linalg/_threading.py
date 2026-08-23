@@ -20,7 +20,7 @@ import contextlib
 try:
     from threadpoolctl import threadpool_limits
 except ImportError:
-    threadpool_limits = None  # ty: ignore[invalid-assignment]
+    threadpool_limits = None
 
 
 def threadpool_limits_one() -> contextlib.AbstractContextManager[None]:

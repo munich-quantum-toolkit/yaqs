@@ -31,7 +31,7 @@ TRes = TypeVar("TRes")
 try:
     from threadpoolctl import threadpool_info, threadpool_limits
 except ImportError:
-    threadpool_limits = None  # ty: ignore[invalid-assignment]
+    threadpool_limits = None
     threadpool_info = None
 
 MPContext = Literal["fork", "spawn", "auto"]
