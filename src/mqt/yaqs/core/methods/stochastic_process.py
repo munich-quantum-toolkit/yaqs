@@ -37,8 +37,8 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     """Calculate the stochastic factor for a given state.
 
     This factor is used to determine the probability that a quantum jump will occur
-    during the stochastic evolution. It is defined as 1 minus the norm of the state
-    at site 0.
+    during the stochastic evolution. It is defined as 1 minus the squared norm
+    ``<psi|psi>`` of the state at site 0.
 
     Args:
         state: The Matrix Product MPS representing the current state of the system.
@@ -47,7 +47,7 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     Returns:
         The calculated stochastic factor as a float.
     """
-    return np.asarray(1 - state.norm(0), dtype=np.float64)
+    return np.asarray(1 - state.norm_squared(0), dtype=np.float64)
 
 
 def _adjacent_jump_weight(
@@ -80,7 +80,7 @@ def _adjacent_jump_weight(
     jumped_state.tensors[site] = tensor_left_new
     jumped_state.tensors[site + 1] = tensor_right_new
     jumped_state.set_center(None)
-    return float(jumped_state.norm())
+    return float(jumped_state.norm_squared())
 
 
 def create_probability_distribution(
@@ -148,7 +148,7 @@ def create_probability_distribution(
 
                 jumped_state = copy.deepcopy(state)
                 jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
-                dp_m = dt * gamma * jumped_state.norm(site)
+                dp_m = dt * gamma * jumped_state.norm_squared(site)
                 ordered_processes.append(process)
                 dp_m_list.append(float(dp_m.real))
 
@@ -158,7 +158,7 @@ def create_probability_distribution(
                 if len(process["sites"]) == 2 and process["sites"][0] == site:
                     if is_pauli(process):
                         gamma = process["strength"]
-                        dp_m = dt * gamma * state.norm(site)
+                        dp_m = dt * gamma * state.norm_squared(site)
                         ordered_processes.append(process)
                         dp_m_list.append(float(dp_m.real))
 

@@ -119,12 +119,12 @@ def test_calculate_stochastic_factor_nontrivial() -> None:
 
     This test artificially rescales the first tensor of an MPS, resulting in a non-unit
     norm, and checks that `calculate_stochastic_factor` returns the expected value
-    (1 minus the actual norm of the first site).
+    (1 minus the actual squared norm of the first site).
     """
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.8
     factor = calculate_stochastic_factor(state)
-    expected = 1 - state.norm()
+    expected = 1 - state.norm_squared()
     assert np.isclose(factor, expected), "Stochastic factor does not match expectation."
 
 
@@ -308,11 +308,11 @@ def test_adjacent_pdf_unknown_gauge_uses_global_norm() -> None:
 
     two_i = 2.0 * np.eye(4, dtype=np.complex128)
     # Local Frobenius shortcuts disagree with the global norm under this gauge.
-    global_norm = float(state.norm())
+    global_norm_sq = float(state.norm_squared())
     local_t0 = float(np.vdot(state.tensors[0], state.tensors[0]).real)
     merged_2i = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
-    assert not np.isclose(local_t0, global_norm, atol=1e-8)
-    assert not np.isclose(float(np.vdot(merged_2i, merged_2i).real), 4.0 * global_norm, atol=1e-8)
+    assert not np.isclose(local_t0, global_norm_sq, atol=1e-8)
+    assert not np.isclose(float(np.vdot(merged_2i, merged_2i).real), 4.0 * global_norm_sq, atol=1e-8)
 
     noise_model = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 1.0},
@@ -349,7 +349,7 @@ def test_nonfinite_probability_weight_raises(bad: float) -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     # Inject the non-finite weight directly: planting 1e200 overflows in the norm
     # contraction and emits a platform-dependent RuntimeWarning under BLAS.
-    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
+    with patch.object(MPS, "norm_squared", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
         create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
 
 

@@ -918,6 +918,56 @@ def test_norm() -> None:
     assert val == 1
 
 
+def test_norm_returns_euclidean_norm_not_its_square() -> None:
+    """``norm`` returns ``sqrt(<psi|psi>)``, matching the 2-norm of the dense vector."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 3.0
+
+    assert float(mps.norm()) == pytest.approx(3.0)
+    assert float(mps.norm()) == pytest.approx(float(np.linalg.norm(mps.to_vec())))
+
+
+def test_norm_squared_returns_scalar_product() -> None:
+    """``norm_squared`` returns ``<psi|psi>``, i.e. the square of :meth:`MPS.norm`."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 3.0
+
+    assert float(mps.norm_squared()) == pytest.approx(9.0)
+    assert float(mps.norm_squared()) == pytest.approx(float(mps.scalar_product(mps).real))
+    assert float(mps.norm_squared()) == pytest.approx(float(mps.norm()) ** 2)
+
+
+@pytest.mark.parametrize("site", [0, 1, 2])
+def test_norm_site_resolved_is_square_root_of_norm_squared(site: int) -> None:
+    """The site-resolved branch obeys the same contract as the global one."""
+    mps = MPS(3, state="zeros")
+    mps.set_canonical_form(orthogonality_center=0)
+    mps.tensors[0] *= 2.0
+
+    assert float(mps.norm_squared(site)) == pytest.approx(4.0)
+    assert float(mps.norm(site)) == pytest.approx(2.0)
+    assert float(mps.norm(site)) == pytest.approx(np.sqrt(float(mps.norm_squared(site))))
+
+
+def test_norm_unknown_gauge_falls_back_to_global() -> None:
+    """With an unknown gauge, the site-resolved call reduces to the global norm."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 3.0
+    mps.set_center(None)
+
+    assert float(mps.norm(1)) == pytest.approx(3.0)
+    assert float(mps.norm_squared(1)) == pytest.approx(9.0)
+
+
+def test_norm_of_zero_state_is_zero() -> None:
+    """The square root is guarded against negative round-off for a null state."""
+    mps = MPS(2, state="zeros")
+    mps.tensors[0][:] = 0.0
+
+    assert float(mps.norm()) == pytest.approx(0.0)
+    assert float(mps.norm_squared()) == pytest.approx(0.0)
+
+
 def test_check_if_valid_mps() -> None:
     """Test that an MPS with consistent bond dimensions passes the validity check.
 

@@ -108,7 +108,7 @@ def apply_scheduled_jumps(
     if not applied:
         return state
 
-    post_squared_norm = float(state.norm())
+    post_squared_norm = float(state.norm_squared())
     if not np.isfinite(post_squared_norm) or post_squared_norm <= 0.0:
         msg = (
             "Scheduled jump produced a zero or non-finite squared norm "

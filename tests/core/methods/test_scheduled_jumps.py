@@ -115,7 +115,7 @@ def test_apply_scheduled_jumps_nonfinite_norm_raises(bad: float) -> None:
     state.normalize("B")
     # Inject the non-finite squared norm directly: planting 1e200 overflows in the
     # norm contraction and emits a platform-dependent RuntimeWarning under BLAS.
-    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
+    with patch.object(MPS, "norm_squared", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
         apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
 

@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added `MPS.norm_squared` for the squared norm `<psi|psi>`, the quantity
+  quantum-jump probabilities are proportional to ([#552]) ([**@Pouri96**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])
@@ -45,6 +47,10 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed `MPS.norm` returning the squared norm `<psi|psi>` instead of the
+  Euclidean norm `sqrt(<psi|psi>)`, which made the single-qubit density matrix
+  extracted from an unnormalized MPS disagree with the dense backend ([#552])
+  ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])
@@ -248,6 +254,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#552]: https://github.com/munich-quantum-toolkit/yaqs/pull/552
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
 [#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529

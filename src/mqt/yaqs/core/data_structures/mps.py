@@ -1536,10 +1536,39 @@ class MPS:
 
         return np.complex128(total_norm**2)
 
+    def norm_squared(self, site: int | None = None) -> np.float64:
+        """Squared norm calculation.
+
+        Calculate the squared norm ``<psi|psi>`` of the state.
+
+        Args:
+            site: The specific site to calculate the squared norm from. If ``None``,
+                the squared norm is calculated for the entire network.
+
+        Returns:
+            The squared norm of the state or the specified site.
+
+        Notes:
+            This is the quantity quantum-jump probabilities are proportional to, such
+            as ``||L|psi>||^2``. Use :meth:`norm` for the Euclidean norm itself.
+
+            For a site-specific squared norm, uses fast local contraction when
+            :attr:`orthogonality_center` covers that site; shifts on a copy when the
+            center is known but misaligned; falls back to the global squared norm when
+            the gauge is unknown (``None``).
+        """
+        if site is not None and self.orthogonality_center is not None:
+            if not self.check_covers_sites(site):
+                temp = copy.deepcopy(self)
+                temp.shift_center_to(site)
+                return temp.scalar_product(temp, site).real
+            return self.scalar_product(self, site).real
+        return self.scalar_product(self).real
+
     def norm(self, site: int | None = None) -> np.float64:
         """Norm calculation.
 
-        Calculate the norm of the state.
+        Calculate the Euclidean norm ``sqrt(<psi|psi>)`` of the state.
 
         Args:
             site: The specific site to calculate the norm from. If ``None``, the
@@ -1549,20 +1578,11 @@ class MPS:
             The norm of the state or the specified site.
 
         Notes:
-            For a site-specific norm, uses fast local contraction when
-            :attr:`orthogonality_center` covers that site; shifts on a copy when the
-            center is known but misaligned; falls back to the global norm when the
-            gauge is unknown (``None``).
+            For jump probabilities and other quantities proportional to ``<psi|psi>``,
+            call :meth:`norm_squared` rather than squaring this value.
         """
-        if site is not None:
-            if self.orthogonality_center is not None:
-                if not self.check_covers_sites(site):
-                    temp = copy.deepcopy(self)
-                    temp.shift_center_to(site)
-                    return temp.scalar_product(temp, site).real
-                return self.scalar_product(self, site).real
-            return self.scalar_product(self).real
-        return self.scalar_product(self).real
+        squared = float(self.norm_squared(site))
+        return np.float64(np.sqrt(max(squared, 0.0)))
 
     def check_if_valid_mps(self) -> None:
         """MPS validity check.
