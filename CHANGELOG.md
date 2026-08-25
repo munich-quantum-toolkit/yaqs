@@ -51,6 +51,10 @@ releases may include breaking changes.
   Euclidean norm `sqrt(<psi|psi>)`, which made the single-qubit density matrix
   extracted from an unnormalized MPS disagree with the dense backend ([#552])
   ([**@Pouri96**])
+- fixed `MPS.init_mps_from_basis` appending to the existing tensors instead of
+  replacing them, which left a populated MPS with twice as many tensors as its
+  `length`; `MPS.check_if_valid_mps` now also rejects that mismatch ([#552])
+  ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])

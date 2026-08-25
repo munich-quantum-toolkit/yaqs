@@ -983,6 +983,60 @@ def test_check_if_valid_mps() -> None:
     mps.check_if_valid_mps()
 
 
+def test_check_if_valid_mps_rejects_tensor_count_mismatch() -> None:
+    """A tensor list whose length disagrees with ``length`` is not a valid MPS."""
+    mps = MPS(3, state="zeros")
+    mps.tensors.append(mps.tensors[-1].copy())
+
+    with pytest.raises(AssertionError, match="4 tensors but length 3"):
+        mps.check_if_valid_mps()
+
+
+def test_init_mps_from_basis_replaces_existing_tensors() -> None:
+    """Calling the initializer on a populated MPS assigns rather than appends."""
+    mps = MPS(3, state="zeros")
+    mps.init_mps_from_basis("010", [2] * 3)
+
+    assert len(mps.tensors) == mps.length == 3
+    mps.check_if_valid_mps()
+    for site, char in enumerate("010"):
+        expected = np.zeros(2, dtype=complex)
+        expected[int(char)] = 1.0
+        np.testing.assert_allclose(mps.tensors[site][:, 0, 0], expected)
+
+
+def test_init_mps_from_basis_is_idempotent() -> None:
+    """Repeated calls leave the same state rather than accumulating tensors."""
+    mps = MPS(4, state="zeros")
+    mps.init_mps_from_basis("1001", [2] * 4)
+    once = [t.copy() for t in mps.tensors]
+    mps.init_mps_from_basis("1001", [2] * 4)
+
+    assert len(mps.tensors) == 4
+    for before, after in zip(once, mps.tensors, strict=True):
+        np.testing.assert_allclose(before, after)
+
+
+def test_init_mps_from_basis_rejects_length_mismatch() -> None:
+    """A basis string that does not span the chain is rejected instead of corrupting it."""
+    mps = MPS(3, state="zeros")
+
+    with pytest.raises(ValueError, match="2 characters but the MPS has length 3"):
+        mps.init_mps_from_basis("01", [2] * 2)
+
+    with pytest.raises(ValueError, match="3 characters but 2 physical dimensions"):
+        mps.init_mps_from_basis("010", [2] * 2)
+
+
+def test_init_mps_from_basis_matches_constructor_path() -> None:
+    """In-place initialization agrees with ``MPS(..., state="basis")``."""
+    reference = MPS(6, state="basis", basis_string="010011")
+    mps = MPS(6, state="zeros")
+    mps.init_mps_from_basis("010011", [2] * 6)
+
+    np.testing.assert_allclose(mps.to_vec(), reference.to_vec())
+
+
 def test_check_canonical_form_none() -> None:
     """Tests that no canonical form is detected for an MPS in a non-canonical state."""
     mps = random_mps([(2, 1, 2), (2, 2, 3), (2, 3, 1)], normalize=False)

@@ -393,18 +393,36 @@ class MPS:
             current -= 1
 
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
-        """Initialize a list of MPS tensors representing a product state from a basis string.
+        """Initialize this MPS in place as a product state from a basis string.
+
+        Any existing tensors are replaced, so the method is safe to call on an
+        already-populated MPS.
 
         Args:
             basis_string: A string like "0101" indicating the computational basis state.
             physical_dimensions: The physical dimension of each site (e.g. 2 for qubits, 3+ for qudits).
+
+        Raises:
+            ValueError: If ``basis_string`` and ``physical_dimensions`` differ in length,
+                or if they do not match :attr:`length`.
         """
-        assert len(basis_string) == len(physical_dimensions)
+        if len(basis_string) != len(physical_dimensions):
+            msg = (
+                f"basis_string has {len(basis_string)} characters but "
+                f"{len(physical_dimensions)} physical dimensions were given."
+            )
+            raise ValueError(msg)
+        if len(basis_string) != self.length:
+            msg = f"basis_string has {len(basis_string)} characters but the MPS has length {self.length}."
+            raise ValueError(msg)
+
+        tensors = []
         for site, char in enumerate(basis_string):
             idx = int(char)
             tensor = np.zeros((physical_dimensions[site], 1, 1), dtype=complex)
             tensor[idx, 0, 0] = 1.0
-            self.tensors.append(tensor)
+            tensors.append(tensor)
+        self.tensors = tensors
 
     def pad_bond_dimension(self, target_dim: int) -> None:
         """Pad MPS with extra zeros to increase bond dims.
@@ -1589,10 +1607,12 @@ class MPS:
 
         Check if the current tensor network is a valid Matrix Product State (MPS).
 
-        This method verifies that the bond dimensions between consecutive tensors
-        in the network are consistent. Specifically, it checks that the second
-        dimension of each tensor matches the third dimension of the previous tensor.
+        This method verifies that the tensor count matches :attr:`length` and that the
+        bond dimensions between consecutive tensors in the network are consistent.
+        Specifically, it checks that the second dimension of each tensor matches the
+        third dimension of the previous tensor.
         """
+        assert len(self.tensors) == self.length, f"MPS has {len(self.tensors)} tensors but length {self.length}."
         right_bond = self.tensors[0].shape[2]
         for tensor in self.tensors[1::]:
             assert tensor.shape[1] == right_bond
