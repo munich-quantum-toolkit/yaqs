@@ -64,7 +64,7 @@ flowchart LR
 | Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
 | Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
 | Transmon–resonator SWAP (noiseless vs noisy)                               | {doc}`examples/transmon_emulation`                                          |
-| Trapped-ion position-grid dynamics                                         | {doc}`examples/trapped_ion`                                                 |
+| Static and moving trapped-ion position-grid dynamics                       | {doc}`examples/trapped_ion`                                                 |
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
 | Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |

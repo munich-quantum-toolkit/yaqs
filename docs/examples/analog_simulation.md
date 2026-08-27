@@ -169,7 +169,8 @@ plt.show()
 
 - {doc}`digital_analog_simulation` — combine analog evolution with digital
   operations in one program
-- {doc}`hamiltonians` — Pauli, Hubbard, and hardware Hamiltonians
+- {doc}`hamiltonians` — Pauli, Hubbard, hardware, and piecewise time-dependent
+  Hamiltonians
 - {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
 - {doc}`scheduled_jumps` — deterministic jumps at specified times
 - {doc}`ensemble_evolution` — unitary ensemble correlations

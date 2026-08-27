@@ -47,7 +47,8 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, initialize, step_through
+from mqt.yaqs.analog import analog_tjm as analog_module
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -430,3 +431,182 @@ def test_simulator_order1_honors_bug_evolution_mode() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
     assert result.expectation_values is not None
     assert result.expectation_values[0].shape == (len(sim_params.times),)
+
+
+def test_analog_tjm_1_uses_operator_for_each_interval() -> None:
+    """Order-1 TJM applies the matching MPO on each analog interval."""
+    first = MPO.ising(2, 1.0, 0.5)
+    second = MPO.ising(2, 1.0, 2.0)
+    state = MPS(2)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=1,
+        sample_timesteps=False,
+        num_traj=1,
+    )
+    seen: list[MPO] = []
+
+    def capture(_state: MPS, hamiltonian: MPO, _sim_params: AnalogSimParams) -> None:
+        seen.append(hamiltonian)
+
+    with patch("mqt.yaqs.analog.analog_tjm.apply_unitary_evolution", side_effect=capture):
+        analog_tjm_1((0, state, None, sim_params, (first, second)))
+    assert seen == [first, second]
+
+
+def test_analog_tjm_2_uses_operator_for_each_interval() -> None:
+    """Order-2 TJM uses each interval MPO for evolution and measurement."""
+    first = MPO.ising(2, 1.0, 0.5)
+    second = MPO.ising(2, 1.0, 1.0)
+    third = MPO.ising(2, 1.0, 2.0)
+    state = MPS(2)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.3,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        num_traj=1,
+    )
+    with (
+        patch.object(
+            analog_module,
+            "step_through",
+            side_effect=lambda current_state, *_args, **_kwargs: current_state,
+        ) as mock_step,
+        patch.object(analog_module, "sample", return_value=None) as mock_sample,
+    ):
+        analog_tjm_2((0, state, None, sim_params, (first, second, third)))
+
+    assert [call.args[1] for call in mock_step.call_args_list] == [first, second]
+    assert [call.args[1] for call in mock_sample.call_args_list] == [first, second, third]
+
+
+def test_analog_tjm_2_sample_at_measures_only_requested_indices(monkeypatch: pytest.MonkeyPatch) -> None:
+    """sample_at records order-2 measurement copies only at the selected times."""
+    sampled: list[int] = []
+    original = analog_module.sample
+
+    def record_sample(
+        phi: MPS,
+        hamiltonian: MPO,
+        noise_model: NoiseModel | None,
+        sim_params: AnalogSimParams,
+        results: NDArray[np.float64],
+        j: int,
+        rng: np.random.Generator | None = None,
+        diagnostics: NDArray[np.float64] | None = None,
+    ) -> MPS | None:
+        sampled.append(j)
+        return original(phi, hamiltonian, noise_model, sim_params, results, j, rng=rng, diagnostics=diagnostics)
+
+    monkeypatch.setattr(analog_module, "sample", record_sample)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.4,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    analog_tjm_2((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(2, 4))
+    assert sampled == [2, 4]
+
+
+def test_analog_tjm_1_sample_at_writes_only_selected_columns() -> None:
+    """Order-1 sample_at fills selected columns and leaves the others untouched."""
+    hamiltonian = MPO.ising(1, 0.0, 1.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.4,
+        dt=0.1,
+        order=1,
+        sample_timesteps=True,
+        num_traj=1,
+    )
+    selected, _, _ = analog_tjm_1((0, MPS(1), None, sim_params, hamiltonian), sample_at=(1, 3))
+    full, _, _ = analog_tjm_1((0, MPS(1), None, sim_params, hamiltonian))
+    selected_z = np.asarray(selected[0], dtype=float)
+    full_z = np.asarray(full[0], dtype=float)
+    np.testing.assert_allclose(selected_z[1], full_z[1])
+    np.testing.assert_allclose(selected_z[3], full_z[3])
+    np.testing.assert_allclose(selected_z[[0, 2, 4]], 0.0)
+
+
+def test_analog_tjm_2_zero_duration_empty_sample_at_writes_nothing() -> None:
+    """A single-time order-2 run with sample_at=() records neither diagnostics nor observables."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.0,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    results, diagnostics, state = analog_tjm_2(
+        (0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)),
+        sample_at=(),
+    )
+    assert state is not None
+    np.testing.assert_allclose(np.asarray(results, dtype=float), 0.0)
+    np.testing.assert_allclose(diagnostics, 0.0)
+
+
+def test_sample_at_multiple_indices_require_sample_timesteps() -> None:
+    """Multiple sample_at indices need a full time-grid result buffer."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=1,
+        sample_timesteps=False,
+    )
+    with pytest.raises(ValueError, match="sample_timesteps=True"):
+        analog_tjm_1((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(1, 2))
+
+
+@pytest.mark.parametrize(("backend", "order"), [(analog_tjm_1, 1), (analog_tjm_2, 2)])
+@pytest.mark.parametrize("bad_index", [-1, 5])
+def test_sample_at_rejects_out_of_range_indices(
+    backend: Callable[..., tuple[np.ndarray, np.ndarray, MPS | None]],
+    order: int,
+    bad_index: int,
+) -> None:
+    """sample_at indices must lie on the analog time grid."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        order=order,
+        sample_timesteps=True,
+    )
+    with pytest.raises(ValueError, match="outside the time grid"):
+        backend((0, MPS(1), None, sim_params, MPO.ising(1, 0.0, 0.0)), sample_at=(bad_index,))
+
+
+def test_analog_tjm_2_get_state_when_sample_at_omits_final_time() -> None:
+    """Order-2 get_state still returns the physical sample if sample_at skips the last time."""
+    hamiltonian = MPO.ising(1, 0.0, 1.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.3,
+        dt=0.1,
+        order=2,
+        sample_timesteps=True,
+        get_state=True,
+        num_traj=1,
+    )
+    args = (0, MPS(1), None, sim_params, hamiltonian)
+    omitted_results, _, omitted_state = analog_tjm_2(args, sample_at=(1,))
+    full_results, _, full_state = analog_tjm_2(
+        (0, MPS(1), None, sim_params, hamiltonian),
+    )
+    assert omitted_state is not None
+    assert full_state is not None
+    np.testing.assert_allclose(omitted_state.to_vec(), full_state.to_vec())
+    np.testing.assert_allclose(omitted_results[0, 1], full_results[0, 1])
+    np.testing.assert_allclose(omitted_results[0, -1], 0.0)

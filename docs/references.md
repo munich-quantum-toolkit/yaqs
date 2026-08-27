@@ -1,6 +1,6 @@
 # References
 
-*MQT YAQS* implements algorithms from peer-reviewed research. **When you use MQT
+MQT YAQS implements algorithms from peer-reviewed research. **When you use MQT
 YAQS in academic work, please cite the publications that correspond to the
 features you use:**
 
@@ -53,7 +53,7 @@ Representative BibTeX entries:
 }
 ```
 
-*MQT YAQS* is part of the Munich Quantum Toolkit, which is described in
+MQT YAQS is part of the Munich Quantum Toolkit, which is described in
 {cite:p}`mqt`.
 
 A full list of references is given below.

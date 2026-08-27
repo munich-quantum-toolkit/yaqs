@@ -6,6 +6,44 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: `MPS.norm` returns the Euclidean norm, not its square
+
+`MPS.norm(site=None)` previously returned `<psi|psi>`, the *squared* norm,
+contradicting its name and docstring. It now returns `sqrt(<psi|psi>)`, so a
+state scaled to `||psi|| = 3` reports `3.0` where it previously reported `9.0`.
+The site-resolved branch changed the same way.
+
+Where an algorithm needs the squared norm `<psi|psi> = ||psi||^2`, square the
+result explicitly:
+
+```python
+from mqt.yaqs.core.data_structures.mps import MPS
+
+state = MPS(3, state="zeros")
+state.tensors[0] = state.tensors[0] * 3.0
+
+state.norm()  # 3.0 -- was 9.0
+state.norm() ** 2  # 9.0 -- the previous return value of norm()
+```
+
+Replace bare `state.norm()` with `state.norm() ** 2` wherever the value feeds a
+probability, such as a quantum-jump weight `dt * gamma * ||L|psi>||^2` or the
+Monte-Carlo wave-function factor `1 - <psi|psi>`. Code that only compares the
+result against `1.0` to check normalization is unaffected, because
+`sqrt(1) == 1`.
+
+All jump-probability call sites inside YAQS were updated to square `norm()`
+explicitly, so trajectory sampling remains numerically equivalent within
+floating- point tolerance (`sqrt(x)**2` need not be bit-identical to `x`).
+
+### Added: piecewise time-dependent Hamiltonians
+
+Use `Hamiltonian.piecewise([(H, duration), ...])` to switch static Hamiltonians
+on the analog `dt` grid. Each duration must be a positive multiple of `dt`, and
+the durations must sum to `elapsed_time`. This currently supports a single MPS
+state with TDVP. See the
+[Hamiltonian guide](docs/examples/hamiltonians.md#time-dependent-hamiltonians).
+
 ### Breaking: analog durations must contain a whole number of fixed time steps
 
 `AnalogSimParams` now requires a finite, positive `dt` and a finite,
@@ -187,7 +225,7 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 Removed from `*SimParams`: `noise_model`, `output_state`,
 `multi_time_observables_times`, `multi_time_observables_results`,
 `measurements`, `results`, `aggregate_trajectories`, `aggregate_measurements`.
-Observable _configuration_ (`observables`, `multi_time_observables`, etc.) stays
+Observable *configuration* (`observables`, `multi_time_observables`, etc.) stays
 on `*SimParams`.
 
 For MPS-backed analog and digital-observable runs, `result.runtime_cost`,

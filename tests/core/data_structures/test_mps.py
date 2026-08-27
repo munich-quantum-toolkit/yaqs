@@ -918,6 +918,55 @@ def test_norm() -> None:
     assert val == 1
 
 
+def test_norm_returns_euclidean_norm_not_its_square() -> None:
+    """``norm`` returns ``sqrt(<psi|psi>)``, matching the 2-norm of the dense vector."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 3.0
+
+    assert float(mps.norm()) == pytest.approx(3.0)
+    assert float(mps.norm()) == pytest.approx(float(np.linalg.norm(mps.to_vec())))
+    assert float(mps.norm() ** 2) == pytest.approx(float(mps.scalar_product(mps).real))
+
+
+def test_norm_of_unnormalized_basis_state() -> None:
+    """For the unnormalized state ``2|0>``, ``norm`` returns ``2.0``."""
+    mps = MPS(1, state="zeros")
+    mps.tensors[0] *= 2.0
+
+    assert float(mps.norm()) == pytest.approx(2.0)
+    assert float(mps.norm() ** 2) == pytest.approx(4.0)
+
+
+@pytest.mark.parametrize("site", [0, 1, 2])
+def test_norm_site_resolved_matches_global_for_left_canonical_scale(site: int) -> None:
+    """The site-resolved branch obeys the same Euclidean contract as the global one."""
+    mps = MPS(3, state="zeros")
+    mps.set_canonical_form(orthogonality_center=0)
+    mps.tensors[0] *= 2.0
+
+    assert float(mps.norm(site)) == pytest.approx(2.0)
+    assert float(mps.norm(site) ** 2) == pytest.approx(4.0)
+
+
+def test_norm_unknown_gauge_falls_back_to_global() -> None:
+    """With an unknown gauge, the site-resolved call reduces to the global norm."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 3.0
+    mps.set_center(None)
+
+    assert float(mps.norm(1)) == pytest.approx(3.0)
+    assert float(mps.norm(1) ** 2) == pytest.approx(9.0)
+
+
+def test_norm_of_zero_state_is_zero() -> None:
+    """The square root is guarded against negative round-off for a null state."""
+    mps = MPS(2, state="zeros")
+    mps.tensors[0][:] = 0.0
+
+    assert float(mps.norm()) == pytest.approx(0.0)
+    assert float(mps.norm() ** 2) == pytest.approx(0.0)
+
+
 def test_check_if_valid_mps() -> None:
     """Test that an MPS with consistent bond dimensions passes the validity check.
 
@@ -931,6 +980,60 @@ def test_check_if_valid_mps() -> None:
     t3 = rng.random(size=(pdim, 3, 1)).astype(np.complex128)
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
     mps.check_if_valid_mps()
+
+
+def test_check_if_valid_mps_rejects_tensor_count_mismatch() -> None:
+    """A tensor list whose length disagrees with ``length`` is not a valid MPS."""
+    mps = MPS(3, state="zeros")
+    mps.tensors.append(mps.tensors[-1].copy())
+
+    with pytest.raises(AssertionError, match="4 tensors but length 3"):
+        mps.check_if_valid_mps()
+
+
+def test_init_mps_from_basis_replaces_existing_tensors() -> None:
+    """Calling the initializer on a populated MPS assigns rather than appends."""
+    mps = MPS(3, state="zeros")
+    mps.init_mps_from_basis("010", [2] * 3)
+
+    assert len(mps.tensors) == mps.length == 3
+    mps.check_if_valid_mps()
+    for site, char in enumerate("010"):
+        expected = np.zeros(2, dtype=complex)
+        expected[int(char)] = 1.0
+        np.testing.assert_allclose(mps.tensors[site][:, 0, 0], expected)
+
+
+def test_init_mps_from_basis_is_idempotent() -> None:
+    """Repeated calls leave the same state rather than accumulating tensors."""
+    mps = MPS(4, state="zeros")
+    mps.init_mps_from_basis("1001", [2] * 4)
+    once = [t.copy() for t in mps.tensors]
+    mps.init_mps_from_basis("1001", [2] * 4)
+
+    assert len(mps.tensors) == 4
+    for before, after in zip(once, mps.tensors, strict=True):
+        np.testing.assert_allclose(before, after)
+
+
+def test_init_mps_from_basis_rejects_length_mismatch() -> None:
+    """A basis string that does not span the chain is rejected instead of corrupting it."""
+    mps = MPS(3, state="zeros")
+
+    with pytest.raises(ValueError, match="2 characters but the MPS has length 3"):
+        mps.init_mps_from_basis("01", [2] * 2)
+
+    with pytest.raises(ValueError, match="3 characters but 2 physical dimensions"):
+        mps.init_mps_from_basis("010", [2] * 2)
+
+
+def test_init_mps_from_basis_matches_constructor_path() -> None:
+    """In-place initialization agrees with ``MPS(..., state="basis")``."""
+    reference = MPS(6, state="basis", basis_string="010011")
+    mps = MPS(6, state="zeros")
+    mps.init_mps_from_basis("010011", [2] * 6)
+
+    np.testing.assert_allclose(mps.to_vec(), reference.to_vec())
 
 
 def test_check_canonical_form_none() -> None:

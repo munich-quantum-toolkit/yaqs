@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Trapped-Ion Position-Grid Emulation
+# Static and Moving Trapped-Ion Position-Grid Emulation
 
 This example evolves a **single ion** on a finite position grid with
 {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion`. Each ion is one MPO
@@ -20,8 +20,8 @@ site; the local Hilbert space is the grid itself. The Hamiltonian combines a
 finite-difference kinetic term and a harmonic trap—see {doc}`hamiltonians` for
 the factory API and two-ion Coulomb extensions.
 
-We initialize a displaced harmonic-oscillator wavepacket in a static central
-well. In the continuum limit, its center follows
+We first initialize a displaced harmonic-oscillator wavepacket in a static
+central well. In the continuum limit, its center follows
 $\langle x(t)\rangle = x_0 \cos(\omega t)$, so after half a trap period it
 reaches the opposite turning point.
 
@@ -114,6 +114,111 @@ ax.legend(loc="upper right")
 fig.colorbar(image, ax=ax, label=r"$|\psi(x,t)|^2$")
 plt.show()
 ```
+
+## 4. Transport in a moving harmonic well
+
+A moving trap is a piecewise Hamiltonian: one static well per ``dt`` interval,
+then a hold at the target. The trap center is a staircase from
+$q\nobreak=\nobreak-1$ to $q\nobreak=\nobreak1$, constant on each analog step.
+
+```{code-cell} ipython3
+transport_positions = np.linspace(-6.0, 6.0, 25)
+transport_grid_dim = len(transport_positions)
+start_center = -1.0
+target_center = 1.0
+transport_duration = 10.0
+hold_duration = 5.0
+dt = 0.25
+
+
+def trap_at(trap_center: float) -> Hamiltonian:
+    return Hamiltonian.from_mpo(
+        MPO.trapped_ion(
+            transport_positions,
+            masses=[1.0],
+            omega=omega,
+            trap_center=trap_center,
+        )
+    )
+
+
+n_transport = round(transport_duration / dt)
+transport_pieces = [
+    (trap_at(start_center + (target_center - start_center) * (step / n_transport)), dt)
+    for step in range(n_transport)
+]
+moving_hamiltonian = Hamiltonian.piecewise([
+    *transport_pieces,
+    (trap_at(target_center), hold_duration),
+])
+
+transport_wavepacket = np.exp(-0.5 * (transport_positions - start_center) ** 2).astype(np.complex128)
+transport_wavepacket /= np.linalg.norm(transport_wavepacket)
+transport_state = State(
+    length=1,
+    tensors=[transport_wavepacket.reshape(transport_grid_dim, 1, 1)],
+    physical_dimensions=[transport_grid_dim],
+)
+transport_position = Observable("position", 0, positions=transport_positions)
+transport_params = AnalogSimParams(
+    observables=[transport_position],
+    elapsed_time=transport_duration + hold_duration,
+    dt=dt,
+    tdvp_sweeps=2,
+    max_bond_dim=None,
+    svd_threshold=1e-12,
+    krylov_tol=1e-12,
+    preset="exact",
+    sample_timesteps=True,
+)
+
+transport_result = Simulator(parallel=False, show_progress=False).run(
+    transport_state,
+    moving_hamiltonian,
+    transport_params,
+)
+transport_expectation = np.real(transport_result.expectation_values[0])
+transport_centers = [
+    start_center + (target_center - start_center) * (step / n_transport) for step in range(n_transport)
+]
+n_hold_times = len(transport_params.times) - n_transport
+scheduled_centers = np.asarray([*transport_centers, *([target_center] * n_hold_times)])
+hold_mask = transport_params.times >= transport_duration
+residual_motion = np.max(np.abs(transport_expectation[hold_mask] - target_center))
+assert residual_motion > 0.1
+print(f"Maximum displacement from the target during the hold: {residual_motion:.3f}")
+```
+
+Each transport interval uses a fixed trap center. During the hold the well stays
+at the target while the ion continues to move.
+
+```{code-cell} ipython3
+fig, ax = plt.subplots(figsize=(7.2, 3.4), layout="constrained")
+ax.step(
+    transport_params.times,
+    scheduled_centers,
+    where="post",
+    linestyle="--",
+    label=r"trap center $q(t)$",
+)
+ax.plot(transport_params.times, transport_expectation, label=r"ion $\langle x(t)\rangle$")
+ax.axvline(transport_duration, color="0.6", ls=":", label="end of transport")
+ax.set_xlabel(r"$t$")
+ax.set_ylabel(r"$x$")
+ax.set_title("Residual motion after linear trap transport")
+ax.legend()
+plt.show()
+```
+
+The ion does not end at rest: during the hold, $q(t)$ stays at the target while
+$\langle x(t)\rangle$ oscillates around it. This staircase protocol is
+intentionally idealized: the trap center is constant on each ``dt`` interval and
+jumps at interval boundaries, so the ion is kicked non-adiabatically. Residual
+motion can degrade later operations; smooth ramps reduce that error.
+
+This example uses dimensionless units with $\hbar=m=\omega=1$. For dimensional
+inputs, use compatible time and energy units. A finer grid, smaller `dt`, and
+slower trajectory reduce spatial and non-adiabatic transport errors.
 
 ## Related topics
 

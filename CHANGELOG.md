@@ -12,8 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
-- Add stochastic circuit sampling from NoiseModel ([#545])
-  ([**@yiranwang-phys**])
+- added piecewise time-dependent Hamiltonians that switch on the analog `dt`
+  grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])
   ([**@linusschulte**])
 - added native support for gates acting on three or more qubits in circuit
@@ -45,6 +45,9 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed MPS norm definition and construction of arbitrary basis state ([#553])
+  ([**@Pouri96**])
+- fixed single-site MPO addition ([#541]) ([**@linusschulte**])
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])
 - fixed the CZ and CPhase generators used on the TDVP gate application path
@@ -247,7 +250,8 @@ for previous changelogs._
 
 <!-- PR links -->
 
-[#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
+[#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
+[#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
 [#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
 [#525]: https://github.com/munich-quantum-toolkit/yaqs/pull/525

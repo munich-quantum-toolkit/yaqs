@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -456,3 +457,59 @@ def test_to_sparse_matrix_called_once_across_two_runs() -> None:
         sim.run(state, h, params, None)
         sim.run(state, h, params, None)
     assert mock_sparse.call_count == 1
+
+
+def test_piecewise_stores_static_pieces() -> None:
+    """piecewise() keeps static Hamiltonians and durations."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.5)
+    second = Hamiltonian.ising(2, J=1.0, g=2.0)
+    hamiltonian = Hamiltonian.piecewise([(first, 0.1), (second, 0.2)])
+    assert hamiltonian.is_piecewise
+    assert hamiltonian.length == 2
+    assert hamiltonian.pieces == ((first, 0.1), (second, 0.2))
+    assert hamiltonian.duration == pytest.approx(0.3)
+
+
+def test_static_hamiltonian_has_no_piecewise_duration() -> None:
+    """Duration is defined only for piecewise Hamiltonians."""
+    with pytest.raises(ValueError, match="do not have a piecewise duration"):
+        _ = Hamiltonian.ising(2, J=1.0, g=0.5).duration
+
+
+def test_piecewise_rejects_empty_or_nested_or_mismatched_pieces() -> None:
+    """Construction rejects empty, nested, and length-mismatched pieces."""
+    static = Hamiltonian.ising(2, J=1.0, g=0.5)
+    with pytest.raises(ValueError, match="non-empty sequence"):
+        Hamiltonian.piecewise([])
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", 0))
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", "pairs"))
+    with pytest.raises(TypeError, match="non-empty sequence"):
+        Hamiltonian.piecewise(cast("Any", b"pairs"))
+    nested = Hamiltonian.piecewise([(static, 0.1)])
+    with pytest.raises(ValueError, match="nested piecewise"):
+        Hamiltonian.piecewise([(nested, 0.1)])
+    with pytest.raises(TypeError, match="must be a \\(Hamiltonian, duration\\) tuple"):
+        Hamiltonian.piecewise(cast("Any", [(static, 0.1, 0.0)]))
+    with pytest.raises(TypeError, match="must start with a Hamiltonian"):
+        Hamiltonian.piecewise(cast("Any", [(object(), 0.1)]))
+    with pytest.raises(TypeError, match="duration must be a real number"):
+        Hamiltonian.piecewise(cast("Any", [(static, "0.1")]))
+    with pytest.raises(TypeError, match="duration must be a real number"):
+        Hamiltonian.piecewise(cast("Any", [(static, True)]))
+    with pytest.raises(ValueError, match="does not match piece 0 length"):
+        Hamiltonian.piecewise([(static, 0.1), (Hamiltonian.ising(3, J=1.0, g=0.5), 0.1)])
+    with pytest.raises(ValueError, match="finite and positive"):
+        Hamiltonian.piecewise([(static, 0.0)])
+
+
+def test_piecewise_cannot_materialize_a_single_operator() -> None:
+    """A piecewise Hamiltonian is not one static MPO or sparse matrix."""
+    hamiltonian = Hamiltonian.piecewise([(Hamiltonian.ising(2, J=1.0, g=0.5), 0.1)])
+    with pytest.raises(ValueError, match="no single static operator"):
+        hamiltonian.ensure_mpo()
+    with pytest.raises(ValueError, match="no single static operator"):
+        hamiltonian.ensure_sparse()
+    with pytest.raises(ValueError, match="do not have piecewise durations"):
+        _ = Hamiltonian.ising(2, J=1.0, g=0.5).pieces
