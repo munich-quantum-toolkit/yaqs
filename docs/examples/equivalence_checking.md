@@ -247,44 +247,84 @@ overhead would dominate.
 
 ## Noisy ensembles
 
-To compare a reference circuit $G$ against noisy realizations of a transformed
-circuit $G'$, pass a Pauli {class}`~mqt.yaqs.NoiseModel` to
-{meth}`~mqt.yaqs.EquivalenceChecker.check`. Each trajectory samples an explicit
-circuit $\widetilde G_r$ (local Pauli errors after one- and two-qubit gates) and
-runs the same relative-operator check $Q_r = G\,\widetilde G_r^\dagger$ used in
-the noiseless case.
+A typical use of noisy equivalence checking is to ask how close a
+**compiled, hardware-like** circuit still is to an **ideal** specification once
+Pauli noise acts on the compiled gates. Pass a Pauli
+{class}`~mqt.yaqs.NoiseModel` to {meth}`~mqt.yaqs.EquivalenceChecker.check`.
+Each trajectory samples an explicit circuit $\widetilde G_r$ (local Pauli errors
+after one- and two-qubit gates on the **second** argument only) and runs the
+same relative-operator check $Q_r = G\,\widetilde G_r^\dagger$ used in the
+noiseless case. The ensemble `fidelity` is the mean identity overlap of those
+$Q_r$: values near $1$ mean the noisy compiled unitary is still close to the
+ideal one.
+
+Start from a small ideal circuit and transpile it to a device-style basis:
 
 ```{code-cell} ipython3
+import matplotlib.pyplot as plt
+from qiskit import transpile
+from qiskit.circuit import QuantumCircuit
+
 from mqt.yaqs import EquivalenceChecker, NoiseModel
-from qiskit import QuantumCircuit
 
-reference = QuantumCircuit(2)
-reference.h(0)
-reference.cx(0, 1)
+ideal = QuantumCircuit(4)
+for qubit in range(4):
+    ideal.ry(0.4 * (qubit + 1), qubit)
+for qubit in range(3):
+    ideal.cx(qubit, qubit + 1)
 
-compiled = reference.copy()
-noise = NoiseModel([
-    {"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(2)
-])
-
-checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
-ensemble = checker.check(
-    reference,
-    compiled,
-    noise_model=noise,
-    num_traj=8,
-    random_seed=0,
+compiled = transpile(
+    ideal,
+    basis_gates=["rz", "sx", "x", "cx"],
+    optimization_level=1,
 )
+print(f"gates: ideal {ideal.size()}, compiled {compiled.size()}")
 ```
 
-The ensemble result includes the trajectory-mean `fidelity` (and, on the MPO
-backend, mean operator entanglement), plus `trajectories` with the standard
-per-realization diagnostics. Noise is applied only to the **second** circuit.
-Distribution-valued strengths are resolved once per `check` call. Non-Pauli
-processes such as `raising`/`lowering` and scheduled jumps are rejected; those
-remain on the TJM simulation path. Independent trajectories run in a process
-pool with serial MPO updates inside each worker (`max_workers` caps the pool);
-checkerboard zone threads are not used when a noise model is set.
+Without noise the two circuits implement the same unitary (up to global phase).
+With Pauli-X noise on the compiled circuit, the mean fidelity drops and the
+per-trajectory values show how often a sampled error knocks $Q_r$ off the
+identity:
+
+```{code-cell} ipython3
+checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
+noiseless = checker.check(ideal, compiled)
+noise = NoiseModel([
+    {"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(4)
+])
+noisy = checker.check(
+    ideal,
+    compiled,
+    noise_model=noise,
+    num_traj=24,
+    random_seed=0,
+)
+traj_fidelities = [traj["fidelity"] for traj in noisy["trajectories"]]
+
+print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
+print(f"noisy:     equivalent={noisy['equivalent']}, mean fidelity={noisy['fidelity']:.4f}")
+print(f"trajectories: {noisy['num_traj']}")
+
+fig, ax = plt.subplots(figsize=(5.5, 3.2), layout="constrained")
+ax.hist(traj_fidelities, bins=12, range=(0.0, 1.0), color="C0", alpha=0.85)
+ax.axvline(noiseless["fidelity"], color="0.35", ls="--", label="noiseless compiled")
+ax.axvline(noisy["fidelity"], color="C1", ls="-", label="noisy mean")
+ax.set_xlabel("identity fidelity of $Q_r$")
+ax.set_ylabel("trajectories")
+ax.set_title("Ideal vs compiled circuit with Pauli-X noise")
+ax.legend(frameon=False)
+```
+
+A noisy `check` returns
+{class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult`: the usual
+`equivalent` / `fidelity` keys (now trajectory averages), plus `num_traj` and
+`trajectories`. On the MPO backend the ensemble also averages operator
+entanglement. Distribution-valued strengths are resolved once per `check` call.
+
+Non-Pauli processes such as `raising`/`lowering` and scheduled jumps are
+rejected; those remain on the TJM simulation path. Independent trajectories run
+in a process pool with serial MPO updates inside each worker (`max_workers` caps
+the pool). Checkerboard zone threads are not used when a noise model is set.
 
 ## Performance notes
 
@@ -296,6 +336,7 @@ where it is still affordable, and MPO for everything larger.
 
 ## Related topics
 
+- {doc}`realistic_noise_models` — Pauli and dissipative process names, disorder
 - {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
 - {doc}`simulator_initialization` — running simulations with
   {class}`~mqt.yaqs.Simulator`

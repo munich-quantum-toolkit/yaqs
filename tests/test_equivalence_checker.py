@@ -850,6 +850,26 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
 
 
+def test_example_ideal_versus_noisy_compiled_circuit() -> None:
+    """The docs example: noiseless compiled circuit matches; Pauli noise lowers mean overlap."""
+    ideal = QuantumCircuit(4)
+    for qubit in range(4):
+        ideal.ry(0.4 * (qubit + 1), qubit)
+    for qubit in range(3):
+        ideal.cx(qubit, qubit + 1)
+    compiled = transpile(ideal, basis_gates=["rz", "sx", "x", "cx"], optimization_level=1)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(4)])
+    checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
+
+    noiseless = checker.check(ideal, compiled)
+    noisy = checker.check(ideal, compiled, noise_model=noise, num_traj=8, random_seed=0)
+
+    assert noiseless["equivalent"] is True
+    assert float(noiseless["fidelity"]) == pytest.approx(1.0, abs=1e-10)
+    assert noisy["num_traj"] == 8
+    assert float(noisy["fidelity"]) < float(noiseless["fidelity"])
+
+
 def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     """Serial and process-pool workers use the same trajectory-index streams."""
     qc = QuantumCircuit(2)
