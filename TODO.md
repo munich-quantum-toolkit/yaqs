@@ -1,4 +1,4 @@
-# Stochastic Pauli-Channel Comparison TODO
+# Noise-Model Equivalence Comparison TODO
 
 ## Chunk 1: Fix `NoiseModel` handling
 
@@ -41,8 +41,8 @@
 
 ## Chunk 5: Update documentation and release notes
 
-- [x] Describe the feature as stochastic Pauli-channel comparison, not general
-  noisy-channel equivalence.
+- [x] Describe the feature as a stochastic comparison under a supported noise
+  model, not general noisy-channel equivalence.
 - [x] Document the corrected metric, uncertainty, supported noise processes, and
   gate-opportunity rule.
 - [x] Correct the relative-operator order to `U_noisy^dagger U_ideal`.

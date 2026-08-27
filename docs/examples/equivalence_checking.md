@@ -93,25 +93,25 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   speed up checks at the cost of accuracy.
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
   and the identity (global phase removed). It must be finite and between `0` and
-  `1`. Used by **both** backends. A stochastic Pauli ensemble squares this value
-  for its process-fidelity threshold.
+  `1`. Used by **both** backends. A noisy ensemble squares this value for its
+  process-fidelity threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
 - **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
   a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
   **process pool**. Set it to `False` to keep either path serial.
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
-  (noiseless MPO checks), and on worker processes for stochastic Pauli
-  ensembles. When unset, noiseless MPO zone threads use
+  (noiseless MPO checks), and on worker processes for noisy ensembles. When
+  unset, noiseless MPO zone threads use
   `min(available_cpus(), number_of_work_items)`. The effective noisy worker
   count is `min(num_traj, max_workers or max(1, available_cpus() - 1))`, where
   {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
   `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
   limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
   host. A process pool is created only when that count is greater than one.
-- **`mp_context`**: start method for stochastic Pauli ensemble process pools
-  (`"auto"`, `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone
-  parallelism inside `iterate()` still uses in-process threads.
+- **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
+  `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
+  inside `iterate()` still uses in-process threads.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -227,9 +227,8 @@ Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO**
 checks on circuits where many independent updates can run at once. This is the
 default; below 12 qubits the implementation keeps a single noiseless check
 serial even when `parallel=True`, because thread overhead would dominate. A
-single matrix check is also serial. When a supported Pauli noise model is
-supplied, independent matrix or MPO trajectories can instead run across
-processes.
+single matrix check is also serial. When a noise model is supplied, independent
+matrix or MPO trajectories can instead run across processes.
 
 Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
 MPO site tensors and can be computed in parallel in a shared thread pool (one
@@ -249,19 +248,17 @@ Expect the largest gains on **wide** nearest-neighbor circuits (typically
 implementation keeps the serial path even when `parallel=True`, because thread
 overhead would dominate.
 
-## Stochastic Pauli-channel comparison
+## Comparing with a noise model
 
 Passing a {class}`~mqt.yaqs.NoiseModel` asks how close a
 **compiled, hardware-like** circuit remains to an **ideal** specification under
-sampled Pauli errors. This is a Monte Carlo comparison of a random-unitary Pauli
-channel, not a general noisy-channel equivalence test.
+sampled noise. Each trajectory materializes a stochastic realization of the
+noise model on the compiled circuit. This gives a Monte Carlo comparison rather
+than an exact noisy-channel equivalence certificate.
 
-The checker accepts normalized one-site X, Y, and Z processes and two-site Pauli
-products. This includes `pauli_x`, `pauli_y`, `pauli_z`, names matching
-`crosstalk_[xyz]{2}` or `longrange_crosstalk_[xyz]{2}`, and custom matrices or
-factors that match those Pauli operators up to a unit-modulus phase. Scaled
-operators such as $2X$, dissipative processes such as `raising` and `lowering`,
-other non-Pauli custom operators, and scheduled jumps are rejected.
+The current circuit-sampling path accepts processes that normalize to one-site
+Pauli operators or two-site Pauli products. Other process types and scheduled
+jumps are rejected; those remain available through the simulator.
 
 Noise is sampled onto the **second** circuit argument only. A supported unitary
 gate acting on two or more qubits is a noise opportunity; single-qubit gates,
@@ -280,15 +277,15 @@ Q_r = U_{\mathrm{noisy},r}^\dagger U_{\mathrm{ideal}}.
 ```
 
 If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the
-random-unitary channel process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
+sampled channel's process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
 estimated by
 
 ```{math}
 \widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
 ```
 
-For a stochastic result, `fidelity` is this Monte Carlo sample mean. For $N>1$,
-the reported sampling uncertainty is
+For a noisy result, `fidelity` is this Monte Carlo sample mean. For $N>1$, the
+reported sampling uncertainty is
 
 ```{math}
 \mathtt{fidelity\_error}

@@ -14,11 +14,10 @@ available for very small circuits. With ``representation="auto"``, circuits with
 Pass ``representation="mpo"`` explicitly for production workloads.
 
 When a :class:`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` is passed to
-:meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` explicit Pauli
-realizations of the second circuit and runs the standard relative-operator check on
-each trajectory. The resulting random-unitary channel is summarized by the Monte Carlo
-mean and standard error of the squared trajectory overlaps. This is a stochastic
-Pauli-channel comparison, not a general noisy-channel equivalence test.
+:meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` realizations of the
+noise model on the second circuit and runs the standard relative-operator check on each
+trajectory. The sampled channel is summarized by the Monte Carlo mean and standard
+error of the squared trajectory overlaps.
 """
 
 from __future__ import annotations
@@ -69,7 +68,7 @@ _PAULI_PRODUCTS = {
     for left_label, left_matrix in _PAULI_MATRICES.items()
     for right_label, right_matrix in _PAULI_MATRICES.items()
 }
-_PAULI_ERROR = "Stochastic Pauli-channel comparison supports recognized YAQS Pauli processes only."
+_PAULI_ERROR = "The noise model contains a process that is not supported for circuit sampling."
 
 
 class EquivalenceCheckResult(TypedDict):
@@ -87,7 +86,7 @@ class EquivalenceCheckResult(TypedDict):
 
 
 class EquivalenceEnsembleResult(TypedDict):
-    """Monte Carlo result from a stochastic Pauli-channel comparison.
+    """Monte Carlo result from an equivalence check with a noise model.
 
     ``fidelity`` is the mean of the squared trajectory overlaps, and
     ``fidelity_error`` is its empirical standard error (or ``None`` for one
@@ -298,7 +297,7 @@ def _validate_pauli_noise_model(noise_model: NoiseModel, num_qubits: int) -> Non
             processes are present.
     """
     if noise_model.scheduled_jumps:
-        msg = "Stochastic Pauli-channel comparison does not support scheduled jumps."
+        msg = "Scheduled jumps are not supported for circuit-sampled equivalence checks."
         raise ValueError(msg)
     validate_noise_model_for_run(noise_model, length=num_qubits, physical_dimensions=2)
     if any(_pauli_labels(process) is None for process in noise_model.processes):
@@ -520,24 +519,21 @@ class EquivalenceChecker:
 
     The MPO backend is the primary, scalable method; the matrix backend is intended for
     very small qubits counts. Owns numerical thresholds and backend selection. The two
-    circuits to compare are passed per call to :meth:`check`. Supplying a supported
-    :class:`NoiseModel` performs a stochastic Pauli-channel comparison, not a general
-    noisy-channel equivalence test.
+    circuits to compare are passed per call to :meth:`check`. Supplying a
+    :class:`NoiseModel` performs a Monte Carlo comparison under sampled noise.
 
     Attributes:
         threshold: Singular-value truncation threshold used during SVD in the MPO update.
-        fidelity: Root-overlap threshold for a noiseless check. Stochastic Pauli
-            comparisons compare their process-fidelity estimate with the square of
-            this threshold.
+        fidelity: Root-overlap threshold for a noiseless check. Noisy comparisons use
+            the square of this threshold for their process-fidelity estimate.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
-        parallel: Whether to parallelize noiseless MPO pair updates and stochastic Pauli
-            trajectory ensembles (default ``True``).
+        parallel: Whether to parallelize noiseless MPO pair updates and noisy trajectory
+            ensembles (default ``True``).
         max_workers: Maximum worker threads for noiseless MPO checks, and the process-pool
-            cap for stochastic Pauli trajectory ensembles. Process pools are also capped
-            by ``num_traj``.
-        mp_context: Multiprocessing start method when a stochastic Pauli ensemble process
-            pool is used.
+            cap for noisy trajectory ensembles. Process pools are also capped by
+            ``num_traj``.
+        mp_context: Multiprocessing start method when a noisy-ensemble process pool is used.
     """
 
     def __init__(
@@ -556,18 +552,17 @@ class EquivalenceChecker:
         Args:
             threshold: SVD truncation threshold in the MPO update (default ``1e-13``).
             fidelity: Minimum root overlap for a noiseless identity check (default
-                ``1 - 1e-13``). Stochastic Pauli comparisons square it to obtain the
-                corresponding process-fidelity threshold.
+                ``1 - 1e-13``). Noisy comparisons square it to obtain the corresponding
+                process-fidelity threshold.
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
             parallel: Enable parallel checkerboard MPO pair updates on noiseless checks
-                (effective only from 12 qubits upward) and process-pool execution of
-                stochastic Pauli trajectory ensembles (default ``True``).
+                (effective only from 12 qubits upward) and process-pool execution of noisy
+                trajectory ensembles (default ``True``).
             max_workers: Cap on worker threads for noiseless MPO checks, and on processes for
-                stochastic Pauli trajectory ensembles. Process pools use at most
-                ``num_traj`` workers.
-            mp_context: Start method when a stochastic Pauli ensemble process pool is used.
+                noisy trajectory ensembles. Process pools use at most ``num_traj`` workers.
+            mp_context: Start method when a noisy-ensemble process pool is used.
         """
         self.threshold = threshold
         self.fidelity = _validate_fidelity(fidelity)
@@ -644,7 +639,7 @@ class EquivalenceChecker:
                     mp_context=self.mp_context,
                 )
             )
-            trajectories = reassemble_indexed(by_idx, num_traj, label="Stochastic Pauli-channel ensemble")
+            trajectories = reassemble_indexed(by_idx, num_traj, label="Noisy equivalence-checking ensemble")
         else:
             trajectories = [
                 _run_noisy_check_trajectory(
@@ -714,19 +709,18 @@ class EquivalenceChecker:
         num_traj: int = 1,
         random_seed: int | None = None,
     ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
-        """Compare two quantum circuits, optionally under sampled Pauli noise.
+        """Compare two quantum circuits, optionally under sampled noise.
 
         On the noiseless path, circuits that differ only up to global phase and numerical
         error have a composed operator ``U2† U1`` that approximates the identity and are
         reported as equivalent.
 
-        When ``noise_model`` is set, Pauli noise is sampled onto ``circuit2`` only.
-        Each of ``num_traj`` independent realizations is checked with the same
-        relative operator ``U_noisy† U_ideal`` used for a noiseless pair. The returned
-        ensemble reports a Monte Carlo estimate of the random-unitary Pauli channel's
-        process fidelity, its empirical standard error when ``num_traj > 1``, and
-        trajectory-averaged operator-entanglement diagnostics. This is not a general
-        noisy-channel equivalence test, and its threshold comparison is a sample-level
+        When ``noise_model`` is set, noise is sampled onto ``circuit2`` only. Each of
+        ``num_traj`` independent realizations is checked with the same relative operator
+        ``U_noisy† U_ideal`` used for a noiseless pair. The returned ensemble reports a
+        Monte Carlo estimate of the sampled channel's process fidelity, its empirical
+        standard error when ``num_traj > 1``, and trajectory-averaged
+        operator-entanglement diagnostics. Its threshold comparison is a sample-level
         decision rather than an equivalence certificate.
         With ``parallel=True``, noisy worker count is capped by both ``num_traj`` and
         ``max_workers``. A process pool is used only when that count is greater than one,
@@ -742,9 +736,10 @@ class EquivalenceChecker:
             circuit2: Second quantum circuit (must have the same number of qubits).
                 Accepts the same types as ``circuit1``. When ``noise_model`` is set, this is
                 the circuit that is sampled stochastically.
-            noise_model: Optional YAQS noise model restricted to normalized one-site X/Y/Z
-                processes and two-site Pauli products. ``None`` runs a single noiseless
-                check. Distribution-valued strengths are resolved once per call.
+            noise_model: Optional YAQS noise model. The current circuit-sampling path
+                accepts normalized one-site Pauli operators and two-site Pauli products.
+                ``None`` runs a single noiseless check. Distribution-valued strengths are
+                resolved once per call.
             num_traj: Number of stochastic circuit realizations when ``noise_model`` is set.
                 Must be ``1`` when ``noise_model`` is ``None``.
             random_seed: Optional run-level seed for disorder sampling and per-trajectory
@@ -753,15 +748,16 @@ class EquivalenceChecker:
         Returns:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
             :class:`EquivalenceEnsembleResult` when ``noise_model`` is set. Both include
-            ``equivalent`` and ``fidelity``; for a stochastic Pauli result these are the
-            sampled process-fidelity decision and estimate. The ensemble additionally
-            includes ``fidelity_error``, ``num_traj``, and the individual ``trajectories``.
+            ``equivalent`` and ``fidelity``; for a noisy result these are the sampled
+            process-fidelity decision and estimate. The ensemble additionally includes
+            ``fidelity_error``, ``num_traj``, and the individual ``trajectories``.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit
                 measurements, contain gates on more than two qubits on the MPO backend,
                 ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
-                ``random_seed`` is negative, or the noise model is not a supported Pauli model.
+                ``random_seed`` is negative, or the noise model contains a process that
+                cannot be sampled as a circuit error.
             TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
         """
         num_traj = _validate_num_traj(num_traj)

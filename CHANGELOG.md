@@ -12,7 +12,9 @@ releases may include breaking changes.
 
 ### Added
 
-- added noisy equivalence checking ([#545]) ([**@yiranwang-phys**])
+- added sampled noise-model comparisons to `EquivalenceChecker`, including
+  process-fidelity estimates, Monte Carlo standard errors, and per-trajectory
+  diagnostics ([#545]) ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])

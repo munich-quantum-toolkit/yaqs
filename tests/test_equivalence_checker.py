@@ -996,7 +996,7 @@ def test_non_pauli_noise_is_rejected() -> None:
     qc = QuantumCircuit(1)
     qc.x(0)
     noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
-    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+    with pytest.raises(ValueError, match="process that is not supported for circuit sampling"):
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
 
 
@@ -1005,7 +1005,7 @@ def test_zero_strength_non_pauli_noise_is_rejected() -> None:
     qc = QuantumCircuit(1)
     noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.0}])
 
-    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+    with pytest.raises(ValueError, match="process that is not supported for circuit sampling"):
         EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
 
 
@@ -1021,7 +1021,7 @@ def test_pauli_name_does_not_hide_unsupported_matrix() -> None:
         }
     ])
 
-    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+    with pytest.raises(ValueError, match="process that is not supported for circuit sampling"):
         EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
 
 
@@ -1162,7 +1162,7 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
     qc = QuantumCircuit(1)
     qc.x(0)
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
-    with pytest.raises(ValueError, match="does not support scheduled jumps"):
+    with pytest.raises(ValueError, match="Scheduled jumps are not supported for circuit-sampled equivalence checks"):
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
 
 
