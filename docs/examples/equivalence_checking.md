@@ -97,21 +97,21 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   process-fidelity threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
-- **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair
-  updates run in a **thread pool** from 12 qubits upward (ignored for the matrix
-  backend, below the cutoff, and when a noise model is set).
+- **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
+  a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
+  **process pool**. Set it to `False` to keep either path serial.
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
   (noiseless MPO checks), and on worker processes for noisy ensembles. When
   unset, noiseless MPO zone threads use
-  `min(available_cpus(), number_of_work_items)`, and noisy trajectory processes
-  use `max(1, available_cpus() - 1)`, where
+  `min(available_cpus(), number_of_work_items)`. The effective noisy worker
+  count is `min(num_traj, max_workers or max(1, available_cpus() - 1))`, where
   {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
   `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
   limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
-  host.
+  host. A process pool is created only when that count is greater than one.
 - **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
-  `"fork"`, `"spawn"`). Noiseless MPO zone parallelism inside `iterate()` still
-  uses in-process threads.
+  `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
+  inside `iterate()` still uses in-process threads.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -225,9 +225,10 @@ memory; prefer MPO instead.
 
 Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO**
 checks on circuits where many independent updates can run at once. This is the
-default; below 12 qubits the implementation keeps the serial path even when
-`parallel=True`, because thread overhead would dominate. The matrix backend is
-always serial.
+default; below 12 qubits the implementation keeps a single noiseless check
+serial even when `parallel=True`, because thread overhead would dominate. A
+single matrix check is also serial. When a noise model is supplied, independent
+matrix or MPO trajectories can instead run across processes.
 
 Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
 MPO site tensors and can be computed in parallel in a shared thread pool (one
@@ -341,9 +342,12 @@ ensemble also averages operator entanglement. Distribution-valued strengths are
 resolved once per `check` call.
 
 Non-Pauli processes such as `raising`/`lowering` and scheduled jumps are
-rejected; those remain on the TJM simulation path. Independent trajectories run
-in a process pool with serial MPO updates inside each worker (`max_workers` caps
-the pool). Checkerboard zone threads are not used when a noise model is set.
+rejected; those remain on the TJM simulation path. With `parallel=True`, noisy
+trajectories use an effective worker count capped by `num_traj` and
+`max_workers`, and run in a process pool only when that count is greater than
+one; each worker uses serial MPO updates. With `parallel=False`, all
+trajectories stay serial and in-process. A nonnegative `random_seed` makes the
+ordered trajectory results reproducible independently of process scheduling.
 
 ## Performance notes
 

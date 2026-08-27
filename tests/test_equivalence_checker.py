@@ -845,6 +845,61 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
         assert result["global_entanglement_entropy"] is not None
 
 
+@pytest.mark.parametrize("max_workers", [8, None])
+def test_noisy_ensemble_caps_workers_and_reassembles_by_index(max_workers: int | None) -> None:
+    """A noisy pool is capped by trajectory count and preserves trajectory order."""
+    reference = QuantumCircuit(2)
+    checker = EquivalenceChecker(representation="matrix", parallel=True, max_workers=max_workers)
+    trajectory_results = []
+    for overlap in (0.2, 0.8):
+        candidate = QuantumCircuit(2)
+        candidate.ry(2 * np.arccos(overlap), 0)
+        trajectory_results.append(checker.check(reference, candidate))
+    indexed_results = [(1, trajectory_results[1]), (0, trajectory_results[0])]
+
+    with (
+        patch("mqt.yaqs.equivalence_checker.available_cpus", return_value=9) as available_cpus,
+        patch(
+            "mqt.yaqs.equivalence_checker.run_backend_parallel",
+            return_value=iter(indexed_results),
+        ) as run_parallel,
+    ):
+        result = checker.check(
+            reference,
+            reference,
+            noise_model=_pauli_x_noise(2, 0.0),
+            num_traj=2,
+            random_seed=0,
+        )
+
+    run_parallel.assert_called_once()
+    assert run_parallel.call_args.kwargs["n_jobs"] == 2
+    assert run_parallel.call_args.kwargs["max_workers"] == 2
+    if max_workers is None:
+        available_cpus.assert_called_once_with()
+    else:
+        available_cpus.assert_not_called()
+    np.testing.assert_allclose([trajectory["fidelity"] for trajectory in result["trajectories"]], [0.2, 0.8])
+
+
+def test_parallel_false_keeps_noisy_ensemble_serial() -> None:
+    """Disabling parallelism prevents noisy process-pool dispatch."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+
+    with patch("mqt.yaqs.equivalence_checker.run_backend_parallel") as run_parallel:
+        result = EquivalenceChecker(representation="matrix", parallel=False, max_workers=8).check(
+            circuit,
+            circuit,
+            noise_model=_pauli_x_noise(2, 0.0),
+            num_traj=3,
+            random_seed=0,
+        )
+
+    run_parallel.assert_not_called()
+    assert len(result["trajectories"]) == 3
+
+
 def test_noisy_ensemble_averages_squared_overlaps_and_reports_standard_error() -> None:
     """The channel estimate averages squared overlaps and reports their sample SEM."""
     reference = QuantumCircuit(2)
@@ -922,6 +977,18 @@ def test_num_traj_without_noise_model_raises() -> None:
     qc = QuantumCircuit(1)
     with pytest.raises(ValueError, match="num_traj must be 1"):
         EquivalenceChecker(representation="mpo").check(qc, qc, num_traj=4)
+
+
+def test_negative_random_seed_raises() -> None:
+    """Negative checker seeds are rejected consistently on both execution paths."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    checker = EquivalenceChecker(representation="matrix")
+
+    with pytest.raises(ValueError, match="random_seed must be non-negative, got -1"):
+        checker.check(circuit, circuit, random_seed=-1)
+    with pytest.raises(ValueError, match="random_seed must be non-negative, got -1"):
+        checker.check(circuit, circuit, noise_model=_pauli_x_noise(2, 0.1), random_seed=-1)
 
 
 def test_non_pauli_noise_is_rejected() -> None:
@@ -1124,17 +1191,16 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
-    noise = _pauli_x_noise(2, 1.0)
-    kwargs = {"noise_model": noise, "num_traj": 4, "random_seed": 7}
+    noise = _pauli_x_noise(2, 0.5)
+    kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0}
 
-    serial = EquivalenceChecker(representation="mpo", max_workers=1).check(qc, qc, **kwargs)
-    pooled = EquivalenceChecker(representation="mpo", max_workers=2).check(qc, qc, **kwargs)
+    serial = EquivalenceChecker(representation="matrix", parallel=False).check(qc, qc, **kwargs)
+    pooled = EquivalenceChecker(representation="matrix", parallel=True, max_workers=2).check(qc, qc, **kwargs)
+    serial_fidelities = [traj["fidelity"] for traj in serial["trajectories"]]
+    pooled_fidelities = [traj["fidelity"] for traj in pooled["trajectories"]]
 
-    np.testing.assert_allclose(
-        [traj["fidelity"] for traj in serial["trajectories"]],
-        [traj["fidelity"] for traj in pooled["trajectories"]],
-        atol=1e-12,
-    )
+    assert len(set(serial_fidelities)) > 1, "Parity fixture must sample both noisy and clean trajectories."
+    np.testing.assert_allclose(serial_fidelities, pooled_fidelities, atol=1e-12)
     assert serial["fidelity"] == pytest.approx(pooled["fidelity"], abs=1e-12)
     assert serial["fidelity_error"] == pytest.approx(pooled["fidelity_error"], abs=1e-12)
     assert serial["equivalent"] is pooled["equivalent"]

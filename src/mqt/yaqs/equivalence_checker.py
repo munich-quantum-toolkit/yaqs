@@ -230,12 +230,16 @@ def _validate_random_seed(random_seed: int | None) -> int | None:
 
     Raises:
         TypeError: If ``random_seed`` is not ``None`` or a non-boolean ``int``.
+        ValueError: If ``random_seed`` is negative.
     """
     if random_seed is None:
         return None
     if isinstance(random_seed, bool) or not isinstance(random_seed, int):
         msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
         raise TypeError(msg)
+    if random_seed < 0:
+        msg = f"random_seed must be non-negative, got {random_seed}."
+        raise ValueError(msg)
     return random_seed
 
 
@@ -523,11 +527,11 @@ class EquivalenceChecker:
             their process-fidelity estimate with the square of this threshold.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
-        parallel: Whether to use a thread pool for independent MPO pair updates on noiseless
-            checks (default ``True``; MPO backend only). Ignored when a noise model is set.
+        parallel: Whether to parallelize noiseless MPO pair updates and noisy trajectory
+            ensembles (default ``True``).
         max_workers: Maximum worker threads for noiseless MPO checks, and the process-pool
-            cap for noisy trajectory ensembles.
-        mp_context: Multiprocessing start method for noisy-ensemble process pools.
+            cap for noisy trajectory ensembles. Noisy pools are also capped by ``num_traj``.
+        mp_context: Multiprocessing start method when a noisy-ensemble process pool is used.
     """
 
     def __init__(
@@ -551,12 +555,12 @@ class EquivalenceChecker:
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
-            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates on
-                noiseless checks (default ``True``; effective only from 12 qubits upward).
-                Ignored when a noise model is set.
+            parallel: Enable parallel checkerboard MPO pair updates on noiseless checks
+                (effective only from 12 qubits upward) and process-pool execution of noisy
+                trajectory ensembles (default ``True``).
             max_workers: Cap on worker threads for noiseless MPO checks, and on processes for
-                noisy trajectory ensembles (default: machine CPU count).
-            mp_context: Start method for noisy-ensemble process pools.
+                noisy trajectory ensembles. Noisy pools use at most ``num_traj`` workers.
+            mp_context: Start method when a noisy-ensemble process pool is used.
         """
         self.threshold = threshold
         self.fidelity = _validate_fidelity(fidelity)
@@ -605,9 +609,12 @@ class EquivalenceChecker:
             standard error is ``None`` when ``num_traj`` is one.
         """
         start_time = time.time()
-        workers = self.max_workers if self.max_workers is not None else max(1, available_cpus() - 1)
+        workers = 1
+        if self.parallel and num_traj > 1:
+            resolved_workers = self.max_workers if self.max_workers is not None else max(1, available_cpus() - 1)
+            workers = min(num_traj, resolved_workers)
 
-        if num_traj > 1 and workers > 1:
+        if workers > 1:
             payload = {
                 "circuit1": circuit1,
                 "circuit2": circuit2,
@@ -713,8 +720,10 @@ class EquivalenceChecker:
         error when ``num_traj > 1``, and trajectory-averaged operator-entanglement
         diagnostics. Its threshold comparison is a sample-level decision, not an
         equivalence certificate.
-        Trajectories run in a process pool (each with serial ``iterate``); MPO zone
-        threads are not used on the noisy path.
+        With ``parallel=True``, noisy worker count is capped by both ``num_traj`` and
+        ``max_workers``. A process pool is used only when that count is greater than one,
+        and each worker uses serial ``iterate``. ``parallel=False`` keeps the noisy
+        ensemble in-process and serial. MPO zone threads are not used on the noisy path.
 
         Args:
             circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
@@ -730,7 +739,7 @@ class EquivalenceChecker:
             num_traj: Number of stochastic circuit realizations when ``noise_model`` is set.
                 Must be ``1`` when ``noise_model`` is ``None``.
             random_seed: Optional run-level seed for disorder sampling and per-trajectory
-                circuit draws. ``None`` uses non-deterministic streams.
+                circuit draws. Must be non-negative; ``None`` uses non-deterministic streams.
 
         Returns:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
@@ -743,7 +752,7 @@ class EquivalenceChecker:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit
                 measurements, contain gates on more than two qubits on the MPO backend,
                 ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
-                or the noise model is not a supported Pauli model.
+                ``random_seed`` is negative, or the noise model is not a supported Pauli model.
             TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
         """
         num_traj = _validate_num_traj(num_traj)

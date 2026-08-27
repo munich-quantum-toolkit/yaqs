@@ -33,10 +33,10 @@
 
 ## Chunk 4: Harden parallelism and seeding
 
-- [ ] Cap worker processes at `min(num_traj, resolved_workers)`.
-- [ ] Make `parallel=False` keep noisy checks serial.
-- [ ] Reject negative seeds consistently with other YAQS APIs.
-- [ ] Replace the degenerate serial/process parity test with one that can detect
+- [x] Cap worker processes at `min(num_traj, resolved_workers)`.
+- [x] Make `parallel=False` keep noisy checks serial.
+- [x] Reject negative seeds consistently with other YAQS APIs.
+- [x] Replace the degenerate serial/process parity test with one that can detect
   different sampled trajectories.
 
 ## Chunk 5: Update documentation and release notes
