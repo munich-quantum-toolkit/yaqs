@@ -69,7 +69,7 @@ them with a `ValueError`. Unknown unitaries translate via the matrix fallback,
 which supports at most eight qubits (see {doc}`custom_gates`). See
 {cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
 
-`check` returns a dictionary:
+A noiseless `check` returns a dictionary:
 
 | Key                               | Type                | Meaning                                                                   |
 | --------------------------------- | ------------------- | ------------------------------------------------------------------------- |
@@ -92,7 +92,9 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   Smaller values retain more bond dimension and are stricter; larger values
   speed up checks at the cost of accuracy.
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
-  and the identity (global phase removed). Used by **both** backends.
+  and the identity (global phase removed). It must be finite and between `0` and
+  `1`. Used by **both** backends. A noisy ensemble squares this value for its
+  process-fidelity threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair
@@ -252,11 +254,17 @@ A typical use of noisy equivalence checking is to ask how close a
 Pauli noise acts on the compiled gates. Pass a Pauli
 {class}`~mqt.yaqs.NoiseModel` to {meth}`~mqt.yaqs.EquivalenceChecker.check`.
 Each trajectory samples an explicit circuit $\widetilde G_r$ (local Pauli errors
-after one- and two-qubit gates on the **second** argument only) and runs the
-same relative-operator check $Q_r = G\,\widetilde G_r^\dagger$ used in the
-noiseless case. The ensemble `fidelity` is the mean identity overlap of those
-$Q_r$: values near $1$ mean the noisy compiled unitary is still close to the
-ideal one.
+after gates on two or more qubits on the **second** argument only) and runs the
+same relative-operator check $Q_r = \widetilde G_r^\dagger G$ used in the
+noiseless case. If $a_r = |\operatorname{Tr}(Q_r)| / d$ is a trajectory's
+normalized root overlap, the random-unitary channel process fidelity is
+
+```{math}
+\widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
+```
+
+For a noisy result, `fidelity` is this Monte Carlo sample mean and
+`fidelity_error` is its empirical standard error.
 
 Start from a small ideal circuit and transpile it to a device-style basis:
 
@@ -282,9 +290,9 @@ print(f"gates: ideal {ideal.size()}, compiled {compiled.size()}")
 ```
 
 Without noise the two circuits implement the same unitary (up to global phase).
-With Pauli-X noise on the compiled circuit, the mean fidelity drops and the
-per-trajectory values show how often a sampled error knocks $Q_r$ off the
-identity:
+With Pauli-X noise on the compiled circuit, the estimated process fidelity drops
+and the per-trajectory values show how often a sampled error knocks $Q_r$ off
+the identity:
 
 ```{code-cell} ipython3
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
@@ -299,27 +307,38 @@ noisy = checker.check(
     num_traj=24,
     random_seed=0,
 )
-traj_fidelities = [traj["fidelity"] for traj in noisy["trajectories"]]
+traj_process_fidelities = [traj["fidelity"] ** 2 for traj in noisy["trajectories"]]
 
 print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
-print(f"noisy:     equivalent={noisy['equivalent']}, mean fidelity={noisy['fidelity']:.4f}")
+print(
+    "noisy:     "
+    f"equivalent={noisy['equivalent']}, "
+    f"process fidelity={noisy['fidelity']:.4f} "
+    f"+/- {noisy['fidelity_error']:.4f}"
+)
 print(f"trajectories: {noisy['num_traj']}")
 
 fig, ax = plt.subplots(figsize=(5.5, 3.2), layout="constrained")
-ax.hist(traj_fidelities, bins=12, range=(0.0, 1.0), color="C0", alpha=0.85)
-ax.axvline(noiseless["fidelity"], color="0.35", ls="--", label="noiseless compiled")
-ax.axvline(noisy["fidelity"], color="C1", ls="-", label="noisy mean")
-ax.set_xlabel("identity fidelity of $Q_r$")
+ax.hist(traj_process_fidelities, bins=12, range=(0.0, 1.0), color="C0", alpha=0.85)
+ax.axvline(noiseless["fidelity"] ** 2, color="0.35", ls="--", label="noiseless compiled")
+ax.axvline(noisy["fidelity"], color="C1", ls="-", label="noisy sample mean")
+ax.set_xlabel("process-fidelity sample $a_r^2$")
 ax.set_ylabel("trajectories")
 ax.set_title("Ideal vs compiled circuit with Pauli-X noise")
 ax.legend(frameon=False)
 ```
 
 A noisy `check` returns
-{class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult`: the usual
-`equivalent` / `fidelity` keys (now trajectory averages), plus `num_traj` and
-`trajectories`. On the MPO backend the ensemble also averages operator
-entanglement. Distribution-valued strengths are resolved once per `check` call.
+{class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
+primary `equivalent` and `fidelity` keys as a noiseless check, plus
+`fidelity_error`, `num_traj`, and `trajectories`. Here `fidelity` is the mean of
+the squared trajectory overlaps, and `fidelity_error` is its Monte Carlo
+standard error; the latter is `None` for one trajectory. Noisy `equivalent` only
+means that this observed mean is at least `checker.fidelity**2`. It is not an
+equivalence certificate or a confidence-level decision. Compare noisy and
+noiseless fidelities by squaring the noiseless value. On the MPO backend the
+ensemble also averages operator entanglement. Distribution-valued strengths are
+resolved once per `check` call.
 
 Non-Pauli processes such as `raising`/`lowering` and scheduled jumps are
 rejected; those remain on the TJM simulation path. Independent trajectories run

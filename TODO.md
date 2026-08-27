@@ -23,12 +23,12 @@
 
 ## Chunk 3: Fix ensemble result semantics
 
-- [ ] Report noisy-channel process fidelity by averaging squared trajectory
+- [x] Report noisy-channel process fidelity by averaging squared trajectory
   overlaps, rather than averaging root overlaps.
-- [ ] Do not present a finite Monte Carlo sample as an equivalence certificate.
-- [ ] Return an uncertainty estimate and a clearly named statistical decision,
-  including sensible behavior for `num_traj=1`.
-- [ ] Update the noisy result type and tests accordingly while leaving noiseless
+- [x] Keep noisy `equivalent` as a finite-sample threshold result, not an exact
+  equivalence certificate.
+- [x] Return a fidelity error estimate, with sensible behavior for `num_traj=1`.
+- [x] Update the noisy result type and tests accordingly while leaving noiseless
   checks unchanged.
 
 ## Chunk 4: Harden parallelism and seeding

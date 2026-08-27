@@ -418,6 +418,20 @@ def test_matrix_max_qubits_override() -> None:
     assert checker_wide.check(qc, qc)["representation"] == "matrix"
 
 
+@pytest.mark.parametrize("fidelity", [-0.1, 1.1, np.nan, np.inf])
+def test_checker_rejects_invalid_fidelity_threshold(fidelity: float) -> None:
+    """The root-overlap threshold must be finite and inside the fidelity range."""
+    with pytest.raises(ValueError, match="fidelity must be finite and between 0 and 1"):
+        EquivalenceChecker(fidelity=fidelity)
+
+
+@pytest.mark.parametrize("fidelity", [True, "0.9"])
+def test_checker_rejects_non_real_fidelity_threshold(fidelity: object) -> None:
+    """Booleans and non-real values are not valid fidelity thresholds."""
+    with pytest.raises(TypeError, match="fidelity must be a real number"):
+        EquivalenceChecker(fidelity=fidelity)  # ty: ignore[invalid-argument-type]
+
+
 @pytest.mark.parametrize("max_workers", [0, -1])
 def test_checker_rejects_non_positive_max_workers(max_workers: int) -> None:
     """``max_workers`` must be positive when provided."""
@@ -748,7 +762,10 @@ def test_zero_strength_noise_matches_noiseless_check() -> None:
     assert ensemble["num_traj"] == 4
     assert len(ensemble["trajectories"]) == 4
     assert ensemble["equivalent"] is True
-    assert float(ensemble["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
+    assert float(ensemble["fidelity"]) == pytest.approx(float(noiseless["fidelity"]) ** 2, abs=1e-12)
+    standard_error = ensemble["fidelity_error"]
+    assert standard_error is not None
+    assert standard_error == pytest.approx(0.0, abs=1e-12)
     assert ensemble["mpo"] is None
     assert ensemble["matrix"] is None
     for traj in ensemble["trajectories"]:
@@ -758,7 +775,7 @@ def test_zero_strength_noise_matches_noiseless_check() -> None:
 
 
 def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
-    """Sampling Pauli errors onto the second circuit lowers mean identity overlap."""
+    """Sampling Pauli errors onto the second circuit lowers process fidelity."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
@@ -784,8 +801,8 @@ def test_noise_is_applied_only_to_circuit2() -> None:
     noisy_empty = checker.check(qc_cx, qc_id, noise_model=noise, num_traj=5, random_seed=0)
     noisy_cx = checker.check(qc_id, qc_cx, noise_model=noise, num_traj=5, random_seed=0)
 
-    assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
-    assert float(noisy_cx["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_cx)["fidelity"]), abs=1e-6)
+    assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]) ** 2, abs=1e-12)
+    assert float(noisy_cx["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_cx)["fidelity"]) ** 2, abs=1e-6)
 
 
 def test_noisy_check_is_seeded_reproducible() -> None:
@@ -817,12 +834,87 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
     assert result["representation"] == representation
     assert result["num_traj"] == 3
     assert len(result["trajectories"]) == 3
+    assert isinstance(result["equivalent"], bool)
+    assert isinstance(result["fidelity"], float)
+    assert result["fidelity_error"] is not None
     if representation == "matrix":
         assert result["center_cut_entanglement_entropy"] is None
         assert result["global_entanglement_entropy"] is None
     else:
         assert result["center_cut_entanglement_entropy"] is not None
         assert result["global_entanglement_entropy"] is not None
+
+
+def test_noisy_ensemble_averages_squared_overlaps_and_reports_standard_error() -> None:
+    """The channel estimate averages squared overlaps and reports their sample SEM."""
+    reference = QuantumCircuit(2)
+    overlaps = np.asarray([0.2, 0.5, 0.9])
+    checker = EquivalenceChecker(representation="matrix", fidelity=0.6, max_workers=1)
+    trajectory_results = []
+    for overlap in overlaps:
+        candidate = QuantumCircuit(2)
+        candidate.ry(2 * np.arccos(overlap), 0)
+        trajectory_results.append(checker.check(reference, candidate))
+
+    with patch(
+        "mqt.yaqs.equivalence_checker._run_noisy_check_trajectory",
+        side_effect=trajectory_results,
+    ):
+        result = checker.check(
+            reference,
+            reference,
+            noise_model=_pauli_x_noise(2, 0.0),
+            num_traj=len(overlaps),
+            random_seed=0,
+        )
+
+    squared_overlaps = np.square(overlaps)
+    assert result["fidelity"] == pytest.approx(float(np.mean(squared_overlaps)), abs=1e-12)
+    assert result["fidelity"] != pytest.approx(float(np.mean(overlaps)), abs=1e-12)
+    assert result["fidelity"] != pytest.approx(float(np.mean(overlaps) ** 2), abs=1e-12)
+    assert result["fidelity_error"] == pytest.approx(
+        float(np.std(squared_overlaps, ddof=1) / np.sqrt(len(squared_overlaps))), abs=1e-12
+    )
+    assert result["equivalent"] is True
+
+
+def test_single_trajectory_process_fidelity_has_no_standard_error() -> None:
+    """One trajectory gives a point estimate but cannot estimate sampling uncertainty."""
+    reference = QuantumCircuit(2)
+    candidate = QuantumCircuit(2)
+    candidate.ry(2 * np.arccos(0.6), 0)
+    checker = EquivalenceChecker(representation="matrix", fidelity=0.7, max_workers=1)
+    trajectory_result = checker.check(reference, candidate)
+
+    with patch(
+        "mqt.yaqs.equivalence_checker._run_noisy_check_trajectory",
+        return_value=trajectory_result,
+    ):
+        result = checker.check(
+            reference,
+            reference,
+            noise_model=_pauli_x_noise(2, 0.0),
+            num_traj=1,
+            random_seed=0,
+        )
+
+    assert result["fidelity"] == pytest.approx(0.6**2, abs=1e-12)
+    assert result["fidelity_error"] is None
+    assert result["equivalent"] is False
+
+
+@pytest.mark.parametrize("representation", ["matrix", "mpo"])
+def test_noiseless_check_keeps_root_overlap_semantics(representation: Literal["matrix", "mpo"]) -> None:
+    """Chunk 3 does not square the fidelity or threshold for noiseless checks."""
+    reference = QuantumCircuit(2)
+    candidate = QuantumCircuit(2)
+    candidate.ry(2 * np.pi / 3, 0)
+
+    result = EquivalenceChecker(representation=representation, fidelity=0.4).check(reference, candidate)
+
+    assert result["fidelity"] == pytest.approx(0.5, abs=1e-12)
+    assert result["equivalent"] is True
+    assert "fidelity_error" not in result
 
 
 def test_num_traj_without_noise_model_raises() -> None:
@@ -1008,7 +1100,7 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
 
 
 def test_example_ideal_versus_noisy_compiled_circuit() -> None:
-    """The docs example: noiseless compiled circuit matches; Pauli noise lowers mean overlap."""
+    """The docs example: noiseless compiled circuit matches; Pauli noise lowers process fidelity."""
     ideal = QuantumCircuit(4)
     for qubit in range(4):
         ideal.ry(0.4 * (qubit + 1), qubit)
@@ -1024,7 +1116,7 @@ def test_example_ideal_versus_noisy_compiled_circuit() -> None:
     assert noiseless["equivalent"] is True
     assert float(noiseless["fidelity"]) == pytest.approx(1.0, abs=1e-10)
     assert noisy["num_traj"] == 8
-    assert float(noisy["fidelity"]) < float(noiseless["fidelity"])
+    assert float(noisy["fidelity"]) < float(noiseless["fidelity"]) ** 2
 
 
 def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
@@ -1043,3 +1135,6 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
         [traj["fidelity"] for traj in pooled["trajectories"]],
         atol=1e-12,
     )
+    assert serial["fidelity"] == pytest.approx(pooled["fidelity"], abs=1e-12)
+    assert serial["fidelity_error"] == pytest.approx(pooled["fidelity_error"], abs=1e-12)
+    assert serial["equivalent"] is pooled["equivalent"]

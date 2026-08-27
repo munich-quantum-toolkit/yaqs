@@ -16,7 +16,8 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 When a :class:`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` is passed to
 :meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` explicit Pauli
 realizations of the second circuit and runs the standard relative-operator check on
-each trajectory.
+each trajectory. The resulting random-unitary channel is summarized by the Monte Carlo
+mean and standard error of the squared trajectory overlaps.
 """
 
 from __future__ import annotations
@@ -85,10 +86,18 @@ class EquivalenceCheckResult(TypedDict):
 
 
 class EquivalenceEnsembleResult(TypedDict):
-    """Return type of :meth:`EquivalenceChecker.check` for a noisy trajectory ensemble."""
+    """Monte Carlo result from :meth:`EquivalenceChecker.check` for a noisy ensemble.
+
+    ``fidelity`` is the mean of the squared trajectory overlaps, and
+    ``fidelity_error`` is its empirical standard error (or ``None`` for one
+    trajectory). ``equivalent`` compares that sampled process-fidelity mean with
+    the squared configured threshold. It is a finite-sample decision, not an exact
+    equivalence certificate.
+    """
 
     equivalent: bool
     fidelity: float
+    fidelity_error: float | None
     elapsed_time: float
     representation: str
     num_traj: int
@@ -163,6 +172,29 @@ def _validate_max_workers(max_workers: int | None) -> int | None:
         msg = f"max_workers must be positive, got {max_workers}."
         raise ValueError(msg)
     return max_workers
+
+
+def _validate_fidelity(fidelity: float) -> float:
+    """Validate the normalized root-overlap threshold.
+
+    Args:
+        fidelity: Requested threshold.
+
+    Returns:
+        The threshold as a built-in ``float``.
+
+    Raises:
+        TypeError: If ``fidelity`` is not a non-boolean real number.
+        ValueError: If ``fidelity`` is non-finite or outside the interval ``[0, 1]``.
+    """
+    if isinstance(fidelity, bool) or not isinstance(fidelity, (int, float, np.floating, np.integer)):
+        msg = f"fidelity must be a real number, got {type(fidelity).__name__}."
+        raise TypeError(msg)
+    value = float(fidelity)
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        msg = f"fidelity must be finite and between 0 and 1 inclusive, got {value}."
+        raise ValueError(msg)
+    return value
 
 
 def _validate_num_traj(num_traj: int) -> int:
@@ -336,6 +368,21 @@ def _mean_or_none(values: list[float | None]) -> float | None:
     return float(np.mean(np.asarray(values, dtype=np.float64)))
 
 
+def _standard_error_or_none(values: NDArray[np.float64]) -> float | None:
+    """Estimate the standard error of a sample mean when at least two samples exist.
+
+    Args:
+        values: One-dimensional sample values.
+
+    Returns:
+        The sample standard deviation divided by the square root of the sample size,
+        or ``None`` when the sample contains only one value.
+    """
+    if values.size < 2:
+        return None
+    return float(np.std(values, ddof=1) / np.sqrt(values.size))
+
+
 def _check_loaded_pair(
     checker: EquivalenceChecker,
     circuit1: QuantumCircuit,
@@ -472,7 +519,8 @@ class EquivalenceChecker:
 
     Attributes:
         threshold: Singular-value truncation threshold used during SVD in the MPO update.
-        fidelity: Fidelity threshold for deciding whether the composed operator is identity-like.
+        fidelity: Root-overlap threshold for a noiseless check. Noisy checks compare
+            their process-fidelity estimate with the square of this threshold.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
         parallel: Whether to use a thread pool for independent MPO pair updates on noiseless
@@ -497,7 +545,9 @@ class EquivalenceChecker:
 
         Args:
             threshold: SVD truncation threshold in the MPO update (default ``1e-13``).
-            fidelity: Minimum fidelity to treat the composed operator as identity (default ``1 - 1e-13``).
+            fidelity: Minimum root overlap for a noiseless identity check (default
+                ``1 - 1e-13``). Noisy checks square it to obtain the corresponding
+                process-fidelity threshold.
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
@@ -509,7 +559,7 @@ class EquivalenceChecker:
             mp_context: Start method for noisy-ensemble process pools.
         """
         self.threshold = threshold
-        self.fidelity = fidelity
+        self.fidelity = _validate_fidelity(fidelity)
         self.representation = _validate_representation(representation)
         self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
         self.parallel = parallel
@@ -551,7 +601,8 @@ class EquivalenceChecker:
             backend: Resolved backend.
 
         Returns:
-            Aggregated :class:`EquivalenceEnsembleResult`.
+            A Monte Carlo :class:`EquivalenceEnsembleResult`. The process-fidelity
+            standard error is ``None`` when ``num_traj`` is one.
         """
         start_time = time.time()
         workers = self.max_workers if self.max_workers is not None else max(1, available_cpus() - 1)
@@ -594,10 +645,15 @@ class EquivalenceChecker:
                 for traj_idx in range(num_traj)
             ]
 
-        mean_fidelity = float(np.mean([traj["fidelity"] for traj in trajectories]))
+        # A trajectory reports |Tr(Q_r)| / d; random-unitary channel process fidelity
+        # is the ensemble mean of its square.
+        process_fidelity_samples = np.square(np.asarray([traj["fidelity"] for traj in trajectories], dtype=np.float64))
+        mean_fidelity = float(np.mean(process_fidelity_samples))
+        process_fidelity_threshold = self.fidelity**2
         return {
-            "equivalent": mean_fidelity >= self.fidelity,
+            "equivalent": mean_fidelity >= process_fidelity_threshold,
             "fidelity": mean_fidelity,
+            "fidelity_error": _standard_error_or_none(process_fidelity_samples),
             "elapsed_time": time.time() - start_time,
             "representation": backend,
             "num_traj": num_traj,
@@ -644,15 +700,19 @@ class EquivalenceChecker:
         num_traj: int = 1,
         random_seed: int | None = None,
     ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
-        """Check whether two quantum circuits are equivalent.
+        """Compare two quantum circuits, optionally under sampled Pauli noise.
 
-        If the circuits differ only up to global phase and numerical error, the composed
-        operator ``U2† U1`` approximates the identity.
+        On the noiseless path, circuits that differ only up to global phase and numerical
+        error have a composed operator ``U2† U1`` that approximates the identity and are
+        reported as equivalent.
 
         When ``noise_model`` is set, Pauli noise is sampled onto ``circuit2`` only.
         Each of ``num_traj`` independent realizations is checked with the same
-        relative-operator path used for a noiseless pair, and the returned ensemble
-        reports trajectory-averaged fidelity and operator-entanglement diagnostics.
+        relative-operator path used for a noiseless pair. The returned ensemble reports
+        a Monte Carlo estimate of the channel process fidelity, its empirical standard
+        error when ``num_traj > 1``, and trajectory-averaged operator-entanglement
+        diagnostics. Its threshold comparison is a sample-level decision, not an
+        equivalence certificate.
         Trajectories run in a process pool (each with serial ``iterate``); MPO zone
         threads are not used on the noisy path.
 
@@ -675,8 +735,9 @@ class EquivalenceChecker:
         Returns:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
             :class:`EquivalenceEnsembleResult` when ``noise_model`` is set. Both include
-            ``equivalent``, ``fidelity``, ``elapsed_time``, and ``representation``. The
-            ensemble additionally includes ``num_traj`` and ``trajectories``.
+            ``equivalent`` and ``fidelity``; for a noisy result these are the sampled
+            process-fidelity decision and estimate. The ensemble additionally includes
+            ``fidelity_error``, ``num_traj``, and the individual ``trajectories``.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit
