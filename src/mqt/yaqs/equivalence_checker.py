@@ -21,18 +21,20 @@ each trajectory.
 
 from __future__ import annotations
 
+import math
 import time
-from typing import TYPE_CHECKING, Literal, TypedDict, overload
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, overload
 
 import numpy as np
+from qiskit.circuit import Gate, QuantumCircuit
+from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
 from .core.data_structures.noise_model import NoiseModel
 from .core.parallel_utils import WORKER_CTX, available_cpus, reassemble_indexed, run_backend_parallel
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
-from .digital.stochastic_circuit import _validate_pauli_noise_model, sample_stochastic_circuit
-from .digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL, iterate
+from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import (
     compose_operator_tensor,
     compute_identity_fidelity,
@@ -44,13 +46,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy.typing import NDArray
-    from qiskit.circuit import QuantumCircuit
 
     from .core.parallel_utils import MPContext
 
 __all__ = [
     "DEFAULT_MATRIX_MAX_QUBITS",
-    "EnsembleParallel",
     "EquivalenceCheckResult",
     "EquivalenceChecker",
     "EquivalenceEnsembleResult",
@@ -58,8 +58,17 @@ __all__ = [
 ]
 
 Representation = Literal["auto", "matrix", "mpo"]
-EnsembleParallel = Literal["auto", "trajectories", "zones"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
+_ONE_QUBIT_PAULIS = {
+    "pauli_x": "x",
+    "pauli_y": "y",
+    "pauli_z": "z",
+    "x": "x",
+    "y": "y",
+    "z": "z",
+}
+_PAULI_GATES = {"x": XGate(), "y": YGate(), "z": ZGate()}
+_PAULI_ERROR = "Noisy equivalence checking supports recognized YAQS Pauli processes only."
 
 
 class EquivalenceCheckResult(TypedDict):
@@ -134,10 +143,10 @@ def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
 
 
 def _validate_max_workers(max_workers: int | None) -> int | None:
-    """Validate the MPO parallel worker-thread cap.
+    """Validate the worker-count cap.
 
     Args:
-        max_workers: Requested thread cap, or ``None`` for the default.
+        max_workers: Requested cap, or ``None`` for the default.
 
     Returns:
         The validated cap, or ``None``.
@@ -155,25 +164,6 @@ def _validate_max_workers(max_workers: int | None) -> int | None:
         msg = f"max_workers must be positive, got {max_workers}."
         raise ValueError(msg)
     return max_workers
-
-
-def _validate_ensemble_parallel(ensemble_parallel: str) -> EnsembleParallel:
-    """Validate the noisy-ensemble parallelism selector.
-
-    Args:
-        ensemble_parallel: Requested ensemble strategy.
-
-    Returns:
-        A validated ``EnsembleParallel`` literal.
-
-    Raises:
-        ValueError: If ``ensemble_parallel`` is not one of ``auto``, ``trajectories``, or ``zones``.
-    """
-    allowed = ("auto", "trajectories", "zones")
-    if ensemble_parallel not in allowed:
-        msg = f"ensemble_parallel must be one of {allowed!r}, got {ensemble_parallel!r}."
-        raise ValueError(msg)
-    return ensemble_parallel
 
 
 def _validate_num_traj(num_traj: int) -> int:
@@ -233,6 +223,91 @@ def _has_unsupported_mpo_gates(circuit: QuantumCircuit) -> bool:
     )
 
 
+def _pauli_labels(process: dict[str, Any]) -> tuple[str, ...] | None:
+    """Decode a recognized YAQS Pauli process name.
+
+    Returns:
+        One Pauli label per process site, or ``None`` if unsupported.
+    """
+    name = str(process["name"])
+    if len(process["sites"]) == 1:
+        label = _ONE_QUBIT_PAULIS.get(name)
+        return (label,) if label is not None else None
+
+    if name.startswith("crosstalk_"):
+        labels = name.removeprefix("crosstalk_")
+        if len(labels) == 2 and set(labels) <= {"x", "y", "z"}:
+            return labels[0], labels[1]
+    return None
+
+
+def _validate_pauli_noise_model(noise_model: NoiseModel) -> None:
+    """Validate that a noise model can be materialized as Pauli gates.
+
+    Raises:
+        ValueError: If scheduled jumps or positive-rate non-Pauli processes are present.
+    """
+    if noise_model.scheduled_jumps:
+        msg = "Noisy equivalence checking does not support scheduled jumps."
+        raise ValueError(msg)
+    if any(float(process["strength"]) > 0.0 and _pauli_labels(process) is None for process in noise_model.processes):
+        raise ValueError(_PAULI_ERROR)
+
+
+def _sample_noisy_circuit(
+    circuit: QuantumCircuit,
+    noise_model: NoiseModel,
+    rng: np.random.Generator,
+) -> QuantumCircuit:
+    """Sample one Pauli-noise realization of ``circuit``.
+
+    Every one- or two-qubit gate is a noise opportunity. A process participates
+    when its complete support is contained in the gate support. At most one
+    process is appended after each such gate.
+
+    Args:
+        circuit: Circuit to sample.
+        noise_model: Concrete Pauli noise model (distribution-valued strengths
+            must already be resolved).
+        rng: Random-number generator for event and process draws.
+
+    Returns:
+        A copy of ``circuit`` with sampled Pauli gates inserted.
+    """
+    sampled_circuit = circuit.copy_empty_like()
+    for instruction in circuit.data:
+        sites = [circuit.find_bit(qubit).index for qubit in instruction.qubits]
+        qubits = [sampled_circuit.qubits[site] for site in sites]
+        clbits = [sampled_circuit.clbits[circuit.find_bit(clbit).index] for clbit in instruction.clbits]
+        sampled_circuit.append(instruction.operation.copy(), qubits, clbits)
+
+        if not isinstance(instruction.operation, Gate) or instruction.operation.num_qubits not in {1, 2}:
+            continue
+
+        gate_sites = set(sites)
+        processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
+        rates = [float(process["strength"]) for process in processes]
+        total_rate = sum(rates)
+        if not total_rate or rng.random() >= -math.expm1(-total_rate):
+            continue
+
+        threshold = float(rng.random()) * total_rate
+        cumulative = 0.0
+        selected = next(process for process, rate in zip(reversed(processes), reversed(rates), strict=True) if rate > 0)
+        for process, rate in zip(processes, rates, strict=True):
+            cumulative += rate
+            if threshold < cumulative:
+                selected = process
+                break
+
+        labels = _pauli_labels(selected)
+        assert labels is not None
+        for label, site in zip(labels, selected["sites"], strict=True):
+            sampled_circuit.append(_PAULI_GATES[label], [sampled_circuit.qubits[int(site)]])
+
+    return sampled_circuit
+
+
 def _mean_or_none(values: list[float | None]) -> float | None:
     """Average a list of optional floats, or return ``None`` if any entry is missing.
 
@@ -247,27 +322,13 @@ def _mean_or_none(values: list[float | None]) -> float | None:
     return float(np.mean(np.asarray(values, dtype=np.float64)))
 
 
-def _strip_operators(result: EquivalenceCheckResult) -> EquivalenceCheckResult:
-    """Drop stored operators from a single-check result.
-
-    Args:
-        result: Per-trajectory check result.
-
-    Returns:
-        The same mapping with ``mpo`` and ``matrix`` set to ``None``.
-    """
-    result["mpo"] = None
-    result["matrix"] = None
-    return result
-
-
 def _check_loaded_pair(
     checker: EquivalenceChecker,
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
     backend: Literal["matrix", "mpo"],
     *,
-    zone_parallel: bool | None = None,
+    parallel: bool | None = None,
 ) -> EquivalenceCheckResult:
     """Run one relative-operator check on already loaded circuits.
 
@@ -276,13 +337,13 @@ def _check_loaded_pair(
         circuit1: First (reference) circuit.
         circuit2: Second circuit.
         backend: Resolved ``"matrix"`` or ``"mpo"`` backend.
-        zone_parallel: Override for MPO zone-thread parallelism. ``None`` uses
+        parallel: Override for MPO zone-thread parallelism. ``None`` uses
             :attr:`EquivalenceChecker.parallel`.
 
     Returns:
         A single :class:`EquivalenceCheckResult`.
     """
-    use_zone_parallel = checker.parallel if zone_parallel is None else zone_parallel
+    use_parallel = checker.parallel if parallel is None else parallel
     start_time = time.time()
 
     if backend == "matrix":
@@ -311,7 +372,7 @@ def _check_loaded_pair(
         circuit1_dag,
         circuit2_dag,
         checker.threshold,
-        parallel=use_zone_parallel,
+        parallel=use_parallel,
         max_workers=checker.max_workers,
         mp_context=checker.mp_context,
     )
@@ -338,9 +399,6 @@ def _run_noisy_check_trajectory(
     random_seed: int | None,
     checker: EquivalenceChecker,
     backend: Literal["matrix", "mpo"],
-    *,
-    zone_parallel: bool,
-    keep_operators: bool,
 ) -> EquivalenceCheckResult:
     """Sample one noisy ``circuit2`` realization and run a single relative check.
 
@@ -352,17 +410,16 @@ def _run_noisy_check_trajectory(
         random_seed: Optional run-level seed.
         checker: Checker supplying thresholds and backend settings.
         backend: Resolved ``"matrix"`` or ``"mpo"`` backend.
-        zone_parallel: Whether ``iterate`` may use its in-process thread pool.
-        keep_operators: If ``False``, drop the stored MPO or dense matrix.
 
     Returns:
-        One :class:`EquivalenceCheckResult` for the sampled pair.
+        One :class:`EquivalenceCheckResult` for the sampled pair. Stored operators
+        are dropped after diagnostics are extracted.
     """
     rng = make_trajectory_rng(traj_idx, base_seed=random_seed)
-    noisy2 = sample_stochastic_circuit(circuit2, noise_model, rng)
-    result = _check_loaded_pair(checker, circuit1, noisy2, backend, zone_parallel=zone_parallel)
-    if not keep_operators:
-        return _strip_operators(result)
+    noisy2 = _sample_noisy_circuit(circuit2, noise_model, rng)
+    result = _check_loaded_pair(checker, circuit1, noisy2, backend, parallel=False)
+    result["mpo"] = None
+    result["matrix"] = None
     return result
 
 
@@ -380,7 +437,6 @@ def _ensemble_trajectory_worker(traj_idx: int) -> EquivalenceCheckResult:
         parallel=False,
         max_workers=1,
         mp_context=WORKER_CTX["mp_context"],
-        ensemble_parallel="trajectories",
     )
     return _run_noisy_check_trajectory(
         traj_idx,
@@ -390,8 +446,6 @@ def _ensemble_trajectory_worker(traj_idx: int) -> EquivalenceCheckResult:
         WORKER_CTX["random_seed"],
         checker,
         WORKER_CTX["backend"],
-        zone_parallel=False,
-        keep_operators=WORKER_CTX["keep_operators"],
     )
 
 
@@ -407,12 +461,11 @@ class EquivalenceChecker:
         fidelity: Fidelity threshold for deciding whether the composed operator is identity-like.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
-        parallel: Whether to use a thread pool for independent MPO pair updates (default ``True``; MPO backend only).
-        max_workers: Maximum worker threads when ``parallel`` is True, and the process-pool
-            cap when noisy ensembles use trajectory parallelism.
-        mp_context: Multiprocessing start method for trajectory process pools; MPO zone
-            parallelism uses in-process threads.
-        ensemble_parallel: Strategy for noisy ensembles (``"auto"``, ``"trajectories"``, or ``"zones"``).
+        parallel: Whether to use a thread pool for independent MPO pair updates on noiseless
+            checks (default ``True``; MPO backend only). Ignored when a noise model is set.
+        max_workers: Maximum worker threads for noiseless MPO checks, and the process-pool
+            cap for noisy trajectory ensembles.
+        mp_context: Multiprocessing start method for noisy-ensemble process pools.
     """
 
     def __init__(
@@ -425,7 +478,6 @@ class EquivalenceChecker:
         parallel: bool = True,
         max_workers: int | None = None,
         mp_context: MPContext = "auto",
-        ensemble_parallel: EnsembleParallel = "auto",
     ) -> None:
         """Initialize the checker with numerical thresholds and backend options.
 
@@ -435,14 +487,12 @@ class EquivalenceChecker:
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
-            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates (default ``True``;
-                effective only from ``MIN_QUBITS_FOR_MPO_PARALLEL`` qubits upward).
-            max_workers: Cap on worker threads for the MPO backend, and on processes for
-                trajectory ensembles (default: machine CPU count).
-            mp_context: Start method for trajectory process pools. Zone parallelism uses threads.
-            ensemble_parallel: ``"auto"`` picks trajectory process-pool parallelism for small
-                (or matrix) noisy ensembles and zone threads otherwise; ``"trajectories"`` and
-                ``"zones"`` force that strategy.
+            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates on
+                noiseless checks (default ``True``; effective only from 12 qubits upward).
+                Ignored when a noise model is set.
+            max_workers: Cap on worker threads for noiseless MPO checks, and on processes for
+                noisy trajectory ensembles (default: machine CPU count).
+            mp_context: Start method for noisy-ensemble process pools.
         """
         self.threshold = threshold
         self.fidelity = fidelity
@@ -451,7 +501,6 @@ class EquivalenceChecker:
         self.parallel = parallel
         self.max_workers = _validate_max_workers(max_workers)
         self.mp_context = mp_context
-        self.ensemble_parallel = _validate_ensemble_parallel(ensemble_parallel)
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:
         """Choose the concrete backend for a given circuit width.
@@ -468,28 +517,6 @@ class EquivalenceChecker:
             return "mpo"
         return "matrix" if num_qubits <= self.matrix_max_qubits else "mpo"
 
-    def _resolve_ensemble_parallel(
-        self,
-        num_qubits: int,
-        backend: Literal["matrix", "mpo"],
-        num_traj: int,
-    ) -> Literal["trajectories", "zones"]:
-        """Choose trajectory vs zone parallelism for a noisy ensemble.
-
-        Args:
-            num_qubits: Width of the circuits being compared.
-            backend: Resolved backend.
-            num_traj: Ensemble size.
-
-        Returns:
-            ``"trajectories"`` or ``"zones"``.
-        """
-        if self.ensemble_parallel != "auto":
-            return self.ensemble_parallel
-        if num_traj > 1 and (backend == "matrix" or num_qubits < MIN_QUBITS_FOR_MPO_PARALLEL):
-            return "trajectories"
-        return "zones"
-
     def _run_noisy_ensemble(
         self,
         circuit1: QuantumCircuit,
@@ -498,8 +525,6 @@ class EquivalenceChecker:
         num_traj: int,
         random_seed: int | None,
         backend: Literal["matrix", "mpo"],
-        *,
-        keep_operators: bool,
     ) -> EquivalenceEnsembleResult:
         """Sample noisy ``circuit2`` trajectories and aggregate relative-operator checks.
 
@@ -510,16 +535,14 @@ class EquivalenceChecker:
             num_traj: Ensemble size.
             random_seed: Optional run-level seed.
             backend: Resolved backend.
-            keep_operators: If ``True``, retain per-trajectory operators.
 
         Returns:
             Aggregated :class:`EquivalenceEnsembleResult`.
         """
         start_time = time.time()
-        mode = self._resolve_ensemble_parallel(circuit1.num_qubits, backend, num_traj)
         workers = self.max_workers if self.max_workers is not None else max(1, available_cpus() - 1)
 
-        if mode == "trajectories" and num_traj > 1 and workers > 1:
+        if num_traj > 1 and workers > 1:
             payload = {
                 "circuit1": circuit1,
                 "circuit2": circuit2,
@@ -530,7 +553,6 @@ class EquivalenceChecker:
                 "backend": backend,
                 "matrix_max_qubits": self.matrix_max_qubits,
                 "mp_context": self.mp_context,
-                "keep_operators": keep_operators,
             }
             by_idx = dict(
                 run_backend_parallel(
@@ -554,8 +576,6 @@ class EquivalenceChecker:
                     random_seed,
                     self,
                     backend,
-                    zone_parallel=self.parallel if mode == "zones" else False,
-                    keep_operators=keep_operators,
                 )
                 for traj_idx in range(num_traj)
             ]
@@ -588,7 +608,6 @@ class EquivalenceChecker:
         noise_model: None = None,
         num_traj: int = 1,
         random_seed: int | None = None,
-        keep_operators: bool = False,
     ) -> EquivalenceCheckResult: ...
 
     @overload
@@ -600,7 +619,6 @@ class EquivalenceChecker:
         noise_model: NoiseModel,
         num_traj: int = 1,
         random_seed: int | None = None,
-        keep_operators: bool = False,
     ) -> EquivalenceEnsembleResult: ...
 
     def check(
@@ -611,7 +629,6 @@ class EquivalenceChecker:
         noise_model: NoiseModel | None = None,
         num_traj: int = 1,
         random_seed: int | None = None,
-        keep_operators: bool = False,
     ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
         """Check whether two quantum circuits are equivalent.
 
@@ -622,6 +639,8 @@ class EquivalenceChecker:
         Each of ``num_traj`` independent realizations is checked with the same
         relative-operator path used for a noiseless pair, and the returned ensemble
         reports trajectory-averaged fidelity and operator-entanglement diagnostics.
+        Trajectories run in a process pool (each with serial ``iterate``); MPO zone
+        threads are not used on the noisy path.
 
         Args:
             circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
@@ -638,9 +657,6 @@ class EquivalenceChecker:
                 Must be ``1`` when ``noise_model`` is ``None``.
             random_seed: Optional run-level seed for disorder sampling and per-trajectory
                 circuit draws. ``None`` uses non-deterministic streams.
-            keep_operators: If ``True``, retain per-trajectory ``mpo`` / ``matrix`` objects
-                in a noisy ensemble. Ignored for noiseless checks. Ensemble-level operators
-                are never stored.
 
         Returns:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
@@ -652,7 +668,7 @@ class EquivalenceChecker:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit
                 measurements, contain gates on more than two qubits on the MPO backend,
                 ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
-                or the noise model is not supported by explicit Pauli circuit sampling.
+                or the noise model is not a supported Pauli model.
             TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
         """
         num_traj = _validate_num_traj(num_traj)
@@ -693,5 +709,4 @@ class EquivalenceChecker:
             num_traj,
             random_seed,
             backend,
-            keep_operators=keep_operators,
         )

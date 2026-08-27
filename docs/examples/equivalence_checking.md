@@ -97,26 +97,19 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair
   updates run in a **thread pool** from 12 qubits upward (ignored for the matrix
-  backend and below the cutoff).
-- **`max_workers`** (default `None`): cap on worker threads when
-  `parallel=True`, and on worker processes when a noisy ensemble uses
-  `ensemble_parallel="trajectories"`. When unset, the pool size is
-  `min(available_cpus(), number_of_work_items)` for zone threads, or
-  `max(1, available_cpus() - 1)` for trajectory processes, where
+  backend, below the cutoff, and when a noise model is set).
+- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
+  (noiseless MPO checks), and on worker processes for noisy ensembles. When
+  unset, noiseless MPO zone threads use
+  `min(available_cpus(), number_of_work_items)`, and noisy trajectory processes
+  use `max(1, available_cpus() - 1)`, where
   {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
   `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
   limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
   host.
-- **`mp_context`**: start method for noisy-ensemble process pools
-  (`"auto"`, `"fork"`, `"spawn"`). Zone parallelism inside `iterate()` still
+- **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
+  `"fork"`, `"spawn"`). Noiseless MPO zone parallelism inside `iterate()` still
   uses in-process threads.
-- **`ensemble_parallel`** (default `"auto"`): how to parallelize a noisy
-  ensemble. `"zones"` loops trajectories sequentially and keeps MPO
-  checkerboard threads inside `iterate()`. `"trajectories"` runs each sampled
-  circuit in a process with `iterate(parallel=False)`. `"auto"` uses
-  trajectories when `num_traj > 1` and the circuit is below 12 qubits (or the
-  matrix backend is selected), and zones otherwise, so the two pools are never
-  nested.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -289,7 +282,9 @@ backend, mean operator entanglement), plus `trajectories` with the standard
 per-realization diagnostics. Noise is applied only to the **second** circuit.
 Distribution-valued strengths are resolved once per `check` call. Non-Pauli
 processes such as `raising`/`lowering` and scheduled jumps are rejected; those
-remain on the TJM simulation path.
+remain on the TJM simulation path. Independent trajectories run in a process
+pool with serial MPO updates inside each worker (`max_workers` caps the pool);
+checkerboard zone threads are not used when a noise model is set.
 
 ## Performance notes
 

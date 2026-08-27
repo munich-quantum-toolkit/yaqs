@@ -147,7 +147,7 @@ def test_large_equivalence(tmp_path: Path) -> None:
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
 
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qc, qc)
     assert result["equivalent"] is True, "Large scale test fails. Circuits should be equivalent."
     assert result["representation"] == "mpo"
@@ -378,7 +378,7 @@ def test_mpo_backend_rejects_multi_qubit_gates() -> None:
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
 
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     with pytest.raises(ValueError, match="more than two qubits"):
         checker.check(qc, qc)
 
@@ -539,7 +539,7 @@ def test_check_accepts_qasm2_path_object(tmp_path: Path) -> None:
     """Check that a QASM 2 file given as a Path object is accepted and returns equivalent."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
 
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
@@ -548,7 +548,7 @@ def test_check_accepts_qasm2_str_path(tmp_path: Path) -> None:
     """Check that a QASM 2 file given as a str path is accepted and returns equivalent."""
     qasm_path = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
 
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
@@ -557,7 +557,7 @@ def test_check_qasm_path_vs_quantumcircuit_agree(tmp_path: Path) -> None:
     """Verify that loading via path and via QuantumCircuit gives the same equivalence result."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     result_path = checker.check(qasm_path, qasm_path)
     result_qc = checker.check(qc, qc)
     assert result_path["equivalent"] == result_qc["equivalent"]
@@ -585,7 +585,7 @@ def test_check_accepts_qasm3_str_path(tmp_path: Path) -> None:
 
 def test_check_accepts_qasm2_raw_string() -> None:
     """Check that a raw QASM 2 string (not a file path) is accepted and returns equivalent."""
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     result = checker.check(LARGE_QASM2_STRING, LARGE_QASM2_STRING)
     assert result["equivalent"] is True
 
@@ -609,7 +609,7 @@ def test_check_mixed_qasm_path_and_quantumcircuit(tmp_path: Path) -> None:
     """Mixed OpenQASM path and QuantumCircuit inputs agree with path-only checking."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     assert checker.check(qasm_path, qc)["equivalent"] is True
     assert checker.check(qc, qasm_path)["equivalent"] is True
 
@@ -618,7 +618,7 @@ def test_check_mixed_qasm_raw_string_and_quantumcircuit(tmp_path: Path) -> None:
     """Raw OpenQASM string mixed with a QuantumCircuit matches path-based checking."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
     assert checker.check(LARGE_QASM2_STRING, qc)["equivalent"] is True
     assert checker.check(qc, LARGE_QASM2_STRING)["equivalent"] is True
 
@@ -740,7 +740,7 @@ def test_zero_strength_noise_matches_noiseless_check() -> None:
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 0.0)
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
 
     noiseless = checker.check(qc, qc)
     ensemble = checker.check(qc, qc, noise_model=noise, num_traj=4, random_seed=0)
@@ -763,7 +763,7 @@ def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 5.0)
-    checker = EquivalenceChecker(representation="mpo", fidelity=1 - 1e-8, ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo", fidelity=1 - 1e-8)
 
     ensemble = checker.check(qc, qc, noise_model=noise, num_traj=8, random_seed=1)
 
@@ -778,7 +778,7 @@ def test_noise_is_applied_only_to_circuit2() -> None:
     qc_h.h(0)
     qc_id = QuantumCircuit(2)
     noise = _pauli_x_noise(2, 100.0)
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
 
     noiseless = checker.check(qc_h, qc_id)
     noisy_empty = checker.check(qc_h, qc_id, noise_model=noise, num_traj=5, random_seed=0)
@@ -794,7 +794,7 @@ def test_noisy_check_is_seeded_reproducible() -> None:
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 0.2)
-    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+    checker = EquivalenceChecker(representation="mpo")
 
     first = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
     second = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
@@ -810,7 +810,7 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
     qc = QuantumCircuit(2)
     qc.h(0)
     noise = _pauli_x_noise(2, 0.5)
-    result = EquivalenceChecker(representation=representation, ensemble_parallel="zones").check(
+    result = EquivalenceChecker(representation=representation).check(
         qc, qc, noise_model=noise, num_traj=3, random_seed=0
     )
 
@@ -823,19 +823,6 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
     else:
         assert result["center_cut_entanglement_entropy"] is not None
         assert result["global_entanglement_entropy"] is not None
-
-
-def test_keep_operators_retains_per_trajectory_mpo() -> None:
-    """``keep_operators=True`` stores per-trajectory MPOs but not an ensemble operator."""
-    qc = QuantumCircuit(2)
-    qc.h(0)
-    noise = _pauli_x_noise(2, 0.0)
-    result = EquivalenceChecker(representation="mpo", ensemble_parallel="zones").check(
-        qc, qc, noise_model=noise, num_traj=2, random_seed=0, keep_operators=True
-    )
-
-    assert result["mpo"] is None
-    assert all(traj["mpo"] is not None for traj in result["trajectories"])
 
 
 def test_num_traj_without_noise_model_raises() -> None:
@@ -863,27 +850,19 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
 
 
-def test_trajectory_and_zone_ensemble_modes_agree() -> None:
-    """Forced trajectory and zone strategies agree on a small seeded ensemble."""
+def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
+    """Serial and process-pool workers use the same trajectory-index streams."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 1.0)
     kwargs = {"noise_model": noise, "num_traj": 4, "random_seed": 7}
 
-    zones = EquivalenceChecker(representation="mpo", ensemble_parallel="zones").check(qc, qc, **kwargs)
-    trajectories = EquivalenceChecker(representation="mpo", ensemble_parallel="trajectories", max_workers=2).check(
-        qc, qc, **kwargs
-    )
+    serial = EquivalenceChecker(representation="mpo", max_workers=1).check(qc, qc, **kwargs)
+    pooled = EquivalenceChecker(representation="mpo", max_workers=2).check(qc, qc, **kwargs)
 
     np.testing.assert_allclose(
-        [traj["fidelity"] for traj in zones["trajectories"]],
-        [traj["fidelity"] for traj in trajectories["trajectories"]],
+        [traj["fidelity"] for traj in serial["trajectories"]],
+        [traj["fidelity"] for traj in pooled["trajectories"]],
         atol=1e-12,
     )
-
-
-def test_checker_rejects_invalid_ensemble_parallel() -> None:
-    """``ensemble_parallel`` must be one of the supported strategies."""
-    with pytest.raises(ValueError, match="ensemble_parallel"):
-        EquivalenceChecker(ensemble_parallel="threads")  # ty: ignore[invalid-argument-type]
