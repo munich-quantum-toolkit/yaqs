@@ -24,7 +24,7 @@ from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
 
-from mqt.yaqs import EquivalenceChecker
+from mqt.yaqs import EquivalenceChecker, NoiseModel
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
@@ -147,7 +147,7 @@ def test_large_equivalence(tmp_path: Path) -> None:
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
 
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     result = checker.check(qc, qc)
     assert result["equivalent"] is True, "Large scale test fails. Circuits should be equivalent."
     assert result["representation"] == "mpo"
@@ -378,7 +378,7 @@ def test_mpo_backend_rejects_multi_qubit_gates() -> None:
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
 
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     with pytest.raises(ValueError, match="more than two qubits"):
         checker.check(qc, qc)
 
@@ -539,7 +539,7 @@ def test_check_accepts_qasm2_path_object(tmp_path: Path) -> None:
     """Check that a QASM 2 file given as a Path object is accepted and returns equivalent."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
 
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
@@ -548,7 +548,7 @@ def test_check_accepts_qasm2_str_path(tmp_path: Path) -> None:
     """Check that a QASM 2 file given as a str path is accepted and returns equivalent."""
     qasm_path = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
 
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
@@ -557,7 +557,7 @@ def test_check_qasm_path_vs_quantumcircuit_agree(tmp_path: Path) -> None:
     """Verify that loading via path and via QuantumCircuit gives the same equivalence result."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     result_path = checker.check(qasm_path, qasm_path)
     result_qc = checker.check(qc, qc)
     assert result_path["equivalent"] == result_qc["equivalent"]
@@ -585,7 +585,7 @@ def test_check_accepts_qasm3_str_path(tmp_path: Path) -> None:
 
 def test_check_accepts_qasm2_raw_string() -> None:
     """Check that a raw QASM 2 string (not a file path) is accepted and returns equivalent."""
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     result = checker.check(LARGE_QASM2_STRING, LARGE_QASM2_STRING)
     assert result["equivalent"] is True
 
@@ -609,7 +609,7 @@ def test_check_mixed_qasm_path_and_quantumcircuit(tmp_path: Path) -> None:
     """Mixed OpenQASM path and QuantumCircuit inputs agree with path-only checking."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     assert checker.check(qasm_path, qc)["equivalent"] is True
     assert checker.check(qc, qasm_path)["equivalent"] is True
 
@@ -618,7 +618,7 @@ def test_check_mixed_qasm_raw_string_and_quantumcircuit(tmp_path: Path) -> None:
     """Raw OpenQASM string mixed with a QuantumCircuit matches path-based checking."""
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
-    checker = EquivalenceChecker(representation="mpo")
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
     assert checker.check(LARGE_QASM2_STRING, qc)["equivalent"] is True
     assert checker.check(qc, LARGE_QASM2_STRING)["equivalent"] is True
 
@@ -719,3 +719,171 @@ def test_check_non_equivalent_pair_still_returns_diagnostics() -> None:
     assert result["schmidt_values"] is not None
     assert result["center_cut_entanglement_entropy"] is not None
     assert result["global_entanglement_entropy"] is not None
+
+
+def _pauli_x_noise(num_qubits: int, strength: float) -> NoiseModel:
+    """Build a local Pauli-X noise model on every qubit.
+
+    Args:
+        num_qubits: Number of qubits to cover.
+        strength: Process strength (Lindblad rate) on each site.
+
+    Returns:
+        A :class:`NoiseModel` of one-qubit ``pauli_x`` processes.
+    """
+    return NoiseModel([{"name": "pauli_x", "sites": [q], "strength": strength} for q in range(num_qubits)])
+
+
+def test_zero_strength_noise_matches_noiseless_check() -> None:
+    """A Pauli model with zero rates leaves the second circuit unchanged."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+    noise = _pauli_x_noise(2, 0.0)
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+
+    noiseless = checker.check(qc, qc)
+    ensemble = checker.check(qc, qc, noise_model=noise, num_traj=4, random_seed=0)
+
+    assert ensemble["num_traj"] == 4
+    assert len(ensemble["trajectories"]) == 4
+    assert ensemble["equivalent"] is True
+    assert float(ensemble["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
+    assert ensemble["mpo"] is None
+    assert ensemble["matrix"] is None
+    for traj in ensemble["trajectories"]:
+        assert traj["mpo"] is None
+        assert traj["matrix"] is None
+        assert float(traj["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
+    """Sampling Pauli errors onto the second circuit lowers mean identity overlap."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+    noise = _pauli_x_noise(2, 5.0)
+    checker = EquivalenceChecker(representation="mpo", fidelity=1 - 1e-8, ensemble_parallel="zones")
+
+    ensemble = checker.check(qc, qc, noise_model=noise, num_traj=8, random_seed=1)
+
+    assert ensemble["equivalent"] is False
+    assert float(ensemble["fidelity"]) < 1.0 - 1e-6
+    assert all(isinstance(traj["fidelity"], float) for traj in ensemble["trajectories"])
+
+
+def test_noise_is_applied_only_to_circuit2() -> None:
+    """An empty second circuit has no noise sites, so a strong model is a no-op."""
+    qc_h = QuantumCircuit(2)
+    qc_h.h(0)
+    qc_id = QuantumCircuit(2)
+    noise = _pauli_x_noise(2, 100.0)
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+
+    noiseless = checker.check(qc_h, qc_id)
+    noisy_empty = checker.check(qc_h, qc_id, noise_model=noise, num_traj=5, random_seed=0)
+    noisy_h = checker.check(qc_id, qc_h, noise_model=noise, num_traj=5, random_seed=0)
+
+    assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
+    assert float(noisy_h["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_h)["fidelity"]), abs=1e-6)
+
+
+def test_noisy_check_is_seeded_reproducible() -> None:
+    """The same ``(random_seed, num_traj)`` pair reproduces trajectory fidelities."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+    noise = _pauli_x_noise(2, 0.2)
+    checker = EquivalenceChecker(representation="mpo", ensemble_parallel="zones")
+
+    first = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
+    second = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
+    third = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=43)
+
+    assert [traj["fidelity"] for traj in first["trajectories"]] == [traj["fidelity"] for traj in second["trajectories"]]
+    assert [traj["fidelity"] for traj in first["trajectories"]] != [traj["fidelity"] for traj in third["trajectories"]]
+
+
+@pytest.mark.parametrize("representation", ["mpo", "matrix"])
+def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mpo", "matrix"]) -> None:
+    """Both backends accept a Pauli ``noise_model`` and return an ensemble."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    noise = _pauli_x_noise(2, 0.5)
+    result = EquivalenceChecker(representation=representation, ensemble_parallel="zones").check(
+        qc, qc, noise_model=noise, num_traj=3, random_seed=0
+    )
+
+    assert result["representation"] == representation
+    assert result["num_traj"] == 3
+    assert len(result["trajectories"]) == 3
+    if representation == "matrix":
+        assert result["center_cut_entanglement_entropy"] is None
+        assert result["global_entanglement_entropy"] is None
+    else:
+        assert result["center_cut_entanglement_entropy"] is not None
+        assert result["global_entanglement_entropy"] is not None
+
+
+def test_keep_operators_retains_per_trajectory_mpo() -> None:
+    """``keep_operators=True`` stores per-trajectory MPOs but not an ensemble operator."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    noise = _pauli_x_noise(2, 0.0)
+    result = EquivalenceChecker(representation="mpo", ensemble_parallel="zones").check(
+        qc, qc, noise_model=noise, num_traj=2, random_seed=0, keep_operators=True
+    )
+
+    assert result["mpo"] is None
+    assert all(traj["mpo"] is not None for traj in result["trajectories"])
+
+
+def test_num_traj_without_noise_model_raises() -> None:
+    """``num_traj`` is only meaningful together with a noise model."""
+    qc = QuantumCircuit(1)
+    with pytest.raises(ValueError, match="num_traj must be 1"):
+        EquivalenceChecker(representation="mpo").check(qc, qc, num_traj=4)
+
+
+def test_non_pauli_noise_is_rejected() -> None:
+    """Dissipative processes cannot be materialized as stochastic circuits."""
+    qc = QuantumCircuit(1)
+    qc.x(0)
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
+    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+        EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
+
+
+def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
+    """Scheduled jumps are not part of the explicit circuit-sampling path."""
+    qc = QuantumCircuit(1)
+    qc.x(0)
+    noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
+    with pytest.raises(ValueError, match="does not support scheduled jumps"):
+        EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
+
+
+def test_trajectory_and_zone_ensemble_modes_agree() -> None:
+    """Forced trajectory and zone strategies agree on a small seeded ensemble."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+    noise = _pauli_x_noise(2, 1.0)
+    kwargs = {"noise_model": noise, "num_traj": 4, "random_seed": 7}
+
+    zones = EquivalenceChecker(representation="mpo", ensemble_parallel="zones").check(qc, qc, **kwargs)
+    trajectories = EquivalenceChecker(representation="mpo", ensemble_parallel="trajectories", max_workers=2).check(
+        qc, qc, **kwargs
+    )
+
+    np.testing.assert_allclose(
+        [traj["fidelity"] for traj in zones["trajectories"]],
+        [traj["fidelity"] for traj in trajectories["trajectories"]],
+        atol=1e-12,
+    )
+
+
+def test_checker_rejects_invalid_ensemble_parallel() -> None:
+    """``ensemble_parallel`` must be one of the supported strategies."""
+    with pytest.raises(ValueError, match="ensemble_parallel"):
+        EquivalenceChecker(ensemble_parallel="threads")  # ty: ignore[invalid-argument-type]

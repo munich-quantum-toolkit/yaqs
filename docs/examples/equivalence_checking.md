@@ -99,14 +99,24 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   updates run in a **thread pool** from 12 qubits upward (ignored for the matrix
   backend and below the cutoff).
 - **`max_workers`** (default `None`): cap on worker threads when
-  `parallel=True`. When unset, the pool size is
-  `min(available_cpus(), number_of_work_items)`, where
+  `parallel=True`, and on worker processes when a noisy ensemble uses
+  `ensemble_parallel="trajectories"`. When unset, the pool size is
+  `min(available_cpus(), number_of_work_items)` for zone threads, or
+  `max(1, available_cpus() - 1)` for trajectory processes, where
   {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
   `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
   limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
   host.
-- **`mp_context`**: reserved for a future process-pool mode; MPO parallelism
-  uses threads today.
+- **`mp_context`**: start method for noisy-ensemble process pools
+  (`"auto"`, `"fork"`, `"spawn"`). Zone parallelism inside `iterate()` still
+  uses in-process threads.
+- **`ensemble_parallel`** (default `"auto"`): how to parallelize a noisy
+  ensemble. `"zones"` loops trajectories sequentially and keeps MPO
+  checkerboard threads inside `iterate()`. `"trajectories"` runs each sampled
+  circuit in a process with `iterate(parallel=False)`. `"auto"` uses
+  trajectories when `num_traj > 1` and the circuit is below 12 qubits (or the
+  matrix backend is selected), and zones otherwise, so the two pools are never
+  nested.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -241,6 +251,45 @@ Expect the largest gains on **wide** nearest-neighbor circuits (typically
 **12+ qubits**) where each sweep has several disjoint pairs. Below 12 qubits the
 implementation keeps the serial path even when `parallel=True`, because thread
 overhead would dominate.
+
+## Noisy ensembles
+
+To compare a reference circuit $G$ against noisy realizations of a transformed
+circuit $G'$, pass a Pauli {class}`~mqt.yaqs.NoiseModel` to
+{meth}`~mqt.yaqs.EquivalenceChecker.check`. Each trajectory samples an explicit
+circuit $\widetilde G_r$ (local Pauli errors after one- and two-qubit gates) and
+runs the same relative-operator check $Q_r = G\,\widetilde G_r^\dagger$ used in
+the noiseless case.
+
+```{code-cell} ipython3
+from mqt.yaqs import EquivalenceChecker, NoiseModel
+from qiskit import QuantumCircuit
+
+reference = QuantumCircuit(2)
+reference.h(0)
+reference.cx(0, 1)
+
+compiled = reference.copy()
+noise = NoiseModel([
+    {"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(2)
+])
+
+checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
+ensemble = checker.check(
+    reference,
+    compiled,
+    noise_model=noise,
+    num_traj=8,
+    random_seed=0,
+)
+```
+
+The ensemble result includes the trajectory-mean `fidelity` (and, on the MPO
+backend, mean operator entanglement), plus `trajectories` with the standard
+per-realization diagnostics. Noise is applied only to the **second** circuit.
+Distribution-valued strengths are resolved once per `check` call. Non-Pauli
+processes such as `raising`/`lowering` and scheduled jumps are rejected; those
+remain on the TJM simulation path.
 
 ## Performance notes
 
