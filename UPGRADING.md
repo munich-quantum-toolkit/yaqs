@@ -6,34 +6,6 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
-### Breaking: `MPS.norm` returns the Euclidean norm, not its square
-
-`MPS.norm(site=None)` returned `<psi|psi>`, the *squared* norm, contradicting
-its name and docstring. It now returns `sqrt(<psi|psi>)`, so a state scaled to
-`||psi|| = 3` reports `3.0` where it previously reported `9.0`. The
-site-resolved branch changed the same way.
-
-The squared norm remains available under an accurate name:
-
-```python
-from mqt.yaqs.core.data_structures.mps import MPS
-
-state = MPS(3, state="zeros")
-state.tensors[0] = state.tensors[0] * 3.0
-
-state.norm()  # 3.0 -- was 9.0
-state.norm_squared()  # 9.0 -- the previous return value of norm()
-```
-
-Replace `state.norm()` with `state.norm_squared()` wherever the value feeds a
-probability, such as a quantum-jump weight `dt * gamma * ||L|psi>||^2` or the
-Monte-Carlo wave-function factor `1 - <psi|psi>`. Replace `state.norm() ** 2`
-with `state.norm_squared()`. Code that only compares the result against `1.0` to
-check normalization is unaffected, because `sqrt(1) == 1`.
-
-All jump-probability call sites inside YAQS were migrated to `norm_squared`, so
-trajectory sampling is unchanged.
-
 ### Added: piecewise time-dependent Hamiltonians
 
 Use `Hamiltonian.piecewise([(H, duration), ...])` to switch static Hamiltonians
