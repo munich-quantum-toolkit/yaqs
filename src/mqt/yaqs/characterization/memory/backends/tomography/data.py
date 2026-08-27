@@ -126,7 +126,7 @@ def pack_sequence_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], N
     out_vecs = np.zeros([4] + [16] * num_steps, dtype=np.complex128)
     seq_weights = np.zeros([16] * num_steps, dtype=np.float64)
     for i, alpha in enumerate(data.sequences):
-        out_vecs[(slice(None), *alpha)] = np.asarray(data.outputs[i], dtype=np.complex128).reshape(-1)
+        out_vecs[slice(None), *alpha] = np.asarray(data.outputs[i], dtype=np.complex128).reshape(-1)
         seq_weights[alpha] = float(data.weights[i])
     return out_vecs, seq_weights
 
@@ -179,7 +179,7 @@ def assemble_upsilon(
         w = float(seq_weights[alpha])
         if w <= 1e-30:
             continue
-        rho_out = out_vecs[(slice(None), *alpha)].reshape(2, 2)
+        rho_out = out_vecs[slice(None), *alpha].reshape(2, 2)
         past = dual_ops[alpha[0]].T
         for a in alpha[1:]:
             past = np.kron(past, dual_ops[a].T)
@@ -198,7 +198,7 @@ def assemble_upsilon(
         w = float(seq_weights[alpha])
         if w <= 1e-30:
             continue
-        rho_true = w * out_vecs[(slice(None), *alpha)].reshape(2, 2)
+        rho_true = w * out_vecs[slice(None), *alpha].reshape(2, 2)
         past = basis_ops[alpha[0]]
         for a in alpha[1:]:
             past = np.kron(past, basis_ops[a])

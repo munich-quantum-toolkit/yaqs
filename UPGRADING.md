@@ -6,6 +6,18 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Restored testing on Python 3.13 and 3.14
+
+MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
+requires Torch 2.6 or later on Python 3.13 and Torch 2.9 or later on Python
+3.14.
+
+### End of support for Python 3.10
+
+Starting with this release, MQT YAQS no longer supports Python 3.10. As a
+result, MQT YAQS is no longer tested under Python 3.10 and requires Python 3.11
+or later.
+
 ### Breaking: `MPS.norm` returns the Euclidean norm, not its square
 
 `MPS.norm(site=None)` previously returned `<psi|psi>`, the *squared* norm,
