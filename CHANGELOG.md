@@ -45,6 +45,8 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed MPS norm definition and construction of arbitrary basis state ([#553])
+  ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])
@@ -248,6 +250,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
 [#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
