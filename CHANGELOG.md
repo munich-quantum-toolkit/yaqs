@@ -251,7 +251,6 @@ for previous changelogs._
 <!-- PR links -->
 
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
-[#552]: https://github.com/munich-quantum-toolkit/yaqs/pull/552
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
 [#529]: https://github.com/munich-quantum-toolkit/yaqs/pull/529
