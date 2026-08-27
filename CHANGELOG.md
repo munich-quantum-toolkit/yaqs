@@ -12,8 +12,6 @@ releases may include breaking changes.
 
 ### Added
 
-- added `MPS.norm_squared` for the squared norm `<psi|psi>`, the quantity
-  quantum-jump probabilities are proportional to ([#552]) ([**@Pouri96**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])
@@ -47,14 +45,7 @@ releases may include breaking changes.
 
 ### Fixed
 
-- fixed `MPS.norm` returning the squared norm `<psi|psi>` instead of the
-  Euclidean norm `sqrt(<psi|psi>)`, which made the single-qubit density matrix
-  extracted from an unnormalized MPS disagree with the dense backend ([#552])
-  ([**@Pouri96**])
-- fixed `MPS.init_mps_from_basis` appending to the existing tensors instead of
-  replacing them, which left a populated MPS with twice as many tensors as its
-  `length`; `MPS.check_if_valid_mps` now also rejects that mismatch ([#552])
-  ([**@Pouri96**])
+- fixed MPS norm definition and construction of arbitrary basis state ([#553]) ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
 - fixed descending-site two-qubit gate application in the dense equivalence
   backend ([#528]) ([**@Pouri96**])
