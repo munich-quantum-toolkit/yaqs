@@ -20,7 +20,7 @@ import pytest
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import merge_two_site
+from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.stochastic_process import (
     calculate_stochastic_factor,
     create_probability_distribution,
@@ -121,11 +121,44 @@ def test_calculate_stochastic_factor_nontrivial() -> None:
     norm, and checks that `calculate_stochastic_factor` returns the expected value
     (1 minus the actual squared norm of the first site).
     """
-    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state = MPS(3, state="zeros")
     state.tensors[0] *= 0.8
     factor = calculate_stochastic_factor(state)
-    expected = 1 - state.norm_squared()
+    expected = 1.0 - state.norm() ** 2
     assert np.isclose(factor, expected), "Stochastic factor does not match expectation."
+    # Residual norm 0.8 ⇒ ||psi||^2 = 0.64 ⇒ MCWF factor 0.36 (previous squared-norm API).
+    assert float(factor) == pytest.approx(0.36, abs=1e-12)
+
+
+def test_adjacent_jump_weight_unknown_gauge_uses_euclidean_norm_squared() -> None:
+    """Unknown-gauge adjacent weights match ``||L|psi>||^2`` via ``norm() ** 2``."""
+    state = MPS(2, state="zeros")
+    state.set_center(None)
+    two_i = 2.0 * np.eye(4, dtype=np.complex128)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    # Reproduce the unknown-gauge branch: untruncated split, then global ||ψ'||^2.
+    merged = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
+    left, right = split_two_site(
+        merged,
+        [2, 2],
+        svd_distribution="right",
+        trunc_mode=sim_params.trunc_mode,
+        threshold=0.0,
+        max_bond_dim=None,
+    )
+    jumped = copy.deepcopy(state)
+    jumped.tensors[0] = left
+    jumped.tensors[1] = right
+    jumped.set_center(None)
+    assert float(jumped.norm() ** 2) == pytest.approx(4.0, abs=1e-12)
+
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 1.0},
+        {"name": "scaled_i", "sites": [0, 1], "strength": 1.0, "matrix": two_i},
+    ])
+    _procs, probabilities = create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
+    np.testing.assert_allclose(probabilities, [0.2, 0.8], atol=1e-10)
 
 
 def test_create_probability_distribution_no_noise() -> None:
@@ -266,6 +299,8 @@ def test_adjacent_non_pauli_pdf_matches_exact_weights() -> None:
     # Product |0>: ||X|0>||^2 = 1, ||(2I)|00>||^2 = 4 → weights 1:4 → [0.2, 0.8]
     state = MPS(2, state="zeros")
     two_i = 2.0 * np.eye(4, dtype=np.complex128)
+    merged = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
+    assert float(np.vdot(merged, merged).real) == pytest.approx(4.0)
     noise_model = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 1.0},
         {"name": "scaled_i", "sites": [0, 1], "strength": 1.0, "matrix": two_i},
@@ -308,7 +343,7 @@ def test_adjacent_pdf_unknown_gauge_uses_global_norm() -> None:
 
     two_i = 2.0 * np.eye(4, dtype=np.complex128)
     # Local Frobenius shortcuts disagree with the global norm under this gauge.
-    global_norm_sq = float(state.norm_squared())
+    global_norm_sq = float(state.norm() ** 2)
     local_t0 = float(np.vdot(state.tensors[0], state.tensors[0]).real)
     merged_2i = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
     assert not np.isclose(local_t0, global_norm_sq, atol=1e-8)
@@ -349,7 +384,7 @@ def test_nonfinite_probability_weight_raises(bad: float) -> None:
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     # Inject the non-finite weight directly: planting 1e200 overflows in the norm
     # contraction and emits a platform-dependent RuntimeWarning under BLAS.
-    with patch.object(MPS, "norm_squared", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
+    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
         create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
 
 

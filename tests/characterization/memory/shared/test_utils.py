@@ -76,12 +76,14 @@ def test_extract_site0_rho_unnormalized_matches_dense_backend() -> None:
     """MPS and dense branches agree on an unnormalized state, where ``trace = <psi|psi>``."""
     mps = MPS(length=1, state="zeros")
     mps.tensors[0] *= 2.0
+    assert float(mps.norm()) == pytest.approx(2.0)
     rho_mps = extract_site0_rho(mps)
 
     rho_vec = extract_site0_rho(np.array([2.0, 0.0], dtype=np.complex128))
 
     np.testing.assert_allclose(rho_mps, rho_vec)
     assert np.real(np.trace(rho_mps)) == pytest.approx(4.0)
+    assert np.real(np.trace(rho_vec)) == pytest.approx(4.0)
 
 
 def test_assemble_state_from_expectations() -> None:

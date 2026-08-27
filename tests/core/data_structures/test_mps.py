@@ -925,28 +925,27 @@ def test_norm_returns_euclidean_norm_not_its_square() -> None:
 
     assert float(mps.norm()) == pytest.approx(3.0)
     assert float(mps.norm()) == pytest.approx(float(np.linalg.norm(mps.to_vec())))
+    assert float(mps.norm() ** 2) == pytest.approx(float(mps.scalar_product(mps).real))
 
 
-def test_norm_squared_returns_scalar_product() -> None:
-    """``norm_squared`` returns ``<psi|psi>``, i.e. the square of :meth:`MPS.norm`."""
-    mps = MPS(3, state="zeros")
-    mps.tensors[0] *= 3.0
+def test_norm_of_unnormalized_basis_state() -> None:
+    """For the unnormalized state ``2|0>``, ``norm`` returns ``2.0``."""
+    mps = MPS(1, state="zeros")
+    mps.tensors[0] *= 2.0
 
-    assert float(mps.norm_squared()) == pytest.approx(9.0)
-    assert float(mps.norm_squared()) == pytest.approx(float(mps.scalar_product(mps).real))
-    assert float(mps.norm_squared()) == pytest.approx(float(mps.norm()) ** 2)
+    assert float(mps.norm()) == pytest.approx(2.0)
+    assert float(mps.norm() ** 2) == pytest.approx(4.0)
 
 
 @pytest.mark.parametrize("site", [0, 1, 2])
-def test_norm_site_resolved_is_square_root_of_norm_squared(site: int) -> None:
-    """The site-resolved branch obeys the same contract as the global one."""
+def test_norm_site_resolved_matches_global_for_left_canonical_scale(site: int) -> None:
+    """The site-resolved branch obeys the same Euclidean contract as the global one."""
     mps = MPS(3, state="zeros")
     mps.set_canonical_form(orthogonality_center=0)
     mps.tensors[0] *= 2.0
 
-    assert float(mps.norm_squared(site)) == pytest.approx(4.0)
     assert float(mps.norm(site)) == pytest.approx(2.0)
-    assert float(mps.norm(site)) == pytest.approx(np.sqrt(float(mps.norm_squared(site))))
+    assert float(mps.norm(site) ** 2) == pytest.approx(4.0)
 
 
 def test_norm_unknown_gauge_falls_back_to_global() -> None:
@@ -956,7 +955,7 @@ def test_norm_unknown_gauge_falls_back_to_global() -> None:
     mps.set_center(None)
 
     assert float(mps.norm(1)) == pytest.approx(3.0)
-    assert float(mps.norm_squared(1)) == pytest.approx(9.0)
+    assert float(mps.norm(1) ** 2) == pytest.approx(9.0)
 
 
 def test_norm_of_zero_state_is_zero() -> None:
@@ -965,7 +964,7 @@ def test_norm_of_zero_state_is_zero() -> None:
     mps.tensors[0][:] = 0.0
 
     assert float(mps.norm()) == pytest.approx(0.0)
-    assert float(mps.norm_squared()) == pytest.approx(0.0)
+    assert float(mps.norm() ** 2) == pytest.approx(0.0)
 
 
 def test_check_if_valid_mps() -> None:
