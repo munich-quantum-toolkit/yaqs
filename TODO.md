@@ -14,12 +14,12 @@
 
 ## Chunk 2: Match YAQS circuit-noise semantics
 
-- [ ] Use the same noise-opportunity rule as the digital Simulator.
-- [ ] Do not noise single-qubit gates.
-- [ ] Apply noise after gates on two or more qubits, including CCX, when the
+- [x] Use the same noise-opportunity rule as the digital Simulator.
+- [x] Do not noise single-qubit gates.
+- [x] Apply noise after gates on two or more qubits, including CCX, when the
   selected equivalence backend supports the gate.
-- [ ] Share the opportunity logic so the Simulator and checker cannot drift.
-- [ ] Test H, CX, and CCX circuits explicitly.
+- [x] Share the opportunity logic so the Simulator and checker cannot drift.
+- [x] Test H, CX, and CCX circuits explicitly.
 
 ## Chunk 3: Fix ensemble result semantics
 

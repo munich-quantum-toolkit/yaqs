@@ -25,11 +25,13 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Gate, Parameter
+from qiskit.circuit import Barrier, Gate, Measure, Operation, Parameter
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
+    CCXGate,
     CRZGate,
     CXGate,
+    HGate,
     IGate,
     RZXGate,
     SdgGate,
@@ -47,13 +49,14 @@ from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
 from mqt.yaqs import DigitalSimParams, EquivalenceChecker, State
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
     SUPPORTED_QISKIT_GATE_NAMES,
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,
+    is_digital_noise_opportunity,
     select_starting_point,
 )
 from tests.core.methods.tdvp.conftest import _fidelity
@@ -66,6 +69,32 @@ def test_supported_qiskit_gate_names_exact() -> None:
     for name in SUPPORTED_QISKIT_GATE_NAMES:
         assert hasattr(GateLibrary, name), f"GateLibrary missing hardcoded alias '{name}'"
         assert getattr(GateLibrary, name) is not GateLibrary.custom
+
+
+def _wrapped_cx() -> Operation:
+    """Return a unitary two-qubit Instruction that is not a Gate."""
+    definition = QuantumCircuit(2, name="wrapped_cx")
+    definition.cx(0, 1)
+    return definition.to_instruction()
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected"),
+    [
+        pytest.param(GateLibrary.h(), "skip", id="yaqs-h"),
+        pytest.param(GateLibrary.cx(), "noise", id="yaqs-cx"),
+        pytest.param(GateLibrary.ccx(), "noise", id="yaqs-ccx"),
+        pytest.param(HGate(), "skip", id="qiskit-h"),
+        pytest.param(CXGate(), "noise", id="qiskit-cx"),
+        pytest.param(CCXGate(), "noise", id="qiskit-ccx"),
+        pytest.param(_wrapped_cx(), "noise", id="unitary-instruction"),
+        pytest.param(Barrier(3), "skip", id="barrier"),
+        pytest.param(Measure(), "skip", id="measure"),
+    ],
+)
+def test_digital_noise_opportunity(operation: BaseGate | Operation, expected: str) -> None:
+    """Only supported unitary operations on two or more qubits are opportunities."""
+    assert is_digital_noise_opportunity(operation) is (expected == "noise")
 
 
 def _qiskit_gate_matrix(gate_cls: type, *params: float) -> np.ndarray:

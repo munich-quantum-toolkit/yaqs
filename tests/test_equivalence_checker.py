@@ -774,18 +774,18 @@ def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
 
 def test_noise_is_applied_only_to_circuit2() -> None:
     """An empty second circuit has no noise sites, so a strong model is a no-op."""
-    qc_h = QuantumCircuit(2)
-    qc_h.h(0)
+    qc_cx = QuantumCircuit(2)
+    qc_cx.cx(0, 1)
     qc_id = QuantumCircuit(2)
     noise = _pauli_x_noise(2, 100.0)
     checker = EquivalenceChecker(representation="mpo")
 
-    noiseless = checker.check(qc_h, qc_id)
-    noisy_empty = checker.check(qc_h, qc_id, noise_model=noise, num_traj=5, random_seed=0)
-    noisy_h = checker.check(qc_id, qc_h, noise_model=noise, num_traj=5, random_seed=0)
+    noiseless = checker.check(qc_cx, qc_id)
+    noisy_empty = checker.check(qc_cx, qc_id, noise_model=noise, num_traj=5, random_seed=0)
+    noisy_cx = checker.check(qc_id, qc_cx, noise_model=noise, num_traj=5, random_seed=0)
 
     assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
-    assert float(noisy_h["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_h)["fidelity"]), abs=1e-6)
+    assert float(noisy_cx["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_cx)["fidelity"]), abs=1e-6)
 
 
 def test_noisy_check_is_seeded_reproducible() -> None:
@@ -869,8 +869,8 @@ def test_pauli_name_does_not_hide_unsupported_matrix() -> None:
 @pytest.mark.parametrize("name", ["pauli_x", "custom_z"])
 def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
     """The normalized process matrix, rather than its name, selects the Pauli gate."""
-    circuit = QuantumCircuit(1)
-    circuit.h(0)
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
     expected = circuit.copy()
     expected.z(0)
     noise = NoiseModel([
@@ -883,6 +883,59 @@ def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
     ])
 
     result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("gate_name", "num_qubits", "noise_gate"),
+    [
+        pytest.param("h", 1, None, id="h"),
+        pytest.param("cx", 2, "x", id="cx"),
+        pytest.param("ccx", 3, "x", id="ccx"),
+    ],
+)
+def test_noisy_check_uses_digital_gate_opportunities(
+    gate_name: str,
+    num_qubits: int,
+    noise_gate: Literal["x"] | None,
+) -> None:
+    """Noisy checking follows the Simulator's H, CX, and CCX opportunity rule."""
+    circuit = QuantumCircuit(num_qubits)
+    getattr(circuit, gate_name)(*range(num_qubits))
+    expected = circuit.copy()
+    if noise_gate is not None:
+        expected.x(0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 100.0}])
+
+    result = EquivalenceChecker(representation="matrix").check(
+        expected,
+        circuit,
+        noise_model=noise,
+        random_seed=0,
+    )
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_noisy_check_treats_unitary_instruction_as_opportunity() -> None:
+    """Matrix-backed unitary Instructions follow the Simulator's gate rule."""
+    definition = QuantumCircuit(2, name="wrapped_cx")
+    definition.cx(0, 1)
+    circuit = QuantumCircuit(2)
+    circuit.append(definition.to_instruction(), [0, 1])
+    expected = circuit.copy()
+    expected.x(0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 100.0}])
+
+    result = EquivalenceChecker(representation="matrix").check(
+        expected,
+        circuit,
+        noise_model=noise,
+        random_seed=0,
+    )
 
     assert result["equivalent"] is True
     assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)

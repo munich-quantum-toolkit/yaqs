@@ -26,7 +26,6 @@ import time
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, overload
 
 import numpy as np
-from qiskit.circuit import Gate, QuantumCircuit
 from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.converters import circuit_to_dag
 
@@ -35,6 +34,7 @@ from .core.data_structures.noise_model import NoiseModel, is_pauli, validate_noi
 from .core.parallel_utils import WORKER_CTX, available_cpus, reassemble_indexed, run_backend_parallel
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
 from .digital.utils.contraction_utils import iterate
+from .digital.utils.dag_utils import is_digital_noise_opportunity
 from .digital.utils.matrix_utils import (
     compose_operator_tensor,
     compute_identity_fidelity,
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy.typing import NDArray
+    from qiskit.circuit import QuantumCircuit
 
     from .core.parallel_utils import MPContext
 
@@ -274,9 +275,9 @@ def _sample_noisy_circuit(
 ) -> QuantumCircuit:
     """Sample one Pauli-noise realization of ``circuit``.
 
-    Every one- or two-qubit gate is a noise opportunity. A process participates
-    when its complete support is contained in the gate support. At most one
-    process is appended after each such gate.
+    Every gate acting on two or more qubits is a noise opportunity. A process
+    participates when its complete support is contained in the gate support.
+    At most one process is appended after each such gate.
 
     Args:
         circuit: Circuit to sample.
@@ -294,7 +295,7 @@ def _sample_noisy_circuit(
         clbits = [sampled_circuit.clbits[circuit.find_bit(clbit).index] for clbit in instruction.clbits]
         sampled_circuit.append(instruction.operation.copy(), qubits, clbits)
 
-        if not isinstance(instruction.operation, Gate) or instruction.operation.num_qubits not in {1, 2}:
+        if not is_digital_noise_opportunity(instruction.operation):
             continue
 
         gate_sites = set(sites)

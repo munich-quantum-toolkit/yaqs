@@ -2848,6 +2848,29 @@ def test_noise_sites_end_to_end(builder: Callable[[QuantumCircuit], object], exp
     assert np.all(np.isfinite(results))
 
 
+def test_single_qubit_gate_has_no_noise_layer() -> None:
+    """A single-qubit gate is not a digital-noise opportunity."""
+    qc = QuantumCircuit(1)
+    qc.h(0)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        preset="exact",
+        num_traj=1,
+        random_seed=0,
+    )
+
+    with patch(
+        "mqt.yaqs.digital.digital_tjm.create_local_noise_model",
+        wraps=create_local_noise_model,
+    ) as mock_local:
+        results, _diag, _counts, _final = digital_tjm((0, MPS(1, state="zeros"), noise_model, sim_params, qc))
+
+    mock_local.assert_not_called()
+    assert results is not None
+    assert np.all(np.isfinite(results))
+
+
 def test_noise_sites_generator_path() -> None:
     """The TDVP/generator path uses the same noise sites as the MPO path."""
     n = 3
