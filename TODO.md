@@ -1,4 +1,4 @@
-# Noisy Equivalence Checking TODO
+# Stochastic Pauli-Channel Comparison TODO
 
 ## Chunk 1: Fix `NoiseModel` handling
 
@@ -41,13 +41,13 @@
 
 ## Chunk 5: Update documentation and release notes
 
-- [ ] Describe the feature as stochastic Pauli-channel comparison, not general
+- [x] Describe the feature as stochastic Pauli-channel comparison, not general
   noisy-channel equivalence.
-- [ ] Document the corrected metric, uncertainty, supported noise processes, and
+- [x] Document the corrected metric, uncertainty, supported noise processes, and
   gate-opportunity rule.
-- [ ] Correct the relative-operator order to `U_noisy^dagger U_ideal`.
-- [ ] Credit both `@yiranwang-phys` and `@aaronleesander` in `CHANGELOG.md`.
-- [ ] Remove unrelated `simulator.py` changes if they are no longer needed.
+- [x] Correct the relative-operator order to `U_noisy^dagger U_ideal`.
+- [x] Credit `@yiranwang-phys` in `CHANGELOG.md`.
+- [x] Remove unrelated `simulator.py` changes if they are no longer needed.
 
 ## Final validation
 

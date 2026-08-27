@@ -93,25 +93,25 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   speed up checks at the cost of accuracy.
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
   and the identity (global phase removed). It must be finite and between `0` and
-  `1`. Used by **both** backends. A noisy ensemble squares this value for its
-  process-fidelity threshold.
+  `1`. Used by **both** backends. A stochastic Pauli ensemble squares this value
+  for its process-fidelity threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
 - **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
   a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
   **process pool**. Set it to `False` to keep either path serial.
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
-  (noiseless MPO checks), and on worker processes for noisy ensembles. When
-  unset, noiseless MPO zone threads use
+  (noiseless MPO checks), and on worker processes for stochastic Pauli
+  ensembles. When unset, noiseless MPO zone threads use
   `min(available_cpus(), number_of_work_items)`. The effective noisy worker
   count is `min(num_traj, max_workers or max(1, available_cpus() - 1))`, where
   {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
   `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
   limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
   host. A process pool is created only when that count is greater than one.
-- **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
-  `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
-  inside `iterate()` still uses in-process threads.
+- **`mp_context`**: start method for stochastic Pauli ensemble process pools
+  (`"auto"`, `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone
+  parallelism inside `iterate()` still uses in-process threads.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -227,8 +227,9 @@ Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO**
 checks on circuits where many independent updates can run at once. This is the
 default; below 12 qubits the implementation keeps a single noiseless check
 serial even when `parallel=True`, because thread overhead would dominate. A
-single matrix check is also serial. When a noise model is supplied, independent
-matrix or MPO trajectories can instead run across processes.
+single matrix check is also serial. When a supported Pauli noise model is
+supplied, independent matrix or MPO trajectories can instead run across
+processes.
 
 Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
 MPO site tensors and can be computed in parallel in a shared thread pool (one
@@ -248,24 +249,55 @@ Expect the largest gains on **wide** nearest-neighbor circuits (typically
 implementation keeps the serial path even when `parallel=True`, because thread
 overhead would dominate.
 
-## Noisy ensembles
+## Stochastic Pauli-channel comparison
 
-A typical use of noisy equivalence checking is to ask how close a
-**compiled, hardware-like** circuit still is to an **ideal** specification once
-Pauli noise acts on the compiled gates. Pass a Pauli
-{class}`~mqt.yaqs.NoiseModel` to {meth}`~mqt.yaqs.EquivalenceChecker.check`.
-Each trajectory samples an explicit circuit $\widetilde G_r$ (local Pauli errors
-after gates on two or more qubits on the **second** argument only) and runs the
-same relative-operator check $Q_r = \widetilde G_r^\dagger G$ used in the
-noiseless case. If $a_r = |\operatorname{Tr}(Q_r)| / d$ is a trajectory's
-normalized root overlap, the random-unitary channel process fidelity is
+Passing a {class}`~mqt.yaqs.NoiseModel` asks how close a
+**compiled, hardware-like** circuit remains to an **ideal** specification under
+sampled Pauli errors. This is a Monte Carlo comparison of a random-unitary Pauli
+channel, not a general noisy-channel equivalence test.
+
+The checker accepts normalized one-site X, Y, and Z processes and two-site Pauli
+products. This includes `pauli_x`, `pauli_y`, `pauli_z`, names matching
+`crosstalk_[xyz]{2}` or `longrange_crosstalk_[xyz]{2}`, and custom matrices or
+factors that match those Pauli operators up to a unit-modulus phase. Scaled
+operators such as $2X$, dissipative processes such as `raising` and `lowering`,
+other non-Pauli custom operators, and scheduled jumps are rejected.
+
+Noise is sampled onto the **second** circuit argument only. A supported unitary
+gate acting on two or more qubits is a noise opportunity; single-qubit gates,
+barriers, and measurements are not. A process is eligible when its complete site
+support is contained in the gate support. At most one eligible process is
+appended after each opportunity, with total event probability
+$1-\exp(-\sum_j \gamma_j)$ and conditional process selection proportional to its
+strength $\gamma_j$. The selected equivalence backend must also support the
+original gate.
+
+Writing $U_{\mathrm{ideal}}$ for the first circuit and $U_{\mathrm{noisy},r}$
+for trajectory $r$ of the second, the relative operator has the order
+
+```{math}
+Q_r = U_{\mathrm{noisy},r}^\dagger U_{\mathrm{ideal}}.
+```
+
+If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the
+random-unitary channel process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
+estimated by
 
 ```{math}
 \widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
 ```
 
-For a noisy result, `fidelity` is this Monte Carlo sample mean and
-`fidelity_error` is its empirical standard error.
+For a stochastic result, `fidelity` is this Monte Carlo sample mean. For $N>1$,
+the reported sampling uncertainty is
+
+```{math}
+\mathtt{fidelity\_error}
+= \sqrt{\frac{1}{N(N-1)}\sum_{r=1}^{N}
+\left(a_r^2-\widehat F_{\mathrm{pro}}\right)^2}.
+```
+
+For one trajectory, `fidelity_error` is `None` because sampling uncertainty
+cannot be estimated.
 
 Start from a small ideal circuit and transpile it to a device-style basis:
 
@@ -313,7 +345,7 @@ traj_process_fidelities = [traj["fidelity"] ** 2 for traj in noisy["trajectories
 print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
 print(
     "noisy:     "
-    f"equivalent={noisy['equivalent']}, "
+    f"sample threshold passed={noisy['equivalent']}, "
     f"process fidelity={noisy['fidelity']:.4f} "
     f"+/- {noisy['fidelity_error']:.4f}"
 )
@@ -338,16 +370,14 @@ standard error; the latter is `None` for one trajectory. Noisy `equivalent` only
 means that this observed mean is at least `checker.fidelity**2`. It is not an
 equivalence certificate or a confidence-level decision. Compare noisy and
 noiseless fidelities by squaring the noiseless value. On the MPO backend the
-ensemble also averages operator entanglement. Distribution-valued strengths are
-resolved once per `check` call.
+ensemble also averages operator entanglement.
 
-Non-Pauli processes such as `raising`/`lowering` and scheduled jumps are
-rejected; those remain on the TJM simulation path. With `parallel=True`, noisy
-trajectories use an effective worker count capped by `num_traj` and
-`max_workers`, and run in a process pool only when that count is greater than
-one; each worker uses serial MPO updates. With `parallel=False`, all
-trajectories stay serial and in-process. A nonnegative `random_seed` makes the
-ordered trajectory results reproducible independently of process scheduling.
+Distribution-valued strengths are resolved once per `check` call. With
+`parallel=True`, noisy trajectories use an effective worker count capped by
+`num_traj` and `max_workers`, and run in a process pool only when that count is
+greater than one; each worker uses serial MPO updates. With `parallel=False`,
+all trajectories stay serial and in-process. A nonnegative `random_seed` makes
+the ordered trajectory results reproducible independently of process scheduling.
 
 ## Performance notes
 

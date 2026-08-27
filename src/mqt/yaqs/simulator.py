@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .core.data_structures.mpo import MPO
+    from .core.data_structures.noise_model import NoiseModel
     from .core.parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
@@ -98,7 +99,7 @@ from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mps import MPS
-from .core.data_structures.noise_model import NoiseModel, validate_noise_model_for_run
+from .core.data_structures.noise_model import validate_noise_model_for_run
 from .core.data_structures.result import (
     Result,
     aggregate_counts,
@@ -1703,6 +1704,11 @@ class Simulator:
         Raises:
             ValueError: If ``get_state`` is ``True`` with a non-trivial noise model.
         """
+        backend: Callable[
+            [tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]],
+            Any,
+        ] = digital_tjm
+
         wants_obs = bool(sim_params.observables)
         wants_shots = sim_params.shots is not None
         shots_only = wants_shots and not wants_obs
@@ -1813,7 +1819,7 @@ class Simulator:
                 iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
                 for i, arg in enumerate(iterator):
                     traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(
-                        digital_tjm, arg, n_threads=n_threads
+                        backend, arg, n_threads=n_threads
                     )
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
         finally:
@@ -1866,13 +1872,7 @@ class Simulator:
                 is_digital=True,
             )
 
-        self._run_digital_sim(
-            mps,
-            operator,
-            sim_params,
-            noise_model,
-            result,
-        )
+        self._run_digital_sim(mps, operator, sim_params, noise_model, result)
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)
