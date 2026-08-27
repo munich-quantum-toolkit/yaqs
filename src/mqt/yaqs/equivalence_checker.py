@@ -31,7 +31,7 @@ from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
-from .core.data_structures.noise_model import NoiseModel
+from .core.data_structures.noise_model import NoiseModel, is_pauli, validate_noise_model_for_run
 from .core.parallel_utils import WORKER_CTX, available_cpus, reassemble_indexed, run_backend_parallel
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
 from .digital.utils.contraction_utils import iterate
@@ -59,15 +59,13 @@ __all__ = [
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
-_ONE_QUBIT_PAULIS = {
-    "pauli_x": "x",
-    "pauli_y": "y",
-    "pauli_z": "z",
-    "x": "x",
-    "y": "y",
-    "z": "z",
-}
 _PAULI_GATES = {"x": XGate(), "y": YGate(), "z": ZGate()}
+_PAULI_MATRICES = {label: np.asarray(gate.to_matrix()) for label, gate in _PAULI_GATES.items()}
+_PAULI_PRODUCTS = {
+    (left_label, right_label): np.kron(left_matrix, right_matrix)
+    for left_label, left_matrix in _PAULI_MATRICES.items()
+    for right_label, right_matrix in _PAULI_MATRICES.items()
+}
 _PAULI_ERROR = "Noisy equivalence checking supports recognized YAQS Pauli processes only."
 
 
@@ -224,33 +222,48 @@ def _has_unsupported_mpo_gates(circuit: QuantumCircuit) -> bool:
 
 
 def _pauli_labels(process: dict[str, Any]) -> tuple[str, ...] | None:
-    """Decode a recognized YAQS Pauli process name.
+    """Decode labels from a normalized YAQS Pauli process.
+
+    Args:
+        process: Process normalized by :class:`NoiseModel`.
 
     Returns:
         One Pauli label per process site, or ``None`` if unsupported.
     """
-    name = str(process["name"])
+    if not is_pauli(process):
+        return None
+
     if len(process["sites"]) == 1:
-        label = _ONE_QUBIT_PAULIS.get(name)
-        return (label,) if label is not None else None
+        matrix = np.asarray(process["matrix"])
+        label = max(_PAULI_MATRICES, key=lambda candidate: abs(np.vdot(_PAULI_MATRICES[candidate], matrix)))
+        return (label,)
 
-    if name.startswith("crosstalk_"):
-        labels = name.removeprefix("crosstalk_")
-        if len(labels) == 2 and set(labels) <= {"x", "y", "z"}:
-            return labels[0], labels[1]
-    return None
+    if "factors" in process:
+        return tuple(
+            max(_PAULI_MATRICES, key=lambda candidate: abs(np.vdot(_PAULI_MATRICES[candidate], factor)))
+            for factor in process["factors"]
+        )
+
+    matrix = np.asarray(process["matrix"])
+    return max(_PAULI_PRODUCTS.items(), key=lambda item: abs(np.vdot(item[1], matrix)))[0]
 
 
-def _validate_pauli_noise_model(noise_model: NoiseModel) -> None:
+def _validate_pauli_noise_model(noise_model: NoiseModel, num_qubits: int) -> None:
     """Validate that a noise model can be materialized as Pauli gates.
 
+    Args:
+        noise_model: Sampled noise model to validate.
+        num_qubits: Width of the circuit receiving sampled noise.
+
     Raises:
-        ValueError: If scheduled jumps or positive-rate non-Pauli processes are present.
+        ValueError: If scheduled jumps, invalid sites or dimensions, or non-Pauli
+            processes are present.
     """
     if noise_model.scheduled_jumps:
         msg = "Noisy equivalence checking does not support scheduled jumps."
         raise ValueError(msg)
-    if any(float(process["strength"]) > 0.0 and _pauli_labels(process) is None for process in noise_model.processes):
+    validate_noise_model_for_run(noise_model, length=num_qubits, physical_dimensions=2)
+    if any(_pauli_labels(process) is None for process in noise_model.processes):
         raise ValueError(_PAULI_ERROR)
 
 
@@ -701,7 +714,7 @@ class EquivalenceChecker:
             return _check_loaded_pair(self, circuit1, circuit2, backend)
 
         noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=random_seed))
-        _validate_pauli_noise_model(noise_model)
+        _validate_pauli_noise_model(noise_model, circuit2.num_qubits)
         return self._run_noisy_ensemble(
             circuit1,
             circuit2,

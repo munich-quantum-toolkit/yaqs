@@ -2,14 +2,14 @@
 
 ## Chunk 1: Fix `NoiseModel` handling
 
-- [ ] Derive sampled Pauli gates from normalized `matrix`/`factors`, not the
+- [x] Derive sampled Pauli gates from normalized `matrix`/`factors`, not the
   process name.
-- [ ] Preserve descending-site crosstalk ordering and handle supported
+- [x] Preserve descending-site crosstalk ordering and handle supported
   `longrange_crosstalk_*` processes consistently.
-- [ ] Validate sites and operator dimensions against the circuit before running
+- [x] Validate sites and operator dimensions against the circuit before running
   trajectories.
-- [ ] Reject unsupported processes explicitly instead of silently ignoring them.
-- [ ] Add regressions for custom matrix overrides, descending crosstalk, and
+- [x] Reject unsupported processes explicitly instead of silently ignoring them.
+- [x] Add regressions for custom matrix overrides, descending crosstalk, and
   out-of-range sites.
 
 ## Chunk 2: Match YAQS circuit-noise semantics
@@ -45,10 +45,8 @@
   noisy-channel equivalence.
 - [ ] Document the corrected metric, uncertainty, supported noise processes, and
   gate-opportunity rule.
-- [ ] Correct the relative-operator order to
-  `U_noisy^dagger U_ideal`.
-- [ ] Credit both `@yiranwang-phys` and `@aaronleesander` in
-  `CHANGELOG.md`.
+- [ ] Correct the relative-operator order to `U_noisy^dagger U_ideal`.
+- [ ] Credit both `@yiranwang-phys` and `@aaronleesander` in `CHANGELOG.md`.
 - [ ] Remove unrelated `simulator.py` changes if they are no longer needed.
 
 ## Final validation

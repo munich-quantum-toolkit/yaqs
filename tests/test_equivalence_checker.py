@@ -841,6 +841,110 @@ def test_non_pauli_noise_is_rejected() -> None:
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
 
 
+def test_zero_strength_non_pauli_noise_is_rejected() -> None:
+    """Unsupported operators are rejected even when their rate is zero."""
+    qc = QuantumCircuit(1)
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.0}])
+
+    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+        EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
+
+
+def test_pauli_name_does_not_hide_unsupported_matrix() -> None:
+    """A recognized process name cannot override a non-Pauli normalized operator."""
+    qc = QuantumCircuit(1)
+    noise = NoiseModel([
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": 1.0,
+            "matrix": 2 * NoiseModel.get_operator("x"),
+        }
+    ])
+
+    with pytest.raises(ValueError, match="supports recognized YAQS Pauli processes only"):
+        EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
+
+
+@pytest.mark.parametrize("name", ["pauli_x", "custom_z"])
+def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
+    """The normalized process matrix, rather than its name, selects the Pauli gate."""
+    circuit = QuantumCircuit(1)
+    circuit.h(0)
+    expected = circuit.copy()
+    expected.z(0)
+    noise = NoiseModel([
+        {
+            "name": name,
+            "sites": [0],
+            "strength": 100.0,
+            "matrix": np.exp(0.37j) * np.diag([1.0, -1.0]),
+        }
+    ])
+
+    result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_noisy_check_preserves_descending_crosstalk_order() -> None:
+    """Normalized crosstalk matrices retain the caller's descending-site operator order."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    expected = circuit.copy()
+    expected.y(0)
+    expected.x(1)
+    noise = NoiseModel([{"name": "crosstalk_xy", "sites": [1, 0], "strength": 100.0}])
+
+    result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_noisy_check_accepts_normalized_long_range_crosstalk() -> None:
+    """Long-range Pauli factors are decoded independently of the process alias."""
+    circuit = QuantumCircuit(3)
+    circuit.cx(0, 2)
+    expected = circuit.copy()
+    expected.x(0)
+    expected.y(2)
+    noise = NoiseModel([{"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 100.0}])
+
+    result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_noisy_check_rejects_out_of_range_process_site() -> None:
+    """Noise sites are validated against the circuit width before sampling."""
+    circuit = QuantumCircuit(1)
+    circuit.h(0)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [1], "strength": 100.0}])
+
+    with pytest.raises(ValueError, match="Process site index 1 is out of range for length 1"):
+        EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
+
+
+def test_noisy_check_rejects_wrong_process_dimension() -> None:
+    """Noise operator dimensions are validated for qubit circuits before sampling."""
+    circuit = QuantumCircuit(1)
+    circuit.h(0)
+    noise = NoiseModel([
+        {
+            "name": "custom",
+            "sites": [0],
+            "strength": 1.0,
+            "matrix": np.eye(3),
+        }
+    ])
+
+    with pytest.raises(ValueError, match=r"Process matrix shape \(3, 3\).*expected \(2, 2\)"):
+        EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
+
+
 def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
     """Scheduled jumps are not part of the explicit circuit-sampling path."""
     qc = QuantumCircuit(1)
