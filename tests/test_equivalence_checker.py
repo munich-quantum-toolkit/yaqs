@@ -28,7 +28,10 @@ from mqt.yaqs import EquivalenceChecker, NoiseModel
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
-from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
+from mqt.yaqs.digital.utils.dag_utils import (
+    SUPPORTED_QISKIT_GATE_NAMES,
+    convert_dag_to_tensor_algorithm,
+)
 from mqt.yaqs.equivalence_checker import DEFAULT_MATRIX_MAX_QUBITS
 from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
@@ -821,6 +824,27 @@ def test_noisy_check_is_seeded_reproducible() -> None:
     assert [traj["fidelity"] for traj in first["trajectories"]] != [traj["fidelity"] for traj in third["trajectories"]]
 
 
+def test_noisy_check_precomputes_instruction_noise_plan_once() -> None:
+    """Gate opportunities are classified once and reused by every trajectory."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    noise = _pauli_x_noise(2, 0.2)
+
+    with patch(
+        "mqt.yaqs.equivalence_checker.is_digital_noise_opportunity",
+        return_value=True,
+    ) as classify_opportunity:
+        EquivalenceChecker(representation="matrix", parallel=False).check(
+            circuit,
+            circuit,
+            noise_model=noise,
+            num_traj=4,
+            random_seed=0,
+        )
+
+    assert classify_opportunity.call_count == len(circuit.data)
+
+
 @pytest.mark.parametrize("representation", ["mpo", "matrix"])
 def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mpo", "matrix"]) -> None:
     """Both backends accept a Pauli ``noise_model`` and return an ensemble."""
@@ -930,6 +954,7 @@ def test_noisy_ensemble_averages_squared_overlaps_and_reports_standard_error() -
     assert result["fidelity_error"] == pytest.approx(
         float(np.std(squared_overlaps, ddof=1) / np.sqrt(len(squared_overlaps))), abs=1e-12
     )
+    assert [trajectory["equivalent"] for trajectory in result["trajectories"]] == [False, False, True]
     assert result["equivalent"] is True
 
 
@@ -960,7 +985,7 @@ def test_single_trajectory_process_fidelity_has_no_standard_error() -> None:
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])
 def test_noiseless_check_keeps_root_overlap_semantics(representation: Literal["matrix", "mpo"]) -> None:
-    """Chunk 3 does not square the fidelity or threshold for noiseless checks."""
+    """Noiseless checks retain root-overlap fidelity and threshold semantics."""
     reference = QuantumCircuit(2)
     candidate = QuantumCircuit(2)
     candidate.ry(2 * np.pi / 3, 0)

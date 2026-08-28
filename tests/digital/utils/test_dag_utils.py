@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 from itertools import permutations
+from types import SimpleNamespace
 from typing import Literal
 from unittest.mock import patch
 
@@ -90,6 +91,16 @@ def _wrapped_cx() -> Operation:
         pytest.param(_wrapped_cx(), "noise", id="unitary-instruction"),
         pytest.param(Barrier(3), "skip", id="barrier"),
         pytest.param(Measure(), "skip", id="measure"),
+        pytest.param(
+            Gate("reset", 2, []),
+            "skip",
+            id="rejected-reset",
+        ),
+        pytest.param(
+            SimpleNamespace(name="cx", num_qubits=2, condition=object()),
+            "skip",
+            id="conditional-cx",
+        ),
     ],
 )
 def test_digital_noise_opportunity(operation: BaseGate | Operation, expected: str) -> None:

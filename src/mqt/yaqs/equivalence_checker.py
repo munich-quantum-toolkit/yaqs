@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 import time
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict, overload
 
 import numpy as np
 from qiskit.circuit.library import XGate, YGate, ZGate
@@ -71,8 +71,8 @@ _PAULI_PRODUCTS = {
 _PAULI_ERROR = "The noise model contains a process that is not supported for circuit sampling."
 
 
-class EquivalenceCheckResult(TypedDict):
-    """Return type of :meth:`EquivalenceChecker.check` for a single pair."""
+class _CheckResultBase(TypedDict):
+    """Fields shared by single-pair and noisy-ensemble check results."""
 
     equivalent: bool
     fidelity: float
@@ -85,28 +85,37 @@ class EquivalenceCheckResult(TypedDict):
     global_entanglement_entropy: float | None
 
 
-class EquivalenceEnsembleResult(TypedDict):
+class EquivalenceCheckResult(_CheckResultBase):
+    """Return type of :meth:`EquivalenceChecker.check` for a single pair."""
+
+
+class EquivalenceEnsembleResult(_CheckResultBase):
     """Monte Carlo result from an equivalence check with a noise model.
 
     ``fidelity`` is the mean of the squared trajectory overlaps, and
     ``fidelity_error`` is its empirical standard error (or ``None`` for one
-    trajectory). ``equivalent`` compares that sampled process-fidelity mean with
-    the squared configured threshold. It is a finite-sample decision, not an exact
-    equivalence certificate.
+    trajectory). The ensemble-level ``equivalent`` compares that mean with the
+    squared configured threshold. Each entry in ``trajectories`` instead retains
+    the single-pair semantics: its unsquared overlap is compared with the
+    configured unsquared threshold. The ensemble result is a finite-sample
+    decision, not an exact equivalence certificate.
     """
 
-    equivalent: bool
-    fidelity: float
     fidelity_error: float | None
-    elapsed_time: float
-    representation: str
     num_traj: int
     trajectories: list[EquivalenceCheckResult]
-    matrix: NDArray[np.complex128] | None
-    mpo: MPO | None
-    schmidt_values: NDArray[np.float64] | None
-    center_cut_entanglement_entropy: float | None
-    global_entanglement_entropy: float | None
+
+
+_NoiseProcessPlan = tuple[tuple[int, ...], tuple[str, ...]]
+
+
+class _InstructionNoisePlan(NamedTuple):
+    """Precomputed noise-sampling data for one circuit instruction."""
+
+    is_opportunity: bool
+    processes: tuple[_NoiseProcessPlan, ...]
+    cumulative_rates: tuple[float, ...]
+    total_rate: float
 
 
 def _validate_representation(representation: str) -> Representation:
@@ -304,9 +313,54 @@ def _validate_pauli_noise_model(noise_model: NoiseModel, num_qubits: int) -> Non
         raise ValueError(_PAULI_ERROR)
 
 
-def _sample_noisy_circuit(
+def _build_circuit_noise_plan(
     circuit: QuantumCircuit,
     noise_model: NoiseModel,
+) -> tuple[_InstructionNoisePlan, ...]:
+    """Precompute gate-local noise data shared by every trajectory.
+
+    Args:
+        circuit: Circuit whose instructions define noise opportunities.
+        noise_model: Concrete, validated Pauli noise model.
+
+    Returns:
+        One immutable sampling plan per circuit instruction.
+    """
+    instruction_plans: list[_InstructionNoisePlan] = []
+    for instruction in circuit.data:
+        is_opportunity = is_digital_noise_opportunity(instruction.operation)
+        gate_sites = {circuit.find_bit(qubit).index for qubit in instruction.qubits}
+
+        processes: list[_NoiseProcessPlan] = []
+        cumulative_rates: list[float] = []
+        total_rate = 0.0
+        if is_opportunity:
+            for process in noise_model.processes:
+                if not set(process["sites"]).issubset(gate_sites):
+                    continue
+                rate = float(process["strength"])
+                if not rate:
+                    continue
+                total_rate += rate
+                cumulative_rates.append(total_rate)
+                labels = _pauli_labels(process)
+                assert labels is not None
+                processes.append((tuple(int(site) for site in process["sites"]), labels))
+
+        instruction_plans.append(
+            _InstructionNoisePlan(
+                is_opportunity=is_opportunity,
+                processes=tuple(processes),
+                cumulative_rates=tuple(cumulative_rates),
+                total_rate=total_rate,
+            )
+        )
+    return tuple(instruction_plans)
+
+
+def _sample_noisy_circuit(
+    circuit: QuantumCircuit,
+    noise_plan: tuple[_InstructionNoisePlan, ...],
     rng: np.random.Generator,
 ) -> QuantumCircuit:
     """Sample one Pauli-noise realization of ``circuit``.
@@ -317,43 +371,39 @@ def _sample_noisy_circuit(
 
     Args:
         circuit: Circuit to sample.
-        noise_model: Concrete Pauli noise model (distribution-valued strengths
-            must already be resolved).
+        noise_plan: Per-instruction noise data precomputed for ``circuit``.
         rng: Random-number generator for event and process draws.
 
     Returns:
         A copy of ``circuit`` with sampled Pauli gates inserted.
     """
     sampled_circuit = circuit.copy_empty_like()
-    for instruction in circuit.data:
+    for instruction, instruction_plan in zip(circuit.data, noise_plan, strict=True):
         sites = [circuit.find_bit(qubit).index for qubit in instruction.qubits]
         qubits = [sampled_circuit.qubits[site] for site in sites]
         clbits = [sampled_circuit.clbits[circuit.find_bit(clbit).index] for clbit in instruction.clbits]
         sampled_circuit.append(instruction.operation.copy(), qubits, clbits)
 
-        if not is_digital_noise_opportunity(instruction.operation):
+        if not instruction_plan.is_opportunity:
             continue
 
-        gate_sites = set(sites)
-        processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
-        rates = [float(process["strength"]) for process in processes]
-        total_rate = sum(rates)
+        total_rate = instruction_plan.total_rate
         if not total_rate or rng.random() >= -math.expm1(-total_rate):
             continue
 
         threshold = float(rng.random()) * total_rate
-        cumulative = 0.0
-        selected = next(process for process, rate in zip(reversed(processes), reversed(rates), strict=True) if rate > 0)
-        for process, rate in zip(processes, rates, strict=True):
-            cumulative += rate
-            if threshold < cumulative:
+        selected = instruction_plan.processes[-1]
+        for process, cumulative_rate in zip(
+            instruction_plan.processes,
+            instruction_plan.cumulative_rates,
+            strict=True,
+        ):
+            if threshold < cumulative_rate:
                 selected = process
                 break
-
-        labels = _pauli_labels(selected)
-        assert labels is not None
-        for label, site in zip(labels, selected["sites"], strict=True):
-            sampled_circuit.append(_PAULI_GATES[label], [sampled_circuit.qubits[int(site)]])
+        selected_sites, labels = selected
+        for label, site in zip(labels, selected_sites, strict=True):
+            sampled_circuit.append(_PAULI_GATES[label], [sampled_circuit.qubits[site]])
 
     return sampled_circuit
 
@@ -460,7 +510,7 @@ def _run_noisy_check_trajectory(
     traj_idx: int,
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
-    noise_model: NoiseModel,
+    noise_plan: tuple[_InstructionNoisePlan, ...],
     random_seed: int | None,
     checker: EquivalenceChecker,
     backend: Literal["matrix", "mpo"],
@@ -471,7 +521,7 @@ def _run_noisy_check_trajectory(
         traj_idx: Trajectory index used to seed the sampler.
         circuit1: Clean reference circuit.
         circuit2: Circuit to sample Pauli noise onto.
-        noise_model: Concrete Pauli noise model.
+        noise_plan: Per-instruction noise data precomputed for ``circuit2``.
         random_seed: Optional run-level seed.
         checker: Checker supplying thresholds and backend settings.
         backend: Resolved ``"matrix"`` or ``"mpo"`` backend.
@@ -481,7 +531,7 @@ def _run_noisy_check_trajectory(
         are dropped after diagnostics are extracted.
     """
     rng = make_trajectory_rng(traj_idx, base_seed=random_seed)
-    noisy2 = _sample_noisy_circuit(circuit2, noise_model, rng)
+    noisy2 = _sample_noisy_circuit(circuit2, noise_plan, rng)
     result = _check_loaded_pair(checker, circuit1, noisy2, backend, parallel=False)
     result["mpo"] = None
     result["matrix"] = None
@@ -507,7 +557,7 @@ def _ensemble_trajectory_worker(traj_idx: int) -> EquivalenceCheckResult:
         traj_idx,
         WORKER_CTX["circuit1"],
         WORKER_CTX["circuit2"],
-        WORKER_CTX["noise_model"],
+        WORKER_CTX["noise_plan"],
         WORKER_CTX["random_seed"],
         checker,
         WORKER_CTX["backend"],
@@ -591,7 +641,7 @@ class EquivalenceChecker:
         self,
         circuit1: QuantumCircuit,
         circuit2: QuantumCircuit,
-        noise_model: NoiseModel,
+        noise_plan: tuple[_InstructionNoisePlan, ...],
         num_traj: int,
         random_seed: int | None,
         backend: Literal["matrix", "mpo"],
@@ -601,7 +651,7 @@ class EquivalenceChecker:
         Args:
             circuit1: Clean reference circuit.
             circuit2: Circuit sampled stochastically on each trajectory.
-            noise_model: Concrete Pauli noise model.
+            noise_plan: Per-instruction noise data precomputed for ``circuit2``.
             num_traj: Ensemble size.
             random_seed: Optional run-level seed.
             backend: Resolved backend.
@@ -620,7 +670,7 @@ class EquivalenceChecker:
             payload = {
                 "circuit1": circuit1,
                 "circuit2": circuit2,
-                "noise_model": noise_model,
+                "noise_plan": noise_plan,
                 "random_seed": random_seed,
                 "threshold": self.threshold,
                 "fidelity": self.fidelity,
@@ -646,7 +696,7 @@ class EquivalenceChecker:
                     traj_idx,
                     circuit1,
                     circuit2,
-                    noise_model,
+                    noise_plan,
                     random_seed,
                     self,
                     backend,
@@ -791,10 +841,11 @@ class EquivalenceChecker:
 
         noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=random_seed))
         _validate_pauli_noise_model(noise_model, circuit2.num_qubits)
+        noise_plan = _build_circuit_noise_plan(circuit2, noise_model)
         return self._run_noisy_ensemble(
             circuit1,
             circuit2,
-            noise_model,
+            noise_plan,
             num_traj,
             random_seed,
             backend,
