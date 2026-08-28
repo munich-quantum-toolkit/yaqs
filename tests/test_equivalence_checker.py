@@ -789,18 +789,14 @@ def test_zero_strength_noise_matches_noiseless_check() -> None:
     ensemble = checker.check(qc, qc, noise_model=noise, num_traj=4, random_seed=0)
 
     assert ensemble["num_traj"] == 4
-    assert len(ensemble["trajectories"]) == 4
+    assert "trajectories" not in ensemble
     assert ensemble["equivalent"] is True
-    assert float(ensemble["fidelity"]) == pytest.approx(float(noiseless["fidelity"]) ** 2, abs=1e-12)
+    assert float(ensemble["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
     standard_error = ensemble["fidelity_error"]
     assert standard_error is not None
     assert standard_error == pytest.approx(0.0, abs=1e-12)
     assert ensemble["mpo"] is None
     assert ensemble["matrix"] is None
-    for traj in ensemble["trajectories"]:
-        assert traj["mpo"] is None
-        assert traj["matrix"] is None
-        assert float(traj["fidelity"]) == pytest.approx(1.0, abs=1e-12)
 
 
 def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
@@ -815,7 +811,6 @@ def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
 
     assert ensemble["equivalent"] is False
     assert float(ensemble["fidelity"]) < 1.0 - 1e-6
-    assert all(isinstance(traj["fidelity"], float) for traj in ensemble["trajectories"])
 
 
 def test_noise_is_applied_only_to_circuit2() -> None:
@@ -830,8 +825,8 @@ def test_noise_is_applied_only_to_circuit2() -> None:
     noisy_empty = checker.check(qc_cx, qc_id, noise_model=noise, num_traj=5, random_seed=0)
     noisy_cx = checker.check(qc_id, qc_cx, noise_model=noise, num_traj=5, random_seed=0)
 
-    assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]) ** 2, abs=1e-12)
-    assert float(noisy_cx["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_cx)["fidelity"]) ** 2, abs=1e-6)
+    assert float(noisy_empty["fidelity"]) == pytest.approx(float(noiseless["fidelity"]), abs=1e-12)
+    assert float(noisy_cx["fidelity"]) != pytest.approx(float(checker.check(qc_id, qc_cx)["fidelity"]), abs=1e-6)
 
 
 def test_noisy_check_is_seeded_reproducible() -> None:
@@ -842,9 +837,9 @@ def test_noisy_check_is_seeded_reproducible() -> None:
     noise = _pauli_x_noise(2, 0.2)
     checker = EquivalenceChecker(representation="mpo")
 
-    first = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
-    second = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42)
-    third = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=43)
+    first = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42, return_trajectories=True)
+    second = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42, return_trajectories=True)
+    third = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=43, return_trajectories=True)
 
     assert [traj["fidelity"] for traj in first["trajectories"]] == [traj["fidelity"] for traj in second["trajectories"]]
     assert [traj["fidelity"] for traj in first["trajectories"]] != [traj["fidelity"] for traj in third["trajectories"]]
@@ -948,7 +943,7 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
     qc.h(0)
     noise = _pauli_x_noise(2, 0.5)
     result = EquivalenceChecker(representation=representation).check(
-        qc, qc, noise_model=noise, num_traj=3, random_seed=0
+        qc, qc, noise_model=noise, num_traj=3, random_seed=0, return_trajectories=True
     )
 
     assert result["representation"] == representation
@@ -969,9 +964,29 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
         ensemble_schmidt_values = result["schmidt_values"]
         assert ensemble_schmidt_values is not None
         assert len(trajectory_schmidt_values) == result["num_traj"]
-        np.testing.assert_allclose(ensemble_schmidt_values, np.concatenate(trajectory_schmidt_values))
+        expected = np.zeros(max(values.size for values in trajectory_schmidt_values))
+        for values in trajectory_schmidt_values:
+            expected[: values.size] += values
+        np.testing.assert_allclose(ensemble_schmidt_values, expected / len(trajectory_schmidt_values))
         assert result["center_cut_entanglement_entropy"] is not None
         assert result["global_entanglement_entropy"] is not None
+
+
+def test_noisy_check_zero_pads_schmidt_spectra_before_averaging() -> None:
+    """Variable-rank trajectory spectra are averaged by Schmidt index."""
+    circuit = QuantumCircuit(2)
+    checker = EquivalenceChecker(representation="mpo", parallel=False)
+    first = checker.check(circuit, circuit)
+    second = first.copy()
+    first["schmidt_values"] = np.array([4.0, 2.0])
+    second["schmidt_values"] = np.array([2.0])
+
+    with patch("mqt.yaqs.equivalence_checker._run_noisy_check_trajectory", side_effect=[first, second]):
+        result = checker.check(circuit, circuit, noise_model=_pauli_x_noise(2, 0.0), num_traj=2)
+
+    schmidt_values = result["schmidt_values"]
+    assert schmidt_values is not None
+    np.testing.assert_allclose(schmidt_values, [3.0, 1.0])
 
 
 def test_noisy_ensemble_caps_workers_and_reassembles_by_index() -> None:
@@ -995,6 +1010,7 @@ def test_noisy_ensemble_caps_workers_and_reassembles_by_index() -> None:
             noise_model=_pauli_x_noise(2, 0.0),
             num_traj=2,
             random_seed=0,
+            return_trajectories=True,
         )
 
     run_parallel.assert_called_once()
@@ -1018,11 +1034,12 @@ def test_parallel_false_keeps_noisy_ensemble_serial() -> None:
         )
 
     run_parallel.assert_not_called()
-    assert len(result["trajectories"]) == 3
+    assert result["num_traj"] == 3
+    assert "trajectories" not in result
 
 
-def test_noisy_ensemble_averages_squared_overlaps_and_reports_standard_error() -> None:
-    """The channel estimate averages squared overlaps and reports their sample SEM."""
+def test_noisy_ensemble_reports_root_process_fidelity_and_error() -> None:
+    """The public fidelity and its error use the noiseless root-overlap scale."""
     reference = QuantumCircuit(2)
     overlaps = np.asarray([0.2, 0.5, 0.9])
     checker = EquivalenceChecker(representation="matrix", fidelity=0.6, max_workers=1)
@@ -1042,20 +1059,20 @@ def test_noisy_ensemble_averages_squared_overlaps_and_reports_standard_error() -
             noise_model=_pauli_x_noise(2, 0.0),
             num_traj=len(overlaps),
             random_seed=0,
+            return_trajectories=True,
         )
 
     squared_overlaps = np.square(overlaps)
-    assert result["fidelity"] == pytest.approx(float(np.mean(squared_overlaps)), abs=1e-12)
+    root_process_fidelity = float(np.sqrt(np.mean(squared_overlaps)))
+    assert result["fidelity"] == pytest.approx(root_process_fidelity, abs=1e-12)
     assert result["fidelity"] != pytest.approx(float(np.mean(overlaps)), abs=1e-12)
-    assert result["fidelity"] != pytest.approx(float(np.mean(overlaps) ** 2), abs=1e-12)
-    assert result["fidelity_error"] == pytest.approx(
-        float(np.std(squared_overlaps, ddof=1) / np.sqrt(len(squared_overlaps))), abs=1e-12
-    )
+    process_fidelity_error = float(np.std(squared_overlaps, ddof=1) / np.sqrt(len(squared_overlaps)))
+    assert result["fidelity_error"] == pytest.approx(process_fidelity_error / (2 * root_process_fidelity), abs=1e-12)
     assert [trajectory["equivalent"] for trajectory in result["trajectories"]] == [False, False, True]
     assert result["equivalent"] is True
 
 
-def test_single_trajectory_process_fidelity_has_no_standard_error() -> None:
+def test_single_trajectory_root_process_fidelity_has_no_standard_error() -> None:
     """One trajectory gives a point estimate but cannot estimate sampling uncertainty."""
     reference = QuantumCircuit(2)
     candidate = QuantumCircuit(2)
@@ -1075,9 +1092,24 @@ def test_single_trajectory_process_fidelity_has_no_standard_error() -> None:
             random_seed=0,
         )
 
-    assert result["fidelity"] == pytest.approx(0.6**2, abs=1e-12)
+    assert result["fidelity"] == pytest.approx(0.6, abs=1e-12)
     assert result["fidelity_error"] is None
     assert result["equivalent"] is False
+
+
+def test_zero_fidelity_ensemble_has_zero_observed_error() -> None:
+    """Identical zero-overlap samples have a finite zero Monte Carlo error."""
+    reference = QuantumCircuit(2)
+    candidate = QuantumCircuit(2)
+    candidate.x(0)
+    checker = EquivalenceChecker(representation="matrix", parallel=False)
+    trajectory = checker.check(reference, candidate)
+
+    with patch("mqt.yaqs.equivalence_checker._run_noisy_check_trajectory", return_value=trajectory):
+        result = checker.check(reference, reference, noise_model=_pauli_x_noise(2, 0.0), num_traj=2)
+
+    assert result["fidelity"] == pytest.approx(0.0, abs=1e-12)
+    assert result["fidelity_error"] == pytest.approx(0.0, abs=1e-12)
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])
@@ -1099,6 +1131,20 @@ def test_num_traj_without_noise_model_raises() -> None:
     qc = QuantumCircuit(1)
     with pytest.raises(ValueError, match="num_traj must be 1"):
         EquivalenceChecker(representation="mpo").check(qc, qc, num_traj=4)
+
+
+def test_return_trajectories_requires_noise_model() -> None:
+    """Trajectory details are available only for a noisy ensemble."""
+    qc = QuantumCircuit(1)
+    with pytest.raises(ValueError, match="return_trajectories requires a noise_model"):
+        EquivalenceChecker().check(qc, qc, return_trajectories=True)  # ty: ignore[invalid-argument-type]
+
+
+def test_return_trajectories_must_be_bool() -> None:
+    """The trajectory-detail selector rejects non-boolean values."""
+    qc = QuantumCircuit(1)
+    with pytest.raises(TypeError, match="return_trajectories must be bool"):
+        EquivalenceChecker().check(qc, qc, return_trajectories=1)  # ty: ignore[invalid-argument-type]
 
 
 def test_negative_random_seed_raises() -> None:
@@ -1265,7 +1311,7 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 0.5)
-    kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0}
+    kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0, "return_trajectories": True}
 
     serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc, qc, **kwargs)
     pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, mp_context="spawn").check(

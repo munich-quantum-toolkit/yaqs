@@ -16,9 +16,9 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 When a :class:`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` is passed to
 :meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` realizations of the
 noise model on the second circuit and runs the standard relative-operator check on each
-trajectory. The sampled channel is summarized by the Monte Carlo mean and standard
-error of the squared trajectory overlaps. On this checker path, resolved process
-strengths are direct per-opportunity branch probabilities, rather than Lindblad rates.
+trajectory. The sampled channel is summarized by the root-mean-square trajectory
+overlap and its Monte Carlo error. On this checker path, resolved process strengths
+are direct per-opportunity branch probabilities, rather than Lindblad rates.
 """
 
 from __future__ import annotations
@@ -90,22 +90,27 @@ class EquivalenceCheckResult(_CheckResultBase):
     """Return type of :meth:`EquivalenceChecker.check` for a single pair."""
 
 
-class EquivalenceEnsembleResult(_CheckResultBase):
+class _OptionalEnsembleFields(TypedDict, total=False):
+    """Noisy result fields included only when requested."""
+
+    trajectories: list[EquivalenceCheckResult]
+
+
+class EquivalenceEnsembleResult(_CheckResultBase, _OptionalEnsembleFields):
     """Monte Carlo result from an equivalence check with a noise model.
 
-    ``fidelity`` is the mean of the squared trajectory overlaps, and
-    ``fidelity_error`` is its empirical standard error (or ``None`` for one
-    trajectory). The ensemble-level ``equivalent`` compares that mean with the
-    squared configured threshold. Each entry in ``trajectories`` instead retains
-    the single-pair semantics: its unsquared overlap is compared with the
-    configured unsquared threshold. On the MPO backend, ``schmidt_values``
-    concatenates the center-cut spectra from all trajectories. The ensemble
-    result is a finite-sample decision, not an exact equivalence certificate.
+    ``fidelity`` is the root-mean-square trajectory overlap, on the same scale as
+    a noiseless result. For multiple trajectories, ``fidelity_error`` is its
+    delta-method Monte Carlo standard error, or zero when every sampled overlap
+    is zero; it is ``None`` for one trajectory. ``equivalent`` compares the point
+    estimate with the configured threshold. MPO diagnostics are averaged across
+    trajectories; shorter Schmidt spectra are zero-padded. ``trajectories`` is
+    included only when ``return_trajectories=True``. This remains a finite-sample
+    decision, not an exact equivalence certificate.
     """
 
     fidelity_error: float | None
     num_traj: int
-    trajectories: list[EquivalenceCheckResult]
 
 
 _NoiseOutcome = tuple[float, tuple[str, ...]]
@@ -434,8 +439,7 @@ class EquivalenceChecker:
 
     Attributes:
         threshold: Singular-value truncation threshold used during SVD in the MPO update.
-        fidelity: Root-overlap threshold for a noiseless check. Noisy comparisons use
-            the square of this threshold for their process-fidelity estimate.
+        fidelity: Root-overlap threshold used by both noiseless and noisy checks.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
         parallel: Whether to parallelize noiseless MPO pair updates and noisy trajectory
@@ -461,9 +465,8 @@ class EquivalenceChecker:
 
         Args:
             threshold: SVD truncation threshold in the MPO update (default ``1e-13``).
-            fidelity: Minimum root overlap for a noiseless identity check (default
-                ``1 - 1e-13``). Noisy comparisons square it to obtain the corresponding
-                process-fidelity threshold.
+            fidelity: Minimum root overlap for an identity check (default
+                ``1 - 1e-13``), on the scale returned by both check modes.
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
@@ -517,6 +520,8 @@ class EquivalenceChecker:
         num_traj: int,
         random_seed: int | None,
         backend: Literal["matrix", "mpo"],
+        *,
+        return_trajectories: bool,
     ) -> EquivalenceEnsembleResult:
         """Sample noisy ``circuit2`` trajectories and aggregate relative-operator checks.
 
@@ -527,10 +532,10 @@ class EquivalenceChecker:
             num_traj: Ensemble size.
             random_seed: Optional run-level seed.
             backend: Resolved backend.
+            return_trajectories: Whether to include individual trajectory results.
 
         Returns:
-            A Monte Carlo :class:`EquivalenceEnsembleResult`. The process-fidelity
-            standard error is ``None`` when ``num_traj`` is one.
+            An aggregated :class:`EquivalenceEnsembleResult`.
         """
         start_time = time.time()
         workers = 1
@@ -573,32 +578,46 @@ class EquivalenceChecker:
                 for traj_idx in range(num_traj)
             ]
 
-        # A trajectory reports |Tr(Q_r)| / d; random-unitary channel process fidelity
-        # is the ensemble mean of its square.
+        # Random-unitary process fidelity is mean(a_r**2). Its square root keeps
+        # the public result on the noiseless root-overlap scale.
         process_fidelity_samples = np.square(np.asarray([traj["fidelity"] for traj in trajectories], dtype=np.float64))
-        mean_fidelity = float(np.mean(process_fidelity_samples))
-        fidelity_error = float(np.std(process_fidelity_samples, ddof=1) / np.sqrt(num_traj)) if num_traj > 1 else None
-        schmidt_values = [
+        fidelity = math.sqrt(float(np.mean(process_fidelity_samples)))
+        if num_traj > 1:
+            process_fidelity_error = float(np.std(process_fidelity_samples, ddof=1) / np.sqrt(num_traj))
+            fidelity_error = process_fidelity_error / (2 * fidelity) if fidelity else 0.0
+        else:
+            fidelity_error = None
+
+        schmidt_spectra = [
             values.ravel() for trajectory in trajectories if (values := trajectory["schmidt_values"]) is not None
         ]
+        mean_schmidt_values = None
+        if schmidt_spectra:
+            mean_schmidt_values = np.zeros(max(values.size for values in schmidt_spectra), dtype=np.float64)
+            for values in schmidt_spectra:
+                mean_schmidt_values[: values.size] += values
+            mean_schmidt_values /= len(schmidt_spectra)
+
         center_entropy = global_entropy = None
         if backend == "mpo":
             center_entropy = float(np.mean([traj["center_cut_entanglement_entropy"] for traj in trajectories]))
             global_entropy = float(np.mean([traj["global_entanglement_entropy"] for traj in trajectories]))
-        return {
-            "equivalent": mean_fidelity >= self.fidelity**2,
-            "fidelity": mean_fidelity,
+        result: EquivalenceEnsembleResult = {
+            "equivalent": fidelity >= self.fidelity,
+            "fidelity": fidelity,
             "fidelity_error": fidelity_error,
             "elapsed_time": time.time() - start_time,
             "representation": backend,
             "num_traj": num_traj,
-            "trajectories": trajectories,
             "matrix": None,
             "mpo": None,
-            "schmidt_values": np.concatenate(schmidt_values) if schmidt_values else None,
+            "schmidt_values": mean_schmidt_values,
             "center_cut_entanglement_entropy": center_entropy,
             "global_entanglement_entropy": global_entropy,
         }
+        if return_trajectories:
+            result["trajectories"] = trajectories
+        return result
 
     @overload
     def check(
@@ -609,6 +628,7 @@ class EquivalenceChecker:
         noise_model: None = None,
         num_traj: int = 1,
         random_seed: int | None = None,
+        return_trajectories: Literal[False] = False,
     ) -> EquivalenceCheckResult: ...
 
     @overload
@@ -620,6 +640,7 @@ class EquivalenceChecker:
         noise_model: NoiseModel,
         num_traj: int = 1,
         random_seed: int | None = None,
+        return_trajectories: bool = False,
     ) -> EquivalenceEnsembleResult: ...
 
     def check(
@@ -630,6 +651,7 @@ class EquivalenceChecker:
         noise_model: NoiseModel | None = None,
         num_traj: int = 1,
         random_seed: int | None = None,
+        return_trajectories: bool = False,
     ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
         """Compare two quantum circuits, optionally under sampled noise.
 
@@ -639,11 +661,10 @@ class EquivalenceChecker:
 
         When ``noise_model`` is set, noise is sampled onto ``circuit2`` only. Each of
         ``num_traj`` independent realizations is checked with the same relative operator
-        ``U_ideal U_noisy†`` used for a noiseless pair. The returned ensemble reports a
-        Monte Carlo estimate of the sampled channel's process fidelity, its empirical
-        standard error when ``num_traj > 1``, and trajectory-averaged
-        operator-entanglement diagnostics. Its threshold comparison is a sample-level
-        decision rather than an equivalence certificate.
+        ``U_ideal U_noisy†`` used for a noiseless pair. The returned ``fidelity`` is the
+        root-mean-square trajectory overlap, so it uses the same scale and threshold as
+        a noiseless result. The ensemble also reports its Monte Carlo standard error and
+        trajectory-averaged operator-entanglement diagnostics.
         Resolved process strengths are used as direct branch probabilities after each
         eligible two-qubit gate. Processes sharing an exact support are mutually
         exclusive and their probabilities must sum to at most one; distinct supports
@@ -662,31 +683,31 @@ class EquivalenceChecker:
             circuit2: Second quantum circuit (must have the same number of qubits).
                 Accepts the same types as ``circuit1``. When ``noise_model`` is set, this is
                 the circuit that is sampled stochastically.
-            noise_model: Optional YAQS noise model. The current circuit-sampling path
-                accepts normalized one-site Pauli operators and two-site Pauli products.
-                ``None`` runs a single noiseless check. Distribution-valued strengths are
+            noise_model: Optional YAQS noise model. ``None`` runs a single noiseless
+                check. Unsupported processes that cannot be materialized as stochastic
+                circuit operations are rejected. Distribution-valued strengths are
                 resolved once per call, then interpreted as direct per-opportunity
                 probabilities and validated by exact support.
             num_traj: Number of stochastic circuit realizations when ``noise_model`` is set.
                 Must be ``1`` when ``noise_model`` is ``None``.
             random_seed: Optional run-level seed for disorder sampling and per-trajectory
                 circuit draws. Must be non-negative; ``None`` uses non-deterministic streams.
+            return_trajectories: Include individual trajectory results in a noisy result.
+                Defaults to ``False`` and must remain ``False`` without ``noise_model``.
 
         Returns:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
             :class:`EquivalenceEnsembleResult` when ``noise_model`` is set. Both include
-            ``equivalent`` and ``fidelity``; for a noisy result these are the sampled
-            process-fidelity decision and estimate. The ensemble additionally includes
-            ``fidelity_error``, ``num_traj``, and the individual ``trajectories``.
+            the same primary fields. A noisy result additionally includes
+            ``fidelity_error`` and ``num_traj``; ``trajectories`` is opt-in.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit
                 measurements, contain gates on more than two qubits on the MPO backend,
                 ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
-                ``random_seed`` is negative, or the noise model contains a process that
-                cannot be sampled as a circuit error or same-support probabilities whose
-                sum exceeds one.
-            TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
+                ``return_trajectories`` is used without ``noise_model``, ``random_seed`` is
+                negative, or the noise model cannot be sampled.
+            TypeError: If an ensemble option or ``noise_model`` has an invalid type.
         """
         if isinstance(num_traj, bool) or not isinstance(num_traj, int):
             msg = f"num_traj must be int, got {type(num_traj).__name__}."
@@ -701,9 +722,15 @@ class EquivalenceChecker:
             if random_seed < 0:
                 msg = f"random_seed must be non-negative, got {random_seed}."
                 raise ValueError(msg)
+        if not isinstance(return_trajectories, bool):
+            msg = f"return_trajectories must be bool, got {type(return_trajectories).__name__}."
+            raise TypeError(msg)
         if noise_model is None:
             if num_traj != 1:
                 msg = "num_traj must be 1 when noise_model is None."
+                raise ValueError(msg)
+            if return_trajectories:
+                msg = "return_trajectories requires a noise_model."
                 raise ValueError(msg)
         elif not isinstance(noise_model, NoiseModel):
             msg = f"noise_model must be NoiseModel or None, got {type(noise_model).__name__}."
@@ -741,4 +768,5 @@ class EquivalenceChecker:
             num_traj,
             random_seed,
             backend,
+            return_trajectories=return_trajectories,
         )

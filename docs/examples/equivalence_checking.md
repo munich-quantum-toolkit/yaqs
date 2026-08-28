@@ -93,8 +93,7 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   speed up checks at the cost of accuracy.
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
   and the identity (global phase removed). It must be finite and between `0` and
-  `1`. Used by **both** backends. A noisy ensemble squares this value for its
-  process-fidelity threshold.
+  `1`. Noiseless and noisy results use this same scale and threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
 - **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
@@ -247,9 +246,8 @@ sampled noise. Each trajectory materializes a stochastic realization of the
 noise model on the compiled circuit. This gives a Monte Carlo comparison rather
 than an exact noisy-channel equivalence certificate.
 
-The current circuit-sampling path accepts processes that normalize to one-site
-Pauli operators or two-site Pauli products. Other process types and scheduled
-jumps are rejected; those remain available through the simulator.
+The checker rejects noise processes that it cannot materialize as stochastic
+circuit operations; those remain available through the simulator.
 
 Noise is sampled onto the **second** circuit argument only. A supported
 two-qubit unitary gate is a noise opportunity; single-qubit gates, gates on
@@ -280,26 +278,24 @@ Q_r = U_{\mathrm{ideal}} U_{\mathrm{noisy},r}^\dagger.
 
 If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the
 sampled channel's process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
-estimated by
+estimated internally by
 
 ```{math}
 \widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
 ```
 
-For a noisy result, `fidelity` is this Monte Carlo sample mean. For $N>1$, the
-reported sampling uncertainty is
+The public result stays on the noiseless scale:
 
 ```{math}
-\mathtt{fidelity\_error}
-= \sqrt{\frac{1}{N(N-1)}\sum_{r=1}^{N}
-\left(a_r^2-\widehat F_{\mathrm{pro}}\right)^2}.
+\mathtt{fidelity}=\sqrt{\widehat F_{\mathrm{pro}}}.
 ```
 
-For one trajectory, `fidelity_error` is `None` because sampling uncertainty
-cannot be estimated.
+For $N>1$, `fidelity_error` is the approximate delta-method Monte Carlo standard
+error on this root-fidelity scale. It is `0.0` when every sampled overlap is
+zero and `None` for one trajectory.
 
-Apply noise to the transpiled circuit from the earlier example. The noiseless
-pair remains equivalent, while the noisy run estimates its process fidelity:
+Apply noise to the transpiled circuit from the earlier example. The noisy call
+returns the same primary fields as the noiseless call:
 
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
@@ -321,7 +317,7 @@ print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fi
 print(
     "noisy:     "
     f"sample threshold passed={noisy['equivalent']}, "
-    f"process fidelity={noisy['fidelity']:.4f} "
+    f"root process fidelity={noisy['fidelity']:.4f} "
     f"+/- {noisy['fidelity_error']:.4f}"
 )
 print(f"trajectories: {noisy['num_traj']}")
@@ -333,17 +329,19 @@ error probability for the complete circuit.
 
 A noisy `check` returns
 {class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
-primary `equivalent` and `fidelity` keys as a noiseless check, plus
-`fidelity_error`, `num_traj`, and `trajectories`. Noisy `equivalent` compares
-the sample mean with `checker.fidelity**2`; it is not an exact certificate. On
-the MPO backend, the ensemble also averages operator entanglement and
-concatenates the center-cut Schmidt spectra in `schmidt_values`.
+fields as a noiseless check, plus `fidelity_error` and `num_traj`. Noisy
+`equivalent` compares the point estimate with `checker.fidelity`; it does not
+use the error bar and is not an exact certificate. For MPO checks, entropies are
+trajectory means and `schmidt_values` is the zero-padded mean trajectory
+spectrum, not a channel spectrum. `matrix` and `mpo` are `None` because the
+ensemble is a channel rather than one relative unitary. Pass
+`return_trajectories=True` to include the individual trajectory results.
 
 Distribution-valued strengths are resolved once per `check` call, so every
 trajectory uses the same resolved probabilities. The checker then validates the
 same-support sums; an out-of-range draw raises `ValueError`. A nonnegative
-`random_seed` makes the ordered trajectory results reproducible independently of
-process scheduling.
+`random_seed` makes the sampled ensemble reproducible independently of process
+scheduling.
 
 ## Performance notes
 
