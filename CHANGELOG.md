@@ -13,6 +13,7 @@ releases may include breaking changes.
 ### Added
 
 - added sampled noise-model comparisons to `EquivalenceChecker`, including
+  direct per-opportunity branch probabilities grouped by process support,
   process-fidelity estimates, Monte Carlo standard errors, and per-trajectory
   diagnostics ([#545]) ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`

@@ -17,14 +17,15 @@ When a :class:`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` is passed 
 :meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` realizations of the
 noise model on the second circuit and runs the standard relative-operator check on each
 trajectory. The sampled channel is summarized by the Monte Carlo mean and standard
-error of the squared trajectory overlaps.
+error of the squared trajectory overlaps. On this checker path, resolved process
+strengths are direct per-opportunity branch probabilities, rather than Lindblad rates.
 """
 
 from __future__ import annotations
 
 import math
 import time
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict, overload
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, overload
 
 import numpy as np
 from qiskit.circuit.library import XGate, YGate, ZGate
@@ -107,16 +108,9 @@ class EquivalenceEnsembleResult(_CheckResultBase):
     trajectories: list[EquivalenceCheckResult]
 
 
-_NoiseProcessPlan = tuple[tuple[int, ...], tuple[str, ...]]
-
-
-class _InstructionNoisePlan(NamedTuple):
-    """Precomputed noise-sampling data for one circuit instruction."""
-
-    is_opportunity: bool
-    processes: tuple[_NoiseProcessPlan, ...]
-    cumulative_rates: tuple[float, ...]
-    total_rate: float
+_NoiseOutcome = tuple[float, tuple[str, ...]]
+_SupportNoisePlan = tuple[tuple[int, ...], tuple[_NoiseOutcome, ...]]
+_CircuitNoisePlan = tuple[tuple[_SupportNoisePlan, ...], ...]
 
 
 def _validate_representation(representation: str) -> Representation:
@@ -317,7 +311,7 @@ def _validate_pauli_noise_model(noise_model: NoiseModel, num_qubits: int) -> Non
 def _build_circuit_noise_plan(
     circuit: QuantumCircuit,
     noise_model: NoiseModel,
-) -> tuple[_InstructionNoisePlan, ...]:
+) -> _CircuitNoisePlan:
     """Precompute gate-local noise data shared by every trajectory.
 
     Args:
@@ -325,55 +319,66 @@ def _build_circuit_noise_plan(
         noise_model: Concrete, validated Pauli noise model.
 
     Returns:
-        One immutable sampling plan per circuit instruction.
+        Eligible support groups for each instruction. An empty tuple means that
+        the instruction has no applicable noise.
+
+    Raises:
+        ValueError: If process probabilities sharing an exact support sum to more
+            than one.
     """
-    instruction_plans: list[_InstructionNoisePlan] = []
-    for instruction in circuit.data:
-        is_opportunity = is_digital_noise_opportunity(instruction.operation)
-        gate_sites = {circuit.find_bit(qubit).index for qubit in instruction.qubits}
+    grouped_processes: dict[tuple[int, ...], list[tuple[tuple[str, ...], float]]] = {}
+    for process in noise_model.processes:
+        probability = float(process["strength"])
+        if not probability:
+            continue
+        labels = _pauli_labels(process)
+        assert labels is not None
+        sites = tuple(int(site) for site in process["sites"])
+        grouped_processes.setdefault(sites, []).append((labels, probability))
 
-        processes: list[_NoiseProcessPlan] = []
-        cumulative_rates: list[float] = []
-        total_rate = 0.0
-        if is_opportunity:
-            for process in noise_model.processes:
-                if not set(process["sites"]).issubset(gate_sites):
-                    continue
-                rate = float(process["strength"])
-                if not rate:
-                    continue
-                total_rate += rate
-                cumulative_rates.append(total_rate)
-                labels = _pauli_labels(process)
-                assert labels is not None
-                processes.append((tuple(int(site) for site in process["sites"]), labels))
-
-        instruction_plans.append(
-            _InstructionNoisePlan(
-                is_opportunity=is_opportunity,
-                processes=tuple(processes),
-                cumulative_rates=tuple(cumulative_rates),
-                total_rate=total_rate,
+    support_plans: list[_SupportNoisePlan] = []
+    for sites, processes in grouped_processes.items():
+        total_probability = math.fsum(probability for _, probability in processes)
+        if total_probability > 1.0:
+            msg = (
+                "Circuit-sampled equivalence checking requires process strengths "
+                f"sharing support {sites} to sum to at most 1, got {total_probability}."
             )
+            raise ValueError(msg)
+        outcomes: list[_NoiseOutcome] = []
+        cumulative_probability = 0.0
+        for labels, probability in processes:
+            cumulative_probability += probability
+            outcomes.append((cumulative_probability, labels))
+        support_plans.append((sites, tuple(outcomes)))
+
+    instruction_plans: list[tuple[_SupportNoisePlan, ...]] = []
+    for instruction in circuit.data:
+        if instruction.operation.num_qubits != 2 or not is_digital_noise_opportunity(instruction.operation):
+            instruction_plans.append(())
+            continue
+        gate_sites = {circuit.find_bit(qubit).index for qubit in instruction.qubits}
+        instruction_plans.append(
+            tuple((sites, outcomes) for sites, outcomes in support_plans if all(site in gate_sites for site in sites))
         )
     return tuple(instruction_plans)
 
 
 def _sample_noisy_circuit(
     circuit: QuantumCircuit,
-    noise_plan: tuple[_InstructionNoisePlan, ...],
+    noise_plan: _CircuitNoisePlan,
     rng: np.random.Generator,
 ) -> QuantumCircuit:
     """Sample one Pauli-noise realization of ``circuit``.
 
-    Every gate acting on two or more qubits is a noise opportunity. A process
-    participates when its complete support is contained in the gate support.
-    At most one process is appended after each such gate.
+    Every supported two-qubit gate is a noise opportunity. Processes with the
+    same support are mutually exclusive probability branches, while distinct
+    supports are sampled independently.
 
     Args:
         circuit: Circuit to sample.
         noise_plan: Per-instruction noise data precomputed for ``circuit``.
-        rng: Random-number generator for event and process draws.
+        rng: Random-number generator for categorical support draws.
 
     Returns:
         A copy of ``circuit`` with sampled Pauli gates inserted.
@@ -385,26 +390,13 @@ def _sample_noisy_circuit(
         clbits = [sampled_circuit.clbits[circuit.find_bit(clbit).index] for clbit in instruction.clbits]
         sampled_circuit.append(instruction.operation.copy(), qubits, clbits)
 
-        if not instruction_plan.is_opportunity:
-            continue
-
-        total_rate = instruction_plan.total_rate
-        if not total_rate or rng.random() >= -math.expm1(-total_rate):
-            continue
-
-        threshold = float(rng.random()) * total_rate
-        selected = instruction_plan.processes[-1]
-        for process, cumulative_rate in zip(
-            instruction_plan.processes,
-            instruction_plan.cumulative_rates,
-            strict=True,
-        ):
-            if threshold < cumulative_rate:
-                selected = process
-                break
-        selected_sites, labels = selected
-        for label, site in zip(labels, selected_sites, strict=True):
-            sampled_circuit.append(_PAULI_GATES[label], [sampled_circuit.qubits[site]])
+        for support_sites, outcomes in instruction_plan:
+            draw = float(rng.random())
+            for cumulative_probability, labels in outcomes:
+                if draw < cumulative_probability:
+                    for label, site in zip(labels, support_sites, strict=True):
+                        sampled_circuit.append(_PAULI_GATES[label], [sampled_circuit.qubits[site]])
+                    break
 
     return sampled_circuit
 
@@ -511,7 +503,7 @@ def _run_noisy_check_trajectory(
     traj_idx: int,
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
-    noise_plan: tuple[_InstructionNoisePlan, ...],
+    noise_plan: _CircuitNoisePlan,
     random_seed: int | None,
     checker: EquivalenceChecker,
     backend: Literal["matrix", "mpo"],
@@ -571,7 +563,9 @@ class EquivalenceChecker:
     The MPO backend is the primary, scalable method; the matrix backend is intended for
     very small qubits counts. Owns numerical thresholds and backend selection. The two
     circuits to compare are passed per call to :meth:`check`. Supplying a
-    :class:`NoiseModel` performs a Monte Carlo comparison under sampled noise.
+    :class:`NoiseModel` performs a Monte Carlo comparison under sampled noise. For
+    this comparison, concrete process strengths are interpreted as direct error
+    probabilities at each eligible gate.
 
     Attributes:
         threshold: Singular-value truncation threshold used during SVD in the MPO update.
@@ -642,7 +636,7 @@ class EquivalenceChecker:
         self,
         circuit1: QuantumCircuit,
         circuit2: QuantumCircuit,
-        noise_plan: tuple[_InstructionNoisePlan, ...],
+        noise_plan: _CircuitNoisePlan,
         num_traj: int,
         random_seed: int | None,
         backend: Literal["matrix", "mpo"],
@@ -776,6 +770,10 @@ class EquivalenceChecker:
         standard error when ``num_traj > 1``, and trajectory-averaged
         operator-entanglement diagnostics. Its threshold comparison is a sample-level
         decision rather than an equivalence certificate.
+        Resolved process strengths are used as direct branch probabilities after each
+        eligible two-qubit gate. Processes sharing an exact support are mutually
+        exclusive and their probabilities must sum to at most one; distinct supports
+        are sampled independently.
         With ``parallel=True``, noisy worker count is capped by both ``num_traj`` and
         ``max_workers``. A process pool is used only when that count is greater than one,
         and each worker uses serial ``iterate``. ``parallel=False`` keeps the noisy
@@ -793,7 +791,8 @@ class EquivalenceChecker:
             noise_model: Optional YAQS noise model. The current circuit-sampling path
                 accepts normalized one-site Pauli operators and two-site Pauli products.
                 ``None`` runs a single noiseless check. Distribution-valued strengths are
-                resolved once per call.
+                resolved once per call, then interpreted as direct per-opportunity
+                probabilities and validated by exact support.
             num_traj: Number of stochastic circuit realizations when ``noise_model`` is set.
                 Must be ``1`` when ``noise_model`` is ``None``.
             random_seed: Optional run-level seed for disorder sampling and per-trajectory
@@ -811,7 +810,8 @@ class EquivalenceChecker:
                 measurements, contain gates on more than two qubits on the MPO backend,
                 ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
                 ``random_seed`` is negative, or the noise model contains a process that
-                cannot be sampled as a circuit error.
+                cannot be sampled as a circuit error or same-support probabilities whose
+                sum exceeds one.
             TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
         """
         num_traj = _validate_num_traj(num_traj)

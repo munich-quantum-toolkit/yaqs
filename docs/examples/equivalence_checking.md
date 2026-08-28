@@ -248,6 +248,8 @@ Expect the largest gains on **wide** nearest-neighbor circuits (typically
 implementation keeps the serial path even when `parallel=True`, because thread
 overhead would dominate.
 
+(equivalence-noise-model)=
+
 ## Comparing with a noise model
 
 Passing a {class}`~mqt.yaqs.NoiseModel` asks how close a
@@ -260,14 +262,25 @@ The current circuit-sampling path accepts processes that normalize to one-site
 Pauli operators or two-site Pauli products. Other process types and scheduled
 jumps are rejected; those remain available through the simulator.
 
-Noise is sampled onto the **second** circuit argument only. A supported unitary
-gate acting on two or more qubits is a noise opportunity; single-qubit gates,
-barriers, and measurements are not. A process is eligible when its complete site
-support is contained in the gate support. At most one eligible process is
-appended after each opportunity, with total event probability
-$1-\exp(-\sum_j \gamma_j)$ and conditional process selection proportional to its
-strength $\gamma_j$. The selected equivalence backend must also support the
-original gate.
+Noise is sampled onto the **second** circuit argument only. A supported
+two-qubit unitary gate is a noise opportunity; single-qubit gates, gates on
+three or more qubits, barriers, and measurements are not. A process is eligible
+when its complete site support is contained in the gate support. The selected
+equivalence backend must also support the original gate.
+
+Within `EquivalenceChecker`, each resolved `strength` is a dimensionless branch
+probability $p_i$ at every eligible gate. Processes with the same exact site
+support form one categorical draw: process $i$ occurs with probability $p_i$,
+and no process from that support occurs with probability $1-\sum_i p_i$.
+Consequently, each same-support sum must be at most one. Different exact
+supports are sampled independently, so multiple errors may follow one gate. This
+also applies to overlapping supports such as `[0]` and `[0, 1]`, which may both
+be selected in one trajectory.
+
+For an isotropic Pauli error with total probability $p$ on each gate qubit,
+assign `strength=p/3` to X, Y, and Z on that one-qubit support. The identity
+then has probability $1-p$ on each qubit, and the per-qubit draws are
+independent.
 
 Writing $U_{\mathrm{ideal}}$ for the first circuit and $U_{\mathrm{noisy},r}$
 for trajectory $r$ of the second, the relative operator has the order
@@ -358,6 +371,10 @@ ax.set_title("Ideal vs compiled circuit with Pauli-X noise")
 ax.legend(frameon=False)
 ```
 
+Here `strength=0.02` means a 2% X-error probability on that qubit after each
+eligible two-qubit gate containing it. It is neither a Lindblad rate nor a 2%
+error probability for the complete circuit.
+
 A noisy `check` returns
 {class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
 primary `equivalent` and `fidelity` keys as a noiseless check, plus
@@ -371,7 +388,9 @@ ensemble also averages operator entanglement and concatenates the center-cut
 Schmidt spectra from all trajectories in `schmidt_values`. Individual spectra
 remain available through each entry in `trajectories`.
 
-Distribution-valued strengths are resolved once per `check` call. With
+Distribution-valued strengths are resolved once per `check` call, so every
+trajectory uses the same resolved probabilities. The checker then validates the
+same-support sums; an out-of-range draw raises `ValueError`. With
 `parallel=True`, noisy trajectories use an effective worker count capped by
 `num_traj` and `max_workers`, and run in a process pool only when that count is
 greater than one; each worker uses serial MPO updates. With `parallel=False`,

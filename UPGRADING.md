@@ -6,6 +6,14 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Added: direct probabilities for noisy equivalence checks
+
+`EquivalenceChecker.check(..., noise_model=...)` interprets each resolved
+process `strength` as a direct branch probability after an eligible two-qubit
+gate. Probabilities on the same exact support must sum to at most one; distinct
+supports are sampled independently. `Simulator` continues to interpret the same
+field as a Lindblad rate.
+
 ### Breaking: `MPS.norm` returns the Euclidean norm, not its square
 
 `MPS.norm(site=None)` previously returned `<psi|psi>`, the *squared* norm,

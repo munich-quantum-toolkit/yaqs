@@ -743,7 +743,7 @@ def _pauli_x_noise(num_qubits: int, strength: float) -> NoiseModel:
 
     Args:
         num_qubits: Number of qubits to cover.
-        strength: Process strength (Lindblad rate) on each site.
+        strength: Direct per-opportunity branch probability on each site.
 
     Returns:
         A :class:`NoiseModel` of one-qubit ``pauli_x`` processes.
@@ -752,7 +752,7 @@ def _pauli_x_noise(num_qubits: int, strength: float) -> NoiseModel:
 
 
 def test_zero_strength_noise_matches_noiseless_check() -> None:
-    """A Pauli model with zero rates leaves the second circuit unchanged."""
+    """A Pauli model with zero probabilities leaves the second circuit unchanged."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
@@ -782,7 +782,7 @@ def test_finite_pauli_noise_on_circuit2_reduces_fidelity() -> None:
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
-    noise = _pauli_x_noise(2, 5.0)
+    noise = _pauli_x_noise(2, 1.0)
     checker = EquivalenceChecker(representation="mpo", fidelity=1 - 1e-8)
 
     ensemble = checker.check(qc, qc, noise_model=noise, num_traj=8, random_seed=1)
@@ -797,7 +797,7 @@ def test_noise_is_applied_only_to_circuit2() -> None:
     qc_cx = QuantumCircuit(2)
     qc_cx.cx(0, 1)
     qc_id = QuantumCircuit(2)
-    noise = _pauli_x_noise(2, 100.0)
+    noise = _pauli_x_noise(2, 1.0)
     checker = EquivalenceChecker(representation="mpo")
 
     noiseless = checker.check(qc_cx, qc_id)
@@ -843,6 +843,111 @@ def test_noisy_check_precomputes_instruction_noise_plan_once() -> None:
         )
 
     assert classify_opportunity.call_count == len(circuit.data)
+
+
+@pytest.mark.parametrize(
+    ("draw", "error_gate"),
+    [
+        pytest.param(0.1, "x", id="first-branch"),
+        pytest.param(0.2, "y", id="second-branch-boundary"),
+        pytest.param(0.499, "y", id="second-branch"),
+        pytest.param(0.5, None, id="identity-remainder"),
+    ],
+)
+def test_noisy_check_uses_direct_categorical_probabilities(
+    draw: float,
+    error_gate: Literal["x", "y"] | None,
+) -> None:
+    """One direct draw selects a same-support branch or its identity remainder."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    expected = circuit.copy()
+    if error_gate is not None:
+        getattr(expected, error_gate)(0)
+    noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.2},
+        {"name": "pauli_y", "sites": [0], "strength": 0.3},
+    ])
+
+    with patch("mqt.yaqs.equivalence_checker.make_trajectory_rng") as make_rng:
+        make_rng.return_value.random.return_value = draw
+        result = EquivalenceChecker(representation="matrix").check(
+            expected,
+            circuit,
+            noise_model=noise,
+        )
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+    assert make_rng.return_value.random.call_count == 1
+
+
+def test_noisy_check_samples_distinct_supports_independently() -> None:
+    """Distinct and overlapping supports may all contribute after one gate."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    expected = circuit.copy()
+    expected.x(0)
+    expected.z(1)
+    expected.y(0)
+    expected.x(1)
+    noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 1.0},
+        {"name": "pauli_z", "sites": [1], "strength": 1.0},
+        {"name": "crosstalk_yx", "sites": [0, 1], "strength": 1.0},
+    ])
+
+    result = EquivalenceChecker(representation="matrix").check(
+        expected,
+        circuit,
+        noise_model=noise,
+        random_seed=0,
+    )
+
+    assert result["equivalent"] is True
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_noisy_check_rejects_probability_sum_above_one_per_support() -> None:
+    """Mutually exclusive branches on one support cannot exceed unit probability."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.6},
+        {"name": "pauli_y", "sites": [0], "strength": 0.5},
+    ])
+
+    with pytest.raises(ValueError, match=r"sharing support \(0,\) to sum to at most 1"):
+        EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
+
+
+def test_noisy_check_accepts_nine_branches_summing_to_one() -> None:
+    """Nine two-site Pauli branches of probability one ninth form a valid group."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    noise = NoiseModel([
+        {"name": f"crosstalk_{left}{right}", "sites": [0, 1], "strength": 1 / 9} for left in "xyz" for right in "xyz"
+    ])
+
+    result = EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise, random_seed=0)
+
+    assert float(result["fidelity"]) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_noisy_check_validates_probability_after_distribution_sampling() -> None:
+    """A resolved distribution draw must satisfy the checker's probability bound."""
+    circuit = QuantumCircuit(2)
+    circuit.cx(0, 1)
+    noise = NoiseModel([
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "normal", "mean": 1.1, "std": 0.0},
+        }
+    ])
+
+    with pytest.raises(ValueError, match=r"sharing support \(0,\) to sum to at most 1"):
+        EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
 
 
 @pytest.mark.parametrize("representation", ["mpo", "matrix"])
@@ -1035,7 +1140,7 @@ def test_non_pauli_noise_is_rejected() -> None:
 
 
 def test_zero_strength_non_pauli_noise_is_rejected() -> None:
-    """Unsupported operators are rejected even when their rate is zero."""
+    """Unsupported operators are rejected even when their probability is zero."""
     qc = QuantumCircuit(1)
     noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.0}])
 
@@ -1070,7 +1175,7 @@ def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
         {
             "name": name,
             "sites": [0],
-            "strength": 100.0,
+            "strength": 1.0,
             "matrix": np.exp(0.37j) * np.diag([1.0, -1.0]),
         }
     ])
@@ -1086,21 +1191,21 @@ def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
     [
         pytest.param("h", 1, None, id="h"),
         pytest.param("cx", 2, "x", id="cx"),
-        pytest.param("ccx", 3, "x", id="ccx"),
+        pytest.param("ccx", 3, None, id="ccx"),
     ],
 )
-def test_noisy_check_uses_digital_gate_opportunities(
+def test_noisy_check_uses_two_qubit_gate_opportunities(
     gate_name: str,
     num_qubits: int,
     noise_gate: Literal["x"] | None,
 ) -> None:
-    """Noisy checking follows the Simulator's H, CX, and CCX opportunity rule."""
+    """Only supported two-qubit gates are noise opportunities for the checker."""
     circuit = QuantumCircuit(num_qubits)
     getattr(circuit, gate_name)(*range(num_qubits))
     expected = circuit.copy()
     if noise_gate is not None:
         expected.x(0)
-    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 100.0}])
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1.0}])
 
     result = EquivalenceChecker(representation="matrix").check(
         expected,
@@ -1114,14 +1219,14 @@ def test_noisy_check_uses_digital_gate_opportunities(
 
 
 def test_noisy_check_treats_unitary_instruction_as_opportunity() -> None:
-    """Matrix-backed unitary Instructions follow the Simulator's gate rule."""
+    """A matrix-backed two-qubit unitary Instruction is a noise opportunity."""
     definition = QuantumCircuit(2, name="wrapped_cx")
     definition.cx(0, 1)
     circuit = QuantumCircuit(2)
     circuit.append(definition.to_instruction(), [0, 1])
     expected = circuit.copy()
     expected.x(0)
-    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 100.0}])
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1.0}])
 
     result = EquivalenceChecker(representation="matrix").check(
         expected,
@@ -1141,7 +1246,7 @@ def test_noisy_check_preserves_descending_crosstalk_order() -> None:
     expected = circuit.copy()
     expected.y(0)
     expected.x(1)
-    noise = NoiseModel([{"name": "crosstalk_xy", "sites": [1, 0], "strength": 100.0}])
+    noise = NoiseModel([{"name": "crosstalk_xy", "sites": [1, 0], "strength": 1.0}])
 
     result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
 
@@ -1156,7 +1261,7 @@ def test_noisy_check_accepts_normalized_long_range_crosstalk() -> None:
     expected = circuit.copy()
     expected.x(0)
     expected.y(2)
-    noise = NoiseModel([{"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 100.0}])
+    noise = NoiseModel([{"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 1.0}])
 
     result = EquivalenceChecker(representation="matrix").check(expected, circuit, noise_model=noise, random_seed=0)
 
@@ -1168,7 +1273,7 @@ def test_noisy_check_rejects_out_of_range_process_site() -> None:
     """Noise sites are validated against the circuit width before sampling."""
     circuit = QuantumCircuit(1)
     circuit.h(0)
-    noise = NoiseModel([{"name": "pauli_x", "sites": [1], "strength": 100.0}])
+    noise = NoiseModel([{"name": "pauli_x", "sites": [1], "strength": 1.0}])
 
     with pytest.raises(ValueError, match="Process site index 1 is out of range for length 1"):
         EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
