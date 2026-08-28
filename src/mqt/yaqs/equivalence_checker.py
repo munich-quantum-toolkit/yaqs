@@ -760,12 +760,12 @@ class EquivalenceChecker:
         """Compare two quantum circuits, optionally under sampled noise.
 
         On the noiseless path, circuits that differ only up to global phase and numerical
-        error have a composed operator ``U2† U1`` that approximates the identity and are
+        error have a composed operator ``U1 U2†`` that approximates the identity and are
         reported as equivalent.
 
         When ``noise_model`` is set, noise is sampled onto ``circuit2`` only. Each of
         ``num_traj`` independent realizations is checked with the same relative operator
-        ``U_noisy† U_ideal`` used for a noiseless pair. The returned ensemble reports a
+        ``U_ideal U_noisy†`` used for a noiseless pair. The returned ensemble reports a
         Monte Carlo estimate of the sampled channel's process fidelity, its empirical
         standard error when ``num_traj > 1``, and trajectory-averaged
         operator-entanglement diagnostics. Its threshold comparison is a sample-level

@@ -23,6 +23,7 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
+from qiskit.quantum_info import Operator
 
 from mqt.yaqs import EquivalenceChecker, NoiseModel
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
@@ -355,6 +356,35 @@ def test_matrix_and_mpo_agree_on_small_circuits(representation: Literal["matrix"
     assert equal_result["equivalent"] is True
     assert diff_result["equivalent"] is False
     assert equal_result["representation"] == representation
+
+
+def test_matrix_and_mpo_return_same_relative_operator_orientation() -> None:
+    """Both backends construct the documented ``U1 U2†`` relative operator."""
+    circuit1 = QuantumCircuit(3)
+    circuit1.h(0)
+    circuit1.cx(0, 1)
+    circuit1.ry(0.37, 2)
+    circuit1.cx(1, 2)
+
+    circuit2 = QuantumCircuit(3)
+    circuit2.rz(0.29, 0)
+    circuit2.cx(1, 2)
+    circuit2.rx(-0.41, 1)
+    circuit2.cx(0, 1)
+
+    unitary1 = np.asarray(Operator(circuit1.reverse_bits()).data, dtype=np.complex128)
+    unitary2 = np.asarray(Operator(circuit2.reverse_bits()).data, dtype=np.complex128)
+    expected = unitary1 @ unitary2.conj().T
+    reverse_order = unitary2.conj().T @ unitary1
+    assert not np.allclose(expected, reverse_order, atol=1e-10)
+
+    matrix = EquivalenceChecker(representation="matrix").check(circuit1, circuit2)["matrix"]
+    mpo = EquivalenceChecker(representation="mpo", parallel=False).check(circuit1, circuit2)["mpo"]
+
+    assert matrix is not None
+    assert mpo is not None
+    np.testing.assert_allclose(matrix, expected, atol=1e-12)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])

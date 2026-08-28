@@ -17,7 +17,7 @@ mystnb:
 YAQS can test whether two quantum circuits implement the same unitary map, up to
 a **global phase** and numerical tolerance. The public API is
 {class}`~mqt.yaqs.EquivalenceChecker`, which forms the composed operator
-$W = U_2^\dagger U_1$ from the two circuits and checks whether $W$ is close to
+$W = U_1 U_2^\dagger$ from the two circuits and checks whether $W$ is close to
 the identity.
 
 For most workflows—comparing a high-level circuit to a transpiled variant,
@@ -55,7 +55,7 @@ Two circuits $C_1$ and $C_2$ on $n$ qubits are reported as equivalent when their
 unitaries $U_1$ and $U_2$ satisfy
 
 ```{math}
-U_2^\dagger U_1 \approx e^{i\phi}\, I
+U_1 U_2^\dagger \approx e^{i\phi}\, I
 ```
 
 for some global phase $\phi$, within `fidelity`. On the **matrix** path, only
@@ -74,7 +74,7 @@ A noiseless `check` returns a dictionary:
 | Key                               | Type                | Meaning                                                                   |
 | --------------------------------- | ------------------- | ------------------------------------------------------------------------- |
 | `equivalent`                      | `bool`              | Whether the circuits pass the identity test                               |
-| `fidelity`                        | `float`             | Measured normalized overlap of $W=U_2^\dagger U_1$ with the identity      |
+| `fidelity`                        | `float`             | Measured normalized overlap of $W=U_1U_2^\dagger$ with the identity       |
 | `elapsed_time`                    | `float`             | Wall time in seconds                                                      |
 | `representation`                  | `str`               | `"matrix"` or `"mpo"` — which backend ran                                 |
 | `matrix`                          | `ndarray` or `None` | Dense composed operator $W$ as a $(2^n, 2^n)$ matrix; matrix backend only |
@@ -204,7 +204,7 @@ auto_result = EquivalenceChecker(representation="auto").check(circuit, transpile
 
 ## Matrix backend (small circuits)
 
-The matrix backend builds $W = U_2^\dagger U_1$ as a tensor with $2n$ indices of
+The matrix backend builds $W = U_1 U_2^\dagger$ as a tensor with $2n$ indices of
 dimension 2 and applies local gate contractions. It uses the same trace-based
 identity test as the MPO path. Memory and time grow as $\mathcal{O}(4^n)$, so
 this backend is practical only for very small $n$.
@@ -286,7 +286,7 @@ Writing $U_{\mathrm{ideal}}$ for the first circuit and $U_{\mathrm{noisy},r}$
 for trajectory $r$ of the second, the relative operator has the order
 
 ```{math}
-Q_r = U_{\mathrm{noisy},r}^\dagger U_{\mathrm{ideal}}.
+Q_r = U_{\mathrm{ideal}} U_{\mathrm{noisy},r}^\dagger.
 ```
 
 If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the

@@ -7,7 +7,7 @@
 
 """Dense tensorized utilities for matrix-based equivalence checking.
 
-Builds the composed operator ``W = U2† U1`` as a tensor with shape ``(2,) * (2 * n_qubits)``
+Builds the composed operator ``W = U1 U2†`` as a tensor with shape ``(2,) * (2 * n_qubits)``
 and applies local gate contractions. The final operator is checked for closeness to the
 identity using the same trace-based criterion as the MPO backend.
 """
@@ -313,10 +313,11 @@ def compose_operator_tensor(
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
 ) -> NDArray[np.complex128]:
-    """Build ``W = U2† U1`` as a tensor with ``2 * num_qubits`` indices of dimension 2.
+    """Build ``W = U1 U2†`` as a tensor with ``2 * num_qubits`` indices of dimension 2.
 
-    Gates from ``circuit1`` are applied in DAG order. Gates from ``circuit2`` are applied in
-    reverse DAG order with conjugation, implementing multiplication by ``U2†`` on the left.
+    Gates from ``circuit2`` are first applied in reverse DAG order with conjugation to
+    construct ``U2†``. Gates from ``circuit1`` are then applied in DAG order on the left,
+    producing the same relative-operator orientation as the MPO backend.
 
     Args:
         circuit1: First circuit.
@@ -337,12 +338,12 @@ def compose_operator_tensor(
     dag1 = circuit_to_dag(strip_final_measurements(circuit1))
     dag2 = circuit_to_dag(strip_final_measurements(circuit2))
 
-    for layer_gates in collect_layers(dag1):
-        op = apply_layer(op, layer_gates, num_qubits, dagger=False)
-
     layers2 = collect_layers(dag2)
     for layer_gates in reversed(layers2):
         op = apply_layer(op, layer_gates, num_qubits, dagger=True)
+
+    for layer_gates in collect_layers(dag1):
+        op = apply_layer(op, layer_gates, num_qubits, dagger=False)
 
     return op
 

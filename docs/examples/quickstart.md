@@ -139,7 +139,7 @@ fig, ax = plt.subplots(figsize=(4.5, 3))
 ax.semilogy(equiv["schmidt_values"], "o-")
 ax.set_xlabel("Schmidt index")
 ax.set_ylabel("singular value")
-ax.set_title("Composed operator $W = U_2^\\dagger U_1$")
+ax.set_title("Composed operator $W = U_1 U_2^\\dagger$")
 fig.tight_layout()
 ```
 
