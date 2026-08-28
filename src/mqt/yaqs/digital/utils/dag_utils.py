@@ -245,10 +245,10 @@ def is_digital_noise_opportunity(operation: Operation) -> bool:
         return False
     if getattr(operation, "condition", None) is not None:
         return False
-    if name in SUPPORTED_QISKIT_GATE_NAMES:
-        return True
     if _has_unbound_params(operation):
         return False
+    if name in SUPPORTED_QISKIT_GATE_NAMES:
+        return True
     try:
         matrix = _extract_matrix(operation, name=name)
     except ValueError:

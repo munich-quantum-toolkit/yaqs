@@ -29,11 +29,15 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import Barrier, Gate, Operation, Parameter
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
+    CPhaseGate,
     CRZGate,
     CXGate,
     HGate,
     IGate,
+    RXXGate,
+    RYYGate,
     RZXGate,
+    RZZGate,
     SdgGate,
     SGate,
     SXdgGate,
@@ -100,6 +104,21 @@ def _wrapped_cx() -> Operation:
 def test_digital_noise_opportunity(operation: Operation, expected: str) -> None:
     """Only supported two-qubit unitary operations are opportunities."""
     assert is_digital_noise_opportunity(operation) is (expected == "noise")
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(CPhaseGate(Parameter("theta")), id="cp"),
+        pytest.param(RXXGate(Parameter("theta")), id="rxx"),
+        pytest.param(RYYGate(Parameter("theta")), id="ryy"),
+        pytest.param(RZZGate(Parameter("theta")), id="rzz"),
+    ],
+)
+def test_unbound_supported_gate_is_not_digital_noise_opportunity(operation: Operation) -> None:
+    """Supported two-qubit gates require bound parameters to be noise opportunities."""
+    assert operation.name in SUPPORTED_QISKIT_GATE_NAMES
+    assert is_digital_noise_opportunity(operation) is False
 
 
 def _qiskit_gate_matrix(gate_cls: type, *params: float) -> np.ndarray:
