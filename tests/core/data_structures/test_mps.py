@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 from unittest.mock import patch
 
 import numpy as np
@@ -20,7 +20,6 @@ import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
-from typing_extensions import Self
 
 from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod

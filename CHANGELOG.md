@@ -12,10 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
-- added sampled noise-model comparisons to `EquivalenceChecker`, including
-  direct per-opportunity branch probabilities grouped by process support,
-  process-fidelity estimates, Monte Carlo standard errors, and per-trajectory
-  diagnostics ([#545]) ([**@yiranwang-phys**])
+- Add stochastic circuit sampling from NoiseModel ([#545])
+  ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])
@@ -30,6 +28,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
+- dropped support for Python 3.10 ([#556]) ([**@denialhaag**])
 - updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
 - tested and documented the multi-qubit local noise rule ([#529])
   ([**@Pouri96**])
@@ -255,6 +255,7 @@ for previous changelogs._
 <!-- PR links -->
 
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
+[#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539

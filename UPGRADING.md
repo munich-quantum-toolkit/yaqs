@@ -139,6 +139,18 @@ DigitalSimParams(
 | Combined       | Set both `observables` and `shots`      |
 | Example docs   | `circuit_observables` / `circuit_shots` |
 
+### Restored testing on Python 3.13 and 3.14
+
+MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
+requires Torch 2.6 or later on Python 3.13 and Torch 2.9 or later on Python
+3.14.
+
+### End of support for Python 3.10
+
+Starting with this release, MQT YAQS no longer supports Python 3.10. As a
+result, MQT YAQS is no longer tested under Python 3.10 and requires Python 3.11
+or later.
+
 ## [0.6.0]
 
 The unreleased API refresh replaces free functions and deep module paths with a
