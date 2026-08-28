@@ -334,16 +334,16 @@ error probability for the complete circuit.
 A noisy `check` returns
 {class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
 primary `equivalent` and `fidelity` keys as a noiseless check, plus
-`fidelity_error`, `num_traj`, and `trajectories`. Noisy `equivalent` compares the
-sample mean with `checker.fidelity**2`; it is not an exact certificate. On the
-MPO backend, the ensemble also averages operator entanglement and concatenates
-the center-cut Schmidt spectra in `schmidt_values`.
+`fidelity_error`, `num_traj`, and `trajectories`. Noisy `equivalent` compares
+the sample mean with `checker.fidelity**2`; it is not an exact certificate. On
+the MPO backend, the ensemble also averages operator entanglement and
+concatenates the center-cut Schmidt spectra in `schmidt_values`.
 
 Distribution-valued strengths are resolved once per `check` call, so every
 trajectory uses the same resolved probabilities. The checker then validates the
 same-support sums; an out-of-range draw raises `ValueError`. A nonnegative
-`random_seed` makes the ordered trajectory results reproducible independently
-of process scheduling.
+`random_seed` makes the ordered trajectory results reproducible independently of
+process scheduling.
 
 ## Performance notes
 

@@ -505,6 +505,7 @@ class NoiseModel:
 
         Negative draws from ``normal`` are clamped to ``0.0`` with a warning.
         Sampled strengths are re-validated before the resolved model is returned.
+
         Args:
             rng: The random number generator or seed to use for sampling.
                 If None, a new generator is created.
