@@ -769,14 +769,10 @@ def test_check_non_equivalent_pair_still_returns_diagnostics() -> None:
 
 
 def _pauli_x_noise(num_qubits: int, strength: float) -> NoiseModel:
-    """Build a local Pauli-X noise model on every qubit.
-
-    Args:
-        num_qubits: Number of qubits to cover.
-        strength: Direct per-opportunity branch probability on each site.
+    """Build local Pauli-X noise with the same probability on every qubit.
 
     Returns:
-        A :class:`NoiseModel` of one-qubit ``pauli_x`` processes.
+        The noise model.
     """
     return NoiseModel([{"name": "pauli_x", "sites": [q], "strength": strength} for q in range(num_qubits)])
 
@@ -854,33 +850,11 @@ def test_noisy_check_is_seeded_reproducible() -> None:
     assert [traj["fidelity"] for traj in first["trajectories"]] != [traj["fidelity"] for traj in third["trajectories"]]
 
 
-def test_noisy_check_precomputes_instruction_noise_plan_once() -> None:
-    """Gate opportunities are classified once and reused by every trajectory."""
-    circuit = QuantumCircuit(2)
-    circuit.cx(0, 1)
-    noise = _pauli_x_noise(2, 0.2)
-
-    with patch(
-        "mqt.yaqs.equivalence_checker.is_digital_noise_opportunity",
-        return_value=True,
-    ) as classify_opportunity:
-        EquivalenceChecker(representation="matrix", parallel=False).check(
-            circuit,
-            circuit,
-            noise_model=noise,
-            num_traj=4,
-            random_seed=0,
-        )
-
-    assert classify_opportunity.call_count == len(circuit.data)
-
-
 @pytest.mark.parametrize(
     ("draw", "error_gate"),
     [
         pytest.param(0.1, "x", id="first-branch"),
         pytest.param(0.2, "y", id="second-branch-boundary"),
-        pytest.param(0.499, "y", id="second-branch"),
         pytest.param(0.5, None, id="identity-remainder"),
     ],
 )
@@ -951,19 +925,6 @@ def test_noisy_check_rejects_probability_sum_above_one_per_support() -> None:
         EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
 
 
-def test_noisy_check_accepts_nine_branches_summing_to_one() -> None:
-    """Nine two-site Pauli branches of probability one ninth form a valid group."""
-    circuit = QuantumCircuit(2)
-    circuit.cx(0, 1)
-    noise = NoiseModel([
-        {"name": f"crosstalk_{left}{right}", "sites": [0, 1], "strength": 1 / 9} for left in "xyz" for right in "xyz"
-    ])
-
-    result = EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise, random_seed=0)
-
-    assert float(result["fidelity"]) == pytest.approx(0.0, abs=1e-12)
-
-
 def test_noisy_check_validates_probability_after_distribution_sampling() -> None:
     """A resolved distribution draw must satisfy the checker's probability bound."""
     circuit = QuantumCircuit(2)
@@ -1013,11 +974,10 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
         assert result["global_entanglement_entropy"] is not None
 
 
-@pytest.mark.parametrize("max_workers", [8, None])
-def test_noisy_ensemble_caps_workers_and_reassembles_by_index(max_workers: int | None) -> None:
+def test_noisy_ensemble_caps_workers_and_reassembles_by_index() -> None:
     """A noisy pool is capped by trajectory count and preserves trajectory order."""
     reference = QuantumCircuit(2)
-    checker = EquivalenceChecker(representation="matrix", parallel=True, max_workers=max_workers)
+    checker = EquivalenceChecker(representation="matrix", parallel=True, max_workers=8)
     trajectory_results = []
     for overlap in (0.2, 0.8):
         candidate = QuantumCircuit(2)
@@ -1025,13 +985,10 @@ def test_noisy_ensemble_caps_workers_and_reassembles_by_index(max_workers: int |
         trajectory_results.append(checker.check(reference, candidate))
     indexed_results = [(1, trajectory_results[1]), (0, trajectory_results[0])]
 
-    with (
-        patch("mqt.yaqs.equivalence_checker.available_cpus", return_value=9) as available_cpus,
-        patch(
-            "mqt.yaqs.equivalence_checker.run_backend_parallel",
-            return_value=iter(indexed_results),
-        ) as run_parallel,
-    ):
+    with patch(
+        "mqt.yaqs.equivalence_checker.run_backend_parallel",
+        return_value=iter(indexed_results),
+    ) as run_parallel:
         result = checker.check(
             reference,
             reference,
@@ -1043,10 +1000,6 @@ def test_noisy_ensemble_caps_workers_and_reassembles_by_index(max_workers: int |
     run_parallel.assert_called_once()
     assert run_parallel.call_args.kwargs["n_jobs"] == 2
     assert run_parallel.call_args.kwargs["max_workers"] == 2
-    if max_workers is None:
-        available_cpus.assert_called_once_with()
-    else:
-        available_cpus.assert_not_called()
     np.testing.assert_allclose([trajectory["fidelity"] for trajectory in result["trajectories"]], [0.2, 0.8])
 
 
@@ -1155,25 +1108,14 @@ def test_negative_random_seed_raises() -> None:
     checker = EquivalenceChecker(representation="matrix")
 
     with pytest.raises(ValueError, match="random_seed must be non-negative, got -1"):
-        checker.check(circuit, circuit, random_seed=-1)
-    with pytest.raises(ValueError, match="random_seed must be non-negative, got -1"):
         checker.check(circuit, circuit, noise_model=_pauli_x_noise(2, 0.1), random_seed=-1)
 
 
-def test_non_pauli_noise_is_rejected() -> None:
+@pytest.mark.parametrize("strength", [0.0, 0.1])
+def test_non_pauli_noise_is_rejected(strength: float) -> None:
     """Dissipative processes cannot be materialized as stochastic circuits."""
     qc = QuantumCircuit(1)
-    qc.x(0)
-    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
-    with pytest.raises(ValueError, match="process that is not supported for circuit sampling"):
-        EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
-
-
-def test_zero_strength_non_pauli_noise_is_rejected() -> None:
-    """Unsupported operators are rejected even when their probability is zero."""
-    qc = QuantumCircuit(1)
-    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.0}])
-
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": strength}])
     with pytest.raises(ValueError, match="process that is not supported for circuit sampling"):
         EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
 
@@ -1194,8 +1136,7 @@ def test_pauli_name_does_not_hide_unsupported_matrix() -> None:
         EquivalenceChecker(representation="matrix").check(qc, qc, noise_model=noise)
 
 
-@pytest.mark.parametrize("name", ["pauli_x", "custom_z"])
-def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
+def test_noisy_check_uses_custom_pauli_matrix_override() -> None:
     """The normalized process matrix, rather than its name, selects the Pauli gate."""
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
@@ -1203,7 +1144,7 @@ def test_noisy_check_uses_custom_pauli_matrix_override(name: str) -> None:
     expected.z(0)
     noise = NoiseModel([
         {
-            "name": name,
+            "name": "pauli_x",
             "sites": [0],
             "strength": 1.0,
             "matrix": np.exp(0.37j) * np.diag([1.0, -1.0]),
@@ -1309,23 +1250,6 @@ def test_noisy_check_rejects_out_of_range_process_site() -> None:
         EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
 
 
-def test_noisy_check_rejects_wrong_process_dimension() -> None:
-    """Noise operator dimensions are validated for qubit circuits before sampling."""
-    circuit = QuantumCircuit(1)
-    circuit.h(0)
-    noise = NoiseModel([
-        {
-            "name": "custom",
-            "sites": [0],
-            "strength": 1.0,
-            "matrix": np.eye(3),
-        }
-    ])
-
-    with pytest.raises(ValueError, match=r"Process matrix shape \(3, 3\).*expected \(2, 2\)"):
-        EquivalenceChecker(representation="matrix").check(circuit, circuit, noise_model=noise)
-
-
 def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
     """Scheduled jumps are not part of the explicit circuit-sampling path."""
     qc = QuantumCircuit(1)
@@ -1333,26 +1257,6 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     with pytest.raises(ValueError, match="Scheduled jumps are not supported for circuit-sampled equivalence checks"):
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
-
-
-def test_example_ideal_versus_noisy_compiled_circuit() -> None:
-    """The docs example: noiseless compiled circuit matches; Pauli noise lowers process fidelity."""
-    ideal = QuantumCircuit(4)
-    for qubit in range(4):
-        ideal.ry(0.4 * (qubit + 1), qubit)
-    for qubit in range(3):
-        ideal.cx(qubit, qubit + 1)
-    compiled = transpile(ideal, basis_gates=["rz", "sx", "x", "cx"], optimization_level=1)
-    noise = NoiseModel([{"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(4)])
-    checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
-
-    noiseless = checker.check(ideal, compiled)
-    noisy = checker.check(ideal, compiled, noise_model=noise, num_traj=8, random_seed=0)
-
-    assert noiseless["equivalent"] is True
-    assert float(noiseless["fidelity"]) == pytest.approx(1.0, abs=1e-10)
-    assert noisy["num_traj"] == 8
-    assert float(noisy["fidelity"]) < float(noiseless["fidelity"]) ** 2
 
 
 def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
@@ -1364,7 +1268,9 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0}
 
     serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc, qc, **kwargs)
-    pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc, qc, **kwargs)
+    pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, mp_context="spawn").check(
+        qc, qc, **kwargs
+    )
     serial_fidelities = [traj["fidelity"] for traj in serial["trajectories"]]
     pooled_fidelities = [traj["fidelity"] for traj in pooled["trajectories"]]
 

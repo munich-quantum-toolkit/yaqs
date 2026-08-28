@@ -26,10 +26,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Barrier, Gate, Measure, Operation, Parameter
+from qiskit.circuit import Barrier, Gate, Operation, Parameter
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
-    CCXGate,
     CRZGate,
     CXGate,
     HGate,
@@ -50,7 +49,7 @@ from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
 from mqt.yaqs import DigitalSimParams, EquivalenceChecker, State
-from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, Rx
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
     SUPPORTED_QISKIT_GATE_NAMES,
@@ -82,15 +81,10 @@ def _wrapped_cx() -> Operation:
 @pytest.mark.parametrize(
     ("operation", "expected"),
     [
-        pytest.param(GateLibrary.h(), "skip", id="yaqs-h"),
-        pytest.param(GateLibrary.cx(), "noise", id="yaqs-cx"),
-        pytest.param(GateLibrary.ccx(), "noise", id="yaqs-ccx"),
         pytest.param(HGate(), "skip", id="qiskit-h"),
         pytest.param(CXGate(), "noise", id="qiskit-cx"),
-        pytest.param(CCXGate(), "noise", id="qiskit-ccx"),
         pytest.param(_wrapped_cx(), "noise", id="unitary-instruction"),
-        pytest.param(Barrier(3), "skip", id="barrier"),
-        pytest.param(Measure(), "skip", id="measure"),
+        pytest.param(Barrier(2), "skip", id="barrier"),
         pytest.param(
             Gate("reset", 2, []),
             "skip",
@@ -103,8 +97,8 @@ def _wrapped_cx() -> Operation:
         ),
     ],
 )
-def test_digital_noise_opportunity(operation: BaseGate | Operation, expected: str) -> None:
-    """Only supported unitary operations on two or more qubits are opportunities."""
+def test_digital_noise_opportunity(operation: Operation, expected: str) -> None:
+    """Only supported two-qubit unitary operations are opportunities."""
     assert is_digital_noise_opportunity(operation) is (expected == "noise")
 
 

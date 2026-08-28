@@ -228,20 +228,16 @@ def _reject_unsupported(node: DAGOpNode) -> None:
 _MAX_MATRIX_FALLBACK_QUBITS = 8
 
 
-def is_digital_noise_opportunity(operation: BaseGate | Operation) -> bool:
-    """Return whether a translated digital operation receives gate-local noise.
+def is_digital_noise_opportunity(operation: Operation) -> bool:
+    """Return whether a Qiskit operation is an eligible two-qubit noise opportunity.
 
     Args:
-        operation: A translated YAQS gate or Qiskit circuit operation.
+        operation: A Qiskit circuit operation.
 
     Returns:
-        ``True`` when ``operation`` is a supported unitary on two or more
-        qubits. Non-unitary instructions and skipped circuit annotations are
-        not noise opportunities.
+        ``True`` when ``operation`` is a supported two-qubit unitary.
     """
-    if isinstance(operation, BaseGate):
-        return operation.interaction >= 2
-    if operation.num_qubits < 2:
+    if operation.num_qubits != 2:
         return False
 
     name = operation.name
@@ -251,7 +247,7 @@ def is_digital_noise_opportunity(operation: BaseGate | Operation) -> bool:
         return False
     if name in SUPPORTED_QISKIT_GATE_NAMES:
         return True
-    if operation.num_qubits > _MAX_MATRIX_FALLBACK_QUBITS or _has_unbound_params(operation):
+    if _has_unbound_params(operation):
         return False
     try:
         matrix = _extract_matrix(operation, name=name)

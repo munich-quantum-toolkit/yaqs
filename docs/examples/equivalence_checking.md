@@ -101,14 +101,8 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
   **process pool**. Set it to `False` to keep either path serial.
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
-  (noiseless MPO checks), and on worker processes for noisy ensembles. When
-  unset, noiseless MPO zone threads use
-  `min(available_cpus(), number_of_work_items)`. The effective noisy worker
-  count is `min(num_traj, max_workers or max(1, available_cpus() - 1))`, where
-  {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
-  `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
-  limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
-  host. A process pool is created only when that count is greater than one.
+  (noiseless MPO checks), and on worker processes for noisy ensembles. Worker
+  counts also respect the available CPUs and number of trajectories.
 - **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
   `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
   inside `iterate()` still uses in-process threads.
@@ -243,11 +237,6 @@ wide_checker = EquivalenceChecker(
 )
 ```
 
-Expect the largest gains on **wide** nearest-neighbor circuits (typically
-**12+ qubits**) where each sweep has several disjoint pairs. Below 12 qubits the
-implementation keeps the serial path even when `parallel=True`, because thread
-overhead would dominate.
-
 (equivalence-noise-model)=
 
 ## Comparing with a noise model
@@ -309,48 +298,24 @@ reported sampling uncertainty is
 For one trajectory, `fidelity_error` is `None` because sampling uncertainty
 cannot be estimated.
 
-Start from a small ideal circuit and transpile it to a device-style basis:
+Apply noise to the transpiled circuit from the earlier example. The noiseless
+pair remains equivalent, while the noisy run estimates its process fidelity:
 
 ```{code-cell} ipython3
-import matplotlib.pyplot as plt
-from qiskit import transpile
-from qiskit.circuit import QuantumCircuit
+from mqt.yaqs import NoiseModel
 
-from mqt.yaqs import EquivalenceChecker, NoiseModel
-
-ideal = QuantumCircuit(4)
-for qubit in range(4):
-    ideal.ry(0.4 * (qubit + 1), qubit)
-for qubit in range(3):
-    ideal.cx(qubit, qubit + 1)
-
-compiled = transpile(
-    ideal,
-    basis_gates=["rz", "sx", "x", "cx"],
-    optimization_level=1,
-)
-print(f"gates: ideal {ideal.size()}, compiled {compiled.size()}")
-```
-
-Without noise the two circuits implement the same unitary (up to global phase).
-With Pauli-X noise on the compiled circuit, the estimated process fidelity drops
-and the per-trajectory values show how often a sampled error knocks $Q_r$ off
-the identity:
-
-```{code-cell} ipython3
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
-noiseless = checker.check(ideal, compiled)
+noiseless = checker.check(circuit, transpiled_circuit)
 noise = NoiseModel([
-    {"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(4)
+    {"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(num_qubits)
 ])
 noisy = checker.check(
-    ideal,
-    compiled,
+    circuit,
+    transpiled_circuit,
     noise_model=noise,
     num_traj=24,
     random_seed=0,
 )
-traj_process_fidelities = [traj["fidelity"] ** 2 for traj in noisy["trajectories"]]
 
 print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
 print(
@@ -360,15 +325,6 @@ print(
     f"+/- {noisy['fidelity_error']:.4f}"
 )
 print(f"trajectories: {noisy['num_traj']}")
-
-fig, ax = plt.subplots(figsize=(5.5, 3.2), layout="constrained")
-ax.hist(traj_process_fidelities, bins=12, range=(0.0, 1.0), color="C0", alpha=0.85)
-ax.axvline(noiseless["fidelity"] ** 2, color="0.35", ls="--", label="noiseless compiled")
-ax.axvline(noisy["fidelity"], color="C1", ls="-", label="noisy sample mean")
-ax.set_xlabel("process-fidelity sample $a_r^2$")
-ax.set_ylabel("trajectories")
-ax.set_title("Ideal vs compiled circuit with Pauli-X noise")
-ax.legend(frameon=False)
 ```
 
 Here `strength=0.02` means a 2% X-error probability on that qubit after each
@@ -378,24 +334,16 @@ error probability for the complete circuit.
 A noisy `check` returns
 {class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
 primary `equivalent` and `fidelity` keys as a noiseless check, plus
-`fidelity_error`, `num_traj`, and `trajectories`. Here `fidelity` is the mean of
-the squared trajectory overlaps, and `fidelity_error` is its Monte Carlo
-standard error; the latter is `None` for one trajectory. Noisy `equivalent` only
-means that this observed mean is at least `checker.fidelity**2`. It is not an
-equivalence certificate or a confidence-level decision. Compare noisy and
-noiseless fidelities by squaring the noiseless value. On the MPO backend the
-ensemble also averages operator entanglement and concatenates the center-cut
-Schmidt spectra from all trajectories in `schmidt_values`. Individual spectra
-remain available through each entry in `trajectories`.
+`fidelity_error`, `num_traj`, and `trajectories`. Noisy `equivalent` compares the
+sample mean with `checker.fidelity**2`; it is not an exact certificate. On the
+MPO backend, the ensemble also averages operator entanglement and concatenates
+the center-cut Schmidt spectra in `schmidt_values`.
 
 Distribution-valued strengths are resolved once per `check` call, so every
 trajectory uses the same resolved probabilities. The checker then validates the
-same-support sums; an out-of-range draw raises `ValueError`. With
-`parallel=True`, noisy trajectories use an effective worker count capped by
-`num_traj` and `max_workers`, and run in a process pool only when that count is
-greater than one; each worker uses serial MPO updates. With `parallel=False`,
-all trajectories stay serial and in-process. A nonnegative `random_seed` makes
-the ordered trajectory results reproducible independently of process scheduling.
+same-support sums; an out-of-range draw raises `ValueError`. A nonnegative
+`random_seed` makes the ordered trajectory results reproducible independently
+of process scheduling.
 
 ## Performance notes
 

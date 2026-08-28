@@ -178,98 +178,14 @@ def _validate_max_workers(max_workers: int | None) -> int | None:
     return max_workers
 
 
-def _validate_fidelity(fidelity: float) -> float:
-    """Validate the normalized root-overlap threshold.
-
-    Args:
-        fidelity: Requested threshold.
-
-    Returns:
-        The threshold as a built-in ``float``.
-
-    Raises:
-        TypeError: If ``fidelity`` is not a non-boolean real number.
-        ValueError: If ``fidelity`` is non-finite or outside the interval ``[0, 1]``.
-    """
-    if isinstance(fidelity, bool) or not isinstance(fidelity, (int, float, np.floating, np.integer)):
-        msg = f"fidelity must be a real number, got {type(fidelity).__name__}."
-        raise TypeError(msg)
-    value = float(fidelity)
-    if not math.isfinite(value) or not 0 <= value <= 1:
-        msg = f"fidelity must be finite and between 0 and 1 inclusive, got {value}."
-        raise ValueError(msg)
-    return value
-
-
-def _validate_num_traj(num_traj: int) -> int:
-    """Validate the trajectory count.
-
-    Args:
-        num_traj: Requested ensemble size.
-
-    Returns:
-        The validated trajectory count.
-
-    Raises:
-        TypeError: If ``num_traj`` is not an ``int``.
-        ValueError: If ``num_traj`` is less than one.
-    """
-    if isinstance(num_traj, bool) or not isinstance(num_traj, int):
-        msg = f"num_traj must be int, got {type(num_traj).__name__}."
-        raise TypeError(msg)
-    if num_traj < 1:
-        msg = f"num_traj must be at least 1, got {num_traj}."
-        raise ValueError(msg)
-    return num_traj
-
-
-def _validate_random_seed(random_seed: int | None) -> int | None:
-    """Validate an optional run-level RNG seed.
-
-    Args:
-        random_seed: Requested seed, or ``None`` for a non-deterministic stream.
-
-    Returns:
-        The validated seed, or ``None``.
-
-    Raises:
-        TypeError: If ``random_seed`` is not ``None`` or a non-boolean ``int``.
-        ValueError: If ``random_seed`` is negative.
-    """
-    if random_seed is None:
-        return None
-    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
-        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
-        raise TypeError(msg)
-    if random_seed < 0:
-        msg = f"random_seed must be non-negative, got {random_seed}."
-        raise ValueError(msg)
-    return random_seed
-
-
-def _has_unsupported_mpo_gates(circuit: QuantumCircuit) -> bool:
-    """Return whether ``circuit`` contains a gate the MPO backend cannot apply.
-
-    Args:
-        circuit: Circuit to inspect.
-
-    Returns:
-        ``True`` if any non-barrier, non-measure instruction acts on more than two qubits.
-    """
-    return any(
-        instruction.operation.num_qubits > 2 and instruction.operation.name not in {"barrier", "measure"}
-        for instruction in circuit.data
-    )
-
-
 def _pauli_labels(process: dict[str, Any]) -> tuple[str, ...] | None:
-    """Decode labels from a normalized YAQS Pauli process.
+    """Decode one label per site from a normalized Pauli process.
 
     Args:
-        process: Process normalized by :class:`NoiseModel`.
+        process: Normalized noise process.
 
     Returns:
-        One Pauli label per process site, or ``None`` if unsupported.
+        Pauli labels, or ``None`` when the process is unsupported.
     """
     if not is_pauli(process):
         return None
@@ -289,25 +205,6 @@ def _pauli_labels(process: dict[str, Any]) -> tuple[str, ...] | None:
     return max(_PAULI_PRODUCTS.items(), key=lambda item: abs(np.vdot(item[1], matrix)))[0]
 
 
-def _validate_pauli_noise_model(noise_model: NoiseModel, num_qubits: int) -> None:
-    """Validate that a noise model can be materialized as Pauli gates.
-
-    Args:
-        noise_model: Sampled noise model to validate.
-        num_qubits: Width of the circuit receiving sampled noise.
-
-    Raises:
-        ValueError: If scheduled jumps, invalid sites or dimensions, or non-Pauli
-            processes are present.
-    """
-    if noise_model.scheduled_jumps:
-        msg = "Scheduled jumps are not supported for circuit-sampled equivalence checks."
-        raise ValueError(msg)
-    validate_noise_model_for_run(noise_model, length=num_qubits, physical_dimensions=2)
-    if any(_pauli_labels(process) is None for process in noise_model.processes):
-        raise ValueError(_PAULI_ERROR)
-
-
 def _build_circuit_noise_plan(
     circuit: QuantumCircuit,
     noise_model: NoiseModel,
@@ -316,23 +213,29 @@ def _build_circuit_noise_plan(
 
     Args:
         circuit: Circuit whose instructions define noise opportunities.
-        noise_model: Concrete, validated Pauli noise model.
+        noise_model: Concrete noise model to validate and plan.
 
     Returns:
         Eligible support groups for each instruction. An empty tuple means that
         the instruction has no applicable noise.
 
     Raises:
-        ValueError: If process probabilities sharing an exact support sum to more
-            than one.
+        ValueError: If the model cannot be sampled or same-support probabilities
+            sum to more than one.
     """
+    if noise_model.scheduled_jumps:
+        msg = "Scheduled jumps are not supported for circuit-sampled equivalence checks."
+        raise ValueError(msg)
+    validate_noise_model_for_run(noise_model, length=circuit.num_qubits, physical_dimensions=2)
+
     grouped_processes: dict[tuple[int, ...], list[tuple[tuple[str, ...], float]]] = {}
     for process in noise_model.processes:
+        labels = _pauli_labels(process)
+        if labels is None:
+            raise ValueError(_PAULI_ERROR)
         probability = float(process["strength"])
         if not probability:
             continue
-        labels = _pauli_labels(process)
-        assert labels is not None
         sites = tuple(int(site) for site in process["sites"])
         grouped_processes.setdefault(sites, []).append((labels, probability))
 
@@ -354,7 +257,7 @@ def _build_circuit_noise_plan(
 
     instruction_plans: list[tuple[_SupportNoisePlan, ...]] = []
     for instruction in circuit.data:
-        if instruction.operation.num_qubits != 2 or not is_digital_noise_opportunity(instruction.operation):
+        if not is_digital_noise_opportunity(instruction.operation):
             instruction_plans.append(())
             continue
         gate_sites = {circuit.find_bit(qubit).index for qubit in instruction.qubits}
@@ -399,35 +302,6 @@ def _sample_noisy_circuit(
                     break
 
     return sampled_circuit
-
-
-def _mean_or_none(values: list[float | None]) -> float | None:
-    """Average a list of optional floats, or return ``None`` if any entry is missing.
-
-    Args:
-        values: Per-trajectory scalars.
-
-    Returns:
-        The arithmetic mean, or ``None``.
-    """
-    if any(value is None for value in values):
-        return None
-    return float(np.mean(np.asarray(values, dtype=np.float64)))
-
-
-def _standard_error_or_none(values: NDArray[np.float64]) -> float | None:
-    """Estimate the standard error of a sample mean when at least two samples exist.
-
-    Args:
-        values: One-dimensional sample values.
-
-    Returns:
-        The sample standard deviation divided by the square root of the sample size,
-        or ``None`` when the sample contains only one value.
-    """
-    if values.size < 2:
-        return None
-    return float(np.std(values, ddof=1) / np.sqrt(values.size))
 
 
 def _check_loaded_pair(
@@ -532,27 +406,18 @@ def _run_noisy_check_trajectory(
 
 
 def _ensemble_trajectory_worker(traj_idx: int) -> EquivalenceCheckResult:
-    """Process-pool worker: sample one noisy circuit and check it serially.
+    """Sample and check one trajectory in a process-pool worker.
 
     Returns:
-        One :class:`EquivalenceCheckResult` for trajectory ``traj_idx``.
+        The trajectory result.
     """
-    checker = EquivalenceChecker(
-        threshold=WORKER_CTX["threshold"],
-        fidelity=WORKER_CTX["fidelity"],
-        representation=WORKER_CTX["backend"],
-        matrix_max_qubits=WORKER_CTX["matrix_max_qubits"],
-        parallel=False,
-        max_workers=1,
-        mp_context=WORKER_CTX["mp_context"],
-    )
     return _run_noisy_check_trajectory(
         traj_idx,
         WORKER_CTX["circuit1"],
         WORKER_CTX["circuit2"],
         WORKER_CTX["noise_plan"],
         WORKER_CTX["random_seed"],
-        checker,
+        WORKER_CTX["checker"],
         WORKER_CTX["backend"],
     )
 
@@ -608,9 +473,21 @@ class EquivalenceChecker:
             max_workers: Cap on worker threads for noiseless MPO checks, and on processes for
                 noisy trajectory ensembles. Process pools use at most ``num_traj`` workers.
             mp_context: Start method when a noisy-ensemble process pool is used.
+
+        Raises:
+            TypeError: If ``fidelity`` is not a real number.
+            ValueError: If ``fidelity`` is non-finite or outside ``[0, 1]``.
         """
+        if isinstance(fidelity, bool) or not isinstance(fidelity, (int, float, np.floating, np.integer)):
+            msg = f"fidelity must be a real number, got {type(fidelity).__name__}."
+            raise TypeError(msg)
+        fidelity = float(fidelity)
+        if not math.isfinite(fidelity) or not 0 <= fidelity <= 1:
+            msg = f"fidelity must be finite and between 0 and 1 inclusive, got {fidelity}."
+            raise ValueError(msg)
+
         self.threshold = threshold
-        self.fidelity = _validate_fidelity(fidelity)
+        self.fidelity = fidelity
         self.representation = _validate_representation(representation)
         self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
         self.parallel = parallel
@@ -667,11 +544,8 @@ class EquivalenceChecker:
                 "circuit2": circuit2,
                 "noise_plan": noise_plan,
                 "random_seed": random_seed,
-                "threshold": self.threshold,
-                "fidelity": self.fidelity,
+                "checker": self,
                 "backend": backend,
-                "matrix_max_qubits": self.matrix_max_qubits,
-                "mp_context": self.mp_context,
             }
             by_idx = dict(
                 run_backend_parallel(
@@ -703,14 +577,18 @@ class EquivalenceChecker:
         # is the ensemble mean of its square.
         process_fidelity_samples = np.square(np.asarray([traj["fidelity"] for traj in trajectories], dtype=np.float64))
         mean_fidelity = float(np.mean(process_fidelity_samples))
-        process_fidelity_threshold = self.fidelity**2
+        fidelity_error = float(np.std(process_fidelity_samples, ddof=1) / np.sqrt(num_traj)) if num_traj > 1 else None
         schmidt_values = [
             values.ravel() for trajectory in trajectories if (values := trajectory["schmidt_values"]) is not None
         ]
+        center_entropy = global_entropy = None
+        if backend == "mpo":
+            center_entropy = float(np.mean([traj["center_cut_entanglement_entropy"] for traj in trajectories]))
+            global_entropy = float(np.mean([traj["global_entanglement_entropy"] for traj in trajectories]))
         return {
-            "equivalent": mean_fidelity >= process_fidelity_threshold,
+            "equivalent": mean_fidelity >= self.fidelity**2,
             "fidelity": mean_fidelity,
-            "fidelity_error": _standard_error_or_none(process_fidelity_samples),
+            "fidelity_error": fidelity_error,
             "elapsed_time": time.time() - start_time,
             "representation": backend,
             "num_traj": num_traj,
@@ -718,12 +596,8 @@ class EquivalenceChecker:
             "matrix": None,
             "mpo": None,
             "schmidt_values": np.concatenate(schmidt_values) if schmidt_values else None,
-            "center_cut_entanglement_entropy": _mean_or_none([
-                traj["center_cut_entanglement_entropy"] for traj in trajectories
-            ]),
-            "global_entanglement_entropy": _mean_or_none([
-                traj["global_entanglement_entropy"] for traj in trajectories
-            ]),
+            "center_cut_entanglement_entropy": center_entropy,
+            "global_entanglement_entropy": global_entropy,
         }
 
     @overload
@@ -814,8 +688,19 @@ class EquivalenceChecker:
                 sum exceeds one.
             TypeError: If ``num_traj``, ``random_seed``, or ``noise_model`` has an invalid type.
         """
-        num_traj = _validate_num_traj(num_traj)
-        random_seed = _validate_random_seed(random_seed)
+        if isinstance(num_traj, bool) or not isinstance(num_traj, int):
+            msg = f"num_traj must be int, got {type(num_traj).__name__}."
+            raise TypeError(msg)
+        if num_traj < 1:
+            msg = f"num_traj must be at least 1, got {num_traj}."
+            raise ValueError(msg)
+        if random_seed is not None:
+            if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+                msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
+                raise TypeError(msg)
+            if random_seed < 0:
+                msg = f"random_seed must be non-negative, got {random_seed}."
+                raise ValueError(msg)
         if noise_model is None:
             if num_traj != 1:
                 msg = "num_traj must be 1 when noise_model is None."
@@ -832,7 +717,11 @@ class EquivalenceChecker:
             raise ValueError(msg)
 
         backend = self._resolve_representation(circuit1.num_qubits)
-        if backend == "mpo" and (_has_unsupported_mpo_gates(circuit1) or _has_unsupported_mpo_gates(circuit2)):
+        if backend == "mpo" and any(
+            instruction.operation.num_qubits > 2 and instruction.operation.name not in {"barrier", "measure"}
+            for circuit in (circuit1, circuit2)
+            for instruction in circuit.data
+        ):
             msg = (
                 "representation='mpo' does not support gates acting on more than two qubits; "
                 "use representation='matrix'. The matrix fallback for unknown unitaries "
@@ -844,7 +733,6 @@ class EquivalenceChecker:
             return _check_loaded_pair(self, circuit1, circuit2, backend)
 
         noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=random_seed))
-        _validate_pauli_noise_model(noise_model, circuit2.num_qubits)
         noise_plan = _build_circuit_noise_plan(circuit2, noise_model)
         return self._run_noisy_ensemble(
             circuit1,

@@ -34,7 +34,7 @@ from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fix
 from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
-from .utils.dag_utils import convert_dag_to_tensor_algorithm, is_digital_noise_opportunity
+from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -633,40 +633,6 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     return _apply_two_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0], sim_params)
 
 
-def _apply_noise_at_gate_opportunity(
-    state: MPS,
-    gate: BaseGate,
-    noise_model: NoiseModel | None,
-    sim_params: DigitalSimParams,
-    rng: np.random.Generator,
-    *,
-    noisy: bool,
-) -> MPS:
-    """Apply the post-gate normalization or noise layer when the gate is eligible.
-
-    Args:
-        state: State after applying ``gate``.
-        gate: Gate defining the noise opportunity and local support.
-        noise_model: Global noise model, or ``None`` for noiseless simulation.
-        sim_params: Digital simulation parameters.
-        rng: Trajectory random-number generator.
-        noisy: Whether the global model contains a nonzero process.
-
-    Returns:
-        The state after the opportunity has been handled.
-    """
-    if not is_digital_noise_opportunity(gate):
-        return state
-    if not noisy:
-        state.normalize(form="B", decomposition="QR")
-        return state
-
-    assert noise_model is not None
-    local_noise_model = create_local_noise_model(noise_model, gate.sites)
-    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-    return stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
-
-
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
     *,
@@ -736,26 +702,17 @@ def digital_tjm(
     for layer in compiled.layers:
         for gate in layer.single_qubit_gates:
             _apply_single_qubit_gate(state, gate)
-            state = _apply_noise_at_gate_opportunity(
-                state,
-                gate,
-                noise_model,
-                sim_params,
-                rng,
-                noisy=noisy,
-            )
 
         for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
             for gate in group:
                 _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
-                state = _apply_noise_at_gate_opportunity(
-                    state,
-                    gate,
-                    noise_model,
-                    sim_params,
-                    rng,
-                    noisy=noisy,
-                )
+
+                if not noisy:
+                    state.normalize(form="B", decomposition="QR")
+                else:
+                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
+                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
         if sim_params.sample_layers:
             for _ in range(layer.sample_points):
