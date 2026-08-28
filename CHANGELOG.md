@@ -26,6 +26,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
+- dropped support for Python 3.10 ([#556]) ([**@denialhaag**])
 - updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
 - tested and documented the multi-qubit local noise rule ([#529])
   ([**@Pouri96**])
@@ -250,6 +252,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541
 [#539]: https://github.com/munich-quantum-toolkit/yaqs/pull/539
