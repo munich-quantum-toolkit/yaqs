@@ -367,7 +367,9 @@ standard error; the latter is `None` for one trajectory. Noisy `equivalent` only
 means that this observed mean is at least `checker.fidelity**2`. It is not an
 equivalence certificate or a confidence-level decision. Compare noisy and
 noiseless fidelities by squaring the noiseless value. On the MPO backend the
-ensemble also averages operator entanglement.
+ensemble also averages operator entanglement and concatenates the center-cut
+Schmidt spectra from all trajectories in `schmidt_values`. Individual spectra
+remain available through each entry in `trajectories`.
 
 Distribution-valued strengths are resolved once per `check` call. With
 `parallel=True`, noisy trajectories use an effective worker count capped by

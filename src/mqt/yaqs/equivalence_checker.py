@@ -97,8 +97,9 @@ class EquivalenceEnsembleResult(_CheckResultBase):
     trajectory). The ensemble-level ``equivalent`` compares that mean with the
     squared configured threshold. Each entry in ``trajectories`` instead retains
     the single-pair semantics: its unsquared overlap is compared with the
-    configured unsquared threshold. The ensemble result is a finite-sample
-    decision, not an exact equivalence certificate.
+    configured unsquared threshold. On the MPO backend, ``schmidt_values``
+    concatenates the center-cut spectra from all trajectories. The ensemble
+    result is a finite-sample decision, not an exact equivalence certificate.
     """
 
     fidelity_error: float | None
@@ -709,6 +710,9 @@ class EquivalenceChecker:
         process_fidelity_samples = np.square(np.asarray([traj["fidelity"] for traj in trajectories], dtype=np.float64))
         mean_fidelity = float(np.mean(process_fidelity_samples))
         process_fidelity_threshold = self.fidelity**2
+        schmidt_values = [
+            values.ravel() for trajectory in trajectories if (values := trajectory["schmidt_values"]) is not None
+        ]
         return {
             "equivalent": mean_fidelity >= process_fidelity_threshold,
             "fidelity": mean_fidelity,
@@ -719,7 +723,7 @@ class EquivalenceChecker:
             "trajectories": trajectories,
             "matrix": None,
             "mpo": None,
-            "schmidt_values": None,
+            "schmidt_values": np.concatenate(schmidt_values) if schmidt_values else None,
             "center_cut_entanglement_entropy": _mean_or_none([
                 traj["center_cut_entanglement_entropy"] for traj in trajectories
             ]),

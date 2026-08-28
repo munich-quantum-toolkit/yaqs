@@ -862,9 +862,18 @@ def test_noisy_check_accepts_mpo_and_matrix_backends(representation: Literal["mp
     assert isinstance(result["fidelity"], float)
     assert result["fidelity_error"] is not None
     if representation == "matrix":
+        assert result["schmidt_values"] is None
+        assert all(trajectory["schmidt_values"] is None for trajectory in result["trajectories"])
         assert result["center_cut_entanglement_entropy"] is None
         assert result["global_entanglement_entropy"] is None
     else:
+        trajectory_schmidt_values = [
+            values for trajectory in result["trajectories"] if (values := trajectory["schmidt_values"]) is not None
+        ]
+        ensemble_schmidt_values = result["schmidt_values"]
+        assert ensemble_schmidt_values is not None
+        assert len(trajectory_schmidt_values) == result["num_traj"]
+        np.testing.assert_allclose(ensemble_schmidt_values, np.concatenate(trajectory_schmidt_values))
         assert result["center_cut_entanglement_entropy"] is not None
         assert result["global_entanglement_entropy"] is not None
 
@@ -1212,15 +1221,15 @@ def test_example_ideal_versus_noisy_compiled_circuit() -> None:
 
 
 def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
-    """Serial and process-pool workers use the same trajectory-index streams."""
+    """Serial and process-pool workers return the same seeded MPO ensemble."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
     noise = _pauli_x_noise(2, 0.5)
     kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0}
 
-    serial = EquivalenceChecker(representation="matrix", parallel=False).check(qc, qc, **kwargs)
-    pooled = EquivalenceChecker(representation="matrix", parallel=True, max_workers=2).check(qc, qc, **kwargs)
+    serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc, qc, **kwargs)
+    pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc, qc, **kwargs)
     serial_fidelities = [traj["fidelity"] for traj in serial["trajectories"]]
     pooled_fidelities = [traj["fidelity"] for traj in pooled["trajectories"]]
 
@@ -1229,3 +1238,6 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     assert serial["fidelity"] == pytest.approx(pooled["fidelity"], abs=1e-12)
     assert serial["fidelity_error"] == pytest.approx(pooled["fidelity_error"], abs=1e-12)
     assert serial["equivalent"] is pooled["equivalent"]
+    assert serial["schmidt_values"] is not None
+    assert pooled["schmidt_values"] is not None
+    np.testing.assert_allclose(serial["schmidt_values"], pooled["schmidt_values"], atol=1e-12)
