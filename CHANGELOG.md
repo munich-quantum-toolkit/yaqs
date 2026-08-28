@@ -12,7 +12,7 @@ releases may include breaking changes.
 
 ### Added
 
-- Add stochastic circuit sampling from NoiseModel ([#545])
+- added noisy equivalence checking ([#545])
   ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
