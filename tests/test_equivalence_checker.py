@@ -25,6 +25,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
 from qiskit.quantum_info import Operator
 
+import mqt.yaqs.equivalence_checker as equivalence_checker_module
 from mqt.yaqs import EquivalenceChecker, NoiseModel
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
@@ -1147,6 +1148,32 @@ def test_return_trajectories_must_be_bool() -> None:
         EquivalenceChecker().check(qc, qc, return_trajectories=1)  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        pytest.param({"num_traj": True}, TypeError, "num_traj must be int, got bool", id="num-traj-type"),
+        pytest.param({"num_traj": 0}, ValueError, "num_traj must be at least 1, got 0", id="num-traj-value"),
+        pytest.param(
+            {"random_seed": True},
+            TypeError,
+            "random_seed must be int or None, got bool",
+            id="random-seed-type",
+        ),
+        pytest.param(
+            {"noise_model": "invalid"},
+            TypeError,
+            "noise_model must be NoiseModel or None, got str",
+            id="noise-model-type",
+        ),
+    ],
+)
+def test_invalid_ensemble_options_raise(kwargs: dict[str, object], error: type[Exception], match: str) -> None:
+    """Invalid noisy-check options are rejected before circuit evaluation."""
+    qc = QuantumCircuit(1)
+    with pytest.raises(error, match=match):
+        EquivalenceChecker().check(qc, qc, **kwargs)  # ty: ignore[no-matching-overload]
+
+
 def test_negative_random_seed_raises() -> None:
     """Negative checker seeds are rejected consistently on both execution paths."""
     circuit = QuantumCircuit(2)
@@ -1303,6 +1330,26 @@ def test_scheduled_jumps_are_rejected_by_noisy_check() -> None:
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     with pytest.raises(ValueError, match="Scheduled jumps are not supported for circuit-sampled equivalence checks"):
         EquivalenceChecker(representation="mpo").check(qc, qc, noise_model=noise)
+
+
+def test_ensemble_trajectory_worker_uses_initialized_context() -> None:
+    """The process worker forwards its initialized context to one trajectory."""
+    circuit = QuantumCircuit(2)
+    checker = EquivalenceChecker(representation="matrix", parallel=False)
+    context = {
+        "circuit1": circuit,
+        "circuit2": circuit,
+        "noise_plan": (),
+        "random_seed": 0,
+        "checker": checker,
+        "backend": "matrix",
+    }
+
+    with patch.dict(equivalence_checker_module.WORKER_CTX, context, clear=True):
+        result = equivalence_checker_module._ensemble_trajectory_worker(0)  # ruff: ignore[private-member-access]
+
+    assert result["equivalent"] is True
+    assert result["fidelity"] == pytest.approx(1.0, abs=1e-12)
 
 
 def test_seeded_serial_and_process_pool_ensembles_agree() -> None:

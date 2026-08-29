@@ -94,6 +94,7 @@ def _wrapped_cx() -> Operation:
             "skip",
             id="rejected-reset",
         ),
+        pytest.param(Gate("opaque", 2, []), "skip", id="non-matrix-operation"),
         pytest.param(
             SimpleNamespace(name="cx", num_qubits=2, condition=object()),
             "skip",
