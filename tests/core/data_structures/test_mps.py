@@ -1543,6 +1543,79 @@ def test_get_entropy_bell_pair_ln2() -> None:
     assert np.isclose(ent, np.log(2.0), atol=1e-12)
 
 
+def _entangled_mps(length: int = 6, chi: int = 4, seed: int = 3) -> MPS:
+    """Random right-canonical MPS with entanglement at every internal cut.
+
+    Returns:
+        MPS: Normalized state with the orthogonality center at site 0.
+    """
+    rng = np.random.default_rng(seed)
+    bonds = [1] + [min(chi, 2**i, 2 ** (length - i)) for i in range(1, length)] + [1]
+    tensors = [
+        rng.standard_normal((2, bonds[i], bonds[i + 1])) + 1j * rng.standard_normal((2, bonds[i], bonds[i + 1]))
+        for i in range(length)
+    ]
+    state = MPS(length=length, tensors=tensors)
+    state.normalize(form="B", decomposition="QR")
+    return state
+
+
+def _dense_schmidt_values(state: MPS, cut: int) -> np.ndarray:
+    """Schmidt values at the cut between sites ``cut`` and ``cut + 1`` from the dense state.
+
+    Returns:
+        Singular values of the state reshaped across the physical bipartition.
+    """
+    dense = state.tensors[0].transpose(1, 0, 2)
+    for tensor in state.tensors[1:]:
+        dense = np.tensordot(dense, tensor.transpose(1, 0, 2), axes=([dense.ndim - 1], [0]))
+    matrix = np.asarray(dense, dtype=np.complex128).reshape(2 ** (cut + 1), -1)
+    return np.linalg.svd(matrix, compute_uv=False)
+
+
+@pytest.mark.parametrize("cut", [1, 2, 3])
+def test_entropy_at_an_interior_cut_matches_the_dense_state(cut: int) -> None:
+    """The entropy of a bond is the entropy of the physical bipartition there."""
+    state = _entangled_mps()
+    values = _dense_schmidt_values(state, cut)
+    weights = values**2 / np.sum(values**2)
+    expected = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+
+    assert state.get_entropy([cut, cut + 1]) == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("center", [0, 2, 5, None])
+def test_entropy_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
+    """Entropy is a property of the state, not of the gauge it is stored in."""
+    reference = _entangled_mps()
+    expected = reference.get_entropy([2, 3])
+
+    state = _entangled_mps()
+    if center is None:
+        state.set_center(None)
+    else:
+        state.shift_center_to(center)
+
+    assert state.get_entropy([2, 3]) == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("center", [0, 2, 5, None])
+def test_schmidt_spectrum_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
+    """The Schmidt spectrum of a bond is gauge-independent."""
+    expected = _dense_schmidt_values(_entangled_mps(), 2)
+
+    state = _entangled_mps()
+    if center is None:
+        state.set_center(None)
+    else:
+        state.shift_center_to(center)
+
+    spectrum = state.get_schmidt_spectrum([2, 3])
+    values = spectrum[~np.isnan(spectrum)]
+    assert values.size == expected.size
+    np.testing.assert_allclose(np.sort(values)[::-1], np.sort(expected)[::-1], atol=1e-12)
+
+
 def test_get_entropy_asserts_on_non_adjacent_or_wrong_len() -> None:
     """get_entropy asserts on invalid site lists."""
     mps = _product_state_mps(4)
