@@ -325,9 +325,9 @@ def _renormalize(state: MPS) -> None:
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
     """Apply one translated single-qubit gate to an MPS in place."""
     site = gate.sites[0]
+    # Circuit translation admits only unitary single-site gates, which preserve
+    # left- and right-canonicality, so the tracked center stays valid.
     state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
-    if state.orthogonality_center is not None and state.orthogonality_center != site:
-        state.set_center(None)
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
