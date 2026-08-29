@@ -301,6 +301,27 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
+def _renormalize(state: MPS) -> None:
+    """Normalize ``state`` in place, rescaling the center tensor when the gauge is known.
+
+    With the orthogonality center tracked at site ``c``, every other tensor is an
+    isometry and ``||psi|| == ||tensors[c]||_F``, so dividing that one tensor by its
+    Frobenius norm normalizes the state without touching the rest of the chain. The
+    center is left where it is; an unknown gauge falls back to a full-chain sweep.
+
+    Args:
+        state: MPS normalized in place.
+    """
+    center = state.orthogonality_center
+    if center is None:
+        state.normalize(form="B", decomposition="QR")
+        return
+    center_tensor = state.tensors[center]
+    norm = float(np.linalg.norm(center_tensor))
+    if norm > 0.0:
+        state.tensors[center] = center_tensor / norm
+
+
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
     """Apply one translated single-qubit gate to an MPS in place."""
     site = gate.sites[0]
@@ -711,13 +732,16 @@ def digital_tjm(
                 _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
 
                 if not noisy:
-                    state.normalize(form="B", decomposition="QR")
+                    _renormalize(state)
                 else:
                     local_noise_model = create_local_noise_model(noise_model, gate.sites)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
-        if sim_params.sample_layers:
+        if sim_params.sample_layers and layer.sample_points:
+            # Bond-dimension diagnostics and the entropy observables read the tensors
+            # directly, so sample them in B form as before.
+            state.normalize(form="B", decomposition="QR")
             for _ in range(layer.sample_points):
                 col_idx += 1
                 assert diagnostics is not None
@@ -726,6 +750,9 @@ def digital_tjm(
                 state.evaluate_observables(sim_params, results, col_idx)
 
     counts: dict[int, int] | None = None
+    # The gate loop leaves the center on the last gate; returned states and following
+    # analog segments are handed the chain in B form.
+    state.normalize(form="B", decomposition="QR")
     final = state if sim_params.get_state else None
 
     if shots_only:
@@ -733,9 +760,6 @@ def digital_tjm(
         per_call = _per_call_shots(sim_params, traj_idx) if has_explicit_shot_plan or not noisy else 1
         counts = state.measure_shots(per_call) if per_call > 0 else {}
         return None, None, counts, final
-
-    if state.orthogonality_center is None:
-        state.normalize(form="B", decomposition="QR")
 
     assert diagnostics is not None
     assert results is not None
