@@ -25,9 +25,17 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
     from qiskit.circuit import Parameter
 
+# Round-off floor of the site-by-site SVD, not an accuracy target. Gate tensors are unnormalized,
+# so the cutoff is taken relative to the leading singular value: an absolute one would track the
+# scale of the gate rather than its operator-Schmidt rank.
+_GATE_SPLIT_RELATIVE_CUTOFF = 1e-12
+
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
     """Splits a multi-qubit gate tensor into one tensor per site using Singular Value Decomposition (SVD).
+
+    Only round-off-level singular values are discarded, so a weakly entangling gate keeps its full
+    operator-Schmidt rank; truncation to a simulation tolerance happens later, in the state gauge.
 
     Args:
         tensor: A gate tensor of shape ``(2,) * (2 * n)`` for ``n >= 2`` sites, with index
@@ -50,7 +58,7 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     remaining = np.reshape(matrix, (left_bond * 4, 4 ** (num_sites - 1)))
     for _ in range(num_sites - 1):
         u_mat, s_list, v_mat = linalg.svd(remaining, full_matrices=False)
-        keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+        keep = linalg.truncate(s_list, mode="relative", threshold=_GATE_SPLIT_RELATIVE_CUTOFF, min_keep=1)
         s_list = s_list[:keep]
         u_mat = u_mat[:, :keep]
         v_mat = v_mat[:keep, :]
