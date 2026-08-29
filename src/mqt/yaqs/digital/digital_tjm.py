@@ -377,11 +377,12 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
-    # Shift the orthogonality center to the start of the window.
+    # Shift the orthogonality center to the start of the window. ``sweep_2site`` seeds a
+    # left environment of identity and takes the window as right-canonical, so the center
+    # must sit on the window's first site, not merely inside the window.
     if state.orthogonality_center is not None:
         rel_center = state.orthogonality_center - window[0]
-        window_len = window[1] - window[0] + 1
-        if rel_center < 0 or rel_center >= window_len:
+        if rel_center != 0:
             state.shift_center_to(window[0])
             rel_center = 0
     else:
@@ -443,12 +444,13 @@ def apply_two_qubit_gate_tdvp(
     evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
-    if uses_fixed_chi(sim_params):
-        renorm_drift(state, sim_params)
     if gauge_known and short_state.orthogonality_center is not None:
         state.set_center(window[0] + short_state.orthogonality_center)
     else:
         state.set_center(None)
+    # After the graft, so that a drift renormalization's own gauge is the one recorded.
+    if uses_fixed_chi(sim_params):
+        renorm_drift(state, sim_params)
 
     return first_site, last_site
 
