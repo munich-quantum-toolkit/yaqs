@@ -236,7 +236,7 @@ def test_from_gate_reuses_mpo_tensors() -> None:
 # --- gate support window ---
 
 # Long-range, spread multi-qubit, and matrix-backed gates that reach apply_long_range_gate_mpo.
-_SUPPORT_CASES: list[tuple[str, Callable[[QuantumCircuit], None]]] = [
+_SUPPORT_CASES: list[tuple[str, Callable[[QuantumCircuit], object]]] = [
     ("rzz_0_5", lambda qc: qc.rzz(0.7, 0, 5)),
     ("cx_1_6", lambda qc: qc.cx(1, 6)),
     ("cphase_2_7", lambda qc: qc.cp(0.9, 2, 7)),
@@ -246,7 +246,7 @@ _SUPPORT_CASES: list[tuple[str, Callable[[QuantumCircuit], None]]] = [
 ]
 
 
-def _single_gate_circuit(length: int, build: Callable[[QuantumCircuit], None]) -> QuantumCircuit:
+def _single_gate_circuit(length: int, build: Callable[[QuantumCircuit], object]) -> QuantumCircuit:
     """Build a circuit holding exactly the gate under test.
 
     Args:
@@ -281,7 +281,7 @@ def test_long_range_gate_leaves_sites_outside_support_unchanged() -> None:
 @pytest.mark.parametrize("entangled", [False, True], ids=["product", "entangled"])
 def test_long_range_gate_matches_dense_gate_operator(
     case: str,
-    build: Callable[[QuantumCircuit], None],
+    build: Callable[[QuantumCircuit], object],
     *,
     entangled: bool,
 ) -> None:
