@@ -51,6 +51,10 @@ still contain negative elements. Site lists/tuples must contain exactly one or
 two distinct nonnegative integers; custom full two-site matrices require
 **ascending** site order (or use `factors` instead).
 
+This rate interpretation applies to `Simulator`. For sampled equivalence
+checking, `EquivalenceChecker` instead treats resolved strengths as direct
+per-opportunity branch probabilities; see {ref}`equivalence-noise-model`.
+
 ```{code-cell} ipython3
 from mqt.yaqs import NoiseModel
 
@@ -300,8 +304,8 @@ array:
 YAQS does not check complete positivity; supply physically meaningful jump
 operators. The same `matrix` override works for **scheduled jumps** (see
 {doc}`scheduled_jumps`) on supported backends and for process noise on TJM
-(`mps`), MCWF (`vector`), Lindblad (`density_matrix`), and noisy circuits
-(nearest-neighbor digital processes only).
+(`mps`), MCWF (`vector`), Lindblad (`density_matrix`), and supported Simulator
+digital-circuit runs.
 
 ### Amplitude damping with an explicit $\sigma_-$
 
@@ -320,8 +324,7 @@ custom_model = NoiseModel([
 ])
 ```
 
-Run a short analog simulation—the custom operator is used wherever
-`NoiseModel.processes` is consumed:
+Run a short analog simulation using the custom operator:
 
 ```{code-cell} ipython3
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State

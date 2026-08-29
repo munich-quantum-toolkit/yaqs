@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added noisy equivalence checking ([#545])
+  ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
   grid ([#541]) ([**@linusschulte**])
 - added infrastructure for analog-digital simulation ([#525])
@@ -252,6 +254,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
 [#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
 [#541]: https://github.com/munich-quantum-toolkit/yaqs/pull/541

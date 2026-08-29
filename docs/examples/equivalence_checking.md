@@ -17,7 +17,7 @@ mystnb:
 YAQS can test whether two quantum circuits implement the same unitary map, up to
 a **global phase** and numerical tolerance. The public API is
 {class}`~mqt.yaqs.EquivalenceChecker`, which forms the composed operator
-$W = U_2^\dagger U_1$ from the two circuits and checks whether $W$ is close to
+$W = U_1 U_2^\dagger$ from the two circuits and checks whether $W$ is close to
 the identity.
 
 For most workflows—comparing a high-level circuit to a transpiled variant,
@@ -55,7 +55,7 @@ Two circuits $C_1$ and $C_2$ on $n$ qubits are reported as equivalent when their
 unitaries $U_1$ and $U_2$ satisfy
 
 ```{math}
-U_2^\dagger U_1 \approx e^{i\phi}\, I
+U_1 U_2^\dagger \approx e^{i\phi}\, I
 ```
 
 for some global phase $\phi$, within `fidelity`. On the **matrix** path, only
@@ -69,12 +69,12 @@ them with a `ValueError`. Unknown unitaries translate via the matrix fallback,
 which supports at most eight qubits (see {doc}`custom_gates`). See
 {cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
 
-`check` returns a dictionary:
+A noiseless `check` returns a dictionary:
 
 | Key                               | Type                | Meaning                                                                   |
 | --------------------------------- | ------------------- | ------------------------------------------------------------------------- |
 | `equivalent`                      | `bool`              | Whether the circuits pass the identity test                               |
-| `fidelity`                        | `float`             | Measured normalized overlap of $W=U_2^\dagger U_1$ with the identity      |
+| `fidelity`                        | `float`             | Measured normalized overlap of $W=U_1U_2^\dagger$ with the identity       |
 | `elapsed_time`                    | `float`             | Wall time in seconds                                                      |
 | `representation`                  | `str`               | `"matrix"` or `"mpo"` — which backend ran                                 |
 | `matrix`                          | `ndarray` or `None` | Dense composed operator $W$ as a $(2^n, 2^n)$ matrix; matrix backend only |
@@ -92,21 +92,19 @@ are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
   Smaller values retain more bond dimension and are stricter; larger values
   speed up checks at the cost of accuracy.
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
-  and the identity (global phase removed). Used by **both** backends.
+  and the identity (global phase removed). It must be finite and between `0` and
+  `1`. Noiseless and noisy results use this same scale and threshold.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
-- **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair
-  updates run in a **thread pool** from 12 qubits upward (ignored for the matrix
-  backend and below the cutoff).
-- **`max_workers`** (default `None`): cap on worker threads when
-  `parallel=True`. When unset, the pool size is
-  `min(available_cpus(), number_of_work_items)`, where
-  {func}`~mqt.yaqs.core.parallel_utils.available_cpus` respects
-  `YAQS_MAX_WORKERS`, returns `1` under `PYTEST_XDIST_WORKER`, reads Slurm CPU
-  limits when set, and falls back to CPU affinity or `os.cpu_count()` on the
-  host.
-- **`mp_context`**: reserved for a future process-pool mode; MPO parallelism
-  uses threads today.
+- **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
+  a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
+  **process pool**. Set it to `False` to keep either path serial.
+- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
+  (noiseless MPO checks), and on worker processes for noisy ensembles. Worker
+  counts also respect the available CPUs and number of trajectories.
+- **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
+  `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
+  inside `iterate()` still uses in-process threads.
 
 ```{code-cell} ipython3
 from mqt.yaqs import EquivalenceChecker
@@ -199,7 +197,7 @@ auto_result = EquivalenceChecker(representation="auto").check(circuit, transpile
 
 ## Matrix backend (small circuits)
 
-The matrix backend builds $W = U_2^\dagger U_1$ as a tensor with $2n$ indices of
+The matrix backend builds $W = U_1 U_2^\dagger$ as a tensor with $2n$ indices of
 dimension 2 and applies local gate contractions. It uses the same trace-based
 identity test as the MPO path. Memory and time grow as $\mathcal{O}(4^n)$, so
 this backend is practical only for very small $n$.
@@ -220,9 +218,10 @@ memory; prefer MPO instead.
 
 Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO**
 checks on circuits where many independent updates can run at once. This is the
-default; below 12 qubits the implementation keeps the serial path even when
-`parallel=True`, because thread overhead would dominate. The matrix backend is
-always serial.
+default; below 12 qubits the implementation keeps a single noiseless check
+serial even when `parallel=True`, because thread overhead would dominate. A
+single matrix check is also serial. When a noise model is supplied, independent
+matrix or MPO trajectories can instead run across processes.
 
 Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
 MPO site tensors and can be computed in parallel in a shared thread pool (one
@@ -237,10 +236,112 @@ wide_checker = EquivalenceChecker(
 )
 ```
 
-Expect the largest gains on **wide** nearest-neighbor circuits (typically
-**12+ qubits**) where each sweep has several disjoint pairs. Below 12 qubits the
-implementation keeps the serial path even when `parallel=True`, because thread
-overhead would dominate.
+(equivalence-noise-model)=
+
+## Comparing with a noise model
+
+Passing a {class}`~mqt.yaqs.NoiseModel` asks how close a
+**compiled, hardware-like** circuit remains to an **ideal** specification under
+sampled noise. Each trajectory materializes a stochastic realization of the
+noise model on the compiled circuit. This gives a Monte Carlo comparison rather
+than an exact noisy-channel equivalence certificate.
+
+The checker rejects noise processes that it cannot materialize as stochastic
+circuit operations; those remain available through the simulator.
+
+Noise is sampled onto the **second** circuit argument only. A supported
+two-qubit unitary gate is a noise opportunity; single-qubit gates, gates on
+three or more qubits, barriers, and measurements are not. A process is eligible
+when its complete site support is contained in the gate support. The selected
+equivalence backend must also support the original gate.
+
+Within `EquivalenceChecker`, each resolved `strength` is a dimensionless branch
+probability $p_i$ at every eligible gate. Processes with the same exact site
+support form one categorical draw: process $i$ occurs with probability $p_i$,
+and no process from that support occurs with probability $1-\sum_i p_i$.
+Consequently, each same-support sum must be at most one. Different exact
+supports are sampled independently, so multiple errors may follow one gate. This
+also applies to overlapping supports such as `[0]` and `[0, 1]`, which may both
+be selected in one trajectory.
+
+For an isotropic Pauli error with total probability $p$ on each gate qubit,
+assign `strength=p/3` to X, Y, and Z on that one-qubit support. The identity
+then has probability $1-p$ on each qubit, and the per-qubit draws are
+independent.
+
+Writing $U_{\mathrm{ideal}}$ for the first circuit and $U_{\mathrm{noisy},r}$
+for trajectory $r$ of the second, the relative operator has the order
+
+```{math}
+Q_r = U_{\mathrm{ideal}} U_{\mathrm{noisy},r}^\dagger.
+```
+
+If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the
+sampled channel's process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
+estimated internally by
+
+```{math}
+\widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
+```
+
+The public result stays on the noiseless scale:
+
+```{math}
+\mathtt{fidelity}=\sqrt{\widehat F_{\mathrm{pro}}}.
+```
+
+For $N>1$, `fidelity_error` is the approximate delta-method Monte Carlo standard
+error on this root-fidelity scale. It is `0.0` when every sampled overlap is
+zero and `None` for one trajectory.
+
+Apply noise to the transpiled circuit from the earlier example. The noisy call
+returns the same primary fields as the noiseless call:
+
+```{code-cell} ipython3
+from mqt.yaqs import NoiseModel
+
+checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
+noiseless = checker.check(circuit, transpiled_circuit)
+noise = NoiseModel([
+    {"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(num_qubits)
+])
+noisy = checker.check(
+    circuit,
+    transpiled_circuit,
+    noise_model=noise,
+    num_traj=24,
+    random_seed=0,
+)
+
+print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
+print(
+    "noisy:     "
+    f"sample threshold passed={noisy['equivalent']}, "
+    f"root process fidelity={noisy['fidelity']:.4f} "
+    f"+/- {noisy['fidelity_error']:.4f}"
+)
+print(f"trajectories: {noisy['num_traj']}")
+```
+
+Here `strength=0.02` means a 2% X-error probability on that qubit after each
+eligible two-qubit gate containing it. It is neither a Lindblad rate nor a 2%
+error probability for the complete circuit.
+
+A noisy `check` returns
+{class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
+fields as a noiseless check, plus `fidelity_error` and `num_traj`. Noisy
+`equivalent` compares the point estimate with `checker.fidelity`; it does not
+use the error bar and is not an exact certificate. For MPO checks, entropies are
+trajectory means and `schmidt_values` is the zero-padded mean trajectory
+spectrum, not a channel spectrum. `matrix` and `mpo` are `None` because the
+ensemble is a channel rather than one relative unitary. Pass
+`return_trajectories=True` to include the individual trajectory results.
+
+Distribution-valued strengths are resolved once per `check` call, so every
+trajectory uses the same resolved probabilities. The checker then validates the
+same-support sums; an out-of-range draw raises `ValueError`. A nonnegative
+`random_seed` makes the sampled ensemble reproducible independently of process
+scheduling.
 
 ## Performance notes
 
@@ -252,6 +353,7 @@ where it is still affordable, and MPO for everything larger.
 
 ## Related topics
 
+- {doc}`realistic_noise_models` — Pauli and dissipative process names, disorder
 - {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
 - {doc}`simulator_initialization` — running simulations with
   {class}`~mqt.yaqs.Simulator`

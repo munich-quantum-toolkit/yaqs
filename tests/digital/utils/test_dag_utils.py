@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 from itertools import permutations
+from types import SimpleNamespace
 from typing import Literal
 from unittest.mock import patch
 
@@ -25,13 +26,18 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Gate, Parameter
+from qiskit.circuit import Barrier, Gate, Operation, Parameter
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
+    CPhaseGate,
     CRZGate,
     CXGate,
+    HGate,
     IGate,
+    RXXGate,
+    RYYGate,
     RZXGate,
+    RZZGate,
     SdgGate,
     SGate,
     SXdgGate,
@@ -54,6 +60,7 @@ from mqt.yaqs.digital.utils.dag_utils import (
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,
+    is_digital_noise_opportunity,
     select_starting_point,
 )
 from tests.core.methods.tdvp.conftest import _fidelity
@@ -66,6 +73,53 @@ def test_supported_qiskit_gate_names_exact() -> None:
     for name in SUPPORTED_QISKIT_GATE_NAMES:
         assert hasattr(GateLibrary, name), f"GateLibrary missing hardcoded alias '{name}'"
         assert getattr(GateLibrary, name) is not GateLibrary.custom
+
+
+def _wrapped_cx() -> Operation:
+    """Return a unitary two-qubit Instruction that is not a Gate."""
+    definition = QuantumCircuit(2, name="wrapped_cx")
+    definition.cx(0, 1)
+    return definition.to_instruction()
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected"),
+    [
+        pytest.param(HGate(), "skip", id="qiskit-h"),
+        pytest.param(CXGate(), "noise", id="qiskit-cx"),
+        pytest.param(_wrapped_cx(), "noise", id="unitary-instruction"),
+        pytest.param(Barrier(2), "skip", id="barrier"),
+        pytest.param(
+            Gate("reset", 2, []),
+            "skip",
+            id="rejected-reset",
+        ),
+        pytest.param(Gate("opaque", 2, []), "skip", id="non-matrix-operation"),
+        pytest.param(
+            SimpleNamespace(name="cx", num_qubits=2, condition=object()),
+            "skip",
+            id="conditional-cx",
+        ),
+    ],
+)
+def test_digital_noise_opportunity(operation: Operation, expected: str) -> None:
+    """Only supported two-qubit unitary operations are opportunities."""
+    assert is_digital_noise_opportunity(operation) is (expected == "noise")
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(CPhaseGate(Parameter("theta")), id="cp"),
+        pytest.param(RXXGate(Parameter("theta")), id="rxx"),
+        pytest.param(RYYGate(Parameter("theta")), id="ryy"),
+        pytest.param(RZZGate(Parameter("theta")), id="rzz"),
+    ],
+)
+def test_unbound_supported_gate_is_not_digital_noise_opportunity(operation: Operation) -> None:
+    """Supported two-qubit gates require bound parameters to be noise opportunities."""
+    assert operation.name in SUPPORTED_QISKIT_GATE_NAMES
+    assert is_digital_noise_opportunity(operation) is False
 
 
 def _qiskit_gate_matrix(gate_cls: type, *params: float) -> np.ndarray:
