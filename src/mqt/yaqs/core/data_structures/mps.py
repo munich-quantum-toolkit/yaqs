@@ -619,6 +619,32 @@ class MPS:
         diagnostics[1, column_index] = self.get_max_bond()
         diagnostics[2, column_index] = self.get_total_bond()
 
+    def _bond_matrix(self, i: int, j: int) -> NDArray[np.complex128]:
+        """Two-site matrix at the cut ``(i, j)``, gauged so its singular values are Schmidt values.
+
+        The singular values of ``tensors[i] tensors[j]`` are the Schmidt coefficients of the
+        cut only in a mixed-canonical gauge with the center on the pair; the center is moved
+        onto the pair on a copy when it is not already there.
+
+        Args:
+            i: Left site of the nearest-neighbor cut.
+            j: Right site of the cut, ``i + 1``.
+
+        Returns:
+            The two-site matrix reshaped to ``(d_i * chi_left, d_j * chi_right)``.
+        """
+        state = self
+        if not self.check_covers_sites([i, j]):
+            state = copy.deepcopy(self)
+            if state.orthogonality_center is None:
+                state.set_canonical_form(i)
+            else:
+                state.shift_center_to(i)
+
+        a, b = state.tensors[i], state.tensors[j]
+        theta = np.tensordot(a, b, axes=(2, 1))
+        return theta.reshape(a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]).astype(np.complex128)
+
     def get_entropy(self, sites: list[int]) -> np.float64:
         """Compute bipartite entanglement entropy.
 
@@ -637,15 +663,10 @@ class MPS:
         i, j = sites
         assert i + 1 == j, "Entropy is only defined for nearest-neighbor cut."
 
-        a, b = self.tensors[i], self.tensors[j]
-
-        if a.shape[2] == 1:
+        if self.tensors[i].shape[2] == 1:
             return np.float64(0.0)
 
-        theta = np.tensordot(a, b, axes=(2, 1))
-        phys_i, left = a.shape[0], a.shape[1]
-        phys_j, right = b.shape[0], b.shape[2]
-        theta_mat = theta.reshape(left * phys_i, phys_j * right).astype(np.complex128)
+        theta_mat = self._bond_matrix(i, j)
 
         s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
         s2 = (s.astype(np.float64)) ** 2
@@ -677,19 +698,13 @@ class MPS:
         assert sites[0] + 1 == sites[1], "Schmidt spectrum only defined for nearest-neighbor cut."
         top_schmidt_vals = 500
         i, j = sites
-        a, b = self.tensors[i], self.tensors[j]
 
-        if a.shape[2] == 1:
+        if self.tensors[i].shape[2] == 1:
             padded = np.full(top_schmidt_vals, np.nan)
             padded[0] = 1.0
             return padded
 
-        theta = np.tensordot(a, b, axes=(2, 1))
-        phys_i, left = a.shape[0], a.shape[1]
-        phys_j, right = b.shape[0], b.shape[2]
-        theta_mat = theta.reshape(left * phys_i, phys_j * right).astype(np.complex128)
-
-        _, s_vec, _ = linalg.svd(theta_mat, full_matrices=False)
+        _, s_vec, _ = linalg.svd(self._bond_matrix(i, j), full_matrices=False)
 
         padded = np.full(top_schmidt_vals, np.nan)
         padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
