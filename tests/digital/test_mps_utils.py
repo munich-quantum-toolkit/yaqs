@@ -9,12 +9,14 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Statevector
+from qiskit.quantum_info import Operator, Statevector, random_unitary
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -22,8 +24,11 @@ from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, Z
 from mqt.yaqs.digital.digital_tjm import apply_long_range_gate_mpo, apply_two_qubit_gate_tebd
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+from tests.core.methods.tdvp.conftest import _fidelity, _haar_random_mps
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 
@@ -226,3 +231,106 @@ def test_from_gate_reuses_mpo_tensors() -> None:
     first = MPO.from_gate(gate, length)
     second = MPO.from_gate(gate, length)
     np.testing.assert_allclose(first.to_matrix(), second.to_matrix(), atol=1e-12)
+
+
+# --- gate support window ---
+
+# Long-range, spread multi-qubit, and matrix-backed gates that reach apply_long_range_gate_mpo.
+_SUPPORT_CASES: list[tuple[str, Callable[[QuantumCircuit], None]]] = [
+    ("rzz_0_5", lambda qc: qc.rzz(0.7, 0, 5)),
+    ("cx_1_6", lambda qc: qc.cx(1, 6)),
+    ("cphase_2_7", lambda qc: qc.cp(0.9, 2, 7)),
+    ("ccz_0_2_4", lambda qc: qc.ccz(0, 2, 4)),
+    ("cswap_0_2_4", lambda qc: qc.cswap(0, 2, 4)),
+    ("matrix_1_3_5", lambda qc: qc.unitary(random_unitary(8, seed=99), [1, 3, 5])),
+]
+
+
+def _single_gate_circuit(length: int, build: Callable[[QuantumCircuit], None]) -> QuantumCircuit:
+    """Build a circuit holding exactly the gate under test.
+
+    Args:
+        length: Number of qubits.
+        build: Callable appending the single operation.
+
+    Returns:
+        Circuit with one operation.
+    """
+    qc = QuantumCircuit(length)
+    build(qc)
+    return qc
+
+
+def test_long_range_gate_leaves_sites_outside_support_unchanged() -> None:
+    """A gate on ``[3, 8]`` rewrites only those tensors of a 30-site chain."""
+    length, first, last = 30, 3, 8
+    state = _haar_random_mps(length, pad=8, seed=20260829)
+    state.set_canonical_form(first)
+    exterior = {site: state.tensors[site].copy() for site in range(length) if not first <= site <= last}
+
+    gate = _gate_from_circuit(_single_gate_circuit(length, lambda qc: qc.cp(0.9, first, last)))
+    apply_long_range_gate_mpo(state, gate, _sim_params())
+
+    for site, tensor in exterior.items():
+        assert np.array_equal(state.tensors[site], tensor), f"site {site} outside the gate support changed"
+    assert state.orthogonality_center is not None
+    assert first <= state.orthogonality_center <= last
+
+
+@pytest.mark.parametrize(("case", "build"), _SUPPORT_CASES, ids=[case for case, _ in _SUPPORT_CASES])
+@pytest.mark.parametrize("entangled", [False, True], ids=["product", "entangled"])
+def test_long_range_gate_matches_dense_gate_operator(
+    case: str,
+    build: Callable[[QuantumCircuit], None],
+    *,
+    entangled: bool,
+) -> None:
+    """Support-windowed application reproduces the dense gate operator.
+
+    The entangled fixtures are seeded Haar-random MPS; generic-state coverage is the point.
+    """
+    del case
+    length = 10
+    qc = _single_gate_circuit(length, build)
+    gate = _gate_from_circuit(qc)
+    state = _haar_random_mps(length, pad=8, seed=20260829) if entangled else MPS(length, state="x+")
+    state.set_canonical_form(min(gate.sites))
+
+    expected = np.asarray(Operator(qc).data, dtype=np.complex128) @ np.asarray(state.to_vec(), dtype=np.complex128)
+    apply_long_range_gate_mpo(state, gate, _sim_params())
+
+    assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-10
+
+
+def test_capped_long_range_gate_is_no_less_accurate_than_full_chain_compression() -> None:
+    """Under a bond cap, windowed truncation is at least as accurate as compressing the whole chain."""
+    length, cap = 12, 8
+    qc = _single_gate_circuit(length, lambda circuit: circuit.cp(0.9, 2, 9))
+    gate = _gate_from_circuit(qc)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
+
+    state = _haar_random_mps(length, pad=cap, seed=20260829)
+    state.set_canonical_form(min(gate.sites))
+    expected = np.asarray(Operator(qc).data, dtype=np.complex128) @ np.asarray(state.to_vec(), dtype=np.complex128)
+
+    full_chain = copy.deepcopy(state)
+    MPO.from_gate(gate, length).multiply(full_chain, sim_params=sim_params, compress=True)
+    apply_long_range_gate_mpo(state, gate, sim_params)
+
+    assert _fidelity(state.to_vec(), expected) >= _fidelity(full_chain.to_vec(), expected) - 1e-12
+
+
+@pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
+def test_long_range_gate_tracks_orthogonality_center(*, known_gauge: bool) -> None:
+    """The tracked center after the gate is a genuine canonical center of the full chain."""
+    length = 10
+    gate = _gate_from_circuit(_single_gate_circuit(length, lambda qc: qc.cx(1, 6)))
+    state = _haar_random_mps(length, pad=8, seed=20260829)
+    if known_gauge:
+        state.set_canonical_form(0)
+    else:
+        state.set_center(None)
+
+    apply_long_range_gate_mpo(state, gate, _sim_params())
+
+    assert state.orthogonality_center in state.check_canonical_form()
