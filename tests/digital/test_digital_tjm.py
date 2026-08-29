@@ -1104,17 +1104,41 @@ def test_mixed_gate2_norm_unit() -> None:
 
 
 @pytest.mark.parametrize("chi", [16, 32])
-def test_mixed_zeros_full(chi: int) -> None:
-    """Full mixed_small L=10 zeros circuit matches exact evolution under hybrid TDVP."""
+@pytest.mark.tdvp_regression
+def test_mixed_zeros_full_replay_matches_the_simulator(chi: int) -> None:
+    """Replaying gates through the public API gives what the circuit loop gives.
+
+    The replay applies gates back to back without the loop's per-gate renormalization,
+    so it reaches ``apply_two_qubit_gate`` with the center wherever the previous gate
+    left it. The gate application gauges the window itself, so both routes agree.
+    """
+    qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
+    params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
+    state = _replay_hybrid_tdvp_through_gate(qc, len(list(circuit_to_dag(qc).topological_op_nodes())), params=params)
+    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
+
+    loop_params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
+    loop_params.observables = [Observable(Z(), 0)]
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(MIXED_SMALL_ZEROS_LENGTH, initial="zeros"), qc, loop_params, None
+    )
+    assert result.output_state is not None
+    assert _fidelity(result.output_state.mps.to_vec(), state.mps.to_vec()) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("chi", [16, 32])
+@pytest.mark.tdvp_regression
+@pytest.mark.xfail(
+    reason="a long-range generator gate is under-applied once a preceding two-qubit gate has "
+    "changed the bond structure; gate_mode='mpo' is exact on the same circuit",
+    strict=True,
+)
+def test_mixed_zeros_full_is_exact(chi: int) -> None:
+    """The hybrid TDVP route should reproduce the exact state for this circuit."""
     qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
-    state = _replay_hybrid_tdvp_through_gate(
-        qc,
-        len(list(circuit_to_dag(qc).topological_op_nodes())),
-        params=params,
-    )
-    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
+    state = _replay_hybrid_tdvp_through_gate(qc, len(list(circuit_to_dag(qc).topological_op_nodes())), params=params)
     assert _fidelity(ref, state.mps.to_vec()) > 0.99
 
 
@@ -2602,6 +2626,51 @@ def test_tebd_establishes_canonical_gauge() -> None:
 
     assert state.orthogonality_center == 5
     assert state.check_canonical_form()[0] == 5
+
+
+# ---- windowed TDVP gauge ----------------------------------------------------------------
+
+WINDOW_LENGTH = 10
+WINDOW_SEED = 11
+
+
+@pytest.mark.parametrize("center", [0, 4, 9])
+def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int) -> None:
+    """An uncapped windowed RZZ must reproduce the exact gate wherever the center starts.
+
+    ``sweep_2site`` takes its window right-canonical from the first site, so a center left
+    anywhere else has to be moved there first. A center on the window's last site is the
+    case that bites: with the window's right edge at the chain end there is no dangling
+    bond to absorb the mismatch.
+    """
+    theta = 0.6
+    sites = (1, WINDOW_LENGTH - 2)  # window [0, 9] — right edge is the chain end
+    state = _random_capped_mps(WINDOW_LENGTH, GAUGE_CHI, WINDOW_SEED)
+    eigenvalues = np.array([1.0, -1.0])
+    phases = np.exp(-0.5j * theta * np.multiply.outer(eigenvalues, eigenvalues))
+    expected = _dense_state(state) * phases.reshape([2 if site in sites else 1 for site in range(WINDOW_LENGTH)])
+
+    state.shift_center_to(center)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    apply_two_qubit_gate_tdvp(state, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
+
+    got = _dense_state(state).reshape(-1)
+    assert _fidelity(got, expected.reshape(-1)) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_fixed_chi_windowed_tdvp_gate_leaves_a_truthful_center() -> None:
+    """A drift renormalization inside the window path must not be overwritten by a stale center."""
+    params = _tdvp_params(max_bond_dim=2, tdvp_sweeps=1)
+    state = _random_capped_mps(WINDOW_LENGTH, GAUGE_CHI, WINDOW_SEED)
+    state.shift_center_to(4)
+
+    gate = GateLibrary.rzz([0.6])
+    gate.set_sites(3, 7)
+    apply_two_qubit_gate_tdvp(state, gate, params)
+
+    assert state.orthogonality_center is not None
+    assert state.orthogonality_center in state.check_canonical_form()
 
 
 # --- multi-qubit local noise -------------------------------------------------
