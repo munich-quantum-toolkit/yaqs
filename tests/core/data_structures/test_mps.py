@@ -385,6 +385,133 @@ def test_shift_orthogonality_center_left() -> None:
     assert mps.check_canonical_form() == [0]
 
 
+def _seeded_canonical_mps(shapes: list[tuple[int, int, int]], center: int, seed: int) -> MPS:
+    """Build a seeded unit-norm MPS with the given shapes, canonical around ``center``.
+
+    Args:
+        shapes: Per-site ``(phys, left, right)`` shapes.
+        center: Orthogonality center to establish.
+        seed: Seed for the complex-normal entries.
+
+    Returns:
+        MPS in mixed-canonical form with the center at ``center``.
+    """
+    tensors = [crandn(shape, seed=seed + i) for i, shape in enumerate(shapes)]
+    mps = MPS(len(shapes), tensors=tensors, physical_dimensions=[shape[0] for shape in shapes])
+    mps.normalize(form="B")
+    mps.set_canonical_form(center)
+    return mps
+
+
+def _flip_based_left_shift(mps: MPS, current: int, decomposition: str = "QR") -> MPS:
+    """Shift left the way it was done before: flip, shift right, flip back.
+
+    Args:
+        mps: State to shift; left unmodified.
+        current: Current orthogonality center.
+        decomposition: ``"QR"`` or ``"SVD"``.
+
+    Returns:
+        A shifted deep copy of ``mps``.
+    """
+    reference = copy.deepcopy(mps)
+    reference.flip_network()
+    reference.shift_orthogonality_center_right(reference.length - current - 1, decomposition)
+    reference.flip_network()
+    return reference
+
+
+@pytest.mark.parametrize("decomposition", ["QR", "SVD"])
+def test_left_shift_at_site_zero_renormalizes_and_keeps_center(decomposition: str) -> None:
+    """A left shift at site 0 has no site to absorb R, so it normalizes and stays put."""
+    shapes = [(2, 1, 2), (2, 2, 3), (2, 3, 3), (2, 3, 1)]
+    mps = _seeded_canonical_mps(shapes, 0, seed=6001)
+    # Every other tensor is an isometry, so scaling the center by 2.5 makes ||psi|| == 2.5.
+    mps.tensors[0] *= 2.5
+    assert mps.norm() == pytest.approx(2.5, abs=1e-12)
+
+    reference = _flip_based_left_shift(mps, 0, decomposition)
+    mps.shift_orthogonality_center_left(0, decomposition)
+
+    assert mps.orthogonality_center == 0
+    assert mps.norm() == pytest.approx(1.0, abs=1e-12)
+    for shifted, expected in zip(mps.tensors, reference.tensors, strict=False):
+        assert np.allclose(shifted, expected, atol=1e-13)
+
+
+@pytest.mark.parametrize("center", [1, 2, 3])
+def test_left_shift_matches_flip_based_path_at_interior_sites(center: int) -> None:
+    """Interior QR left shifts reproduce the flip-based path tensor for tensor."""
+    shapes = [(2, 1, 2), (2, 2, 4), (2, 4, 3), (2, 3, 1)]
+    mps = _seeded_canonical_mps(shapes, center, seed=6100 + center)
+    reference = _flip_based_left_shift(mps, center)
+    mps.shift_orthogonality_center_left(center)
+
+    assert mps.orthogonality_center == center - 1
+    assert mps.check_canonical_form() == [center - 1]
+    assert np.allclose(mps.to_vec(), reference.to_vec(), atol=1e-13)
+    for shifted, expected in zip(mps.tensors, reference.tensors, strict=False):
+        assert shifted.shape == expected.shape
+        assert np.allclose(shifted, expected, atol=1e-13)
+
+
+def test_left_shift_with_svd_matches_flip_based_path_up_to_a_bond_phase() -> None:
+    """The SVD branch reproduces the state; its gauge differs by one phase on the shared bond."""
+    shapes = [(2, 1, 2), (2, 2, 4), (2, 4, 3), (2, 3, 1)]
+    center = 2
+    mps = _seeded_canonical_mps(shapes, center, seed=6150)
+    reference = _flip_based_left_shift(mps, center, "SVD")
+    mps.shift_orthogonality_center_left(center, "SVD")
+
+    assert mps.orthogonality_center == center - 1
+    assert mps.check_canonical_form() == [center - 1]
+    assert np.allclose(mps.to_vec(), reference.to_vec(), atol=1e-13)
+
+    # Both site tensors are the same isometry up to a diagonal unitary on the shared bond:
+    # ``new[a, i, c] == sum_j ref[a, j, c] phase[j, i]``, i.e. ``phase`` diagonal with ``|.| == 1``.
+    phase = oe.contract("ajc, aic->ji", reference.tensors[center].conj(), mps.tensors[center])
+    assert np.allclose(phase, np.diag(np.diag(phase)), atol=1e-13)
+    assert np.allclose(np.abs(np.diag(phase)), 1.0, atol=1e-13)
+
+
+def test_left_shift_preserves_flip_state_and_physical_dimensions() -> None:
+    """A left shift leaves flipped, physical_dimensions, length, and tensor shapes alone."""
+    shapes = [(3, 1, 2), (2, 2, 4), (4, 4, 3), (2, 3, 1)]
+    mps = _seeded_canonical_mps(shapes, 2, seed=6200)
+    reference = _flip_based_left_shift(mps, 2)
+    mps.shift_orthogonality_center_left(2)
+
+    assert mps.flipped is False
+    assert reference.flipped is False
+    assert mps.physical_dimensions == reference.physical_dimensions == [3, 2, 4, 2]
+    assert mps.length == reference.length == 4
+    assert [t.shape for t in mps.tensors] == [t.shape for t in reference.tensors]
+
+
+@pytest.mark.parametrize(
+    "shapes",
+    [
+        [(2, 1, 2), (2, 2, 4), (2, 4, 4), (2, 4, 2), (2, 2, 1)],
+        [(3, 1, 3), (2, 3, 4), (4, 4, 4), (2, 4, 2), (3, 2, 1)],
+    ],
+    ids=["qubits", "qudits"],
+)
+@pytest.mark.parametrize("target", [1, 2, 3, 4])
+def test_center_round_trip_preserves_state_and_canonical_form(shapes: list[tuple[int, int, int]], target: int) -> None:
+    """Walking the center out to ``target`` and back to 0 leaves the state unchanged."""
+    mps = _seeded_canonical_mps(shapes, 0, seed=6300 + target)
+    before = mps.to_vec()
+
+    mps.shift_center_to(target)
+    assert mps.check_canonical_form() == [target]
+    mps.shift_center_to(0)
+
+    assert mps.orthogonality_center == 0
+    assert mps.check_canonical_form() == [0]
+    assert mps.physical_dimensions == [shape[0] for shape in shapes]
+    assert np.allclose(mps.to_vec(), before, atol=1e-13)
+
+
 @pytest.mark.parametrize("desired_center", [0, 1, 2, 3])
 def test_set_canonical_form(desired_center: int) -> None:
     """Test that set_canonical_form correctly sets the MPS into a canonical form without altering tensor shapes.
