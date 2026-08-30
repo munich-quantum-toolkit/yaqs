@@ -53,7 +53,7 @@ def split_tdvp(
     svd_distribution: str,
     *,
     dynamic: bool,
-    retain_null_workspace: bool = True,
+    _prune_null: bool = False,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site tensor using TDVP simulation truncation policy.
 
@@ -70,8 +70,7 @@ def split_tdvp(
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
-        retain_null_workspace: Whether ``min_keep`` may retain numerical-null
-            singular directions for subsequent TDVP updates.
+        _prune_null: Remove numerical-null workspace after a completed gate.
 
     Returns:
         Left and right MPS site tensors after split and truncation.
@@ -85,7 +84,7 @@ def split_tdvp(
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic else sim_params.max_bond_dim,
         min_keep=get_min_keep(sim_params),
-        retain_null_workspace=retain_null_workspace,
+        retain_null_workspace=not _prune_null,
     )
 
 

@@ -693,7 +693,7 @@ def test_lr_routes_2site() -> None:
         apply_two_qubit_gate_tdvp(out, gate, params)
         mock_two.assert_called_once()
         mock_dynamic.assert_not_called()
-        assert mock_two.call_args.kwargs.get("drift_renorm") is False
+        assert mock_two.call_args.kwargs.get("_gate_window") is True
 
 
 def test_lr_rzz_cap_chi1() -> None:

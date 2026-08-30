@@ -243,8 +243,9 @@ def test_split_truncation_max_bond_enforced() -> None:
     assert A1.shape[1] == 2
 
 
-def test_split_tdvp_retains_rank_two_workspace() -> None:
-    """TDVP retains a rank-two workspace even for a rank-one input."""
+@pytest.mark.parametrize(("prune_null", "expected_rank"), [(False, 2), (True, 1)])
+def test_split_tdvp_null_workspace_policy(expected_rank: int, *, prune_null: bool) -> None:
+    """TDVP retains intermediate workspace and prunes it at a gate boundary."""
     null_svs = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
     d0, d1, D0, D2 = 2, 2, 2, 2
     null_theta = _theta_from_singulars(null_svs, d0 * D0, d1 * D2, seed=31)
@@ -258,9 +259,16 @@ def test_split_tdvp_retains_rank_two_workspace() -> None:
         trunc_mode="relative",
         sample_timesteps=True,
     )
-    left, right = split_tdvp(null_input, sim_params, [d0, d1], "sqrt", dynamic=True)
+    left, right = split_tdvp(
+        null_input,
+        sim_params,
+        [d0, d1],
+        "sqrt",
+        dynamic=True,
+        _prune_null=prune_null,
+    )
 
-    assert left.shape[2] == right.shape[1] == 2
+    assert left.shape[2] == right.shape[1] == expected_rank
 
 
 @pytest.mark.parametrize("distr", ["left", "right", "sqrt"])

@@ -30,6 +30,7 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.integrators import sweep_2site
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
+from mqt.yaqs.core.methods.tdvp.sweep_utils import split_tdvp
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 from tests.core.methods.tdvp.conftest import (
     EXACT_FID_TOL,
@@ -131,6 +132,41 @@ def test_2site_sweep_symmetric() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
+        assert mock_sweep.call_args.kwargs.get("_gate_window", False) is False
+
+
+@pytest.mark.parametrize(
+    ("gate_window", "expected_pruned", "expected_renorms", "expected_rank"),
+    [(False, [], 2, 2), (True, [7, 8, 9], 0, 1)],
+)
+def test_2site_gate_window_policy(
+    expected_pruned: list[int],
+    expected_renorms: int,
+    expected_rank: int,
+    *,
+    gate_window: bool,
+) -> None:
+    """Gate windows prune only final bond visits and defer renormalization."""
+    length = 4
+    state = MPS(length, state="zeros")
+    operator = MPO.ising(length, 0.0, 0.0)
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        preset="exact",
+        max_bond_dim=2,
+        tdvp_mode="2site",
+    )
+
+    with (
+        patch("mqt.yaqs.core.methods.tdvp.integrators.split_tdvp", wraps=split_tdvp) as mock_split,
+        patch("mqt.yaqs.core.methods.tdvp.integrators.renorm_drift") as mock_renorm,
+    ):
+        sweep_2site(state, operator, sim_params, sweep_plan=[0.5, 0.5], _gate_window=gate_window)
+
+    pruned = [index for index, call in enumerate(mock_split.call_args_list) if call.kwargs.get("_prune_null", False)]
+    assert pruned == expected_pruned
+    assert mock_renorm.call_count == expected_renorms
+    assert state.bond_dimensions() == [expected_rank] * (length - 1)
 
 
 def test_2site_tdvp_tracks_center_mid_sweep() -> None:

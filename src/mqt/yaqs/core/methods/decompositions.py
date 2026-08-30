@@ -125,8 +125,7 @@ def split_two_site(
         threshold: Truncation threshold for the chosen mode.
         max_bond_dim: Optional hard cap on bond dimension passed to
             :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
-        min_keep: Minimum number of numerically nonzero singular values to
-            retain (default ``1``).
+        min_keep: Minimum number of numerically nonzero singular values to retain (default ``1``).
 
     Returns:
         Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
@@ -155,10 +154,7 @@ def _split_two_site(
     min_keep: int,
     retain_null_workspace: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Implement the physical-rank and TDVP-workspace split policies.
-
-    ``retain_null_workspace`` is an internal TDVP exception that permits
-    ``min_keep`` to retain numerical-null singular directions during a sweep.
+    """Split using either physical-rank or temporary TDVP-workspace semantics.
 
     Returns:
         Left and right MPS site tensors after the configured split.

@@ -165,8 +165,7 @@ def sweep_2site(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
-    drift_renorm: bool = True,
-    _finalize_gate: bool = False,
+    _gate_window: bool = False,
 ) -> None:
     """Run one symmetric 2TDVP sweep over ``state`` in place.
 
@@ -176,10 +175,8 @@ def sweep_2site(
         sim_params: Truncation, Krylov, and timestep settings.
         step_scale: Fraction of one evolution step for each planned substep.
         sweep_plan: Optional list of substep scales; defaults to ``[step_scale]``.
-        drift_renorm: When True and fixed-χ digital simulation is active,
-            renormalize after norm drift at the end of the sweep.
-        _finalize_gate: Remove numerical-null workspace on each bond's final
-            split. Internal gate-window policy; ordinary TDVP retains it.
+        _gate_window: Suppress pre-graft renormalization and prune numerical-null
+            workspace on each bond's final split.
 
     """
     num_sites = operator.length
@@ -196,8 +193,7 @@ def sweep_2site(
     left_blocks[0] = left_identity
 
     for plan_index, plan_step_scale in enumerate(plan):
-        is_final_plan_step = plan_index == len(plan) - 1
-        retain_final_workspace = not (_finalize_gate and is_final_plan_step)
+        prune_final = _gate_window and plan_index == len(plan) - 1
         substep_evolution_dt = _scale_dt(sim_params, plan_step_scale)
 
         for i in range(num_sites - 2):
@@ -248,7 +244,7 @@ def sweep_2site(
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
             "left",
             dynamic=False,
-            retain_null_workspace=retain_final_workspace,
+            _prune_null=prune_final,
         )
         state.update_center_after_split(i, i + 1, "left")
 
@@ -285,14 +281,14 @@ def sweep_2site(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "left",
                 dynamic=False,
-                retain_null_workspace=retain_final_workspace,
+                _prune_null=prune_final,
             )
             state.update_center_after_split(i, i + 1, "left")
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
 
-        if drift_renorm and uses_fixed_chi(sim_params):
+        if not _gate_window and uses_fixed_chi(sim_params):
             renorm_drift(state, sim_params)
 
     state.set_center(0)

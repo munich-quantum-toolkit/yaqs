@@ -138,6 +138,5 @@ def evolve_window(
         state,
         operator,
         sim_params,
-        drift_renorm=False,
-        _finalize_gate=True,
+        _gate_window=True,
     )
