@@ -313,16 +313,18 @@ def _renormalize(state: MPS) -> None:
         state: MPS normalized in place.
 
     Raises:
-        ValueError: If the orthogonality-center tensor has zero or non-finite norm.
+        ValueError: If the MPS norm is zero or non-finite.
     """
+    msg = "Cannot normalize MPS: norm is zero or non-finite."
     center = state.orthogonality_center
     if center is None:
-        state.normalize(form="B", decomposition="QR")
-        return
+        if not all(np.isfinite(tensor).all() for tensor in state.tensors):
+            raise ValueError(msg)
+        center = 0
+        state.set_canonical_form(center, decomposition="QR")
     center_tensor = state.tensors[center]
     norm = float(np.linalg.norm(center_tensor))
     if norm <= 0.0 or not np.isfinite(norm):
-        msg = "Cannot normalize MPS: orthogonality-center tensor norm is zero or non-finite."
         raise ValueError(msg)
     state.tensors[center] = center_tensor / norm
 
@@ -463,13 +465,12 @@ def apply_two_qubit_gate_tdvp(
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length, state.physical_dimensions)
 
     window_size = 1
-    gauge_known = state.orthogonality_center is not None
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
     evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
-    if gauge_known and short_state.orthogonality_center is not None:
+    if short_state.orthogonality_center is not None:
         state.set_center(window[0] + short_state.orthogonality_center)
     else:
         state.set_center(None)

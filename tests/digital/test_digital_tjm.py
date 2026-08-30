@@ -2622,7 +2622,7 @@ def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int | None)
     that the fallback reconstructs it at the window start.
     """
     theta = 0.6
-    sites = (1, WINDOW_LENGTH - 2)  # window [0, 9] — right edge is the chain end
+    sites = (2, WINDOW_LENGTH - 2)  # window [1, 9] — right edge is the chain end
     state = _random_capped_mps(WINDOW_LENGTH, GAUGE_CHI, WINDOW_SEED)
     eigenvalues = np.array([1.0, -1.0])
     phases = np.exp(-0.5j * theta * np.multiply.outer(eigenvalues, eigenvalues))
@@ -2636,6 +2636,8 @@ def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int | None)
 
     got = _dense_state(state).reshape(-1)
     assert _fidelity(got, expected.reshape(-1)) == pytest.approx(1.0, abs=1e-12)
+    assert state.orthogonality_center is not None
+    assert state.orthogonality_center in state.check_canonical_form()
 
 
 def test_fixed_chi_windowed_tdvp_gate_leaves_a_truthful_center() -> None:
@@ -2722,11 +2724,13 @@ def test_center_rescale_normalizes_without_moving_the_center() -> None:
     assert 0 in state.check_canonical_form()
 
 
+@pytest.mark.parametrize("center", [0, None])
 @pytest.mark.parametrize("invalid_value", [0.0, np.nan, np.inf])
-def test_center_rescale_rejects_invalid_norm(invalid_value: float) -> None:
-    """A zero or non-finite center norm cannot represent a normalizable state."""
+def test_center_rescale_rejects_invalid_norm(invalid_value: float, center: int | None) -> None:
+    """A zero or non-finite state cannot be normalized with a known or unknown gauge."""
     state = MPS(3, state="zeros")
     state.tensors[0] = np.full_like(state.tensors[0], invalid_value)
+    state.set_center(center)
 
     with pytest.raises(ValueError, match="zero or non-finite"):
         _renormalize(state)
