@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 
 from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
-from ..decompositions import merge_two_site, split_two_site
+from ..decompositions import _split_two_site, merge_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -53,13 +53,15 @@ def split_tdvp(
     svd_distribution: str,
     *,
     dynamic: bool,
+    _prune_null: bool = False,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site tensor using TDVP simulation truncation policy.
 
-    Thin adapter around :func:`mqt.yaqs.core.methods.decompositions.split_two_site`.
-    When ``dynamic`` is True, no ``max_bond_dim`` cap is applied during truncation
-    (bond growth is handled by the dynamic TDVP sweep and global χ enforcement).
-    Otherwise the cap is ``sim_params.max_bond_dim``.
+    Unlike ordinary two-site splitting, TDVP may retain a numerical-null
+    direction as workspace for later projected updates. When ``dynamic`` is
+    True, no ``max_bond_dim`` cap is applied during truncation (bond growth is
+    handled by the dynamic TDVP sweep and global χ enforcement). Otherwise the
+    cap is ``sim_params.max_bond_dim``.
 
     Args:
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
@@ -68,12 +70,13 @@ def split_tdvp(
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
+        _prune_null: Remove numerical-null workspace after a completed gate.
 
     Returns:
         Left and right MPS site tensors after split and truncation.
 
     """
-    return split_two_site(
+    return _split_two_site(
         merged,
         physical_dimensions,
         svd_distribution=cast("SvdDistribution", svd_distribution),
@@ -81,6 +84,7 @@ def split_tdvp(
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic else sim_params.max_bond_dim,
         min_keep=get_min_keep(sim_params),
+        retain_null_workspace=not _prune_null,
     )
 
 
@@ -148,7 +152,7 @@ def _sync_bond_dim(
         threshold = sim_params.svd_threshold if sim_params is not None else 0.0
         merged = merge_two_site(left, right)
         phys_dims = [int(left.shape[0]), int(right.shape[0])]
-        left_new, right_new = split_two_site(
+        left_new, right_new = _split_two_site(
             merged,
             phys_dims,
             svd_distribution="sqrt",
@@ -156,6 +160,7 @@ def _sync_bond_dim(
             threshold=threshold,
             max_bond_dim=target_dim,
             min_keep=1,
+            retain_null_workspace=True,
         )
         state.tensors[bond_index] = left_new
         state.tensors[bond_index + 1] = right_new

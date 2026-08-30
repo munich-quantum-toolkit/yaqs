@@ -158,8 +158,8 @@ def test_evolve_window_rejects_single_site_window() -> None:
         evolve_window(state, hamiltonian, sim_params)
 
 
-def test_evolve_window_no_drift_renorm() -> None:
-    """Window-local TDVP disables per-sweep drift renorm before grafting."""
+def test_evolve_window_uses_gate_window_policy() -> None:
+    """Window-local TDVP enables final pruning and defers renormalization."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
@@ -168,7 +168,7 @@ def test_evolve_window_no_drift_renorm() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         evolve_window(state, H, sim_params)
         mock_two.assert_called_once()
-        assert mock_two.call_args.kwargs.get("drift_renorm") is False
+        assert mock_two.call_args.kwargs.get("_gate_window") is True
 
 
 def test_tdvp_rejects_invalid_tdvp_sweeps_at_runtime() -> None:
