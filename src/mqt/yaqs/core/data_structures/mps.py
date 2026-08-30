@@ -20,7 +20,7 @@ import scipy.linalg
 from tqdm import tqdm
 
 from .. import linalg
-from ..methods.decompositions import merge_two_site, right_qr, split_two_site
+from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 
 if TYPE_CHECKING:
@@ -898,7 +898,8 @@ class MPS:
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
 
-        This function flips the network, performs a right shift, then flips the network again.
+        This function performs a QR decomposition to shift the known current center to the left and move
+        the canonical form. This is essential for maintaining efficient tensor network algorithms.
 
         Args:
             current_orthogonality_center (int): current center
@@ -915,9 +916,41 @@ class MPS:
                 f"shift_orthogonality_center_left: tracked center is {self._orthogonality_center}, "
                 f"but shift requested from site {current_orthogonality_center}."
             )
-        self.flip_network()
-        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
-        self.flip_network()
+        tensor = self.tensors[current_orthogonality_center]
+        if decomposition == "QR" or current_orthogonality_center == 0:
+            site_tensor, bond_tensor = left_qr(tensor)
+            self.tensors[current_orthogonality_center] = site_tensor
+
+            # If normalizing, we just throw away the R
+            if current_orthogonality_center - 1 >= 0:
+                self.tensors[current_orthogonality_center - 1] = oe.contract(
+                    "aij, jk->aik",
+                    self.tensors[current_orthogonality_center - 1],
+                    bond_tensor,
+                )
+        elif decomposition == "SVD":
+            a, b = (
+                self.tensors[current_orthogonality_center - 1],
+                self.tensors[current_orthogonality_center],
+            )
+            merged = merge_two_site(a, b)
+            a_new, b_new = split_two_site(
+                merged,
+                [a.shape[0], b.shape[0]],
+                svd_distribution="left",
+                trunc_mode="discarded_weight",
+                threshold=1e-12,
+                max_bond_dim=None,
+            )
+            (
+                self.tensors[current_orthogonality_center - 1],
+                self.tensors[current_orthogonality_center],
+            ) = (a_new, b_new)
+        if self._orthogonality_center is not None:
+            if current_orthogonality_center - 1 >= 0:
+                self._orthogonality_center = current_orthogonality_center - 1
+            else:
+                self._orthogonality_center = current_orthogonality_center
 
     def set_canonical_form(self, orthogonality_center: int, decomposition: str = "QR") -> None:
         """Sets canonical form of MPS.
