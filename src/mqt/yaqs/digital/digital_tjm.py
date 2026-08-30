@@ -412,9 +412,8 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
             state.shift_center_to(window[0])
             rel_center = 0
     else:
-        for i in range(window[0]):
-            state.shift_orthogonality_center_right(i)
-        rel_center = None
+        state.set_canonical_form(window[0], decomposition="QR")
+        rel_center = 0
 
     short_mpo = MPO()
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)

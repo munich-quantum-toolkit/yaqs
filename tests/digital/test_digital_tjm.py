@@ -2611,14 +2611,15 @@ WINDOW_LENGTH = 10
 WINDOW_SEED = 11
 
 
-@pytest.mark.parametrize("center", [0, 4, 9])
-def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int) -> None:
-    """An uncapped windowed RZZ must reproduce the exact gate wherever the center starts.
+@pytest.mark.parametrize("center", [0, 4, 9, None])
+def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int | None) -> None:
+    """An uncapped windowed RZZ must be exact for any incoming or unknown center.
 
     ``sweep_2site`` takes its window right-canonical from the first site, so a center left
     anywhere else has to be moved there first. A center on the window's last site is the
     case that bites: with the window's right edge at the chain end there is no dangling
-    bond to absorb the mismatch.
+    bond to absorb the mismatch. The unknown-center case hides that same gauge to verify
+    that the fallback reconstructs it at the window start.
     """
     theta = 0.6
     sites = (1, WINDOW_LENGTH - 2)  # window [0, 9] — right edge is the chain end
@@ -2627,7 +2628,8 @@ def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int) -> Non
     phases = np.exp(-0.5j * theta * np.multiply.outer(eigenvalues, eigenvalues))
     expected = _dense_state(state) * phases.reshape([2 if site in sites else 1 for site in range(WINDOW_LENGTH)])
 
-    state.shift_center_to(center)
+    state.shift_center_to(WINDOW_LENGTH - 1 if center is None else center)
+    state.set_center(center)
     gate = GateLibrary.rzz([theta])
     gate.set_sites(*sites)
     apply_two_qubit_gate_tdvp(state, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
