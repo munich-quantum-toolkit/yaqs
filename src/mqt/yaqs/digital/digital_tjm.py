@@ -599,16 +599,7 @@ def apply_long_range_gate_mpo(
         physical_dimensions=state.physical_dimensions[first_site : last_site + 1],
     )
     MPO.from_gate(gate, window.length, physical_dimensions=window.physical_dimensions).multiply(
-        window, sim_params=sim_params, compress=False
-    )
-    # compress() reads the tracked center only to choose where to leave it, and its
-    # truncating sweep ends on the last site; naming that site skips the gauge scan the
-    # unknown center would trigger, and the return sweep that would follow it.
-    window.set_center(window.length - 1)
-    window.compress(
-        sim_params.svd_threshold,
-        max_bond_dim=sim_params.max_bond_dim,
-        trunc_mode=sim_params.trunc_mode,
+        window, sim_params=sim_params, compress=True
     )
     state.tensors[first_site : last_site + 1] = window.tensors
     center = window.orthogonality_center
