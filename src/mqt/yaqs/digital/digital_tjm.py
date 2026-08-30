@@ -717,6 +717,7 @@ def digital_tjm(
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
+            state.normalize(form="B", decomposition="QR")
             results = np.zeros((n_obs, mid + 2))
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
