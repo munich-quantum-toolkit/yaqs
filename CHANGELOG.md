@@ -49,8 +49,8 @@ releases may include breaking changes.
 
 ### Fixed
 
-- stabilize digital TDVP by pruning null bond directions
-  ([#567]) ([**@aaronleesander**])
+- stabilize digital TDVP by pruning null bond directions ([#567])
+  ([**@aaronleesander**])
 - fixed MPS norm definition and construction of arbitrary basis state ([#553])
   ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
