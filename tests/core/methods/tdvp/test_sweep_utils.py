@@ -243,12 +243,12 @@ def test_split_truncation_max_bond_enforced() -> None:
     assert A1.shape[1] == 2
 
 
-def test_split_tdvp_min_keep() -> None:
-    """``split_tdvp`` enforces ``min_keep=2`` even when threshold would drop further."""
-    svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
+def test_split_tdvp_retains_rank_two_workspace() -> None:
+    """TDVP retains a rank-two workspace even for a rank-one input."""
+    null_svs = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
     d0, d1, D0, D2 = 2, 2, 2, 2
-    theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=31)
-    A_in = _as_input_tensor(theta, d0, d1, D0, D2)
+    null_theta = _theta_from_singulars(null_svs, d0 * D0, d1 * D2, seed=31)
+    null_input = _as_input_tensor(null_theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -258,9 +258,9 @@ def test_split_tdvp_min_keep() -> None:
         trunc_mode="relative",
         sample_timesteps=True,
     )
-    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
-    assert A0.shape[2] == 2
-    assert A1.shape[1] == 2
+    left, right = split_tdvp(null_input, sim_params, [d0, d1], "sqrt", dynamic=True)
+
+    assert left.shape[2] == right.shape[1] == 2
 
 
 @pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
@@ -386,6 +386,25 @@ def test_sync_bond_dim_preserves_low_rank_state() -> None:
     _sync_bond_dim(state, 0, 1, params)
     assert state.tensors[0].shape[2] == 1
     assert state.tensors[1].shape[1] == 1
+    assert abs(np.vdot(reference, state.to_vec())) ** 2 == pytest.approx(1.0, abs=1e-12)
+
+
+def test_sync_bond_dim_preserves_analog_workspace() -> None:
+    """Analog bond synchronization retains the requested null TDVP workspace."""
+    state = MPS(4, state="zeros", pad=4)
+    reference = state.to_vec()
+    params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        max_bond_dim=2,
+        svd_threshold=0.0,
+    )
+
+    _sync_bond_dim(state, 1, 2, params)
+
+    assert state.tensors[1].shape[2] == 2
+    assert state.tensors[2].shape[1] == 2
     assert abs(np.vdot(reference, state.to_vec())) ** 2 == pytest.approx(1.0, abs=1e-12)
 
 

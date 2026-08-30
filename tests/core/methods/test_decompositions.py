@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.core.methods.decompositions import (
         SvdDistribution,
+        TruncMode,
     )
 
 
@@ -146,9 +147,9 @@ def test_split_two_site_truncates_to_max_bond_dim() -> None:
     assert b_new.shape[1] == k
 
 
-def test_split_two_site_min_keep() -> None:
-    """``min_keep`` enforces a truncation floor even when threshold would drop further."""
-    svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
+def test_split_two_site_min_keep_preserves_small_nonzero_rank() -> None:
+    """``min_keep`` protects a small but numerically nonzero singular value."""
+    svs = np.array([1.0, 1e-12, 0.0, 0.0], dtype=np.float64)
     d0, d1, d_left, d_right = 2, 2, 2, 2
     theta = _theta_from_singulars(svs, d0 * d_left, d1 * d_right, seed=31)
     merged = _as_merged_two_site(theta, d0, d1, d_left, d_right)
@@ -163,6 +164,25 @@ def test_split_two_site_min_keep() -> None:
     )
     assert a_new.shape[2] == 2
     assert b_new.shape[1] == 2
+
+
+@pytest.mark.parametrize("trunc_mode", ["discarded_weight", "relative", "hard_cutoff", "relative_discarded_weight"])
+def test_split_two_site_drops_null_rank_at_zero_threshold(trunc_mode: TruncMode) -> None:
+    """The public split never exposes numerical-null bond directions."""
+    theta = _theta_from_singulars(np.array([1.0, 0.0, 0.0, 0.0]), 4, 4, seed=41)
+    merged = _as_merged_two_site(theta, 2, 2, 2, 2)
+    left, right = split_two_site(
+        merged,
+        [2, 2],
+        svd_distribution="sqrt",
+        trunc_mode=trunc_mode,
+        threshold=0.0,
+        max_bond_dim=None,
+        min_keep=2,
+    )
+
+    assert left.shape[2] == right.shape[1] == 1
+    np.testing.assert_allclose(merge_two_site(left, right), merged, atol=1e-14)
 
 
 def test_split_two_site_unknown_mode_raises() -> None:

@@ -125,15 +125,46 @@ def split_two_site(
         threshold: Truncation threshold for the chosen mode.
         max_bond_dim: Optional hard cap on bond dimension passed to
             :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
-        min_keep: Minimum number of singular values to retain (default ``1``).
+        min_keep: Minimum number of numerically nonzero singular values to
+            retain (default ``1``).
 
     Returns:
         Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
 
+    """
+    return _split_two_site(
+        merged,
+        physical_dimensions,
+        svd_distribution=svd_distribution,
+        trunc_mode=trunc_mode,
+        threshold=threshold,
+        max_bond_dim=max_bond_dim,
+        min_keep=min_keep,
+        retain_null_workspace=False,
+    )
+
+
+def _split_two_site(
+    merged: NDArray[np.complex128],
+    physical_dimensions: list[int],
+    *,
+    svd_distribution: SvdDistribution,
+    trunc_mode: TruncMode,
+    threshold: float,
+    max_bond_dim: int | None,
+    min_keep: int,
+    retain_null_workspace: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Implement the physical-rank and TDVP-workspace split policies.
+
+    ``retain_null_workspace`` is an internal TDVP exception that permits
+    ``min_keep`` to retain numerical-null singular directions during a sweep.
+
+    Returns:
+        Left and right MPS site tensors after the configured split.
+
     Raises:
-        ValueError: If ``physical_dimensions`` does not have exactly two
-            elements, if it does not match the first axis of ``merged``,
-            ``trunc_mode`` is not recognized, or ``svd_distribution`` is invalid.
+        ValueError: If the physical dimensions or SVD policy are invalid.
     """
     if len(physical_dimensions) != 2:
         msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
@@ -154,13 +185,21 @@ def split_two_site(
     )
     u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
+    numerical_rank = 0
+    if s_vec.size:
+        null_tolerance = np.finfo(s_vec.dtype).eps * max(theta_mat.shape) * float(s_vec[0])
+        numerical_rank = max(1, int(np.count_nonzero(s_vec > null_tolerance)))
+    effective_min_keep = min_keep if retain_null_workspace else min(min_keep, numerical_rank)
+
     keep = linalg.truncate(
         s_vec,
         mode=trunc_mode,
         threshold=threshold,
         max_bond_dim=max_bond_dim,
-        min_keep=min_keep,
+        min_keep=effective_min_keep,
     )
+    if not retain_null_workspace:
+        keep = min(keep, numerical_rank)
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]

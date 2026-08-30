@@ -412,11 +412,12 @@ def apply_two_qubit_gate_tdvp(
 ) -> tuple[int, int]:
     """Apply a gate via generator MPO and TDVP.
 
-    Long-range gates use local two-site TDVP (2TDVP) on a window-local MPS without
-    post-sweep renormalization before grafting tensors back into the full chain.
-    Nearest-neighbor two-qubit gates in hybrid ``gate_mode="tdvp"`` use TEBD instead;
-    callers should route via :func:`apply_two_qubit_gate`. The window spans the full
-    gate support, so the function applies to any gate with a product-form generator.
+    Gates use local two-site TDVP (2TDVP) on a window-local MPS without post-sweep
+    renormalization before grafting tensors back into the full chain. Numerical-null
+    workspace is pruned on the gate's final split. Nearest-neighbor two-qubit gates
+    in hybrid ``gate_mode="tdvp"`` use TEBD instead; callers should route via
+    :func:`apply_two_qubit_gate`. The window spans the full gate support, so the
+    function applies to any gate with a product-form generator.
 
     Args:
         state: MPS updated in place.

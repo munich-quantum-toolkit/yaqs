@@ -166,6 +166,7 @@ def sweep_2site(
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
     drift_renorm: bool = True,
+    _finalize_gate: bool = False,
 ) -> None:
     """Run one symmetric 2TDVP sweep over ``state`` in place.
 
@@ -177,6 +178,8 @@ def sweep_2site(
         sweep_plan: Optional list of substep scales; defaults to ``[step_scale]``.
         drift_renorm: When True and fixed-χ digital simulation is active,
             renormalize after norm drift at the end of the sweep.
+        _finalize_gate: Remove numerical-null workspace on each bond's final
+            split. Internal gate-window policy; ordinary TDVP retains it.
 
     """
     num_sites = operator.length
@@ -192,7 +195,9 @@ def sweep_2site(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
-    for plan_step_scale in plan:
+    for plan_index, plan_step_scale in enumerate(plan):
+        is_final_plan_step = plan_index == len(plan) - 1
+        retain_final_workspace = not (_finalize_gate and is_final_plan_step)
         substep_evolution_dt = _scale_dt(sim_params, plan_step_scale)
 
         for i in range(num_sites - 2):
@@ -243,6 +248,7 @@ def sweep_2site(
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
             "left",
             dynamic=False,
+            retain_null_workspace=retain_final_workspace,
         )
         state.update_center_after_split(i, i + 1, "left")
 
@@ -279,6 +285,7 @@ def sweep_2site(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "left",
                 dynamic=False,
+                retain_null_workspace=retain_final_workspace,
             )
             state.update_center_after_split(i, i + 1, "left")
             right_blocks[i] = update_right_environment(

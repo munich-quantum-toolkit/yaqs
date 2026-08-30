@@ -116,7 +116,7 @@ def evolve_window(
     operator: MPO,
     sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
-    """Evolve a window-local MPS without post-sweep renormalization before grafting.
+    """Evolve a window-local MPS and remove null workspace on the final split.
 
     Used by :func:`mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tdvp` for
     long-range gates whose tensors are copied back into a larger chain.
@@ -139,4 +139,5 @@ def evolve_window(
         operator,
         sim_params,
         drift_renorm=False,
+        _finalize_gate=True,
     )
