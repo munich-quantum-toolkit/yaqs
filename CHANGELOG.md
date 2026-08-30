@@ -28,8 +28,7 @@ releases may include breaking changes.
 
 ### Changed
 
-- replaced per-gate full-chain renormalization with an orthogonality-center
-  rescale ([#560]) ([**@Pouri96**])
+- sped up normalization in circuit simulation and fix TDVP state tracking ([#560]) ([**@Pouri96**])
 - restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
 - dropped support for Python 3.10 ([#556]) ([**@denialhaag**])
 - updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
