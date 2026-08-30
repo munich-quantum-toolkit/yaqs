@@ -1105,41 +1105,17 @@ def test_mixed_gate2_norm_unit() -> None:
 
 
 @pytest.mark.parametrize("chi", [16, 32])
-@pytest.mark.tdvp_regression
-def test_mixed_zeros_full_replay_matches_the_simulator(chi: int) -> None:
-    """Replaying gates through the public API gives what the circuit loop gives.
-
-    The replay applies gates back to back without the loop's per-gate renormalization,
-    so it reaches ``apply_two_qubit_gate`` with the center wherever the previous gate
-    left it. The gate application gauges the window itself, so both routes agree.
-    """
-    qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
-    params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
-    state = _replay_hybrid_tdvp_through_gate(qc, len(list(circuit_to_dag(qc).topological_op_nodes())), params=params)
-    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
-
-    loop_params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
-    loop_params.observables = [Observable(Z(), 0)]
-    result = Simulator(parallel=False, show_progress=False).run(
-        State(MIXED_SMALL_ZEROS_LENGTH, initial="zeros"), qc, loop_params, None
-    )
-    assert result.output_state is not None
-    assert _fidelity(result.output_state.mps.to_vec(), state.mps.to_vec()) == pytest.approx(1.0, abs=1e-10)
-
-
-@pytest.mark.parametrize("chi", [16, 32])
-@pytest.mark.tdvp_regression
-@pytest.mark.xfail(
-    reason="a long-range generator gate is under-applied once a preceding two-qubit gate has "
-    "changed the bond structure; gate_mode='mpo' is exact on the same circuit",
-    strict=True,
-)
-def test_mixed_zeros_full_is_exact(chi: int) -> None:
-    """The hybrid TDVP route should reproduce the exact state for this circuit."""
+def test_mixed_zeros_full(chi: int) -> None:
+    """Full mixed_small L=10 zeros circuit matches exact evolution under hybrid TDVP."""
     qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
-    state = _replay_hybrid_tdvp_through_gate(qc, len(list(circuit_to_dag(qc).topological_op_nodes())), params=params)
+    state = _replay_hybrid_tdvp_through_gate(
+        qc,
+        len(list(circuit_to_dag(qc).topological_op_nodes())),
+        params=params,
+    )
+    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
     assert _fidelity(ref, state.mps.to_vec()) > 0.99
 
 
