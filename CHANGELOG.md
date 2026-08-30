@@ -49,6 +49,8 @@ releases may include breaking changes.
 
 ### Fixed
 
+- stabilize digital TDVP by pruning null bond directions
+  ([#567]) ([**@aaronleesander**])
 - fixed MPS norm definition and construction of arbitrary basis state ([#553])
   ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
@@ -254,6 +256,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
 [#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
