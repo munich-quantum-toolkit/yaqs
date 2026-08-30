@@ -311,6 +311,9 @@ def _renormalize(state: MPS) -> None:
 
     Args:
         state: MPS normalized in place.
+
+    Raises:
+        ValueError: If the orthogonality-center tensor has zero or non-finite norm.
     """
     center = state.orthogonality_center
     if center is None:
@@ -318,8 +321,10 @@ def _renormalize(state: MPS) -> None:
         return
     center_tensor = state.tensors[center]
     norm = float(np.linalg.norm(center_tensor))
-    if norm > 0.0:
-        state.tensors[center] = center_tensor / norm
+    if norm <= 0.0 or not np.isfinite(norm):
+        msg = "Cannot normalize MPS: orthogonality-center tensor norm is zero or non-finite."
+        raise ValueError(msg)
+    state.tensors[center] = center_tensor / norm
 
 
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:

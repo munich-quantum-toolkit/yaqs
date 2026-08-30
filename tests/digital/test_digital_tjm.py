@@ -2720,6 +2720,16 @@ def test_center_rescale_normalizes_without_moving_the_center() -> None:
     assert 0 in state.check_canonical_form()
 
 
+@pytest.mark.parametrize("invalid_value", [0.0, np.nan, np.inf])
+def test_center_rescale_rejects_invalid_norm(invalid_value: float) -> None:
+    """A zero or non-finite center norm cannot represent a normalizable state."""
+    state = MPS(3, state="zeros")
+    state.tensors[0] = np.full_like(state.tensors[0], invalid_value)
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        _renormalize(state)
+
+
 def test_renormalization_falls_back_to_a_full_sweep_when_the_gauge_is_unknown() -> None:
     """With no tracked center the state is renormalized by a full-chain sweep."""
     state = MPS(3, state="zeros")
