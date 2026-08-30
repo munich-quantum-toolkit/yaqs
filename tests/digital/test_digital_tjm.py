@@ -2814,12 +2814,22 @@ def test_layer_sampling_reads_the_state_in_b_form() -> None:
     original = MPS.record_diagnostics
 
     def recording(self: MPS, diagnostics: NDArray[np.float64], column_index: int) -> None:
+        """Record the center before writing a diagnostics column.
+
+        Args:
+            self: MPS being sampled.
+            diagnostics: Array that stores diagnostic values.
+            column_index: Column to fill.
+        """
         centers.append(self.orthogonality_center)
         original(self, diagnostics, column_index)
 
+    initial_mps = _random_capped_mps(6, GAUGE_CHI, GAUGE_SEED)
+    initial_mps.shift_center_to(4)
+    assert initial_mps.orthogonality_center == 4
     sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="mpo", preset="exact", sample_layers=True)
     with patch.object(MPS, "record_diagnostics", recording):
-        Simulator(parallel=False, show_progress=False).run(State(6, initial="zeros"), qc, sim_params, None)
+        Simulator(parallel=False, show_progress=False).run(State.from_mps(initial_mps), qc, sim_params, None)
 
     assert len(centers) >= 3  # initial sample, one per barrier, and the final column
     assert set(centers) == {0}
