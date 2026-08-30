@@ -1001,6 +1001,22 @@ def test_ladder_fchi_no_shape_error() -> None:
     assert_mps_bond_invariants(out, max_bond_dim=8)
 
 
+def test_ladder_grows_required_physical_rank() -> None:
+    """A high-cap RZZ ladder should reproduce its rank-growing exact state."""
+    length = LADDER_INVARIANT_LENGTH
+    prep = _prep_state("plus", length)
+    out = _run_circuit(prep, _rzz_lr_ladder_circuit(length), max_bond_dim=64, sweeps=1)
+    exact = _exact_ladder_reference(length, len(_ladder_pairs(length)))
+    fidelity = _fidelity(exact, out.to_vec())
+
+    assert out.norm() == pytest.approx(1.0, abs=NORM_TOL)
+    assert fidelity > 0.9
+    if fidelity <= 0.99 or _max_bond(out) <= 2:
+        pytest.xfail("One-sweep TDVP cannot yet grow all physical ranks required by an RZZ ladder")
+    assert fidelity > 0.99
+    assert _max_bond(out) > 2
+
+
 def test_ladder_fchi_vs_uncapped() -> None:
     """L=10 |+⟩ ladder: χ=64 matches χ=None when no bond reaches the cap."""
     uncapped = State(LADDER_INVARIANT_LENGTH, initial="x+")
@@ -1087,6 +1103,21 @@ def test_mixed_gate2_norm_unit() -> None:
     assert abs(vec_norm - 1.0) < NORM_TOL, f"vec norm {vec_norm}"
 
 
+@pytest.mark.parametrize("chi", [16, 32])
+def test_mixed_zeros_full(chi: int) -> None:
+    """Full mixed_small L=10 zeros circuit matches exact evolution under hybrid TDVP."""
+    qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
+    state = _replay_hybrid_tdvp_through_gate(
+        qc,
+        len(list(circuit_to_dag(qc).topological_op_nodes())),
+        params=params,
+    )
+    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
+    assert _fidelity(ref, state.mps.to_vec()) > 0.99
+
+
 @pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp"])
 @pytest.mark.parametrize("tdvp_sweeps", [1, 4])
 @pytest.mark.parametrize("noop_sites", [(2, 3), (1, 4)])
@@ -1127,7 +1158,7 @@ def test_mixed_zeros_full_is_history_invariant(
 @pytest.mark.parametrize("gate_name", ["rxx", "ryy"])
 @pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp"])
 def test_lr_product_state_grows_support(gate_mode: GateMode, gate_name: str) -> None:
-    """The TDVP rank-two workspace still applies an entangling LR gate to a product state."""
+    """The TDVP workspace grows physical rank and responds to a restrictive cap."""
     qc = QuantumCircuit(4)
     getattr(qc, gate_name)(np.pi / 2, 0, 3)
 
@@ -1140,6 +1171,72 @@ def test_lr_product_state_grows_support(gate_mode: GateMode, gate_name: str) -> 
     assert isinstance(vec, np.ndarray)
     reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(reference, vec) == pytest.approx(1.0, abs=1e-9)
+
+    rank_one_vec = _run_digital_observables_noiseless(
+        qc,
+        gate_mode=gate_mode,
+        max_bond_dim=1,
+        get_state=True,
+    )
+    assert isinstance(rank_one_vec, np.ndarray)
+    assert _fidelity(reference, rank_one_vec) < 0.99
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp"])
+def test_issue_566_long_range_cz_grows_required_rank(gate_mode: GateMode) -> None:
+    """The Issue 566 circuit should match exact evolution without a bond cap."""
+    length = 10
+    rng = np.random.default_rng(4)
+    qc = QuantumCircuit(length)
+    for qubit in range(length):
+        qc.ry(float(rng.uniform(0.3, 2.5)), qubit)
+        qc.rz(float(rng.uniform(0.3, 2.5)), qubit)
+    for layer in (0, 1):
+        for qubit in range(layer, length - 1, 2):
+            qc.cx(qubit, qubit + 1)
+    qc.cz(0, length - 1)
+
+    vec = _run_digital_observables_noiseless(
+        qc,
+        gate_mode=gate_mode,
+        max_bond_dim=None,
+        get_state=True,
+        tdvp_sweeps=1,
+    )
+    assert isinstance(vec, np.ndarray)
+    reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    fidelity = _fidelity(reference, vec)
+
+    assert np.linalg.norm(vec) == pytest.approx(1.0, abs=1e-12)
+    assert fidelity > 0.8
+    if fidelity <= 0.99:
+        pytest.xfail("Issue #566: circuit TDVP does not grow the interior Schmidt ranks from two to four")
+    assert fidelity > 0.99
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp"])
+def test_one_sweep_long_range_cz_grows_product_state_rank(gate_mode: GateMode) -> None:
+    """A long-range CZ should be exact after one requested gate sweep."""
+    qc = QuantumCircuit(5)
+    qc.h(range(5))
+    qc.cz(0, 4)
+
+    vec = _run_digital_observables_noiseless(
+        qc,
+        gate_mode=gate_mode,
+        max_bond_dim=8,
+        get_state=True,
+        tdvp_sweeps=1,
+    )
+    assert isinstance(vec, np.ndarray)
+    reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    fidelity = _fidelity(reference, vec)
+
+    assert np.linalg.norm(vec) == pytest.approx(1.0, abs=1e-12)
+    assert fidelity >= 0.5 - 1e-9
+    if fidelity <= 0.99:
+        pytest.xfail("One-sweep TDVP cannot yet activate the rank needed by a long-range CZ on a product MPS")
+    assert fidelity > 0.99
 
 
 @pytest.mark.parametrize("initial_state", ["plus", "low_depth"])
