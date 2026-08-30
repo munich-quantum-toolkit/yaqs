@@ -228,6 +228,34 @@ def _reject_unsupported(node: DAGOpNode) -> None:
 _MAX_MATRIX_FALLBACK_QUBITS = 8
 
 
+def is_digital_noise_opportunity(operation: Operation) -> bool:
+    """Return whether a Qiskit operation is an eligible two-qubit noise opportunity.
+
+    Args:
+        operation: A Qiskit circuit operation.
+
+    Returns:
+        ``True`` when ``operation`` is a supported two-qubit unitary.
+    """
+    if operation.num_qubits != 2:
+        return False
+
+    name = operation.name
+    if name in _SKIP_INSTRUCTIONS or name in _REJECTED_INSTRUCTIONS or name in _CONTROL_FLOW_INSTRUCTIONS:
+        return False
+    if getattr(operation, "condition", None) is not None:
+        return False
+    if _has_unbound_params(operation):
+        return False
+    if name in SUPPORTED_QISKIT_GATE_NAMES:
+        return True
+    try:
+        matrix = _extract_matrix(operation, name=name)
+    except ValueError:
+        return False
+    return _is_unitary(matrix)
+
+
 def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate:
     """Build a YAQS gate from a Qiskit operation matrix.
 

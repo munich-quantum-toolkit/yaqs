@@ -115,7 +115,7 @@ Plain `barrier` instructions are dropped in simulation except barriers labelled
 ### Equivalence checking
 
 {class}`~mqt.yaqs.EquivalenceChecker` compares two circuits by forming
-$W = U_2^\dagger U_1$ and testing whether $W$ is identity-like up to global
+$W = U_1 U_2^\dagger$ and testing whether $W$ is identity-like up to global
 phase. Custom and QASM-defined gates use the same translation path as
 simulation; unknown unitaries work via matrix fallback. Gates on more than two
 qubits require the matrix backend; use `representation="matrix"` explicitly when

@@ -359,7 +359,7 @@ def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:
         tol=0.0,
         n_sweeps=0,
     )
-    mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    mps = MPS(length, state="x+")
     ref = mps.to_vec().copy()
     dt = 0.05
     bug(

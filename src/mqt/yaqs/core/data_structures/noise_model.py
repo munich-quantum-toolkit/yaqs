@@ -227,6 +227,11 @@ def _crosstalk_pauli_letters(suffix: str, *, swapped: bool) -> tuple[str, str]:
 class NoiseModel:
     """A class to represent a noise model with arbitrary-site jump operators.
 
+    Simulation backends interpret ``strength`` as a Lindblad rate.
+    :class:`~mqt.yaqs.EquivalenceChecker` instead interprets each resolved
+    strength as a direct per-opportunity branch probability and applies
+    checker-specific probability constraints.
+
     Attributes:
         processes: A list of noise processes affecting the system. Each process is
             a ``dict`` with:
@@ -262,7 +267,8 @@ class NoiseModel:
 
                 ``strength`` is the Lindblad rate ``gamma``; jump operators are
                 formed as ``sqrt(gamma) * L`` during simulation. Fixed strengths
-                must be finite and nonnegative.
+                must be finite and nonnegative. For equivalence checking, resolved
+                strengths are instead direct branch probabilities.
             scheduled_jumps: A list of scheduled jumps to apply at specific times.
                 Each dict must contain ``time``, ``sites``, and ``name``. An
                 optional ``matrix`` overrides the library lookup. Two-site
