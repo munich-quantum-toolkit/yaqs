@@ -343,6 +343,65 @@ def test_capped_long_range_gate_truncates_inside_its_support_only() -> None:
     assert max(bonds_mpo[first:last]) <= cap
 
 
+def _seeded_qudit_mps(physical_dimensions: list[int], *, seed: int) -> MPS:
+    """Build a deterministic bond-2 MPS with the given per-site physical dimensions.
+
+    Args:
+        physical_dimensions: Local dimension of every site.
+        seed: NumPy RNG seed.
+
+    Returns:
+        Normalized MPS in B form.
+    """
+    rng = np.random.default_rng(seed)
+    length = len(physical_dimensions)
+    bonds = [1, *[2] * (length - 1), 1]
+    tensors = [
+        (
+            rng.normal(size=(dim, bonds[site], bonds[site + 1]))
+            + 1j * rng.normal(size=(dim, bonds[site], bonds[site + 1]))
+        ).astype(np.complex128)
+        for site, dim in enumerate(physical_dimensions)
+    ]
+    state = MPS(length, tensors=tensors, physical_dimensions=list(physical_dimensions))
+    state.normalize("B")
+    return state
+
+
+@pytest.mark.parametrize(
+    ("physical_dimensions", "sites"),
+    [
+        ([2, 3, 2], (0, 2)),
+        ([2, 2, 3, 2, 2], (1, 4)),
+        ([3, 2, 3, 2, 4, 2, 3], (1, 5)),
+    ],
+    ids=["qutrit_spectator", "offset_window", "qudits_inside_and_outside"],
+)
+def test_long_range_gate_on_qudit_spectators_matches_full_chain_mpo(
+    physical_dimensions: list[int], sites: tuple[int, int]
+) -> None:
+    """The window slices ``physical_dimensions``, so qudit spectators must survive the re-basing.
+
+    ``get_support_mpo`` indexes its dimensions by ``site - first_site`` while the sites stay
+    absolute, so a window that does not start at site 0 is where a mis-based slice would show.
+    """
+    length = len(physical_dimensions)
+    gate = GateLibrary.cx()
+    gate.set_sites(*sites)
+    state = _seeded_qudit_mps(physical_dimensions, seed=20260901)
+    state.set_canonical_form(min(sites))
+
+    reference = copy.deepcopy(state)
+    MPO.from_gate(gate, length, physical_dimensions=physical_dimensions).multiply(reference, compress=False)
+    expected = reference.to_vec()
+
+    apply_long_range_gate_mpo(state, gate, _sim_params())
+
+    assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-12
+    assert [tensor.shape[0] for tensor in state.tensors] == physical_dimensions
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
 @pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
 def test_long_range_gate_tracks_orthogonality_center(*, known_gauge: bool) -> None:
     """The tracked center after the gate is a genuine canonical center of the full chain."""
