@@ -35,6 +35,7 @@ from mqt.yaqs.core.methods.stochastic_process import create_probability_distribu
 from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
 from mqt.yaqs.core.methods.tdvp.tdvp import evolve_window
 from mqt.yaqs.digital.digital_tjm import (
+    _renormalize,  # ruff: ignore[import-private-name]  # module-private gauge-aware normalization
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
     apply_two_qubit_gate,
@@ -2669,6 +2670,253 @@ def test_tebd_establishes_canonical_gauge() -> None:
 
     assert state.orthogonality_center == 5
     assert state.check_canonical_form()[0] == 5
+
+
+# ---- windowed TDVP gauge ----------------------------------------------------------------
+
+WINDOW_LENGTH = 10
+WINDOW_SEED = 11
+
+
+@pytest.mark.parametrize("center", [0, 4, 9, None])
+def test_windowed_tdvp_gate_is_exact_for_any_incoming_center(center: int | None) -> None:
+    """An uncapped windowed RZZ must be exact for any incoming or unknown center.
+
+    ``sweep_2site`` takes its window right-canonical from the first site, so a center left
+    anywhere else has to be moved there first. A center on the window's last site is the
+    case that bites: with the window's right edge at the chain end there is no dangling
+    bond to absorb the mismatch. The unknown-center case hides that same gauge to verify
+    that the fallback reconstructs it at the window start.
+    """
+    theta = 0.6
+    sites = (2, WINDOW_LENGTH - 2)  # window [1, 9] — right edge is the chain end
+    state = _random_capped_mps(WINDOW_LENGTH, GAUGE_CHI, WINDOW_SEED)
+    eigenvalues = np.array([1.0, -1.0])
+    phases = np.exp(-0.5j * theta * np.multiply.outer(eigenvalues, eigenvalues))
+    expected = _dense_state(state) * phases.reshape([2 if site in sites else 1 for site in range(WINDOW_LENGTH)])
+
+    state.shift_center_to(WINDOW_LENGTH - 1 if center is None else center)
+    state.set_center(center)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    apply_two_qubit_gate_tdvp(state, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
+
+    got = _dense_state(state).reshape(-1)
+    assert _fidelity(got, expected.reshape(-1)) == pytest.approx(1.0, abs=1e-12)
+    assert state.orthogonality_center is not None
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_fixed_chi_windowed_tdvp_gate_leaves_a_truthful_center() -> None:
+    """A drift renormalization inside the window path must not be overwritten by a stale center."""
+    params = _tdvp_params(max_bond_dim=2, tdvp_sweeps=1)
+    state = _random_capped_mps(WINDOW_LENGTH, GAUGE_CHI, WINDOW_SEED)
+    state.shift_center_to(4)
+
+    gate = GateLibrary.rzz([0.6])
+    gate.set_sites(3, 7)
+    apply_two_qubit_gate_tdvp(state, gate, params)
+
+    assert state.orthogonality_center is not None
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+# ---- center-local renormalization -------------------------------------------------------
+
+RESCALE_LENGTH = 10
+ALL_GATE_MODES: list[GateMode] = ["mpo", "swaps", "tdvp", "full-tdvp"]
+
+
+def _mixed_circuit(length: int) -> QuantumCircuit:
+    """Circuit exercising every two-qubit gate path: TEBD, gate MPO, and a three-qubit gate.
+
+    Args:
+        length: Number of qubits.
+
+    Returns:
+        Circuit with single-qubit layers, a nearest-neighbor CZ brickwork, one long-range
+        RZZ, and one contiguous CCZ.
+    """
+    qc = QuantumCircuit(length)
+    for q in range(length):
+        qc.rx(0.3 + 0.07 * q, q)
+    for q in range(0, length - 1, 2):
+        qc.cz(q, q + 1)
+    for q in range(1, length - 1, 2):
+        qc.cz(q, q + 1)
+    for q in range(length):
+        qc.ry(0.21 + 0.05 * q, q)
+    qc.rzz(0.6, 1, length - 4)
+    qc.ccz(0, 1, 2)
+    return qc
+
+
+def _run_mixed_circuit(gate_mode: GateMode, length: int = RESCALE_LENGTH, max_bond_dim: int | None = None) -> MPS:
+    """Run :func:`_mixed_circuit` noiselessly under ``gate_mode``.
+
+    Args:
+        gate_mode: Two-qubit gate routing mode.
+        length: Number of qubits.
+        max_bond_dim: Optional bond-dimension cap; a small cap makes the gates truncate.
+
+    Returns:
+        Final MPS of the run.
+    """
+    qc = _mixed_circuit(length)
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode=gate_mode,
+        preset="exact",
+        svd_threshold=1e-14,
+        max_bond_dim=max_bond_dim,
+        get_state=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, sim_params, None)
+    assert result.output_state is not None
+    return result.output_state.mps
+
+
+def test_center_rescale_normalizes_without_moving_the_center() -> None:
+    """Rescaling the center tensor normalizes the state and leaves the gauge in place."""
+    state = MPS(3, state="zeros")
+    assert state.orthogonality_center == 0
+    # |000> has unit norm, so scaling the center tensor by 0.8 makes ||psi|| = 0.8 exactly.
+    state.tensors[0] *= 0.8
+    assert float(state.norm()) == pytest.approx(0.8, abs=1e-12)
+
+    _renormalize(state)
+
+    assert state.orthogonality_center == 0
+    assert float(state.norm()) == pytest.approx(1.0, abs=1e-12)
+    assert 0 in state.check_canonical_form()
+
+
+@pytest.mark.parametrize("center", [0, None])
+@pytest.mark.parametrize("invalid_value", [0.0, np.nan, np.inf])
+def test_center_rescale_rejects_invalid_norm(invalid_value: float, center: int | None) -> None:
+    """A zero or non-finite state cannot be normalized with a known or unknown gauge."""
+    state = MPS(3, state="zeros")
+    state.tensors[0] = np.full_like(state.tensors[0], invalid_value)
+    state.set_center(center)
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        _renormalize(state)
+
+
+def test_renormalization_falls_back_to_a_full_sweep_when_the_gauge_is_unknown() -> None:
+    """With no tracked center the state is renormalized by a full-chain sweep."""
+    state = MPS(3, state="zeros")
+    state.tensors[0] *= 0.8
+    state.set_center(None)
+
+    _renormalize(state)
+
+    assert state.orthogonality_center == 0
+    assert float(state.norm()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_unitary_single_qubit_gate_keeps_the_tracked_center() -> None:
+    """Unitary single-site gates preserve canonicality, so the tracked center stays valid."""
+    state = _random_capped_mps(GAUGE_LENGTH, GAUGE_CHI, GAUGE_SEED)
+    state.shift_center_to(4)
+    expected = _dense_state(state)
+
+    circuit = QuantumCircuit(GAUGE_LENGTH)
+    circuit.rx(0.7, 1)
+    circuit.h(6)
+    circuit.t(2)
+    circuit.unitary(Operator(GateLibrary.h().matrix), [5], label="custom_h")
+    for node in circuit_to_dag(circuit).op_nodes():
+        apply_single_qubit_gate(state, node)
+        site = circuit.find_bit(node.qargs[0]).index
+        expected = np.moveaxis(np.tensordot(Operator(node.op).data, expected, axes=([1], [site])), 0, site)
+
+    assert state.orthogonality_center == 4
+    assert 4 in state.check_canonical_form()
+
+    np.testing.assert_allclose(_dense_state(state), expected, atol=1e-12)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_noiseless_run_matches_the_statevector_in_exact_gate_modes(gate_mode: GateMode) -> None:
+    """Center-local renormalization leaves the exact gate paths exact."""
+    mps = _run_mixed_circuit(gate_mode)
+    reference = np.asarray(Statevector(_mixed_circuit(RESCALE_LENGTH)).data)
+
+    assert _fidelity(mps.to_vec(), reference) >= 1.0 - 1e-10
+    assert float(mps.norm()) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("max_bond_dim", [None, 2])
+@pytest.mark.parametrize("gate_mode", ALL_GATE_MODES)
+def test_noiseless_run_stays_normalized_in_every_gate_mode(gate_mode: GateMode, max_bond_dim: int | None) -> None:
+    """Every two-qubit gate path leaves a normalized state with a valid tracked center.
+
+    ``max_bond_dim=2`` truncates hard on this circuit, so the run also covers absorbing the
+    norm a truncating gate discards.
+    """
+    mps = _run_mixed_circuit(gate_mode, max_bond_dim=max_bond_dim)
+
+    assert float(mps.norm()) == pytest.approx(1.0, abs=1e-12)
+    assert mps.orthogonality_center is not None
+    assert mps.orthogonality_center in mps.check_canonical_form()
+
+
+def test_layer_sampling_reads_the_state_in_b_form() -> None:
+    """Mid-circuit samples see B form, so gauge-reading observables are unaffected.
+
+    ``record_diagnostics`` and the entropy observables read the tensors directly rather
+    than through a center-shifting copy, so the gauge they are sampled in is part of the
+    result.
+    """
+    qc = QuantumCircuit(6)
+    for layer in range(2):
+        for q in range(6):
+            qc.rx(0.37 + 0.11 * q, q)
+        for q in range(layer % 2, 5, 2):
+            qc.cz(q, q + 1)
+        qc.barrier(label="SAMPLE_OBSERVABLES")
+
+    centers: list[int | None] = []
+    original = MPS.record_diagnostics
+
+    def recording(self: MPS, diagnostics: NDArray[np.float64], column_index: int) -> None:
+        """Record the center before writing a diagnostics column.
+
+        Args:
+            self: MPS being sampled.
+            diagnostics: Array that stores diagnostic values.
+            column_index: Column to fill.
+        """
+        centers.append(self.orthogonality_center)
+        original(self, diagnostics, column_index)
+
+    initial_mps = _random_capped_mps(6, GAUGE_CHI, GAUGE_SEED)
+    initial_mps.shift_center_to(4)
+    assert initial_mps.orthogonality_center == 4
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="mpo", preset="exact", sample_layers=True)
+    with patch.object(MPS, "record_diagnostics", recording):
+        Simulator(parallel=False, show_progress=False).run(State.from_mps(initial_mps), qc, sim_params, None)
+
+    assert len(centers) >= 3  # initial sample, one per barrier, and the final column
+    assert set(centers) == {0}
+
+
+def test_unknown_gauge_run_is_normalized_before_observables() -> None:
+    """A trajectory started from an ungauged MPS still reports observables on a unit state."""
+    mps = MPS(6, state="zeros")
+    mps.tensors[0] *= 0.8
+    mps.set_center(None)
+
+    qc = QuantumCircuit(6)
+    for q in range(6):
+        qc.h(q)
+
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="mpo", preset="exact", get_state=True)
+    _results, _diagnostics, _counts, final = digital_tjm((0, mps, None, sim_params, qc))
+
+    assert final is not None
+    assert float(final.norm()) == pytest.approx(1.0, abs=1e-12)
 
 
 # --- multi-qubit local noise -------------------------------------------------

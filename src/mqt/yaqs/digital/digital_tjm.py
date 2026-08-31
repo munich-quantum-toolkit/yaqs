@@ -302,12 +302,40 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
+def _renormalize(state: MPS) -> None:
+    """Normalize ``state`` in place, rescaling the center tensor when the gauge is known.
+
+    With the orthogonality center tracked at site ``c``, every other tensor is an
+    isometry and ``||psi|| == ||tensors[c]||_F``, so dividing that one tensor by its
+    Frobenius norm normalizes the state without touching the rest of the chain. The
+    center is left where it is; an unknown gauge falls back to a full-chain sweep.
+
+    Args:
+        state: MPS normalized in place.
+
+    Raises:
+        ValueError: If the MPS norm is zero or non-finite.
+    """
+    msg = "Cannot normalize MPS: norm is zero or non-finite."
+    center = state.orthogonality_center
+    if center is None:
+        if not all(np.isfinite(tensor).all() for tensor in state.tensors):
+            raise ValueError(msg)
+        center = 0
+        state.set_canonical_form(center, decomposition="QR")
+    center_tensor = state.tensors[center]
+    norm = float(np.linalg.norm(center_tensor))
+    if norm <= 0.0 or not np.isfinite(norm):
+        raise ValueError(msg)
+    state.tensors[center] = center_tensor / norm
+
+
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
     """Apply one translated single-qubit gate to an MPS in place."""
     site = gate.sites[0]
+    # Circuit translation admits only unitary single-site gates, which preserve
+    # left- and right-canonicality, so the tracked center stays valid.
     state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
-    if state.orthogonality_center is not None and state.orthogonality_center != site:
-        state.set_center(None)
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
@@ -378,17 +406,17 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
-    # Shift the orthogonality center to the start of the window.
+    # Shift the orthogonality center to the start of the window. ``sweep_2site`` seeds a
+    # left environment of identity and takes the window as right-canonical, so the center
+    # must sit on the window's first site, not merely inside the window.
     if state.orthogonality_center is not None:
         rel_center = state.orthogonality_center - window[0]
-        window_len = window[1] - window[0] + 1
-        if rel_center < 0 or rel_center >= window_len:
+        if rel_center != 0:
             state.shift_center_to(window[0])
             rel_center = 0
     else:
-        for i in range(window[0]):
-            state.shift_orthogonality_center_right(i)
-        rel_center = None
+        state.set_canonical_form(window[0], decomposition="QR")
+        rel_center = 0
 
     short_mpo = MPO()
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
@@ -438,18 +466,18 @@ def apply_two_qubit_gate_tdvp(
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length, state.physical_dimensions)
 
     window_size = 1
-    gauge_known = state.orthogonality_center is not None
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
     evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
-    if uses_fixed_chi(sim_params):
-        renorm_drift(state, sim_params)
-    if gauge_known and short_state.orthogonality_center is not None:
+    if short_state.orthogonality_center is not None:
         state.set_center(window[0] + short_state.orthogonality_center)
     else:
         state.set_center(None)
+    # After the graft, so that a drift renormalization's own gauge is the one recorded.
+    if uses_fixed_chi(sim_params):
+        renorm_drift(state, sim_params)
 
     return first_site, last_site
 
@@ -713,6 +741,7 @@ def digital_tjm(
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
+            state.normalize(form="B", decomposition="QR")
             results = np.zeros((n_obs, mid + 2))
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
@@ -733,13 +762,16 @@ def digital_tjm(
                 _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
 
                 if not noisy:
-                    state.normalize(form="B", decomposition="QR")
+                    _renormalize(state)
                 else:
                     local_noise_model = create_local_noise_model(noise_model, gate.sites)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
-        if sim_params.sample_layers:
+        if sim_params.sample_layers and layer.sample_points:
+            # Bond-dimension diagnostics and the entropy observables read the tensors
+            # directly, so sample them in B form as before.
+            state.normalize(form="B", decomposition="QR")
             for _ in range(layer.sample_points):
                 col_idx += 1
                 assert diagnostics is not None
@@ -748,6 +780,9 @@ def digital_tjm(
                 state.evaluate_observables(sim_params, results, col_idx)
 
     counts: dict[int, int] | None = None
+    # The gate loop leaves the center on the last gate; returned states and following
+    # analog segments are handed the chain in B form.
+    state.normalize(form="B", decomposition="QR")
     final = state if sim_params.get_state else None
 
     if shots_only:
@@ -755,9 +790,6 @@ def digital_tjm(
         per_call = _per_call_shots(sim_params, traj_idx) if has_explicit_shot_plan or not noisy else 1
         counts = state.measure_shots(per_call) if per_call > 0 else {}
         return None, None, counts, final
-
-    if state.orthogonality_center is None:
-        state.normalize(form="B", decomposition="QR")
 
     assert diagnostics is not None
     assert results is not None

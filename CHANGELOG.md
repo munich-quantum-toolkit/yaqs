@@ -29,7 +29,9 @@ releases may include breaking changes.
 ### Changed
 
 - removed redundant orthogonality center transport from long-range SWAP routing
-  ([#XXX]) ([**@Pouri96**])
+  ([#571]) ([**@Pouri96**])
+- sped up normalization in circuit simulation and fixed TDVP state tracking
+  ([#560]) ([**@Pouri96**])
 - restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
 - dropped support for Python 3.10 ([#556]) ([**@denialhaag**])
 - updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
@@ -260,6 +262,7 @@ for previous changelogs._
 
 [#XXX]: https://github.com/munich-quantum-toolkit/yaqs/pull/XXX
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
+[#560]: https://github.com/munich-quantum-toolkit/yaqs/pull/560
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
 [#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
