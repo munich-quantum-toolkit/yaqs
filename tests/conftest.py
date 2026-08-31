@@ -45,15 +45,6 @@ set_default_thread_limits(os.environ)
 YAQS_TEST_SEED = 42
 
 
-def available_logical_cpus() -> int:
-    """Return the logical CPUs available to the current process."""
-    try:
-        affinity_count = len(psutil.Process().cpu_affinity())
-    except (AttributeError, NotImplementedError, psutil.Error):
-        affinity_count = 0
-    return affinity_count or psutil.cpu_count(logical=True) or 1
-
-
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
     """Select an allocation-aware pytest-xdist worker count.
 
@@ -61,12 +52,15 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
         The number of xdist workers.
     """
     del config
-    available_cpus = available_logical_cpus()
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        return available_cpus
+    # Delay the YAQS import until numerical thread defaults are configured.
+    from mqt.yaqs.core.parallel_utils import available_cpus  # ruff: ignore[import-outside-top-level]
 
-    physical_cpus = psutil.cpu_count(logical=False) or available_cpus
-    available_physical_cpus = min(physical_cpus, available_cpus)
+    worker_limit = available_cpus()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return worker_limit
+
+    physical_cpus = psutil.cpu_count(logical=False) or worker_limit
+    available_physical_cpus = min(physical_cpus, worker_limit)
     return max(1, available_physical_cpus - 1)
 
 

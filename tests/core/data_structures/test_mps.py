@@ -1546,6 +1546,11 @@ def test_get_entropy_bell_pair_ln2() -> None:
 def _entangled_mps(length: int = 6, chi: int = 4, seed: int = 3) -> MPS:
     """Random right-canonical MPS with entanglement at every internal cut.
 
+    Args:
+        length: Number of sites in the state.
+        chi: Maximum internal bond dimension.
+        seed: Random-number generator seed.
+
     Returns:
         MPS: Normalized state with the orthogonality center at site 0.
     """
@@ -1563,6 +1568,10 @@ def _entangled_mps(length: int = 6, chi: int = 4, seed: int = 3) -> MPS:
 def _dense_schmidt_values(state: MPS, cut: int) -> np.ndarray:
     """Schmidt values at the cut between sites ``cut`` and ``cut + 1`` from the dense state.
 
+    Args:
+        state: State to analyze.
+        cut: Left site of the internal bond.
+
     Returns:
         Singular values of the state reshaped across the physical bipartition.
     """
@@ -1575,7 +1584,11 @@ def _dense_schmidt_values(state: MPS, cut: int) -> np.ndarray:
 
 @pytest.mark.parametrize("cut", [1, 2, 3])
 def test_entropy_at_an_interior_cut_matches_the_dense_state(cut: int) -> None:
-    """The entropy of a bond is the entropy of the physical bipartition there."""
+    """The entropy of a bond is the entropy of the physical bipartition there.
+
+    Args:
+        cut: Left site of the internal bond.
+    """
     state = _entangled_mps()
     values = _dense_schmidt_values(state, cut)
     weights = values**2 / np.sum(values**2)
@@ -1586,7 +1599,11 @@ def test_entropy_at_an_interior_cut_matches_the_dense_state(cut: int) -> None:
 
 @pytest.mark.parametrize("center", [0, 2, 5, None])
 def test_entropy_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
-    """Entropy is a property of the state, not of the gauge it is stored in."""
+    """Entropy is a property of the state, not of the gauge it is stored in.
+
+    Args:
+        center: Orthogonality center to set, or ``None`` to mark it as unknown.
+    """
     reference = _entangled_mps()
     expected = reference.get_entropy([2, 3])
 
@@ -1601,7 +1618,11 @@ def test_entropy_does_not_depend_on_the_orthogonality_center(center: int | None)
 
 @pytest.mark.parametrize("center", [0, 2, 5, None])
 def test_schmidt_spectrum_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
-    """The Schmidt spectrum of a bond is gauge-independent."""
+    """The Schmidt spectrum of a bond is gauge-independent.
+
+    Args:
+        center: Orthogonality center to set, or ``None`` to mark it as unknown.
+    """
     expected = _dense_schmidt_values(_entangled_mps(), 2)
 
     state = _entangled_mps()
@@ -1627,7 +1648,12 @@ def test_schmidt_spectrum_does_not_depend_on_the_orthogonality_center(center: in
 def test_non_unitary_apply_local_invalidates_center_and_preserves_bond_metrics(
     matrix: np.ndarray, sites: int | list[int]
 ) -> None:
-    """A local filter invalidates the tracked gauge before bond metrics are evaluated."""
+    """A local filter invalidates the tracked gauge before bond metrics are evaluated.
+
+    Args:
+        matrix: Non-unitary matrix to apply.
+        sites: Site or sites targeted by the matrix.
+    """
     state = _entangled_mps()
     state.shift_center_to(2)
 
@@ -1734,7 +1760,11 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
 @pytest.mark.parametrize("center", [0, None])
 def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(center: int | None) -> None:
-    """Sorted bond metrics reuse one canonical working state without mutating the input."""
+    """Sorted bond metrics reuse one canonical working state without mutating the input.
+
+    Args:
+        center: Tracked center to set, or ``None`` to mark it as unknown.
+    """
     state = _entangled_mps()
     state.set_center(center)
     tensors_before = [tensor.copy() for tensor in state.tensors]

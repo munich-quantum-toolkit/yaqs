@@ -9,12 +9,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
+
+import pytest
 
 from tests import conftest
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_numerical_thread_pools_default_to_one_thread() -> None:
@@ -36,19 +35,36 @@ def test_numerical_thread_pool_defaults_preserve_runner_overrides() -> None:
     assert environment["OMP_NUM_THREADS"] == "runner-value"
 
 
-def test_local_xdist_auto_worker_count_reserves_one_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Local automatic worker selection keeps one available physical CPU free."""
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    available_logical_cpus = conftest.available_logical_cpus()
-    physical_cpus = conftest.psutil.cpu_count(logical=False) or available_logical_cpus
-    expected_workers = max(1, min(physical_cpus, available_logical_cpus) - 1)
+@pytest.mark.parametrize(
+    ("environment", "worker_limit"),
+    [
+        pytest.param(
+            {"YAQS_MAX_WORKERS": "4", "SLURM_CPUS_PER_TASK": "3", "SLURM_CPUS_ON_NODE": "2"},
+            4,
+            id="yaqs-precedes-slurm",
+        ),
+        pytest.param(
+            {"SLURM_CPUS_PER_TASK": "3", "SLURM_CPUS_ON_NODE": "2"},
+            3,
+            id="slurm-task-precedes-node",
+        ),
+        pytest.param({"SLURM_CPUS_ON_NODE": "2"}, 2, id="slurm-node"),
+    ],
+)
+def test_xdist_auto_worker_count_respects_shared_limits(
+    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str], worker_limit: int
+) -> None:
+    """Configured YAQS and SLURM limits cap local and GitHub Actions workers."""
+    for name in ("YAQS_MAX_WORKERS", "PYTEST_XDIST_WORKER", "SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
     config = cast("pytest.Config", object())
-    assert conftest.pytest_xdist_auto_num_workers(config) == expected_workers
 
-
-def test_github_actions_uses_its_full_cpu_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """GitHub Actions keeps its existing automatic worker allocation."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    config = cast("pytest.Config", object())
+    assert conftest.pytest_xdist_auto_num_workers(config) == worker_limit
 
-    assert conftest.pytest_xdist_auto_num_workers(config) == conftest.available_logical_cpus()
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    physical_cpus = conftest.psutil.cpu_count(logical=False) or worker_limit
+    expected_local_workers = max(1, min(physical_cpus, worker_limit) - 1)
+    assert conftest.pytest_xdist_auto_num_workers(config) == expected_local_workers
