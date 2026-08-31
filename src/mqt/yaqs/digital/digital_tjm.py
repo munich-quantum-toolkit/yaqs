@@ -572,7 +572,9 @@ def apply_long_range_gate_mpo(
     The gate MPO is built on the support ``[first_site, last_site]`` and multiplied into
     the matching window of ``state``, so contraction and compression touch
     ``last_site - first_site + 1`` sites instead of :attr:`~mqt.yaqs.core.data_structures.mps.MPS.length`
-    sites. Tensors outside the support are left untouched.
+    sites, and no bond outside the support is truncated, matching the other gate modes.
+    Moving the center onto the window still rewrites the sites it passes; the
+    multiplication and its compression do not.
 
     Args:
         state: MPS updated in place.
