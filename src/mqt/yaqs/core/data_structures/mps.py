@@ -1093,6 +1093,11 @@ class MPS:
         Raises:
             ValueError: If the observable is not one- or two-site local under the
                 supported adjacency conventions.
+
+        Notes:
+            The observable can be non-unitary. Applying it can therefore invalidate
+            the canonical form, so this method marks the orthogonality center as
+            unknown after changing the tensors.
         """
 
         def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -1127,6 +1132,7 @@ class MPS:
 
             state.tensors[i] = u_tensor
             state.tensors[j] = v_tensor
+            state.set_center(None)
 
         def bubble_swaps_forward(state: MPS) -> None:
             """Move logical q_0 next to q_{L-1} via adjacent SWAPs."""
@@ -1153,6 +1159,7 @@ class MPS:
                 msg = f"Local observable matrix shape {matrix.shape} does not match site {site} dimension {local_dim}."
                 raise ValueError(msg)
             self.tensors[site] = oe.contract("ab, bcd->acd", matrix, self.tensors[site])
+            self.set_center(None)
             return
 
         if observable.gate.interaction == 2:

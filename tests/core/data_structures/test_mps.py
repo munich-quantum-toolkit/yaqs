@@ -1616,6 +1616,34 @@ def test_schmidt_spectrum_does_not_depend_on_the_orthogonality_center(center: in
     np.testing.assert_allclose(np.sort(values)[::-1], np.sort(expected)[::-1], atol=1e-12)
 
 
+@pytest.mark.parametrize(
+    ("matrix", "sites"),
+    [
+        (np.diag([1.0, 0.15]), 0),
+        (np.diag([1.0, 0.5, 0.25, 0.125]), [0, 1]),
+    ],
+    ids=["one_site", "two_site"],
+)
+def test_non_unitary_apply_local_invalidates_center_and_preserves_bond_metrics(
+    matrix: np.ndarray, sites: int | list[int]
+) -> None:
+    """A local filter invalidates the tracked gauge before bond metrics are evaluated."""
+    state = _entangled_mps()
+    state.shift_center_to(2)
+
+    state.apply_local(Observable(BaseGate(matrix), sites))
+
+    assert state.orthogonality_center is None
+    expected = _dense_schmidt_values(state, 2)
+    weights = expected**2 / np.sum(expected**2)
+    expected_entropy = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+    assert state.get_entropy([2, 3]) == pytest.approx(expected_entropy, abs=1e-12)
+
+    spectrum = state.get_schmidt_spectrum([2, 3])
+    values = spectrum[~np.isnan(spectrum)]
+    np.testing.assert_allclose(values, expected, atol=1e-12)
+
+
 def test_get_entropy_asserts_on_non_adjacent_or_wrong_len() -> None:
     """get_entropy asserts on invalid site lists."""
     mps = _product_state_mps(4)
