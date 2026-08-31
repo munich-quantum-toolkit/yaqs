@@ -1732,6 +1732,46 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     assert results_pvm[0, 0] == 1
 
 
+@pytest.mark.parametrize("center", [0, None])
+def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(center: int | None) -> None:
+    """Sorted bond metrics reuse one canonical working state without mutating the input."""
+    state = _entangled_mps()
+    state.set_center(center)
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+
+    observables = [
+        observable
+        for cut in reversed(range(state.length - 1))
+        for observable in (
+            Observable(GateLibrary.entropy(), [cut, cut + 1]),
+            Observable(GateLibrary.schmidt_spectrum(), [cut, cut + 1]),
+        )
+    ]
+    sim_params = AnalogSimParams(observables, elapsed_time=0.1, dt=0.1)
+    results = np.empty((len(observables), 1), dtype=object)
+    dense_values = {cut: _dense_schmidt_values(state, cut) for cut in range(state.length - 1)}
+
+    with patch.object(mps_mod, "copy") as copy_module:
+        copy_module.deepcopy.side_effect = copy.deepcopy
+        state.evaluate_observables(sim_params, results)
+
+    copy_module.deepcopy.assert_called_once_with(state)
+    assert state.orthogonality_center == center
+    for tensor, tensor_before in zip(state.tensors, tensors_before, strict=True):
+        np.testing.assert_array_equal(tensor, tensor_before)
+
+    for obs_index, observable in enumerate(sim_params.sorted_observables):
+        assert isinstance(observable.sites, list)
+        values = dense_values[observable.sites[0]]
+        if observable.gate.name == "entropy":
+            weights = values**2 / np.sum(values**2)
+            expected = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+            assert results[obs_index, 0] == pytest.approx(expected, abs=1e-12)
+        else:
+            spectrum = results[obs_index, 0]
+            np.testing.assert_allclose(spectrum[~np.isnan(spectrum)], values, atol=1e-12)
+
+
 def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     """Evaluate local observables over increasing sites to exercise rightward shifts.
 

@@ -1245,10 +1245,17 @@ class MPS:
                 assert max_site - min_site == 1, "Entropy and Schmidt cuts must be nearest neighbor."
                 for s in observable.sites:
                     assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+                if not temp_state.check_covers_sites(observable.sites):
+                    if temp_state.orthogonality_center is None:
+                        temp_state.set_canonical_form(min_site)
+                    else:
+                        center = temp_state.orthogonality_center
+                        target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
+                        temp_state.shift_center_to(target)
                 if observable.gate.name == "entropy":
-                    results[obs_index, column_index] = self.get_entropy(observable.sites)
+                    results[obs_index, column_index] = temp_state.get_entropy(observable.sites)
                 elif observable.gate.name == "schmidt_spectrum":
-                    results[obs_index, column_index] = self.get_schmidt_spectrum(observable.sites)
+                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(observable.sites)
 
             elif observable.gate.name == "pvm":
                 assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
