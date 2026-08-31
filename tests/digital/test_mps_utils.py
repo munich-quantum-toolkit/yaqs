@@ -320,6 +320,29 @@ def test_capped_long_range_gate_is_no_less_accurate_than_full_chain_compression(
     assert _fidelity(state.to_vec(), expected) >= _fidelity(full_chain.to_vec(), expected) - 1e-12
 
 
+def test_capped_long_range_gate_truncates_inside_its_support_only() -> None:
+    """A chain entering above the cap keeps its exterior bonds, as the ``swaps`` route leaves them."""
+    length, cap, first, last = 12, 4, 4, 7
+    gate = _gate_from_circuit(_single_gate_circuit(length, lambda qc: qc.cp(0.9, first, last)))
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
+
+    state = _haar_random_mps(length, pad=16, seed=20260829)
+    state.set_canonical_form(first)
+    bonds_before = [tensor.shape[2] for tensor in state.tensors[:-1]]
+
+    swaps_state = copy.deepcopy(state)
+    apply_two_qubit_gate_tebd(swaps_state, gate, sim_params)
+    apply_long_range_gate_mpo(state, gate, sim_params)
+
+    bonds_mpo = [tensor.shape[2] for tensor in state.tensors[:-1]]
+    bonds_swaps = [tensor.shape[2] for tensor in swaps_state.tensors[:-1]]
+    exterior = [bond for bond in range(length - 1) if bond < first or bond >= last]
+
+    assert [bonds_mpo[bond] for bond in exterior] == [bonds_before[bond] for bond in exterior]
+    assert [bonds_mpo[bond] for bond in exterior] == [bonds_swaps[bond] for bond in exterior]
+    assert max(bonds_mpo[first:last]) <= cap
+
+
 @pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
 def test_long_range_gate_tracks_orthogonality_center(*, known_gauge: bool) -> None:
     """The tracked center after the gate is a genuine canonical center of the full chain."""
