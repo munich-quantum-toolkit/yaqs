@@ -10,27 +10,65 @@
 from __future__ import annotations
 
 import os
+from importlib.util import find_spec
 from typing import TYPE_CHECKING
 
+import psutil
 import pytest
-from qiskit.utils.optionals import HAS_QASM3_IMPORT
 
 if TYPE_CHECKING:
+    from collections.abc import MutableMapping
     from pathlib import Path
 
-# Cap BLAS/OpenMP/Numba threads in pytest workers before numerical libraries spin
-# up pools (reduces oversubscription and Numba config reload crashes under xdist).
-for _name, _val in (
-    ("OPENBLAS_NUM_THREADS", "1"),
-    ("MKL_NUM_THREADS", "1"),
-    ("OMP_NUM_THREADS", "1"),
-    ("NUMEXPR_NUM_THREADS", "1"),
-    ("NUMBA_NUM_THREADS", "1"),
-):
-    os.environ.setdefault(_name, _val)
+
+def set_default_thread_limits(environment: MutableMapping[str, str]) -> None:
+    """Default numerical thread pools to one thread.
+
+    Args:
+        environment: Environment mapping to configure.
+    """
+    for name in (
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "NUMBA_NUM_THREADS",
+    ):
+        environment.setdefault(name, "1")
+
+
+# Set defaults before test modules import numerical libraries. Explicit values
+# from a local shell or CI runner take precedence.
+set_default_thread_limits(os.environ)
 
 # Default seed for stochastic integration tests (TJM, noisy simulator.run, etc.).
 YAQS_TEST_SEED = 42
+
+
+def available_logical_cpus() -> int:
+    """Return the logical CPUs available to the current process."""
+    try:
+        affinity_count = len(psutil.Process().cpu_affinity())
+    except (AttributeError, NotImplementedError, psutil.Error):
+        affinity_count = 0
+    return affinity_count or psutil.cpu_count(logical=True) or 1
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    """Select an allocation-aware pytest-xdist worker count.
+
+    Returns:
+        The number of xdist workers.
+    """
+    del config
+    available_cpus = available_logical_cpus()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return available_cpus
+
+    physical_cpus = psutil.cpu_count(logical=False) or available_cpus
+    available_physical_cpus = min(physical_cpus, available_cpus)
+    return max(1, available_physical_cpus - 1)
+
 
 LARGE_QASM2_STRING = """\
 // circuit_small.qasm
@@ -114,6 +152,6 @@ def write_qasm_file(directory: Path, content: str, *, filename: str = "circuit.q
 
 
 requires_qasm3_import = pytest.mark.skipif(
-    not HAS_QASM3_IMPORT,
+    find_spec("qiskit_qasm3_import") is None,
     reason="qiskit-qasm3-import is not installed",
 )
