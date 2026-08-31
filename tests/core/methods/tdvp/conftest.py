@@ -5,21 +5,13 @@
 #
 # Licensed under the MIT License
 
-r"""Shared helpers for TDVP unit and regression tests.
-
-PR TDVP regression smoke (fast subset)::
-
-    uv run pytest tests/core/methods/tdvp/test_tdvp.py \\
-                  tests/core/methods/tdvp/test_integrators.py \\
-                  tests/digital/test_digital_tjm.py \\
-                  -m "tdvp_regression and not slow"
-"""
+"""Shared helpers for TDVP tests."""
 
 from __future__ import annotations
 
 import copy
 import math
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 from unittest.mock import patch
 
 import numpy as np
@@ -31,30 +23,15 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
-if TYPE_CHECKING:
-    import pytest
-
 NORM_TOL = 1e-6
 EXACT_FID_TOL = 1e-12
 
 GateName = Literal["rzz", "rxx", "ryy"]
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Register TDVP regression markers."""
-    config.addinivalue_line(
-        "markers",
-        "tdvp_regression: circuit TDVP infrastructure stability regressions",
-    )
-    config.addinivalue_line(
-        "markers",
-        "slow: tests that need many TDVP sweeps or large L",
-    )
-
-
 Z_TOL = 1e-8
-# Endpoint |+⟩ RZZ global fidelity under production 2TDVP window path (local ⟨Z_i⟩ still exact).
-PLUS_LR_RZZ_GLOBAL_FID = 0.9776682445628022
+# Minimum production fidelity for endpoint |+⟩ RZZ across supported lengths.
+PLUS_LR_RZZ_FID_FLOOR = 0.9775
 # Entangled Haar prep: 1-sweep LR RZZ may drift slightly on minimum-deps / ARM Krylov stacks.
 HAAR_LR_PREP_SEED = 42
 HAAR_LR_PREP_PAD = 4

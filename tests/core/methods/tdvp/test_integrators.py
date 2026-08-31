@@ -30,6 +30,7 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.integrators import sweep_2site
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
+from mqt.yaqs.core.methods.tdvp.sweep_utils import split_tdvp
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 from tests.core.methods.tdvp.conftest import (
     EXACT_FID_TOL,
@@ -131,6 +132,41 @@ def test_2site_sweep_symmetric() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
+        assert mock_sweep.call_args.kwargs.get("_gate_window", False) is False
+
+
+@pytest.mark.parametrize(
+    ("gate_window", "expected_pruned", "expected_renorms", "expected_rank"),
+    [(False, [], 2, 2), (True, [7, 8, 9], 0, 1)],
+)
+def test_2site_gate_window_policy(
+    expected_pruned: list[int],
+    expected_renorms: int,
+    expected_rank: int,
+    *,
+    gate_window: bool,
+) -> None:
+    """Gate windows prune only final bond visits and defer renormalization."""
+    length = 4
+    state = MPS(length, state="zeros")
+    operator = MPO.ising(length, 0.0, 0.0)
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        preset="exact",
+        max_bond_dim=2,
+        tdvp_mode="2site",
+    )
+
+    with (
+        patch("mqt.yaqs.core.methods.tdvp.integrators.split_tdvp", wraps=split_tdvp) as mock_split,
+        patch("mqt.yaqs.core.methods.tdvp.integrators.renorm_drift") as mock_renorm,
+    ):
+        sweep_2site(state, operator, sim_params, sweep_plan=[0.5, 0.5], _gate_window=gate_window)
+
+    pruned = [index for index, call in enumerate(mock_split.call_args_list) if call.kwargs.get("_prune_null", False)]
+    assert pruned == expected_pruned
+    assert mock_renorm.call_count == expected_renorms
+    assert state.bond_dimensions() == [expected_rank] * (length - 1)
 
 
 def test_2site_tdvp_tracks_center_mid_sweep() -> None:
@@ -181,7 +217,7 @@ def test_2site_analog_sweep_dt() -> None:
     assert np.allclose(state_vec, found)
 
 
-# --- circuit 2TDVP exactness (tdvp_regression) ---
+# --- circuit 2TDVP exactness ---
 
 
 def _evolve_l2_two_site(
@@ -212,7 +248,6 @@ def _evolve_l2_two_site(
     return window_state
 
 
-@pytest.mark.tdvp_regression
 @pytest.mark.parametrize("gate_name", ["rzz", "rxx", "ryy"])
 @pytest.mark.parametrize("theta", [0.1, 0.3, np.pi / 4])
 def test_two_site_l2_plus_exact(gate_name: GateName, theta: float) -> None:
@@ -225,7 +260,6 @@ def test_two_site_l2_plus_exact(gate_name: GateName, theta: float) -> None:
     assert_mps_bond_invariants(out)
 
 
-@pytest.mark.tdvp_regression
 def test_two_site_l2_haar_exact() -> None:
     """Two-site TDVP is exact on a deterministic Haar two-qubit state."""
     prep = MPS(2, state="haar-random")
@@ -242,7 +276,6 @@ def test_two_site_l2_haar_exact() -> None:
     assert out.norm() == pytest.approx(1.0, abs=EXACT_FID_TOL)
 
 
-@pytest.mark.tdvp_regression
 def test_l2_rzz_no_double_theta() -> None:
     """|++⟩ + RZZ(θ) must match RZZ(θ), not the old RZZ(2θ) duplicate-update bug."""
     theta = 0.3
@@ -254,7 +287,6 @@ def test_l2_rzz_no_double_theta() -> None:
     assert _fidelity(doubled, out.to_vec()) < 1.0 - 1e-6
 
 
-@pytest.mark.tdvp_regression
 def test_l2_unit_time() -> None:
     """One 2TDVP substep integrates total generator time 1, not 2."""
     theta = 0.3
@@ -292,7 +324,6 @@ def test_l2_unit_time() -> None:
     assert recorded_dts == [pytest.approx(1.0)]
 
 
-@pytest.mark.tdvp_regression
 def test_apply_lr_gate_supports_ryy() -> None:
     """Long-range helper accepts RYY in addition to RZZ/RXX."""
     prep = State(2, initial="x+").mps
@@ -300,7 +331,6 @@ def test_apply_lr_gate_supports_ryy() -> None:
     assert out.norm() == pytest.approx(1.0, abs=1e-10)
 
 
-@pytest.mark.tdvp_regression
 def test_dynamic_sweep_plan() -> None:
     """tdvp_sweeps=N produces N symmetric substeps summing to unit evolution time."""
     length = 6
@@ -348,7 +378,6 @@ def test_1site_analog_sweep_plan_integration() -> None:
     assert _fidelity(reference.to_vec(), state.to_vec()) > 0.99
 
 
-@pytest.mark.tdvp_regression
 def test_dynamic_ising_matches_expm() -> None:
     """Dynamic TDVP integrates a capped Ising chain against an expm reference."""
     length = 4
@@ -369,11 +398,10 @@ def test_dynamic_ising_matches_expm() -> None:
     )
     tdvp(state, hamiltonian, sim_params)
     exact_vec = expm(-1j * dt * hamiltonian.to_matrix()) @ prep.to_vec()
-    assert _fidelity(exact_vec, state.to_vec()) > 0.5
+    assert _fidelity(exact_vec, state.to_vec()) > 0.99
     assert state.get_max_bond() <= 2
 
 
-@pytest.mark.tdvp_regression
 def test_dynamic_analog_sweep_plan_integration() -> None:
     """Dynamic analog TDVP honors tdvp_sweeps without mocking sweep_dynamic."""
     length = 4
@@ -407,7 +435,6 @@ def test_dynamic_analog_sweep_plan_integration() -> None:
     assert _fidelity(ref.to_vec(), state.to_vec()) > 0.99
 
 
-@pytest.mark.tdvp_regression
 def test_fixed_chi_2site_capped_sweep() -> None:
     """Fixed-χ two-site TDVP runs on a capped digital window evolution."""
     length = 4
@@ -429,7 +456,6 @@ def test_fixed_chi_2site_capped_sweep() -> None:
     assert prep.norm() == pytest.approx(1.0, abs=1e-8)
 
 
-@pytest.mark.tdvp_regression
 def test_dynamic_digital_fixed_chi_renorm() -> None:
     """Fixed-χ dynamic TDVP on a digital window runs end-of-sweep drift renorm."""
     length = 4

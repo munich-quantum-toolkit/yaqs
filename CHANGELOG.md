@@ -28,6 +28,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- sped up normalization in circuit simulation and fixed TDVP state tracking
+  ([#560]) ([**@Pouri96**])
 - restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
 - dropped support for Python 3.10 ([#556]) ([**@denialhaag**])
 - updated BUG to use alternating endpoint root ([#539]) ([**@aaronleesander**])
@@ -51,6 +53,8 @@ releases may include breaking changes.
 
 - fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
   ([#561]) ([**@Pouri96**])
+- stabilize digital TDVP by pruning null bond directions ([#567])
+  ([**@aaronleesander**])
 - fixed MPS norm definition and construction of arbitrary basis state ([#553])
   ([**@Pouri96**])
 - fixed single-site MPO addition ([#541]) ([**@linusschulte**])
@@ -257,6 +261,8 @@ for previous changelogs._
 <!-- PR links -->
 
 [#561]: https://github.com/munich-quantum-toolkit/yaqs/pull/561
+[#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
+[#560]: https://github.com/munich-quantum-toolkit/yaqs/pull/560
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
 [#556]: https://github.com/munich-quantum-toolkit/yaqs/pull/556
 [#553]: https://github.com/munich-quantum-toolkit/yaqs/pull/553
