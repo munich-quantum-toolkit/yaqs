@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import cast
 
 import pytest
+from qiskit.exceptions import OptionalDependencyImportWarning
 
 from tests import conftest
 
@@ -33,6 +35,23 @@ def test_numerical_thread_pool_defaults_preserve_runner_overrides() -> None:
     conftest.set_default_thread_limits(environment)
 
     assert environment["OMP_NUM_THREADS"] == "runner-value"
+
+
+def test_qasm3_import_availability_handles_incompatible_importer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An incompatible OpenQASM 3 importer is unavailable without a test error."""
+
+    class IncompatibleImport:
+        """Model Qiskit's warning for an installed but incompatible importer."""
+
+        def __bool__(self) -> bool:
+            warnings.warn("incompatible importer", OptionalDependencyImportWarning, stacklevel=2)
+            return False
+
+    monkeypatch.setattr("qiskit.utils.optionals.HAS_QASM3_IMPORT", IncompatibleImport())
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", OptionalDependencyImportWarning)
+        assert not conftest.qasm3_import_available()
 
 
 @pytest.mark.parametrize(

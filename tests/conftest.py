@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import os
-from importlib.util import find_spec
+import warnings
 from typing import TYPE_CHECKING
 
 import psutil
@@ -43,6 +43,17 @@ set_default_thread_limits(os.environ)
 
 # Default seed for stochastic integration tests (TJM, noisy simulator.run, etc.).
 YAQS_TEST_SEED = 42
+
+
+def qasm3_import_available() -> bool:
+    """Return whether Qiskit's OpenQASM 3 importer can be used."""
+    # Delay the Qiskit import until numerical thread defaults are configured.
+    from qiskit.exceptions import OptionalDependencyImportWarning  # ruff: ignore[import-outside-top-level]
+    from qiskit.utils.optionals import HAS_QASM3_IMPORT  # ruff: ignore[import-outside-top-level]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", OptionalDependencyImportWarning)
+        return bool(HAS_QASM3_IMPORT)
 
 
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
@@ -146,6 +157,6 @@ def write_qasm_file(directory: Path, content: str, *, filename: str = "circuit.q
 
 
 requires_qasm3_import = pytest.mark.skipif(
-    find_spec("qiskit_qasm3_import") is None,
-    reason="qiskit-qasm3-import is not installed",
+    not qasm3_import_available(),
+    reason="qiskit-qasm3-import is unavailable or incompatible",
 )
