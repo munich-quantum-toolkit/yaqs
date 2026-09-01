@@ -569,6 +569,13 @@ def apply_long_range_gate_mpo(
 ) -> tuple[int, int]:
     """Apply a gate on two or more qubits via :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.multiply`.
 
+    The gate MPO is built on the support ``[first_site, last_site]`` and multiplied into
+    the matching window of ``state``, so contraction and compression touch
+    ``last_site - first_site + 1`` sites instead of :attr:`~mqt.yaqs.core.data_structures.mps.MPS.length`
+    sites, and no bond outside the support is truncated, matching the other gate modes.
+    Moving the center to the nearest window boundary still rewrites the sites it
+    passes; the multiplication and its compression do not.
+
     Args:
         state: MPS updated in place.
         gate: Gate with sites and MPO data populated.
@@ -579,9 +586,27 @@ def apply_long_range_gate_mpo(
     """
     first_site = min(gate.sites)
     last_site = max(gate.sites)
-    MPO.from_gate(gate, state.length, physical_dimensions=state.physical_dimensions).multiply(
-        state, sim_params=sim_params, compress=True
+
+    # The gate MPO has bond dimension 1 at both support boundaries, so the windowed
+    # compression matches the full-chain one only while the sites outside
+    # [first_site, last_site] are isometric towards the window (cf. apply_two_qubit_gate_tebd).
+    center = state.orthogonality_center
+    if center is None:
+        state.set_canonical_form(first_site)
+    elif not first_site <= center <= last_site:
+        state.shift_center_to(first_site if center < first_site else last_site)
+
+    window = MPS(
+        length=last_site - first_site + 1,
+        tensors=state.tensors[first_site : last_site + 1],
+        physical_dimensions=state.physical_dimensions[first_site : last_site + 1],
     )
+    MPO.from_gate(gate, window.length, physical_dimensions=window.physical_dimensions).multiply(
+        window, sim_params=sim_params, compress=True
+    )
+    state.tensors[first_site : last_site + 1] = window.tensors
+    center = window.orthogonality_center
+    state.set_center(None if center is None else first_site + center)
     return first_site, last_site
 
 

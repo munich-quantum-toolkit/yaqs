@@ -1077,6 +1077,24 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     assert no_compress.orthogonality_center is None
 
 
+def test_multiply_mps_leaves_center_on_last_site() -> None:
+    """Compression after ``multiply(MPS)`` leaves a genuine center on the last site."""
+    length = 6
+    state = MPS(length, state="haar-random", pad=4)
+    state.normalize("B")
+    gate = GateLibrary.cx()
+    gate.set_sites(1, 4)
+    gate_mpo = MPO.from_gate(gate, length)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    gate_mpo.multiply(state, sim_params=sim_params, compress=True)
+
+    # ``compress`` ends its truncating sweep on the last site, so that site is named before
+    # the call; the tracked center must therefore be a genuine canonical center there.
+    assert state.orthogonality_center == length - 1
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
 def test_multiply_mps_compress_requires_sim_params() -> None:
     """Compression without ``sim_params`` raises ``ValueError``."""
     state = MPS(2, state="zeros")
