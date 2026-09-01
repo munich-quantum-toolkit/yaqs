@@ -1531,19 +1531,18 @@ class MPO:
         if len(self.tensors) != state.length:
             msg = f"MPO length {len(self.tensors)} does not match MPS length {state.length}."
             raise ValueError(msg)
+        if compress and sim_params is None:
+            msg = "sim_params is required when compress=True for MPO.multiply(MPS)."
+            raise ValueError(msg)
 
         state.set_center(None)
         for site, operator in enumerate(self.tensors):
             state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
 
         if not compress:
-            state.set_center(None)
             return
-        if sim_params is None:
-            state.set_center(None)
-            msg = "sim_params is required when compress=True for MPO.multiply(MPS)."
-            raise ValueError(msg)
 
+        assert sim_params is not None
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
