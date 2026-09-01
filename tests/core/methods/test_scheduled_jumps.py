@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import copy
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -146,14 +145,27 @@ def test_apply_scheduled_jumps_custom_matrix() -> None:
 @pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_apply_scheduled_jumps_nonfinite_norm_raises(bad: float) -> None:
     """NaN and Inf post-jump norms raise instead of normalizing."""
-    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "x"}])
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "custom", "matrix": np.ones((2, 2))}])
     sim_params = AnalogSimParams(dt=0.1, get_state=True)
     state = MPS(1, state="zeros")
     state.normalize("B")
-    # Inject the non-finite squared norm directly: planting 1e200 overflows in the
-    # norm contraction and emits a platform-dependent RuntimeWarning under BLAS.
-    with patch.object(MPS, "norm", return_value=bad), pytest.raises(ValueError, match="zero or non-finite"):
+    state.tensors[0][0, 0, 0] = bad
+
+    with np.errstate(invalid="ignore"), pytest.raises(ValueError, match="zero or non-finite"):
         apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
+
+
+def test_apply_scheduled_jumps_normalizes_large_finite_center() -> None:
+    """A scheduled jump normalizes a large finite center without overflow."""
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0], "name": "identity", "matrix": np.eye(2)}])
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+    state = MPS(1, state="zeros")
+    state.tensors[0] *= 1e308
+
+    apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
+
+    assert state.norm() == pytest.approx(1.0)
+    assert state.orthogonality_center == 0
 
 
 def test_apply_scheduled_jumps_two_site() -> None:

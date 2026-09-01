@@ -264,6 +264,22 @@ def test_mps_rejects_invalid_length(length: object) -> None:
         MPS(length)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
 
 
+def test_mps_accepts_numpy_integer_length_and_centers() -> None:
+    """NumPy integer indices are accepted and stored as Python integers."""
+    mps = MPS(np.int64(3))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+
+    assert mps.length == 3
+    assert type(mps.length) is int
+
+    mps.set_center(np.int64(2))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+    assert mps.orthogonality_center == 2
+    assert type(mps.orthogonality_center) is int
+
+    mps.set_canonical_form(np.int64(1))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+    assert mps.orthogonality_center == 1
+    assert type(mps.orthogonality_center) is int
+
+
 def test_mps_custom_tensors() -> None:
     """Test that an MPS can be initialized with custom tensors.
 
@@ -530,6 +546,66 @@ def test_normalize_accepts_large_finite_center_tensor() -> None:
     np.testing.assert_allclose(mps.to_vec(), np.full(2, 1 / np.sqrt(2)))
     assert mps.norm() == pytest.approx(1.0)
     assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_rescales_only_a_displaced_center() -> None:
+    """Center-only normalization preserves the gauge and every other tensor."""
+    mps = _entangled_mps(length=4, chi=4, seed=46)
+    mps.shift_center_to(2)
+    mps.tensors[2] *= 3.0
+    untouched = [(site, tensor, tensor.copy()) for site, tensor in enumerate(mps.tensors) if site != 2]
+
+    mps.normalize_center()
+
+    assert mps.orthogonality_center == 2
+    assert 2 in mps.check_canonical_form()
+    assert float(mps.norm()) == pytest.approx(1.0, abs=1e-12)
+    for site, tensor, expected in untouched:
+        assert mps.tensors[site] is tensor
+        np.testing.assert_array_equal(mps.tensors[site], expected)
+
+
+def test_normalize_center_accepts_large_finite_tensor() -> None:
+    """Center-only normalization avoids overflow for large finite complex amplitudes."""
+    tensor = np.array(
+        [complex(1.7e308, 1.7e308), complex(-1.7e308, 1.7e308)],
+        dtype=np.complex128,
+    ).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+    mps.set_center(0)
+
+    mps.normalize_center()
+
+    np.testing.assert_allclose(mps.to_vec(), np.array([0.5 + 0.5j, -0.5 + 0.5j]))
+    assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_rejects_unknown_gauge_without_mutation() -> None:
+    """Center-only normalization requires a tracked center."""
+    mps = MPS(3, state="x+")
+    mps.set_center(None)
+    before = [tensor.copy() for tensor in mps.tensors]
+
+    with pytest.raises(ValueError, match="orthogonality center is unknown"):
+        mps.normalize_center()
+
+    assert mps.orthogonality_center is None
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_normalize_center_rejects_zero_center_without_mutation() -> None:
+    """Center-only normalization rejects a zero state without replacing it."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 0
+    before = [tensor.copy() for tensor in mps.tensors]
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize_center()
+
+    assert mps.orthogonality_center == 0
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_normalize() -> None:

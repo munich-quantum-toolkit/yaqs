@@ -364,14 +364,29 @@ def test_renorm_drift_skips_when_within_tolerance() -> None:
 
 
 def test_renorm_drift_normalizes_large_drift() -> None:
-    """Drift renorm restores unit norm when truncation drifts far from unity."""
+    """Drift renorm rescales a genuine center without a full canonical sweep."""
     state = MPS(2, state="zeros")
     state.tensors[0] *= 0.1
-    state.tensors[1] *= 0.1
     params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
-    with patch.object(MPS, "normalize") as mock_normalize:
-        renorm_drift(state, params)
-        mock_normalize.assert_called_once()
+
+    renorm_drift(state, params)
+
+    assert state.norm() == pytest.approx(1.0)
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
+
+
+def test_renorm_drift_normalizes_overflowed_global_norm() -> None:
+    """A non-finite norm estimate still triggers robust center normalization."""
+    state = MPS(2, state="zeros")
+    state.tensors[0] *= 1e200
+    params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
+
+    renorm_drift(state, params)
+
+    assert state.norm() == pytest.approx(1.0)
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
 
 
 def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:

@@ -1131,13 +1131,26 @@ def test_multiply_single_site_mps_restores_genuine_center() -> None:
 
 
 def test_multiply_mps_compress_requires_sim_params() -> None:
-    """Compression without ``sim_params`` raises ``ValueError``."""
-    state = MPS(2, state="zeros")
+    """Missing compression settings are rejected before the MPS is changed."""
+    state = MPS(2, state="x+")
+    tensor_list = state.tensors
+    tensors = [tensor.copy() for tensor in state.tensors]
+    physical_dimensions = state.physical_dimensions
+    center = state.orthogonality_center
+    flipped = state.flipped
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, 2)
+
     with pytest.raises(ValueError, match="sim_params is required"):
         gate_mpo.multiply(state, compress=True)
+
+    assert state.tensors is tensor_list
+    assert state.physical_dimensions is physical_dimensions
+    assert state.orthogonality_center == center
+    assert state.flipped is flipped
+    for expected, actual in zip(tensors, state.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_multiply_mps_length_mismatch_raises() -> None:

@@ -2724,6 +2724,18 @@ def test_center_rescale_normalizes_without_moving_the_center() -> None:
     assert 0 in state.check_canonical_form()
 
 
+def test_center_rescale_normalizes_large_finite_amplitudes() -> None:
+    """Digital renormalization avoids overflow for large finite amplitudes."""
+    tensor = np.array([1e308, 1e308], dtype=np.complex128).reshape(2, 1, 1)
+    state = MPS(1, tensors=[tensor])
+    state.set_center(0)
+
+    _renormalize(state)
+
+    np.testing.assert_allclose(state.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert state.orthogonality_center == 0
+
+
 @pytest.mark.parametrize("center", [0, None])
 @pytest.mark.parametrize("invalid_value", [0.0, np.nan, np.inf])
 def test_center_rescale_rejects_invalid_norm(invalid_value: float, center: int | None) -> None:
