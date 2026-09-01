@@ -1543,6 +1543,133 @@ def test_get_entropy_bell_pair_ln2() -> None:
     assert np.isclose(ent, np.log(2.0), atol=1e-12)
 
 
+def _entangled_mps(length: int = 6, chi: int = 4, seed: int = 3) -> MPS:
+    """Random right-canonical MPS with entanglement at every internal cut.
+
+    Args:
+        length: Number of sites in the state.
+        chi: Maximum internal bond dimension.
+        seed: Random-number generator seed.
+
+    Returns:
+        MPS: Normalized state with the orthogonality center at site 0.
+    """
+    rng = np.random.default_rng(seed)
+    bonds = [1] + [min(chi, 2**i, 2 ** (length - i)) for i in range(1, length)] + [1]
+    tensors = [
+        rng.standard_normal((2, bonds[i], bonds[i + 1])) + 1j * rng.standard_normal((2, bonds[i], bonds[i + 1]))
+        for i in range(length)
+    ]
+    state = MPS(length=length, tensors=tensors)
+    state.normalize(form="B", decomposition="QR")
+    return state
+
+
+def _dense_schmidt_values(state: MPS, cut: int) -> np.ndarray:
+    """Schmidt values at the cut between sites ``cut`` and ``cut + 1`` from the dense state.
+
+    Args:
+        state: State to analyze.
+        cut: Left site of the internal bond.
+
+    Returns:
+        Singular values of the state reshaped across the physical bipartition.
+    """
+    dense = state.tensors[0].transpose(1, 0, 2)
+    for tensor in state.tensors[1:]:
+        dense = np.tensordot(dense, tensor.transpose(1, 0, 2), axes=([dense.ndim - 1], [0]))
+    matrix = np.asarray(dense, dtype=np.complex128).reshape(2 ** (cut + 1), -1)
+    return np.linalg.svd(matrix, compute_uv=False)
+
+
+@pytest.mark.parametrize("cut", [1, 2, 3])
+def test_entropy_at_an_interior_cut_matches_the_dense_state(cut: int) -> None:
+    """The entropy of a bond is the entropy of the physical bipartition there.
+
+    Args:
+        cut: Left site of the internal bond.
+    """
+    state = _entangled_mps()
+    values = _dense_schmidt_values(state, cut)
+    weights = values**2 / np.sum(values**2)
+    expected = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+
+    assert state.get_entropy([cut, cut + 1]) == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("center", [0, 2, 5, None])
+def test_entropy_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
+    """Entropy is a property of the state, not of the gauge it is stored in.
+
+    Args:
+        center: Orthogonality center to set, or ``None`` to mark it as unknown.
+    """
+    reference = _entangled_mps()
+    expected = reference.get_entropy([2, 3])
+
+    state = _entangled_mps()
+    if center is None:
+        state.set_center(None)
+    else:
+        state.shift_center_to(center)
+
+    assert state.get_entropy([2, 3]) == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("center", [0, 2, 5, None])
+def test_schmidt_spectrum_does_not_depend_on_the_orthogonality_center(center: int | None) -> None:
+    """The Schmidt spectrum of a bond is gauge-independent.
+
+    Args:
+        center: Orthogonality center to set, or ``None`` to mark it as unknown.
+    """
+    expected = _dense_schmidt_values(_entangled_mps(), 2)
+
+    state = _entangled_mps()
+    if center is None:
+        state.set_center(None)
+    else:
+        state.shift_center_to(center)
+
+    spectrum = state.get_schmidt_spectrum([2, 3])
+    values = spectrum[~np.isnan(spectrum)]
+    assert values.size == expected.size
+    np.testing.assert_allclose(np.sort(values)[::-1], np.sort(expected)[::-1], atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("matrix", "sites"),
+    [
+        (np.diag([1.0, 0.15]), 0),
+        (np.diag([1.0, 0.5, 0.25, 0.125]), [0, 1]),
+    ],
+    ids=["one_site", "two_site"],
+)
+def test_non_unitary_apply_local_invalidates_center_and_preserves_bond_metrics(
+    matrix: np.ndarray, sites: int | list[int]
+) -> None:
+    """A local filter invalidates the tracked gauge before bond metrics are evaluated.
+
+    Args:
+        matrix: Non-unitary matrix to apply.
+        sites: Site or sites targeted by the matrix.
+    """
+    state = _entangled_mps()
+    state.shift_center_to(2)
+
+    state.apply_local(Observable(BaseGate(matrix), sites))
+
+    assert state.orthogonality_center is None
+    expected = _dense_schmidt_values(state, 2)
+    weights = expected**2 / np.sum(expected**2)
+    expected_entropy = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+    assert state.get_entropy([2, 3]) == pytest.approx(expected_entropy, abs=1e-12)
+
+    spectrum = state.get_schmidt_spectrum([2, 3])
+    values = spectrum[~np.isnan(spectrum)]
+    np.testing.assert_allclose(values, expected, atol=1e-12)
+
+
 def test_get_entropy_asserts_on_non_adjacent_or_wrong_len() -> None:
     """get_entropy asserts on invalid site lists."""
     mps = _product_state_mps(4)
@@ -1629,6 +1756,50 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
 
     assert results_pvm[0, 0] == 1
+
+
+@pytest.mark.parametrize("center", [0, None])
+def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(center: int | None) -> None:
+    """Sorted bond metrics reuse one canonical working state without mutating the input.
+
+    Args:
+        center: Tracked center to set, or ``None`` to mark it as unknown.
+    """
+    state = _entangled_mps()
+    state.set_center(center)
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+
+    observables = [
+        observable
+        for cut in reversed(range(state.length - 1))
+        for observable in (
+            Observable(GateLibrary.entropy(), [cut, cut + 1]),
+            Observable(GateLibrary.schmidt_spectrum(), [cut, cut + 1]),
+        )
+    ]
+    sim_params = AnalogSimParams(observables, elapsed_time=0.1, dt=0.1)
+    results = np.empty((len(observables), 1), dtype=object)
+    dense_values = {cut: _dense_schmidt_values(state, cut) for cut in range(state.length - 1)}
+
+    with patch.object(mps_mod, "copy") as copy_module:
+        copy_module.deepcopy.side_effect = copy.deepcopy
+        state.evaluate_observables(sim_params, results)
+
+    copy_module.deepcopy.assert_called_once_with(state)
+    assert state.orthogonality_center == center
+    for tensor, tensor_before in zip(state.tensors, tensors_before, strict=True):
+        np.testing.assert_array_equal(tensor, tensor_before)
+
+    for obs_index, observable in enumerate(sim_params.sorted_observables):
+        assert isinstance(observable.sites, list)
+        values = dense_values[observable.sites[0]]
+        if observable.gate.name == "entropy":
+            weights = values**2 / np.sum(values**2)
+            expected = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
+            assert results[obs_index, 0] == pytest.approx(expected, abs=1e-12)
+        else:
+            spectrum = results[obs_index, 0]
+            np.testing.assert_allclose(spectrum[~np.isnan(spectrum)], values, atol=1e-12)
 
 
 def test_evaluate_observables_local_ops_and_center_shifts() -> None:

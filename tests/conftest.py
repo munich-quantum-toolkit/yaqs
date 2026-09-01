@@ -10,27 +10,70 @@
 from __future__ import annotations
 
 import os
+import warnings
 from typing import TYPE_CHECKING
 
+import psutil
 import pytest
-from qiskit.utils.optionals import HAS_QASM3_IMPORT
 
 if TYPE_CHECKING:
+    from collections.abc import MutableMapping
     from pathlib import Path
 
-# Cap BLAS/OpenMP/Numba threads in pytest workers before numerical libraries spin
-# up pools (reduces oversubscription and Numba config reload crashes under xdist).
-for _name, _val in (
-    ("OPENBLAS_NUM_THREADS", "1"),
-    ("MKL_NUM_THREADS", "1"),
-    ("OMP_NUM_THREADS", "1"),
-    ("NUMEXPR_NUM_THREADS", "1"),
-    ("NUMBA_NUM_THREADS", "1"),
-):
-    os.environ.setdefault(_name, _val)
+
+def set_default_thread_limits(environment: MutableMapping[str, str]) -> None:
+    """Default numerical thread pools to one thread.
+
+    Args:
+        environment: Environment mapping to configure.
+    """
+    for name in (
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "NUMBA_NUM_THREADS",
+    ):
+        environment.setdefault(name, "1")
+
+
+# Set defaults before test modules import numerical libraries. Explicit values
+# from a local shell or CI runner take precedence.
+set_default_thread_limits(os.environ)
 
 # Default seed for stochastic integration tests (TJM, noisy simulator.run, etc.).
 YAQS_TEST_SEED = 42
+
+
+def qasm3_import_available() -> bool:
+    """Return whether Qiskit's OpenQASM 3 importer can be used."""
+    # Delay the Qiskit import until numerical thread defaults are configured.
+    from qiskit.exceptions import OptionalDependencyImportWarning  # ruff: ignore[import-outside-top-level]
+    from qiskit.utils.optionals import HAS_QASM3_IMPORT  # ruff: ignore[import-outside-top-level]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", OptionalDependencyImportWarning)
+        return bool(HAS_QASM3_IMPORT)
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    """Select an allocation-aware pytest-xdist worker count.
+
+    Returns:
+        The number of xdist workers.
+    """
+    del config
+    # Delay the YAQS import until numerical thread defaults are configured.
+    from mqt.yaqs.core.parallel_utils import available_cpus  # ruff: ignore[import-outside-top-level]
+
+    worker_limit = available_cpus()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return worker_limit
+
+    physical_cpus = psutil.cpu_count(logical=False) or worker_limit
+    available_physical_cpus = min(physical_cpus, worker_limit)
+    return max(1, available_physical_cpus - 1)
+
 
 LARGE_QASM2_STRING = """\
 // circuit_small.qasm
@@ -114,6 +157,6 @@ def write_qasm_file(directory: Path, content: str, *, filename: str = "circuit.q
 
 
 requires_qasm3_import = pytest.mark.skipif(
-    not HAS_QASM3_IMPORT,
-    reason="qiskit-qasm3-import is not installed",
+    not qasm3_import_available(),
+    reason="qiskit-qasm3-import is unavailable or incompatible",
 )
