@@ -27,8 +27,9 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
+from mqt.yaqs.core.methods.tdvp import integrators as integrators_module
 from mqt.yaqs.core.methods.tdvp import tdvp
-from mqt.yaqs.core.methods.tdvp.integrators import sweep_2site
+from mqt.yaqs.core.methods.tdvp.integrators import sweep_1site, sweep_2site
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
 from mqt.yaqs.core.methods.tdvp.sweep_utils import split_tdvp
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
@@ -38,6 +39,7 @@ from tests.core.methods.tdvp.conftest import (
     _apply_lr_gate,
     _double_theta_reference,
     _fidelity,
+    _haar_random_mps,
     _qiskit_two_site_reference,
     _tdvp_params,
     assert_mps_bond_invariants,
@@ -70,6 +72,53 @@ def test_single_site_tdvp() -> None:
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
     )
+
+
+def test_1site_tdvp_tracks_a_genuine_center_at_each_site_update() -> None:
+    """One-site TDVP tracks the physical center through both sweep directions."""
+    length = 4
+    state = _haar_random_mps(length, pad=4, seed=20260901)
+    state.set_canonical_form(0)
+    initial = state.to_vec()
+    operator = MPO.ising(length, 1.0, 0.7)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.01,
+        dt=0.01,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        tdvp_mode="1site",
+    )
+    expected_sites = [*range(length), *range(length - 2, -1, -1)]
+    seen: list[int] = []
+    original_update = integrators_module.update_site
+
+    def checked_update(
+        left_env: NDArray[np.complex128],
+        right_env: NDArray[np.complex128],
+        local_operator: NDArray[np.complex128],
+        ket: NDArray[np.complex128],
+        dt: float,
+        *,
+        krylov_tol: float,
+    ) -> NDArray[np.complex128]:
+        site = expected_sites[len(seen)]
+        center = state.orthogonality_center
+        assert ket is state.tensors[site]
+        assert center == site
+        assert center in state.check_canonical_form()
+        seen.append(center)
+        return original_update(left_env, right_env, local_operator, ket, dt, krylov_tol=krylov_tol)
+
+    with patch.object(integrators_module, "update_site", side_effect=checked_update):
+        sweep_1site(state, operator, sim_params)
+
+    assert seen == expected_sites
+    exact = expm(-1j * sim_params.dt * operator.to_matrix_mps_order()) @ initial
+    assert _fidelity(exact, state.to_vec()) >= 1.0 - 1e-8
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
 
 
 def test_two_site_tdvp() -> None:
@@ -400,6 +449,78 @@ def test_dynamic_ising_matches_expm() -> None:
     exact_vec = expm(-1j * dt * hamiltonian.to_matrix()) @ prep.to_vec()
     assert _fidelity(exact_vec, state.to_vec()) > 0.99
     assert state.get_max_bond() <= 2
+
+
+def test_repeated_capped_dynamic_ising_matches_dense_evolution() -> None:
+    """Repeated capped dynamic sweeps retain dense Ising accuracy."""
+    length = 8
+    dt = 0.05
+    elapsed_time = 0.6
+    hamiltonian = MPO.ising(length, 1.0, 0.7)
+    state = MPS(length, state="x+")
+    initial = state.to_vec()
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=elapsed_time,
+        dt=dt,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=4,
+        svd_threshold=1e-12,
+        tdvp_sweeps=1,
+        tdvp_mode="dynamic",
+    )
+
+    for _ in range(round(elapsed_time / dt)):
+        tdvp(state, hamiltonian, sim_params)
+
+    exact = expm(-1j * elapsed_time * hamiltonian.to_matrix_mps_order()) @ initial
+    exact /= np.linalg.norm(exact)
+    actual = state.to_vec()
+    actual /= np.linalg.norm(actual)
+    fidelity = _fidelity(exact, actual)
+    assert fidelity >= 1.0 - 1e-8, f"fidelity={fidelity}"
+    assert state.get_max_bond() <= 4
+    assert state.orthogonality_center == 0
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_dynamic_alignment_receives_a_genuine_pair_center() -> None:
+    """Each capped dynamic bond alignment receives a valid center on its pair."""
+    length = 5
+    state = _haar_random_mps(length, pad=4, seed=20260901)
+    state.set_canonical_form(0)
+    hamiltonian = MPO.ising(length, 1.0, 0.7)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.05,
+        dt=0.05,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=2,
+        svd_threshold=1e-12,
+        tdvp_sweeps=1,
+        tdvp_mode="dynamic",
+    )
+    original_align = integrators_module._align_bond  # ruff: ignore[private-member-access]
+    seen: list[tuple[int, int]] = []
+
+    def checked_align(current: MPS, bond: int, params: AnalogSimParams | DigitalSimParams) -> None:
+        center = current.orthogonality_center
+        assert center is not None
+        assert current.check_covers_sites([bond, bond + 1])
+        assert center in current.check_canonical_form()
+        seen.append((bond, center))
+        original_align(current, bond, params)
+
+    with patch.object(integrators_module, "_align_bond", side_effect=checked_align):
+        tdvp(state, hamiltonian, sim_params)
+
+    assert seen
+    assert any(center == bond + 1 for bond, center in seen)
+    assert any(center == bond for bond, center in seen)
 
 
 def test_dynamic_analog_sweep_plan_integration() -> None:

@@ -187,6 +187,21 @@ def create_probability_distribution(
     return ordered_processes, [val / dp for val in dp_m_list]
 
 
+def _normalize_at_zero(state: MPS) -> None:
+    """Normalize ``state`` at site zero without a redundant full gauge sweep.
+
+    Args:
+        state: MPS normalized in place. Its norm must be nonzero and finite.
+    """
+    if state.orthogonality_center is None:
+        state.set_canonical_form(0)
+    center = state.orthogonality_center
+    assert center is not None
+    state.normalize_center()
+    if center != 0:
+        state.shift_center_to(0)
+
+
 def stochastic_process(
     state: MPS,
     noise_model: NoiseModel | None,
@@ -214,7 +229,8 @@ def stochastic_process(
         MPS: The updated Matrix Product MPS after the stochastic process.
 
     Raises:
-        ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
+        ValueError: If normalization fails, a two-site jump is not nearest-neighbor, or a jump operator does not act
+            on one or two sites.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -222,24 +238,20 @@ def stochastic_process(
     if state.orthogonality_center is not None:
         state.assert_center(0, context="stochastic_process")
 
+    if noise_model is None:
+        _normalize_at_zero(state)
+        return state
+
     dp = calculate_stochastic_factor(state)
-    if noise_model is None or rng.random() >= dp:
-        if state.orthogonality_center is not None:
-            state.shift_orthogonality_center_left(0)
-        else:
-            state.set_canonical_form(0)
+    if rng.random() >= dp:
+        _normalize_at_zero(state)
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.
     ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
 
     if len(probabilities) == 0:
-        if state.orthogonality_center is not None:
-            if state.orthogonality_center != 0:
-                state.shift_center_to(0)
-            state.shift_orthogonality_center_left(0)
-        else:
-            state.set_canonical_form(0)
+        _normalize_at_zero(state)
         return state
 
     choice_idx = rng.choice(len(ordered_processes), p=probabilities)
@@ -267,24 +279,33 @@ def stochastic_process(
             state.set_center(None)
         else:
             # Adjacent 2-site process: use matrix
-            if np.abs(i - j) > 1:
+            # NoiseModel stores each full matrix in ascending physical-site order.
+            left_site, right_site = sorted((i, j))
+            if right_site - left_site != 1:
                 msg = f"Only nearest-neighbor 2-site jumps are supported for non-Pauli processes (got sites {i}, {j})"
                 raise ValueError(msg)
 
+            # A split can record a pair center only when the surrounding gauge is canonical.
+            if not state.check_covers_sites([left_site, right_site]):
+                if state.orthogonality_center is None:
+                    state.set_canonical_form(left_site)
+                else:
+                    target = left_site if state.orthogonality_center < left_site else right_site
+                    state.shift_center_to(target)
+
             jump_op = chosen_process["matrix"]
-            merged = merge_two_site(state.tensors[i], state.tensors[j])
+            merged = merge_two_site(state.tensors[left_site], state.tensors[right_site])
             merged = oe.contract("ab, bcd->acd", jump_op, merged)
             # For stochastic jumps, always contract singular values to the right
             tensor_left_new, tensor_right_new = split_two_site(
                 merged,
-                [state.physical_dimensions[i], state.physical_dimensions[j]],
+                [state.physical_dimensions[left_site], state.physical_dimensions[right_site]],
                 svd_distribution="right",
                 trunc_mode=sim_params.trunc_mode,
                 threshold=sim_params.svd_threshold,
                 max_bond_dim=sim_params.max_bond_dim,
             )
-            state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
-            left_site, right_site = min(i, j), max(i, j)
+            state.tensors[left_site], state.tensors[right_site] = tensor_left_new, tensor_right_new
             state.update_center_after_split(left_site, right_site, "right")
 
     # Normalize MPS after jump

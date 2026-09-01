@@ -370,7 +370,7 @@ def test_apply_window() -> None:
     length = 5
     tensors = cast(
         "list[NDArray[np.complex128]]",
-        [np.full((2, 1, 1), i, dtype=np.complex128) for i in range(5)],
+        [np.full((2, 1, 1), i + 1, dtype=np.complex128) for i in range(5)],
     )
     mps = MPS(length, tensors)
     mps.normalize()
@@ -2722,6 +2722,18 @@ def test_center_rescale_normalizes_without_moving_the_center() -> None:
     assert state.orthogonality_center == 0
     assert float(state.norm()) == pytest.approx(1.0, abs=1e-12)
     assert 0 in state.check_canonical_form()
+
+
+def test_center_rescale_normalizes_large_finite_amplitudes() -> None:
+    """Digital renormalization avoids overflow for large finite amplitudes."""
+    tensor = np.array([1e308, 1e308], dtype=np.complex128).reshape(2, 1, 1)
+    state = MPS(1, tensors=[tensor])
+    state.set_center(0)
+
+    _renormalize(state)
+
+    np.testing.assert_allclose(state.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert state.orthogonality_center == 0
 
 
 @pytest.mark.parametrize("center", [0, None])

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import copy
 from typing import TYPE_CHECKING, Self
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import opt_einsum as oe
@@ -26,9 +26,10 @@ from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
+from mqt.yaqs.core.methods.decompositions import SvdDistribution, merge_two_site, split_two_site
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from numpy.typing import NDArray
 
@@ -252,6 +253,33 @@ def test_mps_initialization(state: str) -> None:
             np.testing.assert_allclose(vec, expected)
 
 
+@pytest.mark.parametrize("length", [0, -1, False, 1.5])
+def test_mps_rejects_invalid_length(length: object) -> None:
+    """An MPS length must be a positive integer.
+
+    Args:
+        length: Invalid chain length under test.
+    """
+    with pytest.raises(ValueError, match="length must be a positive integer"):
+        MPS(length)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+
+
+def test_mps_accepts_numpy_integer_length_and_centers() -> None:
+    """NumPy integer indices are accepted and stored as Python integers."""
+    mps = MPS(np.int64(3))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+
+    assert mps.length == 3
+    assert type(mps.length) is int
+
+    mps.set_center(np.int64(2))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+    assert mps.orthogonality_center == 2
+    assert type(mps.orthogonality_center) is int
+
+    mps.set_canonical_form(np.int64(1))  # ty: ignore[invalid-argument-type]  # exercise NumPy integer compatibility
+    assert mps.orthogonality_center == 1
+    assert type(mps.orthogonality_center) is int
+
+
 def test_mps_custom_tensors() -> None:
     """Test that an MPS can be initialized with custom tensors.
 
@@ -371,6 +399,238 @@ def test_set_canonical_form(desired_center: int) -> None:
     assert [desired_center] == mps.check_canonical_form()
 
 
+def test_invalid_center_is_rejected_before_mutation() -> None:
+    """Center bounds are checked before tensors or metadata can change."""
+    mps = _entangled_mps(length=3)
+    before = copy.deepcopy(mps.tensors)
+
+    with pytest.raises(ValueError, match="center must be in"):
+        mps.set_center(-1)
+    with pytest.raises(ValueError, match="orthogonality_center must be in"):
+        mps.set_canonical_form(mps.length)
+
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["shift_right", "shift_left", "shift_to", "set_canonical", "normalize"],
+)
+def test_invalid_decomposition_is_rejected_before_mutation(method: str) -> None:
+    """Every canonicalization entry point rejects an invalid decomposition atomically."""
+    mps = _entangled_mps(length=3)
+    before = copy.deepcopy(mps.tensors)
+    method_names = {
+        "shift_right": "shift_orthogonality_center_right",
+        "shift_left": "shift_orthogonality_center_left",
+        "shift_to": "shift_center_to",
+        "set_canonical": "set_canonical_form",
+        "normalize": "normalize",
+    }
+    args = () if method == "normalize" else (1 if method in {"shift_to", "set_canonical"} else 0,)
+    operation = getattr(mps, method_names[method])
+
+    with pytest.raises(ValueError, match="decomposition must be"):
+        operation(*args, decomposition="invalid")
+
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf], ids=["nan", "inf"])
+@pytest.mark.parametrize(
+    ("center", "decomposition"),
+    [(0, "QR"), (2, "SVD")],
+    ids=["left_qr", "right_svd"],
+)
+def test_set_canonical_form_rejects_non_finite_tensors_atomically(
+    bad_value: float,
+    center: int,
+    decomposition: str,
+) -> None:
+    """Canonicalization rejects non-finite tensors before changing the MPS.
+
+    Args:
+        bad_value: Non-finite tensor value under test.
+        center: Requested orthogonality center.
+        decomposition: Requested decomposition.
+    """
+    mps = _entangled_mps(length=3, chi=2, seed=33)
+    mps.set_center(None)
+    mps.tensors[1][0, 0, 0] = bad_value
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+    flipped_before = mps.flipped
+
+    with pytest.raises(ValueError, match="non-finite"):
+        mps.set_canonical_form(center, decomposition=decomposition)
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center is None
+    assert mps.flipped is flipped_before
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_set_canonical_form_rejects_non_finite_sweep_result() -> None:
+    """Finite inputs that overflow during a sweep never acquire a false center."""
+    mps = MPS(2, state="zeros")
+    for tensor in mps.tensors:
+        tensor.fill(1e200)
+    mps.set_center(None)
+
+    with np.errstate(all="ignore"), pytest.raises(ValueError, match="produced non-finite"):
+        mps.set_canonical_form(0)
+
+    assert mps.orthogonality_center is None
+    assert mps.flipped is False
+    assert not all(np.isfinite(tensor).all() for tensor in mps.tensors)
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf], ids=["nan", "inf"])
+def test_normalize_rejects_non_finite_tensors_before_flipping(bad_value: float) -> None:
+    """Normalization rejects non-finite input without reversing the MPS.
+
+    Args:
+        bad_value: Non-finite center-tensor value under test.
+    """
+    tensors = [np.zeros((dimension, 1, 1), dtype=np.complex128) for dimension in (2, 3, 4)]
+    for tensor in tensors:
+        tensor[0, 0, 0] = 1.0
+    mps = MPS(3, tensors=tensors, physical_dimensions=[2, 3, 4])
+    mps.set_center(0)
+    mps.tensors[0][0, 0, 0] = bad_value
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize("B")
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_normalize_rejects_zero_state_without_replacing_it() -> None:
+    """Normalization rejects a zero vector instead of creating an arbitrary state."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 0
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize()
+
+    assert mps.norm() == 0
+    np.testing.assert_array_equal(mps.to_vec(), np.zeros(2**mps.length))
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+
+
+def test_normalize_accepts_large_finite_center_tensor() -> None:
+    """Scaled center normalization does not overflow on large finite values."""
+    tensor = np.array([1e308, 1e308], dtype=np.complex128).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+
+    mps.normalize()
+
+    np.testing.assert_allclose(mps.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert mps.norm() == pytest.approx(1.0)
+    assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_rescales_only_a_displaced_center() -> None:
+    """Direct center normalization preserves the gauge and every other tensor."""
+    mps = _entangled_mps(length=4, chi=4, seed=46)
+    mps.shift_center_to(2)
+    mps.tensors[2] *= 3.0
+    center_before = mps.tensors[2].copy()
+    direct_norm = float(np.linalg.norm(center_before))
+    assert direct_norm > 0.0
+    assert np.isfinite(direct_norm)
+    untouched = [(site, tensor, tensor.copy()) for site, tensor in enumerate(mps.tensors) if site != 2]
+
+    mps.normalize_center()
+
+    assert mps.orthogonality_center == 2
+    assert 2 in mps.check_canonical_form()
+    assert float(mps.norm()) == pytest.approx(1.0, abs=1e-12)
+    np.testing.assert_allclose(mps.tensors[2], center_before / direct_norm)
+    for site, tensor, expected in untouched:
+        assert mps.tensors[site] is tensor
+        np.testing.assert_array_equal(mps.tensors[site], expected)
+
+
+def test_normalize_center_accepts_large_finite_tensor() -> None:
+    """Center-only normalization avoids overflow for large finite complex amplitudes."""
+    tensor = np.array(
+        [complex(1.7e308, 1.7e308), complex(-1.7e308, 1.7e308)],
+        dtype=np.complex128,
+    ).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+    mps.set_center(0)
+    with np.errstate(invalid="ignore", over="ignore"):
+        assert not np.isfinite(np.linalg.norm(tensor))
+
+    mps.normalize_center()
+
+    assert np.isfinite(mps.tensors[0]).all()
+    np.testing.assert_allclose(mps.to_vec(), np.array([0.5 + 0.5j, -0.5 + 0.5j]))
+    assert mps.norm() == pytest.approx(1.0)
+    assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_accepts_tiny_finite_tensor() -> None:
+    """Center-only normalization avoids underflow for tiny finite amplitudes."""
+    tensor = np.array([1e-308, 1e-308], dtype=np.complex128).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+    mps.set_center(0)
+    assert not np.linalg.norm(tensor)
+
+    mps.normalize_center()
+
+    np.testing.assert_allclose(mps.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert mps.norm() == pytest.approx(1.0)
+    assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_rejects_unknown_gauge_without_mutation() -> None:
+    """Center-only normalization requires a tracked center."""
+    mps = MPS(3, state="x+")
+    mps.set_center(None)
+    before = [tensor.copy() for tensor in mps.tensors]
+
+    with pytest.raises(ValueError, match="orthogonality center is unknown"):
+        mps.normalize_center()
+
+    assert mps.orthogonality_center is None
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_normalize_center_rejects_zero_center_without_mutation() -> None:
+    """Center-only normalization rejects a zero state without replacing it."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 0
+    before = [tensor.copy() for tensor in mps.tensors]
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize_center()
+
+    assert mps.orthogonality_center == 0
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
 def test_normalize() -> None:
     """Test that normalize brings an MPS to unit norm without changing tensor ranks.
 
@@ -456,6 +716,40 @@ def test_local_expect_x_on_plus_state() -> None:
     psi_mps = MPS(length=3, state="x+")
     val = psi_mps.local_expect(x, sites=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
+@pytest.mark.parametrize("center", [3, None], ids=["off_center", "unknown_gauge"])
+def test_local_expect_is_gauge_safe(center: int | None) -> None:
+    """Direct one-site local expectation matches a dense result in any tracked gauge."""
+    state = _entangled_mps(length=4, seed=31)
+    state.shift_center_to(3)
+    state.set_center(center)
+    before = copy.deepcopy(state.tensors)
+    observable = Observable(Z(), 0)
+
+    actual = state.local_expect(observable, 0)
+
+    assert actual == pytest.approx(_dense_z_expectation(state, 0), abs=1e-12)
+    assert state.orthogonality_center == center
+    for expected, tensor in zip(before, state.tensors, strict=True):
+        np.testing.assert_array_equal(tensor, expected)
+
+
+@pytest.mark.parametrize("center", [2, 0, None], ids=["centered", "off_center", "unknown_gauge"])
+def test_two_site_local_expect_is_gauge_safe(center: int | None) -> None:
+    """Direct two-site local expectation canonicalizes only a private working copy."""
+    state = _entangled_mps(length=4, seed=32)
+    if center is None:
+        state.set_center(None)
+    else:
+        state.shift_center_to(center)
+    observable = Observable(GateLibrary.zz(), [2, 3])
+    expected = state.mixed_expectation(state, observable)
+
+    actual = state.local_expect(observable, [2, 3])
+
+    assert actual == pytest.approx(expected, abs=1e-12)
+    assert state.orthogonality_center == center
 
 
 def test_non_qubit_local_expectation_from_matrix_observable() -> None:
@@ -684,6 +978,36 @@ def test_single_shot_basis() -> None:
     psi_y_minus = MPS(length=1, state="y-")
     for _ in range(10):
         assert psi_y_minus.measure_single_shot(basis="Y") == 1
+
+
+def test_single_shot_conditional_probabilities_match_dense_distribution() -> None:
+    """Each deterministic measurement path has its exact dense Born probability."""
+    state = _entangled_mps(length=3, seed=41)
+    state.shift_center_to(2)
+    state.set_center(None)
+    dense_probabilities = np.abs(state.to_vec()) ** 2
+    dense_probabilities /= dense_probabilities.sum()
+
+    for outcome, expected in enumerate(dense_probabilities):
+        choices = iter((outcome >> site) & 1 for site in range(state.length))
+        path_probability = 1.0
+
+        def choose(_size: int, *, p: np.ndarray, _choices: Iterator[int] = choices) -> int:
+            """Choose the prescribed branch and record its conditional probability.
+
+            Returns:
+                The prescribed outcome for the current site.
+            """
+            nonlocal path_probability
+            choice = next(_choices)
+            path_probability *= float(p[choice])
+            return choice
+
+        shot_rng = Mock(spec=np.random.Generator)
+        shot_rng.choice.side_effect = choose
+
+        assert state.measure_single_shot(rng=shot_rng) == outcome
+        assert path_probability == pytest.approx(expected, abs=1e-12)
 
 
 def test_measure_shots_basis() -> None:
@@ -1187,12 +1511,14 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
       ( powers-of-two "staircase" capped by target_dim )
     """
     mps = MPS(length=length, state="zeros")  # all bonds = 1
+    state_before = mps.to_vec()
     norm_before = mps.norm()
 
     mps.pad_bond_dimension(target)
 
     # invariants
     assert np.isclose(mps.norm(), norm_before, atol=1e-12)
+    np.testing.assert_allclose(mps.to_vec(), state_before, atol=1e-12)
     assert mps.check_canonical_form()[0] == 0
     assert mps.orthogonality_center == 0
 
@@ -1218,6 +1544,22 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
         assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
+def test_pad_entangled_state_preserves_dense_state_and_restores_center() -> None:
+    """Successful padding preserves a complex entangled state from a displaced center."""
+    mps = _entangled_mps(length=6, chi=2, seed=46)
+    mps.shift_center_to(4)
+    before = mps.to_vec()
+
+    mps.pad_bond_dimension(4)
+
+    after = mps.to_vec()
+    fidelity = abs(np.vdot(before, after)) ** 2 / (np.vdot(before, before).real * np.vdot(after, after).real)
+    assert fidelity == pytest.approx(1.0, abs=1e-12)
+    assert mps.get_max_bond() == 4
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+
+
 def test_pad_raises_on_shrink() -> None:
     """Test that pad_bond_dimension raises a ValueError when trying to shrink the bond dimension.
 
@@ -1229,6 +1571,34 @@ def test_pad_raises_on_shrink() -> None:
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
         mps.pad_bond_dimension(2)  # would shrink - must fail
+
+
+def test_pad_late_shrink_is_failure_atomic() -> None:
+    """A late shrink error leaves tensors, state, center, and orientation unchanged."""
+    shapes = [(2, 1, 1), (2, 1, 1), (2, 1, 4), (2, 4, 2), (2, 2, 1)]
+    local_rng = np.random.default_rng(7)
+    tensors = [local_rng.standard_normal(shape) + 1j * local_rng.standard_normal(shape) for shape in shapes]
+    mps = MPS(length=5, tensors=tensors)
+    mps.set_canonical_form(1)
+    state_before = mps.to_vec()
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+    center_before = mps.orthogonality_center
+    flipped_before = mps.flipped
+
+    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+        mps.pad_bond_dimension(2)
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center == center_before
+    assert mps.flipped is flipped_before
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    mps.check_if_valid_mps()
+    assert center_before in mps.check_canonical_form()
+    np.testing.assert_allclose(mps.to_vec(), state_before, atol=1e-12)
 
 
 def test_haar_random_shapes_and_isometries() -> None:
@@ -1484,6 +1854,7 @@ def test_ensure_internal_bond_dims_zero_pads_selected_bonds() -> None:
     assert mps.tensors[0].shape == (2, 1, 2)
     assert mps.tensors[1].shape == (2, 2, 1)
     assert mps.tensors[2].shape == (2, 1, 1)
+    assert mps.orthogonality_center is None
 
 
 def test_ensure_internal_bond_dims_respects_max_dim() -> None:
@@ -1493,6 +1864,50 @@ def test_ensure_internal_bond_dims_respects_max_dim() -> None:
 
     assert mps.tensors[0].shape == (2, 1, 1)
     assert mps.tensors[1].shape == (2, 1, 1)
+    assert mps.orthogonality_center == 0
+
+
+def test_ensure_internal_bond_dims_validates_all_bonds_before_padding() -> None:
+    """A later invalid request cannot leave padded tensors with a stale center."""
+    mps = MPS(length=3, state="zeros")
+    before = copy.deepcopy(mps.tensors)
+
+    with pytest.raises(ValueError, match="Bond index 3 out of range"):
+        mps.ensure_internal_bond_dims((0, 3), 2)
+
+    assert mps.orthogonality_center == 0
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_ensure_internal_bond_dims_distant_padding_preserves_state_and_invalidates_center() -> None:
+    """Padding away from a genuine center preserves the state but makes its gauge unknown."""
+    mps = _entangled_mps(length=6, chi=4, seed=43)
+    mps.shift_center_to(1)
+    assert mps.orthogonality_center in mps.check_canonical_form()
+    before = mps.to_vec()
+
+    mps.ensure_internal_bond_dims((4,), 3)
+
+    assert mps.orthogonality_center is None
+    np.testing.assert_allclose(mps.to_vec(), before, atol=1e-12)
+
+
+def test_ensure_internal_bond_dims_noop_preserves_center_and_tensors() -> None:
+    """A padding no-op preserves a genuine center and leaves every tensor unchanged."""
+    mps = _entangled_mps(length=6, chi=4, seed=44)
+    mps.shift_center_to(1)
+    center = mps.orthogonality_center
+    before = copy.deepcopy(mps.tensors)
+    bond = 4
+    current_dim = mps.tensors[bond].shape[2]
+
+    mps.ensure_internal_bond_dims((bond,), current_dim)
+
+    assert mps.orthogonality_center == center
+    assert center in mps.check_canonical_form()
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
@@ -1905,15 +2320,92 @@ def test_single_qubit_gate_gauge_policy() -> None:
     assert mps2.orthogonality_center == 0
 
 
-def test_update_center_after_split() -> None:
-    """``update_center_after_split`` sets the tracked center from SVD distribution."""
+@pytest.mark.parametrize(
+    "prior_center",
+    [0, 1, 2, 3, None],
+    ids=["left_of_pair", "on_left_site", "on_right_site", "right_of_pair", "unknown"],
+)
+@pytest.mark.parametrize("distribution", ["left", "right", "sqrt"])
+def test_update_center_after_split_tracks_only_a_center_covering_the_pair(
+    prior_center: int | None,
+    distribution: SvdDistribution,
+) -> None:
+    """A split updates only a prior center on its pair; a square-root split clears it.
+
+    Args:
+        prior_center: Tracked center before the split, or ``None`` for an unknown gauge.
+        distribution: Side that receives the singular values, or ``"sqrt"`` for both sides.
+    """
     mps = MPS(4, state="zeros")
-    mps.update_center_after_split(1, 2, "right")
-    assert mps.orthogonality_center == 2
-    mps.update_center_after_split(0, 1, "left")
+    mps.set_center(prior_center)
+
+    mps.update_center_after_split(1, 2, distribution)
+
+    if prior_center not in {1, 2} or distribution == "sqrt":
+        assert mps.orthogonality_center is None
+    else:
+        expected = 1 if distribution == "left" else 2
+        assert mps.orthogonality_center == expected
+        assert expected in mps.check_canonical_form()
+
+
+@pytest.mark.parametrize("prior_center", [1, 2], ids=["on_left_site", "on_right_site"])
+@pytest.mark.parametrize(("distribution", "expected_center"), [("left", 1), ("right", 2)])
+def test_update_center_after_real_split_preserves_state_and_canonicity(
+    prior_center: int,
+    distribution: SvdDistribution,
+    expected_center: int,
+) -> None:
+    """A directional two-site split preserves the state and establishes its reported center.
+
+    Args:
+        prior_center: Genuine center on one site of the split pair.
+        distribution: Side that receives the singular values.
+        expected_center: Center implied by ``distribution``.
+    """
+    mps = _entangled_mps(length=4, chi=4, seed=45)
+    mps.shift_center_to(prior_center)
+    before = mps.to_vec()
+    left, right = mps.tensors[1], mps.tensors[2]
+    merged = merge_two_site(left, right)
+
+    mps.tensors[1], mps.tensors[2] = split_two_site(
+        merged,
+        [left.shape[0], right.shape[0]],
+        svd_distribution=distribution,
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=None,
+    )
+    mps.update_center_after_split(1, 2, distribution)
+
+    assert mps.orthogonality_center == expected_center
+    assert expected_center in mps.check_canonical_form()
+    np.testing.assert_allclose(mps.to_vec(), before, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "distribution", "match"),
+    [
+        (-1, 0, "right", "left_site must be in"),
+        (1, 4, "right", "right_site must be in"),
+        (0, 2, "right", "must be adjacent and ordered"),
+        (0, 1, "invalid", "svd_distribution must be"),
+    ],
+)
+def test_update_center_after_split_rejects_invalid_arguments_atomically(
+    left: int,
+    right: int,
+    distribution: str,
+    match: str,
+) -> None:
+    """Invalid split metadata leaves the tracked center unchanged."""
+    mps = MPS(4, state="zeros")
+
+    with pytest.raises(ValueError, match=match):
+        mps.update_center_after_split(left, right, distribution)
+
     assert mps.orthogonality_center == 0
-    mps.update_center_after_split(1, 2, "sqrt")
-    assert mps.orthogonality_center is None
 
 
 def test_compress_restores_center_when_gauge_unknown() -> None:
@@ -1926,6 +2418,19 @@ def test_compress_restores_center_when_gauge_unknown() -> None:
     assert mps.orthogonality_center is not None
     obs = Observable(GateLibrary.z(), 2)
     assert isinstance(mps.expect(obs), float)
+
+
+def test_compress_rejects_invalid_private_restore_center_before_mutation() -> None:
+    """The internal compression target is range-checked before canonicalization."""
+    mps = _entangled_mps(length=4, seed=42)
+    before = copy.deepcopy(mps.tensors)
+
+    with pytest.raises(ValueError, match="_restore_center must be in"):
+        mps.compress(threshold=1e-12, _restore_center=mps.length)
+
+    assert mps.orthogonality_center == 0
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_measure_single_shot_off_center() -> None:
