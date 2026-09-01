@@ -191,25 +191,13 @@ def _normalize_at_zero(state: MPS) -> None:
     """Normalize ``state`` at site zero without a redundant full gauge sweep.
 
     Args:
-        state: MPS normalized in place.
-
-    Raises:
-        ValueError: If the state norm is zero or non-finite.
+        state: MPS normalized in place. Its norm must be nonzero and finite.
     """
-    msg = "Cannot normalize MPS: norm is zero or non-finite."
     if state.orthogonality_center is None:
         state.set_canonical_form(0)
     center = state.orthogonality_center
     assert center is not None
-    center_tensor = state.tensors[center]
-    scale = float(np.max(np.abs(center_tensor)))
-    if scale <= 0.0 or not np.isfinite(scale):
-        raise ValueError(msg)
-    scaled_tensor = center_tensor / scale
-    scaled_norm = float(np.linalg.norm(scaled_tensor))
-    if scaled_norm <= 0.0 or not np.isfinite(scaled_norm):
-        raise ValueError(msg)
-    state.tensors[center] = scaled_tensor / scaled_norm
+    state.normalize_center()
     if center != 0:
         state.shift_center_to(0)
 

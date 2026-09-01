@@ -315,18 +315,12 @@ def _renormalize(state: MPS) -> None:
     Raises:
         ValueError: If the MPS norm is zero or non-finite.
     """
-    msg = "Cannot normalize MPS: norm is zero or non-finite."
-    center = state.orthogonality_center
-    if center is None:
+    if state.orthogonality_center is None:
         if not all(np.isfinite(tensor).all() for tensor in state.tensors):
+            msg = "Cannot normalize MPS: norm is zero or non-finite."
             raise ValueError(msg)
-        center = 0
-        state.set_canonical_form(center, decomposition="QR")
-    center_tensor = state.tensors[center]
-    norm = float(np.linalg.norm(center_tensor))
-    if norm <= 0.0 or not np.isfinite(norm):
-        raise ValueError(msg)
-    state.tensors[center] = center_tensor / norm
+        state.set_canonical_form(0, decomposition="QR")
+    state.normalize_center()
 
 
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:

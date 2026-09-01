@@ -227,15 +227,13 @@ def _get_norm(state: MPS) -> float:
     """Return the L2 norm of the full MPS state vector.
 
     Args:
-        state: MPS whose norm is measured via ``scalar_product``.
+        state: MPS whose norm is measured from its tracked center when available.
 
     Returns:
         Non-negative Euclidean norm of the represented state vector.
 
     """
-    overlap = state.scalar_product(state)
-    norm_sq = float(np.real(np.asarray(overlap, dtype=np.complex128).flat[0]))
-    return float(np.sqrt(max(norm_sq, 0.0)))
+    return float(state.norm(state.orthogonality_center))
 
 
 def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | DigitalSimParams) -> None:
@@ -259,8 +257,11 @@ def renorm_drift(state: MPS, sim_params: AnalogSimParams | DigitalSimParams) -> 
     """
     drift_tol = max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
     norm = _get_norm(state)
-    if abs(norm - 1.0) > drift_tol:
-        state.normalize()
+    if not np.isfinite(norm) or abs(norm - 1.0) > drift_tol:
+        if state.orthogonality_center is None:
+            state.normalize()
+        else:
+            state.normalize_center()
 
 
 def _align_bond(
