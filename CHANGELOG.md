@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added stronger tracking and validation of orthogonality center ([#575])
+  ([**@aaronleesander**])
 - added noisy equivalence checking ([#545])
   ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
@@ -261,6 +263,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575
 [#564]: https://github.com/munich-quantum-toolkit/yaqs/pull/564
 [#561]: https://github.com/munich-quantum-toolkit/yaqs/pull/561
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
