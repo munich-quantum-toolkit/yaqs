@@ -29,7 +29,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import integrators as integrators_module
 from mqt.yaqs.core.methods.tdvp import tdvp
-from mqt.yaqs.core.methods.tdvp.integrators import sweep_2site
+from mqt.yaqs.core.methods.tdvp.integrators import sweep_1site, sweep_2site
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
 from mqt.yaqs.core.methods.tdvp.sweep_utils import split_tdvp
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
@@ -72,6 +72,53 @@ def test_single_site_tdvp() -> None:
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
     )
+
+
+def test_1site_tdvp_tracks_a_genuine_center_at_each_site_update() -> None:
+    """One-site TDVP tracks the physical center through both sweep directions."""
+    length = 4
+    state = _haar_random_mps(length, pad=4, seed=20260901)
+    state.set_canonical_form(0)
+    initial = state.to_vec()
+    operator = MPO.ising(length, 1.0, 0.7)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.01,
+        dt=0.01,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        tdvp_mode="1site",
+    )
+    expected_sites = [*range(length), *range(length - 2, -1, -1)]
+    seen: list[int] = []
+    original_update = integrators_module.update_site
+
+    def checked_update(
+        left_env: NDArray[np.complex128],
+        right_env: NDArray[np.complex128],
+        local_operator: NDArray[np.complex128],
+        ket: NDArray[np.complex128],
+        dt: float,
+        *,
+        krylov_tol: float,
+    ) -> NDArray[np.complex128]:
+        site = expected_sites[len(seen)]
+        center = state.orthogonality_center
+        assert ket is state.tensors[site]
+        assert center == site
+        assert center in state.check_canonical_form()
+        seen.append(center)
+        return original_update(left_env, right_env, local_operator, ket, dt, krylov_tol=krylov_tol)
+
+    with patch.object(integrators_module, "update_site", side_effect=checked_update):
+        sweep_1site(state, operator, sim_params)
+
+    assert seen == expected_sites
+    exact = expm(-1j * sim_params.dt * operator.to_matrix_mps_order()) @ initial
+    assert _fidelity(exact, state.to_vec()) >= 1.0 - 1e-8
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
 
 
 def test_two_site_tdvp() -> None:

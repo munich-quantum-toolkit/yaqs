@@ -447,6 +447,8 @@ def test_align_bond_syncs_mismatched_shapes() -> None:
     """Bond alignment raises the smaller virtual index to the capped target."""
     t0 = np.zeros((2, 1, 2), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
+    t0[0, 0, 0] = 1.0
+    t1[0, 0, 0] = 1.0
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
     params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     _align_bond(state, 0, params)

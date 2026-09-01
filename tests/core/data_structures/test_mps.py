@@ -253,6 +253,17 @@ def test_mps_initialization(state: str) -> None:
             np.testing.assert_allclose(vec, expected)
 
 
+@pytest.mark.parametrize("length", [0, -1, False, 1.5])
+def test_mps_rejects_invalid_length(length: object) -> None:
+    """An MPS length must be a positive integer.
+
+    Args:
+        length: Invalid chain length under test.
+    """
+    with pytest.raises(ValueError, match="length must be a positive integer"):
+        MPS(length)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+
+
 def test_mps_custom_tensors() -> None:
     """Test that an MPS can be initialized with custom tensors.
 
@@ -413,6 +424,112 @@ def test_invalid_decomposition_is_rejected_before_mutation(method: str) -> None:
     assert mps.flipped is False
     for expected, actual in zip(before, mps.tensors, strict=True):
         np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf], ids=["nan", "inf"])
+@pytest.mark.parametrize(
+    ("center", "decomposition"),
+    [(0, "QR"), (2, "SVD")],
+    ids=["left_qr", "right_svd"],
+)
+def test_set_canonical_form_rejects_non_finite_tensors_atomically(
+    bad_value: float,
+    center: int,
+    decomposition: str,
+) -> None:
+    """Canonicalization rejects non-finite tensors before changing the MPS.
+
+    Args:
+        bad_value: Non-finite tensor value under test.
+        center: Requested orthogonality center.
+        decomposition: Requested decomposition.
+    """
+    mps = _entangled_mps(length=3, chi=2, seed=33)
+    mps.set_center(None)
+    mps.tensors[1][0, 0, 0] = bad_value
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+    flipped_before = mps.flipped
+
+    with pytest.raises(ValueError, match="non-finite"):
+        mps.set_canonical_form(center, decomposition=decomposition)
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center is None
+    assert mps.flipped is flipped_before
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_set_canonical_form_rejects_non_finite_sweep_result() -> None:
+    """Finite inputs that overflow during a sweep never acquire a false center."""
+    mps = MPS(2, state="zeros")
+    for tensor in mps.tensors:
+        tensor.fill(1e200)
+    mps.set_center(None)
+
+    with np.errstate(all="ignore"), pytest.raises(ValueError, match="produced non-finite"):
+        mps.set_canonical_form(0)
+
+    assert mps.orthogonality_center is None
+    assert mps.flipped is False
+    assert not all(np.isfinite(tensor).all() for tensor in mps.tensors)
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf], ids=["nan", "inf"])
+def test_normalize_rejects_non_finite_tensors_before_flipping(bad_value: float) -> None:
+    """Normalization rejects non-finite input without reversing the MPS.
+
+    Args:
+        bad_value: Non-finite center-tensor value under test.
+    """
+    tensors = [np.zeros((dimension, 1, 1), dtype=np.complex128) for dimension in (2, 3, 4)]
+    for tensor in tensors:
+        tensor[0, 0, 0] = 1.0
+    mps = MPS(3, tensors=tensors, physical_dimensions=[2, 3, 4])
+    mps.set_center(0)
+    mps.tensors[0][0, 0, 0] = bad_value
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize("B")
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center == 0
+    assert mps.flipped is False
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_normalize_rejects_zero_state_without_replacing_it() -> None:
+    """Normalization rejects a zero vector instead of creating an arbitrary state."""
+    mps = MPS(3, state="zeros")
+    mps.tensors[0] *= 0
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        mps.normalize()
+
+    assert mps.norm() == 0
+    np.testing.assert_array_equal(mps.to_vec(), np.zeros(2**mps.length))
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+
+
+def test_normalize_accepts_large_finite_center_tensor() -> None:
+    """Scaled center normalization does not overflow on large finite values."""
+    tensor = np.array([1e308, 1e308], dtype=np.complex128).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+
+    mps.normalize()
+
+    np.testing.assert_allclose(mps.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert mps.norm() == pytest.approx(1.0)
+    assert mps.orthogonality_center == 0
 
 
 def test_normalize() -> None:
@@ -1295,12 +1412,14 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
       ( powers-of-two "staircase" capped by target_dim )
     """
     mps = MPS(length=length, state="zeros")  # all bonds = 1
+    state_before = mps.to_vec()
     norm_before = mps.norm()
 
     mps.pad_bond_dimension(target)
 
     # invariants
     assert np.isclose(mps.norm(), norm_before, atol=1e-12)
+    np.testing.assert_allclose(mps.to_vec(), state_before, atol=1e-12)
     assert mps.check_canonical_form()[0] == 0
     assert mps.orthogonality_center == 0
 
@@ -1326,6 +1445,22 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
         assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
+def test_pad_entangled_state_preserves_dense_state_and_restores_center() -> None:
+    """Successful padding preserves a complex entangled state from a displaced center."""
+    mps = _entangled_mps(length=6, chi=2, seed=46)
+    mps.shift_center_to(4)
+    before = mps.to_vec()
+
+    mps.pad_bond_dimension(4)
+
+    after = mps.to_vec()
+    fidelity = abs(np.vdot(before, after)) ** 2 / (np.vdot(before, before).real * np.vdot(after, after).real)
+    assert fidelity == pytest.approx(1.0, abs=1e-12)
+    assert mps.get_max_bond() == 4
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+
+
 def test_pad_raises_on_shrink() -> None:
     """Test that pad_bond_dimension raises a ValueError when trying to shrink the bond dimension.
 
@@ -1337,6 +1472,34 @@ def test_pad_raises_on_shrink() -> None:
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
         mps.pad_bond_dimension(2)  # would shrink - must fail
+
+
+def test_pad_late_shrink_is_failure_atomic() -> None:
+    """A late shrink error leaves tensors, state, center, and orientation unchanged."""
+    shapes = [(2, 1, 1), (2, 1, 1), (2, 1, 4), (2, 4, 2), (2, 2, 1)]
+    local_rng = np.random.default_rng(7)
+    tensors = [local_rng.standard_normal(shape) + 1j * local_rng.standard_normal(shape) for shape in shapes]
+    mps = MPS(length=5, tensors=tensors)
+    mps.set_canonical_form(1)
+    state_before = mps.to_vec()
+    tensor_list_before = mps.tensors
+    tensors_before = [tensor.copy() for tensor in mps.tensors]
+    physical_dimensions_before = mps.physical_dimensions
+    center_before = mps.orthogonality_center
+    flipped_before = mps.flipped
+
+    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+        mps.pad_bond_dimension(2)
+
+    assert mps.tensors is tensor_list_before
+    assert mps.physical_dimensions is physical_dimensions_before
+    assert mps.orthogonality_center == center_before
+    assert mps.flipped is flipped_before
+    for expected, actual in zip(tensors_before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    mps.check_if_valid_mps()
+    assert center_before in mps.check_canonical_form()
+    np.testing.assert_allclose(mps.to_vec(), state_before, atol=1e-12)
 
 
 def test_haar_random_shapes_and_isometries() -> None:

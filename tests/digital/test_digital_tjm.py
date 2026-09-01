@@ -370,7 +370,7 @@ def test_apply_window() -> None:
     length = 5
     tensors = cast(
         "list[NDArray[np.complex128]]",
-        [np.full((2, 1, 1), i, dtype=np.complex128) for i in range(5)],
+        [np.full((2, 1, 1), i + 1, dtype=np.complex128) for i in range(5)],
     )
     mps = MPS(length, tensors)
     mps.normalize()
