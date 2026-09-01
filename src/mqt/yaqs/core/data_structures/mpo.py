@@ -1537,11 +1537,17 @@ class MPO:
             state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
 
         if not compress:
+            state.set_center(None)
             return
         if sim_params is None:
+            state.set_center(None)
             msg = "sim_params is required when compress=True for MPO.multiply(MPS)."
             raise ValueError(msg)
 
+        # compress() reads the tracked center only to choose where to leave it, and its
+        # truncating sweep ends on the last site. Naming that site skips the gauge scan an
+        # unknown center triggers, and the return sweep that would follow it.
+        state.set_center(state.length - 1)
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
