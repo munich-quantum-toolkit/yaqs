@@ -26,6 +26,7 @@ from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
+from mqt.yaqs.core.methods.decompositions import SvdDistribution, merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -1617,6 +1618,36 @@ def test_ensure_internal_bond_dims_validates_all_bonds_before_padding() -> None:
         np.testing.assert_array_equal(actual, expected)
 
 
+def test_ensure_internal_bond_dims_distant_padding_preserves_state_and_invalidates_center() -> None:
+    """Padding away from a genuine center preserves the state but makes its gauge unknown."""
+    mps = _entangled_mps(length=6, chi=4, seed=43)
+    mps.shift_center_to(1)
+    assert mps.orthogonality_center in mps.check_canonical_form()
+    before = mps.to_vec()
+
+    mps.ensure_internal_bond_dims((4,), 3)
+
+    assert mps.orthogonality_center is None
+    np.testing.assert_allclose(mps.to_vec(), before, atol=1e-12)
+
+
+def test_ensure_internal_bond_dims_noop_preserves_center_and_tensors() -> None:
+    """A padding no-op preserves a genuine center and leaves every tensor unchanged."""
+    mps = _entangled_mps(length=6, chi=4, seed=44)
+    mps.shift_center_to(1)
+    center = mps.orthogonality_center
+    before = copy.deepcopy(mps.tensors)
+    bond = 4
+    current_dim = mps.tensors[bond].shape[2]
+
+    mps.ensure_internal_bond_dims((bond,), current_dim)
+
+    assert mps.orthogonality_center == center
+    assert center in mps.check_canonical_form()
+    for expected, actual in zip(before, mps.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
 def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
     """Internal bond padding raises the smaller side when only one tensor is short."""
     t0 = np.zeros((2, 1, 4), dtype=complex)
@@ -2027,18 +2058,68 @@ def test_single_qubit_gate_gauge_policy() -> None:
     assert mps2.orthogonality_center == 0
 
 
-def test_update_center_after_split() -> None:
-    """A directional split moves a center only when it covered the split pair."""
+@pytest.mark.parametrize(
+    "prior_center",
+    [0, 1, 2, 3, None],
+    ids=["left_of_pair", "on_left_site", "on_right_site", "right_of_pair", "unknown"],
+)
+@pytest.mark.parametrize("distribution", ["left", "right", "sqrt"])
+def test_update_center_after_split_tracks_only_a_center_covering_the_pair(
+    prior_center: int | None,
+    distribution: SvdDistribution,
+) -> None:
+    """A split updates only a prior center on its pair; a square-root split clears it.
+
+    Args:
+        prior_center: Tracked center before the split, or ``None`` for an unknown gauge.
+        distribution: Side that receives the singular values, or ``"sqrt"`` for both sides.
+    """
     mps = MPS(4, state="zeros")
-    mps.update_center_after_split(1, 2, "right")
-    assert mps.orthogonality_center is None
-    mps.set_center(1)
-    mps.update_center_after_split(1, 2, "right")
-    assert mps.orthogonality_center == 2
-    mps.update_center_after_split(1, 2, "left")
-    assert mps.orthogonality_center == 1
-    mps.update_center_after_split(1, 2, "sqrt")
-    assert mps.orthogonality_center is None
+    mps.set_center(prior_center)
+
+    mps.update_center_after_split(1, 2, distribution)
+
+    if prior_center not in {1, 2} or distribution == "sqrt":
+        assert mps.orthogonality_center is None
+    else:
+        expected = 1 if distribution == "left" else 2
+        assert mps.orthogonality_center == expected
+        assert expected in mps.check_canonical_form()
+
+
+@pytest.mark.parametrize("prior_center", [1, 2], ids=["on_left_site", "on_right_site"])
+@pytest.mark.parametrize(("distribution", "expected_center"), [("left", 1), ("right", 2)])
+def test_update_center_after_real_split_preserves_state_and_canonicity(
+    prior_center: int,
+    distribution: SvdDistribution,
+    expected_center: int,
+) -> None:
+    """A directional two-site split preserves the state and establishes its reported center.
+
+    Args:
+        prior_center: Genuine center on one site of the split pair.
+        distribution: Side that receives the singular values.
+        expected_center: Center implied by ``distribution``.
+    """
+    mps = _entangled_mps(length=4, chi=4, seed=45)
+    mps.shift_center_to(prior_center)
+    before = mps.to_vec()
+    left, right = mps.tensors[1], mps.tensors[2]
+    merged = merge_two_site(left, right)
+
+    mps.tensors[1], mps.tensors[2] = split_two_site(
+        merged,
+        [left.shape[0], right.shape[0]],
+        svd_distribution=distribution,
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=None,
+    )
+    mps.update_center_after_split(1, 2, distribution)
+
+    assert mps.orthogonality_center == expected_center
+    assert expected_center in mps.check_canonical_form()
+    np.testing.assert_allclose(mps.to_vec(), before, atol=1e-12)
 
 
 @pytest.mark.parametrize(
