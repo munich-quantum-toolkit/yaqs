@@ -51,6 +51,8 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
+  ([#561]) ([**@Pouri96**])
 - stabilize digital TDVP by pruning null bond directions ([#567])
   ([**@aaronleesander**])
 - fixed MPS norm definition and construction of arbitrary basis state ([#553])
@@ -258,6 +260,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#561]: https://github.com/munich-quantum-toolkit/yaqs/pull/561
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
 [#560]: https://github.com/munich-quantum-toolkit/yaqs/pull/560
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
