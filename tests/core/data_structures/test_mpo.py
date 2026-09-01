@@ -1089,9 +1089,44 @@ def test_multiply_mps_leaves_center_on_last_site() -> None:
 
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
 
-    # ``compress`` ends its truncating sweep on the last site, so that site is named before
-    # the call; the tracked center must therefore be a genuine canonical center there.
     assert state.orthogonality_center == length - 1
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_multiply_mps_passes_restore_target_while_center_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MPO contraction never presents its compression helper with a false center."""
+    state = MPS(3, state="zeros")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    observed: list[tuple[int | None, int | None]] = []
+
+    def record_compress(
+        compressed: MPS,
+        _threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        trunc_mode: object = None,
+        _restore_center: int | None = None,
+    ) -> None:
+        """Record compression metadata without changing the contracted tensors."""
+        del max_bond_dim, trunc_mode
+        observed.append((compressed.orthogonality_center, _restore_center))
+
+    monkeypatch.setattr(MPS, "compress", record_compress)
+
+    MPO.identity(state.length).multiply(state, sim_params=sim_params, compress=True)
+
+    assert observed == [(None, state.length - 1)]
+    assert state.orthogonality_center is None
+
+
+def test_multiply_single_site_mps_restores_genuine_center() -> None:
+    """Compressed one-site MPO application leaves the only site as a valid center."""
+    state = MPS(1, state="x+")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    MPO.identity(1).multiply(state, sim_params=sim_params, compress=True)
+
+    assert state.orthogonality_center == 0
     assert state.orthogonality_center in state.check_canonical_form()
 
 

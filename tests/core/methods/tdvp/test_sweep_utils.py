@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
@@ -382,6 +383,7 @@ def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:
     _sync_bond_dim(state, 1, 2, params)
     assert state.tensors[1].shape[2] == 2
     assert state.tensors[2].shape[1] == 2
+    assert state.orthogonality_center is None
     overlap = abs(np.vdot(reference, state.to_vec())) ** 2
     assert overlap >= 0.5
 
@@ -481,6 +483,42 @@ def test_cap_bonds_truncates_oversized_internal_bonds() -> None:
     for bond in range(state.length - 1):
         assert state.tensors[bond].shape[2] <= 2
         assert state.tensors[bond + 1].shape[1] <= 2
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12),
+        AnalogSimParams(max_bond_dim=2, svd_threshold=1e-12),
+    ],
+)
+def test_cap_bonds_is_gauge_independent(params: AnalogSimParams | DigitalSimParams) -> None:
+    """Bond capping gives the same state for gauge-equivalent MPS inputs."""
+    state = _seeded_haar_random_mps(5, pad=4)
+    state.normalize()
+    gauged = copy.deepcopy(state)
+
+    gauge = np.diag(np.array([0.2, 0.7, 1.4, 3.0], dtype=np.complex128))
+    gauged.tensors[1] = np.einsum("plr,rs->pls", gauged.tensors[1], gauge)
+    gauged.tensors[2] = np.einsum("sl,plr->psr", np.linalg.inv(gauge), gauged.tensors[2])
+    gauged.set_center(None)
+
+    np.testing.assert_allclose(state.to_vec(), gauged.to_vec(), atol=1e-12, rtol=1e-12)
+    _cap_bonds(state, params)
+    _cap_bonds(gauged, params)
+
+    reference = state.to_vec()
+    candidate = gauged.to_vec()
+    fidelity = abs(np.vdot(reference, candidate)) ** 2 / (
+        float(np.vdot(reference, reference).real) * float(np.vdot(candidate, candidate).real)
+    )
+    assert fidelity == pytest.approx(1.0, abs=1e-10)
+    for result in (state, gauged):
+        assert result.orthogonality_center == 0
+        assert 0 in result.check_canonical_form()
+        assert all(dim <= 2 for dim in result.bond_dimensions())
 
 
 def test_resize_bond_lead_trail_branches() -> None:
@@ -497,12 +535,20 @@ def test_resize_bond_lead_trail_branches() -> None:
 
 def test_sync_bond_dim_padding_path() -> None:
     """Bond sync uses padding when both sides are below the target dimension."""
-    t0 = np.zeros((2, 1, 1), dtype=np.complex128)
-    t1 = np.zeros((2, 1, 1), dtype=np.complex128)
-    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    state = MPS(2, state="x+")
+    reference = state.to_vec()
     _sync_bond_dim(state, 0, 2, DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2))
     assert state.tensors[0].shape[2] == 2
     assert state.tensors[1].shape[1] == 2
+    assert state.orthogonality_center is None
+    np.testing.assert_array_equal(state.to_vec(), reference)
+
+
+def test_sync_bond_dim_noop_preserves_center() -> None:
+    """Bond synchronization keeps a valid center when tensor shapes do not change."""
+    state = MPS(2, state="zeros")
+    _sync_bond_dim(state, 0, 1)
+    assert state.orthogonality_center == 0
 
 
 def test_sync_bond_dim_aligns_mismatched_bond_widths() -> None:

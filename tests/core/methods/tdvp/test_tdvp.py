@@ -12,9 +12,11 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from copy import deepcopy
+from typing import Any, Literal, cast
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -23,6 +25,141 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.tdvp import _run_sweeps, evolve_window
+
+
+def _entangled_state() -> MPS:
+    """Build a deterministic entangled MPS with bond dimension four.
+
+    Returns:
+        Mixed-canonical MPS with its center at site 0.
+
+    """
+    with patch("numpy.random.default_rng", return_value=np.random.default_rng(17)):
+        state = MPS(5, state="haar-random", pad=4)
+    state.set_canonical_form(orthogonality_center=0)
+    return state
+
+
+def _equivalent_state(state: MPS, center_kind: Literal["unknown", "known_right"]) -> MPS:
+    """Return an equivalent MPS with a different valid gauge description.
+
+    Args:
+        state: Source MPS with its center at site 0.
+        center_kind: Apply invertible bond gauges and clear the center, or move
+            the truthful center to the last site.
+
+    Returns:
+        Gauge-equivalent copy of ``state``.
+
+    """
+    equivalent = deepcopy(state)
+    if center_kind == "known_right":
+        equivalent.shift_center_to(equivalent.length - 1)
+        return equivalent
+
+    for bond in range(equivalent.length - 1):
+        bond_dim = equivalent.tensors[bond].shape[2]
+        gauge = np.diag(np.geomspace(0.1, 10.0, bond_dim)).astype(np.complex128)
+        gauge += 0.25 * np.triu(np.ones((bond_dim, bond_dim), dtype=np.complex128), 1)
+        inverse_gauge = np.linalg.inv(gauge)
+        equivalent.tensors[bond] = np.einsum("plr,rs->pls", equivalent.tensors[bond], gauge)
+        equivalent.tensors[bond + 1] = np.einsum(
+            "ab,pbr->par",
+            inverse_gauge,
+            equivalent.tensors[bond + 1],
+        )
+    equivalent.set_center(None)
+    return equivalent
+
+
+def _fidelity(left: MPS, right: MPS) -> float:
+    """Return normalized state-vector fidelity for two MPSs.
+
+    Args:
+        left: First MPS.
+        right: Second MPS.
+
+    Returns:
+        Squared normalized overlap of both represented states.
+
+    """
+    left_vec = left.to_vec()
+    right_vec = right.to_vec()
+    overlap = abs(np.vdot(left_vec, right_vec)) ** 2
+    norm = np.vdot(left_vec, left_vec).real * np.vdot(right_vec, right_vec).real
+    return float(overlap / norm)
+
+
+@pytest.mark.parametrize("center_kind", ["unknown", "known_right"])
+@pytest.mark.parametrize(
+    ("tdvp_mode", "max_bond_dim"),
+    [("1site", None), ("2site", None), ("dynamic", None), ("dynamic", 2)],
+)
+def test_tdvp_is_gauge_invariant(
+    tdvp_mode: Literal["1site", "2site", "dynamic"],
+    max_bond_dim: int | None,
+    *,
+    center_kind: Literal["unknown", "known_right"],
+) -> None:
+    """TDVP prepares equivalent unknown and displaced-center gauges consistently.
+
+    Args:
+        tdvp_mode: TDVP integrator geometry under test.
+        max_bond_dim: Optional cap applied before dynamic evolution.
+        center_kind: Gauge description assigned to the equivalent input.
+
+    """
+    reference = _entangled_state()
+    candidate = _equivalent_state(reference, center_kind)
+    assert _fidelity(reference, candidate) == pytest.approx(1.0, abs=1e-12)
+    if max_bond_dim is not None:
+        assert max(candidate.bond_dimensions()) > max_bond_dim
+
+    hamiltonian = MPO.ising(reference.length, 1.0, 0.7)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.15,
+        dt=0.15,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=max_bond_dim,
+        tdvp_mode=tdvp_mode,
+    )
+    tdvp(reference, hamiltonian, sim_params)
+    tdvp(candidate, hamiltonian, sim_params)
+
+    assert _fidelity(reference, candidate) == pytest.approx(1.0, abs=1e-10)
+    for state in (reference, candidate):
+        assert state.orthogonality_center == 0
+        assert 0 in state.check_canonical_form()
+
+
+@pytest.mark.parametrize("center_kind", ["unknown", "known_right"])
+def test_evolve_window_is_gauge_invariant(center_kind: Literal["unknown", "known_right"]) -> None:
+    """Window TDVP prepares unknown and displaced-center gauges before sweeping.
+
+    Args:
+        center_kind: Gauge description assigned to the equivalent input.
+
+    """
+    reference = _entangled_state()
+    candidate = _equivalent_state(reference, center_kind)
+    assert _fidelity(reference, candidate) == pytest.approx(1.0, abs=1e-12)
+
+    hamiltonian = MPO.ising(reference.length, 1.0, 0.7)
+    sim_params = DigitalSimParams(
+        observables=[Observable(Z(), 0)],
+        preset="exact",
+        tdvp_mode="2site",
+    )
+    evolve_window(reference, hamiltonian, sim_params)
+    evolve_window(candidate, hamiltonian, sim_params)
+
+    assert _fidelity(reference, candidate) == pytest.approx(1.0, abs=1e-10)
+    for state in (reference, candidate):
+        assert state.orthogonality_center == 0
+        assert 0 in state.check_canonical_form()
 
 
 def test_run_sweeps_invokes_substeps() -> None:

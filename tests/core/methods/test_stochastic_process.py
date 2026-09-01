@@ -597,6 +597,59 @@ def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
     assert any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
 
 
+@pytest.mark.parametrize("max_bond_dim", [1, None], ids=["capped", "uncapped"])
+@pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
+def test_stochastic_adjacent_jump_is_gauge_independent(max_bond_dim: int | None, *, known_gauge: bool) -> None:
+    """A forced identity jump matches a centered Schmidt split.
+
+    Args:
+        max_bond_dim: Optional bond-dimension cap for the jump split.
+        known_gauge: Whether the off-pair center remains tracked.
+    """
+    shapes = [(2, 1, 2), (2, 2, 4), (2, 4, 2), (2, 2, 1)]
+    state = random_mps(shapes, normalize=False, seed=20260901)
+    state.normalize("B", decomposition="SVD")
+    state.tensors[0] *= 0.5
+    expected = copy.deepcopy(state)
+    if not known_gauge:
+        state.shift_center_to(3)
+        state.set_center(None)
+    sim_params = AnalogSimParams(
+        get_state=True,
+        elapsed_time=0.0,
+        max_bond_dim=max_bond_dim,
+        svd_threshold=0.0,
+    )
+
+    merged = merge_two_site(expected.tensors[0], expected.tensors[1])
+    left, right = split_two_site(
+        merged,
+        [2, 2],
+        svd_distribution="right",
+        trunc_mode=sim_params.trunc_mode,
+        threshold=sim_params.svd_threshold,
+        max_bond_dim=sim_params.max_bond_dim,
+    )
+    expected.tensors[0], expected.tensors[1] = left, right
+    expected.update_center_after_split(0, 1, "right")
+    expected.normalize("B", decomposition="SVD")
+
+    noise_model = NoiseModel([
+        {"name": "identity", "sites": [0, 1], "strength": 1.0, "matrix": np.eye(4)},
+    ])
+    stochastic_process(state, noise_model, 1.0, sim_params, rng=_always_jump_rng())
+
+    expected_vec = expected.to_vec()
+    actual_vec = state.to_vec()
+    expected_vec /= np.linalg.norm(expected_vec)
+    actual_vec /= np.linalg.norm(actual_vec)
+    assert float(abs(np.vdot(expected_vec, actual_vec)) ** 2) == pytest.approx(1.0, abs=1e-12)
+    assert state.orthogonality_center == 0
+    assert state.orthogonality_center in state.check_canonical_form()
+    if max_bond_dim is not None:
+        assert state.tensors[0].shape[2] <= max_bond_dim
+
+
 def test_stochastic_process_longrange_pauli_jump() -> None:
     """Long-range Pauli crosstalk jumps apply per-site factors and clear the gauge."""
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])

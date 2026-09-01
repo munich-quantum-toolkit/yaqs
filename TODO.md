@@ -12,7 +12,7 @@ The tracked center is a correctness invariant:
 
 ## P0: Correctness defects
 
-- [ ] Canonicalize unknown-gauge states before public TDVP evolution.
+- [x] Canonicalize unknown-gauge states before public TDVP evolution.
   - Locations: `src/mqt/yaqs/core/methods/tdvp/tdvp.py::tdvp` and
     `evolve_window`.
   - Problem: `tdvp` checks for center `0` only when the center is known. The
@@ -24,7 +24,7 @@ The tracked center is a correctness invariant:
     exceeds `max_bond_dim`, and verify the returned center with
     `check_canonical_form()`.
 
-- [ ] Move the center onto each scheduled two-site jump before a capped split.
+- [x] Move the center onto each scheduled two-site jump before a capped split.
   - Location:
     `src/mqt/yaqs/core/methods/scheduled_jumps.py::apply_scheduled_jumps`.
   - Problem: an arbitrary adjacent pair is merged and truncated without first
@@ -38,7 +38,7 @@ The tracked center is a correctness invariant:
     the centered result must match the optimal Schmidt truncation. Also test the
     uncapped control.
 
-- [ ] Recenter before applying the selected stochastic adjacent two-site jump.
+- [x] Recenter before applying the selected stochastic adjacent two-site jump.
   - Location:
     `src/mqt/yaqs/core/methods/stochastic_process.py::stochastic_process`.
   - Problem: `create_probability_distribution` sweeps a known center to the last
@@ -52,7 +52,7 @@ The tracked center is a correctness invariant:
 
 ## P1: Internal invariant violations
 
-- [ ] Invalidate or correctly propagate the center in fixed-bond-dimension
+- [x] Invalidate or correctly propagate the center in fixed-bond-dimension
       synchronization.
   - Locations: `src/mqt/yaqs/core/methods/tdvp/sweep_utils.py::_sync_bond_dim`,
     `_align_bond`, and `_cap_bonds`.
@@ -67,7 +67,7 @@ The tracked center is a correctness invariant:
     `orthogonality_center in check_canonical_form()` whenever the center is
     non-`None`.
 
-- [ ] Clear the center when `ensure_internal_bond_dims` adds null workspace.
+- [x] Clear the center when `ensure_internal_bond_dims` adds null workspace.
   - Location:
     `src/mqt/yaqs/core/data_structures/mps.py::ensure_internal_bond_dims`.
   - Problem: zero-padding can make `check_canonical_form()` return no valid
@@ -77,7 +77,7 @@ The tracked center is a correctness invariant:
   - Regression: verify that padding clears the center, a no-op preserves it, and
     the represented dense state is unchanged.
 
-- [ ] Stop using `orthogonality_center` as the compression return-target field.
+- [x] Stop using `orthogonality_center` as the compression return-target field.
   - Location: `src/mqt/yaqs/core/data_structures/mpo.py::MPO._multiply_mps`.
   - Problem: after contracting an MPO into every tensor, the method temporarily
     sets the center to the last site even though the state is not canonical.
@@ -90,7 +90,7 @@ The tracked center is a correctness invariant:
   - Regression: retain the existing dense-result, capped-compression, and
     genuine-final-center checks.
 
-- [ ] Remove the temporary center-as-cursor use in `measure_single_shot` (low
+- [x] Remove the temporary center-as-cursor use in `measure_single_shot` (low
       priority).
   - Location: `src/mqt/yaqs/core/data_structures/mps.py::measure_single_shot`.
   - Problem: the temporary state discards the measured prefix logically but
@@ -105,7 +105,7 @@ The tracked center is a correctness invariant:
 
 ## P2: API hardening
 
-- [ ] Validate center-helper arguments before changing tensors or metadata.
+- [x] Validate center-helper arguments before changing tensors or metadata.
   - Locations: `MPS.set_center`, `shift_center_to`,
     `shift_orthogonality_center_right`, `shift_orthogonality_center_left`, and
     `set_canonical_form`.
@@ -118,7 +118,7 @@ The tracked center is a correctness invariant:
   - Regression: assert that invalid inputs raise without changing tensors,
     orientation, physical dimensions, or center metadata.
 
-- [ ] Make the two-site split precondition explicit and harder to misuse.
+- [x] Make the two-site split precondition explicit and harder to misuse.
   - Location: `MPS.update_center_after_split` and all callers.
   - Problem: the helper assigns a center from the singular-value distribution
     but cannot know whether the pair was in a valid mixed-canonical environment
@@ -129,7 +129,7 @@ The tracked center is a correctness invariant:
   - Regression: exercise calls with a center left of, on, right of, and unknown
     relative to the pair.
 
-- [ ] Defensively enforce the documented precondition of local-only
+- [x] Defensively enforce the documented precondition of local-only
       contractions.
   - Locations: `MPS.local_expect` and local-site `MPS.scalar_product` calls.
   - Problem: these fast contractions are correct only when the center covers the
@@ -147,6 +147,9 @@ The tracked center is a correctness invariant:
 - `set_center` deliberately changes metadata without canonicalizing. Callers
   remain responsible for supplying a truthful center; bounds validation is still
   required.
+- `scalar_product(..., sites=...)` deliberately contracts stored local tensors.
+  Gauge-safe public observables and norms route through `local_expect`,
+  `expect`, and `norm`.
 - `apply_long_range_gate_mpo` already canonicalizes an unknown gauge and moves a
   known center into the gate window.
 - TEBD gate application, digital TDVP windows, dissipation, BUG, `apply_local`,

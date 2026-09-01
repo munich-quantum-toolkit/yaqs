@@ -92,6 +92,13 @@ def apply_scheduled_jumps(
                     )
                     raise ValueError(msg)
 
+                # A split can record a pair center only when the surrounding gauge is canonical.
+                if not state.check_covers_sites([i, j]):
+                    if state.orthogonality_center is None:
+                        state.set_canonical_form(i)
+                    else:
+                        state.shift_center_to(i if state.orthogonality_center < i else j)
+
                 merged = merge_two_site(state.tensors[i], state.tensors[j])
                 merged = oe.contract("ab, bcd->acd", jump_op, merged)
                 tensor_left_new, tensor_right_new = split_two_site(

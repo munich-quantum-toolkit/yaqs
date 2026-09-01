@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import copy
 from unittest.mock import patch
 
 import numpy as np
@@ -19,6 +20,42 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
+
+
+def _entangled_jump_state() -> MPS:
+    """Create the deterministic entangled state used by jump regressions.
+
+    Returns:
+        A normalized four-site MPS with bond dimensions ``[2, 4, 2]``.
+    """
+    rng = np.random.default_rng(20260901)
+    bonds = [1, 2, 4, 2, 1]
+    tensors = [
+        (
+            rng.normal(size=(2, bonds[site], bonds[site + 1])) + 1j * rng.normal(size=(2, bonds[site], bonds[site + 1]))
+        ).astype(np.complex128)
+        for site in range(4)
+    ]
+    state = MPS(4, tensors=tensors)
+    state.normalize("B", decomposition="SVD")
+    return state
+
+
+def _fidelity(left: MPS, right: MPS) -> float:
+    """Return the normalized squared overlap of two MPS states.
+
+    Args:
+        left: First MPS.
+        right: Second MPS.
+
+    Returns:
+        The state fidelity.
+    """
+    left_vec = left.to_vec()
+    right_vec = right.to_vec()
+    left_vec /= np.linalg.norm(left_vec)
+    right_vec /= np.linalg.norm(right_vec)
+    return float(abs(np.vdot(left_vec, right_vec)) ** 2)
 
 
 def test_has_scheduled_jump() -> None:
@@ -146,6 +183,47 @@ def test_apply_scheduled_jumps_two_site() -> None:
 
     assert np.isclose(exp0, -1.0)
     assert np.isclose(exp1, -1.0)
+
+
+@pytest.mark.parametrize("max_bond_dim", [1, None], ids=["capped", "uncapped"])
+@pytest.mark.parametrize("pairs", [[(0, 1)], [(0, 1), (2, 3)]], ids=["single", "multiple"])
+def test_scheduled_two_site_jumps_are_gauge_independent(max_bond_dim: int | None, pairs: list[tuple[int, int]]) -> None:
+    """Identity jumps give the same result from any canonical center.
+
+    Args:
+        max_bond_dim: Optional bond-dimension cap for the jump split.
+        pairs: Adjacent pairs that receive identity jumps.
+    """
+    centered = _entangled_jump_state()
+    off_center = copy.deepcopy(centered)
+    off_center.shift_center_to(3)
+    unknown_center = copy.deepcopy(off_center)
+    unknown_center.set_center(None)
+    noise_model = NoiseModel(
+        scheduled_jumps=[
+            {"time": 1.0, "sites": list(pair), "name": f"identity_{index}", "matrix": np.eye(4)}
+            for index, pair in enumerate(pairs)
+        ]
+    )
+    sim_params = AnalogSimParams(
+        dt=0.1,
+        get_state=True,
+        max_bond_dim=max_bond_dim,
+        svd_threshold=0.0,
+    )
+
+    apply_scheduled_jumps(centered, noise_model, 1.0, sim_params)
+    apply_scheduled_jumps(off_center, noise_model, 1.0, sim_params)
+    apply_scheduled_jumps(unknown_center, noise_model, 1.0, sim_params)
+
+    assert _fidelity(centered, off_center) == pytest.approx(1.0, abs=1e-12)
+    assert _fidelity(centered, unknown_center) == pytest.approx(1.0, abs=1e-12)
+    for state in (centered, off_center, unknown_center):
+        assert state.orthogonality_center == 0
+        assert state.orthogonality_center in state.check_canonical_form()
+        if max_bond_dim is not None:
+            for left_site, _right_site in pairs:
+                assert state.tensors[left_site].shape[2] <= max_bond_dim
 
 
 def test_apply_scheduled_jumps_multiple() -> None:

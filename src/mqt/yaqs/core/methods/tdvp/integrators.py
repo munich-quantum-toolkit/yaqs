@@ -373,6 +373,7 @@ def sweep_dynamic(
                     trail=int(state.tensors[i + 1].shape[1]),
                 )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+                state.set_center(i + 1)
                 _align_bond(state, i, sim_params)
         elif i == num_sites - 1:
             continue
@@ -453,12 +454,11 @@ def sweep_dynamic(
                 site_tensor, bond_tensor = left_qr(state.tensors[i])
                 if cap is not None and int(site_tensor.shape[1]) > cap:
                     site_tensor = site_tensor[:, :cap, :]
-                    bond_tensor = bond_tensor[:cap, :]
+                    bond_tensor = bond_tensor[:, :cap]
                 state.tensors[i] = site_tensor
                 right_blocks[i - 1] = update_right_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
                 )
-                bond_tensor = bond_tensor.transpose()
                 bond_tensor = update_bond(
                     left_blocks[i],
                     right_blocks[i - 1],
@@ -472,6 +472,7 @@ def sweep_dynamic(
                     trail=int(state.tensors[i].shape[1]),
                 )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
+                state.set_center(i - 1)
                 _align_bond(state, i - 1, sim_params)
         elif i == 0:
             continue
