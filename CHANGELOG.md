@@ -28,8 +28,7 @@ releases may include breaking changes.
 
 ### Changed
 
-- restricted long-range gate application to the gate support window and removed
-  a redundant gauge scan ([#564]) ([**@Pouri96**])
+- localized long-range MPO gate application ([#564]) ([**@Pouri96**])
 - sped up normalization in circuit simulation and fixed TDVP state tracking
   ([#560]) ([**@Pouri96**])
 - restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
