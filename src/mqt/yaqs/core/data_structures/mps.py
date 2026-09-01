@@ -896,16 +896,16 @@ class MPS:
                 self._orthogonality_center = current_orthogonality_center
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
-        """Shifts orthogonality center left.
+        """Shift the orthogonality center one site to the left.
 
-        This function performs a QR decomposition to shift the known current center to the left and move
-        the canonical form. This is essential for maintaining efficient tensor network algorithms.
+        The method updates only the center tensor and its left neighbor without
+        flipping the network. At site zero, the method normalizes the center
+        tensor and leaves the center at zero.
 
         Args:
-            current_orthogonality_center (int): current center
-            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
-                Default is QR.
-
+            current_orthogonality_center: Site that currently holds the orthogonality center.
+            decomposition: Decomposition used for the shift. ``"QR"`` is faster;
+                ``"SVD"`` can reduce the bond dimension.
         """
         current_orthogonality_center = self._validate_center(
             current_orthogonality_center, name="current_orthogonality_center"
@@ -921,7 +921,6 @@ class MPS:
             site_tensor, bond_tensor = left_qr(tensor)
             self.tensors[current_orthogonality_center] = site_tensor
 
-            # If normalizing, we just throw away the R
             if current_orthogonality_center - 1 >= 0:
                 self.tensors[current_orthogonality_center - 1] = oe.contract(
                     "aij, jk->aik",
