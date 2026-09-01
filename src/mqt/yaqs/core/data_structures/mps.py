@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -108,9 +109,10 @@ class MPS:
             ValueError: If ``length`` is not positive or the provided ``state`` does not match a valid
                 initialization string.
         """
-        if not isinstance(length, int) or isinstance(length, bool) or length < 1:
+        if not isinstance(length, Integral) or isinstance(length, bool) or length < 1:
             msg = "length must be a positive integer."
             raise ValueError(msg)
+        length = int(length)
 
         self.flipped = False
         self._orthogonality_center: int | None = None
@@ -310,19 +312,23 @@ class MPS:
         """Site index of the mixed-canonical center, or ``None`` if the gauge is unknown."""
         return self._orthogonality_center
 
-    def _validate_center(self, center: int, *, name: str = "center") -> None:
+    def _validate_center(self, center: int, *, name: str = "center") -> int:
         """Validate a site used as an orthogonality center.
 
         Args:
             center: Site index to validate.
             name: Argument name used in the error message.
 
+        Returns:
+            The validated site as a Python integer.
+
         Raises:
             ValueError: If ``center`` is outside this MPS.
         """
-        if not isinstance(center, int) or isinstance(center, bool) or not 0 <= center < self.length:
+        if not isinstance(center, Integral) or isinstance(center, bool) or not 0 <= center < self.length:
             msg = f"{name} must be in [0, {self.length - 1}], got {center!r}."
             raise ValueError(msg)
+        return int(center)
 
     @staticmethod
     def _validate_decomposition(decomposition: str) -> None:
@@ -345,7 +351,7 @@ class MPS:
             center: Mixed-canonical center site index, or ``None`` if the gauge is unknown.
         """
         if center is not None:
-            self._validate_center(center)
+            center = self._validate_center(center)
         self._orthogonality_center = center
 
     def update_center_after_split(self, left_site: int, right_site: int, svd_distribution: str) -> None:
@@ -368,8 +374,8 @@ class MPS:
             split pair. If the prior center did not cover the pair, or the singular
             values were split with ``"sqrt"``, the gauge remains unknown.
         """
-        self._validate_center(left_site, name="left_site")
-        self._validate_center(right_site, name="right_site")
+        left_site = self._validate_center(left_site, name="left_site")
+        right_site = self._validate_center(right_site, name="right_site")
         if right_site != left_site + 1:
             msg = f"Split sites must be adjacent and ordered, got ({left_site}, {right_site})."
             raise ValueError(msg)
@@ -430,7 +436,7 @@ class MPS:
         Raises:
             ValueError: If the target or decomposition is invalid, or the gauge is unknown.
         """
-        self._validate_center(target, name="target")
+        target = self._validate_center(target, name="target")
         self._validate_decomposition(decomposition)
         if self._orthogonality_center is None:
             msg = "Cannot shift orthogonality center when gauge is unknown."
@@ -843,7 +849,9 @@ class MPS:
                            Default is QR.
 
         """
-        self._validate_center(current_orthogonality_center, name="current_orthogonality_center")
+        current_orthogonality_center = self._validate_center(
+            current_orthogonality_center, name="current_orthogonality_center"
+        )
         self._validate_decomposition(decomposition)
         if self._orthogonality_center is not None:
             assert self._orthogonality_center == current_orthogonality_center, (
@@ -897,7 +905,9 @@ class MPS:
                 Default is QR.
 
         """
-        self._validate_center(current_orthogonality_center, name="current_orthogonality_center")
+        current_orthogonality_center = self._validate_center(
+            current_orthogonality_center, name="current_orthogonality_center"
+        )
         self._validate_decomposition(decomposition)
         if self._orthogonality_center is not None:
             assert self._orthogonality_center == current_orthogonality_center, (
@@ -922,7 +932,7 @@ class MPS:
             ValueError: If an argument is invalid or a tensor contains a non-finite value.
 
         """
-        self._validate_center(orthogonality_center, name="orthogonality_center")
+        orthogonality_center = self._validate_center(orthogonality_center, name="orthogonality_center")
         self._validate_decomposition(decomposition)
         if not all(np.isfinite(tensor).all() for tensor in self.tensors):
             msg = "Cannot canonicalize an MPS with non-finite tensor values."
@@ -946,6 +956,53 @@ class MPS:
             msg = "Canonicalization produced non-finite tensor values."
             raise ValueError(msg)
         self._orthogonality_center = orthogonality_center
+
+    def _scaled_center_tensor(self) -> tuple[NDArray[np.complex128], float, float]:
+        """Return stable components for the tracked center's Frobenius norm.
+
+        Returns:
+            The center tensor divided by its largest real or imaginary component,
+            that component scale, and the scaled tensor's Frobenius norm.
+
+        Raises:
+            ValueError: If the orthogonality center is unknown.
+        """
+        center = self._orthogonality_center
+        if center is None:
+            msg = "Cannot inspect MPS center: orthogonality center is unknown."
+            raise ValueError(msg)
+
+        center_tensor = self.tensors[center]
+        real_scale = float(np.max(np.abs(center_tensor.real)))
+        imag_scale = float(np.max(np.abs(center_tensor.imag)))
+        scale = float(np.maximum(real_scale, imag_scale))
+        if scale <= 0.0 or not np.isfinite(scale):
+            return center_tensor, scale, scale
+        scaled_tensor = center_tensor / scale
+        return scaled_tensor, scale, float(np.linalg.norm(scaled_tensor))
+
+    def normalize_center(self) -> None:
+        """Normalize the MPS by rescaling its tracked center tensor.
+
+        This operation does not move or establish the orthogonality center. It trusts
+        the tracked mixed-canonical gauge and therefore touches only the center tensor.
+
+        Raises:
+            ValueError: If the center is unknown or its norm is zero or non-finite.
+        """
+        center = self._orthogonality_center
+        if center is None:
+            msg = "Cannot normalize MPS: orthogonality center is unknown."
+            raise ValueError(msg)
+
+        msg = "Cannot normalize MPS: norm is zero or non-finite."
+        scaled_tensor, scale, scaled_norm = self._scaled_center_tensor()
+        if scale <= 0.0 or not np.isfinite(scale):
+            raise ValueError(msg)
+        if scaled_norm <= 0.0 or not np.isfinite(scaled_norm):
+            raise ValueError(msg)
+        scaled_tensor /= scaled_norm
+        self.tensors[center] = scaled_tensor
 
     def normalize(self, form: str = "B", decomposition: str = "QR") -> None:
         """Normalize MPS.
@@ -977,15 +1034,7 @@ class MPS:
             self.flip_network()
         try:
             self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
-            center_tensor = self.tensors[-1]
-            scale = float(np.max(np.abs(center_tensor)))
-            if scale <= 0.0 or not np.isfinite(scale):
-                raise ValueError(msg)
-            scaled_tensor = center_tensor / scale
-            scaled_norm = float(np.linalg.norm(scaled_tensor))
-            if scaled_norm <= 0.0 or not np.isfinite(scaled_norm):
-                raise ValueError(msg)
-            self.tensors[-1] = scaled_tensor / scaled_norm
+            self.normalize_center()
         finally:
             if flipped:
                 self.flip_network()
@@ -1022,7 +1071,7 @@ class MPS:
 
         """
         if _restore_center is not None:
-            self._validate_center(_restore_center, name="_restore_center")
+            _restore_center = self._validate_center(_restore_center, name="_restore_center")
         if self.length == 1:
             if _restore_center is not None:
                 self._orthogonality_center = _restore_center
@@ -1723,7 +1772,7 @@ class MPS:
             For jump probabilities and other quantities proportional to ``<psi|psi>``,
             use ``norm(...) ** 2``.
 
-            For a site-specific norm, uses fast local contraction when
+            For a site-specific norm, uses stable center-tensor scaling when
             :attr:`orthogonality_center` covers that site; shifts on a copy when the
             center is known but misaligned; falls back to the global norm when the
             gauge is unknown (``None``).
@@ -1732,11 +1781,12 @@ class MPS:
             if not self.check_covers_sites(site):
                 temp = copy.deepcopy(self)
                 temp.shift_center_to(site)
-                squared = float(temp.scalar_product(temp, site).real)
             else:
-                squared = float(self.scalar_product(self, site).real)
-        else:
-            squared = float(self.scalar_product(self).real)
+                temp = self
+            _, scale, scaled_norm = temp._scaled_center_tensor()
+            return np.float64(scale * scaled_norm)
+
+        squared = float(self.scalar_product(self).real)
         return np.float64(np.sqrt(max(squared, 0.0)))
 
     def check_if_valid_mps(self) -> None:
