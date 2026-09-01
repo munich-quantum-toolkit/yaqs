@@ -187,6 +187,33 @@ def create_probability_distribution(
     return ordered_processes, [val / dp for val in dp_m_list]
 
 
+def _normalize_at_zero(state: MPS) -> None:
+    """Normalize ``state`` at site zero without a redundant full gauge sweep.
+
+    Args:
+        state: MPS normalized in place.
+
+    Raises:
+        ValueError: If the state norm is zero or non-finite.
+    """
+    msg = "Cannot normalize MPS: norm is zero or non-finite."
+    if state.orthogonality_center is None:
+        state.set_canonical_form(0)
+    center = state.orthogonality_center
+    assert center is not None
+    center_tensor = state.tensors[center]
+    scale = float(np.max(np.abs(center_tensor)))
+    if scale <= 0.0 or not np.isfinite(scale):
+        raise ValueError(msg)
+    scaled_tensor = center_tensor / scale
+    scaled_norm = float(np.linalg.norm(scaled_tensor))
+    if scaled_norm <= 0.0 or not np.isfinite(scaled_norm):
+        raise ValueError(msg)
+    state.tensors[center] = scaled_tensor / scaled_norm
+    if center != 0:
+        state.shift_center_to(0)
+
+
 def stochastic_process(
     state: MPS,
     noise_model: NoiseModel | None,
@@ -214,7 +241,8 @@ def stochastic_process(
         MPS: The updated Matrix Product MPS after the stochastic process.
 
     Raises:
-        ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
+        ValueError: If normalization fails, a two-site jump is not nearest-neighbor, or a jump operator does not act
+            on one or two sites.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -222,24 +250,20 @@ def stochastic_process(
     if state.orthogonality_center is not None:
         state.assert_center(0, context="stochastic_process")
 
+    if noise_model is None:
+        _normalize_at_zero(state)
+        return state
+
     dp = calculate_stochastic_factor(state)
-    if noise_model is None or rng.random() >= dp:
-        if state.orthogonality_center is not None:
-            state.shift_orthogonality_center_left(0)
-        else:
-            state.set_canonical_form(0)
+    if rng.random() >= dp:
+        _normalize_at_zero(state)
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.
     ordered_processes, probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
 
     if len(probabilities) == 0:
-        if state.orthogonality_center is not None:
-            if state.orthogonality_center != 0:
-                state.shift_center_to(0)
-            state.shift_orthogonality_center_left(0)
-        else:
-            state.set_canonical_form(0)
+        _normalize_at_zero(state)
         return state
 
     choice_idx = rng.choice(len(ordered_processes), p=probabilities)
