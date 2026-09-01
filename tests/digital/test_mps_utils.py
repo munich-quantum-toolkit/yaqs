@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Operator, Statevector, random_unitary
+from qiskit.quantum_info import Statevector, random_unitary
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -296,7 +296,7 @@ def test_long_range_gate_matches_dense_gate_operator(
     state = _haar_random_mps(length, pad=8, seed=20260829) if entangled else MPS(length, state="x+")
     state.set_canonical_form(min(gate.sites))
 
-    expected = np.asarray(Operator(qc).data, dtype=np.complex128) @ np.asarray(state.to_vec(), dtype=np.complex128)
+    expected = np.asarray(Statevector(state.to_vec()).evolve(qc).data, dtype=np.complex128)
     apply_long_range_gate_mpo(state, gate, _sim_params())
 
     assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-10
@@ -311,7 +311,7 @@ def test_capped_long_range_gate_is_no_less_accurate_than_full_chain_compression(
 
     state = _haar_random_mps(length, pad=cap, seed=20260829)
     state.set_canonical_form(min(gate.sites))
-    expected = np.asarray(Operator(qc).data, dtype=np.complex128) @ np.asarray(state.to_vec(), dtype=np.complex128)
+    expected = np.asarray(Statevector(state.to_vec()).evolve(qc).data, dtype=np.complex128)
 
     full_chain = copy.deepcopy(state)
     MPO.from_gate(gate, length).multiply(full_chain, sim_params=sim_params, compress=True)
@@ -383,7 +383,7 @@ def test_long_range_gate_on_qudit_spectators_matches_full_chain_mpo(
     """The window slices ``physical_dimensions``, so qudit spectators must survive the re-basing.
 
     ``get_support_mpo`` indexes its dimensions by ``site - first_site`` while the sites stay
-    absolute, so a window that does not start at site 0 is where a mis-based slice would show.
+    absolute, so a window that does not start at site 0 exposes an incorrectly based slice.
     """
     length = len(physical_dimensions)
     gate = GateLibrary.cx()
