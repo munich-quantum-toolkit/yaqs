@@ -105,8 +105,13 @@ class MPS:
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
 
         Raises:
-            ValueError: If the provided `state` parameter does not match any valid initialization string.
+            ValueError: If ``length`` is not positive or the provided ``state`` does not match a valid
+                initialization string.
         """
+        if not isinstance(length, int) or isinstance(length, bool) or length < 1:
+            msg = "length must be a positive integer."
+            raise ValueError(msg)
+
         self.flipped = False
         self._orthogonality_center: int | None = None
         if tensors is not None:
@@ -486,7 +491,7 @@ class MPS:
         """
         length = self.length
 
-        # enlarge tensors
+        target_shapes = []
         for i, tensor in enumerate(self.tensors):
             phys, chi_l, chi_r = tensor.shape
 
@@ -508,12 +513,27 @@ class MPS:
                 msg = "Target bond dim must be at least current bond dim."
                 raise ValueError(msg)
 
-            # allocate new tensor and copy original data
-            new_tensor = np.zeros((phys, left_target, right_target), dtype=tensor.dtype)
+            target_shapes.append((phys, left_target, right_target))
+
+        padded_tensors = []
+        for tensor, target_shape in zip(self.tensors, target_shapes, strict=True):
+            _, chi_l, chi_r = tensor.shape
+            new_tensor = np.zeros(target_shape, dtype=tensor.dtype)
             new_tensor[:, :chi_l, :chi_r] = tensor
-            self.tensors[i] = new_tensor
-        # renormalise the state
-        self.normalize()
+            padded_tensors.append(new_tensor)
+
+        padded_state = MPS(
+            self.length,
+            tensors=padded_tensors,
+            physical_dimensions=list(self.physical_dimensions),
+        )
+        padded_state.flipped = self.flipped
+        padded_state.normalize()
+
+        self.tensors = padded_state.tensors
+        self.physical_dimensions = padded_state.physical_dimensions
+        self._orthogonality_center = padded_state.orthogonality_center
+        self.flipped = padded_state.flipped
 
     def ensure_internal_bond_dims(
         self,
@@ -898,9 +918,15 @@ class MPS:
             orthogonality_center (int): site of matrix MPS around which we normalize
             decomposition: Type of decomposition. Default QR.
 
+        Raises:
+            ValueError: If an argument is invalid or a tensor contains a non-finite value.
+
         """
         self._validate_center(orthogonality_center, name="orthogonality_center")
         self._validate_decomposition(decomposition)
+        if not all(np.isfinite(tensor).all() for tensor in self.tensors):
+            msg = "Cannot canonicalize an MPS with non-finite tensor values."
+            raise ValueError(msg)
 
         def sweep_decomposition(orthogonality_center: int, decomposition: str = "QR") -> None:
             for site, _ in enumerate(self.tensors):
@@ -911,9 +937,14 @@ class MPS:
         self._orthogonality_center = None
         sweep_decomposition(orthogonality_center, decomposition)
         self.flip_network()
-        flipped_orthogonality_center = self.length - 1 - orthogonality_center
-        sweep_decomposition(flipped_orthogonality_center, decomposition)
-        self.flip_network()
+        try:
+            flipped_orthogonality_center = self.length - 1 - orthogonality_center
+            sweep_decomposition(flipped_orthogonality_center, decomposition)
+        finally:
+            self.flip_network()
+        if not all(np.isfinite(tensor).all() for tensor in self.tensors):
+            msg = "Canonicalization produced non-finite tensor values."
+            raise ValueError(msg)
         self._orthogonality_center = orthogonality_center
 
     def normalize(self, form: str = "B", decomposition: str = "QR") -> None:
@@ -932,17 +963,32 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                            Default is QR.
 
+        Raises:
+            ValueError: If the decomposition is invalid or the state norm is zero or non-finite.
+
         """
         self._validate_decomposition(decomposition)
-        if form == "B":
-            self.flip_network()
+        msg = "Cannot normalize MPS: norm is zero or non-finite."
+        if not all(np.isfinite(tensor).all() for tensor in self.tensors):
+            raise ValueError(msg)
 
-        self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
-        self.shift_orthogonality_center_right(self.length - 1, decomposition)
-
-        if form == "B":
+        flipped = form == "B"
+        if flipped:
             self.flip_network()
-            self._orthogonality_center = 0
+        try:
+            self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
+            center_tensor = self.tensors[-1]
+            scale = float(np.max(np.abs(center_tensor)))
+            if scale <= 0.0 or not np.isfinite(scale):
+                raise ValueError(msg)
+            scaled_tensor = center_tensor / scale
+            scaled_norm = float(np.linalg.norm(scaled_tensor))
+            if scaled_norm <= 0.0 or not np.isfinite(scaled_norm):
+                raise ValueError(msg)
+            self.tensors[-1] = scaled_tensor / scaled_norm
+        finally:
+            if flipped:
+                self.flip_network()
 
     def compress(
         self,
