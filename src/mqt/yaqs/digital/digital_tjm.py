@@ -573,8 +573,8 @@ def apply_long_range_gate_mpo(
     the matching window of ``state``, so contraction and compression touch
     ``last_site - first_site + 1`` sites instead of :attr:`~mqt.yaqs.core.data_structures.mps.MPS.length`
     sites, and no bond outside the support is truncated, matching the other gate modes.
-    Moving the center onto the window still rewrites the sites it passes; the
-    multiplication and its compression do not.
+    Moving the center to the nearest window boundary still rewrites the sites it
+    passes; the multiplication and its compression do not.
 
     Args:
         state: MPS updated in place.
@@ -590,10 +590,11 @@ def apply_long_range_gate_mpo(
     # The gate MPO has bond dimension 1 at both support boundaries, so the windowed
     # compression matches the full-chain one only while the sites outside
     # [first_site, last_site] are isometric towards the window (cf. apply_two_qubit_gate_tebd).
-    if state.orthogonality_center is None:
+    center = state.orthogonality_center
+    if center is None:
         state.set_canonical_form(first_site)
-    elif not first_site <= state.orthogonality_center <= last_site:
-        state.shift_center_to(first_site)
+    elif not first_site <= center <= last_site:
+        state.shift_center_to(first_site if center < first_site else last_site)
 
     window = MPS(
         length=last_site - first_site + 1,

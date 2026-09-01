@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -415,4 +416,22 @@ def test_long_range_gate_tracks_orthogonality_center(*, known_gauge: bool) -> No
 
     apply_long_range_gate_mpo(state, gate, _sim_params())
 
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_long_range_gate_enters_window_from_right_at_nearest_boundary() -> None:
+    """A right-side center moves only to the window's right boundary before a correct gate update."""
+    length, last_site = 10, 6
+    qc = _single_gate_circuit(length, lambda circuit: circuit.cx(1, last_site))
+    gate = _gate_from_circuit(qc)
+    state = _haar_random_mps(length, pad=8, seed=20260829)
+    state.set_canonical_form(length - 1)
+    expected = np.asarray(Statevector(state.to_vec()).evolve(qc).data, dtype=np.complex128)
+
+    with patch.object(state, "shift_center_to", wraps=state.shift_center_to) as shift_center_to:
+        apply_long_range_gate_mpo(state, gate, _sim_params())
+
+    shift_center_to.assert_called_once_with(last_site)
+    assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-10
+    assert state.orthogonality_center == last_site
     assert state.orthogonality_center in state.check_canonical_form()
