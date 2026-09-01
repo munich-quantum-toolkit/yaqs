@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
+import scipy.linalg
 from tqdm import tqdm
 
 from .. import linalg
@@ -986,6 +987,8 @@ class MPS:
 
         This operation does not move or establish the orthogonality center. It trusts
         the tracked mixed-canonical gauge and therefore touches only the center tensor.
+        A stable direct norm handles ordinary tensors; scaled arithmetic handles norms
+        larger than the floating-point range.
 
         Raises:
             ValueError: If the center is unknown or its norm is zero or non-finite.
@@ -996,6 +999,12 @@ class MPS:
             raise ValueError(msg)
 
         msg = "Cannot normalize MPS: norm is zero or non-finite."
+        center_tensor = self.tensors[center]
+        norm = float(scipy.linalg.norm(center_tensor.ravel(order="K"), check_finite=False))
+        if norm > 0.0 and np.isfinite(norm):
+            self.tensors[center] = center_tensor / norm
+            return
+
         scaled_tensor, scale, scaled_norm = self._scaled_center_tensor()
         if scale <= 0.0 or not np.isfinite(scale):
             raise ValueError(msg)

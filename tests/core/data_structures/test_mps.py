@@ -549,10 +549,14 @@ def test_normalize_accepts_large_finite_center_tensor() -> None:
 
 
 def test_normalize_center_rescales_only_a_displaced_center() -> None:
-    """Center-only normalization preserves the gauge and every other tensor."""
+    """Direct center normalization preserves the gauge and every other tensor."""
     mps = _entangled_mps(length=4, chi=4, seed=46)
     mps.shift_center_to(2)
     mps.tensors[2] *= 3.0
+    center_before = mps.tensors[2].copy()
+    direct_norm = float(np.linalg.norm(center_before))
+    assert direct_norm > 0.0
+    assert np.isfinite(direct_norm)
     untouched = [(site, tensor, tensor.copy()) for site, tensor in enumerate(mps.tensors) if site != 2]
 
     mps.normalize_center()
@@ -560,6 +564,7 @@ def test_normalize_center_rescales_only_a_displaced_center() -> None:
     assert mps.orthogonality_center == 2
     assert 2 in mps.check_canonical_form()
     assert float(mps.norm()) == pytest.approx(1.0, abs=1e-12)
+    np.testing.assert_allclose(mps.tensors[2], center_before / direct_norm)
     for site, tensor, expected in untouched:
         assert mps.tensors[site] is tensor
         np.testing.assert_array_equal(mps.tensors[site], expected)
@@ -573,10 +578,28 @@ def test_normalize_center_accepts_large_finite_tensor() -> None:
     ).reshape(2, 1, 1)
     mps = MPS(1, tensors=[tensor])
     mps.set_center(0)
+    with np.errstate(invalid="ignore", over="ignore"):
+        assert not np.isfinite(np.linalg.norm(tensor))
 
     mps.normalize_center()
 
+    assert np.isfinite(mps.tensors[0]).all()
     np.testing.assert_allclose(mps.to_vec(), np.array([0.5 + 0.5j, -0.5 + 0.5j]))
+    assert mps.norm() == pytest.approx(1.0)
+    assert mps.orthogonality_center == 0
+
+
+def test_normalize_center_accepts_tiny_finite_tensor() -> None:
+    """Center-only normalization avoids underflow for tiny finite amplitudes."""
+    tensor = np.array([1e-308, 1e-308], dtype=np.complex128).reshape(2, 1, 1)
+    mps = MPS(1, tensors=[tensor])
+    mps.set_center(0)
+    assert not np.linalg.norm(tensor)
+
+    mps.normalize_center()
+
+    np.testing.assert_allclose(mps.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert mps.norm() == pytest.approx(1.0)
     assert mps.orthogonality_center == 0
 
 
