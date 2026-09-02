@@ -28,7 +28,7 @@ releases may include breaking changes.
 
 ### Changed
 
-- removed redundant orthogonality center transport from long-range SWAP routing
+- removed redundant center shifting in long-range TEBD swaps
   ([#571]) ([**@Pouri96**])
 - sped up normalization in circuit simulation and fixed TDVP state tracking
   ([#560]) ([**@Pouri96**])
@@ -260,7 +260,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
-[#XXX]: https://github.com/munich-quantum-toolkit/yaqs/pull/XXX
+[#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
 [#560]: https://github.com/munich-quantum-toolkit/yaqs/pull/560
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545
