@@ -30,6 +30,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- removed redundant center shifting in long-range TEBD swaps ([#571])
+  ([**@Pouri96**])
 - shifted the orthogonality center left without flipping the network ([#574])
   ([**@Pouri96**])
 - localized long-range MPO gate application ([#564]) ([**@Pouri96**])
@@ -266,6 +268,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
 [#569]: https://github.com/munich-quantum-toolkit/yaqs/pull/569
 [#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575
 [#574]: https://github.com/munich-quantum-toolkit/yaqs/pull/574

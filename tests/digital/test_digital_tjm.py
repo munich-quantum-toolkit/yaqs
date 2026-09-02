@@ -1495,6 +1495,33 @@ def test_nn_gate_prunes_only_null_schmidt_directions(
     assert mps.bond_dimensions() == [expected_rank]
 
 
+def test_swaps_route_does_not_shift_the_center_backwards() -> None:
+    """The SWAP route leaves the center on the pair it visits next, so it shifts nothing."""
+    length = 12
+    distance = 5
+    mps = MPS(length, state="x+")
+    # Start on the pair the route touches first, so any shift counted below is the route's own.
+    mps.set_canonical_form(length - 1)
+
+    gate = GateLibrary.rzz([0.7])
+    gate.set_sites(length - 1 - distance, length - 1)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+
+    original_left = MPS.shift_orthogonality_center_left
+    original_right = MPS.shift_orthogonality_center_right
+    with (
+        patch.object(MPS, "shift_orthogonality_center_left", autospec=True, side_effect=original_left) as left,
+        patch.object(MPS, "shift_orthogonality_center_right", autospec=True, side_effect=original_right) as right,
+    ):
+        apply_two_qubit_gate_tebd(mps, gate, sim_params)
+
+    # Descending pass absorbs S left and ascending pass absorbs S right, so each split already
+    # leaves the center on the following pair: no single-site move is needed anywhere.
+    assert left.call_count == 0
+    assert right.call_count == 0
+    assert mps.orthogonality_center == length - 1
+
+
 def test_tebd_lr_cx() -> None:
     """TEBD applies CX(1, 3) on |1111> via SWAP insertion."""
     length = 4
