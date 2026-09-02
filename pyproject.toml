@@ -92,7 +92,7 @@ strict = true
 addopts = [
   "-ra",
   "--showlocals",
-  "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
+  "--numprocesses=auto", # Select the worker count in tests/conftest.py
 ]
 log_level = "INFO"
 filterwarnings = [
@@ -206,7 +206,7 @@ test = [
     "pytest>=9.0.1",
     "pytest-cov>=7.1.0",
     "pytest-sugar>=1.1.1",
-    "pytest-xdist>=3.8.0",
+    "pytest-xdist[psutil]>=3.8.0",
     "qiskit-qasm3-import>=0.4.1",
     "torch>=2.2",
     "torch>=2.6; python_version >= '3.13'",

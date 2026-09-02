@@ -119,6 +119,8 @@ def _sync_bond_dim(
     bond_index: int,
     target_dim: int,
     sim_params: AnalogSimParams | DigitalSimParams | None = None,
+    *,
+    svd_distribution: SvdDistribution = "sqrt",
 ) -> None:
     """Set both tensors on an internal bond to share dimension ``target_dim``.
 
@@ -130,6 +132,7 @@ def _sync_bond_dim(
         bond_index: Internal bond index ``0 <= b < length - 1``.
         target_dim: Bond dimension enforced on both adjacent virtual indices.
         sim_params: Optional truncation settings for SVD compression.
+        svd_distribution: Site that receives the singular values after truncation.
 
     """
     left = state.tensors[bond_index]
@@ -148,6 +151,18 @@ def _sync_bond_dim(
         if chi_out == target_dim and chi_in == target_dim:
             return
     if chi_out > target_dim or chi_in > target_dim:
+        pair = [bond_index, bond_index + 1]
+        if not state.check_covers_sites(pair):
+            center = state.orthogonality_center
+            if center is None:
+                state.set_canonical_form(bond_index, decomposition="QR")
+            elif center < bond_index:
+                state.shift_center_to(bond_index)
+            else:
+                state.shift_center_to(bond_index + 1)
+
+        left = state.tensors[bond_index]
+        right = state.tensors[bond_index + 1]
         trunc_mode = sim_params.trunc_mode if sim_params is not None else "relative"
         threshold = sim_params.svd_threshold if sim_params is not None else 0.0
         merged = merge_two_site(left, right)
@@ -155,7 +170,7 @@ def _sync_bond_dim(
         left_new, right_new = _split_two_site(
             merged,
             phys_dims,
-            svd_distribution="sqrt",
+            svd_distribution=svd_distribution,
             trunc_mode=trunc_mode,
             threshold=threshold,
             max_bond_dim=target_dim,
@@ -164,6 +179,7 @@ def _sync_bond_dim(
         )
         state.tensors[bond_index] = left_new
         state.tensors[bond_index + 1] = right_new
+        state.update_center_after_split(bond_index, bond_index + 1, svd_distribution)
         return
     state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
 
@@ -211,15 +227,13 @@ def _get_norm(state: MPS) -> float:
     """Return the L2 norm of the full MPS state vector.
 
     Args:
-        state: MPS whose norm is measured via ``scalar_product``.
+        state: MPS whose norm is measured from its tracked center when available.
 
     Returns:
         Non-negative Euclidean norm of the represented state vector.
 
     """
-    overlap = state.scalar_product(state)
-    norm_sq = float(np.real(np.asarray(overlap, dtype=np.complex128).flat[0]))
-    return float(np.sqrt(max(norm_sq, 0.0)))
+    return float(state.norm(state.orthogonality_center))
 
 
 def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | DigitalSimParams) -> None:
@@ -243,8 +257,11 @@ def renorm_drift(state: MPS, sim_params: AnalogSimParams | DigitalSimParams) -> 
     """
     drift_tol = max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
     norm = _get_norm(state)
-    if abs(norm - 1.0) > drift_tol:
-        state.normalize()
+    if not np.isfinite(norm) or abs(norm - 1.0) > drift_tol:
+        if state.orthogonality_center is None:
+            state.normalize()
+        else:
+            state.normalize_center()
 
 
 def _align_bond(
@@ -285,15 +302,22 @@ def _cap_bonds(
     cap = sim_params.max_bond_dim
     if cap is None:
         return
-    changed = False
+    oversized_bonds = []
     for bond in range(state.length - 1):
         chi_out = int(state.tensors[bond].shape[2])
         chi_in = int(state.tensors[bond + 1].shape[1])
         if chi_out > cap or chi_in > cap:
-            _sync_bond_dim(state, bond, cap, sim_params)
-            changed = True
-    if changed and uses_fixed_chi(sim_params):
+            oversized_bonds.append(bond)
+    if not oversized_bonds:
+        return
+
+    for bond in oversized_bonds:
+        _sync_bond_dim(state, bond, cap, sim_params, svd_distribution="right")
+
+    if uses_fixed_chi(sim_params):
         renorm_trunc(state, sim_params)
+    else:
+        state.shift_center_to(0)
 
 
 # --- Bond transfer geometry ---

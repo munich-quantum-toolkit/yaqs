@@ -45,6 +45,10 @@ def apply_unitary_evolution(
     if sim_params.evolution_mode == EvolutionMode.TDVP:
         tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
+        if state.orthogonality_center is None:
+            state.set_canonical_form(0, decomposition="QR")
+        elif state.orthogonality_center != 0:
+            state.shift_center_to(0, decomposition="QR")
         bug(state, hamiltonian, sim_params, normalize=normalize)
     else:
         msg = f"Unsupported evolution_mode: {sim_params.evolution_mode!r}"

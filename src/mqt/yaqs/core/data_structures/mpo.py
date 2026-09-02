@@ -1521,31 +1521,33 @@ class MPO:
             ValueError: On length mismatch or missing ``sim_params`` when compressing.
 
         Notes:
-            Applies the MPO at every site and invalidates the tracked orthogonality
-            center (``set_center(None)``). With ``compress=False`` the center remains
-            ``None`` until canonicalization or compression is performed elsewhere.
-            Compression re-establishes a center via
-            :meth:`~mqt.yaqs.core.data_structures.mps.MPS.compress`.
+            Applies the MPO at every site, which invalidates the tracked orthogonality
+            center. With ``compress=False`` the center is left ``None`` until
+            canonicalization or compression is performed elsewhere. Compression
+            re-establishes a center via
+            :meth:`~mqt.yaqs.core.data_structures.mps.MPS.compress` and leaves it on the
+            last site.
         """
         if len(self.tensors) != state.length:
             msg = f"MPO length {len(self.tensors)} does not match MPS length {state.length}."
             raise ValueError(msg)
-
-        for site, operator in enumerate(self.tensors):
-            state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
-
-        state.set_center(None)
-
-        if not compress:
-            return
-        if sim_params is None:
+        if compress and sim_params is None:
             msg = "sim_params is required when compress=True for MPO.multiply(MPS)."
             raise ValueError(msg)
 
+        state.set_center(None)
+        for site, operator in enumerate(self.tensors):
+            state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
+
+        if not compress:
+            return
+
+        assert sim_params is not None
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
             trunc_mode=sim_params.trunc_mode,
+            _restore_center=state.length - 1,
         )
 
     def _multiply_mpo(
