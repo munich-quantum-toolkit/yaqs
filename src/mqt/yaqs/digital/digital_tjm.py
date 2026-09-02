@@ -482,11 +482,12 @@ def apply_two_qubit_gate_tdvp(
     return first_site, last_site
 
 
-def _apply_two_qubit_gate_tebd(
+def apply_two_qubit_gate_tebd(
     state: MPS,
     gate: BaseGate,
     sim_params: DigitalSimParams,
-    svd_distribution: SvdDistribution,
+    *,
+    svd_distribution: SvdDistribution = "right",
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
 
@@ -495,14 +496,17 @@ def _apply_two_qubit_gate_tebd(
     gauge is not equivalent to discarding the smallest Schmidt values of the state and
     can leave errors far above the optimal truncation error at the same bond dimension.
 
+    ``svd_distribution`` applies only to the adjacent SVD, including each SWAP step of
+    a long-range route. A long-range gate chooses ``"left"`` on the descending SWAP
+    pass and ``"right"`` on the transported gate and the return pass, so a
+    caller-supplied distribution is not used for the route as a whole.
+
     Args:
         state: MPS updated in place.
         gate: Internal gate object from the gate library.
         sim_params: Truncation settings shared with TDVP/MPS splitting.
-        svd_distribution: Side the singular values are absorbed into, which is where
-            the split leaves the center. ``"left"`` for the SWAP pass that walks
-            leftward, so its center lands on the pair visited next; ``"right"``
-            otherwise.
+        svd_distribution: Side the singular values are absorbed into after an
+            adjacent split, which is where the split leaves the center.
 
     Returns:
         ``(left_site, right_site)`` spanning the gate support in MPS order.
@@ -511,7 +515,7 @@ def _apply_two_qubit_gate_tebd(
     def apply_swap(site_left: int, swap_distribution: SvdDistribution) -> None:
         swap_gate = GateLibrary.swap()
         swap_gate.set_sites(site_left, site_left + 1)
-        _apply_two_qubit_gate_tebd(state, swap_gate, sim_params, swap_distribution)
+        apply_two_qubit_gate_tebd(state, swap_gate, sim_params, svd_distribution=swap_distribution)
 
     site0, site1 = gate.sites[0], gate.sites[1]
     if abs(site0 - site1) != 1:
@@ -526,7 +530,7 @@ def _apply_two_qubit_gate_tebd(
             gate_adj.set_sites(left, left + 1)
         else:
             gate_adj.set_sites(left + 1, left)
-        _apply_two_qubit_gate_tebd(state, gate_adj, sim_params, "right")
+        apply_two_qubit_gate_tebd(state, gate_adj, sim_params, svd_distribution="right")
 
         for i in range(left + 1, right):
             apply_swap(i, "right")
@@ -566,24 +570,6 @@ def _apply_two_qubit_gate_tebd(
     state.tensors[right_site] = new_right
     state.update_center_after_split(left_site, right_site, svd_distribution)
     return left_site, right_site
-
-
-def apply_two_qubit_gate_tebd(
-    state: MPS,
-    gate: BaseGate,
-    sim_params: DigitalSimParams,
-) -> tuple[int, int]:
-    """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
-
-    Args:
-        state: MPS updated in place.
-        gate: Internal gate object from the gate library.
-        sim_params: Truncation settings shared with TDVP/MPS splitting.
-
-    Returns:
-        ``(left_site, right_site)`` spanning the gate support in MPS order.
-    """
-    return _apply_two_qubit_gate_tebd(state, gate, sim_params, "right")
 
 
 def apply_long_range_gate_mpo(
