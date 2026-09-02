@@ -56,8 +56,7 @@ releases may include breaking changes.
 
 ### Fixed
 
-- fixed small-angle cutoff in MPO rotation gates
-  ([#569]) ([**@Pouri96**])
+- fixed small-angle cutoff in MPO rotation gates ([#569]) ([**@Pouri96**])
 - fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
   ([#561]) ([**@Pouri96**])
 - stabilize digital TDVP by pruning null bond directions ([#567])
