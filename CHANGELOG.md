@@ -30,6 +30,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- shifted the orthogonality center left without flipping the network ([#574])
+  ([**@Pouri96**])
 - localized long-range MPO gate application ([#564]) ([**@Pouri96**])
 - sped up normalization in circuit simulation and fixed TDVP state tracking
   ([#560]) ([**@Pouri96**])
@@ -264,6 +266,7 @@ for previous changelogs._
 <!-- PR links -->
 
 [#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575
+[#574]: https://github.com/munich-quantum-toolkit/yaqs/pull/574
 [#564]: https://github.com/munich-quantum-toolkit/yaqs/pull/564
 [#561]: https://github.com/munich-quantum-toolkit/yaqs/pull/561
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567

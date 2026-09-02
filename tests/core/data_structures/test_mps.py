@@ -150,19 +150,21 @@ def crandn(
     )
 
 
-def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
+def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True, seed: int | None = None) -> MPS:
     """Create a random MPS with the given shapes.
 
     Args:
         shapes (List[Tuple[int, int, int]]): The shapes of the tensors in the
             MPS.
         normalize (bool): Whether to normalize the MPS.
+        seed: Seed for the complex-normal entries.
 
     Returns:
         MPS: The random MPS.
     """
-    tensors = [crandn(shape) for shape in shapes]
-    mps = MPS(len(shapes), tensors=tensors)
+    rng = np.random.default_rng(seed)
+    tensors = [crandn(shape, seed=rng) for shape in shapes]
+    mps = MPS(len(shapes), tensors=tensors, physical_dimensions=[shape[0] for shape in shapes])
     if normalize:
         mps.normalize()
     return mps
@@ -367,22 +369,86 @@ def test_shift_orthogonality_center_right() -> None:
     assert mps.check_canonical_form() == [3]
 
 
-def test_shift_orthogonality_center_left() -> None:
-    """Test shifting the orthogonality center to the left in an MPS.
+@pytest.mark.parametrize("decomposition", ["QR", "SVD"])
+def test_shift_orthogonality_center_left(decomposition: str) -> None:
+    """Test shifting the orthogonality center left through and at the boundary.
 
-    This test ensures that the left shift operation does not alter the rank (3) of the MPS tensors.
+    Args:
+        decomposition: Local decomposition used for each shift.
     """
     pdim = 2
     shapes = [(pdim, 1, 2), (pdim, 2, 3), (pdim, 3, 3), (pdim, 3, 1)]
     mps = random_mps(shapes)
     mps.set_canonical_form(3)
     assert mps.check_canonical_form() == [3]
-    mps.shift_orthogonality_center_left(current_orthogonality_center=3)
+    mps.shift_orthogonality_center_left(current_orthogonality_center=3, decomposition=decomposition)
     assert mps.check_canonical_form() == [2]
-    mps.shift_orthogonality_center_left(current_orthogonality_center=2)
+    mps.shift_orthogonality_center_left(current_orthogonality_center=2, decomposition=decomposition)
     assert mps.check_canonical_form() == [1]
-    mps.shift_orthogonality_center_left(current_orthogonality_center=1)
+    mps.shift_orthogonality_center_left(current_orthogonality_center=1, decomposition=decomposition)
     assert mps.check_canonical_form() == [0]
+    mps.tensors[0] *= 2.5
+    mps.shift_orthogonality_center_left(0, decomposition)
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+    assert float(mps.norm()) == pytest.approx(1.0, rel=1e-12, abs=1e-13)
+
+
+@pytest.mark.parametrize("decomposition", ["QR", "SVD"])
+def test_left_shift_preserves_state_center_and_exterior_tensor(decomposition: str) -> None:
+    """A flipped interior shift changes only its bond pair and preserves the state.
+
+    Args:
+        decomposition: Local decomposition used for the shift.
+    """
+    shapes = [(3, 1, 2), (2, 2, 2), (4, 2, 1)]
+    mps = random_mps(shapes, seed=6200)
+    mps.set_canonical_form(1)
+    mps.flip_network()
+    before = mps.to_vec()
+    exterior, exterior_values = mps.tensors[2], mps.tensors[2].copy()
+
+    mps.shift_orthogonality_center_left(1, decomposition)
+
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+    assert mps.flipped is True
+    assert mps.tensors[2] is exterior
+    np.testing.assert_array_equal(mps.tensors[2], exterior_values)
+    np.testing.assert_allclose(mps.to_vec(), before, rtol=1e-12, atol=1e-13)
+
+
+def test_left_shift_with_svd_reduces_a_rank_deficient_bond() -> None:
+    """An SVD left shift removes a null direction without changing the state."""
+    left = np.eye(2, dtype=np.complex128).reshape(2, 1, 2)
+    right = np.zeros((2, 2, 1), dtype=np.complex128)
+    right[0, 0, 0] = 1.0
+    mps = MPS(2, tensors=[left, right])
+    mps.set_center(1)
+    before = mps.to_vec()
+
+    mps.shift_orthogonality_center_left(1, "SVD")
+
+    assert mps.tensors[0].shape[2] == mps.tensors[1].shape[1] == 1
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+    np.testing.assert_allclose(mps.to_vec(), before, rtol=1e-12, atol=1e-13)
+
+
+def test_center_round_trip_preserves_a_mixed_dimension_state() -> None:
+    """A full center round trip preserves a mixed-dimension state."""
+    shapes = [(3, 1, 3), (2, 3, 4), (4, 4, 4), (2, 4, 2), (3, 2, 1)]
+    mps = random_mps(shapes, seed=6304)
+    mps.set_canonical_form(0)
+    before = mps.to_vec()
+
+    mps.shift_center_to(4)
+    mps.shift_center_to(0)
+
+    assert mps.orthogonality_center == 0
+    assert 0 in mps.check_canonical_form()
+    assert mps.physical_dimensions == [shape[0] for shape in shapes]
+    np.testing.assert_allclose(mps.to_vec(), before, rtol=1e-12, atol=1e-13)
 
 
 @pytest.mark.parametrize("desired_center", [0, 1, 2, 3])
