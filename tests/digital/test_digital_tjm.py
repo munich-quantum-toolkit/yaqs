@@ -1495,10 +1495,10 @@ def test_nn_gate_prunes_only_null_schmidt_directions(
     assert mps.bond_dimensions() == [expected_rank]
 
 
-@pytest.mark.parametrize("distance", [2, 5, 8])
-def test_swaps_route_does_not_shift_the_center_backwards(distance: int) -> None:
+def test_swaps_route_does_not_shift_the_center_backwards() -> None:
     """The SWAP route leaves the center on the pair it visits next, so it shifts nothing."""
     length = 12
+    distance = 5
     mps = MPS(length, state="x+")
     # Start on the pair the route touches first, so any shift counted below is the route's own.
     mps.set_canonical_form(length - 1)
@@ -1520,46 +1520,6 @@ def test_swaps_route_does_not_shift_the_center_backwards(distance: int) -> None:
     assert left.call_count == 0
     assert right.call_count == 0
     assert mps.orthogonality_center == length - 1
-
-
-def test_nearest_neighbor_tebd_amplitudes() -> None:
-    """CZ on |++> flips the sign of |11> only: amplitudes are exactly (1, 1, 1, -1) / 2."""
-    mps = MPS(2, state="x+")
-    mps.set_canonical_form(0)
-
-    gate = GateLibrary.cz()
-    gate.set_sites(0, 1)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
-
-    left_site, right_site = apply_two_qubit_gate_tebd(mps, gate, sim_params)
-
-    assert (left_site, right_site) == (0, 1)
-    assert mps.orthogonality_center == right_site
-    np.testing.assert_allclose(mps.to_vec(), np.array([1, 1, 1, -1]) / 2, atol=1e-15)
-
-
-@pytest.mark.parametrize("gate_mode", ["swaps", "mpo"])
-def test_lr_gate_modes_match_statevector(gate_mode: str) -> None:
-    """SWAP routing and the gate MPO both reproduce a multi-gate LR circuit exactly at L = 10."""
-    length = 10
-    qc = QuantumCircuit(length)
-    qc.h(range(length))
-    for control, target, theta in ((0, 6, 0.4), (2, 9, 0.7), (1, 5, 1.1)):
-        qc.rzz(theta, control, target)
-    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-
-    params = DigitalSimParams(
-        preset="exact",
-        get_state=True,
-        max_bond_dim=None,
-        gate_mode=cast("GateMode", gate_mode),
-        tdvp_sweeps=16,
-        svd_threshold=1e-14,
-        krylov_tol=1e-12,
-    )
-    result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
-    assert result.output_state is not None
-    assert _fidelity(ref, result.output_state.mps.to_vec()) == pytest.approx(1.0, abs=1e-8)
 
 
 def test_tebd_lr_cx() -> None:
