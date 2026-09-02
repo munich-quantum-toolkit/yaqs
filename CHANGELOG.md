@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added stronger tracking and validation of orthogonality center ([#575])
+  ([**@aaronleesander**])
 - added noisy equivalence checking ([#545])
   ([**@yiranwang-phys**])
 - added piecewise time-dependent Hamiltonians that switch on the analog `dt`
@@ -30,6 +32,9 @@ releases may include breaking changes.
 
 - removed redundant center shifting in long-range TEBD swaps
   ([#571]) ([**@Pouri96**])
+- shifted the orthogonality center left without flipping the network ([#574])
+  ([**@Pouri96**])
+- localized long-range MPO gate application ([#564]) ([**@Pouri96**])
 - sped up normalization in circuit simulation and fixed TDVP state tracking
   ([#560]) ([**@Pouri96**])
 - restored testing on Python 3.13 and 3.14 ([#556]) ([**@denialhaag**])
@@ -53,6 +58,9 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed small-angle cutoff in MPO rotation gates ([#569]) ([**@Pouri96**])
+- fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
+  ([#561]) ([**@Pouri96**])
 - stabilize digital TDVP by pruning null bond directions ([#567])
   ([**@aaronleesander**])
 - fixed MPS norm definition and construction of arbitrary basis state ([#553])
@@ -261,6 +269,11 @@ for previous changelogs._
 <!-- PR links -->
 
 [#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
+[#569]: https://github.com/munich-quantum-toolkit/yaqs/pull/569
+[#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575
+[#574]: https://github.com/munich-quantum-toolkit/yaqs/pull/574
+[#564]: https://github.com/munich-quantum-toolkit/yaqs/pull/564
+[#561]: https://github.com/munich-quantum-toolkit/yaqs/pull/561
 [#567]: https://github.com/munich-quantum-toolkit/yaqs/pull/567
 [#560]: https://github.com/munich-quantum-toolkit/yaqs/pull/560
 [#545]: https://github.com/munich-quantum-toolkit/yaqs/pull/545

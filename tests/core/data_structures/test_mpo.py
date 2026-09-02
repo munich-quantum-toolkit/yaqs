@@ -1077,14 +1077,80 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     assert no_compress.orthogonality_center is None
 
 
+def test_multiply_mps_leaves_center_on_last_site() -> None:
+    """Compression after ``multiply(MPS)`` leaves a genuine center on the last site."""
+    length = 6
+    state = MPS(length, state="haar-random", pad=4)
+    state.normalize("B")
+    gate = GateLibrary.cx()
+    gate.set_sites(1, 4)
+    gate_mpo = MPO.from_gate(gate, length)
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    gate_mpo.multiply(state, sim_params=sim_params, compress=True)
+
+    assert state.orthogonality_center == length - 1
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_multiply_mps_passes_restore_target_while_center_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MPO contraction never presents its compression helper with a false center."""
+    state = MPS(3, state="zeros")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    observed: list[tuple[int | None, int | None]] = []
+
+    def record_compress(
+        compressed: MPS,
+        _threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        trunc_mode: object = None,
+        _restore_center: int | None = None,
+    ) -> None:
+        """Record compression metadata without changing the contracted tensors."""
+        del max_bond_dim, trunc_mode
+        observed.append((compressed.orthogonality_center, _restore_center))
+
+    monkeypatch.setattr(MPS, "compress", record_compress)
+
+    MPO.identity(state.length).multiply(state, sim_params=sim_params, compress=True)
+
+    assert observed == [(None, state.length - 1)]
+    assert state.orthogonality_center is None
+
+
+def test_multiply_single_site_mps_restores_genuine_center() -> None:
+    """Compressed one-site MPO application leaves the only site as a valid center."""
+    state = MPS(1, state="x+")
+    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    MPO.identity(1).multiply(state, sim_params=sim_params, compress=True)
+
+    assert state.orthogonality_center == 0
+    assert state.orthogonality_center in state.check_canonical_form()
+
+
 def test_multiply_mps_compress_requires_sim_params() -> None:
-    """Compression without ``sim_params`` raises ``ValueError``."""
-    state = MPS(2, state="zeros")
+    """Missing compression settings are rejected before the MPS is changed."""
+    state = MPS(2, state="x+")
+    tensor_list = state.tensors
+    tensors = [tensor.copy() for tensor in state.tensors]
+    physical_dimensions = state.physical_dimensions
+    center = state.orthogonality_center
+    flipped = state.flipped
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, 2)
+
     with pytest.raises(ValueError, match="sim_params is required"):
         gate_mpo.multiply(state, compress=True)
+
+    assert state.tensors is tensor_list
+    assert state.physical_dimensions is physical_dimensions
+    assert state.orthogonality_center == center
+    assert state.flipped is flipped
+    for expected, actual in zip(tensors, state.tensors, strict=True):
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_multiply_mps_length_mismatch_raises() -> None:

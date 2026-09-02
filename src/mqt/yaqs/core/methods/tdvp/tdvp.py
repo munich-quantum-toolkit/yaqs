@@ -21,6 +21,19 @@ if TYPE_CHECKING:
     from ...data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 
 
+def _ensure_center_zero(state: MPS) -> None:
+    """Put ``state`` in mixed-canonical form with its center at site 0.
+
+    Args:
+        state: MPS prepared in place without changing its represented state.
+
+    """
+    if state.orthogonality_center is None:
+        state.set_canonical_form(orthogonality_center=0)
+    elif state.orthogonality_center != 0:
+        state.shift_center_to(0)
+
+
 def _run_sweeps(
     evolve_once: Callable[..., None],
     state: MPS,
@@ -91,8 +104,7 @@ def tdvp(
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
         raise ValueError(msg)
-    if state.orthogonality_center is not None:
-        state.assert_center(0, context="tdvp")
+    _ensure_center_zero(state)
     tdvp_mode = sim_params.tdvp_mode
     if tdvp_mode in {"2site", "dynamic"} and operator.length == 1:
         tdvp_mode = "1site"
@@ -133,6 +145,7 @@ def evolve_window(
     if state.length < 2:
         msg = "evolve_window requires an MPS window with at least two sites."
         raise ValueError(msg)
+    _ensure_center_zero(state)
     _run_sweeps(
         integrators.sweep_2site,
         state,

@@ -100,6 +100,43 @@ def random_mps(
     return mps
 
 
+def _fallback_state(*, known_gauge: bool) -> MPS:
+    """Return one non-unit state with a known or genuinely unknown gauge.
+
+    Args:
+        known_gauge: Whether to keep the mixed-canonical center metadata.
+
+    Returns:
+        A deterministic three-site MPS with norm below one.
+    """
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)], seed=20260901)
+    state.tensors[0] *= 0.73
+    if not known_gauge:
+        before = state.to_vec()
+        gauge = np.array([[0.4, 0.3], [0.0, 1.7]], dtype=np.complex128)
+        state.tensors[1] = np.einsum("plr,rs->pls", state.tensors[1], gauge)
+        state.tensors[2] = np.einsum("ab,pbr->par", np.linalg.inv(gauge), state.tensors[2])
+        state.set_center(None)
+        np.testing.assert_allclose(state.to_vec(), before, atol=1e-12)
+        assert not state.check_canonical_form()
+    return state
+
+
+def _normalized_dense_direction(state: MPS) -> NDArray[np.complex128]:
+    """Return a normalized dense vector with a fixed global phase.
+
+    Args:
+        state: MPS to convert.
+
+    Returns:
+        The normalized dense state with its largest component made real.
+    """
+    vector = state.to_vec()
+    vector /= np.linalg.norm(vector)
+    pivot = int(np.argmax(np.abs(vector)))
+    return vector * np.exp(-1j * np.angle(vector[pivot]))
+
+
 def test_calculate_stochastic_factor_zero_norm() -> None:
     """Test that the stochastic factor is zero for a norm-1 state at site 0.
 
@@ -488,59 +525,102 @@ def test_stochastic_process_jump_independent_of_process_order_mixed_channels() -
         np.testing.assert_allclose(a, b)
 
 
-def test_stochastic_process_no_jump_unknown_gauge() -> None:
-    """A no-jump path with unknown gauge re-canonicalizes the MPS at site 0."""
-    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
-    state.set_center(None)
+@pytest.mark.parametrize("known_gauge", [True, False], ids=["known", "unknown"])
+@pytest.mark.parametrize("fallback", ["no_jump", "empty_probabilities"])
+def test_stochastic_process_fallback_normalizes_without_changing_direction(
+    *,
+    known_gauge: bool,
+    fallback: str,
+) -> None:
+    """Every no-jump fallback normalizes the state and restores a genuine center.
+
+    Args:
+        known_gauge: Whether the input has a tracked canonical center.
+        fallback: No jump or a triggered jump with no applicable process.
+    """
+    state = _fallback_state(known_gauge=known_gauge)
+    before = _normalized_dense_direction(state)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
-    new_state = stochastic_process(state, None, dt=0.1, sim_params=sim_params)
+    if fallback == "no_jump":
+        new_state = stochastic_process(state, None, dt=0.1, sim_params=sim_params)
+    else:
+        noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
+        with patch(
+            "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
+            return_value=([], []),
+        ):
+            new_state = stochastic_process(
+                state,
+                noise_model,
+                0.1,
+                sim_params,
+                rng=_always_jump_rng(),
+            )
 
+    assert float(new_state.norm()) == pytest.approx(1.0, abs=1e-12)
+    np.testing.assert_allclose(_normalized_dense_direction(new_state), before, atol=1e-12)
     assert new_state.orthogonality_center == 0
+    assert 0 in new_state.check_canonical_form()
 
 
-def test_stochastic_process_empty_probabilities_after_jump() -> None:
-    """A triggered jump with no applicable processes recenters at site 0 without applying a jump."""
-    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
-    state.tensors[0] *= 0.99
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
+@pytest.mark.parametrize("known_gauge", [True, False], ids=["known", "unknown"])
+@pytest.mark.parametrize("fallback", ["no_jump", "empty_probabilities"])
+def test_stochastic_process_fallback_rejects_zero_state(
+    *,
+    known_gauge: bool,
+    fallback: str,
+) -> None:
+    """A fallback never replaces an invalid zero state with an arbitrary state.
+
+    Args:
+        known_gauge: Whether the zero state starts with tracked center metadata.
+        fallback: No jump or a triggered jump with no applicable process.
+    """
+    state = MPS(3, state="zeros")
+    state.tensors[0] *= 0
+    if not known_gauge:
+        state.set_center(None)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
-    state_copy = copy.deepcopy(state)
 
-    with patch(
-        "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
-        return_value=([], []),
-    ):
-        new_state = stochastic_process(
-            state_copy,
-            noise_model,
-            0.1,
-            sim_params,
-            rng=_always_jump_rng(),
-        )
-    assert new_state.orthogonality_center == 0
+    def run_fallback() -> None:
+        """Run the selected fallback path."""
+        if fallback == "no_jump":
+            stochastic_process(state, None, dt=0.1, sim_params=sim_params)
+        else:
+            noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
+            with patch(
+                "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
+                return_value=([], []),
+            ):
+                stochastic_process(
+                    state,
+                    noise_model,
+                    0.1,
+                    sim_params,
+                    rng=_always_jump_rng(),
+                )
+
+    with pytest.raises(ValueError, match="zero or non-finite"):
+        run_fallback()
+
+    assert state.norm() == 0
+    np.testing.assert_array_equal(state.to_vec(), np.zeros(2**state.length))
+    assert state.orthogonality_center == 0
+    assert 0 in state.check_canonical_form()
 
 
-def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
-    """Empty jump probabilities canonicalize at site 0 when the gauge is unknown."""
-    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
-    state.tensors[0] *= 0.99
-    state.set_center(None)
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.0}])
+def test_stochastic_process_no_noise_normalizes_large_finite_state() -> None:
+    """The no-noise fallback scales large finite amplitudes without overflow."""
+    tensor = np.array([1e308, 1e308], dtype=np.complex128).reshape(2, 1, 1)
+    state = MPS(1, tensors=[tensor])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
-    with patch(
-        "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
-        return_value=([], []),
-    ):
-        new_state = stochastic_process(
-            state,
-            noise_model,
-            0.1,
-            sim_params,
-            rng=_always_jump_rng(),
-        )
-    assert new_state.orthogonality_center == 0
+    result = stochastic_process(state, None, dt=0.1, sim_params=sim_params)
+
+    np.testing.assert_allclose(result.to_vec(), np.full(2, 1 / np.sqrt(2)))
+    assert result.norm() == pytest.approx(1.0)
+    assert result.orthogonality_center == 0
 
 
 def test_create_probability_distribution_non_pauli_longrange_raises() -> None:
@@ -595,6 +675,59 @@ def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
     )
     assert new_state.orthogonality_center == 0
     assert any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
+
+
+@pytest.mark.parametrize("max_bond_dim", [1, None], ids=["capped", "uncapped"])
+@pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
+def test_stochastic_adjacent_jump_is_gauge_independent(max_bond_dim: int | None, *, known_gauge: bool) -> None:
+    """A forced identity jump matches a centered Schmidt split.
+
+    Args:
+        max_bond_dim: Optional bond-dimension cap for the jump split.
+        known_gauge: Whether the off-pair center remains tracked.
+    """
+    shapes = [(2, 1, 2), (2, 2, 4), (2, 4, 2), (2, 2, 1)]
+    state = random_mps(shapes, normalize=False, seed=20260901)
+    state.normalize("B", decomposition="SVD")
+    state.tensors[0] *= 0.5
+    expected = copy.deepcopy(state)
+    if not known_gauge:
+        state.shift_center_to(3)
+        state.set_center(None)
+    sim_params = AnalogSimParams(
+        get_state=True,
+        elapsed_time=0.0,
+        max_bond_dim=max_bond_dim,
+        svd_threshold=0.0,
+    )
+
+    merged = merge_two_site(expected.tensors[0], expected.tensors[1])
+    left, right = split_two_site(
+        merged,
+        [2, 2],
+        svd_distribution="right",
+        trunc_mode=sim_params.trunc_mode,
+        threshold=sim_params.svd_threshold,
+        max_bond_dim=sim_params.max_bond_dim,
+    )
+    expected.tensors[0], expected.tensors[1] = left, right
+    expected.update_center_after_split(0, 1, "right")
+    expected.normalize("B", decomposition="SVD")
+
+    noise_model = NoiseModel([
+        {"name": "identity", "sites": [0, 1], "strength": 1.0, "matrix": np.eye(4)},
+    ])
+    stochastic_process(state, noise_model, 1.0, sim_params, rng=_always_jump_rng())
+
+    expected_vec = expected.to_vec()
+    actual_vec = state.to_vec()
+    expected_vec /= np.linalg.norm(expected_vec)
+    actual_vec /= np.linalg.norm(actual_vec)
+    assert float(abs(np.vdot(expected_vec, actual_vec)) ** 2) == pytest.approx(1.0, abs=1e-12)
+    assert state.orthogonality_center == 0
+    assert state.orthogonality_center in state.check_canonical_form()
+    if max_bond_dim is not None:
+        assert state.tensors[0].shape[2] <= max_bond_dim
 
 
 def test_stochastic_process_longrange_pauli_jump() -> None:

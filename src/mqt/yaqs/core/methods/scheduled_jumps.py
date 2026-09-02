@@ -67,7 +67,7 @@ def apply_scheduled_jumps(
 
     Raises:
         ValueError: If a two-site jump acts on non-adjacent sites, or if a matched
-            jump produces a zero or non-finite squared norm.
+            jump produces a zero or non-finite state norm.
     """
     if noise_model is None or not noise_model.scheduled_jumps:
         return state
@@ -92,6 +92,13 @@ def apply_scheduled_jumps(
                     )
                     raise ValueError(msg)
 
+                # A split can record a pair center only when the surrounding gauge is canonical.
+                if not state.check_covers_sites([i, j]):
+                    if state.orthogonality_center is None:
+                        state.set_canonical_form(i)
+                    else:
+                        state.shift_center_to(i if state.orthogonality_center < i else j)
+
                 merged = merge_two_site(state.tensors[i], state.tensors[j])
                 merged = oe.contract("ab, bcd->acd", jump_op, merged)
                 tensor_left_new, tensor_right_new = split_two_site(
@@ -108,12 +115,11 @@ def apply_scheduled_jumps(
     if not applied:
         return state
 
-    post_squared_norm = float(state.norm() ** 2)
-    if not np.isfinite(post_squared_norm) or post_squared_norm <= 0.0:
-        msg = (
-            "Scheduled jump produced a zero or non-finite squared norm "
-            f"(squared_norm={post_squared_norm}). The jump operator annihilates the current state."
-        )
-        raise ValueError(msg)
-    state.normalize("B")
+    center = state.orthogonality_center
+    if center is None:
+        state.normalize("B")
+    else:
+        state.normalize_center()
+        if center != 0:
+            state.shift_center_to(0)
     return state

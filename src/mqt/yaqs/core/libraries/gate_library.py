@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
     """Splits a multi-qubit gate tensor into one tensor per site using Singular Value Decomposition (SVD).
 
+    Only round-off-level singular values are discarded, so a weakly entangling gate keeps its full
+    operator-Schmidt rank; truncation to a simulation tolerance happens later, in the state gauge.
+
     Args:
         tensor: A gate tensor of shape ``(2,) * (2 * n)`` for ``n >= 2`` sites, with index
             order ``(out_1, ..., out_n, in_1, ..., in_n)``.
@@ -50,7 +53,8 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     remaining = np.reshape(matrix, (left_bond * 4, 4 ** (num_sites - 1)))
     for _ in range(num_sites - 1):
         u_mat, s_list, v_mat = linalg.svd(remaining, full_matrices=False)
-        keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+        # Relative 1e-12 is a round-off floor, not a simulation tolerance.
+        keep = linalg.truncate(s_list, mode="relative", threshold=1e-12, min_keep=1)
         s_list = s_list[:keep]
         u_mat = u_mat[:, :keep]
         v_mat = v_mat[:keep, :]
