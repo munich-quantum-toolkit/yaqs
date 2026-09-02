@@ -51,7 +51,7 @@ releases may include breaking changes.
 
 ### Fixed
 
-- fixed silent deletion of small-angle long-range gates in gate-MPO construction
+- fixed small-angle cutoff in MPO rotation gates
   ([#569]) ([**@Pouri96**])
 - stabilize digital TDVP by pruning null bond directions ([#567])
   ([**@aaronleesander**])
