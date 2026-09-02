@@ -30,8 +30,8 @@ releases may include breaking changes.
 
 ### Changed
 
-- removed redundant center shifting in long-range TEBD swaps
-  ([#571]) ([**@Pouri96**])
+- removed redundant center shifting in long-range TEBD swaps ([#571])
+  ([**@Pouri96**])
 - shifted the orthogonality center left without flipping the network ([#574])
   ([**@Pouri96**])
 - localized long-range MPO gate application ([#564]) ([**@Pouri96**])
