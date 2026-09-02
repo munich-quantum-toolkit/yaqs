@@ -56,6 +56,7 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed small-angle cutoff in MPO rotation gates ([#569]) ([**@Pouri96**])
 - fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
   ([#561]) ([**@Pouri96**])
 - stabilize digital TDVP by pruning null bond directions ([#567])
@@ -265,6 +266,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#569]: https://github.com/munich-quantum-toolkit/yaqs/pull/569
 [#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575
 [#574]: https://github.com/munich-quantum-toolkit/yaqs/pull/574
 [#564]: https://github.com/munich-quantum-toolkit/yaqs/pull/564

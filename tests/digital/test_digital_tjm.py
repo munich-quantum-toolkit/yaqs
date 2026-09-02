@@ -1707,6 +1707,29 @@ def test_lr_modes_fid_cap(gate_mode: str) -> None:
     assert_mps_bond_invariants(out, max_bond_dim=8)
 
 
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+@pytest.mark.parametrize("theta", [1e-6, 1e-8])
+def test_lr_small_angle_gate_survives_gate_mpo(theta: float, gate_mode: str) -> None:
+    """A long-range rzz with a tiny angle must still act on the state in every gate mode.
+
+    The two rzz gates compose to a single rotation by ``pi / 2 + theta`` on the pair, so the state is
+    ``cos(x)|+...+> - i sin(x) Z_0 Z_5|+...+>`` with ``x = (pi / 2 + theta) / 2`` and every Schmidt
+    value in the span equals ``cos(x)`` or ``sin(x)``, both close to ``1 / sqrt(2)``. No truncation
+    setting can drop either one, so the gate MPO is the only place the rotation can be lost, and
+    ``<X_0> = cos(pi / 2 + theta) = -sin(theta)`` exactly.
+    """
+    length = 8
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(np.pi / 2, 0, 5)
+    qc.rzz(theta, 0, 5)
+
+    params = DigitalSimParams(observables=[Observable(X(), 0)], gate_mode=cast("GateMode", gate_mode))
+    result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
+
+    assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(-np.sin(theta), abs=1e-12)
+
+
 def test_zip_lr_vs_tdvp() -> None:
     """Long-range gates use MPO mode and match full-tdvp."""
     qc = QuantumCircuit(4)

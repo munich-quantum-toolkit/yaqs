@@ -188,6 +188,75 @@ def test_split_tensor_three_site_round_trip() -> None:
     assert_allclose(_mpo_train_to_matrix(tensors), unitary, atol=1e-12)
 
 
+@pytest.mark.parametrize("name", ["rzz", "cp"])
+@pytest.mark.parametrize("theta", [1e-6, 1e-8])
+def test_split_tensor_keeps_small_angle_entanglement(name: str, theta: float) -> None:
+    """Test that a weakly entangling two-qubit gate keeps its operator-Schmidt rank of two.
+
+    ``rzz(theta)`` has operator-Schmidt values ``{2 cos(theta/2), 2 sin(theta/2)}`` and ``cp(theta)``
+    has ``{2 cos(theta/4), 2 sin(theta/4)}``, so the entangling value lies between 2.5e-9 and 1e-6
+    here: far above SVD round-off, and therefore not the split's to discard.
+    """
+    gate = getattr(GateLibrary, name)([theta])
+    gate.set_sites(0, 1)
+
+    tensors = split_tensor(gate.tensor)
+
+    assert [tensor.shape for tensor in tensors] == [(2, 2, 1, 2), (2, 2, 2, 1)]
+    assert_allclose(_mpo_train_to_matrix(tensors), gate.matrix, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("name", "params", "expected_bonds"),
+    [
+        ("cx", None, [2]),
+        ("cz", None, [2]),
+        ("swap", None, [4]),
+        ("rxx", [0.7], [2]),
+        ("ryy", [0.7], [2]),
+        ("rzz", [0.7], [2]),
+        ("cp", [0.7], [2]),
+        ("ccx", None, [2, 2]),
+        ("ccz", None, [2, 2]),
+        ("cswap", None, [2, 4]),
+    ],
+)
+def test_split_tensor_bonds_match_operator_schmidt_rank(
+    name: str, params: list[float] | None, expected_bonds: list[int]
+) -> None:
+    """Test that library gates split at their exact operator-Schmidt rank, with no round-off bonds.
+
+    The bond dimensions are pinned as integers so that lowering the split cutoff cannot inflate the
+    gate MPOs: every discarded singular value has to be an exact or round-off zero.
+    """
+    gate = getattr(GateLibrary, name)(params) if params else getattr(GateLibrary, name)()
+    gate.set_sites(*range(gate.interaction))
+
+    tensors = split_tensor(gate.tensor)
+
+    assert [tensor.shape[3] for tensor in tensors[:-1]] == expected_bonds
+    assert tensors[-1].shape[3] == 1
+    assert_allclose(_mpo_train_to_matrix(tensors), gate.matrix, atol=1e-12)
+
+
+def test_split_tensor_ignores_round_off_at_max_arity() -> None:
+    """Test that an eight-qubit product operator splits at bond one at every cut.
+
+    A tensor product of single-qubit gates has operator-Schmidt rank one everywhere. Eight qubits is
+    the ceiling of the dense matrix fallback, where the gate tensor has Frobenius norm 16 and its
+    SVDs carry the most round-off; any bond above one means the cutoff has sunk into that noise.
+    """
+    rng = np.random.default_rng(0)
+    product = _haar_unitary(2, rng)
+    for _ in range(7):
+        product = np.asarray(np.kron(product, _haar_unitary(2, rng)), dtype=np.complex128)
+
+    tensors = split_tensor(product.reshape((2,) * 16))
+
+    assert [tensor.shape[3] for tensor in tensors] == [1] * 8
+    assert_allclose(_mpo_train_to_matrix(tensors), product, atol=1e-12)
+
+
 def test_extend_gate_three_site_with_identity() -> None:
     """Test extend_gate for a three-qubit gate with gaps between the sites.
 
