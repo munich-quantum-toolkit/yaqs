@@ -380,7 +380,8 @@ def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Ob
         user_i, obs = pair
         sites = obs.sites
         site = sites[0] if isinstance(sites, list) else sites
-        assert isinstance(site, int)
+        if site is None:
+            return (-1, user_i)
         return (site, user_i)
 
     sorted_pairs = sorted(sortable, key=_site_sort_key) + pvm_pairs

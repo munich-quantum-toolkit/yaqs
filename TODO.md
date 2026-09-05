@@ -80,31 +80,31 @@ match the state length and each local dimension.
 
 ## 2. Build and validate operator MPOs
 
-- [ ] Define and document matrix basis order, site-list order, and MPO tensor
+- [x] Define and document matrix basis order, site-list order, and MPO tensor
       order before implementing conversions. Preserve supported local
       conventions. Handle reversed sites by permuting operator axes with the
       sites.
-- [ ] Resolve system-dependent dimensions when preparing a run. Validate site
+- [x] Resolve system-dependent dimensions when preparing a run. Validate site
       bounds, duplicate sites, matrix sizes, and physical dimensions before
       workers start. Direct measurement calls must perform equivalent
       validation.
-- [ ] Build compact MPOs for named and custom operators. Insert identity tensors
+- [x] Build compact MPOs for named and custom operators. Insert identity tensors
       across gaps for operators on nonadjacent sites. Avoid allocating a
       separate full-chain MPO for every local observable.
-- [ ] Accept existing MPO objects and add `Observable.from_pauli_sum(...)` using
+- [x] Accept existing MPO objects and add `Observable.from_pauli_sum(...)` using
       the existing MPO builders where their contracts fit. Validate Hermiticity
       of the represented sum.
-- [ ] Validate supplied MPO tensors, finite values, boundary bonds, neighboring
+- [x] Validate supplied MPO tensors, finite values, boundary bonds, neighboring
   bond dimensions, and square physical legs.
-- [ ] Check Hermiticity of the complete MPO through tensor contractions without
+- [x] Check Hermiticity of the complete MPO through tensor contractions without
   constructing a full Hilbert-space matrix. Do not require each tensor to be
   Hermitian. Specify scale-aware tolerances and handle zero operators.
-- [ ] Avoid silent observable truncation. Audit default cutoffs in reused MPO
+- [x] Avoid silent observable truncation. Audit default cutoffs in reused MPO
   builders and make any approximation explicit.
-- [ ] Copy caller-owned matrices and MPOs. Keep prepared operator data
+- [x] Copy caller-owned matrices and MPOs. Keep prepared operator data
       consistent when observables are reused with different states or simulation
       parameters.
-- [ ] Test conversions against independent small dense operators. Include
+- [x] Test conversions against independent small dense operators. Include
   asymmetric operators, complex Hermitian matrices, nonadjacent and reversed
   sites, mixed local dimensions, and malformed MPOs.
 

@@ -12,8 +12,46 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.libraries.gate_library import BaseGate
+
+
+def _embed_dense_on_support(
+    operator: np.ndarray,
+    sites: list[int],
+    physical_dimensions: list[int],
+) -> np.ndarray:
+    """Embed an operator by explicit computational-basis enumeration.
+
+    Args:
+        operator: Matrix in the tensor-factor order given by ``sites``.
+        sites: Full-chain target sites.
+        physical_dimensions: Full-chain local dimensions in site order.
+
+    Returns:
+        Dense matrix on the smallest contiguous interval containing ``sites``.
+    """
+    first_site = min(sites)
+    last_site = max(sites)
+    span_dimensions = physical_dimensions[first_site : last_site + 1]
+    active_dimensions = [physical_dimensions[site] for site in sites]
+    dimension = int(np.prod(span_dimensions))
+    embedded = np.zeros((dimension, dimension), dtype=np.complex128)
+    site_offsets = [site - first_site for site in sites]
+    spectator_offsets = [offset for offset in range(len(span_dimensions)) if offset not in site_offsets]
+    for row in range(dimension):
+        row_digits = np.unravel_index(row, span_dimensions)
+        active_row = np.ravel_multi_index(tuple(row_digits[offset] for offset in site_offsets), active_dimensions)
+        for column in range(dimension):
+            column_digits = np.unravel_index(column, span_dimensions)
+            if any(row_digits[offset] != column_digits[offset] for offset in spectator_offsets):
+                continue
+            active_column = np.ravel_multi_index(
+                tuple(column_digits[offset] for offset in site_offsets), active_dimensions
+            )
+            embedded[row, column] = operator[active_row, active_column]
+    return embedded
 
 
 def test_named_observable_stores_operator_metadata() -> None:
@@ -166,3 +204,138 @@ def test_bitstring_observable_rejects_sites() -> None:
     """A bitstring defines its full support and does not accept sites."""
     with pytest.raises(TypeError, match="do not accept sites"):
         Observable("10101", sites=0)
+
+
+def test_prepare_builds_compact_nonadjacent_mpo() -> None:
+    """A local matrix produces an MPO only on its contiguous support interval."""
+    rng = np.random.default_rng(12)
+    raw = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    matrix = np.asarray(raw + raw.conj().T, dtype=np.complex128)
+    dimensions = [2, 3, 2, 4]
+
+    prepared = Observable(matrix, [0, 2]).prepare(4, dimensions)
+
+    assert prepared.mpo is not None
+    assert prepared.mpo_sites == (0, 1, 2)
+    assert prepared.mpo.length == 3
+    expected = _embed_dense_on_support(matrix, [0, 2], dimensions)
+    np.testing.assert_allclose(prepared.mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_prepare_keeps_long_range_pauli_product_bond_one() -> None:
+    """Named Pauli products carry a bond-one identity channel across gaps."""
+    prepared = Observable("zz", [0, 5]).prepare(6)
+
+    assert prepared.mpo is not None
+    assert prepared.mpo_sites == tuple(range(6))
+    assert all(tensor.shape[2:] == (1, 1) for tensor in prepared.mpo.tensors)
+    z_matrix = np.diag([1.0, -1.0])
+    expected = np.kron(z_matrix, np.kron(np.eye(16), z_matrix))
+    np.testing.assert_allclose(prepared.mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_prepare_permuted_reversed_sites_with_mixed_dimensions() -> None:
+    """Matrix factors follow the user site list and MPO tensors follow chain order."""
+    rng = np.random.default_rng(13)
+    raw = rng.normal(size=(6, 6)) + 1j * rng.normal(size=(6, 6))
+    matrix = np.asarray(raw + raw.conj().T, dtype=np.complex128)
+    dimensions = [3, 4, 2]
+
+    observable = Observable(matrix, [2, 0])
+    prepared = observable.prepare(3, dimensions)
+
+    assert prepared.mpo is not None
+    assert prepared.mpo_sites == (0, 1, 2)
+    expected = _embed_dense_on_support(matrix, [2, 0], dimensions)
+    np.testing.assert_allclose(prepared.mpo.to_matrix(), expected, atol=1e-12)
+    assert observable.mpo is None
+    assert observable.sites == [2, 0]
+
+
+def test_prepare_rejects_invalid_support_and_dimensions() -> None:
+    """Preparation validates duplicate sites, bounds, and matrix dimensions."""
+    with pytest.raises(ValueError, match="must be distinct"):
+        Observable(np.eye(4), [0, 0]).prepare(2)
+    with pytest.raises(ValueError, match="outside the state"):
+        Observable("z", 2).prepare(2)
+    with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
+        Observable(np.eye(4), [0, 1]).prepare(2, [3, 2])
+
+
+def test_prepare_rejects_wrong_bitstring_length() -> None:
+    """Bitstring length is checked against the state before execution."""
+    with pytest.raises(ValueError, match="does not match state length"):
+        Observable("01").prepare(3)
+
+
+def test_observable_accepts_and_copies_full_chain_mpo() -> None:
+    """A supplied MPO is copied and checked against the prepared state layout."""
+    matrix = np.kron(np.diag([1.0, 0.0, -2.0]), np.array([[0.0, 1.0], [1.0, 0.0]]))
+    source = MPO.from_matrix_with_dimensions(matrix, [3, 2])
+
+    observable = Observable(source)
+    source.tensors[0].fill(0)
+    prepared = observable.prepare(2, [3, 2])
+
+    assert prepared.mpo is not None
+    assert prepared.mpo_sites == (0, 1)
+    np.testing.assert_allclose(prepared.mpo.to_matrix(), matrix, atol=1e-12)
+
+
+def test_full_chain_mpo_rejects_sites_and_state_mismatch() -> None:
+    """Full-chain MPOs define their sites and physical dimensions themselves."""
+    mpo = MPO.identity(2)
+    with pytest.raises(TypeError, match="do not accept sites"):
+        Observable(mpo, sites=[0, 1])
+
+    observable = Observable(mpo)
+    with pytest.raises(ValueError, match="length 2 does not match state length 3"):
+        observable.prepare(3)
+    with pytest.raises(ValueError, match="do not match state dimensions"):
+        observable.prepare(2, [2, 3])
+
+
+def test_observable_rejects_non_hermitian_mpo() -> None:
+    """Complete-MPO Hermiticity is required at construction."""
+    lowering = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
+    with pytest.raises(ValueError, match="MPO must be Hermitian"):
+        Observable(MPO.from_local_ops([lowering]))
+
+
+def test_pauli_sum_is_exact_and_requires_hermiticity() -> None:
+    """Pauli sums retain weak terms and reject complex non-Hermitian coefficients."""
+    observable = Observable.from_pauli_sum(
+        terms=[(1.0, "Z0 Z2"), (1e-18, "X1")],
+        length=3,
+    )
+    prepared = observable.prepare(3)
+    assert prepared.mpo is not None
+    expected = np.kron(np.diag([1.0, -1.0]), np.kron(np.eye(2), np.diag([1.0, -1.0])))
+    expected += 1e-18 * np.kron(np.eye(2), np.kron(np.array([[0.0, 1.0], [1.0, 0.0]]), np.eye(2)))
+    np.testing.assert_allclose(prepared.mpo.to_matrix(), expected, rtol=0.0, atol=1e-30)
+
+    with pytest.raises(ValueError, match="MPO must be Hermitian"):
+        Observable.from_pauli_sum(terms=[(1j, "Z0")], length=1)
+
+
+def test_zero_pauli_sum_is_hermitian() -> None:
+    """The empty Pauli sum creates a valid zero observable."""
+    observable = Observable.from_pauli_sum(terms=[], length=2)
+    prepared = observable.prepare(2)
+
+    assert prepared.mpo is not None
+    np.testing.assert_array_equal(prepared.mpo.to_matrix(), np.zeros((4, 4)))
+
+
+def test_prepare_does_not_cache_state_layout_on_source() -> None:
+    """One observable can be prepared for different compatible state layouts."""
+    observable = Observable(np.eye(2), 0)
+
+    first = observable.prepare(2, [2, 3])
+    second = observable.prepare(3, [2, 4, 5])
+
+    assert observable.prepared_length is None
+    assert observable.mpo is None
+    assert first.prepared_dimensions == (2, 3)
+    assert second.prepared_dimensions == (2, 4, 5)
+    assert first.mpo is not second.mpo

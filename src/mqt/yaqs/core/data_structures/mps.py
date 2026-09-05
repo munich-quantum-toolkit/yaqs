@@ -1238,6 +1238,7 @@ class MPS:
             If the tracked center does not cover ``sites``, one copy is shifted or
             canonicalized. The original MPS is not modified.
         """
+        operator = operator.prepare(self.length, self.physical_dimensions)
         if operator.sites is None or operator.matrix is None:
             msg = "Local expectation requires an operator with explicit sites."
             raise ValueError(msg)
@@ -1318,6 +1319,7 @@ class MPS:
             the canonical form, so this method marks the orthogonality center as
             unknown after changing the tensors.
         """
+        observable = observable.prepare(self.length, self.physical_dimensions)
 
         def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
             """Permute wrap gate from |q_{L-1}, q_0> to merged |q_0, q_{L-1}> ordering.
@@ -1461,7 +1463,8 @@ class MPS:
             full contraction when the gauge is unknown (``None``).
         """
         temp_state = copy.deepcopy(self)
-        for obs_index, observable in enumerate(sim_params.sorted_observables):
+        for obs_index, source_observable in enumerate(sim_params.sorted_observables):
+            observable = source_observable.prepare(self.length, self.physical_dimensions)
             if observable.kind == "diagnostic":
                 assert isinstance(observable.sites, list), "Given metric requires a list of sites"
                 assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
@@ -1522,6 +1525,7 @@ class MPS:
             known but misaligned; falls back to full contraction when the gauge is
             unknown (``None``).
         """
+        observable = observable.prepare(self.length, self.physical_dimensions)
         sites_list = None
         if isinstance(observable.sites, int):
             sites_list = [observable.sites]

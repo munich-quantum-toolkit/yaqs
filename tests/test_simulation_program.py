@@ -628,6 +628,18 @@ def test_program_executor_rejects_corrupted_private_instructions() -> None:
         _compile_program(program, state)
 
 
+def test_program_compilation_prepares_observables_for_state_layout() -> None:
+    """Program compilation rejects invalid observable support before workers start."""
+    state = State(2, initial="zeros")
+    program = SimulationProgram(
+        [(QuantumCircuit(2), DigitalSimParams())],
+        observables=[Observable("z", 2)],
+    )
+
+    with pytest.raises(ValueError, match="outside the state of length 2"):
+        _compile_program(program, state)
+
+
 def test_program_executor_requires_propagated_segment_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """A backend that omits state handoff fails at the segment boundary."""
     state = State(2, initial="zeros")

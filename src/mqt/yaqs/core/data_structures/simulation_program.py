@@ -22,7 +22,7 @@ from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
-from .observable import Observable
+from .observable import Observable, prepare_observables
 from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode
 
 if TYPE_CHECKING:
@@ -712,6 +712,9 @@ def _compile_program(
     num_traj = _resolve_program_num_traj(program)
     random_seed = program.random_seed
     observables = program.observables
+    prepared_observables = tuple(
+        prepare_observables(observables, signature.length, list(signature.physical_dimensions))
+    )
 
     for index, segment in enumerate(program.segments):
         resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model
@@ -724,7 +727,7 @@ def _compile_program(
                 signature=signature,
                 noise_model=resolved_noise_model,
                 time_offset=time_offset,
-                observables=observables,
+                observables=prepared_observables,
                 num_traj=num_traj,
                 random_seed=random_seed,
             )
@@ -739,7 +742,7 @@ def _compile_program(
                 signature=signature,
                 noise_model=resolved_noise_model,
                 time_offset=time_offset,
-                observables=observables,
+                observables=prepared_observables,
                 num_traj=num_traj,
                 random_seed=random_seed,
             )

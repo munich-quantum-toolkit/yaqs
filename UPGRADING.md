@@ -15,6 +15,11 @@ binary bitstring. Observable instances expose `name`, `matrix`, `sites`,
 attribute. Named gate operations that are not Hermitian are no longer valid
 observables.
 
+Custom matrices now use the tensor-factor order in `sites`. Supplied MPOs act on
+the full chain, and `Observable.from_pauli_sum(...)` constructs full-chain Pauli
+sums. YAQS validates site bounds, local dimensions, MPO structure, and complete
+operator Hermiticity before simulation workers start.
+
 ### Added: direct probabilities for noisy equivalence checks
 
 `EquivalenceChecker.check(..., noise_model=...)` interprets each resolved

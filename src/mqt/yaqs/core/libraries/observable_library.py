@@ -44,26 +44,43 @@ class ObservableDefinition:
         matrix: Local operator matrix, or ``None`` for a state diagnostic.
         interaction: Number of sites used by a local operator.
         kind: Whether the definition is an operator or a state diagnostic.
+        factors: Optional product factors in public site-list order.
     """
 
     name: str
     matrix: NDArray[np.complex128] | None
     interaction: int
     kind: ObservableKind = "operator"
+    factors: tuple[NDArray[np.complex128], ...] | None = None
 
 
-def _operator(name: str, matrix: ArrayLike, interaction: int) -> ObservableDefinition:
+def _operator(
+    name: str,
+    matrix: ArrayLike,
+    interaction: int,
+    *,
+    factors: tuple[ArrayLike, ...] | None = None,
+) -> ObservableDefinition:
     """Return an independent operator definition.
 
     Args:
         name: Canonical observable name.
         matrix: Operator matrix.
         interaction: Number of sites on which the matrix acts.
+        factors: Product factors in public site-list order, when available.
 
     Returns:
         A named operator definition.
     """
-    return ObservableDefinition(name, np.array(matrix, dtype=np.complex128, copy=True), interaction)
+    factor_copies = (
+        None if factors is None else tuple(np.array(factor, dtype=np.complex128, copy=True) for factor in factors)
+    )
+    return ObservableDefinition(
+        name,
+        np.array(matrix, dtype=np.complex128, copy=True),
+        interaction,
+        factors=factor_copies,
+    )
 
 
 class ObservableLibrary:
@@ -121,17 +138,17 @@ class ObservableLibrary:
     @staticmethod
     def xx() -> ObservableDefinition:
         """Return the two-site Pauli-XX observable."""
-        return _operator("xx", np.kron(PAULI_X, PAULI_X), 2)
+        return _operator("xx", np.kron(PAULI_X, PAULI_X), 2, factors=(PAULI_X, PAULI_X))
 
     @staticmethod
     def yy() -> ObservableDefinition:
         """Return the two-site Pauli-YY observable."""
-        return _operator("yy", np.kron(PAULI_Y, PAULI_Y), 2)
+        return _operator("yy", np.kron(PAULI_Y, PAULI_Y), 2, factors=(PAULI_Y, PAULI_Y))
 
     @staticmethod
     def zz() -> ObservableDefinition:
         """Return the two-site Pauli-ZZ observable."""
-        return _operator("zz", np.kron(PAULI_Z, PAULI_Z), 2)
+        return _operator("zz", np.kron(PAULI_Z, PAULI_Z), 2, factors=(PAULI_Z, PAULI_Z))
 
     @staticmethod
     def cx() -> ObservableDefinition:

@@ -101,6 +101,7 @@ from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mps import MPS
 from .core.data_structures.noise_model import validate_noise_model_for_run
+from .core.data_structures.observable import prepare_observables
 from .core.data_structures.result import (
     Result,
     aggregate_counts,
@@ -916,16 +917,25 @@ def _allocate_program_segment_results(
 
 def _worker_sim_params(
     sim_params: AnalogSimParams | DigitalSimParams,
+    *,
+    length: int,
+    physical_dimensions: list[int] | int | None,
 ) -> AnalogSimParams | DigitalSimParams:
     """Build worker-visible params that expose sorted observables for measurement.
 
+    Args:
+        sim_params: User-owned simulation parameters.
+        length: Full state length.
+        physical_dimensions: Per-site physical dimensions.
+
     Returns:
-        A deep copy of ``sim_params`` whose observable lists are ordered for worker evaluation.
+        A deep copy whose observables are ordered, validated, and MPO-prepared
+        for worker evaluation.
     """
     worker_params = copy.deepcopy(sim_params)
     # Workers evaluate in sorted order for efficiency; Result retains user order.
     sorted_obs, _ = _prepare_observable_ordering(sim_params.observables)
-    worker_params.observables = [copy.deepcopy(obs) for obs in sorted_obs]
+    worker_params.observables = prepare_observables(sorted_obs, length, physical_dimensions)
     return worker_params
 
 
@@ -1559,7 +1569,14 @@ class Simulator:
             effective_num_traj = sim_params.num_traj
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
-        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params))
+        worker_params = cast(
+            "AnalogSimParams",
+            _worker_sim_params(
+                sim_params,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            ),
+        )
 
         diag_per_traj: NDArray[np.float64] | None = None
         if state_rep == "mps":
@@ -1736,7 +1753,14 @@ class Simulator:
                 num_traj=effective_num_traj,
                 num_mid_measurements=effective_num_mid_measurements,
             )
-            worker_params = cast("DigitalSimParams", _worker_sim_params(sim_params))
+            worker_params = cast(
+                "DigitalSimParams",
+                _worker_sim_params(
+                    sim_params,
+                    length=initial_state.length,
+                    physical_dimensions=initial_state.physical_dimensions,
+                ),
+            )
             if sim_params.sample_layers:
                 worker_params.num_mid_measurements = effective_num_mid_measurements
         else:
@@ -1916,6 +1940,10 @@ class Simulator:
         if any(state.length != operator.length for state in initial_states):
             msg = "All initial states in the list must match the MPO length."
             raise ValueError(msg)
+        first_dimensions = tuple(initial_states[0].physical_dimensions)
+        if any(tuple(state.physical_dimensions) != first_dimensions for state in initial_states[1:]):
+            msg = "All initial states in the list must have the same physical dimensions."
+            raise ValueError(msg)
         if sim_params.get_state:
             msg = "get_state=True is not supported for list[State] analog ensemble mode."
             raise ValueError(msg)
@@ -1923,7 +1951,14 @@ class Simulator:
         effective_num_traj = len(initial_states)
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
-        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params))
+        worker_params = cast(
+            "AnalogSimParams",
+            _worker_sim_params(
+                sim_params,
+                length=initial_states[0].length,
+                physical_dimensions=initial_states[0].physical_dimensions,
+            ),
+        )
         diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         n_pairs = len(sim_params.multi_time_observables)

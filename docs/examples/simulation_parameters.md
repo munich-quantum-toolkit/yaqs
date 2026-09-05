@@ -48,6 +48,45 @@ Named observables that require configuration accept keyword-only factory
 arguments. Missing or unknown arguments raise `TypeError`, so misspelled
 parameters are not silently ignored.
 
+## Operator matrices and MPOs
+
+A custom matrix uses the tensor-factor order in `sites`. The first listed site
+is the most-significant Kronecker factor. YAQS permutes those factors into
+ascending chain order when it prepares the observable. This makes reversed and
+nonadjacent supports explicit:
+
+```python
+import numpy as np
+
+from mqt.yaqs import Observable
+
+matrix = np.kron(np.diag([1, -1]), np.array([[0, 1], [1, 0]]))
+observable = Observable(matrix, sites=[4, 1])
+```
+
+Preparation builds an MPO only on the interval from the smallest to the largest
+target site. Identity tensors carry its virtual bond across any gaps. Each MPO
+tensor uses `(physical output, physical input, left bond, right bond)` axis
+order. Supplied MPOs represent the full chain and do not accept `sites`:
+
+```python
+from mqt.yaqs import MPO, Observable
+
+full_operator = MPO.ising(length=4, J=1.0, g=0.5)
+observable = Observable(full_operator)
+
+pauli_sum = Observable.from_pauli_sum(
+    terms=[(0.5, "Z0 Z3"), (0.2, "X1")],
+    length=4,
+)
+```
+
+YAQS copies caller-owned matrices and MPO tensors. It validates state-dependent
+site bounds and physical dimensions before worker processes start. Matrix and
+MPO observables must satisfy `||O - O†||_F <= 1e-12 + 1e-10 * ||O||_F`. The
+Pauli-sum and local-matrix MPO builders do not apply an SVD cutoff or
+bond-dimension cap.
+
 ## Start with a preset
 
 You do **not** need to tune every numerical knob before running a simulation.

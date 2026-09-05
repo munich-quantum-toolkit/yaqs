@@ -900,6 +900,16 @@ def test_to_mps() -> None:
         bond_in = original_mpo_tensor.shape[2]
         bond_out = original_mpo_tensor.shape[3]
         assert tensor.shape == (pdim2, bond_in, bond_out)
+        assert mps.physical_dimensions[i] == pdim2
+
+
+def test_to_mps_preserves_mixed_local_dimensions() -> None:
+    """MPO-to-MPS conversion records each fused local dimension."""
+    mpo = MPO.from_matrix_with_dimensions(np.eye(12, dtype=complex), [2, 3, 2])
+
+    mps = mpo.to_mps()
+
+    assert mps.physical_dimensions == [4, 9, 4]
 
 
 def test_check_if_valid_mpo() -> None:
@@ -1669,3 +1679,91 @@ def test_to_matrix_mps_order_matches_sparse_asymmetric() -> None:
     np.testing.assert_allclose(dense_mps, expected, atol=1e-12)
     # Historical to_matrix keeps site-0 MSB and disagrees for asymmetric H.
     assert not np.allclose(mpo.to_matrix(), expected, atol=1e-6)
+
+
+def test_from_matrix_with_dimensions_reconstructs_asymmetric_complex_operator() -> None:
+    """Untruncated mixed-dimension factorization preserves the dense matrix."""
+    rng = np.random.default_rng(42)
+    matrix = rng.normal(size=(6, 6)) + 1j * rng.normal(size=(6, 6))
+
+    mpo = MPO.from_matrix_with_dimensions(matrix, [3, 2])
+
+    assert mpo.validate() == (3, 2)
+    np.testing.assert_allclose(mpo.to_matrix(), matrix, atol=2e-14)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "length", "physical_dimension", "match"),
+    [
+        ([], 0, 2, "non-empty list"),
+        ([np.zeros((2, 2, 1))], 1, 2, "rank-4"),
+        ([np.zeros((2, 3, 1, 1))], 1, 2, "equal, nonzero physical legs"),
+        ([np.zeros((2, 2, 2, 1))], 1, 2, "boundary bonds"),
+        (
+            [np.zeros((2, 2, 1, 2)), np.zeros((2, 2, 3, 1))],
+            2,
+            2,
+            "bond mismatch",
+        ),
+        ([np.full((2, 2, 1, 1), np.nan)], 1, 2, "finite values"),
+        ([np.zeros((2, 2, 1, 1))], 2, 2, "length metadata"),
+        ([np.zeros((2, 2, 1, 1))], 1, 3, "physical_dimension metadata"),
+    ],
+)
+def test_validate_rejects_malformed_mpo(
+    tensors: list[np.ndarray],
+    length: int,
+    physical_dimension: int,
+    match: str,
+) -> None:
+    """Strict validation rejects malformed tensors and metadata."""
+    mpo = MPO()
+    mpo.tensors = tensors
+    mpo.length = length
+    mpo.physical_dimension = physical_dimension
+
+    with pytest.raises(ValueError, match=match):
+        mpo.validate()
+
+
+def test_mpo_hermiticity_allows_non_hermitian_gauge_tensors() -> None:
+    """Hermiticity applies to the contracted operator rather than each tensor."""
+    matrix = np.kron(_Z2, _X2) + 0.4 * np.kron(_X2, _Z2)
+    mpo = MPO.from_matrix_with_dimensions(matrix, [2, 2])
+    bond_dimension = mpo.tensors[0].shape[3]
+    gauge = np.diag(np.linspace(1.0j, 2.0j, bond_dimension))
+    inverse = np.linalg.inv(gauge)
+    mpo.tensors[0] = np.einsum("ijla,ab->ijlb", mpo.tensors[0], gauge)
+    mpo.tensors[1] = np.einsum("ab,ijbr->ijar", inverse, mpo.tensors[1])
+
+    assert not np.allclose(mpo.tensors[0], mpo.tensors[0].conj().transpose(1, 0, 2, 3))
+    assert mpo.is_hermitian()
+
+
+def test_mpo_hermiticity_uses_tensor_contractions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermiticity validation does not materialize a dense operator."""
+    mpo = MPO.from_matrix_with_dimensions(np.kron(_Z2, _X2), [2, 2])
+
+    def fail_dense_conversion() -> np.ndarray:
+        pytest.fail("Hermiticity validation must not call to_matrix")
+
+    monkeypatch.setattr(mpo, "to_matrix", fail_dense_conversion)
+
+    assert mpo.is_hermitian()
+
+
+def test_mpo_hermiticity_rejects_non_hermitian_and_accepts_zero() -> None:
+    """The contraction check handles non-Hermitian and zero operators."""
+    lowering = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
+    zero = MPO.from_matrix_with_dimensions(np.zeros((6, 6)), [3, 2])
+
+    assert not MPO.from_local_ops([lowering]).is_hermitian()
+    assert zero.is_hermitian()
+    assert zero.to_sparse_matrix().shape == (6, 6)
+
+
+@pytest.mark.parametrize(("rtol", "atol"), [(-1.0, 0.0), (0.0, -1.0), (np.inf, 0.0), (0.0, np.nan)])
+def test_mpo_hermiticity_rejects_invalid_tolerances(rtol: float, atol: float) -> None:
+    """Hermiticity tolerances must be finite and non-negative."""
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        MPO.identity(1).is_hermitian(rtol=rtol, atol=atol)

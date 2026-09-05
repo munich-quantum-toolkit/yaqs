@@ -394,6 +394,7 @@ def _embed_observable_dense(
         ValueError: If the observable does not define a local operator.
         NotImplementedError: If the observable involves more than 2 sites.
     """
+    obs = obs.prepare(num_sites, physical_dimensions)
     sites = obs.sites
     if isinstance(sites, int):
         sites = [sites]
@@ -479,6 +480,7 @@ def _embed_observable_sparse(
         ValueError: If the observable does not define a local operator.
         NotImplementedError: If the observable involves more than 2 sites.
     """
+    obs = obs.prepare(num_sites, physical_dimensions)
     sites = obs.sites
     if isinstance(sites, int):
         sites = [sites]

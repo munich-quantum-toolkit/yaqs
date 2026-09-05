@@ -100,6 +100,136 @@ class MPO:
     length: int
     physical_dimension: int
 
+    def validate(self) -> tuple[int, ...]:
+        """Validate the complete MPO structure and return its local dimensions.
+
+        Each tensor must use ``(phys_out, phys_in, left_bond, right_bond)``
+        order. Physical legs must be square, neighboring bonds must match, and
+        the two outer bonds must have dimension one.
+
+        Returns:
+            One physical dimension for each MPO site.
+
+        Raises:
+            ValueError: If tensors, metadata, physical legs, bonds, or numeric
+                values are invalid.
+        """
+        tensors = getattr(self, "tensors", None)
+        if not isinstance(tensors, list) or not tensors:
+            msg = "MPO tensors must be a non-empty list."
+            raise ValueError(msg)
+        if getattr(self, "length", None) != len(tensors):
+            msg = f"MPO length metadata must equal the tensor count {len(tensors)}."
+            raise ValueError(msg)
+
+        dimensions: list[int] = []
+        previous_right: int | None = None
+        for site, tensor in enumerate(tensors):
+            if not isinstance(tensor, np.ndarray) or tensor.ndim != 4:
+                shape = getattr(tensor, "shape", None)
+                msg = f"MPO tensor {site} must be a rank-4 NumPy array; got shape {shape}."
+                raise ValueError(msg)
+            phys_out, phys_in, left_bond, right_bond = tensor.shape
+            if phys_out <= 0 or phys_out != phys_in:
+                msg = f"MPO tensor {site} must have equal, nonzero physical legs; got {tensor.shape[:2]}."
+                raise ValueError(msg)
+            if left_bond <= 0 or right_bond <= 0:
+                msg = f"MPO tensor {site} must have nonzero bond dimensions; got {tensor.shape[2:]}."
+                raise ValueError(msg)
+            if previous_right is not None and left_bond != previous_right:
+                msg = f"MPO bond mismatch between sites {site - 1} and {site}: {previous_right} != {left_bond}."
+                raise ValueError(msg)
+            try:
+                finite = bool(np.all(np.isfinite(tensor)))
+            except TypeError as exc:
+                msg = f"MPO tensor {site} must contain numeric values."
+                raise ValueError(msg) from exc
+            if not finite:
+                msg = f"MPO tensor {site} must contain only finite values."
+                raise ValueError(msg)
+            dimensions.append(phys_out)
+            previous_right = right_bond
+
+        if tensors[0].shape[2] != 1 or tensors[-1].shape[3] != 1:
+            msg = f"MPO boundary bonds must have dimension one; got {tensors[0].shape[2]} and {tensors[-1].shape[3]}."
+            raise ValueError(msg)
+        physical_dimension = getattr(self, "physical_dimension", None)
+        if not isinstance(physical_dimension, int) or physical_dimension != dimensions[0]:
+            msg = f"MPO physical_dimension metadata must equal the first local dimension {dimensions[0]}."
+            raise ValueError(msg)
+        return tuple(dimensions)
+
+    def adjoint(self) -> MPO:
+        """Return the Hermitian adjoint without changing this MPO.
+
+        Returns:
+            A copied MPO with conjugated and exchanged physical legs.
+        """
+        self.validate()
+        adjoint = MPO()
+        adjoint.tensors = [
+            np.asarray(np.transpose(np.conj(tensor), (1, 0, 2, 3)), dtype=np.complex128).copy()
+            for tensor in self.tensors
+        ]
+        adjoint.length = self.length
+        adjoint.physical_dimension = self.physical_dimension
+        return adjoint
+
+    def frobenius_norm(self) -> float:
+        """Return the Frobenius norm through an MPO double-layer contraction.
+
+        Returns:
+            ``sqrt(Tr(O† O))`` without constructing a dense operator.
+
+        Raises:
+            RuntimeError: If the contraction has an inconsistent complex or
+                negative residual beyond floating-point roundoff.
+        """
+        self.validate()
+        environment = np.ones((1, 1), dtype=np.complex128)
+        for tensor in self.tensors:
+            environment = oe.contract("ab,ijac,ijbd->cd", environment, np.conj(tensor), tensor)
+        squared_norm = np.complex128(environment[0, 0])
+        scale = max(abs(squared_norm.real), 1.0)
+        tolerance = 100 * np.finfo(np.float64).eps * scale
+        if abs(squared_norm.imag) > tolerance or squared_norm.real < -tolerance:
+            msg = f"MPO Frobenius-norm contraction produced invalid residual {squared_norm}."
+            raise RuntimeError(msg)
+        return math.sqrt(max(float(squared_norm.real), 0.0))
+
+    def is_hermitian(self, *, rtol: float = 1e-10, atol: float = 1e-12) -> bool:
+        """Check complete-MPO Hermiticity through tensor contractions.
+
+        The check evaluates ``||O - O†||_F <= atol + rtol * ||O||_F``. It does
+        not require individual MPO tensors or virtual-bond blocks to be
+        Hermitian.
+
+        Args:
+            rtol: Relative tolerance applied to the MPO Frobenius norm.
+            atol: Absolute tolerance, including for a zero operator.
+
+        Returns:
+            Whether the represented operator is Hermitian within tolerance.
+
+        Raises:
+            ValueError: If a tolerance is negative or non-finite, or the MPO is
+                structurally invalid.
+        """
+        if not np.isfinite(rtol) or not np.isfinite(atol) or rtol < 0 or atol < 0:
+            msg = "Hermiticity tolerances must be finite and non-negative."
+            raise ValueError(msg)
+        self.validate()
+        norm = self.frobenius_norm()
+        tolerance = atol + rtol * norm
+        adjoint = self.adjoint()
+        adjoint.tensors[0] *= -1
+        difference = self + adjoint
+        # Bring the direct-sum difference into a common gauge before measuring
+        # its norm. The cutoff is the declared validation tolerance and changes
+        # only this temporary difference MPO.
+        difference.compress(tol=tolerance, max_bond_dim=None, n_sweeps=2)
+        return difference.frobenius_norm() <= tolerance
+
     def apply_local_operator(
         self,
         site: int,
@@ -1097,6 +1227,7 @@ class MPO:
 
         mpo = cls()
         mpo.custom(tensors, transpose=False)
+        mpo.physical_dimension = mpo.tensors[0].shape[0]
         return mpo
 
     def init_identity(self, length: int, physical_dimension: int = 2) -> None:
@@ -1650,7 +1781,8 @@ class MPO:
             for tensor in self.tensors
         ]
 
-        return MPS(self.length, converted_tensors)
+        physical_dimensions = [tensor.shape[0] * tensor.shape[1] for tensor in self.tensors]
+        return MPS(self.length, converted_tensors, physical_dimensions=physical_dimensions)
 
     def _compute_bond_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
         """Return operator Schmidt singular values across a nearest-neighbor bond."""
@@ -1805,8 +1937,6 @@ class MPO:
         Returns:
             The sparse matrix representation of the MPO in CSR format.
         """
-        d = self.physical_dimension
-
         current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
 
         for tensor in self.tensors:
@@ -1845,10 +1975,87 @@ class MPO:
         # Final result should be in current_operators[0] because the last bond dim is 1
         if 0 not in current_operators:
             # Should practically not happen for valid MPOs unless it's a zero operator
-            dim = d**self.length
+            dim = math.prod(tensor.shape[0] for tensor in self.tensors)
             return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
 
         return current_operators[0]
+
+    @classmethod
+    def from_matrix_with_dimensions(
+        cls,
+        matrix: np.ndarray,
+        physical_dimensions: Sequence[int],
+    ) -> MPO:
+        """Factor a dense matrix into an MPO without truncation.
+
+        The dense matrix uses Kronecker-product basis order: the first entry in
+        ``physical_dimensions`` is the most-significant tensor factor. The
+        factorization keeps every singular direction returned by the SVD. It
+        therefore applies no cutoff or bond-dimension cap.
+
+        Args:
+            matrix: Square operator matrix with dimension equal to the product
+                of ``physical_dimensions``.
+            physical_dimensions: Ordered local dimensions for the operator.
+
+        Returns:
+            An exact, up to floating-point factorization, MPO in
+            ``(phys_out, phys_in, left_bond, right_bond)`` tensor order.
+
+        Raises:
+            ValueError: If the dimensions or matrix shape and values are invalid.
+        """
+        dimensions = tuple(physical_dimensions)
+        if not dimensions:
+            msg = "physical_dimensions must contain at least one site."
+            raise ValueError(msg)
+        if any(
+            isinstance(dimension, bool) or not isinstance(dimension, int) or dimension <= 0 for dimension in dimensions
+        ):
+            msg = f"physical_dimensions must contain positive integers; got {dimensions}."
+            raise ValueError(msg)
+
+        operator = np.asarray(matrix, dtype=np.complex128)
+        expected_dimension = math.prod(dimensions)
+        if operator.ndim != 2 or operator.shape != (expected_dimension, expected_dimension):
+            msg = (
+                f"Matrix shape must be {(expected_dimension, expected_dimension)} for "
+                f"physical_dimensions={dimensions}; got {operator.shape}."
+            )
+            raise ValueError(msg)
+        if not np.all(np.isfinite(operator)):
+            msg = "Matrix must contain only finite values."
+            raise ValueError(msg)
+
+        if not np.any(operator):
+            tensors = [make_identity_site(dimension) for dimension in dimensions]
+            tensors[0] = np.zeros_like(tensors[0])
+        else:
+            num_sites = len(dimensions)
+            dense_tensor = operator.reshape((*dimensions, *dimensions))
+            interleaved_axes = tuple(axis for site in range(num_sites) for axis in (site, num_sites + site))
+            remainder = np.transpose(dense_tensor, interleaved_axes)
+            tensors = []
+            left_bond = 1
+            for _site, dimension in enumerate(dimensions[:-1]):
+                unfolded = remainder.reshape(left_bond * dimension * dimension, -1)
+                u_matrix, singular_values, vh_matrix = linalg.svd(unfolded, full_matrices=False)
+                right_bond = len(singular_values)
+                tensor = u_matrix.reshape(left_bond, dimension, dimension, right_bond).transpose(1, 2, 0, 3)
+                tensors.append(np.asarray(tensor, dtype=np.complex128))
+                remainder = singular_values[:, None] * vh_matrix
+                left_bond = right_bond
+
+            last_dimension = dimensions[-1]
+            last_tensor = remainder.reshape(left_bond, last_dimension, last_dimension, 1).transpose(1, 2, 0, 3)
+            tensors.append(np.asarray(last_tensor, dtype=np.complex128))
+
+        mpo = cls()
+        mpo.tensors = [np.array(tensor, dtype=np.complex128, copy=True) for tensor in tensors]
+        mpo.length = len(dimensions)
+        mpo.physical_dimension = dimensions[0]
+        mpo.validate()
+        return mpo
 
     @classmethod
     def from_matrix(

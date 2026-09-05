@@ -854,6 +854,21 @@ def test_mismatch() -> None:
         Simulator(show_progress=False).run(initial_state, circuit, sim_params, noise_model)
 
 
+def test_observable_layout_is_validated_before_digital_worker() -> None:
+    """State-dependent observable errors are raised before backend execution."""
+    state = State(2, initial="zeros")
+    circuit = QuantumCircuit(2)
+    params = DigitalSimParams(observables=[Observable("z", 2)])
+
+    with (
+        patch.object(simulator, "digital_tjm") as backend,
+        pytest.raises(ValueError, match="outside the state of length 2"),
+    ):
+        Simulator(parallel=False, show_progress=False).run(state, circuit, params)
+
+    backend.assert_not_called()
+
+
 def test_two_site_correlator_left_boundary() -> None:
     """Tests the expectation value of a two-site correlator in analog simulation at the left boundary.
 
