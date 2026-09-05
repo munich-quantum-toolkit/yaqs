@@ -69,9 +69,12 @@ def _site_count(sites: int | list[int]) -> int:
         TypeError: If a site is not an integer.
         ValueError: If a list of sites is empty.
     """
+    if isinstance(sites, bool):
+        msg = "sites must be an int or a list of ints."
+        raise TypeError(msg)
     if isinstance(sites, int):
         return 1
-    if not isinstance(sites, list) or any(not isinstance(site, int) for site in sites):
+    if not isinstance(sites, list) or any(isinstance(site, bool) or not isinstance(site, int) for site in sites):
         msg = "sites must be an int or a list of ints."
         raise TypeError(msg)
     if not sites:

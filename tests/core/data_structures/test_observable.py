@@ -100,6 +100,8 @@ def test_bitstring_observable_rejects_named_parameters() -> None:
         ("z", None, ValueError, "sites are required for named observables"),
         (np.eye(2), None, ValueError, "sites are required for matrix observables"),
         ("z", "0", TypeError, "sites must be an int or a list of ints"),
+        ("z", True, TypeError, "sites must be an int or a list of ints"),
+        ("z", [0, False], TypeError, "sites must be an int or a list of ints"),
         ("z", [], ValueError, "sites must not be empty"),
         ("zz", 0, ValueError, "acts on 2 site"),
         (np.eye(2), [0, 1], ValueError, "must have shape"),

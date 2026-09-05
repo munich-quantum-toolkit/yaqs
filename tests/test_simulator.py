@@ -1447,6 +1447,17 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
         _ = state.mps
 
 
+def test_analog_dense_representations_reject_bitstring_observables() -> None:
+    """Vector and density-matrix runs reject unsupported bitstring observables early."""
+    hamiltonian = Hamiltonian.ising(2, 1.0, 0.5)
+    sim_params = AnalogSimParams([Observable("00")], elapsed_time=0.1, dt=0.1)
+
+    for representation in ("vector", "density_matrix"):
+        state = State(2, initial="zeros", representation=representation)
+        with pytest.raises(ValueError, match=r"Bitstring observables require State\.representation='mps'"):
+            Simulator(show_progress=False).run(state, hamiltonian, sim_params)
+
+
 def test_analog_run_rejects_mpo_operator() -> None:
     """Legacy MPO operators are not accepted by Simulator.run."""
     state = State(2, initial="zeros")
