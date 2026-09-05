@@ -21,13 +21,14 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
+from .simulation_parameters import AnalogSimParams, DigitalSimParams
 
 if TYPE_CHECKING:
     from numpy import complex128, float64
     from numpy.typing import NDArray
 
     from .noise_model import NoiseModel
+    from .observable import Observable
     from .state import State
 
 
@@ -130,7 +131,7 @@ def aggregate_trajectories(result: Result) -> None:
     """
     for i, observable in enumerate(result.observables):
         traj = result.trajectories[i]
-        if observable.gate.name == "schmidt_spectrum":
+        if observable.name == "schmidt_spectrum":
             assert isinstance(traj, np.ndarray), "Schmidt spectrum trajectories must be stored in an ndarray"
             all_values = [np.asarray(trajectory).ravel() for trajectory in traj]
             result.expectation_values[i] = np.concatenate(all_values)

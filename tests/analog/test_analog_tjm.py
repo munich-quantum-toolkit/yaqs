@@ -53,7 +53,6 @@ from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
-from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.methods.stochastic_process import calculate_stochastic_factor, stochastic_process
 from mqt.yaqs.core.methods.tdvp.tdvp import tdvp
@@ -80,7 +79,7 @@ def test_initialize() -> None:
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
-        observables=[Observable(X(), site) for site in range(L)],
+        observables=[Observable("x", site) for site in range(L)],
         elapsed_time=0.2,
         dt=0.2,
         num_traj=1,
@@ -111,7 +110,7 @@ def test_step_through() -> None:
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
-        observables=[Observable(X(), site) for site in range(L)],
+        observables=[Observable("x", site) for site in range(L)],
         elapsed_time=0.2,
         dt=0.2,
         num_traj=1,
@@ -142,7 +141,7 @@ def test_analog_tjm_shape_via_simulator(order: int, *, sample_timesteps: bool) -
     length = 5
     state = State(length, initial="zeros")
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
-    observables = [Observable(Z(), site) for site in range(length)]
+    observables = [Observable("z", site) for site in range(length)]
     sim_params = AnalogSimParams(
         observables=observables,
         elapsed_time=0.2,
@@ -173,7 +172,7 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
     hamiltonian = Hamiltonian.ising(length, 1.0, 0.5)
     state = State(length, initial="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=20,
@@ -399,7 +398,7 @@ def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
     state.set_canonical_form(0)
     hamiltonian = MPO.ising(length, 1.0, 0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(length)],
+        observables=[Observable("z", site) for site in range(length)],
         elapsed_time=0.2,
         dt=0.1,
         num_traj=1,
@@ -419,7 +418,7 @@ def test_simulator_order1_honors_bug_evolution_mode() -> None:
     state = State(length, initial="zeros")
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(length)],
+        observables=[Observable("z", site) for site in range(length)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,

@@ -57,24 +57,24 @@ match the state length and each local dimension.
 
 ## 1. Separate definitions from gates
 
-- [ ] Add `core/data_structures/observable.py` and export `Observable` from
+- [x] Add `core/data_structures/observable.py` and export `Observable` from
   `mqt.yaqs`. Update internal imports and remove the class definition from
   `simulation_parameters.py`.
-- [ ] Add `core/libraries/observable_library.py` with explicit named operator
+- [x] Add `core/libraries/observable_library.py` with explicit named operator
   factories. Include Pauli operators, identity, Pauli products, projectors,
   position, and other supported Hermitian named operators.
-- [ ] Replace gate metadata with observable metadata for operator data, sites,
+- [x] Replace gate metadata with observable metadata for operator data, sites,
   names, and diagnostic requests. Keep per-run values on `Result`.
-- [ ] Remove observable-only definitions from `gate_library.py`. Share basic
+- [x] Remove observable-only definitions from `gate_library.py`. Share basic
       operator data through a neutral module only where needed to avoid
       duplicate definitions. Preserve definitions that circuit or Hamiltonian
       code still uses.
-- [ ] Resolve names explicitly. Interpret valid binary strings as projectors;
+- [x] Resolve names explicitly. Interpret valid binary strings as projectors;
   reject unknown names and malformed strings with clear errors.
-- [ ] Validate factory arguments and reject non-Hermitian named operators and
+- [x] Validate factory arguments and reject non-Hermitian named operators and
       custom matrices. A real expectation on one state is not a Hermiticity
       test.
-- [ ] Update constructor and import tests in the corresponding test tree. Cover
+- [x] Update constructor and import tests in the corresponding test tree. Cover
       valid syntax, local dimensions, removed gate inputs, and invalid
       arguments.
 

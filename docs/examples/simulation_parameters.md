@@ -24,22 +24,25 @@ execution options (parallelism, progress bars), see
 
 ## Observable string names
 
-{class}`~mqt.yaqs.Observable` accepts a **string gate name** as its first
-argument. YAQS resolves the name to the corresponding operator internally — you
-do not import gate classes for standard measurements.
+{class}`~mqt.yaqs.Observable` accepts a named Hermitian operator as its first
+argument. YAQS resolves the name internally, so standard measurements do not
+depend on gate classes.
 
-| String                         | Meaning                                                        | Example                                     |
-| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
-| `"x"`, `"y"`, `"z"`            | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
-| `"h"`, `"s"`, `"t"`, `"rx"`, … | Other single-qubit gates from the built-in library             | `Observable("h", sites=0)`                  |
-| `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
-| `"position"`                   | Position operator for a supplied local position basis          | `Observable("position", 0, positions=grid)` |
-| `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
-| `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
-| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`circuit_observables`              |
+| String                   | Meaning                                                        | Example                                     |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
+| `"x"`, `"y"`, `"z"`      | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
+| `"h"`, `"id"`            | Hadamard and identity operators                                | `Observable("h", sites=0)`                  |
+| `"p0"`, `"p1"`           | Single-site computational-basis projectors                     | `Observable("p0", sites=0)`                 |
+| `"xx"`, `"yy"`, `"zz"`   | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
+| `"cx"`, `"cz"`, `"swap"` | Other supported Hermitian two-qubit operators                  | `Observable("cz", sites=[0, 1])`            |
+| `"position"`             | Position operator for a supplied local position basis          | `Observable("position", 0, positions=grid)` |
+| `"entropy"`              | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
+| `"schmidt_spectrum"`     | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
+| binary bitstring         | Projection-valued measurement onto a computational basis state | see {doc}`circuit_observables`              |
 
-For custom unitaries and circuit gates, use {doc}`custom_gates` — those
-workflows still use `GateLibrary` or Qiskit circuits directly.
+Observable matrices must be Hermitian. For custom unitaries and circuit gates,
+use {doc}`custom_gates`; those workflows use `GateLibrary` or Qiskit circuits
+directly.
 
 Named observables that require configuration accept keyword-only factory
 arguments. Missing or unknown arguments raise `TypeError`, so misspelled

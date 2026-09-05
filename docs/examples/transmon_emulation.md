@@ -84,7 +84,7 @@ sim_params = AnalogSimParams(
 
 def pvm_curve(result, bitstring: str) -> np.ndarray:
     for obs, vals in zip(result.observables, result.expectation_values, strict=True):
-        if obs.gate.bitstring == bitstring:
+        if obs.bitstring == bitstring:
             return np.asarray(vals, dtype=float)
     msg = f"bitstring {bitstring!r} not in observables"
     raise ValueError(msg)
@@ -93,7 +93,7 @@ def pvm_curve(result, bitstring: str) -> np.ndarray:
 def leakage_at_t(result, t_idx: int) -> float:
     leak = 1.0
     for obs, vals in zip(result.observables, result.expectation_values, strict=True):
-        if obs.gate.bitstring in all_bitstrings:
+        if obs.bitstring in all_bitstrings:
             leak -= float(vals[t_idx])
     return leak
 ```

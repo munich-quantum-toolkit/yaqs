@@ -17,7 +17,6 @@ import pytest
 from mqt.yaqs import Observable
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import Z
 
 from ..fixtures import NoiseTestConfig, build_propagator
 
@@ -63,7 +62,7 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
             init_state=init_state,
         )
 
-    exceed_observables = [*observables, Observable(Z(), noise_test_config.sites)]
+    exceed_observables = [*observables, Observable("z", noise_test_config.sites)]
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,

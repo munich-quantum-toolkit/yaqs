@@ -35,7 +35,6 @@ from mqt.yaqs import (
 from mqt.yaqs.core.data_structures.result import aggregate_counts
 from mqt.yaqs.core.data_structures.simulation_program import stitch_program_results
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import Z
 
 
 def test_result_holds_outputs_for_analog_run() -> None:
@@ -44,7 +43,7 @@ def test_result_holds_outputs_for_analog_run() -> None:
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,
@@ -91,7 +90,7 @@ def test_result_counts_only_set_for_shots() -> None:
     assert shot_result.total_bond is None
 
     obs_state = State(num_qubits, initial="zeros")
-    obs_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    obs_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=1, max_bond_dim=4)
     obs_result = Simulator(parallel=False, show_progress=False).run(obs_state, circuit, obs_params)
 
     assert obs_result.counts is None
@@ -120,7 +119,7 @@ def test_sim_params_not_mutated_after_analog_run() -> None:
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
-    user_obs = Observable(Z(), 0)
+    user_obs = Observable("z", 0)
     sim_params = AnalogSimParams(
         observables=[user_obs],
         elapsed_time=0.1,
@@ -145,7 +144,7 @@ def test_result_is_pickleable() -> None:
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,

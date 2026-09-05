@@ -41,7 +41,7 @@ def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, 
         for name in ("x", "z"):
             obs = Observable(name, site)
             mps_val = mps.expect(obs)
-            op = embed_one_site_operator(np.asarray(obs.gate.matrix, dtype=np.complex128), length, site)
+            op = embed_one_site_operator(np.asarray(obs.matrix, dtype=np.complex128), length, site)
             embed_val = float(np.real(np.vdot(psi, op @ psi)))
             assert mps_val == pytest.approx(embed_val, abs=1e-9), f"{name} site {site}"
 

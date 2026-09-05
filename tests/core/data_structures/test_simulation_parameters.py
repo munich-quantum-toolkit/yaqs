@@ -7,10 +7,7 @@
 
 """Tests for simulation parameters classes.
 
-This module contains unit tests for the Observable and AnalogSimParams classes used in
-quantum simulation. It verifies that:
-  - An Observable is correctly initialized with valid parameters and that invalid parameters
-    raise an appropriate error.
+This module contains unit tests for simulation parameter classes. It verifies that:
   - AnalogSimParams instances are created with the correct attributes (such as elapsed_time, dt, times,
     sample_timesteps, and num_traj) both with explicit and default values.
   - allocate_observable_buffers properly sets up expectation_values and trajectories arrays
@@ -27,16 +24,15 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
+from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
-    Observable,
     _validate_tdvp_sweeps,
 )
-from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
@@ -49,98 +45,6 @@ if TYPE_CHECKING:
     )
 
 
-def test_observable_creation_valid() -> None:
-    """Test that an Observable is created correctly with valid parameters.
-
-    This test constructs an Observable with the name "x" on site 0 and verifies gate and site.
-    """
-    gate = X()
-    site = 0
-    obs = Observable(gate, site)
-
-    assert np.array_equal(obs.gate.matrix, np.array([[0, 1], [1, 0]]))
-    assert obs.sites == site
-
-
-def test_observable_accepts_custom_local_matrix() -> None:
-    """Observable accepts square matrices as arbitrary one-site local operators."""
-    matrix = np.diag(np.array([-1.0, 0.25, 2.0]))
-
-    obs = Observable(matrix, 0)
-
-    assert obs.gate.name == "local"
-    assert obs.gate.interaction == 1
-    np.testing.assert_allclose(obs.gate.matrix, matrix)
-    assert obs.sites == 0
-
-
-def test_observable_accepts_named_position_operator() -> None:
-    """Position observables build a diagonal local operator from the supplied basis."""
-    positions = np.array([-1.5, 0.0, 2.5])
-
-    obs = Observable("position", 1, positions=positions)
-
-    assert obs.gate.name == "position"
-    assert obs.gate.interaction == 1
-    np.testing.assert_allclose(obs.gate.matrix, np.diag(positions))
-    assert obs.sites == 1
-
-
-def test_position_observable_requires_positions() -> None:
-    """Position observables require their basis values as a keyword argument."""
-    with pytest.raises(TypeError, match="required keyword-only argument: 'positions'"):
-        Observable("position", 0)
-
-
-@pytest.mark.parametrize(
-    ("gate", "kwargs", "match"),
-    [
-        ("position", {"position_values": [0.0, 1.0]}, "unexpected keyword argument 'position_values'"),
-        ("z", {"positions": [0.0, 1.0]}, "unexpected keyword argument 'positions'"),
-    ],
-)
-def test_named_observable_rejects_unexpected_parameters(
-    gate: str,
-    kwargs: dict[str, object],
-    match: str,
-) -> None:
-    """Named observable factories reject misspelled or inapplicable parameters."""
-    with pytest.raises(TypeError, match=match):
-        Observable(gate, 0, **kwargs)
-
-
-def test_matrix_observable_rejects_named_parameters() -> None:
-    """Factory parameters cannot be supplied with a matrix observable."""
-    with pytest.raises(TypeError, match="only supported for named observables"):
-        Observable(np.eye(2), 0, positions=[0.0, 1.0])
-
-
-def test_observable_rejects_parameters_without_a_matching_factory() -> None:
-    """Only recognized named factories accept additional observable parameters."""
-    with pytest.raises(TypeError, match="'pvm' does not accept observable parameters"):
-        Observable("pvm", bitstring="0")
-
-    with pytest.raises(TypeError, match="Unknown observable 'unknown'"):
-        Observable("unknown", parameter=1)
-
-    with pytest.raises(TypeError, match="only supported for named observables"):
-        Observable(BaseGate(np.eye(2)), 0, parameter=1)
-
-
-@pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan]), np.array([0.0, 1.0j])])
-def test_position_observable_rejects_invalid_positions(positions: np.ndarray) -> None:
-    """Position bases must be non-empty, finite, and real."""
-    with pytest.raises(ValueError, match="positions must"):
-        Observable("position", 0, positions=positions)
-
-
-@pytest.mark.parametrize("matrix", [np.ones(3), np.ones((2, 3))])
-def test_observable_rejects_invalid_custom_local_matrix(matrix: np.ndarray) -> None:
-    """Matrix observables must be two-dimensional and square."""
-    with pytest.raises(ValueError, match="Local operator matrix"):
-        Observable(matrix, 0)
-
-
 def test_analog_simparams_basic() -> None:
     """Test that AnalogSimParams is initialized with correct parameters.
 
@@ -148,7 +52,7 @@ def test_analog_simparams_basic() -> None:
     sample_timesteps flag set to True, and a specified number of trajectories num_traj. It then verifies that the
     observables, elapsed_time, dt, times array, sample_timesteps flag, and num_traj are set correctly.
     """
-    obs_list = [Observable(X(), 0)]
+    obs_list = [Observable("x", 0)]
     elapsed_time = 1.0
     dt = 0.2
     params = AnalogSimParams(observables=obs_list, elapsed_time=elapsed_time, dt=dt, num_traj=50)
@@ -164,14 +68,14 @@ def test_analog_simparams_basic() -> None:
 
 def test_analog_simparams_times_no_float_overshoot() -> None:
     """``elapsed_time=0.2, dt=0.1`` must yield ``[0, 0.1, 0.2]``, not an extra 0.3."""
-    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.2, dt=0.1)
+    params = AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=0.2, dt=0.1)
     np.testing.assert_allclose(params.times, [0.0, 0.1, 0.2])
     assert params.times[-1] == pytest.approx(params.elapsed_time)
 
 
 def test_analog_simparams_zero_elapsed_time() -> None:
     """``elapsed_time=0`` with a valid ``dt`` yields a single-point grid at ``t=0``."""
-    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=0.0, dt=0.1)
+    params = AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=0.0, dt=0.1)
     assert params.elapsed_time == pytest.approx(0.0)
     assert params.dt == pytest.approx(0.1)
     np.testing.assert_allclose(params.times, [0.0])
@@ -188,7 +92,7 @@ def test_analog_simparams_zero_elapsed_time() -> None:
 )
 def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt: float) -> None:
     """Ordinary float rounding remains valid on longer and fine-dt grids."""
-    params = AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+    params = AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=elapsed_time, dt=dt)
 
     assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
 
@@ -206,7 +110,7 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
 def test_analog_simparams_rejects_nonintegral_duration(elapsed_time: float, dt: float) -> None:
     """Non-integral ``elapsed_time/dt`` must raise rather than mislabel the final time."""
     with pytest.raises(ValueError, match="integer multiple"):
-        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+        AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=elapsed_time, dt=dt)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +129,7 @@ def test_analog_simparams_rejects_nonintegral_duration(elapsed_time: float, dt: 
 def test_analog_simparams_rejects_invalid_time_parameters(elapsed_time: float, dt: float, match: str) -> None:
     """Non-finite, zero, or negative time parameters raise clear ValueErrors."""
     with pytest.raises(ValueError, match=match):
-        AnalogSimParams(observables=[Observable(X(), 0)], elapsed_time=elapsed_time, dt=dt)
+        AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=elapsed_time, dt=dt)
 
 
 @pytest.mark.parametrize(("elapsed_time", "dt"), [(True, 0.1), (0.1, False), ("0.1", 0.1), (0.1, None)])
@@ -233,7 +137,7 @@ def test_analog_simparams_rejects_non_numeric_time_parameters(elapsed_time: obje
     """Booleans and non-numeric time parameters raise clear TypeErrors."""
     with pytest.raises(TypeError, match="real number"):
         AnalogSimParams(
-            observables=[Observable(X(), 0)],
+            observables=[Observable("x", 0)],
             elapsed_time=cast("Any", elapsed_time),
             dt=cast("Any", dt),
         )
@@ -246,7 +150,7 @@ def test_analog_simparams_defaults() -> None:
     and verifies that default values for dt, sample_timesteps, number of trajectories (num_traj), max_bond_dim,
     svd_threshold, and order are correctly assigned.
     """
-    obs_list = [Observable(X(), 0)]
+    obs_list = [Observable("x", 0)]
     params = AnalogSimParams(observables=obs_list)
 
     assert params.elapsed_time == pytest.approx(0.1)
@@ -527,7 +431,7 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:
     """allocate_observable_buffers shapes buffers when sample_timesteps is True."""
     sim_params = AnalogSimParams(
-        observables=[Observable(X(), 1)],
+        observables=[Observable("x", 1)],
         elapsed_time=1.0,
         dt=0.5,
         num_traj=10,
@@ -543,7 +447,7 @@ def test_allocate_observable_buffers_with_sample_timesteps() -> None:
 def test_allocate_observable_buffers_without_sample_timesteps() -> None:
     """allocate_observable_buffers uses a single time column when sample_timesteps is False."""
     sim_params = AnalogSimParams(
-        observables=[Observable(X(), 0)],
+        observables=[Observable("x", 0)],
         elapsed_time=1.0,
         dt=0.25,
         num_traj=5,
@@ -557,60 +461,6 @@ def test_allocate_observable_buffers_without_sample_timesteps() -> None:
     assert trajectories[0].shape == (5, 1)
 
 
-def test_observable_from_string_entropy_and_spectrum_with_list_sites() -> None:
-    """Constructor maps 'entropy' and 'schmidt_spectrum' and accepts list[int] sites."""
-    cut = [3, 4]
-    obs_ent = Observable("entropy", sites=cut)
-    obs_ssp = Observable("schmidt_spectrum", sites=cut)
-
-    assert obs_ent.gate.name == "entropy"
-    assert obs_ssp.gate.name == "schmidt_spectrum"
-    # meta-observables use identity placeholders for BaseGate compatibility
-    assert np.allclose(obs_ent.gate.matrix, np.eye(2))
-    assert np.allclose(obs_ssp.gate.matrix, np.eye(2))
-    assert obs_ent.sites == cut
-    assert obs_ssp.sites == cut
-
-
-def test_observable_from_string_falls_back_to_pvm() -> None:
-    """Any other string is interpreted as a PVM bitstring; gate must store that bitstring."""
-    bitstring = "10101"
-    obs = Observable(bitstring, sites=None)
-    assert obs.gate.name == "pvm"
-    # gate must expose the queried bitstring
-    assert hasattr(obs.gate, "bitstring")
-    assert obs.gate.bitstring == bitstring
-    # PVM uses identity placeholder matrix for compatibility in your implementation
-    assert np.allclose(obs.gate.matrix, np.eye(2))
-
-
-def test_observable_from_explicit_pvm_string_falls_back_to_pvm() -> None:
-    """The explicit PVM name retains its historical string-resolution behavior."""
-    obs = Observable("pvm")
-
-    assert obs.gate.name == "pvm"
-    assert hasattr(obs.gate, "bitstring")
-    assert obs.gate.bitstring == "pvm"
-
-
-def test_observable_from_gate_instance_keeps_gate_and_sites_int() -> None:
-    """Passing a concrete BaseGate instance should be preserved and sites can be an int."""
-    x_gate = GateLibrary.x()
-    obs = Observable(x_gate, sites=5)
-    # same object semantics not required; equality via matrix is sufficient
-    assert obs.gate.name == "x"
-    assert np.allclose(obs.gate.matrix, x_gate.matrix)
-    assert obs.sites == 5
-
-
-def test_observable_from_gate_instance_with_list_sites() -> None:
-    """Gate instance + list[int] sites should preserve the list (for two-site ops)."""
-    cz_gate = GateLibrary.cz()
-    obs = Observable(cz_gate, sites=[1, 3])
-    assert obs.gate.name == "cz"
-    assert obs.sites == [1, 3]
-
-
 def test_aggregate_trajectories_regular_observable_mean() -> None:
     """Regular observables: results = mean(trajectories, axis=0).
 
@@ -618,7 +468,7 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
     verify that `results` equals the columnwise mean.
     """
     # Observable to aggregate
-    z_obs = Observable(GateLibrary.z(), sites=0)
+    z_obs = Observable("z", sites=0)
 
     # Two trajectories across 3 time steps → mean is easy to verify
     traj = np.array(
@@ -640,7 +490,7 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
     Provide a list of arrays with different shapes (1D/2D) to confirm `.ravel()` and
     `np.concatenate` behavior.
     """
-    ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
+    ss_obs = Observable("schmidt_spectrum", sites=[1, 2])
 
     # List of arrays (the method requires a list, not a single ndarray)
     a = np.array([0.8, 0.6], dtype=np.float64)
@@ -661,10 +511,10 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
 def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
     """Combination: both regular and Schmidt observables are updated correctly."""
     # Regular observable with 3 trajectories x 2 time steps
-    x_obs = Observable(GateLibrary.x(), sites=2)
+    x_obs = Observable("x", sites=2)
     x_traj = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]], dtype=np.float64)
 
-    ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
+    ss_obs = Observable("schmidt_spectrum", sites=[0, 1])
     ss_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
@@ -683,7 +533,7 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
 
 def test_aggregate_trajectories_schmidt_requires_array() -> None:
     """For Schmidt spectrum, trajectories must be a *array*; list should raise AssertionError."""
-    ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[2, 3])
+    ss_obs = Observable("schmidt_spectrum", sites=[2, 3])
     bad_traj = [0.9, 0.1]
 
     sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1)
@@ -701,10 +551,10 @@ def test_aggregate_trajectories_schmidt_requires_array() -> None:
 
 def test_digital_params_sorting_and_fields() -> None:
     """Constructor sorts non-PVM observables by site; PVM observables are appended."""
-    obs_z3 = Observable(GateLibrary.z(), sites=3)
-    obs_x2 = Observable(GateLibrary.x(), sites=2)
-    obs_y1 = Observable(GateLibrary.y(), sites=1)
-    obs_ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
+    obs_z3 = Observable("z", sites=3)
+    obs_x2 = Observable("x", sites=2)
+    obs_y1 = Observable("y", sites=1)
+    obs_ssp = Observable("schmidt_spectrum", sites=[1, 2])
 
     params = DigitalSimParams(
         observables=[obs_z3, obs_x2, obs_y1, obs_ssp],
@@ -724,7 +574,7 @@ def test_digital_params_sorting_and_fields() -> None:
     assert params.observable_sorted_indices == (3, 2, 0, 1)
 
     # Ordering is derived from the current observables list, not cached at construction.
-    params.observables.append(Observable(GateLibrary.z(), sites=0))
+    params.observables.append(Observable("z", sites=0))
     assert len(params.sorted_observables) == 5
     assert params.observable_sorted_indices == (4, 3, 1, 2, 0)
 
@@ -739,8 +589,8 @@ def test_digital_params_sorting_and_fields() -> None:
 
 def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
     """Constructor must assert when mixing PVM with non-PVM observables."""
-    pvm = Observable(GateLibrary.pvm("101"), sites=None)
-    z0 = Observable(GateLibrary.z(), sites=0)
+    pvm = Observable("101")
+    z0 = Observable("z", sites=0)
     with pytest.raises(AssertionError):
         _ = DigitalSimParams(observables=[pvm, z0])
 
@@ -748,19 +598,19 @@ def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
 def test_digital_params_accepts_all_pvm_or_all_non_pvm() -> None:
     """Constructor allows all-PVM and all-non-PVM sets."""
     # All PVM
-    p1 = Observable(GateLibrary.pvm("0"), sites=None)
-    p2 = Observable(GateLibrary.pvm("1"), sites=None)
+    p1 = Observable("0")
+    p2 = Observable("1")
     _ = DigitalSimParams(observables=[p1, p2])  # should not raise
 
     # All non-PVM
-    z0 = Observable(GateLibrary.z(), sites=0)
-    x1 = Observable(GateLibrary.x(), sites=1)
+    z0 = Observable("z", sites=0)
+    x1 = Observable("x", sites=1)
     _ = DigitalSimParams(observables=[z0, x1])  # should not raise
 
 
 def test_digital_aggregate_regular_mean() -> None:
     """Regular observables: results = mean(trajectories, axis=0)."""
-    x = Observable(GateLibrary.x(), sites=2)
+    x = Observable("x", sites=2)
     traj = np.array(
         [[0.0, 1.0, 2.0], [2.0, 1.0, 0.0], [1.0, 1.0, 1.0]],
         dtype=np.float64,
@@ -774,7 +624,7 @@ def test_digital_aggregate_regular_mean() -> None:
 
 def test_digital_aggregate_schmidt_concat() -> None:
     """Schmidt spectrum: concatenation of raveled list entries."""
-    ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
+    ssp = Observable("schmidt_spectrum", sites=[0, 1])
     ssp_traj = np.array([
         np.array([0.9, 0.8], dtype=np.float64),
         np.array([0.6, 0.4], dtype=np.float64),
@@ -792,10 +642,10 @@ def test_digital_aggregate_schmidt_concat() -> None:
 
 def test_digital_aggregate_mixed_regular_and_schmidt() -> None:
     """Combination case: regular and Schmidt updated correctly in one call."""
-    z = Observable(GateLibrary.z(), sites=0)
+    z = Observable("z", sites=0)
     z_traj = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
 
-    ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
+    ssp = Observable("schmidt_spectrum", sites=[1, 2])
     ssp_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     params = DigitalSimParams(observables=[z, ssp], num_traj=2)
@@ -813,7 +663,7 @@ def test_digital_aggregate_mixed_regular_and_schmidt() -> None:
 
 def test_digital_aggregate_schmidt_requires_array() -> None:
     """Schmidt branch must assert if trajectories is not an array."""
-    ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
+    ssp = Observable("schmidt_spectrum", sites=[0, 1])
     bad_traj = [0.9, 0.1]
 
     params = DigitalSimParams(observables=[ssp], num_traj=1)

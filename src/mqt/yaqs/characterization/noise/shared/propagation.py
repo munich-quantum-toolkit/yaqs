@@ -20,7 +20,7 @@ from mqt.yaqs.simulator import Simulator
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-    from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+    from mqt.yaqs.core.data_structures.observable import Observable
     from mqt.yaqs.core.data_structures.state import State
 
 
@@ -115,9 +115,13 @@ class Propagator:
             raise ValueError(msg)
 
         self.obs_list = list(obs_list)
-        all_obs_sites = [
-            site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
-        ]
+        all_obs_sites: list[int] = []
+        for observable in obs_list:
+            sites = observable.sites
+            if sites is None:
+                msg = "Noise propagation observables must have explicit sites."
+                raise ValueError(msg)
+            all_obs_sites.extend(sites if isinstance(sites, list) else [sites])
         if max(all_obs_sites) >= self.sites:
             msg = "Observable site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)

@@ -29,7 +29,7 @@ from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import CCX, GateLibrary, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import CCX, GateLibrary, X
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.methods.stochastic_process import create_probability_distribution
 from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
@@ -1341,7 +1341,7 @@ def test_hybrid_low_depth_smoke() -> None:
     params = DigitalSimParams(
         preset="exact",
         get_state=True,
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         max_bond_dim=8,
         gate_mode="tdvp",
         tdvp_sweeps=16,
@@ -1481,7 +1481,7 @@ def test_nn_gate_prunes_only_null_schmidt_directions(
         apply_single_qubit_gate(mps, h_node)
     cx_node = next(node for node in dag.topological_op_nodes() if node.op.name == "cx")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         preset="exact",
         max_bond_dim=8,
         svd_threshold=1e-12,
@@ -1505,7 +1505,7 @@ def test_swaps_route_does_not_shift_the_center_backwards() -> None:
 
     gate = GateLibrary.rzz([0.7])
     gate.set_sites(length - 1 - distance, length - 1)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="swaps")
 
     original_left = MPS.shift_orthogonality_center_left
     original_right = MPS.shift_orthogonality_center_right
@@ -1533,7 +1533,7 @@ def test_tebd_lr_cx() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
@@ -1554,7 +1554,7 @@ def test_tebd_lr_cnot() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(
         mps,
         convert_dag_to_tensor_algorithm(node)[0],
@@ -1668,7 +1668,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
 
     state = State(4, initial="zeros")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode="swaps",
         max_bond_dim=2,
         svd_threshold=1e-6,
@@ -1692,7 +1692,7 @@ def test_mpo_lr_cx() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="mpo")
     apply_long_range_gate_mpo(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
@@ -1751,7 +1751,7 @@ def test_lr_small_angle_gate_survives_gate_mpo(theta: float, gate_mode: str) -> 
     qc.rzz(np.pi / 2, 0, 5)
     qc.rzz(theta, 0, 5)
 
-    params = DigitalSimParams(observables=[Observable(X(), 0)], gate_mode=cast("GateMode", gate_mode))
+    params = DigitalSimParams(observables=[Observable("x", 0)], gate_mode=cast("GateMode", gate_mode))
     result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
 
     assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(-np.sin(theta), abs=1e-12)
@@ -1800,7 +1800,7 @@ def test_apply_two_qubit_gate() -> None:
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)])
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
@@ -1817,7 +1817,7 @@ def test_standalone_swap_routing_rejects_non_qubit_spectator() -> None:
     circuit = QuantumCircuit(3)
     circuit.cx(0, 2)
     node = next(node for node in circuit_to_dag(circuit).front_layer() if node.op.name == "cx")
-    params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="swaps")
+    params = DigitalSimParams(observables=[Observable("z", 0)], gate_mode="swaps")
 
     with pytest.raises(ValueError, match=r"cannot route.*non-qubit spectator"):
         apply_two_qubit_gate(state, node, params)
@@ -1842,7 +1842,7 @@ def test_unknown_gate_mode_raises() -> None:
     qc.cx(0, 1)
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name == "cx")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)])
     sim_params.gate_mode = cast("GateMode", "invalid")
     with pytest.raises(ValueError, match="Unknown gate_mode"):
         apply_two_qubit_gate(mps, node, sim_params)
@@ -1883,7 +1883,7 @@ def test_digital_tjm_observables_smoke_via_simulator() -> None:
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)])
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
     assert result.expectation_values[0] is not None
@@ -1916,7 +1916,7 @@ def test_digital_tjm_observables_and_shots_via_simulator() -> None:
     qc.measure_all()
 
     shots = 16
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], shots=shots)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], shots=shots)
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
     assert result.expectation_values[0] is not None
@@ -1972,7 +1972,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     qc.rzz(0.5, 1, 2)
 
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), i) for i in range(num_qubits)],
+        observables=[Observable("z", i) for i in range(num_qubits)],
         sample_layers=True,
         num_mid_measurements=4,
         num_traj=100,
@@ -2011,7 +2011,7 @@ def test_digital_tjm_longrange_noise() -> None:
     ])
 
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), i) for i in range(num_qubits)],
+        observables=[Observable("z", i) for i in range(num_qubits)],
         sample_layers=True,
         num_mid_measurements=0,
         num_traj=20,
@@ -2045,7 +2045,7 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     qc.cx(0, 1)
     qc.rzz(0.1, 1, 2)
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -2078,7 +2078,7 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     # Final segment
     qc.cx(2, 3)
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -2107,7 +2107,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
     qc.rzz(0.2, 0, 1)
     qc.measure(0, 0)  # terminal measurements are removed
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
@@ -2200,7 +2200,7 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
     state = State(2, initial="zeros")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode="tdvp",
         num_traj=4,
         random_seed=0,
@@ -2351,7 +2351,7 @@ def test_noisy_ccx_smoke() -> None:
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
     state = State(3, initial="zeros")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode="tdvp",
         num_traj=4,
         random_seed=0,
@@ -2373,7 +2373,7 @@ def test_noisy_ccx_local_noise_uses_all_gate_sites() -> None:
     ])
     mps = MPS(3, state="zeros")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode="mpo",
         num_traj=1,
         random_seed=0,
@@ -2461,11 +2461,11 @@ def test_observables_vs_qiskit() -> None:
     qc.cx(2, 1)
 
     requested = [
-        Observable(Z(), 2),
-        Observable(X(), 0),
-        Observable(Y(), 1),
-        Observable(Z(), 0),
-        Observable(X(), 2),
+        Observable("z", 2),
+        Observable("x", 0),
+        Observable("y", 1),
+        Observable("z", 0),
+        Observable("x", 2),
     ]
     sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact")
     state = State(3, initial="zeros")
@@ -2474,7 +2474,7 @@ def test_observables_vs_qiskit() -> None:
     for i, obs in enumerate(result.observables):
         site = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
         assert isinstance(site, int)
-        op = obs.gate.name.upper()
+        op = obs.name.upper()
         assert op in {"X", "Y", "Z"}
         expected = qiskit_single_pauli_expectation(qc, site, op)
         got = float(np.real(result.expectation_values[i][0]))
@@ -2501,11 +2501,11 @@ def test_pauli_obs_vs_qiskit() -> None:
     qc.cx(2, 1)
 
     requested = [
-        Observable(Z(), 2),
-        Observable(X(), 0),
-        Observable(Y(), 1),
-        Observable(Z(), 0),
-        Observable(X(), 2),
+        Observable("z", 2),
+        Observable("x", 0),
+        Observable("y", 1),
+        Observable("z", 0),
+        Observable("x", 2),
     ]
     sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
@@ -2517,7 +2517,7 @@ def test_pauli_obs_vs_qiskit() -> None:
     for i, obs in enumerate(result.observables):
         site = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
         assert isinstance(site, int)
-        op = obs.gate.name.upper()
+        op = obs.name.upper()
         assert op in {"X", "Y", "Z"}
         expected = qiskit_single_pauli_expectation_from_vec(yaqs_vec, site, op)
         got = float(np.real(result.expectation_values[i][0]))
@@ -2532,7 +2532,7 @@ def test_obs_order_aligned() -> None:
     qc.ry(0.51, 1)
 
     # Intentionally not sorted by site: Result order should still match this list.
-    requested = [Observable(Z(), 2), Observable(X(), 0), Observable(Z(), 0)]
+    requested = [Observable("z", 2), Observable("x", 0), Observable("z", 0)]
     sim_params = DigitalSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
@@ -2542,7 +2542,7 @@ def test_obs_order_aligned() -> None:
 
     assert len(result.observables) == len(requested)
     for i, (got_obs, req_obs) in enumerate(zip(result.observables, requested, strict=True)):
-        assert got_obs.gate.name == req_obs.gate.name
+        assert got_obs.name == req_obs.name
         assert got_obs.sites == req_obs.sites
 
         # Verify the expectation value matches the observable at the same index.
@@ -2550,7 +2550,7 @@ def test_obs_order_aligned() -> None:
         label = ["I"] * n
         site = got_obs.sites[0] if isinstance(got_obs.sites, list) else got_obs.sites
         assert isinstance(site, int)
-        label[n - 1 - site] = got_obs.gate.name.upper()
+        label[n - 1 - site] = got_obs.name.upper()
         expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
@@ -2747,7 +2747,7 @@ def _run_mixed_circuit(gate_mode: GateMode, length: int = RESCALE_LENGTH, max_bo
     """
     qc = _mixed_circuit(length)
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode=gate_mode,
         preset="exact",
         svd_threshold=1e-14,
@@ -2889,7 +2889,7 @@ def test_layer_sampling_reads_the_state_in_b_form() -> None:
     initial_mps = _random_capped_mps(6, GAUGE_CHI, GAUGE_SEED)
     initial_mps.shift_center_to(4)
     assert initial_mps.orthogonality_center == 4
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="mpo", preset="exact", sample_layers=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], gate_mode="mpo", preset="exact", sample_layers=True)
     with patch.object(MPS, "record_diagnostics", recording):
         Simulator(parallel=False, show_progress=False).run(State.from_mps(initial_mps), qc, sim_params, None)
 
@@ -2907,7 +2907,7 @@ def test_unknown_gauge_run_is_normalized_before_observables() -> None:
     for q in range(6):
         qc.h(q)
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], gate_mode="mpo", preset="exact", get_state=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], gate_mode="mpo", preset="exact", get_state=True)
     _results, _diagnostics, _counts, final = digital_tjm((0, mps, None, sim_params, qc))
 
     assert final is not None
@@ -3086,7 +3086,7 @@ def _layer_state() -> np.ndarray:
 def test_dissipation_matches_dense_exponential() -> None:
     """``apply_dissipation`` equals K = expm(-dt/2 * sum_j gamma_j L_j^dag L_j)."""
     nm = NoiseModel([{"name": name, "sites": [s], "strength": g} for name, _, s, g in _LAYER_PROCS])
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", num_traj=1, random_seed=0)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", num_traj=1, random_seed=0)
     v = _layer_state()
     h_eff = np.zeros((8, 8), dtype=np.complex128)
     for _, mat, s, g in _LAYER_PROCS:
@@ -3102,7 +3102,7 @@ def test_dissipation_matches_dense_exponential() -> None:
 def test_jump_probabilities_match_dense() -> None:
     """The categorical jump weights are gamma_m ||L_m K psi||^2, normalized."""
     nm = NoiseModel([{"name": name, "sites": [s], "strength": g} for name, _, s, g in _LAYER_PROCS])
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", num_traj=1, random_seed=0)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", num_traj=1, random_seed=0)
     v = _layer_state()
     mps = _dense_to_mps(v)
     apply_dissipation(mps, nm, dt=1, sim_params=sim_params)
@@ -3139,7 +3139,7 @@ def test_noisy_ccx_trajectory_convergence() -> None:
 
     nm = NoiseModel([{"name": "lowering", "sites": [q], "strength": gamma} for q in range(n)])
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), q) for q in range(n)],
+        observables=[Observable("z", q) for q in range(n)],
         preset="exact",
         num_traj=num_traj,
         random_seed=7,
@@ -3257,7 +3257,7 @@ def test_noise_sites_end_to_end(builder: Callable[[QuantumCircuit], object], exp
     builder(qc)
     nm = NoiseModel([{"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(n)])
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         preset="exact",
         num_traj=1,
         random_seed=0,
@@ -3285,7 +3285,7 @@ def test_noise_sites_generator_path() -> None:
     qc.ccx(0, 1, 2)
     nm = NoiseModel([{"name": "pauli_x", "sites": [q], "strength": 0.01} for q in range(n)])
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode="tdvp",
         preset="exact",
         num_traj=1,

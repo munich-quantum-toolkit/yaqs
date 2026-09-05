@@ -22,7 +22,6 @@ from mqt.yaqs.analog.evolution import apply_unitary_evolution
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
-from mqt.yaqs.core.libraries.gate_library import X, Z
 
 GaugeKind = Literal["center_zero", "center_right", "unknown"]
 
@@ -71,7 +70,7 @@ def _bug_params(*, multi_time: bool = False) -> AnalogSimParams:
     Returns:
         Analog simulation parameters for one BUG step.
     """
-    z0 = Observable(Z(), 0)
+    z0 = Observable("z", 0)
     return AnalogSimParams(
         observables=[z0],
         elapsed_time=0.05,
@@ -82,7 +81,7 @@ def _bug_params(*, multi_time: bool = False) -> AnalogSimParams:
         get_state=True,
         max_bond_dim=8,
         svd_threshold=1e-12,
-        multi_time_observables=[(z0, Observable(X(), 1))] if multi_time else None,
+        multi_time_observables=[(z0, Observable("x", 1))] if multi_time else None,
     )
 
 

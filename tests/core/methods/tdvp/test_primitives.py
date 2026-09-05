@@ -19,8 +19,8 @@ import pytest
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp.primitives import (
     _build_dense_effective_operator,
@@ -46,7 +46,7 @@ def test_split_two_site_invalid_shape() -> None:
     """``split_two_site`` raises when the first axis does not match ``physical_dimensions``."""
     A = rng.random(size=(3, 3, 5)).astype(np.complex128)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         sample_timesteps=True,

@@ -27,7 +27,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..methods.decompositions import TruncMode
-    from .simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
+    from .observable import Observable
+    from .simulation_parameters import AnalogSimParams, DigitalSimParams
 
 # Worker-global state for parallel ``measure_shots`` (initialized once per process).
 _MEASURE_SHOTS_CTX: dict[str, Any] = {}
@@ -1237,13 +1238,16 @@ class MPS:
             If the tracked center does not cover ``sites``, one copy is shifted or
             canonicalized. The original MPS is not modified.
         """
+        if operator.sites is None or operator.matrix is None:
+            msg = "Local expectation requires an operator with explicit sites."
+            raise ValueError(msg)
         sites_list = [sites] if isinstance(sites, int) else list(sites)
         operator_sites = [operator.sites] if isinstance(operator.sites, int) else list(operator.sites)
 
-        if operator.gate.interaction == 1:
+        if operator.interaction == 1:
             assert len(sites_list) == 1, f"One-site observable requires one site, got {sites_list}."
             assert operator_sites == sites_list, f"Operator sites mismatch {operator_sites}, {sites_list}"
-        elif operator.gate.interaction == 2:
+        elif operator.interaction == 2:
             assert isinstance(sites, list)
             assert isinstance(operator.sites, list)
             i, j = sites_list
@@ -1270,11 +1274,11 @@ class MPS:
                 target = min(sites_list, key=lambda site: abs(center - site))
                 base_state.shift_center_to(target)
 
-        if operator.gate.interaction == 1:
+        if operator.interaction == 1:
             i = sites_list[0]
             a = base_state.tensors[i]
             local_dim = a.shape[0]
-            matrix = np.asarray(operator.gate.matrix, dtype=np.complex128)
+            matrix = np.asarray(operator.matrix, dtype=np.complex128)
             if matrix.shape != (local_dim, local_dim):
                 msg = f"Local observable matrix shape {matrix.shape} does not match site {i} dimension {local_dim}."
                 raise ValueError(msg)
@@ -1285,7 +1289,7 @@ class MPS:
         b = base_state.tensors[j]
         d_i, left, _ = a.shape
         d_j, _, right = b.shape
-        matrix = np.asarray(operator.gate.matrix, dtype=np.complex128)
+        matrix = np.asarray(operator.matrix, dtype=np.complex128)
         if matrix.shape != (d_i * d_j, d_i * d_j):
             msg = f"Two-site observable matrix shape {matrix.shape} does not match site dimensions {d_i} and {d_j}."
             raise ValueError(msg)
@@ -1361,15 +1365,18 @@ class MPS:
             for i in reversed(range(state.length - 2)):
                 apply_two_site_nn_inplace(state, i, sw)
 
+        if observable.sites is None or observable.matrix is None:
+            msg = "Local application requires an operator with explicit sites."
+            raise ValueError(msg)
         sites = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
 
-        if observable.gate.interaction == 1:
+        if observable.interaction == 1:
             if len(sites) != 1:
                 msg = f"One-site local observable requires one site, got {sites}."
                 raise ValueError(msg)
             site = sites[0]
             local_dim = self.tensors[site].shape[0]
-            matrix = np.asarray(observable.gate.matrix, dtype=np.complex128)
+            matrix = np.asarray(observable.matrix, dtype=np.complex128)
             if matrix.shape != (local_dim, local_dim):
                 msg = f"Local observable matrix shape {matrix.shape} does not match site {site} dimension {local_dim}."
                 raise ValueError(msg)
@@ -1377,13 +1384,13 @@ class MPS:
             self.set_center(None)
             return
 
-        if observable.gate.interaction == 2:
+        if observable.interaction == 2:
             if len(sites) != 2:
                 msg = f"Two-site local observable requires two sites, got {sites}."
                 raise ValueError(msg)
             i, j = int(sites[0]), int(sites[1])
             length = self.length
-            mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+            mat = np.asarray(observable.matrix, dtype=np.complex128)
             d_i = self.tensors[i].shape[0]
             d_j = self.tensors[j].shape[0]
             if mat.shape != (d_i * d_j, d_i * d_j):
@@ -1444,6 +1451,9 @@ class MPS:
                 expectation values.
             column_index: Time or trajectory index for the column to fill.
 
+        Raises:
+            ValueError: If an operator observable does not define sites.
+
         Notes:
             Deep-copies ``self`` once and reuses that working state for all observables.
             When :attr:`orthogonality_center` covers the observable site(s), uses fast
@@ -1452,7 +1462,7 @@ class MPS:
         """
         temp_state = copy.deepcopy(self)
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name in {"entropy", "schmidt_spectrum"}:
+            if observable.kind == "diagnostic":
                 assert isinstance(observable.sites, list), "Given metric requires a list of sites"
                 assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
                 max_site = max(observable.sites)
@@ -1467,18 +1477,20 @@ class MPS:
                         center = temp_state.orthogonality_center
                         target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
                         temp_state.shift_center_to(target)
-                if observable.gate.name == "entropy":
+                if observable.name == "entropy":
                     results[obs_index, column_index] = temp_state.get_entropy(observable.sites)
-                elif observable.gate.name == "schmidt_spectrum":
+                elif observable.name == "schmidt_spectrum":
                     results[obs_index, column_index] = temp_state.get_schmidt_spectrum(observable.sites)
 
-            elif observable.gate.name == "pvm":
-                assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
-                bitstring = observable.gate.bitstring
-                assert isinstance(bitstring, str)
+            elif observable.kind == "bitstring":
+                bitstring = observable.bitstring
+                assert bitstring is not None
                 results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
 
             else:
+                if observable.sites is None:
+                    msg = "Operator observables must have explicit sites."
+                    raise ValueError(msg)
                 sites_list = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
                 if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
                     if len(sites_list) == 1:

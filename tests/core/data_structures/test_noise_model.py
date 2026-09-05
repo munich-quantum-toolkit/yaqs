@@ -24,7 +24,6 @@ import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel, is_pauli, validate_noise_model_for_run
-from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
 
@@ -205,7 +204,7 @@ def test_noise_distribution_integration() -> None:
 
     # Simulation parameters
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.2,
         num_traj=10,  # Run multiple trajectories to confirm it runs
@@ -772,7 +771,7 @@ def test_is_pauli_structure_branches() -> None:
 def test_validate_noise_model_for_run_success_and_errors() -> None:
     """validate_noise_model_for_run checks sites, shapes, and run-context constraints."""
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.2,
         order=1,
@@ -869,7 +868,7 @@ def test_validate_noise_model_for_run_success_and_errors() -> None:
         )
 
     order2 = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.2,
         order=2,

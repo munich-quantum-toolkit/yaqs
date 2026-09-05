@@ -20,7 +20,6 @@ from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
-from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
 
 
 def test_unitary_ensemble_observable_average() -> None:
@@ -29,7 +28,7 @@ def test_unitary_ensemble_observable_average() -> None:
     hamiltonian = Hamiltonian.ising(length, J=0.6, g=0.2)
     initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
 
-    observable = Observable(Z(), 0)
+    observable = Observable("z", 0)
     sim_params = AnalogSimParams(
         observables=[observable],
         elapsed_time=0.2,
@@ -52,7 +51,7 @@ def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.5, g=0.1)
     initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
-    correlator_op = Observable(Z(), 0)
+    correlator_op = Observable("z", 0)
 
     sim_params = AnalogSimParams(
         observables=[],
@@ -78,8 +77,8 @@ def test_unitary_ensemble_multi_time_observables_mean_matrix() -> None:
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
-    z0 = Observable(Z(), 0)
-    z1 = Observable(Z(), 1)
+    z0 = Observable("z", 0)
+    z1 = Observable("z", 1)
     pairs: list[tuple[Observable, Observable]] = [(z0, z1), (z1, z0)]
 
     sim_params = AnalogSimParams(
@@ -105,8 +104,8 @@ def test_unitary_ensemble_t0_only_records_when_not_sampling_timesteps() -> None:
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     initial_states = [State(length, initial="zeros")]
-    z0 = Observable(Z(), 0)
-    z1 = Observable(Z(), 1)
+    z0 = Observable("z", 0)
+    z1 = Observable("z", 1)
 
     sim_params = AnalogSimParams(
         observables=[z0],
@@ -135,8 +134,8 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
-    z0 = Observable(Z(), 0)
-    z1 = Observable(Z(), 1)
+    z0 = Observable("z", 0)
+    z1 = Observable("z", 1)
 
     sim_params = AnalogSimParams(
         observables=[],
@@ -153,7 +152,7 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
     assert result.multi_time_times is not None
 
     sim_params_off = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         sample_timesteps=True,
@@ -176,7 +175,7 @@ def test_list_mps_analog_ensemble_accepts_dense_hamiltonian() -> None:
         State(length, initial="ones", representation="mps"),
     ]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -194,7 +193,7 @@ def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
         State(length, initial="ones", representation="density_matrix"),
     ]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -209,7 +208,7 @@ def test_list_mps_analog_ensemble_rejects_empty_state_list() -> None:
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -222,7 +221,7 @@ def test_list_mps_analog_ensemble_rejects_state_length_mismatch() -> None:
     hamiltonian = Hamiltonian.ising(2, J=0.2, g=0.1)
     states = [State(3, initial="zeros"), State(3, initial="ones")]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -236,7 +235,7 @@ def test_list_mps_analog_ensemble_rejects_get_state() -> None:
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     states = [State(length, initial="zeros"), State(length, initial="ones")]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         get_state=True,
@@ -250,8 +249,8 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     states = [State(length, initial="zeros"), State(length, initial="ones")]
-    z0 = Observable(Z(), 0)
-    z1 = Observable(Z(), 1)
+    z0 = Observable("z", 0)
+    z1 = Observable("z", 1)
     sim_params = AnalogSimParams(
         observables=[z0],
         elapsed_time=0.15,
@@ -269,7 +268,7 @@ def test_unitary_ensemble_uses_bug_evolution_mode_via_simulator() -> None:
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     states = [State(length, initial="zeros"), State(length, initial="ones")]
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.05,
         dt=0.05,
         evolution_mode=EvolutionMode.BUG,
@@ -287,8 +286,8 @@ def test_unitary_ensemble_final_timestep_when_not_sampling_via_simulator() -> No
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
     states = [State(length, initial="zeros"), State(length, initial="ones")]
-    z0 = Observable(Z(), 0)
-    z1 = Observable(Z(), 1)
+    z0 = Observable("z", 0)
+    z1 = Observable("z", 1)
     sim_params = AnalogSimParams(
         observables=[z0],
         elapsed_time=0.2,
@@ -313,7 +312,7 @@ def test_list_initial_states_with_noise_raises() -> None:
     initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -356,7 +355,7 @@ def _periodic_bond_endpoints(length: int) -> list[tuple[int, int]]:
 
 
 def _spin_current_observable_for_periodic_bond(site_a: int, site_b: int, j_xy: float) -> Observable:
-    return Observable(BaseGate(_spin_current_bond_matrix(j_xy)), sites=[site_a, site_b])
+    return Observable(_spin_current_bond_matrix(j_xy), sites=[site_a, site_b])
 
 
 def _build_xxz_tf_open_chain_dense(length: int, j_xy: float, delta: float, h_x: float) -> np.ndarray:
@@ -431,9 +430,9 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
     )
     states = [State(length, initial="basis", basis_string=format(i, f"0{length}b")) for i in range(k)]
 
-    ox = Observable(X(), mid)
-    oy = Observable(Y(), mid)
-    oz = Observable(Z(), mid)
+    ox = Observable("x", mid)
+    oy = Observable("y", mid)
+    oz = Observable("z", mid)
     pairs = [(ox, ox), (oy, oy), (oz, oz), (oz, ox)]
 
     sim_params = AnalogSimParams(
@@ -517,7 +516,7 @@ def test_bug_ensemble_correlator_preserves_scaled_probe_amplitude() -> None:
     """BUG correlator evolution retains the amplitude of a non-unitary probe B=2I."""
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.0, g=0.0)
-    z0 = Observable(Z(), 0)
+    z0 = Observable("z", 0)
     probe_b = Observable(np.eye(2, dtype=np.complex128) * 2.0, 0)
     states = [State(length, initial="zeros")]
     sim_params = AnalogSimParams(

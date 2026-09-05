@@ -23,7 +23,7 @@ from mqt.yaqs.analog.utils import (
     _kron_all_dense,
     _kron_all_sparse,
 )
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.state_utils import (
     embed_adjacent_two_site_operator,
     embed_one_site_operator,

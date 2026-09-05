@@ -18,7 +18,6 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
-from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.random_utils import make_disorder_rng, make_sample_rng, make_trajectory_rng
 
 
@@ -76,7 +75,7 @@ def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None
     state = State(length, initial="zeros", pad=4)
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.05}])
-    observables = [Observable(Z(), site) for site in range(length)]
+    observables = [Observable("z", site) for site in range(length)]
 
     def run_once() -> list[float]:
         st = copy.deepcopy(state)

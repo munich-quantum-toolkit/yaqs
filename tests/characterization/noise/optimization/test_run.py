@@ -16,7 +16,6 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.optimization.trajectories import simulate_observable_trajectories
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
@@ -57,7 +56,7 @@ def _digital_twin_setup() -> tuple[
     sites = list(range(n_sites))
     hamiltonian = Hamiltonian.ising(n_sites, J=1.0, g=2.0)
     init_state = State(n_sites, initial="zeros")
-    fitting_observables = [Observable(g(), s) for s in range(n_sites) for g in (X, Y, Z)]
+    fitting_observables = [Observable(name, site) for site in range(n_sites) for name in ("x", "y", "z")]
     sim_params = AnalogSimParams(
         observables=fitting_observables,
         elapsed_time=0.8,

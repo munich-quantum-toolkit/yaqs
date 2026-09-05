@@ -28,7 +28,8 @@ if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
     from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+    from mqt.yaqs.core.data_structures.observable import Observable
+    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
     from mqt.yaqs.core.data_structures.state import State
 
 

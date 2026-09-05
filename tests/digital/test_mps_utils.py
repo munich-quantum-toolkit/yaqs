@@ -21,8 +21,9 @@ from qiskit.quantum_info import Statevector, random_unitary
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, Z
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 from mqt.yaqs.digital.digital_tjm import apply_long_range_gate_mpo, apply_two_qubit_gate_tebd
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from tests.core.methods.tdvp.conftest import _fidelity, _haar_random_mps
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
 
 
 def _sim_params() -> DigitalSimParams:
-    return DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
+    return DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="mpo")
 
 
 def _gate_from_circuit(qc: QuantumCircuit, *, op_name: str | None = None) -> BaseGate:
@@ -209,7 +210,7 @@ def test_swap_via_mpo_matches_tebd() -> None:
     length = 4
     swap = GateLibrary.swap()
     swap.set_sites(1, 2)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="swaps")
 
     mpo_path = MPS(length, state="basis", basis_string="1010")
     mpo_path.normalize()
@@ -308,7 +309,7 @@ def test_capped_long_range_gate_is_no_less_accurate_than_full_chain_compression(
     length, cap = 12, 8
     qc = _single_gate_circuit(length, lambda circuit: circuit.cp(0.9, 2, 9))
     gate = _gate_from_circuit(qc)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
 
     state = _haar_random_mps(length, pad=cap, seed=20260829)
     state.set_canonical_form(min(gate.sites))
@@ -325,7 +326,7 @@ def test_capped_long_range_gate_truncates_inside_its_support_only() -> None:
     """A chain entering above the cap keeps its exterior bonds, as the ``swaps`` route leaves them."""
     length, cap, first, last = 12, 4, 4, 7
     gate = _gate_from_circuit(_single_gate_circuit(length, lambda qc: qc.cp(0.9, first, last)))
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", gate_mode="mpo", max_bond_dim=cap)
 
     state = _haar_random_mps(length, pad=16, seed=20260829)
     state.set_canonical_form(first)

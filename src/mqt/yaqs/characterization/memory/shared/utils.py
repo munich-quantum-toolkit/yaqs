@@ -22,8 +22,8 @@ import numpy as np
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from mqt.yaqs.analog.mcwf import MCWFContext, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.libraries.operator_matrices import PAULI_X, PAULI_Y, PAULI_Z
 
 from ..shared.encoding import SITE0_KET
 
@@ -223,9 +223,7 @@ def assemble_state_from_expectations(expectations: dict[str, float]) -> NDArray[
         2x2 complex density matrix.
     """
     eye = np.eye(2, dtype=complex)
-    return 0.5 * (
-        eye + expectations["x"] * X().matrix + expectations["y"] * Y().matrix + expectations["z"] * Z().matrix
-    )
+    return 0.5 * (eye + expectations["x"] * PAULI_X + expectations["y"] * PAULI_Y + expectations["z"] * PAULI_Z)
 
 
 def extract_site0_rho(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -244,9 +242,9 @@ def extract_site0_rho(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex
     trace = float(state.norm() ** 2)
     if trace < 1e-15:
         return np.zeros((2, 2), dtype=np.complex128)
-    rx = state.expect(Observable(X(), sites=[0]))
-    ry = state.expect(Observable(Y(), sites=[0]))
-    rz = state.expect(Observable(Z(), sites=[0]))
+    rx = state.expect(Observable("x", sites=[0]))
+    ry = state.expect(Observable("y", sites=[0]))
+    rz = state.expect(Observable("z", sites=[0]))
     return trace * assemble_state_from_expectations({"x": rx / trace, "y": ry / trace, "z": rz / trace})
 
 

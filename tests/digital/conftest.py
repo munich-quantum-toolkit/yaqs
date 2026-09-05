@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from mqt.yaqs import DigitalSimParams, Observable, Simulator, State
-from mqt.yaqs.core.libraries.gate_library import Z
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -46,12 +45,18 @@ def _expect_mps_like_evaluate_observables(mps: MPS, observables: list[Observable
 
     Returns:
         Expectation values in the same order as ``observables``.
+
+    Raises:
+        ValueError: If an observable does not define sites.
     """
     temp = copy.deepcopy(mps)
     last_site = 0
     values: list[float] = []
     for obs in observables:
         idx = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        if idx is None:
+            msg = "MPS expectation helper requires observables with explicit sites."
+            raise ValueError(msg)
         if idx > last_site:
             for site in range(last_site, idx):
                 temp.shift_orthogonality_center_right(site)
@@ -105,7 +110,7 @@ def _run_digital_observables_noiseless(
     """
     num_qubits = qc.num_qubits
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         gate_mode=gate_mode,
         preset="exact",
         svd_threshold=svd_threshold,

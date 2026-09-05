@@ -16,7 +16,6 @@ import numpy as np
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 
 @dataclass
@@ -74,9 +73,9 @@ def build_propagator(
     hamiltonian = Hamiltonian.ising(test.sites, J=test.j, g=test.g)
     init_state = State(test.sites, initial="zeros")
     observables = (
-        [Observable(X(), site) for site in range(test.sites)]
-        + [Observable(Y(), site) for site in range(test.sites)]
-        + [Observable(Z(), site) for site in range(test.sites)]
+        [Observable("x", site) for site in range(test.sites)]
+        + [Observable("y", site) for site in range(test.sites)]
+        + [Observable("z", site) for site in range(test.sites)]
     )
     sim_params = AnalogSimParams(
         observables=observables,

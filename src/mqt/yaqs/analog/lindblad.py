@@ -145,7 +145,7 @@ def preprocess_lindblad(
 
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
-        if obs.gate.name in {"entropy", "schmidt_spectrum"}:
+        if obs.kind == "diagnostic":
             embedded_observables.append(None)
         else:
             embedded_observables.append(_embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims))

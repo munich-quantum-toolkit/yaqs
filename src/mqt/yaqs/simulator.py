@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 
     from .core.data_structures.mpo import MPO
     from .core.data_structures.noise_model import NoiseModel
+    from .core.data_structures.observable import Observable
     from .core.parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
@@ -112,7 +113,6 @@ from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
-    Observable,
     _prepare_observable_ordering,
 )
 from .core.data_structures.simulation_program import (

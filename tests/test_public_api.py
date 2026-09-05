@@ -77,7 +77,7 @@ def test_top_level_import_smoke() -> None:
     result = Simulator(show_progress=False).run(state, hamiltonian, params)
 
     assert len(result.expectation_values) == 1
-    assert result.observables[0].gate.name == "z"
+    assert result.observables[0].name == "z"
     assert result.sim_params is params
 
     assert MemoryCharacterizer is not None

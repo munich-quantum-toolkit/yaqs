@@ -7,27 +7,23 @@
 
 """Simulation Parameters for each type of simulation allowed in YAQS.
 
-This module provides classes for representing observables and simulation parameters
-for quantum simulations. It defines the Observable class for measurement, as well as
-:class:`AnalogSimParams` and :class:`DigitalSimParams` for configuring simulation
-runs. These classes encapsulate settings such as simulation time, time steps, bond
-dimension limits, and thresholds. Simulation outputs are stored on
+This module provides :class:`AnalogSimParams` and :class:`DigitalSimParams` for
+configuring simulation runs. These classes encapsulate settings such as simulation
+time, time steps, bond dimension limits, and thresholds. Simulation outputs are stored on
 :class:`~mqt.yaqs.core.data_structures.result.Result`, not on these parameter objects.
 """
 
 from __future__ import annotations
 
-import copy
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 import numpy as np
 
-from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
 if TYPE_CHECKING:
-    from numpy.typing import ArrayLike
+    from .observable import Observable
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
@@ -357,65 +353,6 @@ def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMo
         raise ValueError(msg) from exc
 
 
-class Observable:
-    """Measurement metadata for a quantum simulation.
-
-    Describes *what* to measure (gate and sites). Per-run expectation values and
-    trajectories are stored on :class:`~mqt.yaqs.core.data_structures.result.Result`.
-
-    Attributes:
-        gate: The gate that acts as the observable.
-        sites: The site or site indices on which this observable is measured.
-    """
-
-    def __init__(
-        self,
-        gate: BaseGate | str | ArrayLike,
-        sites: int | list[int] | None = None,
-        **gate_kwargs: object,
-    ) -> None:
-        """Initializes an Observable instance.
-
-        Args:
-            gate: The gate or one-site local matrix that will act as the observable.
-            sites: The qubit or site indices on which this observable is measured.
-            **gate_kwargs: Keyword-only arguments for a named gate or observable factory.
-
-        Raises:
-            TypeError: If factory arguments are missing, unexpected, or supplied for a gate instance or matrix.
-        """
-        if isinstance(gate, str):
-            if gate == "pvm":
-                if gate_kwargs:
-                    msg = "'pvm' does not accept observable parameters."
-                    raise TypeError(msg)
-                resolved_gate = GateLibrary.pvm(gate)
-            elif hasattr(GateLibrary, gate):
-                attr = getattr(GateLibrary, gate)
-                resolved_gate = attr(**gate_kwargs)
-            else:
-                if gate_kwargs:
-                    msg = f"Unknown observable {gate!r} does not accept observable parameters."
-                    raise TypeError(msg)
-                resolved_gate = GateLibrary.pvm(gate)
-        elif isinstance(gate, BaseGate):
-            if gate_kwargs:
-                msg = "Observable parameters are only supported for named observables."
-                raise TypeError(msg)
-            resolved_gate = gate
-        else:
-            if gate_kwargs:
-                msg = "Observable parameters are only supported for named observables."
-                raise TypeError(msg)
-            resolved_gate = GateLibrary.local(gate)
-        assert hasattr(GateLibrary, resolved_gate.name), f"Observable {resolved_gate.name} not found in GateLibrary."
-        self.gate: BaseGate = copy.deepcopy(resolved_gate)
-        if resolved_gate.name != "pvm":
-            assert sites is not None
-            self.sites = sites
-            self.gate.set_sites(self.sites)
-
-
 def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Observable], tuple[int, ...]]:
     """Prepare a sorted evaluation order and a user-index to sorted-row mapping.
 
@@ -436,8 +373,8 @@ def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Ob
         return [], ()
 
     indexed = list(enumerate(observables))
-    sortable = [(i, obs) for i, obs in indexed if obs.gate.name != "pvm"]
-    pvm_pairs = [(i, obs) for i, obs in indexed if obs.gate.name == "pvm"]
+    sortable = [(i, obs) for i, obs in indexed if obs.name != "pvm"]
+    pvm_pairs = [(i, obs) for i, obs in indexed if obs.name == "pvm"]
 
     def _site_sort_key(pair: tuple[int, Observable]) -> tuple[int, int]:
         user_i, obs = pair
@@ -580,7 +517,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
+        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = obs_list
@@ -722,7 +659,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
+        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = obs_list

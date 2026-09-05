@@ -15,7 +15,7 @@ from qiskit.circuit.library import CXGate
 from qiskit.quantum_info import Pauli
 
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.data_structures.state_utils import (
     embed_adjacent_two_site_operator,
@@ -322,7 +322,7 @@ def test_embed_matches_mps_expect_on_haar() -> None:
         for name in ("x", "z"):
             obs = Observable(name, site)
             mps_val = mps.expect(obs)
-            op = embed_one_site_operator(np.asarray(obs.gate.matrix, dtype=np.complex128), length, site)
+            op = embed_one_site_operator(np.asarray(obs.matrix, dtype=np.complex128), length, site)
             embed_val = float(np.real(np.vdot(psi, op @ psi)))
             assert mps_val == pytest.approx(embed_val, abs=1e-9)
 

@@ -43,7 +43,6 @@ from mqt.yaqs import (
 from mqt.yaqs.analog.analog_tjm import analog_tjm_2
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.core.random_utils import make_sample_rng
 from tests.conftest import (
     LARGE_QASM2_STRING,
@@ -92,7 +91,7 @@ def test_simulator_parallel_serial_equivalence() -> None:
 
     def _build_params() -> AnalogSimParams:
         return AnalogSimParams(
-            observables=[Observable(Z(), site) for site in range(length)],
+            observables=[Observable("z", site) for site in range(length)],
             elapsed_time=0.4,
             dt=0.1,
             num_traj=4,
@@ -138,7 +137,7 @@ def test_simulator_run_returns_result() -> None:
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,
@@ -171,7 +170,7 @@ def test_analog_simulation() -> None:
     H = Hamiltonian.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(length)],
+        observables=[Observable("z", site) for site in range(length)],
         elapsed_time=1,
         dt=0.1,
         num_traj=10,
@@ -223,7 +222,7 @@ def test_analog_simulation_parallel_off() -> None:
 
     H = Hamiltonian.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(length)],
+        observables=[Observable("z", site) for site in range(length)],
         elapsed_time=1,
         dt=0.1,
         num_traj=10,
@@ -273,7 +272,7 @@ def test_analog_simulation_get_state() -> None:
         H = Hamiltonian.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
-            observables=[Observable(X(), length // 2)],
+            observables=[Observable("x", length // 2)],
             elapsed_time=1,
             dt=0.1,
             num_traj=1,
@@ -352,7 +351,7 @@ def test_density_matrix_get_state() -> None:
     psi = State(2, initial="zeros", representation="density_matrix")
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         get_state=True,
@@ -377,7 +376,7 @@ def test_density_matrix_get_state_noisy() -> None:
         processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
     )
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=t,
         dt=0.1,
         get_state=True,
@@ -444,7 +443,7 @@ def test_density_matrix_get_state_at_elapsed_time() -> None:
         processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
     )
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=elapsed_time,
         dt=0.1,
         get_state=True,
@@ -467,7 +466,7 @@ def test_density_matrix_get_state_preserves_metadata() -> None:
     initial_state = State(2, initial="zeros", representation="density_matrix", physical_dimensions=[pdim, pdim])
     hamiltonian = Hamiltonian.ising(2, J=0.0, g=0.0)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         get_state=True,
@@ -484,7 +483,7 @@ def test_density_matrix_without_get_state_leaves_output_state_empty() -> None:
     initial_state = State(1, initial="ones", representation="density_matrix")
     hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         get_state=False,
@@ -504,7 +503,7 @@ def test_density_matrix_without_get_state_leaves_output_state_empty() -> None:
 def test_circuit_run_rejects_non_mps_state(state: State) -> None:
     """Circuit simulation requires State.representation='mps'."""
     circuit = QuantumCircuit(2)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)])
     with pytest.raises(ValueError, match=r"Circuit simulation requires State\.representation='mps'"):
         Simulator(show_progress=False).run(state, circuit, sim_params, None)
 
@@ -524,7 +523,7 @@ def test_digital_observables() -> None:
     circuit.measure_all()
 
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        observables=[Observable("z", site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
         krylov_tol=1e-12,
@@ -567,7 +566,7 @@ def test_digital_observables_no_noise() -> None:
 
     state = State(length=num_qubits)
 
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], max_bond_dim=16, get_state=True)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], max_bond_dim=16, get_state=True)
 
     result = Simulator(show_progress=False).run(state, circ, sim_params)
     assert result.output_state is not None
@@ -594,7 +593,7 @@ def test_digital_observables_parallel_off() -> None:
     circuit.measure_all()
 
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        observables=[Observable("z", site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
         krylov_tol=1e-12,
@@ -691,7 +690,7 @@ def test_digital_combined_observables_and_shots() -> None:
     num_qubits = 2
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
     circuit.measure_all()
-    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    obs = [Observable("z", i) for i in range(num_qubits)]
     sim = Simulator(parallel=False, show_progress=False)
 
     obs_only = sim.run(
@@ -718,7 +717,7 @@ def test_digital_combined_observables_and_shots_noisy() -> None:
     num_qubits = 2
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
     circuit.measure_all()
-    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    obs = [Observable("z", i) for i in range(num_qubits)]
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
     num_traj = 4
     shots = 10
@@ -758,7 +757,7 @@ def test_digital_combined_noisy_shots_less_than_num_traj(*, parallel: bool) -> N
     num_qubits = 2
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
     circuit.measure_all()
-    obs = [Observable(Z(), i) for i in range(num_qubits)]
+    obs = [Observable("z", i) for i in range(num_qubits)]
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
     num_traj = 4
     shots = 2
@@ -869,7 +868,7 @@ def test_two_site_correlator_left_boundary() -> None:
     state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
-        observables=[Observable(XX(), [0, 1]), Observable(YY(), [0, 1]), Observable(ZZ(), [0, 1])],
+        observables=[Observable("xx", [0, 1]), Observable("yy", [0, 1]), Observable("zz", [0, 1])],
         elapsed_time=2.0,
         dt=0.1,
         max_bond_dim=4,
@@ -978,9 +977,9 @@ def test_two_site_correlator_center() -> None:
 
     sim_params = AnalogSimParams(
         observables=[
-            Observable(XX(), [L // 2, L // 2 + 1]),
-            Observable(YY(), [L // 2, L // 2 + 1]),
-            Observable(ZZ(), [L // 2, L // 2 + 1]),
+            Observable("xx", [L // 2, L // 2 + 1]),
+            Observable("yy", [L // 2, L // 2 + 1]),
+            Observable("zz", [L // 2, L // 2 + 1]),
         ],
         elapsed_time=2.0,
         dt=0.1,
@@ -1090,9 +1089,9 @@ def test_two_site_correlator_right_boundary() -> None:
 
     sim_params = AnalogSimParams(
         observables=[
-            Observable(XX(), [L - 2, L - 1]),
-            Observable(YY(), [L - 2, L - 1]),
-            Observable(ZZ(), [L - 2, L - 1]),
+            Observable("xx", [L - 2, L - 1]),
+            Observable("yy", [L - 2, L - 1]),
+            Observable("zz", [L - 2, L - 1]),
         ],
         elapsed_time=2.0,
         dt=0.1,
@@ -1200,9 +1199,9 @@ def test_two_site_correlator_center_circuit() -> None:
 
     sim_params = DigitalSimParams(
         observables=[
-            Observable(XX(), [L // 2, L // 2 + 1]),
-            Observable(YY(), [L // 2, L // 2 + 1]),
-            Observable(ZZ(), [L // 2, L // 2 + 1]),
+            Observable("xx", [L // 2, L // 2 + 1]),
+            Observable("yy", [L // 2, L // 2 + 1]),
+            Observable("zz", [L // 2, L // 2 + 1]),
         ],
         max_bond_dim=4,
     )
@@ -1268,21 +1267,21 @@ def test_transmon_simulation() -> None:
     leakage = np.ones_like(res0)
 
     for meas, res in zip(result.observables, result.expectation_values, strict=True):
-        assert hasattr(meas.gate, "bitstring")
-        assert res is not None, f"No results for bitstring {meas.gate.bitstring!r}"
+        assert meas.bitstring is not None
+        assert res is not None, f"No results for bitstring {meas.bitstring!r}"
 
         # subtract elementwise
         leakage -= res
 
-        # use meas.bitstring, not meas.gate.bitstring
-        if meas.gate.bitstring == "111":
+        # use meas.bitstring, not meas.bitstring
+        if meas.bitstring == "111":
             # small pop in 111
             np.testing.assert_array_less(np.max(res), 1e-2)
-        elif meas.gate.bitstring == "100":
+        elif meas.bitstring == "100":
             np.testing.assert_allclose(res[-1], 0, atol=5e-2)
-        elif meas.gate.bitstring == "001":
+        elif meas.bitstring == "001":
             np.testing.assert_allclose(res[-1], 1, atol=1e-1)
-        elif meas.gate.bitstring == "010":
+        elif meas.bitstring == "010":
             np.testing.assert_allclose(res[-1], 0, atol=5e-2)
 
     # finally check total leakage
@@ -1293,7 +1292,7 @@ def test_analog_result_observables_preserve_user_order() -> None:
     """Analog runs must preserve user observable order on Result."""
     state = State(2, initial="zeros")
     H = Hamiltonian.ising(2, J=1.0, g=0.7)
-    requested = [Observable(Z(), 1), Observable(X(), 0), Observable(Z(), 0)]
+    requested = [Observable("z", 1), Observable("x", 0), Observable("z", 0)]
     sim_params = AnalogSimParams(
         observables=requested,
         elapsed_time=0.1,
@@ -1312,13 +1311,13 @@ def test_analog_result_observables_preserve_user_order() -> None:
 
     assert len(result.observables) == len(requested)
     for i, (got_obs, req_obs) in enumerate(zip(result.observables, requested, strict=True)):
-        assert got_obs.gate.name == req_obs.gate.name
+        assert got_obs.name == req_obs.name
         assert got_obs.sites == req_obs.sites
 
         label = ["I"] * n
         site = got_obs.sites[0] if isinstance(got_obs.sites, list) else got_obs.sites
         assert isinstance(site, int)
-        label[n - 1 - site] = got_obs.gate.name.upper()
+        label[n - 1 - site] = got_obs.name.upper()
         expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
@@ -1339,7 +1338,7 @@ def test_scheduled_jump_single_site() -> None:
     noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 
     # Measure Z on site 0
-    z_obs = Observable(Z(), sites=0)
+    z_obs = Observable("z", sites=0)
     sim_params = AnalogSimParams(
         elapsed_time=T,
         dt=dt,
@@ -1374,7 +1373,7 @@ def test_scheduled_jump_two_site() -> None:
     noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 
     # Measure ZZ on site 0, 1
-    zz_obs = Observable(ZZ(), sites=[0, 1])
+    zz_obs = Observable("zz", sites=[0, 1])
     sim_params = AnalogSimParams(
         elapsed_time=T,
         dt=dt,
@@ -1394,7 +1393,7 @@ def test_scheduled_jump_two_site() -> None:
     state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), sites=0)],
+        observables=[Observable("z", sites=0)],
         elapsed_time=T,
         dt=dt,
         num_traj=1,
@@ -1518,7 +1517,7 @@ def test_no_output_error() -> None:
 def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
     """``initial_state=[...]`` must contain only :class:`State` instances."""
     H = Hamiltonian.ising(2, J=1.0, g=0.5)
-    params = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.1, dt=0.1)
+    params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.1, dt=0.1)
     sim = Simulator(show_progress=False)
     bad_list = cast("Any", [State(2, initial="zeros"), MPS(2, state="zeros")])
     with pytest.raises(TypeError, match="initial_state list must contain only State objects"):
@@ -1528,7 +1527,7 @@ def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
 def test_circuit_simulation_rejects_state_list() -> None:
     """Circuit simulation does not support ``list[State]`` initial states."""
     circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
-    params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable("z", 0)])
     states = [State(2, initial="zeros"), State(2, initial="ones")]
     with pytest.raises(TypeError, match="Circuit simulation requires a single State initial_state"):
         Simulator(show_progress=False).run(states, circuit, params, None)
@@ -1537,7 +1536,7 @@ def test_circuit_simulation_rejects_state_list() -> None:
 def test_circuit_simulation_rejects_non_circuit_operator() -> None:
     """Circuit simulation requires a :class:`QuantumCircuit`."""
     state = State(2, initial="zeros")
-    params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable("z", 0)])
     bad_operator = cast("Any", Hamiltonian.ising(2, J=1.0, g=0.5))
     with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit operator"):
         Simulator(show_progress=False).run(state, bad_operator, params, None)
@@ -1546,7 +1545,7 @@ def test_circuit_simulation_rejects_non_circuit_operator() -> None:
 def test_circuit_simulation_rejects_non_state_initial_state() -> None:
     """Circuit simulation requires a :class:`State` initial state."""
     circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
-    params = DigitalSimParams(observables=[Observable(Z(), 0)])
+    params = DigitalSimParams(observables=[Observable("z", 0)])
     bad_state = cast("Any", MPS(2, state="zeros"))
     with pytest.raises(TypeError, match="Circuit simulation requires a State initial_state"):
         Simulator(show_progress=False).run(bad_state, circuit, params, None)
@@ -1576,7 +1575,7 @@ def test_digital_observables_parallel_records_final_mps() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=2)
     circuit.measure_all()
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         num_traj=1,
         max_bond_dim=4,
         get_state=True,
@@ -1592,7 +1591,7 @@ def test_analog_simulation_vector_serial_get_state() -> None:
     state = State(n_sites, initial="zeros", representation="vector")
     hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=-1.0)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,
@@ -1610,7 +1609,7 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
     noise = NoiseModel([{"name": "pauli_z", "sites": [i], "strength": 0.05} for i in range(length)])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=2,
@@ -1677,7 +1676,7 @@ def test_simulator_run_observables_accepts_qasm_path(tmp_path: Path) -> None:
     """Verify that Simulator.run with DigitalSimParams accepts a QASM file passed as a Path."""
     qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.expectation_values[0] is not None
 
@@ -1686,7 +1685,7 @@ def test_simulator_run_observables_accepts_qasm_string(tmp_path: Path) -> None:
     """Verify that Simulator.run with DigitalSimParams accepts a QASM file passed as a str path."""
     qasm_string = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     state = State(6, initial="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
     assert result.expectation_values[0] is not None
 
@@ -1695,7 +1694,7 @@ def test_simulator_run_observables_accepts_qasm_string(tmp_path: Path) -> None:
 def test_simulator_run_observables_accepts_qasm3_raw_string() -> None:
     """Verify that Simulator.run with DigitalSimParams accepts a raw OpenQASM 3 string."""
     state = State(2, initial="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
     assert result.expectation_values[0] is not None
 
@@ -1704,7 +1703,7 @@ def test_simulator_run_analog_rejects_str_operator() -> None:
     """Analog simulation with a str operator requires a Hamiltonian, not OpenQASM."""
     state = State(2, initial="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,
@@ -1729,7 +1728,7 @@ def test_simulator_run_qasm_path_and_string_observables_match(tmp_path: Path) ->
     qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         num_traj=1,
         max_bond_dim=4,
         random_seed=YAQS_TEST_SEED,
@@ -1744,7 +1743,7 @@ def test_scheduled_jumps_rejected_for_mcwf_and_lindblad() -> None:
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.1,
         num_traj=1,
@@ -1760,7 +1759,7 @@ def test_scheduled_jumps_rejected_for_ensemble() -> None:
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.1,
         num_traj=1,
@@ -1775,7 +1774,7 @@ def test_scheduled_jump_off_grid_rejected() -> None:
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     noise = NoiseModel(scheduled_jumps=[{"time": 0.05, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.2,
         num_traj=1,
@@ -1789,7 +1788,7 @@ def test_scheduled_jumps_rejected_for_order_2() -> None:
     hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
     noise = NoiseModel(scheduled_jumps=[{"time": 0.1, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.3,
         num_traj=1,
@@ -1804,7 +1803,7 @@ def test_scheduled_jump_at_t0_order_1_flips_z() -> None:
     hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.3,
         num_traj=1,
@@ -1816,7 +1815,7 @@ def test_scheduled_jump_at_t0_order_1_flips_z() -> None:
     np.testing.assert_allclose(z, -1.0, atol=1e-10)
     # Observables and final state agree after the t=0 jump.
     assert result.output_state is not None
-    final_z = float(result.output_state.mps.expect(Observable(Z(), 0)))
+    final_z = float(result.output_state.mps.expect(Observable("z", 0)))
     assert final_z == pytest.approx(-1.0)
 
 
@@ -1825,7 +1824,7 @@ def test_scheduled_jump_at_t0_final_only_elapsed_zero() -> None:
     hamiltonian = Hamiltonian(matrix=np.zeros((2, 2), dtype=complex))
     noise = NoiseModel(scheduled_jumps=[{"time": 0.0, "sites": [0], "name": "x"}])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.0,
         num_traj=1,
@@ -1836,7 +1835,7 @@ def test_scheduled_jump_at_t0_final_only_elapsed_zero() -> None:
     result = Simulator(show_progress=False).run(State(1, initial="zeros"), hamiltonian, sim_params, noise)
     z = float(np.asarray(result.expectation_values[0], dtype=complex).reshape(-1)[0].real)
     assert result.output_state is not None
-    final_z = float(result.output_state.mps.expect(Observable(Z(), 0)))
+    final_z = float(result.output_state.mps.expect(Observable("z", 0)))
     assert z == pytest.approx(-1.0)
     assert final_z == pytest.approx(-1.0)
     assert z == pytest.approx(final_z)
@@ -1854,7 +1853,7 @@ def test_order_2_short_runs_return_observables_and_state(elapsed_time: float, *,
     """Order-2 TJM handles elapsed_time in {0, dt} without IndexError or empty results."""
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=elapsed_time,
         num_traj=1,
@@ -1875,7 +1874,7 @@ def test_order_2_short_runs_return_observables_and_state(elapsed_time: float, *,
             State(2, initial="zeros"),
             hamiltonian,
             AnalogSimParams(
-                observables=[Observable(Z(), 0)],
+                observables=[Observable("z", 0)],
                 dt=0.1,
                 elapsed_time=0.1,
                 num_traj=1,
@@ -1898,7 +1897,7 @@ def test_order_2_zero_duration_final_only_skips_noise() -> None:
         State(1, initial="x+"),
         hamiltonian,
         AnalogSimParams(
-            observables=[Observable(Z(), 0)],
+            observables=[Observable("z", 0)],
             dt=0.1,
             elapsed_time=0.0,
             num_traj=1,
@@ -1912,7 +1911,7 @@ def test_order_2_zero_duration_final_only_skips_noise() -> None:
         State(1, initial="x+"),
         hamiltonian,
         AnalogSimParams(
-            observables=[Observable(Z(), 0)],
+            observables=[Observable("z", 0)],
             dt=0.1,
             elapsed_time=0.0,
             num_traj=1,
@@ -1971,7 +1970,7 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
             return make_sample_rng(traj_idx, base_seed=base_seed, timestep=timestep)
 
         sim_params = AnalogSimParams(
-            observables=[Observable(X(), 0)],
+            observables=[Observable("x", 0)],
             dt=dt,
             elapsed_time=elapsed_time,
             num_traj=1,
@@ -2014,7 +2013,7 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
             state,
             noise,
             AnalogSimParams(
-                observables=[Observable(X(), 0)],
+                observables=[Observable("x", 0)],
                 dt=dt,
                 elapsed_time=elapsed_time,
                 num_traj=1,
@@ -2033,7 +2032,7 @@ def test_order_2_sample_rng_is_per_timestep_not_sequential() -> None:
             state,
             noise,
             AnalogSimParams(
-                observables=[Observable(X(), 0)],
+                observables=[Observable("x", 0)],
                 dt=dt,
                 elapsed_time=elapsed_time,
                 num_traj=1,
@@ -2055,7 +2054,7 @@ def test_digital_rejects_nonadjacent_noise_matching_and_nonmatching() -> None:
     noise = NoiseModel([
         {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.01},
     ])
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=8)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], num_traj=1, max_bond_dim=8)
     with pytest.raises(ValueError, match="Digital TJM does not support non-adjacent"):
         Simulator(show_progress=False).run(State(3), circuit, sim_params, noise)
 
@@ -2072,7 +2071,7 @@ def test_analog_longrange_crosstalk_xy_mps_runs() -> None:
         {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.05},
     ])
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         dt=0.1,
         elapsed_time=0.2,
         num_traj=2,
