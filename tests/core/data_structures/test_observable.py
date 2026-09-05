@@ -88,6 +88,34 @@ def test_matrix_observable_rejects_named_parameters() -> None:
         Observable(np.eye(2), 0, positions=[0.0, 1.0])
 
 
+def test_bitstring_observable_rejects_named_parameters() -> None:
+    """Bitstring requests do not accept named-observable parameters."""
+    with pytest.raises(TypeError, match="do not accept operator parameters"):
+        Observable("01", positions=[0.0, 1.0])
+
+
+@pytest.mark.parametrize(
+    ("operator", "sites", "exception", "match"),
+    [
+        ("z", None, ValueError, "sites are required for named observables"),
+        (np.eye(2), None, ValueError, "sites are required for matrix observables"),
+        ("z", "0", TypeError, "sites must be an int or a list of ints"),
+        ("z", [], ValueError, "sites must not be empty"),
+        ("zz", 0, ValueError, "acts on 2 site"),
+        (np.eye(2), [0, 1], ValueError, "must have shape"),
+    ],
+)
+def test_observable_rejects_invalid_site_definitions(
+    operator: str | np.ndarray,
+    sites: object,
+    exception: type[Exception],
+    match: str,
+) -> None:
+    """Observable construction rejects absent, malformed, or incompatible sites."""
+    with pytest.raises(exception, match=match):
+        Observable(operator, sites)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+
+
 @pytest.mark.parametrize("name", ["pvm", "unknown"])
 def test_observable_rejects_unknown_names(name: str) -> None:
     """Unknown names do not fall back to projectors."""
@@ -137,6 +165,13 @@ def test_observable_rejects_invalid_matrix(matrix: np.ndarray) -> None:
     """Matrix observables must be two-dimensional and square."""
     with pytest.raises(ValueError, match="Observable matrix"):
         Observable(matrix, 0)
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_observable_rejects_nonfinite_matrix(value: float) -> None:
+    """Custom observable matrices must contain finite values."""
+    with pytest.raises(ValueError, match="must contain only finite values"):
+        Observable(np.diag([value, 1.0]), 0)
 
 
 def test_diagnostics_have_no_operator_placeholder() -> None:
