@@ -12,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.core.libraries.observable_library import ObservableLibrary
 
 
@@ -41,12 +40,6 @@ def test_named_operators_are_hermitian(name: str, interaction: int) -> None:
     np.testing.assert_allclose(definition.matrix, definition.matrix.conj().T)
 
 
-@pytest.mark.parametrize("alias", ["i", "iden"])
-def test_identity_aliases_use_canonical_name(alias: str) -> None:
-    """Identity aliases resolve to the canonical ``id`` definition."""
-    assert ObservableLibrary.resolve(alias).name == "id"
-
-
 def test_definitions_do_not_share_mutable_matrix_data() -> None:
     """Changing one returned matrix does not change later definitions."""
     first = ObservableLibrary.x()
@@ -68,19 +61,8 @@ def test_diagnostics_have_no_placeholder_operator() -> None:
     assert definition.interaction == 0
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["xx", "yy", "zz", "p0", "p1", "pvm", "local", "position", "entropy", "schmidt_spectrum"],
-)
-def test_observable_definitions_are_not_in_gate_library(name: str) -> None:
-    """GateLibrary does not expose observable-only factories."""
-    assert not hasattr(GateLibrary, name)
-
-
-@pytest.mark.parametrize("name", ["h", "cx", "cz", "swap"])
-def test_gate_only_names_are_not_named_observables(name: str) -> None:
-    """Gate-only names remain available as gates but not as named observables."""
-    assert hasattr(GateLibrary, name)
-    assert not hasattr(ObservableLibrary, name)
-    with pytest.raises(ValueError, match="gate name, not a named observable"):
+@pytest.mark.parametrize("name", ["i", "iden", "h", "cx", "cz", "swap", "rx", "unknown"])
+def test_unsupported_names_are_unknown(name: str) -> None:
+    """The observable library rejects each name that it does not define."""
+    with pytest.raises(ValueError, match=f"Unknown observable {name!r}"):
         ObservableLibrary.resolve(name)

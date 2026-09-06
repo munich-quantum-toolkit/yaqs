@@ -108,7 +108,7 @@ class Propagator:
             obs_list: Observables to track during propagation.
 
         Raises:
-            ValueError: If any observable references an out-of-range site.
+            ValueError: If the list is empty, an observable has no sites, or a site is out of range.
         """
         if not obs_list:
             msg = "Observable list must not be empty."

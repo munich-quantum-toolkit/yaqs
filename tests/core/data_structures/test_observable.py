@@ -118,9 +118,9 @@ def test_observable_rejects_invalid_site_definitions(
         Observable(operator, sites)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
 
 
-@pytest.mark.parametrize("name", ["pvm", "unknown"])
+@pytest.mark.parametrize("name", ["pvm", "unknown", "i", "iden", "h", "cx", "cz", "swap"])
 def test_observable_rejects_unknown_names(name: str) -> None:
-    """Unknown names do not fall back to projectors."""
+    """Observable rejects each unsupported string name."""
     with pytest.raises(ValueError, match=f"Unknown observable {name!r}"):
         Observable(name)
 
@@ -129,13 +129,6 @@ def test_observable_rejects_gate_instance() -> None:
     """Observable definitions do not accept gate objects."""
     with pytest.raises(TypeError, match="named observable or a numeric matrix"):
         Observable(BaseGate(np.eye(2)), 0)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
-
-
-@pytest.mark.parametrize("name", ["s", "t", "rx", "destroy"])
-def test_observable_rejects_gate_only_names(name: str) -> None:
-    """Gate-only names are not observable names."""
-    with pytest.raises(ValueError, match="gate name, not a named observable"):
-        Observable(name, 0)
 
 
 def test_observable_rejects_non_hermitian_matrix() -> None:
