@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-ObservableKind = Literal["operator", "diagnostic"]
+ObservableType = Literal["operator", "diagnostic"]
 
 
 @dataclass(frozen=True)
@@ -39,13 +39,13 @@ class ObservableDefinition:
         name: Canonical observable name.
         matrix: Local operator matrix, or ``None`` for a state diagnostic.
         interaction: Number of sites used by a local operator.
-        kind: Whether the definition is an operator or a state diagnostic.
+        type: Whether the definition is an operator or a state diagnostic.
     """
 
     name: str
     matrix: NDArray[np.complex128] | None
     interaction: int
-    kind: ObservableKind = "operator"
+    type: ObservableType = "operator"
 
 
 def _operator(name: str, matrix: ArrayLike, interaction: int) -> ObservableDefinition:

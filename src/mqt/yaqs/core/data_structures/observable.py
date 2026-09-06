@@ -18,7 +18,7 @@ from ..libraries.observable_library import ObservableLibrary
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
-ObservableKind = Literal["operator", "bitstring", "diagnostic"]
+ObservableType = Literal["operator", "bitstring", "diagnostic"]
 _HERMITIAN_RTOL = 1e-10
 _HERMITIAN_ATOL = 1e-12
 
@@ -95,7 +95,7 @@ class Observable:
         matrix: Local operator matrix, or ``None`` for diagnostics and bitstrings.
         sites: Site or sites for a local operator or diagnostic.
         interaction: Number of sites used by a local operator.
-        kind: ``"operator"``, ``"bitstring"``, or ``"diagnostic"``.
+        type: ``"operator"``, ``"bitstring"``, or ``"diagnostic"``.
         bitstring: Computational-basis state for a bitstring request, otherwise ``None``.
     """
 
@@ -125,7 +125,7 @@ class Observable:
                 msg = "Bitstring observables do not accept operator parameters."
                 raise TypeError(msg)
             self.name = "pvm"
-            self.kind: ObservableKind = "bitstring"
+            self.type: ObservableType = "bitstring"
             self.matrix: NDArray[np.complex128] | None = None
             self.sites = None
             self.interaction = 0
@@ -138,9 +138,9 @@ class Observable:
                 msg = "sites are required for named observables."
                 raise ValueError(msg)
             count = _site_count(sites)
-            if definition.kind == "diagnostic":
+            if definition.type == "diagnostic":
                 self.name = definition.name
-                self.kind = "diagnostic"
+                self.type = "diagnostic"
                 self.matrix = None
                 self.sites = sites
                 self.interaction = 0
@@ -171,7 +171,7 @@ class Observable:
             name = "local"
 
         self.name = name
-        self.kind = "operator"
+        self.type = "operator"
         self.matrix = matrix
         self.sites = sites
         self.interaction = interaction

@@ -1504,7 +1504,7 @@ class Simulator:
             return
 
         state_rep = initial_state.representation
-        if state_rep != "mps" and any(observable.kind == "bitstring" for observable in sim_params.observables):
+        if state_rep != "mps" and any(observable.type == "bitstring" for observable in sim_params.observables):
             msg = f"Bitstring observables require State.representation='mps'; got {state_rep!r}."
             raise ValueError(msg)
         initial_state.ensure_encoded(state_rep)

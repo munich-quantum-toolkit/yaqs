@@ -35,7 +35,7 @@ def test_named_operators_are_hermitian(name: str, interaction: int) -> None:
 
     assert definition.name == name
     assert definition.interaction == interaction
-    assert definition.kind == "operator"
+    assert definition.type == "operator"
     assert definition.matrix is not None
     np.testing.assert_allclose(definition.matrix, definition.matrix.conj().T)
 
@@ -56,7 +56,7 @@ def test_diagnostics_have_no_placeholder_operator() -> None:
     """State diagnostics are distinct from linear operators."""
     definition = ObservableLibrary.schmidt_spectrum()
 
-    assert definition.kind == "diagnostic"
+    assert definition.type == "diagnostic"
     assert definition.matrix is None
     assert definition.interaction == 0
 

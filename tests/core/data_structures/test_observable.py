@@ -22,7 +22,7 @@ def test_named_observable_stores_operator_metadata() -> None:
 
     np.testing.assert_array_equal(observable.matrix, np.array([[0, 1], [1, 0]]))
     assert observable.name == "x"
-    assert observable.kind == "operator"
+    assert observable.type == "operator"
     assert observable.interaction == 1
     assert observable.sites == 0
     assert not hasattr(observable, "gate")
@@ -176,7 +176,7 @@ def test_diagnostics_have_no_operator_placeholder() -> None:
     for name in ("entropy", "schmidt_spectrum"):
         observable = Observable(name, cut)
         assert observable.name == name
-        assert observable.kind == "diagnostic"
+        assert observable.type == "diagnostic"
         assert observable.matrix is None
         assert observable.sites == cut
 
@@ -186,7 +186,7 @@ def test_binary_string_builds_bitstring_request() -> None:
     observable = Observable("10101")
 
     assert observable.name == "pvm"
-    assert observable.kind == "bitstring"
+    assert observable.type == "bitstring"
     assert observable.bitstring == "10101"
     assert observable.matrix is None
     assert observable.sites is None
