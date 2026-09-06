@@ -22,16 +22,12 @@ from mqt.yaqs.core.libraries.observable_library import ObservableLibrary
         ("x", 1),
         ("y", 1),
         ("z", 1),
-        ("h", 1),
         ("id", 1),
         ("p0", 1),
         ("p1", 1),
         ("xx", 2),
         ("yy", 2),
         ("zz", 2),
-        ("cx", 2),
-        ("cz", 2),
-        ("swap", 2),
     ],
 )
 def test_named_operators_are_hermitian(name: str, interaction: int) -> None:
@@ -79,3 +75,12 @@ def test_diagnostics_have_no_placeholder_operator() -> None:
 def test_observable_definitions_are_not_in_gate_library(name: str) -> None:
     """GateLibrary does not expose observable-only factories."""
     assert not hasattr(GateLibrary, name)
+
+
+@pytest.mark.parametrize("name", ["h", "cx", "cz", "swap"])
+def test_gate_only_names_are_not_named_observables(name: str) -> None:
+    """Gate-only names remain available as gates but not as named observables."""
+    assert hasattr(GateLibrary, name)
+    assert not hasattr(ObservableLibrary, name)
+    with pytest.raises(ValueError, match="gate name, not a named observable"):
+        ObservableLibrary.resolve(name)

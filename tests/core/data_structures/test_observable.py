@@ -132,9 +132,9 @@ def test_observable_rejects_gate_instance() -> None:
 
 
 @pytest.mark.parametrize("name", ["s", "t", "rx", "destroy"])
-def test_observable_rejects_non_hermitian_gate_names(name: str) -> None:
-    """Non-Hermitian gate names are not observable names."""
-    with pytest.raises(ValueError, match="gate name, not a Hermitian observable"):
+def test_observable_rejects_gate_only_names(name: str) -> None:
+    """Gate-only names are not observable names."""
+    with pytest.raises(ValueError, match="gate name, not a named observable"):
         Observable(name, 0)
 
 

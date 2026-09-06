@@ -31,10 +31,9 @@ depend on gate classes.
 | String                   | Meaning                                                        | Example                                     |
 | ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
 | `"x"`, `"y"`, `"z"`      | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
-| `"h"`, `"id"`            | Hadamard and identity operators                                | `Observable("h", sites=0)`                  |
+| `"id"`                   | Single-site identity operator                                  | `Observable("id", sites=0)`                 |
 | `"p0"`, `"p1"`           | Single-site computational-basis projectors                     | `Observable("p0", sites=0)`                 |
 | `"xx"`, `"yy"`, `"zz"`   | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
-| `"cx"`, `"cz"`, `"swap"` | Other supported Hermitian two-qubit operators                  | `Observable("cz", sites=[0, 1])`            |
 | `"position"`             | Position operator for a supplied local position basis          | `Observable("position", 0, positions=grid)` |
 | `"entropy"`              | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
 | `"schmidt_spectrum"`     | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
