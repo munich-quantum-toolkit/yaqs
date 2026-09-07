@@ -14,14 +14,15 @@ backend can measure the new operators.
 | --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
 | 1. Observable definitions         | Complete                                      | Gate-independent construction and metadata              |
 | 2. MPO construction               | Complete                                      | Validated, reusable operator data                       |
-| 3. MPS contraction                | Pending                                       | Direct and batched MPS measurements accept general MPOs |
+| 3. MPS contraction                | Direct contraction complete; batching pending | Direct and batched MPS measurements accept general MPOs |
 | 4. Backend and result integration | Preparation is connected; measurement remains | Supported backends and result paths agree               |
-| 5. Performance and documentation  | Pending; capture baseline before chunk 3      | Measured cost, complete examples, and release checks    |
+| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline    | Measured cost, complete examples, and release checks    |
 
-Work in order: **5A → 3A → 3B → 4A → 4B → 4C → 5B → 5C**. Each subsection is a
+Work in order: **5A → 3B → 4A → 4B → 4C → 5B → 5C**. Each subsection is a
 reviewable implementation batch. Complete its acceptance checks before
 proceeding. Capture the performance baseline in 5A before changing measurement
-code; finish the performance comparison after integration.
+dispatch in 3B; use the commit immediately before 3A for the old direct
+contraction. Finish the performance comparison after integration.
 
 ## Design requirements
 
@@ -163,22 +164,22 @@ need to add general measurement support.
 ## 3. Evaluate general MPO expectations
 
 The current `MPS.expect()` and `evaluate_observables()` still assume local
-one-site or two-site operators. `mixed_expectation()` copies the ket and applies
-the operator before contracting.
+one-site or two-site operators. `mixed_expectation()` now contracts compact and
+full-chain MPOs directly.
 
 ### 3A. Add the direct contraction
 
-- [ ] Contract `bra`, prepared MPO tensors, and `ket` directly. Support both
+- [x] Contract `bra`, prepared MPO tensors, and `ket` directly. Support both
   full-chain MPOs and compact MPOs with identity action outside `mpo_sites`.
   Include the outer state environments when the gauge is unknown.
-- [ ] Validate matching chain lengths and local dimensions. Allow bra and ket to
+- [x] Validate matching chain lengths and local dimensions. Allow bra and ket to
       have different virtual bond dimensions and orthogonality centers.
-- [ ] Return the raw complex matrix element `<bra|O|ket>`. Do not apply the MPO
+- [x] Return the raw complex matrix element `<bra|O|ket>`. Do not apply the MPO
       to a copied state, truncate bonds, normalize inputs, or build a dense
       operator. A Hermitian operator can have a complex mixed matrix element.
-- [ ] Preserve both states, all observable tensors, and center metadata. The
+- [x] Preserve both states, all observable tensors, and center metadata. The
   contraction must also work when the center is unknown.
-- [ ] Replace the apply-to-copy path in `MPS.mixed_expectation()` with the
+- [x] Replace the apply-to-copy path in `MPS.mixed_expectation()` with the
       direct contraction while keeping its public call form.
 
 Acceptance: independent dense references in `test_mps.py` cover distinct bra and
@@ -289,7 +290,7 @@ Use fixed seeds or controlled trajectories for noisy regression tests.
 
 ## 5. Validate performance and document the API
 
-### 5A. Capture the baseline before chunk 3
+### 5A. Capture the pre-3A baseline
 
 - [ ] Record repeatable runtime and peak-memory measurements for one local
   observable, all single-site observables, and many adjacent two-site

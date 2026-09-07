@@ -1425,19 +1425,117 @@ class MPS:
     def mixed_expectation(self, bra: MPS, observable: Observable) -> np.complex128:
         r"""Compute the mixed matrix element :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
 
-        This applies ``observable`` to a deep copy of ``self`` (the ket) and contracts
-        with ``bra`` using :meth:`scalar_product`.
+        This method contracts ``bra``, the prepared observable MPO, and ``self``
+        (the ket) directly across the full chain. For a compact local MPO, the
+        contraction applies the identity outside :attr:`Observable.mpo_sites`.
+        The contraction does not require either MPS to be canonical.
 
         Args:
-            bra: Bra MPS (left vector).
-            observable: One-site or two-site local observable, same conventions as :meth:`apply_local`.
+            bra: MPS used as the bra.
+            observable: Hermitian operator observable.
 
         Returns:
-            The scalar contraction :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+            The raw complex matrix element
+            :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+
+        Raises:
+            TypeError: If ``bra`` is not an MPS.
+            ValueError: If the states have different lengths or physical
+                dimensions, a state tensor network is malformed, or the
+                observable does not define a compatible MPO.
+
+        Notes:
+            This method does not normalize or modify either state or the
+            observable. A Hermitian operator can have a complex mixed matrix
+            element when ``bra`` and ``self`` represent different states.
         """
-        ket_with_op = copy.deepcopy(self)
-        ket_with_op.apply_local(observable)
-        return bra.scalar_product(ket_with_op)
+        if not isinstance(bra, MPS):
+            msg = f"bra must be an MPS, got {type(bra).__name__}."
+            raise TypeError(msg)
+        if bra.length != self.length:
+            msg = f"Bra and ket lengths must match; got {bra.length} and {self.length}."
+            raise ValueError(msg)
+        bra_dimensions = tuple(bra.physical_dimensions)
+        ket_dimensions = tuple(self.physical_dimensions)
+        if bra_dimensions != ket_dimensions:
+            msg = f"Bra and ket physical dimensions must match; got {bra_dimensions} and {ket_dimensions}."
+            raise ValueError(msg)
+
+        for name, state in (("bra", bra), ("ket", self)):
+            if len(state.tensors) != state.length:
+                msg = f"The {name} MPS must contain {state.length} tensors; got {len(state.tensors)}."
+                raise ValueError(msg)
+            previous_right_bond = 1
+            for site, (tensor, dimension) in enumerate(zip(state.tensors, state.physical_dimensions, strict=True)):
+                if not isinstance(tensor, np.ndarray) or tensor.ndim != 3:
+                    shape = getattr(tensor, "shape", None)
+                    msg = f"The {name} MPS tensor {site} must be a rank-3 NumPy array; got shape {shape}."
+                    raise ValueError(msg)
+                physical_dimension, left_bond, right_bond = tensor.shape
+                if physical_dimension != dimension:
+                    msg = (
+                        f"The {name} MPS tensor {site} physical dimension {physical_dimension} "
+                        f"does not match metadata {dimension}."
+                    )
+                    raise ValueError(msg)
+                if left_bond != previous_right_bond:
+                    msg = (
+                        f"The {name} MPS bond before site {site} has dimension {left_bond}; "
+                        f"expected {previous_right_bond}."
+                    )
+                    raise ValueError(msg)
+                previous_right_bond = right_bond
+            if previous_right_bond != 1:
+                msg = f"The {name} MPS right boundary bond must have dimension one; got {previous_right_bond}."
+                raise ValueError(msg)
+
+        prepared = observable.prepare(self.length, self.physical_dimensions)
+        if prepared.type != "operator" or prepared.mpo is None or prepared.mpo_sites is None:
+            msg = "Mixed expectation requires an operator observable with a prepared MPO."
+            raise ValueError(msg)
+
+        mpo_dimensions = prepared.mpo.validate()
+        mpo_sites = prepared.mpo_sites
+        if not mpo_sites or len(mpo_sites) != prepared.mpo.length:
+            msg = "Prepared observable MPO sites must match its tensor count."
+            raise ValueError(msg)
+        expected_sites = tuple(range(mpo_sites[0], mpo_sites[0] + prepared.mpo.length))
+        if mpo_sites != expected_sites or mpo_sites[0] < 0 or mpo_sites[-1] >= self.length:
+            msg = f"Prepared observable MPO sites must form an in-range contiguous interval; got {mpo_sites}."
+            raise ValueError(msg)
+        expected_dimensions = tuple(self.physical_dimensions[site] for site in mpo_sites)
+        if mpo_dimensions != expected_dimensions:
+            msg = (
+                f"Observable MPO physical dimensions {mpo_dimensions} do not match "
+                f"state dimensions {expected_dimensions} on sites {mpo_sites}."
+            )
+            raise ValueError(msg)
+
+        environment = np.ones((1, 1, 1), dtype=np.complex128)
+        first_mpo_site = mpo_sites[0]
+        last_mpo_site = mpo_sites[-1]
+        for site, (bra_tensor, ket_tensor) in enumerate(zip(bra.tensors, self.tensors, strict=True)):
+            if first_mpo_site <= site <= last_mpo_site:
+                mpo_tensor = prepared.mpo.tensors[site - first_mpo_site]
+                environment = oe.contract(
+                    "abc,pad,pqbe,qcf->def",
+                    environment,
+                    np.conj(bra_tensor),
+                    mpo_tensor,
+                    ket_tensor,
+                )
+            else:
+                environment = oe.contract(
+                    "abc,pad,pcf->dbf",
+                    environment,
+                    np.conj(bra_tensor),
+                    ket_tensor,
+                )
+
+        if environment.shape != (1, 1, 1):
+            msg = f"MPS-MPO contraction ended with open boundary dimensions {environment.shape}."
+            raise ValueError(msg)
+        return np.complex128(environment[0, 0, 0])
 
     def evaluate_observables(
         self,

@@ -21,7 +21,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
+from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -106,6 +106,70 @@ def _dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.nd
     g_merged = _permuted_periodic_wrap_gate(g)
     g_nn = _dense_embed_adjacent_two_site(length, length - 2, g_merged)
     return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
+
+
+def _dense_embed_operator_mps_order(
+    operator: np.ndarray,
+    sites: list[int],
+    physical_dimensions: list[int],
+) -> np.ndarray:
+    """Embed an operator in the site-0-LSB order used by :meth:`MPS.to_vec`.
+
+    Args:
+        operator: Matrix whose tensor factors follow ``sites`` order.
+        sites: Operator sites in user-supplied tensor-factor order.
+        physical_dimensions: Full-chain local dimensions in site order.
+
+    Returns:
+        Full-chain dense operator in MPS vector order.
+    """
+    full_dimension = int(np.prod(physical_dimensions))
+    reversed_dimensions = tuple(reversed(physical_dimensions))
+    basis_digits = [tuple(reversed(np.unravel_index(index, reversed_dimensions))) for index in range(full_dimension)]
+    active_dimensions = tuple(physical_dimensions[site] for site in sites)
+    spectator_sites = [site for site in range(len(physical_dimensions)) if site not in sites]
+    embedded = np.zeros((full_dimension, full_dimension), dtype=np.complex128)
+    for row, row_digits in enumerate(basis_digits):
+        active_row = np.ravel_multi_index(tuple(row_digits[site] for site in sites), active_dimensions)
+        for column, column_digits in enumerate(basis_digits):
+            if any(row_digits[site] != column_digits[site] for site in spectator_sites):
+                continue
+            active_column = np.ravel_multi_index(tuple(column_digits[site] for site in sites), active_dimensions)
+            embedded[row, column] = operator[active_row, active_column]
+    return embedded
+
+
+def _random_mps_with_bonds(
+    physical_dimensions: list[int],
+    bond_dimensions: list[int],
+    seed: int,
+) -> MPS:
+    """Build a deterministic complex MPS with specified virtual bonds.
+
+    Args:
+        physical_dimensions: Local dimensions in site order.
+        bond_dimensions: Boundary and internal bond dimensions.
+        seed: Random-number seed.
+
+    Returns:
+        An MPS with an unknown orthogonality center.
+    """
+    rng = np.random.default_rng(seed)
+    tensors = [
+        (
+            rng.normal(size=(dimension, bond_dimensions[site], bond_dimensions[site + 1]))
+            + 1j * rng.normal(size=(dimension, bond_dimensions[site], bond_dimensions[site + 1]))
+        )
+        / 4
+        for site, dimension in enumerate(physical_dimensions)
+    ]
+    state = MPS(
+        len(physical_dimensions),
+        tensors=[np.asarray(tensor, dtype=np.complex128) for tensor in tensors],
+        physical_dimensions=physical_dimensions.copy(),
+    )
+    state.set_center(None)
+    return state
 
 
 def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -1007,6 +1071,125 @@ def test_mps_mixed_expectation_periodic_wrap_matches_dense_expectation() -> None
     ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
     ex_mps = float(np.real(mps.mixed_expectation(mps, obs)))
     assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
+
+
+def test_mixed_expectation_compact_mpo_matches_dense_and_preserves_inputs() -> None:
+    """A compact general MPO contracts distinct MPS gauges without mutation."""
+    dimensions = [2, 3, 2, 2, 2]
+    ket = _random_mps_with_bonds(dimensions, [1, 3, 2, 3, 2, 1], seed=71)
+    bra = _random_mps_with_bonds(dimensions, [1, 2, 3, 2, 3, 1], seed=72)
+    ket.set_canonical_form(1)
+    bra.set_canonical_form(4)
+    rng = np.random.default_rng(73)
+    raw_operator = rng.normal(size=(6, 6)) + 1j * rng.normal(size=(6, 6))
+    operator = np.asarray(raw_operator + raw_operator.conj().T, dtype=np.complex128)
+    sites = [3, 1]
+    observable = Observable(operator, sites)
+    dense_operator = _dense_embed_operator_mps_order(operator, sites, dimensions)
+    expected = np.vdot(bra.to_vec(), dense_operator @ ket.to_vec())
+    bra_tensors = [tensor.copy() for tensor in bra.tensors]
+    ket_tensors = [tensor.copy() for tensor in ket.tensors]
+    observable_matrix = observable.matrix.copy() if observable.matrix is not None else None
+
+    actual = ket.mixed_expectation(bra, observable)
+
+    assert actual == pytest.approx(expected, rel=1e-12, abs=1e-12)
+    assert abs(actual.imag) > 1e-8
+    assert bra.orthogonality_center == 4
+    assert ket.orthogonality_center == 1
+    assert observable.mpo is None
+    np.testing.assert_array_equal(observable.matrix, observable_matrix)
+    for before, after in zip(bra_tensors, bra.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+    for before, after in zip(ket_tensors, ket.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+
+    bra_scale = 1.2 - 0.4j
+    ket_scale = -0.7 + 0.8j
+    scaled_bra = copy.deepcopy(bra)
+    scaled_ket = copy.deepcopy(ket)
+    scaled_bra.tensors[4] *= bra_scale
+    scaled_ket.tensors[1] *= ket_scale
+    scaled = scaled_ket.mixed_expectation(scaled_bra, observable)
+    assert scaled == pytest.approx(np.conj(bra_scale) * ket_scale * actual, rel=1e-12, abs=1e-12)
+
+
+def test_mixed_expectation_full_chain_mpo_uses_direct_contraction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A supplied MPO is contracted without local application or dense conversion."""
+    dimensions = [2, 2, 2]
+    ket = _random_mps_with_bonds(dimensions, [1, 2, 3, 1], seed=74)
+    bra = _random_mps_with_bonds(dimensions, [1, 3, 2, 1], seed=75)
+    rng = np.random.default_rng(76)
+    raw_operator = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    operator = np.asarray(raw_operator + raw_operator.conj().T, dtype=np.complex128)
+    observable = Observable(MPO.from_matrix_with_dimensions(operator, dimensions))
+    observable_tensors = [tensor.copy() for tensor in observable.mpo.tensors] if observable.mpo is not None else []
+    dense_operator = _dense_embed_operator_mps_order(operator, [0, 1, 2], dimensions)
+    expected = np.vdot(bra.to_vec(), dense_operator @ ket.to_vec())
+
+    def fail_indirect_path(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Direct MPS-MPO contraction must not apply or densify the operator.")
+
+    monkeypatch.setattr(MPS, "apply_local", fail_indirect_path)
+    monkeypatch.setattr(MPO, "to_matrix", fail_indirect_path)
+    monkeypatch.setattr(MPO, "to_matrix_mps_order", fail_indirect_path)
+
+    actual = ket.mixed_expectation(bra, observable)
+
+    assert actual == pytest.approx(expected, rel=1e-12, abs=1e-12)
+    assert bra.orthogonality_center is None
+    assert ket.orthogonality_center is None
+    assert observable.mpo is not None
+    for before, after in zip(observable_tensors, observable.mpo.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+
+
+def test_mixed_expectation_accepts_a_zero_mpo() -> None:
+    """A zero full-chain MPO returns an exact zero matrix element."""
+    ket = _random_mps_with_bonds([2, 2], [1, 2, 1], seed=77)
+    bra = _random_mps_with_bonds([2, 2], [1, 3, 1], seed=78)
+    zero = MPO.from_matrix_with_dimensions(np.zeros((4, 4)), [2, 2])
+
+    assert ket.mixed_expectation(bra, Observable(zero)) == 0
+
+
+def test_mixed_expectation_rejects_incompatible_state_layouts() -> None:
+    """Mixed contractions require equal lengths and physical dimensions."""
+    ket = MPS(2, state="zeros")
+
+    with pytest.raises(TypeError, match="bra must be an MPS"):
+        ket.mixed_expectation(object(), Observable("z", 0))  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="lengths must match"):
+        ket.mixed_expectation(MPS(3, state="zeros"), Observable("z", 0))
+    with pytest.raises(ValueError, match="physical dimensions must match"):
+        ket.mixed_expectation(MPS(2, physical_dimensions=[3, 2], state="zeros"), Observable("z", 0))
+    with pytest.raises(ValueError, match="requires an operator observable"):
+        ket.mixed_expectation(MPS(2, state="zeros"), Observable("entropy", [0, 1]))
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (lambda state: state.tensors.pop(), "must contain 2 tensors"),
+        (lambda state: state.tensors.__setitem__(0, np.ones((2, 1))), "must be a rank-3"),
+        (
+            lambda state: state.tensors.__setitem__(0, np.ones((3, 1, 1))),
+            "physical dimension 3 does not match metadata 2",
+        ),
+        (lambda state: state.tensors.__setitem__(1, np.ones((2, 2, 1))), "bond before site 1"),
+        (lambda state: state.tensors.__setitem__(1, np.ones((2, 1, 2))), "right boundary bond"),
+    ],
+)
+def test_mixed_expectation_rejects_malformed_mps(
+    mutate: Callable[[MPS], object],
+    match: str,
+) -> None:
+    """Direct contraction reports malformed state tensors before contraction."""
+    bra = MPS(2, state="zeros")
+    mutate(bra)
+
+    with pytest.raises(ValueError, match=match):
+        MPS(2, state="zeros").mixed_expectation(bra, Observable("z", 0))
 
 
 def test_measure() -> None:
