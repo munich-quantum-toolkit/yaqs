@@ -321,7 +321,8 @@ class Observable:
 
         Raises:
             TypeError: If matrix data, sites, or factory arguments have invalid types.
-            ValueError: If a name, matrix, or number of sites is invalid.
+            ValueError: If a name, matrix, MPO, or number of sites is invalid,
+                or if an operator is not Hermitian.
         """
         self.bitstring: str | None = None
         self.mpo: MPO | None = None

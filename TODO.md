@@ -7,19 +7,19 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 through 4 are complete. Performance checks, documentation, and release
-notes remain in chunk 5.
+Chunks 1 through 5 are complete except for the changelog reference, which needs
+the number of the pull request that will contain this work.
 
-| Chunk                             | Status                                                           | Completion boundary                                     |
-| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
-| 1. Observable definitions         | Complete                                                         | Gate-independent construction and metadata              |
-| 2. MPO construction               | Complete                                                         | Validated, reusable operator data                       |
-| 3. MPS contraction                | Complete                                                         | Direct and batched MPS measurements accept general MPOs |
-| 4. Backend and result integration | Complete                                                         | Supported backends and result paths agree               |
-| 5. Performance and documentation  | 5A and 5B complete; 5C remains                                   | Measured cost, complete examples, and release checks    |
+| Chunk                             | Status                                         | Completion boundary                                     |
+| --------------------------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| 1. Observable definitions         | Complete                                       | Gate-independent construction and metadata              |
+| 2. MPO construction               | Complete                                       | Validated, reusable operator data                       |
+| 3. MPS contraction                | Complete                                       | Direct and batched MPS measurements accept general MPOs |
+| 4. Backend and result integration | Complete                                       | Supported backends and result paths agree               |
+| 5. Performance and documentation  | Complete except for the changelog PR reference | Measured cost, complete examples, and release checks    |
 
-Remaining work: **5C**. Complete its acceptance checks before declaring the
-observable work finished.
+Remaining work: add the pull request number and author reference to the
+changelog after the pull request exists.
 
 ## Design requirements
 
@@ -318,23 +318,23 @@ flaky wall-clock thresholds in ordinary unit tests.
 
 ### 5C. Complete documentation and release checks
 
-- [ ] Update `docs/examples/simulation_parameters.md` and API docstrings with
+- [x] Update `docs/examples/simulation_parameters.md` and API docstrings with
   working examples for named operators, custom matrices, nonadjacent sites,
   supplied MPOs, Pauli sums, mixed projectors, and diagnostics.
-- [ ] Document Hermiticity and real-result tolerances, normalization, tensor and
+- [x] Document Hermiticity and real-result tolerances, normalization, tensor and
       basis order, compact MPO support, dimension checks, and reuse/mutation
       rules. Include a backend support table and diagnostic result semantics.
-- [ ] Check public imports and Google-style docstrings. Keep `ObservableType`,
+- [x] Check public imports and Google-style docstrings. Keep `ObservableType`,
       `id`, and gate-independent definitions consistent across code and
       examples.
 - [ ] Complete `CHANGELOG.md` and `UPGRADING.md` for the final feature. Include
       diagnostics and MPO inputs in accepted-input descriptions and distinguish
       construction from measurement support. Use required PR and author
       references; no compatibility period or migration tutorial is needed.
-- [ ] Run the relevant integration tests and full test suite after the targeted
+- [x] Run the relevant integration tests and full test suite after the targeted
       checks pass. Build documentation with `uvx nox --non-interactive -s docs`
       and verify the examples against supported execution paths.
-- [ ] Run `uvx nox -s lint` with all hooks passing before submission. Record any
+- [x] Run `uvx nox -s lint` with all hooks passing before submission. Record any
       unavailable check as a blocker, rather than treating a skipped hook as a
       pass.
 
@@ -349,9 +349,9 @@ audit.
   construction pattern without depending on gate objects.
 - [x] Long-range correlations, custom operators on several sites, and supplied
   MPOs agree with independent references across supported backends.
-- [ ] Non-Hermitian operators and invalid dimensions fail clearly before
+- [x] Non-Hermitian operators and invalid dimensions fail clearly before
   evolution begins.
 - [x] Measurements preserve the state and retain local-observable efficiency.
-- [ ] Diagnostics and projectors have explicit behavior across sampling and
+- [x] Diagnostics and projectors have explicit behavior across sampling and
   result aggregation paths.
 - [ ] Tests, examples, release notes, and required checks cover the final API.

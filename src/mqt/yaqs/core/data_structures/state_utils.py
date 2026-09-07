@@ -24,6 +24,9 @@ _ALLOWED_REPRESENTATIONS = frozenset({"mps", "vector", "density_matrix"})
 def expectation_to_real(value: complex, name: str) -> np.float64:
     """Return a finite expectation value with only numerical imaginary noise.
 
+    The accepted residual satisfies
+    ``abs(imaginary) <= 1e-10 * max(1, abs(real))``.
+
     Args:
         value: Contracted operator expectation value.
         name: Observable name used in error messages.

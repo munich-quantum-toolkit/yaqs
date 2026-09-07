@@ -171,10 +171,13 @@ class Result:
     :attr:`counts` like a normal run; :attr:`segment_results` retains per-segment
     detail. :attr:`observables` preserves the user-supplied ordering;
     :attr:`expectation_values` and :attr:`trajectories` hold the corresponding
-    data in lock-step by index. For MPS-backed runs with observables,
-    :attr:`runtime_cost`, :attr:`max_bond`, and :attr:`total_bond` are populated
-    automatically. Nested segment results use :attr:`segment_index`,
-    :attr:`segment_type`, and :attr:`time_offset`.
+    data in lock-step by index. Operator, projector, and entropy results are
+    real arrays over recorded times or circuit layers. Schmidt spectra use
+    object-valued trajectory entries and a concatenated one-dimensional
+    aggregate because their lengths can vary. For MPS-backed runs with
+    observables, :attr:`runtime_cost`, :attr:`max_bond`, and :attr:`total_bond`
+    are populated automatically. Nested segment results use
+    :attr:`segment_index`, :attr:`segment_type`, and :attr:`time_offset`.
     """
 
     sim_params: AnalogSimParams | DigitalSimParams | None = None
