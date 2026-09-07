@@ -44,6 +44,7 @@ from mqt.yaqs.analog.analog_tjm import analog_tjm_2
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.random_utils import make_sample_rng
+from mqt.yaqs.simulator import _worker_sim_params  # ruff: ignore[import-private-name]  # worker preparation contract
 from tests.conftest import (
     LARGE_QASM2_STRING,
     SAMPLE_QASM3_STRING,
@@ -114,6 +115,24 @@ def test_simulator_parallel_serial_equivalence() -> None:
         assert serial_vals is not None
         assert parallel_vals is not None
         np.testing.assert_allclose(serial_vals, parallel_vals, atol=1e-10)
+
+
+def test_worker_params_prepare_and_copy_all_observable_roles() -> None:
+    """Worker parameters prepare regular and multi-time observables without mutating inputs."""
+    full_chain = Observable(MPO.identity(2))
+    params = AnalogSimParams(
+        observables=[Observable("00"), full_chain, full_chain],
+        multi_time_observables=[(full_chain, full_chain)],
+    )
+
+    worker = _worker_sim_params(params, length=2, physical_dimensions=[2, 2])
+
+    assert isinstance(worker, AnalogSimParams)
+    assert all(observable.prepared_length == 2 for observable in worker.observables)
+    assert worker.observables[0] is not worker.observables[1]
+    assert all(observable.prepared_length == 2 for pair in worker.multi_time_observables for observable in pair)
+    assert all(observable.prepared_length is None for observable in params.observables)
+    assert all(observable.prepared_length is None for pair in params.multi_time_observables for observable in pair)
 
 
 def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) -> None:

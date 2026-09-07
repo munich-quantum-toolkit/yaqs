@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -597,6 +598,27 @@ def test_simulation_params_accept_mixed_bitstring_and_operator_observables(
     params = params_type(observables=observables)
 
     assert params.observables == observables
+
+
+def test_observable_ordering_preserves_duplicates_and_full_chain_entries() -> None:
+    """Sorting keeps duplicate rows distinct and accepts observables without sites."""
+    full_chain = Observable(MPO.identity(3))
+    repeated = Observable("z", 2)
+    first_bitstring = Observable("001")
+    second_bitstring = Observable("001")
+    params = AnalogSimParams(
+        observables=[repeated, full_chain, first_bitstring, Observable("x", 0), repeated, second_bitstring]
+    )
+
+    assert params.sorted_observables == [
+        full_chain,
+        params.observables[3],
+        repeated,
+        repeated,
+        first_bitstring,
+        second_bitstring,
+    ]
+    assert params.observable_sorted_indices == (2, 0, 4, 1, 3, 5)
 
 
 def test_digital_params_accepts_all_pvm_or_all_non_pvm() -> None:

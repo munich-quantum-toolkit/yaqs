@@ -7,18 +7,18 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 through 3 and chunks 4A and 4B are complete. Worker, sampling, and
-result-path audits remain in chunk 4C.
+Chunks 1 through 4 are complete. Performance checks, documentation, and release
+notes remain in chunk 5.
 
 | Chunk                             | Status                                                           | Completion boundary                                     |
 | --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | 1. Observable definitions         | Complete                                                         | Gate-independent construction and metadata              |
 | 2. MPO construction               | Complete                                                         | Validated, reusable operator data                       |
 | 3. MPS contraction                | Complete                                                         | Direct and batched MPS measurements accept general MPOs |
-| 4. Backend and result integration | Operator, projector, and diagnostic support complete; 4C remains | Supported backends and result paths agree               |
+| 4. Backend and result integration | Complete                                                         | Supported backends and result paths agree               |
 | 5. Performance and documentation  | Pending; use the pre-3A commit as baseline                       | Measured cost, complete examples, and release checks    |
 
-Remaining work in order: **5A → 4C → 5B → 5C**. Each subsection is a reviewable
+Remaining work in order: **5A → 5B → 5C**. Each subsection is a reviewable
 implementation batch. Complete its acceptance checks before proceeding. In 5A,
 use the commit immediately before 3A for the old direct contraction and the
 commit immediately before 3B for the old batched dispatch. Finish the
@@ -46,8 +46,8 @@ performance comparison after integration.
 
 ## Target interface
 
-These constructors and general MPS measurements are implemented. Chunk 4C
-retains the final sampling, worker, and result-path audit.
+These constructors and general MPS measurements are implemented. Sampling,
+worker transport, and result ordering are also complete.
 
 ```python
 from mqt.yaqs import Observable
@@ -221,7 +221,8 @@ and general measurements preserve the source state.
 
 Operator and projector requests now work in all state representations. Entropy
 and Schmidt-spectrum diagnostics remain MPS-only because they describe an MPS
-bond cut. Chunk 4C will audit sampling, worker transport, and result ordering.
+bond cut. Sampling, worker transport, and result ordering preserve each
+observable type.
 
 ### 4A. Support operators in each backend
 
@@ -268,18 +269,18 @@ combinations raise explicit errors before evolution.
 
 ### 4C. Verify sampling, workers, and results
 
-- [ ] Preserve user-list order and duplicate entries through sorting and result
+- [x] Preserve user-list order and duplicate entries through sorting and result
   lookup. Full-chain observables must not require a local site index. Use
   observable type metadata for dispatch instead of special name checks.
-- [ ] Cover final measurements, intermediate analog times, digital sampling
+- [x] Cover final measurements, intermediate analog times, digital sampling
       barriers, noisy trajectories, and runs that request observables with
       shots.
-- [ ] Check prepared-observable serialization and reuse in process workers.
+- [x] Check prepared-observable serialization and reuse in process workers.
   Preserve real expectation buffers, trajectory statistics, time axes, and
   diagnostic arrays through aggregation.
-- [ ] Check `SimulationProgram` segment preparation, repeated measurements,
+- [x] Check `SimulationProgram` segment preparation, repeated measurements,
   segment boundaries, result stitching, and supported state representations.
-- [ ] Audit remaining observable consumers, including characterization helpers,
+- [x] Audit remaining observable consumers, including characterization helpers,
   for assumptions about a local matrix, a site index, or one scalar result.
 
 Acceptance: tests in `tests/analog/`, `tests/digital/`,

@@ -26,6 +26,7 @@ from scipy.linalg import expm
 
 import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -2086,6 +2087,35 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     for i in range(len(result.observables)):
         assert result.expectation_values[i] is not None
         assert result.expectation_values[i].shape == (5,)
+
+
+def test_sampling_barriers_preserve_mixed_observable_order_with_shots() -> None:
+    """Layer samples and final shots preserve duplicate bitstrings and a full-chain MPO."""
+    circuit = QuantumCircuit(2)
+    circuit.barrier(label="SAMPLE_OBSERVABLES")
+    circuit.x(0)
+    circuit.barrier(label="SAMPLE_OBSERVABLES")
+    full_z0 = Observable(
+        MPO.from_local_ops([
+            np.diag([1.0, -1.0]).astype(np.complex128),
+            np.eye(2, dtype=np.complex128),
+        ])
+    )
+    bitstring = Observable("10")
+    params = DigitalSimParams(
+        observables=[bitstring, Observable("z", 1), full_z0, bitstring],
+        shots=8,
+        sample_layers=True,
+        random_seed=7,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), circuit, params)
+
+    np.testing.assert_allclose(result.expectation_values[0], [0.0, 0.0, 1.0, 1.0])
+    np.testing.assert_allclose(result.expectation_values[1], [1.0, 1.0, 1.0, 1.0])
+    np.testing.assert_allclose(result.expectation_values[2], [1.0, 1.0, -1.0, -1.0])
+    np.testing.assert_allclose(result.expectation_values[3], result.expectation_values[0])
+    assert result.counts == {1: 8}
 
 
 def test_ignores_non_mid_barriers_and_handles_measures() -> None:

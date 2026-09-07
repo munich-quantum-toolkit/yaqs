@@ -930,12 +930,23 @@ def _worker_sim_params(
 
     Returns:
         A deep copy whose observables are ordered, validated, and MPO-prepared
-        for worker evaluation.
+        for worker evaluation. Analog multi-time observable pairs are also
+        prepared in their user order.
     """
     worker_params = copy.deepcopy(sim_params)
     # Workers evaluate in sorted order for efficiency; Result retains user order.
     sorted_obs, _ = _prepare_observable_ordering(sim_params.observables)
     worker_params.observables = prepare_observables(sorted_obs, length, physical_dimensions)
+    if isinstance(worker_params, AnalogSimParams) and worker_params.multi_time_observables:
+        prepared_pairs: list[tuple[Observable, Observable]] = []
+        for probe_a, probe_b in worker_params.multi_time_observables:
+            prepared_a, prepared_b = prepare_observables(
+                [probe_a, probe_b],
+                length,
+                physical_dimensions,
+            )
+            prepared_pairs.append((prepared_a, prepared_b))
+        worker_params.multi_time_observables = prepared_pairs
     return worker_params
 
 

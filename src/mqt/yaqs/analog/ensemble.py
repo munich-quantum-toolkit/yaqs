@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core.data_structures.mpo_utils import contract_mpo_site_with_mps_site
 from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.mpo import MPO
     from ..core.data_structures.mps import MPS
+    from ..core.data_structures.observable import Observable
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -52,6 +54,25 @@ def _step_correlator_phis(
     for phi in phis:
         # Preserve non-unitary probe amplitudes under BUG (TDVP ignores normalize).
         _unitary_step(phi, hamiltonian, sim_params, normalize=False)
+
+
+def _apply_probe(state: MPS, observable: Observable) -> None:
+    """Apply one prepared operator observable to an auxiliary state.
+
+    Args:
+        state: Auxiliary MPS to update in place.
+        observable: Operator with an MPO and its chain support after preparation.
+
+    Raises:
+        ValueError: If the observable is not a prepared operator.
+    """
+    prepared = observable.prepare(state.length, state.physical_dimensions)
+    if prepared.type != "operator" or prepared.mpo is None or prepared.mpo_sites is None:
+        msg = "Multi-time probes must be prepared operator observables."
+        raise ValueError(msg)
+    for site, tensor in zip(prepared.mpo_sites, prepared.mpo.tensors, strict=True):
+        state.tensors[site] = contract_mpo_site_with_mps_site(tensor, state.tensors[site])
+    state.set_center(None)
 
 
 def ensemble_member_worker(
@@ -100,8 +121,8 @@ def ensemble_member_worker(
             multi_time_results = np.zeros((n_pairs, 1), dtype=np.complex128)
         for _probe_a, b_op in pairs:
             phi_b = copy.deepcopy(state)
-            phi_b.apply_local(b_op)
-            # Local application can invalidate gauge metadata; BUG requires center 0.
+            _apply_probe(phi_b, b_op)
+            # Probe application invalidates gauge metadata; BUG requires center 0.
             phi_b.set_canonical_form(0, decomposition="QR")
             phi_b.set_center(0)
             phis.append(phi_b)

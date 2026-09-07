@@ -163,6 +163,56 @@ def test_mixed_program_matches_manual_state_handoff() -> None:
     assert len(result.expectation_values) == 2
 
 
+def test_program_stitches_duplicate_full_chain_and_bitstring_samples_with_shots() -> None:
+    """Program results keep user order across digital barriers and analog time samples."""
+    circuit = QuantumCircuit(2)
+    circuit.barrier(label="SAMPLE_OBSERVABLES")
+    circuit.x(0)
+    full_z0 = Observable(
+        MPO.from_local_ops([
+            np.diag([1.0, -1.0]).astype(np.complex128),
+            np.eye(2, dtype=np.complex128),
+        ])
+    )
+    bitstring = Observable("10")
+    program = SimulationProgram(
+        [
+            (circuit, DigitalSimParams(sample_layers=True, shots=4)),
+            (_zero_hamiltonian(2), AnalogSimParams(elapsed_time=0.1, dt=0.1, sample_timesteps=True)),
+        ],
+        observables=[bitstring, full_z0, bitstring],
+        random_seed=5,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+    np.testing.assert_allclose(result.expectation_values[0], [0.0, 0.0, 1.0, 1.0, 1.0])
+    np.testing.assert_allclose(result.expectation_values[1], [1.0, 1.0, -1.0, -1.0, -1.0])
+    np.testing.assert_allclose(result.expectation_values[2], result.expectation_values[0])
+    assert result.times is not None
+    np.testing.assert_allclose(result.times, [0.0, 0.0, 0.0, 0.0, 0.1])
+    assert result.counts == {1: 4}
+    assert [len(segment.expectation_values[0]) for segment in result.segment_results] == [3, 2]
+
+
+def test_program_stitches_scalar_and_array_diagnostics() -> None:
+    """MPS program aggregation retains entropy samples, Schmidt arrays, and the shared time axis."""
+    program = SimulationProgram(
+        [
+            (QuantumCircuit(2), DigitalSimParams()),
+            (_zero_hamiltonian(2), AnalogSimParams(elapsed_time=0.1, dt=0.1, sample_timesteps=True)),
+        ],
+        observables=[Observable("entropy", [0, 1]), Observable("schmidt_spectrum", [0, 1])],
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+    np.testing.assert_array_equal(result.expectation_values[0], np.zeros(3))
+    assert result.expectation_values[1].shape == (1500,)
+    assert np.count_nonzero(~np.isnan(result.expectation_values[1])) == 4
+    np.testing.assert_array_equal(result.times, np.array([0.0, 0.0, 0.1]))
+
+
 def test_flattened_program_result_preserves_boundary_values_around_digital_pulse() -> None:
     """Equal boundary times retain analog and digital samples around an instantaneous gate."""
     observable = Observable("z", 0)

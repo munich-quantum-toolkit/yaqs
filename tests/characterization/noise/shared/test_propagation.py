@@ -16,6 +16,7 @@ import pytest
 
 from mqt.yaqs import Observable
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 from ..fixtures import NoiseTestConfig, build_propagator
@@ -34,8 +35,8 @@ def test_propagator_rejects_empty_observable_list(noise_test_config: NoiseTestCo
         propagator.set_observable_list([])
 
 
-def test_propagator_requires_explicit_observable_sites(noise_test_config: NoiseTestConfig) -> None:
-    """Noise propagation rejects full-chain observable requests."""
+def test_propagator_accepts_full_chain_observables(noise_test_config: NoiseTestConfig) -> None:
+    """Noise propagation accepts bitstrings and supplied full-chain MPOs."""
     hamiltonian, init_state, _observables, sim_params, noise_model, _ = build_propagator(noise_test_config)
     propagator = Propagator(
         sim_params=sim_params,
@@ -44,8 +45,32 @@ def test_propagator_requires_explicit_observable_sites(noise_test_config: NoiseT
         init_state=init_state,
     )
 
-    with pytest.raises(ValueError, match="observables must have explicit sites"):
-        propagator.set_observable_list([Observable("0" * noise_test_config.sites)])
+    propagator.set_observable_list([
+        Observable("0" * noise_test_config.sites),
+        Observable(MPO.identity(noise_test_config.sites)),
+    ])
+
+    assert [observable.type for observable in propagator.obs_list] == ["bitstring", "operator"]
+    assert all(observable.prepared_length == noise_test_config.sites for observable in propagator.obs_list)
+
+    propagator.run(noise_model)
+
+    assert propagator.obs_array is not None
+    assert propagator.obs_array.shape == (2, noise_test_config.n_t)
+
+
+def test_propagator_rejects_state_diagnostics(noise_test_config: NoiseTestConfig) -> None:
+    """Noise propagation restricts its result matrix to operators and bitstrings."""
+    hamiltonian, init_state, _observables, sim_params, noise_model, _ = build_propagator(noise_test_config)
+    propagator = Propagator(
+        sim_params=sim_params,
+        hamiltonian=hamiltonian,
+        noise_model=noise_model,
+        init_state=init_state,
+    )
+
+    with pytest.raises(ValueError, match="scalar operator and bitstring observables"):
+        propagator.set_observable_list([Observable("entropy", [0, 1])])
 
 
 def test_propagator_runs(noise_test_config: NoiseTestConfig) -> None:
@@ -83,8 +108,7 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
         noise_model=noise_model,
         init_state=init_state,
     )
-    obs_err = "Observable site index exceeds number of sites in the Hamiltonian."
-    with pytest.raises(ValueError, match=re.escape(obs_err)):
+    with pytest.raises(ValueError, match="outside the state"):
         propagator.set_observable_list(exceed_observables)
 
     propagator = Propagator(

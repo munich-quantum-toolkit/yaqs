@@ -262,6 +262,33 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
     assert result.multi_time_results is not None
 
 
+def test_parallel_ensemble_serializes_prepared_full_chain_observables() -> None:
+    """Spawn workers preserve full-chain MPOs, duplicates, bitstrings, and correlator probes."""
+    identity = np.eye(2, dtype=np.complex128)
+    z_op = np.diag([1.0, -1.0]).astype(np.complex128)
+    full_z = Observable(MPO.from_local_ops([z_op, identity]))
+    states = [State(2, initial="zeros"), State(2, initial="ones")]
+    params = AnalogSimParams(
+        observables=[Observable("00"), full_z, full_z],
+        elapsed_time=0.0,
+        dt=0.1,
+        sample_timesteps=False,
+        multi_time_observables=[(full_z, full_z)],
+    )
+
+    result = Simulator(parallel=True, max_workers=2, mp_context="spawn", show_progress=False).run(
+        states,
+        Hamiltonian.ising(2, J=0.0, g=0.0),
+        params,
+    )
+
+    np.testing.assert_allclose(result.expectation_values[0], [0.5])
+    np.testing.assert_allclose(result.expectation_values[1], [0.0])
+    np.testing.assert_allclose(result.expectation_values[2], [0.0])
+    assert result.multi_time_results is not None
+    np.testing.assert_allclose(result.multi_time_results, [[1.0 + 0.0j]])
+
+
 def test_unitary_ensemble_uses_bug_evolution_mode_via_simulator() -> None:
     """BUG tensor evolution should be exercised by the high-level Simulator path."""
     length = 2

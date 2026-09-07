@@ -221,6 +221,66 @@ def test_stitch_program_results_combines_analog_and_digital_samples() -> None:
     np.testing.assert_array_equal(expectation_values[0], np.array([1.0, 0.8, 0.8, 0.0, -0.8, -0.8, -0.6]))
 
 
+def test_stitch_program_results_preserves_schmidt_arrays_and_scalar_time_axis() -> None:
+    """Program stitching keeps spectrum arrays without treating their entries as time samples."""
+    entropy = Observable("entropy", [0, 1])
+    spectrum = Observable("schmidt_spectrum", [0, 1])
+    segment_results = [
+        Result(
+            sim_params=DigitalSimParams(observables=[entropy, spectrum]),
+            observables=[entropy, spectrum],
+            expectation_values=[np.array([0.0]), np.array([1.0, np.nan])],
+            segment_index=0,
+            segment_type="digital",
+            time_offset=0.0,
+        ),
+        Result(
+            sim_params=AnalogSimParams(observables=[entropy, spectrum], elapsed_time=0.1, dt=0.1),
+            observables=[entropy, spectrum],
+            expectation_values=[np.array([0.0, 0.0]), np.array([1.0, np.nan, 1.0, np.nan])],
+            times=np.array([0.0, 0.1]),
+            segment_index=1,
+            segment_type="analog",
+            time_offset=0.0,
+        ),
+    ]
+
+    values, times, _counts = stitch_program_results(segment_results, [entropy, spectrum])
+
+    np.testing.assert_array_equal(values[0], np.zeros(3))
+    np.testing.assert_array_equal(values[1], np.array([1.0, np.nan, 1.0, np.nan, 1.0, np.nan]))
+    np.testing.assert_array_equal(times, np.array([0.0, 0.0, 0.1]))
+
+
+def test_stitch_program_results_uses_segment_metadata_for_only_schmidt_spectrum() -> None:
+    """A spectrum-only program derives sample counts from its segment metadata."""
+    spectrum = Observable("schmidt_spectrum", [0, 1])
+    segment_results = [
+        Result(
+            sim_params=DigitalSimParams(observables=[spectrum], sample_layers=True, num_mid_measurements=1),
+            observables=[spectrum],
+            expectation_values=[np.arange(6, dtype=np.float64)],
+            segment_index=0,
+            segment_type="digital",
+            time_offset=0.0,
+        ),
+        Result(
+            sim_params=AnalogSimParams(observables=[spectrum], elapsed_time=0.1, dt=0.1),
+            observables=[spectrum],
+            expectation_values=[np.arange(4, dtype=np.float64)],
+            times=np.array([0.0, 0.1]),
+            segment_index=1,
+            segment_type="analog",
+            time_offset=0.0,
+        ),
+    ]
+
+    values, times, _counts = stitch_program_results(segment_results, [spectrum])
+
+    np.testing.assert_array_equal(values[0], np.concatenate([np.arange(6), np.arange(4)]))
+    np.testing.assert_array_equal(times, np.array([0.0, 0.0, 0.0, 0.0, 0.1]))
+
+
 def test_stitch_program_results_shifts_adjacent_analog_grids() -> None:
     """Local grids are shifted onto one program timeline."""
     observable = Observable("z", 0)

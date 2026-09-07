@@ -356,9 +356,9 @@ def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMo
 def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Observable], tuple[int, ...]]:
     """Prepare a sorted evaluation order and a user-index to sorted-row mapping.
 
-    Non-PVM observables are evaluated in ascending site order to reduce the number of
+    Operator and diagnostic observables are evaluated in ascending site order to reduce the number of
     orthogonality-center shifts in MPS-based backends. The sorting is *stable* for
-    ties (observables on the same site keep their original list order). PVM
+    ties (observables on the same site keep their original list order). Bitstring
     observables are appended in their original relative order.
 
     Args:
@@ -373,8 +373,8 @@ def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Ob
         return [], ()
 
     indexed = list(enumerate(observables))
-    sortable = [(i, obs) for i, obs in indexed if obs.name != "pvm"]
-    pvm_pairs = [(i, obs) for i, obs in indexed if obs.name == "pvm"]
+    sortable = [(i, obs) for i, obs in indexed if obs.type != "bitstring"]
+    bitstring_pairs = [(i, obs) for i, obs in indexed if obs.type == "bitstring"]
 
     def _site_sort_key(pair: tuple[int, Observable]) -> tuple[int, int]:
         user_i, obs = pair
@@ -384,7 +384,7 @@ def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Ob
             return (-1, user_i)
         return (site, user_i)
 
-    sorted_pairs = sorted(sortable, key=_site_sort_key) + pvm_pairs
+    sorted_pairs = sorted(sortable, key=_site_sort_key) + bitstring_pairs
     sorted_observables = [obs for _user_i, obs in sorted_pairs]
 
     user_to_sorted: list[int] = [0] * len(observables)

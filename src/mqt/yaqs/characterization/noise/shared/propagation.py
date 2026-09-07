@@ -108,23 +108,19 @@ class Propagator:
             obs_list: Observables to track during propagation.
 
         Raises:
-            ValueError: If the list is empty, an observable has no sites, or a site is out of range.
+            ValueError: If the list is empty, an observable is incompatible with the
+                state layout, or a state diagnostic is requested.
         """
         if not obs_list:
             msg = "Observable list must not be empty."
             raise ValueError(msg)
 
-        self.obs_list = list(obs_list)
-        all_obs_sites: list[int] = []
-        for observable in obs_list:
-            sites = observable.sites
-            if sites is None:
-                msg = "Noise propagation observables must have explicit sites."
-                raise ValueError(msg)
-            all_obs_sites.extend(sites if isinstance(sites, list) else [sites])
-        if max(all_obs_sites) >= self.sites:
-            msg = "Observable site index exceeds number of sites in the Hamiltonian."
+        if any(observable.type == "diagnostic" for observable in obs_list):
+            msg = "Noise propagation supports scalar operator and bitstring observables only."
             raise ValueError(msg)
+        self.obs_list = [
+            observable.prepare(self.init_state.length, self.init_state.physical_dimensions) for observable in obs_list
+        ]
 
         self.set_observables = True
 

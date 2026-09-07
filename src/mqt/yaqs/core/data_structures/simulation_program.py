@@ -807,7 +807,9 @@ def stitch_program_results(
     """Stitch per-segment outputs into top-level expectation values, times, and counts.
 
     Outer ``counts`` come from the last segment that recorded shots. Per-segment
-    histograms remain available on ``result.segment_results[i].counts``.
+    histograms remain available on ``result.segment_results[i].counts``. Schmidt
+    spectra stay flattened in fixed-width blocks for each recorded sample; the
+    shared time axis contains one entry per sample.
 
     Args:
         segment_results: Per-segment results in program order.
@@ -832,11 +834,35 @@ def stitch_program_results(
                 f"observables, expected {len(observables)}."
             )
             raise ValueError(msg)
-        first_values = np.asarray(segment.expectation_values[0])
-        time_parts.append(_build_segment_timeline(segment, len(first_values)))
-        for index, values in enumerate(segment.expectation_values):
+        scalar_lengths = [
+            len(np.asarray(values))
+            for observable, values in zip(observables, segment.expectation_values, strict=True)
+            if not (observable.type == "diagnostic" and observable.name == "schmidt_spectrum")
+        ]
+        if scalar_lengths:
+            value_count = scalar_lengths[0]
+        elif segment.segment_type == "analog":
+            if segment.times is None:
+                msg = f"Analog segment {segment.segment_index} has no time data."
+                raise ValueError(msg)
+            value_count = len(segment.times)
+        else:
+            params = segment.sim_params
+            if not isinstance(params, DigitalSimParams):
+                msg = f"Digital segment {segment.segment_index} has no digital simulation parameters."
+                raise ValueError(msg)
+            value_count = params.num_mid_measurements + 2 if params.sample_layers else 1
+
+        time_parts.append(_build_segment_timeline(segment, value_count))
+        for index, (observable, values) in enumerate(zip(observables, segment.expectation_values, strict=True)):
             arr = np.asarray(values)
-            if arr.ndim != 1 or len(arr) != len(first_values):
+            is_spectrum = observable.type == "diagnostic" and observable.name == "schmidt_spectrum"
+            spectrum_is_aligned = is_spectrum and len(arr) % value_count == 0
+            if (
+                arr.ndim != 1
+                or (is_spectrum and not spectrum_is_aligned)
+                or (not is_spectrum and len(arr) != value_count)
+            ):
                 msg = f"Segment {segment.segment_index} observable {index} has inconsistent shape."
                 raise ValueError(msg)
             expectation_parts[index].append(arr)
