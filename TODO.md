@@ -7,20 +7,19 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 and 2 are implemented. Chunk 2 needs a final contract and validation
-review before the measurement work starts. Construction support does not yet
-mean that every backend can measure the new operators.
+Chunks 1 and 2 are complete. Construction support does not yet mean that every
+backend can measure the new operators.
 
 | Chunk                             | Status                                        | Completion boundary                                     |
 | --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
 | 1. Observable definitions         | Complete                                      | Gate-independent construction and metadata              |
-| 2. MPO construction               | Implemented; closeout below remains           | Validated, reusable operator data                       |
+| 2. MPO construction               | Complete                                      | Validated, reusable operator data                       |
 | 3. MPS contraction                | Pending                                       | Direct and batched MPS measurements accept general MPOs |
 | 4. Backend and result integration | Preparation is connected; measurement remains | Supported backends and result paths agree               |
 | 5. Performance and documentation  | Pending; capture baseline before chunk 3      | Measured cost, complete examples, and release checks    |
 
-Work in order: **2A → 5A → 3A → 3B → 4A → 4B → 4C → 5B → 5C**. Each subsection
-is a reviewable implementation batch. Complete its acceptance checks before
+Work in order: **5A → 3A → 3B → 4A → 4B → 4C → 5B → 5C**. Each subsection is a
+reviewable implementation batch. Complete its acceptance checks before
 proceeding. Capture the performance baseline in 5A before changing measurement
 code; finish the performance comparison after integration.
 
@@ -135,24 +134,24 @@ Implemented in `core/data_structures/observable.py` and
 
 ### 2A. Close construction and validation contracts
 
-- [ ] Audit the existing tests against the completed checklist. Add tests only
+- [x] Audit the existing tests against the completed checklist. Add tests only
       for missing contracts or concrete regressions; retain working
       construction.
-- [ ] Check matrix and MPO Hermiticity tolerances near their acceptance limits.
+- [x] Check matrix and MPO Hermiticity tolerances near their acceptance limits.
       Document the norm used by each check. Include zero operators, small
       coefficients, cancellation in Pauli sums, and rescaled equivalent MPO
       gauges. Verify that compression of the temporary Hermiticity residual
       cannot hide a violation of the declared tolerance or alter the stored
       operator.
-- [ ] Define the mutation rules for source and prepared observables. Verify
+- [x] Define the mutation rules for source and prepared observables. Verify
   caller-data isolation, reuse with different state dimensions, and repeated
   preparation. Ensure cached preparation cannot silently use stale operator
   data under the supported mutation rules.
-- [ ] Audit preparation in `simulator.py`, `simulation_program.py`, and direct
+- [x] Audit preparation in `simulator.py`, `simulation_program.py`, and direct
   measurement entry points. Invalid support and dimensions must fail before
   evolution or worker launch. Diagnostic cuts and backend capabilities are
   completed in chunk 4.
-- [ ] Make the construction documentation state the current measurement limits.
+- [x] Make the construction documentation state the current measurement limits.
       Check `to_mpo()` documentation for compact support and `mpo_sites`;
       callers must not mistake a local MPO for a full-chain operator.
 

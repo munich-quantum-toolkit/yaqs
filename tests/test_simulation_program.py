@@ -628,15 +628,22 @@ def test_program_executor_rejects_corrupted_private_instructions() -> None:
         _compile_program(program, state)
 
 
-def test_program_compilation_prepares_observables_for_state_layout() -> None:
-    """Program compilation rejects invalid observable support before workers start."""
+@pytest.mark.parametrize(
+    ("observable", "match"),
+    [
+        (Observable("z", 2), "outside the state of length 2"),
+        (Observable(np.eye(3), 0), "does not match site 0 dimension 2"),
+    ],
+)
+def test_program_compilation_prepares_observables_for_state_layout(observable: Observable, match: str) -> None:
+    """Program compilation rejects invalid observable layouts before workers start."""
     state = State(2, initial="zeros")
     program = SimulationProgram(
         [(QuantumCircuit(2), DigitalSimParams())],
-        observables=[Observable("z", 2)],
+        observables=[observable],
     )
 
-    with pytest.raises(ValueError, match="outside the state of length 2"):
+    with pytest.raises(ValueError, match=match):
         _compile_program(program, state)
 
 

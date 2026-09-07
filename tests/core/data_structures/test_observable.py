@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.observable import Observable, prepare_observables
 from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -174,6 +174,16 @@ def test_observable_rejects_non_hermitian_matrix() -> None:
         Observable(np.array([[0, 1], [0, 0]], dtype=np.complex128), 0)
 
 
+def test_matrix_hermiticity_uses_complete_frobenius_residual() -> None:
+    """Several small matrix residuals cannot exceed the global tolerance."""
+    within_tolerance = 0.2e-12j * np.eye(4)
+    above_tolerance = 0.375e-12j * np.eye(4)
+
+    Observable(within_tolerance, 0)
+    with pytest.raises(ValueError, match="must be Hermitian"):
+        Observable(above_tolerance, 0)
+
+
 def test_observable_copies_custom_matrix() -> None:
     """Changing caller-owned matrix data does not change an observable."""
     matrix = np.diag([1.0, -1.0])
@@ -183,6 +193,16 @@ def test_observable_copies_custom_matrix() -> None:
 
     assert observable.matrix is not None
     assert observable.matrix[0, 0] == pytest.approx(1.0)
+
+
+def test_observable_copies_site_lists() -> None:
+    """Changing a caller-owned site list does not change an observable."""
+    sites = [0, 1]
+    observable = Observable("zz", sites)
+
+    sites[1] = 3
+
+    assert observable.sites == [0, 1]
 
 
 @pytest.mark.parametrize("positions", [np.array([]), np.array([0.0, np.nan]), np.array([0.0, 1.0j])])
@@ -349,6 +369,17 @@ def test_pauli_sum_is_exact_and_requires_hermiticity() -> None:
         Observable.from_pauli_sum(terms=[(1j, "Z0")], length=1)
 
 
+def test_pauli_sum_hermiticity_uses_the_contracted_operator() -> None:
+    """Non-Hermitian terms can cancel to a Hermitian complete operator."""
+    observable = Observable.from_pauli_sum(
+        terms=[(1j, "Z0"), (-1j, "Z0")],
+        length=1,
+    )
+
+    assert observable.mpo is not None
+    np.testing.assert_array_equal(observable.mpo.to_matrix(), np.zeros((2, 2)))
+
+
 def test_zero_pauli_sum_is_hermitian() -> None:
     """The empty Pauli sum creates a valid zero observable."""
     observable = Observable.from_pauli_sum(terms=[], length=2)
@@ -370,3 +401,34 @@ def test_prepare_does_not_cache_state_layout_on_source() -> None:
     assert first.prepared_dimensions == (2, 3)
     assert second.prepared_dimensions == (2, 4, 5)
     assert first.mpo is not second.mpo
+
+
+def test_prepare_observables_copies_compatible_prepared_inputs() -> None:
+    """Worker preparation does not return a caller-owned prepared object."""
+    prepared = Observable("zz", [0, 2]).prepare(3)
+
+    worker_observable = prepare_observables([prepared], 3)[0]
+
+    assert worker_observable is not prepared
+    assert worker_observable.mpo is not None
+    assert prepared.mpo is not None
+    for worker_tensor, source_tensor in zip(worker_observable.mpo.tensors, prepared.mpo.tensors, strict=True):
+        assert worker_tensor is not source_tensor
+        np.testing.assert_array_equal(worker_tensor, source_tensor)
+
+    worker_observable.mpo.tensors[0].fill(0)
+    assert np.any(prepared.mpo.tensors[0])
+
+
+def test_to_mpo_returns_an_independent_compact_support_mpo() -> None:
+    """Local MPO conversion documents its offset through the observable support."""
+    observable = Observable("zz", [1, 3])
+
+    first = observable.to_mpo(5)
+    second = observable.to_mpo(5)
+
+    assert first.length == 3
+    assert second.length == 3
+    assert all(left is not right for left, right in zip(first.tensors, second.tensors, strict=True))
+    first.tensors[0].fill(0)
+    assert np.any(second.tensors[0])

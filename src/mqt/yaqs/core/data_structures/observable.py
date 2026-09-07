@@ -58,7 +58,14 @@ def _validate_matrix(operator: ArrayLike) -> NDArray[np.complex128]:
     if not np.all(np.isfinite(matrix)):
         msg = "Observable matrix must contain only finite values."
         raise ValueError(msg)
-    if not np.allclose(matrix, matrix.conj().T, rtol=_HERMITIAN_RTOL, atol=_HERMITIAN_ATOL):
+    scale = max(float(np.max(np.abs(matrix.real))), float(np.max(np.abs(matrix.imag))))
+    if scale <= 0.0:
+        return matrix
+    scaled_matrix = matrix / scale
+    matrix_norm = float(np.linalg.norm(scaled_matrix, ord="fro"))
+    residual_norm = float(np.linalg.norm(scaled_matrix - scaled_matrix.conj().T, ord="fro"))
+    scaled_tolerance = _HERMITIAN_ATOL / scale + _HERMITIAN_RTOL * matrix_norm
+    if residual_norm > scaled_tolerance:
         msg = "Observable matrix must be Hermitian."
         raise ValueError(msg)
     return matrix
@@ -229,6 +236,12 @@ class Observable:
     follow ascending chain order and use ``(phys_out, phys_in, left_bond,
     right_bond)`` axes.
 
+    YAQS copies matrix, MPO, and site-list inputs. Treat the public definition
+    attributes and prepared MPO tensors as read-only. Create a new observable
+    to change an operator or its support. An unprepared observable can be reused
+    with different compatible state layouts. Matrix and MPO inputs are accepted
+    when ``||O - O†||_F <= 1e-12 + 1e-10 * ||O||_F``.
+
     Attributes:
         name: Canonical observable or diagnostic name.
         matrix: Local operator matrix, or ``None`` for diagnostics and bitstrings.
@@ -314,7 +327,7 @@ class Observable:
                 self.name = definition.name
                 self.type = "diagnostic"
                 self.matrix = None
-                self.sites = sites
+                self.sites = list(sites) if isinstance(sites, list) else sites
                 self.interaction = 0
                 return
             if count != definition.interaction:
@@ -343,7 +356,7 @@ class Observable:
         self.name = name
         self.type = "operator"
         self.matrix = matrix
-        self.sites = sites
+        self.sites = list(sites) if isinstance(sites, list) else sites
         self.interaction = interaction
 
     @classmethod
@@ -480,7 +493,10 @@ class Observable:
             physical_dimensions: Per-site dimensions. ``None`` means qubits.
 
         Returns:
-            A support MPO for an operator observable.
+            An independent MPO for the prepared operator. Local operators use
+            the smallest contiguous interval from the lowest to the highest
+            target site. Tensor index zero therefore corresponds to the lowest
+            target site. Supplied MPOs represent the full chain.
 
         Raises:
             ValueError: If this object is a diagnostic or bitstring request.
@@ -507,4 +523,8 @@ def prepare_observables(
     Returns:
         Prepared observables in the input order.
     """
-    return [observable.prepare(length, physical_dimensions) for observable in observables]
+    prepared_observables: list[Observable] = []
+    for observable in observables:
+        prepared = observable.prepare(length, physical_dimensions)
+        prepared_observables.append(copy.deepcopy(prepared) if prepared is observable else prepared)
+    return prepared_observables

@@ -224,10 +224,11 @@ class MPO:
         adjoint = self.adjoint()
         adjoint.tensors[0] *= -1
         difference = self + adjoint
-        # Bring the direct-sum difference into a common gauge before measuring
-        # its norm. The cutoff is the declared validation tolerance and changes
-        # only this temporary difference MPO.
-        difference.compress(tol=tolerance, max_bond_dim=None, n_sweeps=2)
+        # Reduce redundant direct-sum bonds without truncating a nonzero
+        # singular direction. A tolerance-based cutoff here could remove
+        # several individually small terms whose combined Frobenius norm is
+        # larger than the declared validation tolerance.
+        difference.compress(tol=0.0, max_bond_dim=None, n_sweeps=2)
         return difference.frobenius_norm() <= tolerance
 
     def apply_local_operator(

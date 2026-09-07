@@ -1540,6 +1540,21 @@ def test_no_output_error() -> None:
         sim.run(state, circuit, sim_params_digital)
 
 
+def test_simulator_prepares_observables_before_backend_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid observable dimensions fail before a circuit backend starts."""
+    state = State(1, initial="zeros")
+    circuit = QuantumCircuit(1)
+    params = DigitalSimParams(observables=[Observable(np.eye(3), 0)], num_traj=1)
+
+    def fail_backend(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("The backend must not run before observable validation.")
+
+    monkeypatch.setattr(simulator, "call_serial_capped", fail_backend)
+
+    with pytest.raises(ValueError, match="does not match site 0 dimension 2"):
+        Simulator(parallel=False, show_progress=False).run(state, circuit, params)
+
+
 def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
     """``initial_state=[...]`` must contain only :class:`State` instances."""
     H = Hamiltonian.ising(2, J=1.0, g=0.5)

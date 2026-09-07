@@ -1762,6 +1762,36 @@ def test_mpo_hermiticity_rejects_non_hermitian_and_accepts_zero() -> None:
     assert zero.to_sparse_matrix().shape == (6, 6)
 
 
+def test_mpo_hermiticity_does_not_truncate_combined_residual() -> None:
+    """Small Schmidt terms remain when their combined residual exceeds tolerance."""
+    tolerance = 1e-8
+    coefficient = 0.3 * tolerance
+    pauli_residual = np.kron(_X2, _X2) + np.kron(_Y2, _Y2) + np.kron(_Z2, _Z2)
+    matrix = np.eye(4) + 0.5j * coefficient * pauli_residual
+    mpo = MPO.from_matrix_with_dimensions(matrix, [2, 2])
+    original_tensors = [tensor.copy() for tensor in mpo.tensors]
+
+    residual_norm = float(np.linalg.norm(matrix - matrix.conj().T, ord="fro"))
+    assert residual_norm > tolerance
+    assert not mpo.is_hermitian(rtol=0.0, atol=tolerance)
+    for original, current in zip(original_tensors, mpo.tensors, strict=True):
+        np.testing.assert_array_equal(current, original)
+
+
+def test_mpo_hermiticity_is_stable_under_rescaled_virtual_gauge() -> None:
+    """Reciprocal virtual-bond scaling does not change Hermiticity."""
+    matrix = np.kron(_Z2, _X2) + 0.4 * np.kron(_X2, _Z2)
+    mpo = MPO.from_matrix_with_dimensions(matrix, [2, 2])
+    bond_dimension = mpo.tensors[0].shape[3]
+    gauge = np.diag(1j * np.geomspace(1e-8, 1e8, bond_dimension))
+    inverse = np.linalg.inv(gauge)
+    mpo.tensors[0] = np.einsum("ijla,ab->ijlb", mpo.tensors[0], gauge)
+    mpo.tensors[1] = np.einsum("ab,ijbr->ijar", inverse, mpo.tensors[1])
+
+    assert mpo.is_hermitian()
+    np.testing.assert_allclose(mpo.to_matrix(), matrix, atol=1e-12)
+
+
 @pytest.mark.parametrize(("rtol", "atol"), [(-1.0, 0.0), (0.0, -1.0), (np.inf, 0.0), (0.0, np.nan)])
 def test_mpo_hermiticity_rejects_invalid_tolerances(rtol: float, atol: float) -> None:
     """Hermiticity tolerances must be finite and non-negative."""
