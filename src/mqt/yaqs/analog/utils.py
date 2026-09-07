@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -123,6 +124,81 @@ def _sparse_identity(dim: int) -> scipy.sparse.spmatrix:
         CSR sparse identity of shape ``(dim, dim)``.
     """
     return scipy.sparse.identity(dim, format="csr", dtype=np.complex128)
+
+
+def _embed_support_dense(
+    op: NDArray[np.complex128],
+    support: tuple[int, ...],
+    dims: list[int],
+) -> NDArray[np.complex128]:
+    """Embed an operator on a contiguous support interval into a full chain.
+
+    Args:
+        op: Operator matrix in MPS vector order on ``support``.
+        support: Contiguous full-chain site indices represented by ``op``.
+        dims: Per-site dimensions of the full chain.
+
+    Returns:
+        Dense full-chain operator in MPS vector order.
+    """
+    first_site = support[0]
+    last_site = support[-1]
+    lower_identity = np.eye(math.prod(dims[:first_site]), dtype=np.complex128)
+    upper_identity = np.eye(math.prod(dims[last_site + 1 :]), dtype=np.complex128)
+    return np.asarray(np.kron(upper_identity, np.kron(op, lower_identity)), dtype=np.complex128)
+
+
+def _embed_support_sparse(
+    op: scipy.sparse.spmatrix,
+    support: tuple[int, ...],
+    dims: list[int],
+) -> scipy.sparse.spmatrix:
+    """Embed a sparse operator on a contiguous support interval into a full chain.
+
+    Args:
+        op: Operator matrix in MPS vector order on ``support``.
+        support: Contiguous full-chain site indices represented by ``op``.
+        dims: Per-site dimensions of the full chain.
+
+    Returns:
+        Sparse full-chain operator in MPS vector order.
+    """
+    first_site = support[0]
+    last_site = support[-1]
+    lower_identity = _sparse_identity(math.prod(dims[:first_site]))
+    upper_identity = _sparse_identity(math.prod(dims[last_site + 1 :]))
+    embedded = scipy.sparse.kron(op, lower_identity, format="csr")
+    return cast("scipy.sparse.spmatrix", scipy.sparse.kron(upper_identity, embedded, format="csr"))
+
+
+def _prepared_operator_data(
+    obs: Observable,
+    num_sites: int,
+    physical_dimensions: list[int] | int | None,
+) -> tuple[Observable, list[int], tuple[int, ...]]:
+    """Prepare an operator observable and return its chain layout.
+
+    Args:
+        obs: Observable to prepare.
+        num_sites: Total number of sites in the chain.
+        physical_dimensions: Per-site Hilbert-space dimensions.
+
+    Returns:
+        The prepared observable, full-chain dimensions, and its contiguous MPO support.
+
+    Raises:
+        ValueError: If the request is not an operator or lacks a prepared MPO.
+    """
+    dims = resolve_physical_dimensions(num_sites, physical_dimensions)
+    prepared = obs.prepare(num_sites, dims)
+    if prepared.type != "operator" or prepared.mpo is None or prepared.mpo_sites is None:
+        msg = "Observable embedding requires an operator."
+        raise ValueError(msg)
+    support = prepared.mpo_sites
+    if not support or support != tuple(range(support[0], support[-1] + 1)):
+        msg = "Prepared observable MPO support must be a non-empty contiguous interval."
+        raise ValueError(msg)
+    return prepared, dims, support
 
 
 def _embed_one_site_sparse(
@@ -389,31 +465,33 @@ def _embed_observable_dense(
 
     Returns:
         The embedded observable as a dense matrix.
-
-    Raises:
-        ValueError: If the observable does not define a local operator.
-        NotImplementedError: If the observable involves more than 2 sites.
     """
-    obs = obs.prepare(num_sites, physical_dimensions)
-    sites = obs.sites
+    prepared, dims, support = _prepared_operator_data(obs, num_sites, physical_dimensions)
+    sites = prepared.sites
     if isinstance(sites, int):
         sites = [sites]
-    if sites is None or obs.matrix is None:
-        msg = "Observable embedding requires an operator with explicit sites."
-        raise ValueError(msg)
+    if sites is not None and prepared.matrix is not None:
+        if len(sites) == 1:
+            result = _embed_generic(
+                sites=sites,
+                num_sites=num_sites,
+                op_matrix=prepared.matrix,
+                sparse=False,
+                physical_dimensions=dims,
+            )
+            return cast("NDArray[np.complex128]", result)
+        if len(sites) == 2 and prepared.local_factors is not None:
+            result = _embed_generic(
+                sites=sites,
+                num_sites=num_sites,
+                op_factors=(prepared.local_factors[0], prepared.local_factors[1]),
+                sparse=False,
+                physical_dimensions=dims,
+            )
+            return cast("NDArray[np.complex128]", result)
 
-    if len(sites) > 2:
-        msg = f"Unsupported observable site count: {len(sites)}"
-        raise NotImplementedError(msg)
-
-    result = _embed_generic(
-        sites=sites,
-        num_sites=num_sites,
-        op_matrix=obs.matrix,
-        sparse=False,
-        physical_dimensions=physical_dimensions,
-    )
-    return cast("NDArray[np.complex128]", result)
+    assert prepared.mpo is not None
+    return _embed_support_dense(prepared.mpo.to_matrix_mps_order(), support, dims)
 
 
 # --- Sparse Embedding ---
@@ -475,28 +553,32 @@ def _embed_observable_sparse(
 
     Returns:
         The embedded observable as a sparse matrix.
-
-    Raises:
-        ValueError: If the observable does not define a local operator.
-        NotImplementedError: If the observable involves more than 2 sites.
     """
-    obs = obs.prepare(num_sites, physical_dimensions)
-    sites = obs.sites
+    prepared, dims, support = _prepared_operator_data(obs, num_sites, physical_dimensions)
+    sites = prepared.sites
     if isinstance(sites, int):
         sites = [sites]
-    if sites is None or obs.matrix is None:
-        msg = "Observable embedding requires an operator with explicit sites."
-        raise ValueError(msg)
+    if sites is not None and prepared.matrix is not None:
+        if len(sites) == 1:
+            result = _embed_generic(
+                sites=sites,
+                num_sites=num_sites,
+                op_matrix=_to_sparse_csr(prepared.matrix),
+                sparse=True,
+                physical_dimensions=dims,
+            )
+            return cast("scipy.sparse.spmatrix", result)
+        if len(sites) == 2 and prepared.local_factors is not None:
+            first_factor = _to_sparse_csr(prepared.local_factors[0])
+            second_factor = _to_sparse_csr(prepared.local_factors[1])
+            result = _embed_generic(
+                sites=sites,
+                num_sites=num_sites,
+                op_factors=(first_factor, second_factor),
+                sparse=True,
+                physical_dimensions=dims,
+            )
+            return cast("scipy.sparse.spmatrix", result)
 
-    if len(sites) > 2:
-        msg = f"Unsupported observable site count: {len(sites)}"
-        raise NotImplementedError(msg)
-
-    result = _embed_generic(
-        sites=sites,
-        num_sites=num_sites,
-        op_matrix=_to_sparse_csr(obs.matrix),
-        sparse=True,
-        physical_dimensions=physical_dimensions,
-    )
-    return cast("scipy.sparse.spmatrix", result)
+    assert prepared.mpo is not None
+    return _embed_support_sparse(prepared.mpo.to_sparse_matrix(), support, dims)

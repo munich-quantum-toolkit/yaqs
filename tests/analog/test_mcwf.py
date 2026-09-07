@@ -267,6 +267,27 @@ def test_mcwf_result_has_no_auto_diagnostics() -> None:
     assert result.total_bond is None
 
 
+def test_mcwf_rejects_nonreal_operator_expectation() -> None:
+    """MCWF applies the shared real-result validation during measurement."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.0,
+        dt=0.1,
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(
+        psi_initial=np.array([1.0, 0.0], dtype=np.complex128),
+        h_sparse=scipy.sparse.csr_matrix((2, 2), dtype=np.complex128),
+        noise_model=None,
+        sim_params=sim_params,
+        num_sites=1,
+    )
+    ctx.embedded_observables[0] = 1j * scipy.sparse.identity(2, format="csr", dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="must be real"):
+        mcwf_mod.mcwf((0, ctx))
+
+
 def test_mcwf_trajectory_rng_seeding_reproducible() -> None:
     """Two runs with the same ``random_seed`` produce identical MCWF trajectories."""
     n_sites = 1

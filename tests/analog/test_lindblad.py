@@ -11,9 +11,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
+import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -31,9 +30,6 @@ from mqt.yaqs.analog.lindblad import (
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -462,6 +458,27 @@ def test_rho_vec_at_elapsed_time_returns_initial_state_at_zero() -> None:
     )
     rho_vec = lindblad_mod._rho_vec_at_elapsed_time(ctx)
     np.testing.assert_allclose(rho_vec, ctx.rho_initial)
+
+
+def test_lindblad_rejects_nonreal_operator_expectation() -> None:
+    """Lindblad measurement applies the shared real-result validation."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.0,
+        dt=0.1,
+        sample_timesteps=True,
+    )
+    ctx = preprocess_lindblad(
+        rho_initial=np.diag([1.0, 0.0]).astype(np.complex128),
+        h_sparse=MPO.from_local_ops([np.zeros((2, 2))]).to_sparse_matrix(),
+        noise_model=None,
+        sim_params=sim_params,
+        num_sites=1,
+    )
+    ctx.embedded_observables[0] = 1j * np.eye(2, dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="must be real"):
+        lindblad_evolve(ctx)
 
 
 def test_rho_vec_at_elapsed_time_matches_fixed_dt_grid() -> None:

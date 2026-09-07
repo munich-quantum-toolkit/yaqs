@@ -34,7 +34,7 @@ import scipy.sparse
 from scipy.integrate import solve_ivp
 
 from ..core import linalg
-from ..core.data_structures.state_utils import resolve_physical_dimensions
+from ..core.data_structures.state_utils import expectation_to_real, resolve_physical_dimensions
 from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 if TYPE_CHECKING:
@@ -241,7 +241,7 @@ def _measure_rho(
         if op_mat is not None:
             op_any = cast("Any", op_mat)
             val = np.trace(op_any @ rho_t)
-            obs_results[i, t_idx] = val.real
+            obs_results[i, t_idx] = expectation_to_real(val, ctx.sim_params.sorted_observables[i].name)
         else:
             obs_results[i, t_idx] = 0.0
 

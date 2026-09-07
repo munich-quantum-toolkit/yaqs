@@ -7,18 +7,18 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 through 3 are complete. MPS measurement support does not yet mean that
-every backend can measure the new operators.
+Chunks 1 through 3 and chunk 4A are complete. Projector, diagnostic, worker, and
+result-path integration remain in chunks 4B and 4C.
 
-| Chunk                             | Status                                        | Completion boundary                                     |
-| --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
-| 1. Observable definitions         | Complete                                      | Gate-independent construction and metadata              |
-| 2. MPO construction               | Complete                                      | Validated, reusable operator data                       |
-| 3. MPS contraction                | Complete                                      | Direct and batched MPS measurements accept general MPOs |
-| 4. Backend and result integration | Preparation is connected; measurement remains | Supported backends and result paths agree               |
-| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline    | Measured cost, complete examples, and release checks    |
+| Chunk                             | Status                                          | Completion boundary                                     |
+| --------------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
+| 1. Observable definitions         | Complete                                        | Gate-independent construction and metadata              |
+| 2. MPO construction               | Complete                                        | Validated, reusable operator data                       |
+| 3. MPS contraction                | Complete                                        | Direct and batched MPS measurements accept general MPOs |
+| 4. Backend and result integration | Operator measurement complete; 4B and 4C remain | Supported backends and result paths agree               |
+| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline      | Measured cost, complete examples, and release checks    |
 
-Work in order: **5A → 4A → 4B → 4C → 5B → 5C**. Each subsection is a reviewable
+Work in order: **5A → 4B → 4C → 5B → 5C**. Each subsection is a reviewable
 implementation batch. Complete its acceptance checks before proceeding. In 5A,
 use the commit immediately before 3A for the old direct contraction and the
 commit immediately before 3B for the old batched dispatch. Finish the
@@ -219,25 +219,24 @@ and general measurements preserve the source state.
 - [x] Replace observable gate metadata in consumers and connect state-dependent
   preparation to simulator workers and program compilation.
 
-Remaining limits: analog embedding requires local matrices on at most two sites;
-simulation parameters reject mixed bitstring/operator requests; dense analog
-backends reject bitstrings. Diagnostic placeholders can still produce zero
-results in dense backend measurement paths.
+Remaining limits: simulation parameters reject mixed bitstring/operator
+requests, and dense analog backends reject bitstrings. Diagnostic placeholders
+can still produce zero results in dense backend measurement paths.
 
 ### 4A. Support operators in each backend
 
-- [ ] Extend `analog/utils.py` embedding and the `mcwf.py` and `lindblad.py`
+- [x] Extend `analog/utils.py` embedding and the `mcwf.py` and `lindblad.py`
   preprocessors to accept all prepared Hermitian operators. Keep conversions
   outside measurement loops and preserve efficient sparse local embeddings.
-- [ ] Use the existing `MPO.to_matrix_mps_order()` and `to_sparse_matrix()`
+- [x] Use the existing `MPO.to_matrix_mps_order()` and `to_sparse_matrix()`
       where appropriate. Account for compact support and mixed local dimensions.
       `MPO.to_matrix()` uses a different basis order; do not pass its output to
       a state-vector backend without the required permutation.
-- [ ] Compute vector expectations as `<psi|O|psi>` and density-matrix
+- [x] Compute vector expectations as `<psi|O|psi>` and density-matrix
       expectations as `Tr(O rho)`. Apply the same real-result validation as the
       MPS path. Dense or sparse operator construction belongs only in backends
       that need it.
-- [ ] Verify that digital MPS and analog MPS entry points reach the general
+- [x] Verify that digital MPS and analog MPS entry points reach the general
   measurement path, including each supported analog solver.
 
 Acceptance: small deterministic simulations agree with independent references
@@ -350,7 +349,7 @@ audit.
 
 - [x] Standard named and custom Hermitian observables use the same public
   construction pattern without depending on gate objects.
-- [ ] Long-range correlations, custom operators on several sites, and supplied
+- [x] Long-range correlations, custom operators on several sites, and supplied
   MPOs agree with independent references across supported backends.
 - [ ] Non-Hermitian operators and invalid dimensions fail clearly before
   evolution begins.

@@ -12,9 +12,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import scipy.sparse
+from qiskit import QuantumCircuit
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 
 
@@ -31,6 +34,204 @@ def haar_state() -> tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]:
     rho = np.outer(psi, psi.conj())
     tensors = [np.asarray(t, dtype=np.complex128).copy() for t in mps.tensors]
     return mps, psi, rho, tensors
+
+
+def _embed_operator_reference(operator: np.ndarray, sites: list[int], dimensions: list[int]) -> np.ndarray:
+    """Embed an operator by direct enumeration in site-0-LSB vector order.
+
+    Args:
+        operator: Matrix whose tensor factors follow ``sites``.
+        sites: Target sites in the matrix tensor-factor order.
+        dimensions: Full-chain local dimensions.
+
+    Returns:
+        Full-chain operator in MPS vector order.
+    """
+    dimension = int(np.prod(dimensions))
+    active_dimensions = [dimensions[site] for site in sites]
+    spectators = [site for site in range(len(dimensions)) if site not in sites]
+    embedded = np.zeros((dimension, dimension), dtype=np.complex128)
+    basis_digits: list[list[int]] = []
+    for index in range(dimension):
+        digits: list[int] = []
+        remainder = index
+        for local_dimension in dimensions:
+            digits.append(remainder % local_dimension)
+            remainder //= local_dimension
+        basis_digits.append(digits)
+    for row, row_digits in enumerate(basis_digits):
+        active_row = np.ravel_multi_index(tuple(row_digits[site] for site in sites), active_dimensions)
+        for column, column_digits in enumerate(basis_digits):
+            if any(row_digits[site] != column_digits[site] for site in spectators):
+                continue
+            active_column = np.ravel_multi_index(tuple(column_digits[site] for site in sites), active_dimensions)
+            embedded[row, column] = operator[active_row, active_column]
+    return embedded
+
+
+def _deterministic_qubit_state() -> tuple[np.ndarray, np.ndarray, list[np.ndarray]]:
+    """Return one deterministic three-qubit product state in all required forms."""
+    local_vectors = [
+        np.array([np.sqrt(0.7), 1j * np.sqrt(0.3)], dtype=np.complex128),
+        np.array([0.5, np.sqrt(0.75)], dtype=np.complex128),
+        np.array([np.sqrt(0.4), np.exp(0.3j) * np.sqrt(0.6)], dtype=np.complex128),
+    ]
+    tensors = [vector.reshape(2, 1, 1) for vector in local_vectors]
+    vector = np.kron(local_vectors[2], np.kron(local_vectors[1], local_vectors[0]))
+    return vector, np.outer(vector, vector.conj()), tensors
+
+
+def _general_qubit_observables() -> tuple[list[Observable], list[np.ndarray]]:
+    """Return general observable definitions and independent dense matrices."""
+    identity = np.eye(2, dtype=np.complex128)
+    x_op = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    y_op = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+    z_op = np.diag([1, -1]).astype(np.complex128)
+    rng = np.random.default_rng(91)
+    raw_pair = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    pair = np.asarray(raw_pair + raw_pair.conj().T, dtype=np.complex128)
+    raw_three = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    three = np.asarray(raw_three + raw_three.conj().T, dtype=np.complex128)
+    pauli_sum = 0.4 * np.kron(x_op, np.kron(identity, z_op)) - 0.3 * np.kron(identity, np.kron(y_op, identity))
+    supplied_mpo = np.kron(z_op, np.kron(y_op, x_op))
+    observables = [
+        Observable(pair, [0, 1]),
+        Observable(pair, [2, 0]),
+        Observable(three, [2, 0, 1]),
+        Observable.from_pauli_sum(terms=[(0.4, "Z0 X2"), (-0.3, "Y1")], length=3),
+        Observable(MPO.from_local_ops([x_op, y_op, z_op])),
+    ]
+    matrices = [
+        _embed_operator_reference(pair, [0, 1], [2, 2, 2]),
+        _embed_operator_reference(pair, [2, 0], [2, 2, 2]),
+        _embed_operator_reference(three, [2, 0, 1], [2, 2, 2]),
+        pauli_sum,
+        supplied_mpo,
+    ]
+    return observables, matrices
+
+
+def test_general_observables_agree_across_analog_representations() -> None:
+    """MPS, MCWF, and Lindblad measure each general operator consistently."""
+    vector, density_matrix, tensors = _deterministic_qubit_state()
+    observables, matrices = _general_qubit_observables()
+    expected = [float(np.real(np.vdot(vector, matrix @ vector))) for matrix in matrices]
+    zero_hamiltonian = Hamiltonian.from_mpo(MPO.from_local_ops([np.zeros((2, 2)), np.eye(2), np.eye(2)]))
+    simulator = Simulator(parallel=False, show_progress=False)
+    params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
+    states = [
+        State(tensors=[tensor.copy() for tensor in tensors]),
+        State(vector=vector.copy()),
+        State(density_matrix=density_matrix.copy()),
+    ]
+
+    for state in states:
+        result = simulator.run(state, zero_hamiltonian, params)
+        actual = [float(np.real(values[-1])) for values in result.expectation_values]
+        np.testing.assert_allclose(actual, expected, rtol=1e-10, atol=1e-11)
+
+
+@pytest.mark.parametrize(
+    ("order", "evolution_mode"),
+    [
+        pytest.param(1, EvolutionMode.TDVP, id="order1_tdvp"),
+        pytest.param(2, EvolutionMode.TDVP, id="order2_tdvp"),
+        pytest.param(1, EvolutionMode.BUG, id="order1_bug"),
+        pytest.param(2, EvolutionMode.BUG, id="order2_bug"),
+    ],
+)
+def test_general_observable_reaches_each_mps_analog_solver(order: int, evolution_mode: EvolutionMode) -> None:
+    """Each MPS analog solver reaches the general MPO measurement path."""
+    vector, _density_matrix, tensors = _deterministic_qubit_state()
+    observables, matrices = _general_qubit_observables()
+    expected = float(np.real(np.vdot(vector, matrices[0] @ vector)))
+    zero_hamiltonian = Hamiltonian.from_mpo(MPO.from_local_ops([np.zeros((2, 2)), np.eye(2), np.eye(2)]))
+    params = AnalogSimParams(
+        observables=[observables[0]],
+        elapsed_time=0.1,
+        dt=0.1,
+        order=order,
+        evolution_mode=evolution_mode,
+        num_traj=1,
+        sample_timesteps=False,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(tensors=[tensor.copy() for tensor in tensors]), zero_hamiltonian, params
+    )
+
+    assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(expected, abs=1e-10)
+
+
+def test_general_observable_reaches_digital_mps_measurement() -> None:
+    """Digital MPS simulation measures a general prepared MPO observable."""
+    vector, _density_matrix, tensors = _deterministic_qubit_state()
+    observables, matrices = _general_qubit_observables()
+    expected = float(np.real(np.vdot(vector, matrices[2] @ vector)))
+    params = DigitalSimParams(observables=[observables[2]], num_traj=1, max_bond_dim=None, svd_threshold=0.0)
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(tensors=[tensor.copy() for tensor in tensors]), QuantumCircuit(3), params
+    )
+
+    assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(expected, abs=1e-10)
+
+
+def test_general_observable_supports_mixed_dimensions_across_analog_backends() -> None:
+    """All analog representations embed compact MPO support with mixed dimensions."""
+    dimensions = [2, 3, 2]
+    local_vectors = [
+        np.array([np.sqrt(0.6), 1j * np.sqrt(0.4)], dtype=np.complex128),
+        np.array([0.5, 0.5j, np.sqrt(0.5)], dtype=np.complex128),
+        np.array([np.sqrt(0.3), np.exp(0.2j) * np.sqrt(0.7)], dtype=np.complex128),
+    ]
+    tensors = [vector.reshape(dimension, 1, 1) for vector, dimension in zip(local_vectors, dimensions, strict=True)]
+    vector = np.asarray(np.kron(local_vectors[2], np.kron(local_vectors[1], local_vectors[0])), dtype=np.complex128)
+    density_matrix = np.asarray(np.outer(vector, vector.conj()), dtype=np.complex128)
+    rng = np.random.default_rng(92)
+    raw = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    local_operator = np.asarray(raw + raw.conj().T, dtype=np.complex128)
+    observable = Observable(local_operator, [2, 0])
+    full_operator = _embed_operator_reference(local_operator, [2, 0], dimensions)
+    expected = float(np.real(np.vdot(vector, full_operator @ vector)))
+    zero_hamiltonian = MPO()
+    zero_hamiltonian.custom(
+        [
+            np.zeros((2, 2, 1, 1), dtype=np.complex128),
+            np.eye(3, dtype=np.complex128).reshape(3, 3, 1, 1),
+            np.eye(2, dtype=np.complex128).reshape(2, 2, 1, 1),
+        ],
+        transpose=False,
+    )
+    hamiltonian = Hamiltonian.from_mpo(zero_hamiltonian)
+    params = AnalogSimParams(
+        observables=[observable],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
+    states = [
+        State(tensors=[tensor.copy() for tensor in tensors], physical_dimensions=dimensions),
+        State(length=3, vector=vector.copy(), physical_dimensions=dimensions),
+        State(length=3, density_matrix=density_matrix.copy(), physical_dimensions=dimensions),
+    ]
+
+    for state in states:
+        result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, params)
+        assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(expected, abs=1e-10)
 
 
 def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]) -> None:

@@ -23,6 +23,7 @@ from mqt.yaqs.analog.utils import (
     _kron_all_dense,
     _kron_all_sparse,
 )
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.state_utils import (
     embed_adjacent_two_site_operator,
@@ -156,18 +157,69 @@ def test_embed_observable_sparse_1site() -> None:
 
 @pytest.mark.parametrize("kind", ["dense", "sparse"])
 def test_embed_observable_requires_local_operator(kind: str) -> None:
-    """Observable embedding rejects requests without a local matrix and sites."""
+    """Observable embedding rejects requests that do not define operators."""
     embed = _embed_observable_dense if kind == "dense" else _embed_observable_sparse
-    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+    with pytest.raises(ValueError, match="requires an operator"):
         embed(Observable("000"), 3)
 
 
 @pytest.mark.parametrize("kind", ["dense", "sparse"])
-def test_embed_observable_rejects_more_than_two_sites(kind: str) -> None:
-    """Dense and sparse backends reject unsupported three-site observables."""
+def test_embed_observable_supports_general_local_operators(kind: str) -> None:
+    """Dense and sparse embeddings support complex operators on general support."""
+    dims = [3, 2, 3, 2, 2]
+    sites = [3, 1, 2]
+    rng = np.random.default_rng(17)
+    raw = rng.normal(size=(12, 12)) + 1j * rng.normal(size=(12, 12))
+    matrix = np.asarray(raw + raw.conj().T, dtype=np.complex128)
     embed = _embed_observable_dense if kind == "dense" else _embed_observable_sparse
-    with pytest.raises(NotImplementedError, match="Unsupported observable site count: 3"):
-        embed(Observable(np.eye(8), [0, 1, 2]), 3)
+    actual = embed(Observable(matrix, sites), 5, physical_dimensions=dims)
+
+    dimension = int(np.prod(dims))
+    expected = np.zeros((dimension, dimension), dtype=np.complex128)
+    active_dims = [dims[site] for site in sites]
+    spectators = [site for site in range(5) if site not in sites]
+    for row in range(dimension):
+        row_digits: list[int] = []
+        row_remainder = row
+        for dim in dims:
+            row_digits.append(row_remainder % dim)
+            row_remainder //= dim
+        active_row = np.ravel_multi_index(tuple(row_digits[site] for site in sites), active_dims)
+        for column in range(dimension):
+            column_digits: list[int] = []
+            column_remainder = column
+            for dim in dims:
+                column_digits.append(column_remainder % dim)
+                column_remainder //= dim
+            if any(row_digits[site] != column_digits[site] for site in spectators):
+                continue
+            active_column = np.ravel_multi_index(tuple(column_digits[site] for site in sites), active_dims)
+            expected[row, column] = matrix[active_row, active_column]
+
+    actual_dense = np.asarray(cast("Any", actual).toarray() if scipy.sparse.issparse(actual) else actual)
+    np.testing.assert_allclose(actual_dense, expected, atol=1e-12)
+
+
+@pytest.mark.parametrize("kind", ["dense", "sparse"])
+def test_embed_observable_supports_pauli_sums_and_supplied_mpos(kind: str) -> None:
+    """Full-chain observable MPOs use the MPS vector basis order."""
+    identity = np.eye(2, dtype=np.complex128)
+    x_op = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    y_op = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+    z_op = np.diag([1, -1]).astype(np.complex128)
+    cases = [
+        (
+            Observable.from_pauli_sum(terms=[(0.5, "Z0 X2"), (-0.25, "Y1")], length=3),
+            0.5 * np.kron(x_op, np.kron(identity, z_op)) - 0.25 * np.kron(identity, np.kron(y_op, identity)),
+        ),
+        (Observable(MPO.from_local_ops([x_op, y_op, z_op])), np.kron(z_op, np.kron(y_op, x_op))),
+    ]
+    embed = _embed_observable_dense if kind == "dense" else _embed_observable_sparse
+
+    for observable, expected in cases:
+        actual = embed(observable, 3)
+        actual_dense = np.asarray(cast("Any", actual).toarray() if scipy.sparse.issparse(actual) else actual)
+        np.testing.assert_allclose(actual_dense, expected, atol=1e-12)
 
 
 def test_embed_operator_dense_adjacent_site_order() -> None:

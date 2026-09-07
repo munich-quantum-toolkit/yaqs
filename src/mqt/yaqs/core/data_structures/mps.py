@@ -22,6 +22,7 @@ from tqdm import tqdm
 from .. import linalg
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
+from .state_utils import expectation_to_real
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -56,29 +57,6 @@ def _local_expectation_sites(observable: Observable) -> list[int] | None:
     if observable.interaction == 2 and len(sites) == 2 and sites[1] == sites[0] + 1:
         return sites
     return None
-
-
-def _expectation_to_real(value: complex, name: str) -> np.float64:
-    """Return a finite expectation value with only numerical imaginary noise.
-
-    Args:
-        value: Contracted operator expectation value.
-        name: Observable name used in error messages.
-
-    Returns:
-        The real part of the expectation value.
-
-    Raises:
-        ValueError: If the value is not finite or numerically real.
-    """
-    expectation = np.complex128(value)
-    if not np.isfinite(expectation):
-        msg = f"Expectation value for observable {name!r} must be finite; got {expectation}."
-        raise ValueError(msg)
-    if abs(expectation.imag) > 1e-10 * max(1.0, abs(expectation.real)):
-        msg = f"Expectation value for observable {name!r} must be real; got {expectation}."
-        raise ValueError(msg)
-    return np.float64(expectation.real)
 
 
 def _measure_shots_worker_init(mps: MPS, basis: str) -> None:
@@ -1649,7 +1627,7 @@ class MPS:
                     elif not temp_state.check_covers_sites(sites_list):
                         temp_state.shift_center_to(target)
                     exp = temp_state.local_expect(observable, sites_list)
-                results[obs_index, column_index] = _expectation_to_real(exp, observable.name)
+                results[obs_index, column_index] = expectation_to_real(exp, observable.name)
 
     def expect(self, observable: Observable) -> np.float64:
         r"""Measure the expectation value of a given observable.
@@ -1695,7 +1673,7 @@ class MPS:
             shifted.shift_center_to(target)
             exp = shifted.local_expect(observable, sites_list)
 
-        return _expectation_to_real(exp, observable.name)
+        return expectation_to_real(exp, observable.name)
 
     def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).

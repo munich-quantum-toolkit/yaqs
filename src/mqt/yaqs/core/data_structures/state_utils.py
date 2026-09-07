@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Internal helpers for :class:`~mqt.yaqs.core.data_structures.state.State`."""
+"""Internal helpers for YAQS state representations and measurements."""
 
 from __future__ import annotations
 
@@ -19,6 +19,29 @@ if TYPE_CHECKING:
 Representation = Literal["mps", "vector", "density_matrix"]
 
 _ALLOWED_REPRESENTATIONS = frozenset({"mps", "vector", "density_matrix"})
+
+
+def expectation_to_real(value: complex, name: str) -> np.float64:
+    """Return a finite expectation value with only numerical imaginary noise.
+
+    Args:
+        value: Contracted operator expectation value.
+        name: Observable name used in error messages.
+
+    Returns:
+        The real part of the expectation value.
+
+    Raises:
+        ValueError: If the value is not finite or numerically real.
+    """
+    expectation = np.complex128(value)
+    if not np.isfinite(expectation):
+        msg = f"Expectation value for observable {name!r} must be finite; got {expectation}."
+        raise ValueError(msg)
+    if abs(expectation.imag) > 1e-10 * max(1.0, abs(expectation.real)):
+        msg = f"Expectation value for observable {name!r} must be real; got {expectation}."
+        raise ValueError(msg)
+    return np.float64(expectation.real)
 
 
 def validate_representation(value: str) -> Representation:
