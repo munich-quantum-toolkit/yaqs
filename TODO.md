@@ -7,22 +7,22 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 and 2 are complete. Construction support does not yet mean that every
-backend can measure the new operators.
+Chunks 1 through 3 are complete. MPS measurement support does not yet mean that
+every backend can measure the new operators.
 
 | Chunk                             | Status                                        | Completion boundary                                     |
 | --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
 | 1. Observable definitions         | Complete                                      | Gate-independent construction and metadata              |
 | 2. MPO construction               | Complete                                      | Validated, reusable operator data                       |
-| 3. MPS contraction                | Direct contraction complete; batching pending | Direct and batched MPS measurements accept general MPOs |
+| 3. MPS contraction                | Complete                                      | Direct and batched MPS measurements accept general MPOs |
 | 4. Backend and result integration | Preparation is connected; measurement remains | Supported backends and result paths agree               |
 | 5. Performance and documentation  | Pending; use the pre-3A commit as baseline    | Measured cost, complete examples, and release checks    |
 
-Work in order: **5A → 3B → 4A → 4B → 4C → 5B → 5C**. Each subsection is a
-reviewable implementation batch. Complete its acceptance checks before
-proceeding. Capture the performance baseline in 5A before changing measurement
-dispatch in 3B; use the commit immediately before 3A for the old direct
-contraction. Finish the performance comparison after integration.
+Work in order: **5A → 4A → 4B → 4C → 5B → 5C**. Each subsection is a reviewable
+implementation batch. Complete its acceptance checks before proceeding. In 5A,
+use the commit immediately before 3A for the old direct contraction and the
+commit immediately before 3B for the old batched dispatch. Finish the
+performance comparison after integration.
 
 ## Design requirements
 
@@ -46,8 +46,8 @@ contraction. Finish the performance comparison after integration.
 
 ## Target interface
 
-These constructors are implemented. General MPO measurement and consistent
-backend support remain in chunks 3 and 4.
+These constructors and general MPS measurements are implemented. Consistent
+backend support remains in chunk 4.
 
 ```python
 from mqt.yaqs import Observable
@@ -61,7 +61,7 @@ Observable("101")
 Observable("entropy", [1, 2])
 Observable("schmidt_spectrum", [1, 2])
 
-# Construction is available; general measurement is the next step.
+# General MPS measurement is available; backend integration is the next step.
 Observable("zz", [0, 5])
 Observable(custom_matrix, [1, 3])
 Observable(custom_mpo)
@@ -163,9 +163,9 @@ need to add general measurement support.
 
 ## 3. Evaluate general MPO expectations
 
-The current `MPS.expect()` and `evaluate_observables()` still assume local
-one-site or two-site operators. `mixed_expectation()` now contracts compact and
-full-chain MPOs directly.
+`mixed_expectation()` contracts compact and full-chain MPOs directly.
+`MPS.expect()` and `evaluate_observables()` use that contraction for general
+operators and retain the local contraction path for small adjacent operators.
 
 ### 3A. Add the direct contraction
 
@@ -189,21 +189,22 @@ nonadjacent sites, general MPOs, and zero operators. Check the scaling rule
 
 ### 3B. Connect direct and batched MPS measurements
 
-- [ ] Route `MPS.expect()` and `evaluate_observables()` through the general
+- [x] Route `MPS.expect()` and `evaluate_observables()` through the general
       contraction for long-range correlations, operators on several sites, Pauli
       sums, and supplied MPOs. Remove local-site assumptions from general
       dispatch.
-- [ ] Preserve fast one-site and adjacent two-site evaluation when the gauge
-  permits it. Reuse environments or center shifts on a working copy for many
-  local measurements; check the cost against the 5A baseline.
-- [ ] Keep local and general normalization conventions consistent. Direct
+- [x] Preserve fast one-site and adjacent two-site evaluation when the gauge
+      permits it. Reuse center shifts on a working copy for many local
+      measurements. Compare the cost with the pre-3B baseline in chunks 5A and
+      5B.
+- [x] Keep local and general normalization conventions consistent. Direct
       expectation values return `<psi|O|psi>` and scale by `abs(a)**2` when the
       state is scaled by `a`; simulation backends keep their existing
       normalization flow.
-- [ ] Prepare operator data once per run and reuse it across time steps and
+- [x] Prepare operator data once per run and reuse it across time steps and
       trajectories. Direct calls must still validate unprepared inputs. Keep
       state contraction environments local to the current measurement state.
-- [ ] Use one real-result check for operator expectations: reject non-finite
+- [x] Use one real-result check for operator expectations: reject non-finite
   values and excessive absolute imaginary residuals using a documented,
   scale-aware tolerance. Do not discard a negative imaginary residual or use
   assertions to validate user inputs. Keep mixed matrix elements complex.

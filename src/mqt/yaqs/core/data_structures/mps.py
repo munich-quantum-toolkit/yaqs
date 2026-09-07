@@ -34,6 +34,53 @@ if TYPE_CHECKING:
 _MEASURE_SHOTS_CTX: dict[str, Any] = {}
 
 
+def _local_expectation_sites(observable: Observable) -> list[int] | None:
+    """Return sites when an operator supports the fast local contraction.
+
+    Args:
+        observable: Prepared operator observable.
+
+    Returns:
+        One site or an ascending adjacent pair. Returns ``None`` when the
+        general MPO contraction is required.
+    """
+    if observable.type != "operator" or observable.matrix is None:
+        return None
+    if isinstance(observable.sites, int):
+        return [observable.sites] if observable.interaction == 1 else None
+    if not isinstance(observable.sites, list):
+        return None
+    sites = observable.sites
+    if observable.interaction == 1 and len(sites) == 1:
+        return sites
+    if observable.interaction == 2 and len(sites) == 2 and sites[1] == sites[0] + 1:
+        return sites
+    return None
+
+
+def _expectation_to_real(value: complex, name: str) -> np.float64:
+    """Return a finite expectation value with only numerical imaginary noise.
+
+    Args:
+        value: Contracted operator expectation value.
+        name: Observable name used in error messages.
+
+    Returns:
+        The real part of the expectation value.
+
+    Raises:
+        ValueError: If the value is not finite or numerically real.
+    """
+    expectation = np.complex128(value)
+    if not np.isfinite(expectation):
+        msg = f"Expectation value for observable {name!r} must be finite; got {expectation}."
+        raise ValueError(msg)
+    if abs(expectation.imag) > 1e-10 * max(1.0, abs(expectation.real)):
+        msg = f"Expectation value for observable {name!r} must be real; got {expectation}."
+        raise ValueError(msg)
+    return np.float64(expectation.real)
+
+
 def _measure_shots_worker_init(mps: MPS, basis: str) -> None:
     """Initialize a measure-shots worker and cap numerical thread pools."""
     limit_worker_threads(1)
@@ -1551,14 +1598,12 @@ class MPS:
                 expectation values.
             column_index: Time or trajectory index for the column to fill.
 
-        Raises:
-            ValueError: If an operator observable does not define sites.
-
         Notes:
-            Deep-copies ``self`` once and reuses that working state for all observables.
-            When :attr:`orthogonality_center` covers the observable site(s), uses fast
-            local contraction; otherwise shifts the center on the copy or falls back to
-            full contraction when the gauge is unknown (``None``).
+            Deep-copies ``self`` once and reuses that working state for all
+            observables. One-site and ascending adjacent two-site operators use
+            fast local contraction after moving the center on the working copy.
+            All other operators use direct MPS-MPO contraction. Compatible
+            observables prepared before worker launch reuse their MPO data.
         """
         temp_state = copy.deepcopy(self)
         for obs_index, source_observable in enumerate(sim_params.sorted_observables):
@@ -1589,55 +1634,53 @@ class MPS:
                 results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
 
             else:
-                if observable.sites is None:
-                    msg = "Operator observables must have explicit sites."
-                    raise ValueError(msg)
-                sites_list = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
-                if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
+                sites_list = _local_expectation_sites(observable)
+                if sites_list is None:
+                    exp = temp_state.mixed_expectation(temp_state, observable)
+                else:
                     if len(sites_list) == 1:
                         target = sites_list[0]
                     else:
                         i, j = sites_list
                         center = temp_state.orthogonality_center
-                        target = i if abs(center - i) <= abs(center - j) else j
-                    temp_state.shift_center_to(target)
-                if temp_state.orthogonality_center is None:
-                    exp = temp_state.mixed_expectation(temp_state, observable)
-                else:
+                        target = i if center is None or abs(center - i) <= abs(center - j) else j
+                    if temp_state.orthogonality_center is None:
+                        temp_state.set_canonical_form(target)
+                    elif not temp_state.check_covers_sites(sites_list):
+                        temp_state.shift_center_to(target)
                     exp = temp_state.local_expect(observable, sites_list)
-                assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
-                results[obs_index, column_index] = exp.real
+                results[obs_index, column_index] = _expectation_to_real(exp, observable.name)
 
     def expect(self, observable: Observable) -> np.float64:
-        """Measure the expectation value of a given observable.
+        r"""Measure the expectation value of a given observable.
 
         Args:
-            observable: One-site or two-site observable to evaluate.
+            observable: Hermitian operator observable to evaluate.
 
         Returns:
-            The real part of the expectation value.
+            The finite real expectation value.
+
+        Raises:
+            ValueError: If the observable is not an operator, is incompatible
+                with the state, or produces a non-finite value or excessive
+                imaginary residual.
 
         Notes:
-            Uses fast local contraction when :attr:`orthogonality_center` covers the
-            observable site(s); shifts incrementally on a copy when the center is
-            known but misaligned; falls back to full contraction when the gauge is
-            unknown (``None``).
+            One-site and ascending adjacent two-site operators use fast local
+            contraction when the gauge is known. A displaced center is shifted
+            on a copy. Long-range, multi-site, Pauli-sum, supplied MPO, and
+            unknown-gauge expectations use direct MPS-MPO contraction. The
+            method returns :math:`\langle\psi|O|\psi\rangle` without normalizing
+            the state. It rejects imaginary parts larger than numerical
+            rounding noise.
         """
         observable = observable.prepare(self.length, self.physical_dimensions)
-        sites_list = None
-        if isinstance(observable.sites, int):
-            sites_list = [observable.sites]
-        elif isinstance(observable.sites, list):
-            sites_list = observable.sites
+        if observable.type != "operator":
+            msg = f"MPS.expect requires an operator observable, got {observable.type!r}."
+            raise ValueError(msg)
 
-        assert sites_list is not None, f"Invalid type in expect {type(observable.sites).__name__}"
-
-        assert len(sites_list) < 3, "Only one- and two-site observables are currently implemented."
-
-        for s in sites_list:
-            assert s in range(self.length), f"Observable acting on non-existing site: {s}"
-
-        if self._orthogonality_center is None:
+        sites_list = _local_expectation_sites(observable)
+        if sites_list is None or self._orthogonality_center is None:
             exp = self.mixed_expectation(self, observable)
         elif self.check_covers_sites(sites_list):
             exp = self.local_expect(observable, sites_list)
@@ -1652,8 +1695,7 @@ class MPS:
             shifted.shift_center_to(target)
             exp = shifted.local_expect(observable, sites_list)
 
-        assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
-        return exp.real
+        return _expectation_to_real(exp, observable.name)
 
     def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).

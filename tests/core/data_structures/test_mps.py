@@ -2535,6 +2535,222 @@ def test_expect_matches_dense_without_manual_canonicalization() -> None:
         assert mps.expect(obs) == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
 
 
+@pytest.mark.parametrize("center", [0, 3, None])
+def test_expect_general_local_matrix_matches_dense_and_preserves_state(center: int | None) -> None:
+    """General local operators work for known, displaced, and unknown centers.
+
+    Args:
+        center: Tracked center for the expectation call, or ``None`` for an
+            unknown gauge.
+    """
+    state = _entangled_mps(length=4, chi=4, seed=81)
+    scale_site = 2 if center is None else center
+    state.set_canonical_form(scale_site)
+    scale = 0.3 - 0.4j
+    state.tensors[scale_site] *= scale
+    state.set_center(center)
+    rng = np.random.default_rng(82)
+    raw_operator = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    operator = np.asarray(raw_operator + raw_operator.conj().T, dtype=np.complex128)
+    sites = [3, 0, 2]
+    observable = Observable(operator, sites)
+    dense_operator = _dense_embed_operator_mps_order(operator, sites, state.physical_dimensions)
+    expected = np.vdot(state.to_vec(), dense_operator @ state.to_vec()).real
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+
+    actual = state.expect(observable)
+
+    assert actual == pytest.approx(expected, rel=1e-11, abs=1e-12)
+    assert state.orthogonality_center == center
+    assert observable.mpo is None
+    for before, after in zip(tensors_before, state.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+
+
+def test_expect_supports_long_range_pauli_sum_and_supplied_mpo() -> None:
+    """Every general operator form agrees with an independent dense reference."""
+    state = _entangled_mps(length=4, chi=4, seed=83)
+    state.set_canonical_form(1)
+    x_matrix = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    z_matrix = np.diag([1, -1]).astype(np.complex128)
+
+    long_range = Observable("zz", [3, 0])
+    long_range_dense = _dense_embed_operator_mps_order(
+        np.kron(z_matrix, z_matrix),
+        [3, 0],
+        state.physical_dimensions,
+    )
+
+    pauli_sum = Observable.from_pauli_sum(
+        terms=[(0.5, "Z0 Z3"), (-0.25, "X1"), (1e-18, "Z2")],
+        length=state.length,
+    )
+    pauli_dense = 0.5 * _dense_embed_operator_mps_order(
+        np.kron(z_matrix, z_matrix),
+        [0, 3],
+        state.physical_dimensions,
+    )
+    pauli_dense -= 0.25 * _dense_embed_operator_mps_order(x_matrix, [1], state.physical_dimensions)
+    pauli_dense += 1e-18 * _dense_embed_operator_mps_order(z_matrix, [2], state.physical_dimensions)
+
+    rng = np.random.default_rng(84)
+    raw_operator = rng.normal(size=(16, 16)) + 1j * rng.normal(size=(16, 16))
+    full_matrix = np.asarray(raw_operator + raw_operator.conj().T, dtype=np.complex128)
+    supplied_mpo = Observable(MPO.from_matrix_with_dimensions(full_matrix, state.physical_dimensions))
+    supplied_dense = _dense_embed_operator_mps_order(
+        full_matrix,
+        list(range(state.length)),
+        state.physical_dimensions,
+    )
+
+    vector = state.to_vec()
+    for observable, dense_operator in (
+        (long_range, long_range_dense),
+        (pauli_sum, pauli_dense),
+        (supplied_mpo, supplied_dense),
+    ):
+        expected = np.vdot(vector, dense_operator @ vector).real
+        assert state.expect(observable) == pytest.approx(expected, rel=1e-11, abs=1e-12)
+
+
+def test_expect_preserves_zero_tiny_and_state_scaling() -> None:
+    """General expectations remain raw under zero, tiny, and rescaled inputs."""
+    state = MPS(3, state="zeros")
+    tiny = Observable.from_pauli_sum(terms=[(1e-18, "Z0")], length=3)
+    zero = Observable.from_pauli_sum(terms=[], length=3)
+
+    assert state.expect(tiny) == pytest.approx(1e-18, rel=1e-12, abs=1e-30)
+    assert state.expect(zero) == 0
+
+    scale = 1e-6j
+    state.tensors[0] *= scale
+    assert state.expect(tiny) == pytest.approx(abs(scale) ** 2 * 1e-18, rel=1e-12, abs=1e-40)
+    assert state.expect(zero) == 0
+
+
+@pytest.mark.parametrize("observable", [Observable("entropy", [0, 1]), Observable("00")])
+def test_expect_rejects_non_operator_observables(observable: Observable) -> None:
+    """``expect`` accepts operator observables only."""
+    with pytest.raises(ValueError, match="requires an operator observable"):
+        MPS(2, state="zeros").expect(observable)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        complex(np.nan, 0),
+        complex(np.inf, 0),
+        complex(1, np.nan),
+    ],
+)
+def test_expect_rejects_non_finite_operator_results(value: complex) -> None:
+    """``expect`` rejects non-finite contracted values."""
+    state = MPS(1, state="zeros")
+    observable = Observable(MPO.from_local_ops([np.eye(2)]))
+
+    with (
+        patch.object(state, "mixed_expectation", return_value=np.complex128(value)),
+        pytest.raises(ValueError, match="must be finite"),
+    ):
+        state.expect(observable)
+
+
+@pytest.mark.parametrize("imaginary", [2e-10, -2e-10])
+def test_expect_rejects_excessive_absolute_imaginary_residual(imaginary: float) -> None:
+    """The real-result check treats positive and negative residuals equally."""
+    state = MPS(1, state="zeros")
+    observable = Observable(MPO.from_local_ops([np.eye(2)]))
+
+    with (
+        patch.object(state, "mixed_expectation", return_value=np.complex128(1 + imaginary * 1j)),
+        pytest.raises(ValueError, match="must be real"),
+    ):
+        state.expect(observable)
+
+
+def test_expect_accepts_imaginary_residual_within_scale_aware_tolerance() -> None:
+    """The real-result check accepts a signed residual within its tolerance."""
+    state = MPS(1, state="zeros")
+    observable = Observable(MPO.from_local_ops([np.eye(2)]))
+
+    with patch.object(state, "mixed_expectation", return_value=np.complex128(1e-18 - 5e-13j)):
+        assert state.expect(observable) == pytest.approx(1e-18, abs=0)
+
+
+@pytest.mark.parametrize("center", [0, 3, None])
+def test_evaluate_observables_general_matches_expect_and_reuses_prepared_mpos(center: int | None) -> None:
+    """Batched local and general measurements agree and reuse prepared MPO data.
+
+    Args:
+        center: Tracked center for the batch, or ``None`` for an unknown gauge.
+    """
+    state = _entangled_mps(length=4, chi=4, seed=85)
+    state.set_canonical_form(2 if center is None else center)
+    state.set_center(center)
+    rng = np.random.default_rng(86)
+    raw_three_site = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    three_site = np.asarray(raw_three_site + raw_three_site.conj().T, dtype=np.complex128)
+    raw_full = rng.normal(size=(16, 16)) + 1j * rng.normal(size=(16, 16))
+    full_matrix = np.asarray(raw_full + raw_full.conj().T, dtype=np.complex128)
+    observables = [
+        Observable("z", 0),
+        Observable("xx", [1, 2]),
+        Observable("zz", [0, 3]),
+        Observable(three_site, [3, 0, 2]),
+        Observable.from_pauli_sum(terms=[(0.5, "Z0 Z3"), (0.25, "X1")], length=4),
+        Observable(MPO.from_matrix_with_dimensions(full_matrix, state.physical_dimensions)),
+    ]
+    prepared = [observable.prepare(state.length, state.physical_dimensions) for observable in observables]
+    params = Mock(sorted_observables=prepared)
+    expected = [state.expect(observable) for observable in prepared]
+    results = np.empty((len(observables), 2), dtype=np.float64)
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+    mpo_tensors_before = [
+        [tensor.copy() for tensor in observable.mpo.tensors] if observable.mpo is not None else []
+        for observable in prepared
+    ]
+
+    with patch.object(MPO, "from_matrix_with_dimensions", side_effect=AssertionError("MPO was rebuilt")):
+        state.evaluate_observables(params, results, column_index=1)
+
+    np.testing.assert_allclose(results[:, 1], expected, rtol=1e-11, atol=1e-12)
+    assert state.orthogonality_center == center
+    for before, after in zip(tensors_before, state.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+    for observable, tensors_before in zip(prepared, mpo_tensors_before, strict=True):
+        assert observable.mpo is not None
+        for before, after in zip(tensors_before, observable.mpo.tensors, strict=True):
+            np.testing.assert_array_equal(after, before)
+
+
+def test_evaluate_observables_uses_local_batch_path_from_unknown_gauge() -> None:
+    """A local batch canonicalizes one working copy and avoids general contraction."""
+    state = _random_mps_with_bonds([2, 2, 2, 2], [1, 2, 3, 2, 1], seed=87)
+    observables = [Observable("z", site).prepare(4) for site in range(4)]
+    params = Mock(sorted_observables=observables)
+    results = np.empty((4, 1), dtype=np.float64)
+
+    with patch.object(MPS, "mixed_expectation", side_effect=AssertionError("Local batch used the MPO path")):
+        state.evaluate_observables(params, results)
+
+    expected = [_dense_z_expectation(state, site) for site in range(4)]
+    np.testing.assert_allclose(results[:, 0], expected, atol=1e-12)
+    assert state.orthogonality_center is None
+
+
+def test_evaluate_observables_rejects_excessive_imaginary_residual() -> None:
+    """Batched operator measurements use the shared real-result check."""
+    state = MPS(1, state="zeros")
+    observable = Observable(MPO.from_local_ops([np.eye(2)])).prepare(1)
+    params = Mock(sorted_observables=[observable])
+
+    with (
+        patch.object(MPS, "mixed_expectation", return_value=np.complex128(1 - 2e-10j)),
+        pytest.raises(ValueError, match="must be real"),
+    ):
+        state.evaluate_observables(params, np.empty((1, 1)))
+
+
 def test_evaluate_observables_with_nonzero_initial_center() -> None:
     """``evaluate_observables`` works when the copy starts away from site 0."""
     mps = MPS(4, state="haar-random", pad=4)
