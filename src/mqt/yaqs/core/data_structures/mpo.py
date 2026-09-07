@@ -219,6 +219,8 @@ class MPO:
             msg = "Hermiticity tolerances must be finite and non-negative."
             raise ValueError(msg)
         self.validate()
+        if all(np.array_equal(tensor, np.swapaxes(np.conj(tensor), 0, 1)) for tensor in self.tensors):
+            return True
         norm = self.frobenius_norm()
         tolerance = atol + rtol * norm
         adjoint = self.adjoint()

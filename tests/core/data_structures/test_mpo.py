@@ -1752,6 +1752,26 @@ def test_mpo_hermiticity_uses_tensor_contractions(monkeypatch: pytest.MonkeyPatc
     assert mpo.is_hermitian()
 
 
+def test_mpo_hermiticity_accepts_exactly_hermitian_blocks_without_compression(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exactly Hermitian MPO blocks avoid residual construction and compression."""
+    mpo = MPO()
+    mpo.from_pauli_sum(
+        terms=[(0.5, "X0 Y1 Z2"), (-0.25, "Z0 X1 Y2")],
+        length=3,
+        n_sweeps=0,
+    )
+    assert max(tensor.shape[3] for tensor in mpo.tensors) == 2
+
+    def fail_compression(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Exact block Hermiticity must not build and compress a residual MPO.")
+
+    monkeypatch.setattr(MPO, "compress", fail_compression)
+
+    assert mpo.is_hermitian()
+
+
 def test_mpo_hermiticity_rejects_non_hermitian_and_accepts_zero() -> None:
     """The contraction check handles non-Hermitian and zero operators."""
     lowering = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
