@@ -587,16 +587,20 @@ def test_digital_params_sorting_and_fields() -> None:
     assert params.num_mid_measurements == 2
 
 
-def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
-    """Constructor must assert when mixing PVM with non-PVM observables."""
-    pvm = Observable("101")
-    z0 = Observable("z", sites=0)
-    with pytest.raises(AssertionError):
-        _ = DigitalSimParams(observables=[pvm, z0])
+@pytest.mark.parametrize("params_type", [AnalogSimParams, DigitalSimParams])
+def test_simulation_params_accept_mixed_bitstring_and_operator_observables(
+    params_type: type[AnalogSimParams | DigitalSimParams],
+) -> None:
+    """Simulation parameters preserve mixed projector and operator requests."""
+    observables = [Observable("101"), Observable("z", sites=0)]
+
+    params = params_type(observables=observables)
+
+    assert params.observables == observables
 
 
 def test_digital_params_accepts_all_pvm_or_all_non_pvm() -> None:
-    """Constructor allows all-PVM and all-non-PVM sets."""
+    """Constructor accepts homogeneous observable sets."""
     # All PVM
     p1 = Observable("0")
     p2 = Observable("1")

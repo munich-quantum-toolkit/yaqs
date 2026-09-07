@@ -1480,11 +1480,14 @@ class Simulator:
             ValueError: If ``get_state=True`` is combined with a non-trivial noise model
                 on ``mps`` or ``vector`` representations (the trajectory ensemble has no
                 single representative state). Lindblad ``density_matrix`` evolution always
-                returns the exact ensemble-averaged state when ``get_state=True``. Bitstring
-                observables currently require the ``mps`` representation.
+                returns the exact ensemble-averaged state when ``get_state=True``. State
+                diagnostics require the ``mps`` representation.
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
+            if any(observable.type != "operator" for pair in sim_params.multi_time_observables for observable in pair):
+                msg = "multi_time_observables accepts operator observables only."
+                raise ValueError(msg)
             if operator.is_piecewise:
                 msg = "Piecewise Hamiltonians do not support list[State] ensemble execution."
                 raise ValueError(msg)
@@ -1514,8 +1517,11 @@ class Simulator:
             return
 
         state_rep = initial_state.representation
-        if state_rep != "mps" and any(observable.type == "bitstring" for observable in sim_params.observables):
-            msg = f"Bitstring observables require State.representation='mps'; got {state_rep!r}."
+        if sim_params.multi_time_observables:
+            msg = "multi_time_observables requires list[State] analog ensemble execution."
+            raise ValueError(msg)
+        if state_rep != "mps" and any(observable.type == "diagnostic" for observable in sim_params.observables):
+            msg = f"State diagnostics require State.representation='mps'; got {state_rep!r}."
             raise ValueError(msg)
         initial_state.ensure_encoded(state_rep)
         mps = _materialized_mps(initial_state)

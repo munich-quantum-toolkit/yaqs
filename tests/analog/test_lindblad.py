@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import scipy.sparse
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -212,6 +213,24 @@ def test_lindblad_zero_strength_noise_runs_via_simulator() -> None:
     hamiltonian = Hamiltonian.from_mpo(h)
     result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
     assert result.expectation_values[0] is not None
+
+
+def test_preprocess_lindblad_rejects_state_diagnostics_before_operator_setup() -> None:
+    """Direct Lindblad preprocessing rejects diagnostics instead of storing placeholders."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("schmidt_spectrum", [0, 1])],
+        elapsed_time=0.1,
+        dt=0.1,
+    )
+
+    with pytest.raises(ValueError, match="Lindblad density-matrix evolution does not support state diagnostics"):
+        preprocess_lindblad(
+            rho_initial=np.array([[1.0]], dtype=np.complex128),
+            h_sparse=scipy.sparse.csr_matrix((1, 1), dtype=np.complex128),
+            noise_model=None,
+            sim_params=sim_params,
+            num_sites=2,
+        )
 
 
 def test_lindblad_result_has_no_auto_diagnostics() -> None:

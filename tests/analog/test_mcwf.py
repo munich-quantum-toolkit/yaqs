@@ -204,6 +204,24 @@ def test_preprocess_mcwf_rejects_mismatched_h_sparse_shape() -> None:
         )
 
 
+def test_preprocess_mcwf_rejects_state_diagnostics_before_operator_setup() -> None:
+    """Direct MCWF preprocessing rejects diagnostics instead of storing placeholders."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("entropy", [0, 1])],
+        elapsed_time=0.1,
+        dt=0.1,
+    )
+
+    with pytest.raises(ValueError, match="MCWF vector evolution does not support state diagnostics"):
+        preprocess_mcwf(
+            psi_initial=np.array([1.0], dtype=np.complex128),
+            h_sparse=scipy.sparse.csr_matrix((1, 1), dtype=np.complex128),
+            noise_model=None,
+            sim_params=sim_params,
+            num_sites=2,
+        )
+
+
 def test_preprocess_mcwf_sets_propagator_small_system() -> None:
     """Small systems precompute a fixed time-step propagator."""
     n_sites = 3

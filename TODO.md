@@ -7,18 +7,18 @@ operators (MPOs).
 
 ## Status and execution order
 
-Chunks 1 through 3 and chunk 4A are complete. Projector, diagnostic, worker, and
-result-path integration remain in chunks 4B and 4C.
+Chunks 1 through 3 and chunks 4A and 4B are complete. Worker, sampling, and
+result-path audits remain in chunk 4C.
 
-| Chunk                             | Status                                          | Completion boundary                                     |
-| --------------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
-| 1. Observable definitions         | Complete                                        | Gate-independent construction and metadata              |
-| 2. MPO construction               | Complete                                        | Validated, reusable operator data                       |
-| 3. MPS contraction                | Complete                                        | Direct and batched MPS measurements accept general MPOs |
-| 4. Backend and result integration | Operator measurement complete; 4B and 4C remain | Supported backends and result paths agree               |
-| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline      | Measured cost, complete examples, and release checks    |
+| Chunk                             | Status                                                           | Completion boundary                                     |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| 1. Observable definitions         | Complete                                                         | Gate-independent construction and metadata              |
+| 2. MPO construction               | Complete                                                         | Validated, reusable operator data                       |
+| 3. MPS contraction                | Complete                                                         | Direct and batched MPS measurements accept general MPOs |
+| 4. Backend and result integration | Operator, projector, and diagnostic support complete; 4C remains | Supported backends and result paths agree               |
+| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline                       | Measured cost, complete examples, and release checks    |
 
-Work in order: **5A → 4B → 4C → 5B → 5C**. Each subsection is a reviewable
+Remaining work in order: **5A → 4C → 5B → 5C**. Each subsection is a reviewable
 implementation batch. Complete its acceptance checks before proceeding. In 5A,
 use the commit immediately before 3A for the old direct contraction and the
 commit immediately before 3B for the old batched dispatch. Finish the
@@ -46,8 +46,8 @@ performance comparison after integration.
 
 ## Target interface
 
-These constructors and general MPS measurements are implemented. Consistent
-backend support remains in chunk 4.
+These constructors and general MPS measurements are implemented. Chunk 4C
+retains the final sampling, worker, and result-path audit.
 
 ```python
 from mqt.yaqs import Observable
@@ -61,7 +61,7 @@ Observable("101")
 Observable("entropy", [1, 2])
 Observable("schmidt_spectrum", [1, 2])
 
-# General MPS measurement is available; backend integration is the next step.
+# General MPS measurement is available across supported backends.
 Observable("zz", [0, 5])
 Observable(custom_matrix, [1, 3])
 Observable(custom_mpo)
@@ -219,9 +219,9 @@ and general measurements preserve the source state.
 - [x] Replace observable gate metadata in consumers and connect state-dependent
   preparation to simulator workers and program compilation.
 
-Remaining limits: simulation parameters reject mixed bitstring/operator
-requests, and dense analog backends reject bitstrings. Diagnostic placeholders
-can still produce zero results in dense backend measurement paths.
+Operator and projector requests now work in all state representations. Entropy
+and Schmidt-spectrum diagnostics remain MPS-only because they describe an MPS
+bond cut. Chunk 4C will audit sampling, worker transport, and result ordering.
 
 ### 4A. Support operators in each backend
 
@@ -247,17 +247,17 @@ the state and evolution backend support them.
 
 ### 4B. Handle projectors and diagnostics explicitly
 
-- [ ] Give bitstring requests a linear-projector representation while retaining
+- [x] Give bitstring requests a linear-projector representation while retaining
       efficient MPS amplitude, vector amplitude, and density-diagonal
       evaluation. Preserve the convention that the first character refers to
       site 0, and validate the requested basis state against local dimensions.
-- [ ] Allow bitstrings alongside operator observables. Remove the simulation
+- [x] Allow bitstrings alongside operator observables. Remove the simulation
       parameter restriction and dense-backend rejection only when those paths
       can evaluate and aggregate the mixed requests correctly.
-- [ ] Validate entropy and Schmidt-spectrum cuts during preparation: two
+- [x] Validate entropy and Schmidt-spectrum cuts during preparation: two
       adjacent, distinct, in-range sites. Keep diagnostics separate from
       operator contraction and retain their supported result semantics.
-- [ ] State which backend/diagnostic combinations are supported. Reject other
+- [x] State which backend/diagnostic combinations are supported. Reject other
       combinations before execution, including direct backend calls; remove
       placeholder zero results. Do not introduce a new mixed-state entropy
       meaning under the existing diagnostic name.

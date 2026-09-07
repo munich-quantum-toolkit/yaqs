@@ -44,6 +44,35 @@ def expectation_to_real(value: complex, name: str) -> np.float64:
     return np.float64(expectation.real)
 
 
+def basis_index_from_bitstring(bitstring: str, physical_dimensions: list[int] | tuple[int, ...]) -> int:
+    """Return the flat basis index for a site-0-first bitstring.
+
+    Args:
+        bitstring: Computational-basis digits. Character zero refers to site 0.
+        physical_dimensions: Local dimension for each site.
+
+    Returns:
+        The basis index in the site-0 least-significant state-vector order.
+
+    Raises:
+        ValueError: If the length does not match or a digit is outside its local space.
+    """
+    if len(bitstring) != len(physical_dimensions):
+        msg = f"Bitstring length {len(bitstring)} does not match state length {len(physical_dimensions)}."
+        raise ValueError(msg)
+
+    index = 0
+    stride = 1
+    for site, (character, dimension) in enumerate(zip(bitstring, physical_dimensions, strict=True)):
+        digit = int(character)
+        if digit >= dimension:
+            msg = f"Bitstring digit {digit} at site {site} is outside local dimension {dimension}."
+            raise ValueError(msg)
+        index += digit * stride
+        stride *= dimension
+    return index
+
+
 def validate_representation(value: str) -> Representation:
     """Validate and return a simulation representation label.
 

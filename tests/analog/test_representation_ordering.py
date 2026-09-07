@@ -174,21 +174,27 @@ def test_general_observable_reaches_each_mps_analog_solver(order: int, evolution
 
 
 def test_general_observable_reaches_digital_mps_measurement() -> None:
-    """Digital MPS simulation measures a general prepared MPO observable."""
+    """Digital MPS simulation measures an operator and bitstring together."""
     vector, _density_matrix, tensors = _deterministic_qubit_state()
     observables, matrices = _general_qubit_observables()
     expected = float(np.real(np.vdot(vector, matrices[2] @ vector)))
-    params = DigitalSimParams(observables=[observables[2]], num_traj=1, max_bond_dim=None, svd_threshold=0.0)
+    params = DigitalSimParams(
+        observables=[observables[2], Observable("101")],
+        num_traj=1,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
 
     result = Simulator(parallel=False, show_progress=False).run(
         State(tensors=[tensor.copy() for tensor in tensors]), QuantumCircuit(3), params
     )
 
     assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(expected, abs=1e-10)
+    assert float(result.expectation_values[1][-1]) == pytest.approx(abs(vector[5]) ** 2, abs=1e-12)
 
 
-def test_general_observable_supports_mixed_dimensions_across_analog_backends() -> None:
-    """All analog representations embed compact MPO support with mixed dimensions."""
+def test_mixed_operator_and_bitstring_support_mixed_dimensions_across_analog_backends() -> None:
+    """All analog representations measure mixed operators and bitstrings."""
     dimensions = [2, 3, 2]
     local_vectors = [
         np.array([np.sqrt(0.6), 1j * np.sqrt(0.4)], dtype=np.complex128),
@@ -204,6 +210,7 @@ def test_general_observable_supports_mixed_dimensions_across_analog_backends() -
     observable = Observable(local_operator, [2, 0])
     full_operator = _embed_operator_reference(local_operator, [2, 0], dimensions)
     expected = float(np.real(np.vdot(vector, full_operator @ vector)))
+    projector_probability = float(abs(vector[7]) ** 2)
     zero_hamiltonian = MPO()
     zero_hamiltonian.custom(
         [
@@ -215,7 +222,7 @@ def test_general_observable_supports_mixed_dimensions_across_analog_backends() -
     )
     hamiltonian = Hamiltonian.from_mpo(zero_hamiltonian)
     params = AnalogSimParams(
-        observables=[observable],
+        observables=[observable, Observable("101")],
         elapsed_time=0.1,
         dt=0.1,
         num_traj=1,
@@ -232,6 +239,7 @@ def test_general_observable_supports_mixed_dimensions_across_analog_backends() -
     for state in states:
         result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, params)
         assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(expected, abs=1e-10)
+        assert float(result.expectation_values[1][-1]) == pytest.approx(projector_probability, abs=1e-12)
 
 
 def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]) -> None:

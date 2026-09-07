@@ -319,6 +319,50 @@ def test_prepare_rejects_wrong_bitstring_length() -> None:
         Observable("01").prepare(3)
 
 
+def test_prepare_builds_site_zero_first_bitstring_projector() -> None:
+    """Bitstrings prepare a full-chain bond-one projector in state-vector order."""
+    prepared = Observable("10").prepare(2, [2, 3])
+
+    assert prepared.mpo is not None
+    assert prepared.mpo_sites == (0, 1)
+    assert all(tensor.shape[2:] == (1, 1) for tensor in prepared.mpo.tensors)
+    expected = np.zeros((6, 6), dtype=np.complex128)
+    expected[1, 1] = 1.0
+    np.testing.assert_array_equal(prepared.mpo.to_matrix_mps_order(), expected)
+    np.testing.assert_array_equal(Observable("10").to_mpo(2, [2, 3]).to_matrix_mps_order(), expected)
+
+
+def test_prepare_rejects_bitstring_digit_outside_local_dimension() -> None:
+    """Each bitstring digit must identify a basis state in its local space."""
+    with pytest.raises(ValueError, match="digit 1 at site 0 is outside local dimension 1"):
+        Observable("10").prepare(2, [1, 2])
+
+
+@pytest.mark.parametrize(
+    ("sites", "length", "message"),
+    [
+        (0, 2, "list of exactly two sites"),
+        ([0], 2, "list of exactly two sites"),
+        ([0, 1, 2], 3, "list of exactly two sites"),
+        ([0, 0], 2, "must be distinct"),
+        ([0, 2], 3, "require adjacent sites"),
+        ([1, 2], 2, "outside the state"),
+    ],
+)
+def test_prepare_rejects_invalid_diagnostic_cut(sites: int | list[int], length: int, message: str) -> None:
+    """Diagnostic preparation rejects every invalid bond-cut form."""
+    with pytest.raises(ValueError, match=message):
+        Observable("entropy", sites).prepare(length)
+
+
+def test_prepare_normalizes_reversed_diagnostic_cut() -> None:
+    """A reversed adjacent pair identifies the same state cut."""
+    prepared = Observable("schmidt_spectrum", [2, 1]).prepare(4)
+
+    assert prepared.sites == [1, 2]
+    assert prepared.mpo is None
+
+
 def test_observable_accepts_and_copies_full_chain_mpo() -> None:
     """A supplied MPO is copied and checked against the prepared state layout."""
     matrix = np.kron(np.diag([1.0, 0.0, -2.0]), np.array([[0.0, 1.0], [1.0, 0.0]]))

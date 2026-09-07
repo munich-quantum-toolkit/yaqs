@@ -34,7 +34,11 @@ import scipy.sparse
 from scipy.integrate import solve_ivp
 
 from ..core import linalg
-from ..core.data_structures.state_utils import expectation_to_real, resolve_physical_dimensions
+from ..core.data_structures.state_utils import (
+    basis_index_from_bitstring,
+    expectation_to_real,
+    resolve_physical_dimensions,
+)
 from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 if TYPE_CHECKING:
@@ -58,7 +62,7 @@ class LindbladContext:
     jump_ops: list[scipy.sparse.spmatrix]
     # sum_k L_k^dag L_k, used in the anti-commutator term -0.5 {sum_k L_k^dag L_k, rho}.
     l_dag_l_sum: scipy.sparse.csr_matrix
-    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | int]
     sim_params: AnalogSimParams
     is_unitary: bool = False
     # exp(L * dt) with L the Liouvillian superoperator, if vec(rho) is small enough.
@@ -88,8 +92,13 @@ def preprocess_lindblad(
         LindbladContext ready for time evolution.
 
     Raises:
-        ValueError: If ``rho_initial`` or ``h_sparse`` has the wrong shape or zero trace.
+        ValueError: If ``rho_initial`` or ``h_sparse`` has the wrong shape or zero trace,
+            or a state diagnostic is requested.
     """
+    if any(observable.type == "diagnostic" for observable in sim_params.observables):
+        msg = "Lindblad density-matrix evolution does not support state diagnostics; use State.representation='mps'."
+        raise ValueError(msg)
+
     dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
     site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
@@ -143,12 +152,14 @@ def preprocess_lindblad(
             op_csr = cast("Any", op)
             l_dag_l_sum += op_csr.conj().T @ op_csr
 
-    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | int] = []
     for obs in sim_params.sorted_observables:
-        if obs.type == "diagnostic":
-            embedded_observables.append(None)
+        prepared = obs.prepare(num_sites, site_dims)
+        if prepared.type == "bitstring":
+            assert prepared.bitstring is not None
+            embedded_observables.append(basis_index_from_bitstring(prepared.bitstring, site_dims))
         else:
-            embedded_observables.append(_embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims))
+            embedded_observables.append(_embed_observable_sparse(prepared, num_sites, physical_dimensions=site_dims))
 
     step_propagator: NDArray[np.complex128] | None = None
     vec_dim = dim * dim
@@ -238,12 +249,13 @@ def _measure_rho(
     """Record <O> = Tr(O rho) for each observable at time index ``t_idx``."""
     rho_t = rho_flat.reshape((dim, dim), order="F")
     for i, op_mat in enumerate(ctx.embedded_observables):
-        if op_mat is not None:
+        if isinstance(op_mat, int):
+            value = rho_t[op_mat, op_mat]
+            obs_results[i, t_idx] = expectation_to_real(value, ctx.sim_params.sorted_observables[i].name)
+        else:
             op_any = cast("Any", op_mat)
             val = np.trace(op_any @ rho_t)
             obs_results[i, t_idx] = expectation_to_real(val, ctx.sim_params.sorted_observables[i].name)
-        else:
-            obs_results[i, t_idx] = 0.0
 
 
 def _rho_vec_at_elapsed_time(ctx: LindbladContext) -> NDArray[np.complex128]:

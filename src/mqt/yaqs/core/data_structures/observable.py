@@ -17,7 +17,7 @@ import numpy as np
 
 from ..libraries.observable_library import ObservableLibrary
 from .mpo import MPO
-from .state_utils import resolve_physical_dimensions
+from .state_utils import basis_index_from_bitstring, resolve_physical_dimensions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -222,6 +222,54 @@ def _build_local_mpo(
     return support_mpo, tuple(range(first_site, last_site + 1))
 
 
+def _build_bitstring_projector(bitstring: str, dimensions: tuple[int, ...]) -> MPO:
+    """Build the bond-one MPO for a computational-basis projector.
+
+    Args:
+        bitstring: Computational-basis state with site 0 as its first character.
+        dimensions: Full-chain physical dimensions.
+
+    Returns:
+        The full-chain projector MPO.
+    """
+    tensors: list[NDArray[np.complex128]] = []
+    for character, dimension in zip(bitstring, dimensions, strict=True):
+        projector = np.zeros((dimension, dimension), dtype=np.complex128)
+        projector[int(character), int(character)] = 1.0
+        tensors.append(projector.reshape(dimension, dimension, 1, 1))
+
+    mpo = MPO()
+    mpo.tensors = tensors
+    mpo.length = len(tensors)
+    mpo.physical_dimension = dimensions[0]
+    mpo.validate()
+    return mpo
+
+
+def _validate_diagnostic_sites(sites: int | list[int] | None, length: int) -> list[int]:
+    """Return one validated nearest-neighbor cut in ascending order.
+
+    Args:
+        sites: Requested cut sites.
+        length: Full state length.
+
+    Returns:
+        Two adjacent sites in ascending order.
+
+    Raises:
+        ValueError: If the request does not identify one valid nearest-neighbor cut.
+    """
+    if not isinstance(sites, list) or len(sites) != 2:
+        msg = "Entropy and Schmidt-spectrum diagnostics require a list of exactly two sites."
+        raise ValueError(msg)
+    validated = _validate_sites_for_length(sites, length)
+    first, second = sorted(validated)
+    if second - first != 1:
+        msg = f"Entropy and Schmidt-spectrum diagnostics require adjacent sites; got {sites}."
+        raise ValueError(msg)
+    return [first, second]
+
+
 class Observable:
     """A Hermitian operator or state diagnostic requested from a simulation.
 
@@ -249,7 +297,8 @@ class Observable:
         interaction: Number of sites used by a local operator.
         type: ``"operator"``, ``"bitstring"``, or ``"diagnostic"``.
         bitstring: Computational-basis state for a bitstring request, otherwise ``None``.
-        mpo: Supplied or prepared MPO, otherwise ``None``.
+        mpo: Supplied or prepared operator MPO. Prepared bitstrings use a
+            full-chain rank-one projector MPO.
         mpo_sites: Full-chain sites represented by the prepared MPO tensors.
         full_chain: Whether a supplied MPO defines the full chain.
         prepared_length: State length used for preparation, otherwise ``None``.
@@ -401,7 +450,8 @@ class Observable:
         Matrix tensor factors follow the user-supplied ``sites`` order. The
         prepared MPO follows ascending chain order and spans only from the
         smallest to the largest target site. Identity transport tensors carry
-        its virtual bond across gaps. A supplied MPO represents the full chain.
+        its virtual bond across gaps. A supplied MPO or bitstring projector
+        represents the full chain.
 
         Args:
             length: Full state length.
@@ -422,11 +472,11 @@ class Observable:
         prepared = copy.deepcopy(self)
         if prepared.type == "bitstring":
             assert prepared.bitstring is not None
-            if len(prepared.bitstring) != length:
-                msg = f"Bitstring length {len(prepared.bitstring)} does not match state length {length}."
-                raise ValueError(msg)
+            basis_index_from_bitstring(prepared.bitstring, dimensions)
+            prepared.mpo = _build_bitstring_projector(prepared.bitstring, dimensions)
+            prepared.mpo_sites = tuple(range(length))
         elif prepared.type == "diagnostic":
-            _validate_sites_for_length(prepared.sites, length)
+            prepared.sites = _validate_diagnostic_sites(prepared.sites, length)
         elif prepared.full_chain:
             assert prepared.mpo is not None
             mpo_dimensions = prepared.mpo.validate()
@@ -496,10 +546,11 @@ class Observable:
             An independent MPO for the prepared operator. Local operators use
             the smallest contiguous interval from the lowest to the highest
             target site. Tensor index zero therefore corresponds to the lowest
-            target site. Supplied MPOs represent the full chain.
+            target site. Supplied MPOs and bitstring projectors represent the
+            full chain.
 
         Raises:
-            ValueError: If this object is a diagnostic or bitstring request.
+            ValueError: If this object is a state diagnostic.
         """
         prepared = self.prepare(length, physical_dimensions)
         if prepared.mpo is None:

@@ -517,11 +517,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
-        obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
-            "We currently have not implemented mixed observable and projective-measurement simulation."
-        )
-        self.observables = obs_list
+        self.observables = [] if observables is None else list(observables)
 
         n_steps = _validate_analog_time_grid(elapsed_time, dt)
         self.elapsed_time = float(elapsed_time)
@@ -659,11 +655,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
-        obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
-            "We currently have not implemented mixed observable and projective-measurement simulation."
-        )
-        self.observables = obs_list
+        self.observables = [] if observables is None else list(observables)
 
         if shots is not None and (isinstance(shots, bool) or not isinstance(shots, int) or shots < 1):
             msg = f"shots must be a positive int or None, got {shots!r}."

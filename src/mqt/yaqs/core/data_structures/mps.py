@@ -22,7 +22,7 @@ from tqdm import tqdm
 from .. import linalg
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
-from .state_utils import expectation_to_real
+from .state_utils import basis_index_from_bitstring, expectation_to_real
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -1587,13 +1587,9 @@ class MPS:
         for obs_index, source_observable in enumerate(sim_params.sorted_observables):
             observable = source_observable.prepare(self.length, self.physical_dimensions)
             if observable.type == "diagnostic":
-                assert isinstance(observable.sites, list), "Given metric requires a list of sites"
-                assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
-                max_site = max(observable.sites)
-                min_site = min(observable.sites)
-                assert max_site - min_site == 1, "Entropy and Schmidt cuts must be nearest neighbor."
-                for s in observable.sites:
-                    assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+                assert isinstance(observable.sites, list)
+                assert len(observable.sites) == 2
+                min_site, max_site = observable.sites
                 if not temp_state.check_covers_sites(observable.sites):
                     if temp_state.orthogonality_center is None:
                         temp_state.set_canonical_form(min_site)
@@ -1887,7 +1883,7 @@ class MPS:
 
         return int(chosen_index)
 
-    def project_onto_bitstring(self, bitstring: str) -> np.complex128:
+    def project_onto_bitstring(self, bitstring: str) -> np.float64:
         """Projection-valued measurement.
 
         Project the MPS onto a given bitstring in the computational basis
@@ -1896,12 +1892,12 @@ class MPS:
         This is equivalent to computing ⟨bitstring|ψ⟩⟨ψ|bitstring⟩.
 
         Args:
-            bitstring (str): Bitstring to project onto (little-endian: site 0 is first char).
+            bitstring: Bitstring to project onto. Site 0 is the first character.
 
         Returns:
-            float: Probability of obtaining the given bitstring under projective measurement.
+            Probability of obtaining the given bitstring under projective measurement.
         """
-        assert len(bitstring) == self.length, "Bitstring length must match number of sites"
+        basis_index_from_bitstring(bitstring, self.physical_dimensions)
         temp_state = copy.deepcopy(self)
         total_norm = 1.0
 
@@ -1909,8 +1905,6 @@ class MPS:
             state_index = int(char)
             tensor = temp_state.tensors[site]
             local_dim = self.physical_dimensions[site]
-            assert 0 <= state_index < local_dim, f"Invalid state index {state_index} at site {site}"
-
             selected_state = np.zeros(local_dim)
             selected_state[state_index] = 1
 
@@ -1920,7 +1914,7 @@ class MPS:
             # Compute norm of projected tensor
             norm = float(np.linalg.norm(projected_tensor))
             if norm == 0:
-                return np.complex128(0.0)
+                return np.float64(0.0)
             total_norm *= norm
 
             # Normalize and propagate
@@ -1929,7 +1923,7 @@ class MPS:
                     1 / norm * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
                 )
 
-        return np.complex128(total_norm**2)
+        return np.float64(total_norm**2)
 
     def norm(self, site: int | None = None) -> np.float64:
         """Norm calculation.

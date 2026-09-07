@@ -85,10 +85,11 @@ def ensemble_member_worker(
 
     num_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
+    result_dtype = object if any(obs.name == "schmidt_spectrum" for obs in sim_params.observables) else np.float64
     if sim_params.sample_timesteps:
-        observable_results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=np.float64)
+        observable_results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=result_dtype)
     else:
-        observable_results = np.zeros((len(sim_params.sorted_observables), 1), dtype=np.float64)
+        observable_results = np.zeros((len(sim_params.sorted_observables), 1), dtype=result_dtype)
 
     phis: list[MPS] = []
     multi_time_results: NDArray[np.complex128] | None = None

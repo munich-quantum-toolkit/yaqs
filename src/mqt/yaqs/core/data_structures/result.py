@@ -59,24 +59,28 @@ def allocate_observable_buffers(
     if isinstance(sim_params, AnalogSimParams):
         if sim_params.sample_timesteps:
             times = np.asarray(sim_params.times, dtype=np.float64)
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, len(sim_params.times)), dtype=np.float64))
-                expectation_values.append(np.empty(len(sim_params.times), dtype=np.float64))
+            for observable in sim_params.observables[:num_observables]:
+                dtype = object if observable.name == "schmidt_spectrum" else np.float64
+                trajectories.append(np.empty((num_traj, len(sim_params.times)), dtype=dtype))
+                expectation_values.append(np.empty(len(sim_params.times), dtype=dtype))
         else:
             times = np.asarray([sim_params.elapsed_time], dtype=np.float64)
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, 1), dtype=np.complex128))
-                expectation_values.append(np.empty(1, dtype=np.float64))
+            for observable in sim_params.observables[:num_observables]:
+                dtype = object if observable.name == "schmidt_spectrum" else np.float64
+                trajectories.append(np.empty((num_traj, 1), dtype=dtype))
+                expectation_values.append(np.empty(1, dtype=dtype))
     elif isinstance(sim_params, DigitalSimParams):
         mid = num_mid_measurements if num_mid_measurements is not None else sim_params.num_mid_measurements
         if sim_params.sample_layers:
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, mid + 2), dtype=np.complex128))
-                expectation_values.append(np.empty(mid + 2, dtype=np.float64))
+            for observable in sim_params.observables[:num_observables]:
+                dtype = object if observable.name == "schmidt_spectrum" else np.float64
+                trajectories.append(np.empty((num_traj, mid + 2), dtype=dtype))
+                expectation_values.append(np.empty(mid + 2, dtype=dtype))
         else:
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, 1), dtype=np.complex128))
-                expectation_values.append(np.empty(1, dtype=np.float64))
+            for observable in sim_params.observables[:num_observables]:
+                dtype = object if observable.name == "schmidt_spectrum" else np.float64
+                trajectories.append(np.empty((num_traj, 1), dtype=dtype))
+                expectation_values.append(np.empty(1, dtype=dtype))
 
     return trajectories, expectation_values, times
 
@@ -133,7 +137,10 @@ def aggregate_trajectories(result: Result) -> None:
         traj = result.trajectories[i]
         if observable.name == "schmidt_spectrum":
             assert isinstance(traj, np.ndarray), "Schmidt spectrum trajectories must be stored in an ndarray"
-            all_values = [np.asarray(trajectory).ravel() for trajectory in traj]
+            if traj.dtype == object:
+                all_values = [np.asarray(value, dtype=np.float64).ravel() for value in traj.flat]
+            else:
+                all_values = [np.asarray(trajectory).ravel() for trajectory in traj]
             result.expectation_values[i] = np.concatenate(all_values)
         else:
             result.expectation_values[i] = np.mean(traj, axis=0)

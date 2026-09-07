@@ -1462,15 +1462,50 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
         _ = state.mps
 
 
-def test_analog_dense_representations_reject_bitstring_observables() -> None:
-    """Vector and density-matrix runs reject unsupported bitstring observables early."""
+def test_analog_dense_representations_reject_state_diagnostics() -> None:
+    """Vector and density-matrix runs reject MPS state diagnostics before evolution."""
     hamiltonian = Hamiltonian.ising(2, 1.0, 0.5)
-    sim_params = AnalogSimParams([Observable("00")], elapsed_time=0.1, dt=0.1)
+    sim_params = AnalogSimParams([Observable("entropy", [0, 1])], elapsed_time=0.1, dt=0.1)
 
     for representation in ("vector", "density_matrix"):
         state = State(2, initial="zeros", representation=representation)
-        with pytest.raises(ValueError, match=r"Bitstring observables require State\.representation='mps'"):
+        with pytest.raises(ValueError, match=r"State diagnostics require State\.representation='mps'"):
             Simulator(show_progress=False).run(state, hamiltonian, sim_params)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_analog_mps_preserves_diagnostic_result_shapes(order: int) -> None:
+    """Both analog MPS solvers retain scalar entropy and array Schmidt results."""
+    zero_hamiltonian = Hamiltonian.from_mpo(
+        MPO.from_local_ops([np.zeros((2, 2), dtype=np.complex128), np.eye(2, dtype=np.complex128)])
+    )
+    sim_params = AnalogSimParams(
+        [Observable("entropy", [0, 1]), Observable("schmidt_spectrum", [0, 1])],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+        order=order,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), zero_hamiltonian, sim_params)
+
+    np.testing.assert_array_equal(result.expectation_values[0], np.array([0.0]))
+    assert result.expectation_values[1].shape == (500,)
+    np.testing.assert_allclose(result.expectation_values[1][~np.isnan(result.expectation_values[1])], [1.0, 0.0])
+
+
+def test_digital_mps_preserves_diagnostic_result_shapes() -> None:
+    """Digital MPS simulation retains scalar entropy and array Schmidt results."""
+    sim_params = DigitalSimParams(observables=[Observable("entropy", [0, 1]), Observable("schmidt_spectrum", [0, 1])])
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"), QuantumCircuit(2), sim_params
+    )
+
+    np.testing.assert_array_equal(result.expectation_values[0], np.array([0.0]))
+    assert result.expectation_values[1].shape == (500,)
+    assert result.expectation_values[1][0] == pytest.approx(1.0)
+    assert np.all(np.isnan(result.expectation_values[1][1:]))
 
 
 def test_analog_run_rejects_mpo_operator() -> None:

@@ -40,6 +40,21 @@ if TYPE_CHECKING:
 HamiltonianOperator = MPO | tuple[MPO, ...]
 
 
+def _observable_result_dtype(sim_params: AnalogSimParams) -> type[object]:
+    """Return the result-buffer dtype for the requested observables.
+
+    Args:
+        sim_params: Simulation parameters that contain the observable requests.
+
+    Returns:
+        An object dtype when a Schmidt spectrum needs array entries. Otherwise,
+        returns the NumPy real-scalar dtype.
+    """
+    if any(observable.name == "schmidt_spectrum" for observable in sim_params.observables):
+        return object
+    return np.float64
+
+
 def _mpo_for_interval(hamiltonian: HamiltonianOperator, interval_index: int) -> MPO:
     """Return the MPO used on analog interval ``interval_index``."""
     if not isinstance(hamiltonian, tuple):
@@ -286,10 +301,11 @@ def analog_tjm_2(
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
+    result_dtype = _observable_result_dtype(sim_params)
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
+        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=result_dtype)
     else:
-        results = np.zeros((len(sim_params.sorted_observables), 1))
+        results = np.zeros((len(sim_params.sorted_observables), 1), dtype=result_dtype)
 
     final_state: MPS | None = None
 
@@ -419,11 +435,12 @@ def analog_tjm_1(
     state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
+    result_dtype = _observable_result_dtype(sim_params)
 
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=object)
+        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=result_dtype)
     else:
-        results = np.zeros((len(sim_params.sorted_observables), 1), dtype=object)
+        results = np.zeros((len(sim_params.sorted_observables), 1), dtype=result_dtype)
 
     # Apply scheduled jumps at t=times[0] before the initial sample so observables
     # and get_state agree (later timesteps also sample after the jump event).

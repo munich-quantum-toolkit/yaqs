@@ -2393,8 +2393,8 @@ def test_get_schmidt_spectrum_asserts_on_invalid_sites() -> None:
         _ = mps.get_schmidt_spectrum([1, 3])  # non-adjacent
 
 
-def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None:
-    """Evaluate diagnostics/meta (no PVM) and PVM in separate calls to satisfy params typing/rules.
+def test_evaluate_observables_mixes_diagnostics_and_bitstrings() -> None:
+    """Evaluate diagnostics and a bitstring in one request.
 
     For |0000⟩ product MPS:
       - runtime_cost = Σ_{i≥1} bond_left(i)^3 = 1^3 * 3 = 3
@@ -2402,39 +2402,29 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
       - max_bond    = max over (phys_dim/right_bond) = 2
       - entropy(1,2) = 0
       - schmidt_spectrum(1,2) = length-500 vector with [1, nan, ...]
-      - pvm("0000") = 1  (checked in a separate params object to avoid mixing)
+      - pvm("0000") = 1
     """
     mps = _product_state_mps(4)
 
-    # ---- diagnostics + meta (NO PVM here) ----
-    diagnostics_and_meta: list[Observable] = [
+    observables: list[Observable] = [
         Observable("entropy", [1, 2]),
         Observable("schmidt_spectrum", [1, 2]),
+        Observable("0000"),
     ]
-    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1)
+    sim_params = AnalogSimParams(observables, elapsed_time=0.1, dt=0.1)
 
-    results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
-    mps.evaluate_observables(sim_diag, results_diag, column_index=0)
+    results = np.empty((len(observables), 1), dtype=object)
+    mps.evaluate_observables(sim_params, results, column_index=0)
 
-    # Entropy
-    assert isinstance(results_diag[0, 0], (float, np.floating))
-    assert np.isclose(results_diag[0, 0], 0.0, atol=1e-12)
+    assert isinstance(results[0, 0], (float, np.floating))
+    assert np.isclose(results[0, 0], 0.0, atol=1e-12)
 
-    # Schmidt spectrum
-    spec = results_diag[1, 0]
+    spec = results[1, 0]
     assert isinstance(spec, np.ndarray)
     assert spec.shape == (500,)
     assert np.isclose(spec[0], 1.0, atol=1e-12)
     assert np.all(np.isnan(spec[1:]))
-
-    # ---- PVM ONLY (no mixing) ----
-    pvm_only = [Observable("0000")]
-    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1)
-
-    results_pvm = np.empty((len(pvm_only), 1), dtype=object)
-    mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
-
-    assert results_pvm[0, 0] == 1
+    assert results[2, 0] == 1
 
 
 @pytest.mark.parametrize("center", [0, None])
@@ -2982,7 +2972,7 @@ def test_check_covers_sites() -> None:
 
 
 def test_evaluate_observables_meta_validation_errors() -> None:
-    """Meta-observable input validation: wrong length and non-adjacent sites must assert."""
+    """Diagnostic cut validation runs during observable preparation."""
     mps = _product_state_mps(4)
 
     # Wrong length (entropy expects exactly two adjacent indices)
@@ -2992,7 +2982,7 @@ def test_evaluate_observables_meta_validation_errors() -> None:
         dt=0.1,
     )
     results_len = np.empty((1, 1), dtype=np.float64)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="exactly two sites"):
         mps.evaluate_observables(sim_bad_len, results_len, column_index=0)
 
     # Non-adjacent Schmidt cut
@@ -3002,7 +2992,7 @@ def test_evaluate_observables_meta_validation_errors() -> None:
         dt=0.1,
     )
     results_adj = np.empty((1, 1), dtype=object)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="adjacent sites"):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
 
 

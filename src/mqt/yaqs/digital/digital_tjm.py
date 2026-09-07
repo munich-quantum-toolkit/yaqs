@@ -745,14 +745,15 @@ def digital_tjm(
         num_cols = (mid + 2) if sim_params.sample_layers else 1
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         n_obs = len(sim_params.sorted_observables)
+        result_dtype = object if any(obs.name == "schmidt_spectrum" for obs in sim_params.observables) else np.float64
         if sim_params.sample_layers:
             state.normalize(form="B", decomposition="QR")
-            results = np.zeros((n_obs, mid + 2))
+            results = np.zeros((n_obs, mid + 2), dtype=result_dtype)
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
                 state.evaluate_observables(sim_params, results, 0)
         else:
-            results = np.zeros((n_obs, 1))
+            results = np.zeros((n_obs, 1), dtype=result_dtype)
 
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)

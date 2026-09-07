@@ -34,7 +34,11 @@ import numpy as np
 import scipy.sparse
 
 from ..core import linalg
-from ..core.data_structures.state_utils import expectation_to_real, resolve_physical_dimensions
+from ..core.data_structures.state_utils import (
+    basis_index_from_bitstring,
+    expectation_to_real,
+    resolve_physical_dimensions,
+)
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
 
@@ -58,7 +62,7 @@ class MCWFContext:
     psi_initial: NDArray[np.complex128]
     heff: scipy.sparse.spmatrix
     jump_ops: list[scipy.sparse.spmatrix]
-    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | int]
     sim_params: AnalogSimParams
     # True when there is no dissipative part (no jump operators); skips jump/RNG logic.
     is_unitary: bool = False
@@ -92,9 +96,13 @@ def preprocess_mcwf(
         MCWFContext containing dense arrays ready for trajectory simulation.
 
     Raises:
-        ValueError: If ``psi_initial`` has the wrong Hilbert-space size or zero norm, or if
-            ``h_sparse`` has the wrong shape.
+        ValueError: If ``psi_initial`` has the wrong Hilbert-space size or zero norm,
+            ``h_sparse`` has the wrong shape, or a state diagnostic is requested.
     """
+    if any(observable.type == "diagnostic" for observable in sim_params.observables):
+        msg = "MCWF vector evolution does not support state diagnostics; use State.representation='mps'."
+        raise ValueError(msg)
+
     dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
     site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
@@ -148,12 +156,14 @@ def preprocess_mcwf(
         else:
             step_propagator = linalg.expm(-1j * sim_params.dt * h_dense)
 
-    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | int] = []
     for obs in sim_params.sorted_observables:
-        if obs.type == "diagnostic":
-            embedded_observables.append(None)
+        prepared = obs.prepare(num_sites, site_dims)
+        if prepared.type == "bitstring":
+            assert prepared.bitstring is not None
+            embedded_observables.append(basis_index_from_bitstring(prepared.bitstring, site_dims))
         else:
-            op = _embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims)
+            op = _embed_observable_sparse(prepared, num_sites, physical_dimensions=site_dims)
             embedded_observables.append(op)
 
     return MCWFContext(
@@ -240,16 +250,16 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
 
     def measure(current_psi: NDArray[np.complex128], col: int) -> None:
         for i, op_mat in enumerate(ctx.embedded_observables):
-            if op_mat is not None:
-                if scipy.sparse.issparse(op_mat):
-                    op_mat_sparse = cast("Any", op_mat)
-                    val = np.vdot(current_psi, op_mat_sparse.dot(current_psi))
-                else:
-                    op_mat_dense = cast("NDArray[np.complex128]", op_mat)
-                    val = np.vdot(current_psi, op_mat_dense @ current_psi)
+            if isinstance(op_mat, int):
+                results[i, col] = np.float64(abs(current_psi[op_mat]) ** 2)
+            elif scipy.sparse.issparse(op_mat):
+                op_mat_sparse = cast("Any", op_mat)
+                val = np.vdot(current_psi, op_mat_sparse.dot(current_psi))
                 results[i, col] = expectation_to_real(complex(val), ctx.sim_params.sorted_observables[i].name)
             else:
-                results[i, col] = 0.0
+                op_mat_dense = cast("NDArray[np.complex128]", op_mat)
+                val = np.vdot(current_psi, op_mat_dense @ current_psi)
+                results[i, col] = expectation_to_real(complex(val), ctx.sim_params.sorted_observables[i].name)
 
     if sim_params.sample_timesteps:
         measure(psi, 0)
