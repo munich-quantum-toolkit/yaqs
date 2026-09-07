@@ -25,7 +25,6 @@ from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, S
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
-from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 from mqt.yaqs.core.methods.decompositions import SvdDistribution, merge_two_site, split_two_site
 
 if TYPE_CHECKING:
@@ -761,13 +760,13 @@ def test_local_expect_z_on_zero_state() -> None:
     initialized in the "zeros" state.
     """
     # Pauli-Z in computational basis.
-    z = Observable(Z(), 0)
+    z = Observable("z", 0)
 
     psi_mps = MPS(length=2, state="zeros")
     val = psi_mps.local_expect(z, sites=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
-    z = Observable(Z(), 1)
+    z = Observable("z", 1)
     val_site1 = psi_mps.local_expect(z, sites=1)
     np.testing.assert_allclose(val_site1, 1.0, atol=1e-12)
 
@@ -778,10 +777,18 @@ def test_local_expect_x_on_plus_state() -> None:
     For the |+> state, defined as 1/√2 (|0> + |1>), the expectation value of the X observable is +1.
     This test verifies that local_expect returns +1 for a single-qubit MPS initialized in the "x+" state.
     """
-    x = Observable(X(), 0)
+    x = Observable("x", 0)
     psi_mps = MPS(length=3, state="x+")
     val = psi_mps.local_expect(x, sites=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
+def test_local_expect_rejects_request_without_local_operator() -> None:
+    """Local expectation requires explicit sites and an operator matrix."""
+    state = MPS(length=2, state="zeros")
+
+    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+        state.local_expect(Observable("00"), sites=0)
 
 
 @pytest.mark.parametrize("center", [3, None], ids=["off_center", "unknown_gauge"])
@@ -791,7 +798,7 @@ def test_local_expect_is_gauge_safe(center: int | None) -> None:
     state.shift_center_to(3)
     state.set_center(center)
     before = copy.deepcopy(state.tensors)
-    observable = Observable(Z(), 0)
+    observable = Observable("z", 0)
 
     actual = state.local_expect(observable, 0)
 
@@ -809,7 +816,7 @@ def test_two_site_local_expect_is_gauge_safe(center: int | None) -> None:
         state.set_center(None)
     else:
         state.shift_center_to(center)
-    observable = Observable(GateLibrary.zz(), [2, 3])
+    observable = Observable("zz", [2, 3])
     expected = state.mixed_expectation(state, observable)
 
     actual = state.local_expect(observable, [2, 3])
@@ -854,7 +861,7 @@ def test_local_observable_dimension_mismatch_raises() -> None:
 def test_two_site_local_observable_dimension_mismatch_raises() -> None:
     """Two-site observables must match the product of both local dimensions."""
     psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
-    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+    observable = Observable(np.eye(4), [0, 1])
 
     with pytest.raises(ValueError, match="does not match site dimensions 3 and 2"):
         psi_mps.local_expect(observable, [0, 1])
@@ -863,7 +870,7 @@ def test_two_site_local_observable_dimension_mismatch_raises() -> None:
 def test_local_expect_rejects_observables_with_unsupported_interaction() -> None:
     """Local expectation values support at most two-site observables."""
     psi_mps = MPS(length=3, state="zeros")
-    observable = Observable(BaseGate(np.eye(8)), [0, 1, 2])
+    observable = Observable(np.eye(8), [0, 1, 2])
 
     with pytest.raises(ValueError, match="Local observable must be one-site or nearest-neighbor two-site"):
         psi_mps.local_expect(observable, [0, 1, 2])
@@ -872,11 +879,19 @@ def test_local_expect_rejects_observables_with_unsupported_interaction() -> None
 def test_apply_local_rejects_one_site_observable_with_multiple_sites() -> None:
     """One-site observables retain a defensive site-count check during application."""
     psi_mps = MPS(length=2, state="zeros")
-    observable = Observable(X(), 0)
+    observable = Observable("x", 0)
     observable.sites = [0, 1]
 
     with pytest.raises(ValueError, match=r"One-site local observable requires one site, got \[0, 1\]"):
         psi_mps.apply_local(observable)
+
+
+def test_apply_local_rejects_request_without_local_operator() -> None:
+    """Local application rejects diagnostic and bitstring requests."""
+    state = MPS(length=2, state="zeros")
+
+    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+        state.apply_local(Observable("00"))
 
 
 def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
@@ -890,7 +905,7 @@ def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
 def test_apply_local_rejects_invalid_two_site_observable_shape() -> None:
     """Two-site observables must supply two sites and match both local dimensions."""
     psi_mps = MPS(length=2, physical_dimensions=[3, 2], state="zeros")
-    observable = Observable(BaseGate(np.eye(4)), [0, 1])
+    observable = Observable(np.eye(4), [0, 1])
 
     observable.sites = [0]
     with pytest.raises(ValueError, match=r"requires two sites, got \[0\]"):
@@ -913,8 +928,8 @@ def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
     mps_wrap.normalize("B")
     mps_nn = copy.deepcopy(mps_wrap)
 
-    mps_wrap.apply_local(Observable(BaseGate(gate4), sites=[length - 1, 0]))
-    mps_nn.apply_local(Observable(BaseGate(g_merged), sites=[0, 1]))
+    mps_wrap.apply_local(Observable(gate4, sites=[length - 1, 0]))
+    mps_nn.apply_local(Observable(g_merged, sites=[0, 1]))
 
     np.testing.assert_allclose(np.asarray(mps_wrap.to_vec()), np.asarray(mps_nn.to_vec()), atol=1e-9)
 
@@ -929,7 +944,7 @@ def test_mps_apply_local_periodic_wrap_matches_dense_expectation() -> None:
 
     j_mat = _spin_current_bond_matrix(j_xy)
     j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
-    obs = Observable(BaseGate(j_mat), sites=[length - 1, 0])
+    obs = Observable(j_mat, sites=[length - 1, 0])
 
     mps_with_op = copy.deepcopy(mps)
     mps_with_op.apply_local(obs)
@@ -945,7 +960,7 @@ def test_mps_apply_local_non_adjacent_two_site_raises() -> None:
     mps = MPS(length, state="random", pad=4)
     mps.normalize("B")
     gate4 = np.eye(4, dtype=np.complex128)
-    obs = Observable(BaseGate(gate4), sites=[0, 2])
+    obs = Observable(gate4, sites=[0, 2])
     with pytest.raises(ValueError, match="Only nearest-neighbor two-site observables are currently implemented"):
         mps.apply_local(obs)
 
@@ -955,7 +970,7 @@ def test_mps_apply_local_unsupported_gate_dimension_raises() -> None:
     length = 3
     mps = MPS(length, state="random", pad=4)
     mps.normalize("B")
-    obs = Observable(BaseGate(np.eye(8, dtype=np.complex128)), sites=[0, 1, 2])
+    obs = Observable(np.eye(8, dtype=np.complex128), sites=[0, 1, 2])
     with pytest.raises(ValueError, match="Local observable must be one-site or nearest-neighbor two-site"):
         mps.apply_local(obs)
 
@@ -972,8 +987,8 @@ def test_mps_mixed_expectation_l2_periodic_wrap_matches_permuted_nn() -> None:
     mps_wrap.normalize("B")
     mps_nn = copy.deepcopy(mps_wrap)
 
-    ex_wrap = mps_wrap.mixed_expectation(mps_nn, Observable(BaseGate(gate4), sites=[length - 1, 0]))
-    ex_nn_permuted = mps_nn.mixed_expectation(mps_wrap, Observable(BaseGate(g_merged), sites=[0, 1]))
+    ex_wrap = mps_wrap.mixed_expectation(mps_nn, Observable(gate4, sites=[length - 1, 0]))
+    ex_nn_permuted = mps_nn.mixed_expectation(mps_wrap, Observable(g_merged, sites=[0, 1]))
     assert ex_wrap == pytest.approx(ex_nn_permuted, rel=0, abs=1e-9)
 
 
@@ -987,7 +1002,7 @@ def test_mps_mixed_expectation_periodic_wrap_matches_dense_expectation() -> None
 
     j_mat = _spin_current_bond_matrix(j_xy)
     j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
-    obs = Observable(BaseGate(j_mat), sites=[length - 1, 0])
+    obs = Observable(j_mat, sites=[length - 1, 0])
 
     ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
     ex_mps = float(np.real(mps.mixed_expectation(mps, obs)))
@@ -1003,7 +1018,7 @@ def test_measure() -> None:
     length = 2
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
-    obs = Observable(X(), 0)
+    obs = Observable("x", 0)
     val = mps.expect(obs)
     assert np.isclose(val, 1)
 
@@ -1235,7 +1250,7 @@ def test_inplace_measure() -> None:
     assert outcome in {0, 1}
     # Check that expectation value matches the outcome
     expected_val = 1.0 if outcome == 0 else -1.0
-    assert np.isclose(psi.expect(Observable(Z(), 0)), expected_val)
+    assert np.isclose(psi.expect(Observable("z", 0)), expected_val)
 
     # 2. GHZ state collapse (2 sites)
     psi = MPS(length=2, state="zeros")
@@ -1277,7 +1292,7 @@ def test_inplace_measure() -> None:
     outcome = psi.measure(site=2, basis="X")
     assert outcome in {0, 1}
 
-    assert np.isclose(psi.expect(Observable(X(), 2)), 1.0 if outcome == 0 else -1.0)
+    assert np.isclose(psi.expect(Observable("x", 2)), 1.0 if outcome == 0 else -1.0)
 
 
 def test_multi_shot() -> None:
@@ -1533,7 +1548,7 @@ def test_convert_to_vector_fidelity() -> None:
 
     # Define the simulation parameters
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        observables=[Observable("z", site) for site in range(num_qubits)],
         get_state=True,
     )
     result = Simulator(show_progress=False).run(state, circ, sim_params)
@@ -1558,7 +1573,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
 
     # Define the simulation parameters
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        observables=[Observable("z", site) for site in range(num_qubits)],
         get_state=True,
     )
     result = Simulator(show_progress=False).run(state, circ, sim_params)
@@ -2138,7 +2153,7 @@ def test_non_unitary_apply_local_invalidates_center_and_preserves_bond_metrics(
     state = _entangled_mps()
     state.shift_center_to(2)
 
-    state.apply_local(Observable(BaseGate(matrix), sites))
+    state.apply_local(Observable(matrix, sites))
 
     assert state.orthogonality_center is None
     expected = _dense_schmidt_values(state, 2)
@@ -2210,8 +2225,8 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
     # ---- diagnostics + meta (NO PVM here) ----
     diagnostics_and_meta: list[Observable] = [
-        Observable(GateLibrary.entropy(), [1, 2]),
-        Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
+        Observable("entropy", [1, 2]),
+        Observable("schmidt_spectrum", [1, 2]),
     ]
     sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1)
 
@@ -2230,7 +2245,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     assert np.all(np.isnan(spec[1:]))
 
     # ---- PVM ONLY (no mixing) ----
-    pvm_only = [Observable(GateLibrary.pvm("0000"), 0)]
+    pvm_only = [Observable("0000")]
     sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1)
 
     results_pvm = np.empty((len(pvm_only), 1), dtype=object)
@@ -2254,8 +2269,8 @@ def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(cente
         observable
         for cut in reversed(range(state.length - 1))
         for observable in (
-            Observable(GateLibrary.entropy(), [cut, cut + 1]),
-            Observable(GateLibrary.schmidt_spectrum(), [cut, cut + 1]),
+            Observable("entropy", [cut, cut + 1]),
+            Observable("schmidt_spectrum", [cut, cut + 1]),
         )
     ]
     sim_params = AnalogSimParams(observables, elapsed_time=0.1, dt=0.1)
@@ -2274,7 +2289,7 @@ def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(cente
     for obs_index, observable in enumerate(sim_params.sorted_observables):
         assert isinstance(observable.sites, list)
         values = dense_values[observable.sites[0]]
-        if observable.gate.name == "entropy":
+        if observable.name == "entropy":
             weights = values**2 / np.sum(values**2)
             expected = -np.sum(weights * np.log(weights + np.finfo(np.float64).tiny))
             assert results[obs_index, 0] == pytest.approx(expected, abs=1e-12)
@@ -2294,10 +2309,10 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     mps = _product_state_mps(4)
 
     obs_seq: list[Observable] = [
-        Observable(GateLibrary.z(), 0),
-        Observable(GateLibrary.z(), 1),
-        Observable(GateLibrary.x(), 2),
-        Observable(GateLibrary.z(), 3),
+        Observable("z", 0),
+        Observable("z", 1),
+        Observable("x", 2),
+        Observable("z", 3),
     ]
     sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
 
@@ -2333,7 +2348,7 @@ def test_expect_matches_dense_without_manual_canonicalization() -> None:
     mps.normalize("B")
     assert mps.orthogonality_center == 0
     for site in range(mps.length):
-        obs = Observable(GateLibrary.z(), site)
+        obs = Observable("z", site)
         assert mps.expect(obs) == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
 
 
@@ -2344,7 +2359,7 @@ def test_evaluate_observables_with_nonzero_initial_center() -> None:
     mps.set_canonical_form(3)
     assert mps.orthogonality_center == 3
 
-    obs_seq = [Observable(GateLibrary.z(), s) for s in range(4)]
+    obs_seq = [Observable("z", s) for s in range(4)]
     sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
     results = np.empty((4, 1), dtype=np.float64)
     mps.evaluate_observables(sim_params, results, column_index=0)
@@ -2482,7 +2497,7 @@ def test_compress_restores_center_when_gauge_unknown() -> None:
     assert mps.orthogonality_center is None
     mps.compress(threshold=1e-12, max_bond_dim=8)
     assert mps.orthogonality_center is not None
-    obs = Observable(GateLibrary.z(), 2)
+    obs = Observable("z", 2)
     assert isinstance(mps.expect(obs), float)
 
 
@@ -2518,7 +2533,7 @@ def test_measure_single_shot_off_center() -> None:
         return probabilities / probabilities.sum()
 
     site0_probs = local_z_probabilities(mps, 0)
-    z_expectation = mps.mixed_expectation(mps, Observable(Z(), 0)).real
+    z_expectation = mps.mixed_expectation(mps, Observable("z", 0)).real
     np.testing.assert_allclose(site0_probs[0], (1 + z_expectation) / 2, atol=1e-10)
 
     rng = np.random.default_rng(0)
@@ -2573,7 +2588,7 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Wrong length (entropy expects exactly two adjacent indices)
     sim_bad_len = AnalogSimParams(
-        [Observable(GateLibrary.entropy(), [1])],
+        [Observable("entropy", [1])],
         elapsed_time=0.1,
         dt=0.1,
     )
@@ -2583,10 +2598,21 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Non-adjacent Schmidt cut
     sim_non_adj = AnalogSimParams(
-        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])],
+        [Observable("schmidt_spectrum", [0, 2])],
         elapsed_time=0.1,
         dt=0.1,
     )
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
+
+
+def test_evaluate_observables_rejects_operator_without_sites() -> None:
+    """Batch evaluation checks local-operator sites before measurement."""
+    state = _product_state_mps(2)
+    observable = Observable("z", 0)
+    observable.sites = None
+    sim_params = Mock(sorted_observables=[observable])
+
+    with pytest.raises(ValueError, match="Operator observables must have explicit sites"):
+        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)

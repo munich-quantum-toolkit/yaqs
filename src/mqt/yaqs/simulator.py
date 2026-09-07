@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 
     from .core.data_structures.mpo import MPO
     from .core.data_structures.noise_model import NoiseModel
+    from .core.data_structures.observable import Observable
     from .core.parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
@@ -112,7 +113,6 @@ from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
-    Observable,
     _prepare_observable_ordering,
 )
 from .core.data_structures.simulation_program import (
@@ -1470,7 +1470,8 @@ class Simulator:
             ValueError: If ``get_state=True`` is combined with a non-trivial noise model
                 on ``mps`` or ``vector`` representations (the trajectory ensemble has no
                 single representative state). Lindblad ``density_matrix`` evolution always
-                returns the exact ensemble-averaged state when ``get_state=True``.
+                returns the exact ensemble-averaged state when ``get_state=True``. Bitstring
+                observables currently require the ``mps`` representation.
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
@@ -1502,9 +1503,12 @@ class Simulator:
             )
             return
 
-        initial_state.ensure_encoded(initial_state.representation)
-        mps = _materialized_mps(initial_state)
         state_rep = initial_state.representation
+        if state_rep != "mps" and any(observable.type == "bitstring" for observable in sim_params.observables):
+            msg = f"Bitstring observables require State.representation='mps'; got {state_rep!r}."
+            raise ValueError(msg)
+        initial_state.ensure_encoded(state_rep)
+        mps = _materialized_mps(initial_state)
         _validate_state_hamiltonian_pairing(initial_state, operator)
         if noise_model is not None:
             validate_noise_model_for_run(

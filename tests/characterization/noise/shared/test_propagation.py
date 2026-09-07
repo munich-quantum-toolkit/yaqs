@@ -17,7 +17,6 @@ import pytest
 from mqt.yaqs import Observable
 from mqt.yaqs.characterization.noise.shared.propagation import Propagator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import Z
 
 from ..fixtures import NoiseTestConfig, build_propagator
 
@@ -33,6 +32,20 @@ def test_propagator_rejects_empty_observable_list(noise_test_config: NoiseTestCo
     )
     with pytest.raises(ValueError, match="Observable list must not be empty"):
         propagator.set_observable_list([])
+
+
+def test_propagator_requires_explicit_observable_sites(noise_test_config: NoiseTestConfig) -> None:
+    """Noise propagation rejects full-chain observable requests."""
+    hamiltonian, init_state, _observables, sim_params, noise_model, _ = build_propagator(noise_test_config)
+    propagator = Propagator(
+        sim_params=sim_params,
+        hamiltonian=hamiltonian,
+        noise_model=noise_model,
+        init_state=init_state,
+    )
+
+    with pytest.raises(ValueError, match="observables must have explicit sites"):
+        propagator.set_observable_list([Observable("0" * noise_test_config.sites)])
 
 
 def test_propagator_runs(noise_test_config: NoiseTestConfig) -> None:
@@ -63,7 +76,7 @@ def test_propagator_validation_errors(noise_test_config: NoiseTestConfig) -> Non
             init_state=init_state,
         )
 
-    exceed_observables = [*observables, Observable(Z(), noise_test_config.sites)]
+    exceed_observables = [*observables, Observable("z", noise_test_config.sites)]
     propagator = Propagator(
         sim_params=sim_params,
         hamiltonian=hamiltonian,

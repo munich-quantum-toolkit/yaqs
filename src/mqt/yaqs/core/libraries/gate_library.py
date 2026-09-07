@@ -20,6 +20,16 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from .. import linalg
+from .operator_matrices import (
+    CONTROLLED_X,
+    CONTROLLED_Z,
+    HADAMARD,
+    IDENTITY,
+    PAULI_X,
+    PAULI_Y,
+    PAULI_Z,
+    SWAP_MATRIX,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
@@ -579,61 +589,6 @@ class BaseGate:
         """
         return Rzz(params)
 
-    @classmethod
-    def p0(cls) -> P0:
-        """Returns the P0 projector.
-
-        Returns:
-            An instance of the P0 gate.
-        """
-        return P0()
-
-    @classmethod
-    def p1(cls) -> P1:
-        """Returns the P1 projector.
-
-        Returns:
-            An instance of the P1 gate.
-        """
-        return P1()
-
-    @classmethod
-    def pvm(cls, bitstring: str) -> PVM:
-        """Create a projection-valued measurement (PVM) operator.
-
-        Args:
-            bitstring: The computational basis bitstring (e.g., "0101") that the state
-                should be projected onto.
-
-        Returns:
-            An instance of the PVM gate representing the projection.
-        """
-        return PVM(bitstring)
-
-    @classmethod
-    def entropy(cls) -> Entropy:
-        """Create an entropy diagnostic operator.
-
-        This is a meta-observable used to request the bipartite entanglement
-        entropy across a given nearest-neighbor cut.
-
-        Returns:
-            An instance of the entropy diagnostic gate.
-        """
-        return Entropy()
-
-    @classmethod
-    def schmidt_spectrum(cls) -> SchmidtSpectrum:
-        """Create a Schmidt spectrum diagnostic operator.
-
-        This is a meta-observable used to request the Schmidt coefficients
-        across a given nearest-neighbor cut, padded or truncated to a fixed length.
-
-        Returns:
-            An instance of the Schmidt spectrum diagnostic gate.
-        """
-        return SchmidtSpectrum()
-
     @property
     def mpo_tensors(self) -> list[NDArray[np.complex128]]:
         """List of MPO tensors representing the gate.
@@ -670,8 +625,7 @@ class X(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the Pauli-X gate."""
-        mat = np.array([[0, 1], [1, 0]])
-        super().__init__(mat)
+        super().__init__(PAULI_X.copy())
 
 
 class Y(BaseGate):
@@ -692,8 +646,7 @@ class Y(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the Pauli-Y gate."""
-        mat = np.array([[0, -1j], [1j, 0]])
-        super().__init__(mat)
+        super().__init__(PAULI_Y.copy())
 
 
 class Z(BaseGate):
@@ -714,8 +667,7 @@ class Z(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the Pauli-Z gate."""
-        mat = np.array([[1, 0], [0, -1]])
-        super().__init__(mat)
+        super().__init__(PAULI_Z.copy())
 
 
 class H(BaseGate):
@@ -736,8 +688,7 @@ class H(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the Hadamard gate."""
-        mat = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
-        super().__init__(mat)
+        super().__init__(HADAMARD.copy())
 
 
 class Destroy(BaseGate):
@@ -814,8 +765,7 @@ class Id(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the identity gate."""
-        mat = np.array([[1, 0], [0, 1]])
-        super().__init__(mat)
+        super().__init__(IDENTITY.copy())
 
 
 class SX(BaseGate):
@@ -1169,8 +1119,7 @@ class CX(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the controlled-NOT (CX) gate."""
-        mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
-        super().__init__(mat)
+        super().__init__(CONTROLLED_X.copy())
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
@@ -1224,8 +1173,7 @@ class CZ(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the controlled-Z (CZ) gate."""
-        mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
-        super().__init__(mat)
+        super().__init__(CONTROLLED_Z.copy())
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
@@ -1425,8 +1373,7 @@ class SWAP(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the SWAP gate."""
-        mat = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-        super().__init__(mat)
+        super().__init__(SWAP_MATRIX.copy())
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
@@ -1675,264 +1622,6 @@ class Rzz(BaseGate):
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
-class XX(BaseGate):
-    """Class representing an XX operation. Used for two-site correlators.
-
-    Attributes:
-        name: The name of the gate ("xx").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
-
-    name = "xx"
-
-    def __init__(self) -> None:
-        """Initializes the XX gate."""
-        x = X().matrix
-        # two-site operator X ⊗ X
-        mat = np.kron(x, x).astype(np.complex128)
-        super().__init__(mat)
-
-
-class YY(BaseGate):
-    """Class representing an YY operation. Used for two-site correlators.
-
-    Attributes:
-        name: The name of the gate ("yy").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
-
-    name = "yy"
-
-    def __init__(self) -> None:
-        """Initializes the YY gate."""
-        y = Y().matrix
-        # two-site operator Y ⊗ Y
-        mat = np.kron(y, y).astype(np.complex128)
-        super().__init__(mat)
-
-
-class ZZ(BaseGate):
-    """Class representing an ZZ operation. Used for two-site correlators.
-
-    Attributes:
-        name: The name of the gate ("zz").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
-
-    name = "zz"
-
-    def __init__(self) -> None:
-        """Initializes the ZZ gate."""
-        z = Z().matrix
-        # two-site operator Z ⊗ Z
-        mat = np.kron(z, z).astype(np.complex128)
-        super().__init__(mat)
-
-
-class P0(BaseGate):
-    """Class representing the projector onto ``|0⟩⟨0|``.
-
-    Attributes:
-        name: The name of the gate ("p0").
-        matrix: The 2x2 matrix representation of the projector.
-        interaction: The interaction level (1 for single-qubit projectors).
-        tensor: The tensor representation of the projector (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the projector is applied.
-    """
-
-    name = "p0"
-
-    def __init__(self) -> None:
-        """Initializes the ``|0⟩⟨0|`` projector."""
-        mat = np.array([[1, 0], [0, 0]], dtype=complex)
-        super().__init__(mat)
-
-
-class P1(BaseGate):
-    """Class representing the projector onto ``|1⟩⟨1|``.
-
-    Attributes:
-        name: The name of the gate ("p1").
-        matrix: The 2x2 matrix representation of the projector.
-        interaction: The interaction level (1 for single-qubit projectors).
-        tensor: The tensor representation of the projector (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the projector is applied.
-    """
-
-    name = "p1"
-
-    def __init__(self) -> None:
-        """Initializes the ``|1⟩⟨1|`` projector."""
-        mat = np.array([[0, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
-class PVM(BaseGate):
-    """Class representing a projection-valued measurement.
-
-    Attributes:
-        name: The name of the gate ("pvm").
-    """
-
-    name = "pvm"
-
-    def __init__(self, bitstring: str) -> None:
-        """Initializes the projection."""
-        self.bitstring = bitstring
-
-        # Identity array as placeholder for compatibility
-        mat = np.array([[1, 0], [0, 1]])
-        super().__init__(mat)
-
-
-class LocalOperator(BaseGate):
-    """Custom one-site operator for arbitrary local Hilbert-space dimensions.
-
-    This gate is intended for observables such as position-grid operators on
-    qudits or oscillator truncations. Unlike :class:`BaseGate`, it does not
-    interpret the matrix dimension as a qubit interaction count.
-    """
-
-    name = "local"
-
-    def __init__(self, matrix: ArrayLike) -> None:
-        """Create a one-site local operator.
-
-        Args:
-            matrix: Square matrix acting on one local site.
-
-        Raises:
-            ValueError: If ``matrix`` is not a square two-dimensional array.
-        """
-        mat = np.asarray(matrix, dtype=np.complex128)
-        if mat.ndim != 2:
-            msg = "Local operator matrix must be a 2-D array."
-            raise ValueError(msg)
-        if mat.shape[0] != mat.shape[1]:
-            msg = "Local operator matrix must be square."
-            raise ValueError(msg)
-        self.matrix = mat
-        self.tensor = mat
-        self.interaction = 1
-
-
-class Position(LocalOperator):
-    """One-site position operator for a supplied position basis."""
-
-    name = "position"
-
-    def __init__(self, *, positions: ArrayLike) -> None:
-        """Create a position operator that is diagonal in the supplied basis.
-
-        Args:
-            positions: One-dimensional position values defining the local basis.
-
-        Raises:
-            ValueError: If ``positions`` is complex or not a non-empty, finite one-dimensional array.
-        """
-        position_values = np.asarray(positions)
-        if np.iscomplexobj(position_values):
-            msg = "positions must contain only real values."
-            raise ValueError(msg)
-        position_values = np.asarray(position_values, dtype=np.float64)
-        if position_values.ndim != 1 or position_values.size == 0:
-            msg = "positions must be a non-empty one-dimensional array."
-            raise ValueError(msg)
-        if not np.all(np.isfinite(position_values)):
-            msg = "positions must contain only finite values."
-            raise ValueError(msg)
-        super().__init__(np.diag(position_values))
-
-
-class Entropy(BaseGate):
-    """Meta-observable for bipartite entanglement entropy across a cut.
-
-    The actual entropy is computed from the MPS; this gate serves as a
-    typed handle so that high-level code can request this diagnostic via
-    the same measurement interface.
-    """
-
-    name = "entropy"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-    def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites defining the bipartition (i, i+1).
-
-        Args:
-            *sites: One or two integers or a list of two integers indicating the cut.
-        """
-        sites_list: list[int] = []
-        for s in sites:
-            if isinstance(s, int):
-                sites_list.append(s)
-            else:
-                sites_list.extend(s)
-        self.sites = sites_list
-
-
-class SchmidtSpectrum(BaseGate):
-    """Meta-observable for the Schmidt spectrum across a nearest-neighbor cut.
-
-    The spectrum (singular values) is computed from the MPS around the specified
-    bond and returned as a fixed-length vector (padded/truncated as needed).
-    """
-
-    name = "schmidt_spectrum"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-    def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites defining the bipartition (i, i+1).
-
-        Args:
-            *sites: One or two integers or a list of two integers indicating the cut.
-        """
-        sites_list: list[int] = []
-        for s in sites:
-            if isinstance(s, int):
-                sites_list.append(s)
-            else:
-                sites_list.extend(s)
-        self.sites = sites_list
-
-
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
@@ -1981,19 +1670,6 @@ class GateLibrary:
         destroy: Class for the annihilation operator (ladder operator a).
         create:  Class for the creation operator (ladder operator a†).
 
-        xx: Class for the XX interaction (non-parameterized).
-        yy: Class for the YY interaction (non-parameterized).
-        zz: Class for the ZZ interaction (non-parameterized).
-
-        p0: Class for projector ``|0⟩⟨0|``.
-        p1: Class for projector ``|1⟩⟨1|``.
-        pvm: Class for projection-valued measurement onto a given bitstring.
-        local: Class for arbitrary one-site local operators.
-        position: Class for a one-site position operator in a supplied position basis.
-
-        entropy:      Class representing a request for bipartite entanglement entropy across a cut.
-        schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
-
         custom: Base class hook for defining custom gates (falls back to `BaseGate`).
     """
 
@@ -2035,18 +1711,5 @@ class GateLibrary:
 
     destroy = Destroy
     create = Create
-
-    xx = XX
-    yy = YY
-    zz = ZZ
-
-    p0 = P0
-    p1 = P1
-    pvm = PVM
-    local = LocalOperator
-    position = Position
-
-    entropy = Entropy
-    schmidt_spectrum = SchmidtSpectrum
 
     custom = BaseGate

@@ -20,8 +20,8 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
     _align_bond,
     _cap_bonds,
@@ -61,7 +61,7 @@ def test_split_tdvp_left_right_sqrt() -> None:
     """Test splitting of an MPS tensor using different singular value distribution options."""
     A = rng.random(size=(4, 3, 5)).astype(np.complex128)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True, trunc_mode="relative"
+        observables=[Observable("z", 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True, trunc_mode="relative"
     )
     physical_dimensions = [A.shape[0] // 2, A.shape[0] // 2]
     for distr in ["left", "right", "sqrt"]:
@@ -149,7 +149,7 @@ def test_split_discarded_weight(svs: NDArray[np.float64], threshold: float, expe
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         svd_threshold=threshold,
@@ -203,7 +203,7 @@ def test_split_relative_kept(svs: NDArray[np.float64], rel_the: float, expected_
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         svd_threshold=rel_the,
@@ -231,7 +231,7 @@ def test_split_truncation_max_bond_enforced() -> None:
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=2,
@@ -253,7 +253,7 @@ def test_split_tdvp_null_workspace_policy(expected_rank: int, *, prune_null: boo
     null_input = _as_input_tensor(null_theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         svd_threshold=1e-6,
@@ -281,7 +281,7 @@ def test_split_distribution_rank(distr: str) -> None:
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=2,
@@ -310,7 +310,7 @@ def test_split_dynamic_below_cap() -> None:
     a_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
     uncapped = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=None,
@@ -319,7 +319,7 @@ def test_split_dynamic_below_cap() -> None:
         sample_timesteps=True,
     )
     capped = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=64,
@@ -419,7 +419,7 @@ def test_sync_bond_dim_preserves_analog_workspace() -> None:
     state = MPS(4, state="zeros", pad=4)
     reference = state.to_vec()
     params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         max_bond_dim=2,
@@ -443,7 +443,7 @@ def test_get_min_keep_with_and_without_cap() -> None:
 
 def test_scale_dt_analog_vs_digital() -> None:
     """Analog sweeps scale by dt; digital gate sweeps use the substep fraction directly."""
-    analog = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True)
+    analog = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True)
     digital = DigitalSimParams(preset="exact", get_state=True)
     assert _scale_dt(analog, 0.5) == pytest.approx(0.05)
     assert _scale_dt(digital, 0.5) == pytest.approx(0.5)

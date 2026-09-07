@@ -24,9 +24,10 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams, Observable
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.core.methods.tdvp import integrators as integrators_module
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.integrators import sweep_1site, sweep_2site
@@ -58,7 +59,7 @@ def test_single_site_tdvp() -> None:
 
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         sample_timesteps=True,
@@ -82,7 +83,7 @@ def test_1site_tdvp_tracks_a_genuine_center_at_each_site_update() -> None:
     initial = state.to_vec()
     operator = MPO.ising(length, 1.0, 0.7)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.01,
         dt=0.01,
         sample_timesteps=False,
@@ -131,7 +132,7 @@ def test_two_site_tdvp() -> None:
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         sample_timesteps=True,
@@ -160,7 +161,7 @@ def test_2site_sweep_scaling() -> None:
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], tdvp_sweeps=2, preset="exact", tdvp_mode="2site")
 
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
@@ -176,7 +177,7 @@ def test_2site_sweep_symmetric() -> None:
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], tdvp_sweeps=1, preset="exact", tdvp_mode="2site")
 
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
@@ -200,7 +201,7 @@ def test_2site_gate_window_policy(
     state = MPS(length, state="zeros")
     operator = MPO.ising(length, 0.0, 0.0)
     sim_params = DigitalSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         preset="exact",
         max_bond_dim=2,
         tdvp_mode="2site",
@@ -223,7 +224,7 @@ def test_2site_tdvp_tracks_center_mid_sweep() -> None:
     L = 4
     state = MPS(L, state="zeros")
     operator = MPO.ising(L, 1.0, 0.5)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact", tdvp_mode="2site")
     original_update = MPS.update_center_after_split
     seen: list[int | None] = []
 
@@ -247,7 +248,7 @@ def test_2site_analog_sweep_dt() -> None:
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.2,
         dt=0.1,
         tdvp_sweeps=2,
@@ -402,7 +403,7 @@ def test_1site_analog_sweep_plan_integration() -> None:
     hamiltonian = MPO.ising(length, 1.0, 0.5)
     state = MPS(length, state="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,
@@ -414,7 +415,7 @@ def test_1site_analog_sweep_plan_integration() -> None:
     tdvp(state, hamiltonian, sim_params)
     reference = deepcopy(MPS(length, state="zeros"))
     single = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,
@@ -435,7 +436,7 @@ def test_dynamic_ising_matches_expm() -> None:
     prep = MPS(length, state="x+")
     state = deepcopy(prep)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=dt,
         dt=dt,
         sample_timesteps=False,
@@ -460,7 +461,7 @@ def test_repeated_capped_dynamic_ising_matches_dense_evolution() -> None:
     state = MPS(length, state="x+")
     initial = state.to_vec()
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=elapsed_time,
         dt=dt,
         sample_timesteps=False,
@@ -493,7 +494,7 @@ def test_dynamic_alignment_receives_a_genuine_pair_center() -> None:
     state.set_canonical_form(0)
     hamiltonian = MPO.ising(length, 1.0, 0.7)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.05,
         dt=0.05,
         sample_timesteps=False,
@@ -529,7 +530,7 @@ def test_dynamic_analog_sweep_plan_integration() -> None:
     hamiltonian = MPO.ising(length, 1.0, 0.5)
     state = MPS(length, state="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,
@@ -542,7 +543,7 @@ def test_dynamic_analog_sweep_plan_integration() -> None:
     tdvp(state, hamiltonian, sim_params)
     ref = deepcopy(MPS(length, state="zeros"))
     single = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,

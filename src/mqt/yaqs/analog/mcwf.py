@@ -150,7 +150,7 @@ def preprocess_mcwf(
 
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
-        if obs.gate.name in {"entropy", "schmidt_spectrum"}:
+        if obs.type == "diagnostic":
             embedded_observables.append(None)
         else:
             op = _embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims)

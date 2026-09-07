@@ -169,7 +169,7 @@ def test_program_preserves_order_and_defensively_copies_input() -> None:
     assert first.hamiltonian is hamiltonian
     assert second.circuit is circuit
     assert len(program.observables) == 1
-    assert program.observables[0].gate.name == "z"
+    assert program.observables[0].name == "z"
     assert program.num_traj == 17
     assert program.random_seed == 3
     assert program.get_state

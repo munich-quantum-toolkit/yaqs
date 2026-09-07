@@ -21,13 +21,13 @@ from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.mpo import MPO
 from .core.data_structures.mps import MPS
 from .core.data_structures.noise_model import NoiseModel
+from .core.data_structures.observable import Observable
 from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
     SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
-    Observable,
 )
 from .core.data_structures.simulation_program import SimulationProgram
 from .core.data_structures.state import State

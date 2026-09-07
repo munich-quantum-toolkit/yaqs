@@ -20,9 +20,10 @@ import pytest
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams, Observable
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
-from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
+from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id
 
 if TYPE_CHECKING:
     from typing import Any
@@ -997,7 +998,7 @@ def test_multiply_mps_with_compression() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     state.check_if_valid_mps()
     assert state.orthogonality_center is not None
@@ -1063,10 +1064,10 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     assert state.orthogonality_center is not None
-    obs = Observable(GateLibrary.z(), 1)
+    obs = Observable("z", 1)
     exp = state.expect(obs)
     assert np.isfinite(exp)
     assert abs(exp) <= 1.0
@@ -1085,7 +1086,7 @@ def test_multiply_mps_leaves_center_on_last_site() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(1, 4)
     gate_mpo = MPO.from_gate(gate, length)
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
 
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
 
@@ -1096,7 +1097,7 @@ def test_multiply_mps_leaves_center_on_last_site() -> None:
 def test_multiply_mps_passes_restore_target_while_center_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     """MPO contraction never presents its compression helper with a false center."""
     state = MPS(3, state="zeros")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
     observed: list[tuple[int | None, int | None]] = []
 
     def record_compress(
@@ -1122,7 +1123,7 @@ def test_multiply_mps_passes_restore_target_while_center_is_unknown(monkeypatch:
 def test_multiply_single_site_mps_restores_genuine_center() -> None:
     """Compressed one-site MPO application leaves the only site as a valid center."""
     state = MPS(1, state="x+")
-    sim_params = DigitalSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
 
     MPO.identity(1).multiply(state, sim_params=sim_params, compress=True)
 

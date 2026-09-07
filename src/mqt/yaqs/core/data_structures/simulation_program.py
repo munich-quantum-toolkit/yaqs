@@ -22,7 +22,8 @@ from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode, Observable
+from .observable import Observable
+from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

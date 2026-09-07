@@ -16,8 +16,8 @@ import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.data_structures.observable import Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 
 
@@ -92,10 +92,10 @@ def test_apply_scheduled_jumps_large_time_uses_rtol_zero() -> None:
 
     # Near 100 but outside atol=dt*1e-3; with rtol>0 this would incorrectly match.
     unchanged = apply_scheduled_jumps(MPS(1, state="zeros"), noise_model, 99.999, sim_params)
-    assert np.isclose(unchanged.expect(Observable(Z(), sites=0)), 1.0)
+    assert np.isclose(unchanged.expect(Observable("z", sites=0)), 1.0)
 
     flipped = apply_scheduled_jumps(MPS(1, state="zeros"), noise_model, 100.0, sim_params)
-    assert np.isclose(flipped.expect(Observable(Z(), sites=0)), -1.0)
+    assert np.isclose(flipped.expect(Observable("z", sites=0)), -1.0)
 
 
 def test_apply_scheduled_jumps_single_site() -> None:
@@ -114,8 +114,8 @@ def test_apply_scheduled_jumps_single_site() -> None:
 
     # Expect |10>
     # Measure Z on site 0 and 1
-    z_obs0 = Observable(Z(), sites=0)
-    z_obs1 = Observable(Z(), sites=1)
+    z_obs0 = Observable("z", sites=0)
+    z_obs1 = Observable("z", sites=1)
 
     assert np.isclose(new_state.expect(z_obs0), -1.0)
     assert np.isclose(new_state.expect(z_obs1), 1.0)
@@ -139,7 +139,7 @@ def test_apply_scheduled_jumps_custom_matrix() -> None:
     state_excited = MPS(length, state="basis", basis_string="10")
     state_excited.normalize("B")
     relaxed = apply_scheduled_jumps(state_excited, noise_model, 1.0, sim_params)
-    assert np.isclose(relaxed.expect(Observable(Z(), sites=0)), 1.0)
+    assert np.isclose(relaxed.expect(Observable("z", sites=0)), 1.0)
 
 
 @pytest.mark.parametrize("bad", [np.nan, np.inf])
@@ -185,8 +185,8 @@ def test_apply_scheduled_jumps_two_site() -> None:
     new_state = apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
     # Expect |11>
-    z_obs0 = Observable(Z(), sites=0)
-    z_obs1 = Observable(Z(), sites=1)
+    z_obs0 = Observable("z", sites=0)
+    z_obs1 = Observable("z", sites=1)
 
     new_state.set_canonical_form(0)
     exp0 = new_state.expect(z_obs0)
@@ -257,9 +257,9 @@ def test_apply_scheduled_jumps_multiple() -> None:
     new_state = apply_scheduled_jumps(state, noise_model, 1.0, sim_params)
 
     # Expect |101>
-    z_obs0 = Observable(Z(), sites=0)
-    z_obs1 = Observable(Z(), sites=1)
-    z_obs2 = Observable(Z(), sites=2)
+    z_obs0 = Observable("z", sites=0)
+    z_obs1 = Observable("z", sites=1)
+    z_obs2 = Observable("z", sites=2)
 
     new_state.set_canonical_form(0)
     assert np.isclose(new_state.expect(z_obs0), -1.0)

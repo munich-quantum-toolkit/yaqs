@@ -6,6 +6,15 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: observables are independent of gates
+
+`Observable` now accepts a named Hermitian observable, a Hermitian matrix, or a
+binary bitstring. Observable instances expose `name`, `matrix`, `sites`,
+`interaction`, `kind`, and `bitstring` directly. They no longer accept
+`BaseGate` instances or the `gate=` keyword, and they no longer expose a `.gate`
+attribute. Named gate operations that are not Hermitian are no longer valid
+observables.
+
 ### Added: direct probabilities for noisy equivalence checks
 
 `EquivalenceChecker.check(..., noise_model=...)` interprets each resolved

@@ -25,7 +25,7 @@ from ..core.data_structures.state_utils import (
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.simulation_parameters import Observable
+    from ..core.data_structures.observable import Observable
 
 
 def _kron_all_dense(
@@ -383,7 +383,7 @@ def _embed_observable_dense(
     """Embeds an observable into the full Hilbert space (dense).
 
     Args:
-        obs: Observable object containing sites and the gate/operator definition.
+        obs: Observable object containing sites and the operator definition.
         num_sites: Total number of sites in the system.
         physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
@@ -391,11 +391,15 @@ def _embed_observable_dense(
         The embedded observable as a dense matrix.
 
     Raises:
+        ValueError: If the observable does not define a local operator.
         NotImplementedError: If the observable involves more than 2 sites.
     """
     sites = obs.sites
     if isinstance(sites, int):
         sites = [sites]
+    if sites is None or obs.matrix is None:
+        msg = "Observable embedding requires an operator with explicit sites."
+        raise ValueError(msg)
 
     if len(sites) > 2:
         msg = f"Unsupported observable site count: {len(sites)}"
@@ -404,7 +408,7 @@ def _embed_observable_dense(
     result = _embed_generic(
         sites=sites,
         num_sites=num_sites,
-        op_matrix=obs.gate.matrix,
+        op_matrix=obs.matrix,
         sparse=False,
         physical_dimensions=physical_dimensions,
     )
@@ -464,7 +468,7 @@ def _embed_observable_sparse(
     """Embeds an observable into the full Hilbert space (sparse).
 
     Args:
-        obs: Observable object containing sites and the gate/operator definition.
+        obs: Observable object containing sites and the operator definition.
         num_sites: Total number of sites in the system.
         physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
@@ -472,11 +476,15 @@ def _embed_observable_sparse(
         The embedded observable as a sparse matrix.
 
     Raises:
+        ValueError: If the observable does not define a local operator.
         NotImplementedError: If the observable involves more than 2 sites.
     """
     sites = obs.sites
     if isinstance(sites, int):
         sites = [sites]
+    if sites is None or obs.matrix is None:
+        msg = "Observable embedding requires an operator with explicit sites."
+        raise ValueError(msg)
 
     if len(sites) > 2:
         msg = f"Unsupported observable site count: {len(sites)}"
@@ -485,7 +493,7 @@ def _embed_observable_sparse(
     result = _embed_generic(
         sites=sites,
         num_sites=num_sites,
-        op_matrix=_to_sparse_csr(obs.gate.matrix),
+        op_matrix=_to_sparse_csr(obs.matrix),
         sparse=True,
         physical_dimensions=physical_dimensions,
     )

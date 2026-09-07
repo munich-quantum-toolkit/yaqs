@@ -23,7 +23,7 @@ from mqt.yaqs.analog.utils import (
     _kron_all_dense,
     _kron_all_sparse,
 )
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.state_utils import (
     embed_adjacent_two_site_operator,
     embed_one_site_operator,
@@ -131,7 +131,7 @@ def test_embed_operator_errors() -> None:
 def test_embed_observable_dense_1site() -> None:
     """Test embedding a 1-site observable (dense)."""
     num_sites = 3
-    obs = Observable("z", sites=[1])
+    obs = Observable("z", sites=1)
 
     op = _embed_observable_dense(obs, num_sites)
     z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -144,7 +144,7 @@ def test_embed_observable_dense_1site() -> None:
 def test_embed_observable_sparse_1site() -> None:
     """Test embedding a 1-site observable (sparse)."""
     num_sites = 3
-    obs = Observable("z", sites=[1])
+    obs = Observable("z", sites=1)
 
     op = _embed_observable_sparse(obs, num_sites)
     z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -152,6 +152,22 @@ def test_embed_observable_sparse_1site() -> None:
 
     assert scipy.sparse.issparse(op)
     assert cast("Any", (op != expected)).nnz == 0
+
+
+@pytest.mark.parametrize("kind", ["dense", "sparse"])
+def test_embed_observable_requires_local_operator(kind: str) -> None:
+    """Observable embedding rejects requests without a local matrix and sites."""
+    embed = _embed_observable_dense if kind == "dense" else _embed_observable_sparse
+    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+        embed(Observable("000"), 3)
+
+
+@pytest.mark.parametrize("kind", ["dense", "sparse"])
+def test_embed_observable_rejects_more_than_two_sites(kind: str) -> None:
+    """Dense and sparse backends reject unsupported three-site observables."""
+    embed = _embed_observable_dense if kind == "dense" else _embed_observable_sparse
+    with pytest.raises(NotImplementedError, match="Unsupported observable site count: 3"):
+        embed(Observable(np.eye(8), [0, 1, 2]), 3)
 
 
 def test_embed_operator_dense_adjacent_site_order() -> None:

@@ -39,7 +39,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
-from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 sim = Simulator(show_progress=False)
 ```
@@ -236,8 +235,7 @@ def periodic_bonds(length: int) -> list[tuple[int, int]]:
 
 def current_observables(length: int, j_coupling: float) -> list[Observable]:
     j_mat = spin_current_bond_matrix(j_coupling)
-    gate = BaseGate(j_mat)
-    return [Observable(gate, sites=[i, j]) for i, j in periodic_bonds(length)]
+    return [Observable(j_mat, sites=[i, j]) for i, j in periodic_bonds(length)]
 ```
 
 ```{code-cell} ipython3
