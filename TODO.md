@@ -16,13 +16,10 @@ notes remain in chunk 5.
 | 2. MPO construction               | Complete                                                         | Validated, reusable operator data                       |
 | 3. MPS contraction                | Complete                                                         | Direct and batched MPS measurements accept general MPOs |
 | 4. Backend and result integration | Complete                                                         | Supported backends and result paths agree               |
-| 5. Performance and documentation  | Pending; use the pre-3A commit as baseline                       | Measured cost, complete examples, and release checks    |
+| 5. Performance and documentation  | 5A and 5B complete; 5C remains                                   | Measured cost, complete examples, and release checks    |
 
-Remaining work in order: **5A → 5B → 5C**. Each subsection is a reviewable
-implementation batch. Complete its acceptance checks before proceeding. In 5A,
-use the commit immediately before 3A for the old direct contraction and the
-commit immediately before 3B for the old batched dispatch. Finish the
-performance comparison after integration.
+Remaining work: **5C**. Complete its acceptance checks before declaring the
+observable work finished.
 
 ## Design requirements
 
@@ -293,10 +290,10 @@ Use fixed seeds or controlled trajectories for noisy regression tests.
 
 ### 5A. Capture the pre-3A baseline
 
-- [ ] Record repeatable runtime and peak-memory measurements for one local
+- [x] Record repeatable runtime and peak-memory measurements for one local
   observable, all single-site observables, and many adjacent two-site
   observables. Include known and unknown MPS centers.
-- [ ] Record the commit, environment, seeds, chain length, local dimensions,
+- [x] Record the commit, environment, seeds, chain length, local dimensions,
       state bond dimensions, observable count, and thread limits. Separate
       operator preparation from repeated measurement cost; use warmups and
       repeated runs.
@@ -306,14 +303,14 @@ be rerun after integration. Use bounded workloads that fit available memory.
 
 ### 5B. Compare performance after chunk 4
 
-- [ ] Repeat 5A and investigate avoidable local-measurement regressions before
+- [x] Repeat 5A and investigate avoidable local-measurement regressions before
   declaring completion. Record runtime and memory separately.
-- [ ] Measure long-range products, Pauli sums, and full-chain MPO expectations
+- [x] Measure long-range products, Pauli sums, and full-chain MPO expectations
       while varying chain length, MPS bond dimension, and MPO bond dimension.
       Check that general measurement does not construct a modified MPS or a
       dense Hilbert-space operator; keep dense references limited to small
       cases.
-- [ ] Confirm that repeated time steps and trajectories reuse prepared operators
+- [x] Confirm that repeated time steps and trajectories reuse prepared operators
   without retaining stale state environments or growing memory over time.
 
 Acceptance: retain reproducible measurements and explain remaining costs. Avoid
@@ -354,7 +351,7 @@ audit.
   MPOs agree with independent references across supported backends.
 - [ ] Non-Hermitian operators and invalid dimensions fail clearly before
   evolution begins.
-- [ ] Measurements preserve the state and retain local-observable efficiency.
+- [x] Measurements preserve the state and retain local-observable efficiency.
 - [ ] Diagnostics and projectors have explicit behavior across sampling and
   result aggregation paths.
 - [ ] Tests, examples, release notes, and required checks cover the final API.
