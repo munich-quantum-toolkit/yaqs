@@ -16,7 +16,7 @@ the number of the pull request that will contain this work.
 | 2. MPO construction               | Complete                                       | Validated, reusable operator data                       |
 | 3. MPS contraction                | Complete                                       | Direct and batched MPS measurements accept general MPOs |
 | 4. Backend and result integration | Complete                                       | Supported backends and result paths agree               |
-| 5. Performance and documentation  | Complete except for the changelog PR reference | Measured cost, complete examples, and release checks    |
+| 5. Performance and documentation  | Complete except for the changelog PR reference | Independent end-to-end numerical checks                 |
 
 Remaining work: add the pull request number and author reference to the
 changelog after the pull request exists.
@@ -338,10 +338,74 @@ flaky wall-clock thresholds in ordinary unit tests.
       unavailable check as a blocker, rather than treating a skipped hook as a
       pass.
 
+### 5D. Verify end-to-end numerical correctness
+
+Use Qiskit's state-vector simulator to prepare reference states and direct NumPy
+matrix operations to calculate reference expectations. Build every reference
+operator independently from its local factors or Pauli terms. Do not use
+`Observable.prepare()`, `Observable.to_mpo()`, `MPO.to_matrix*()`, or
+`MPS.expect()` in the reference calculation. Keep external packages out of the
+test dependencies when the existing NumPy and Qiskit checks cover the contract.
+
+- [x] Add focused public-workflow tests in
+      `tests/core/data_structures/test_observable.py`. Use a fixed five-qubit
+      case, exact simulation settings, and no stochastic noise or truncation.
+- [x] Prepare a complex entangled state with an asymmetric Qiskit circuit. Run
+      the same circuit through `Simulator.run(...)` with a mixed observable list
+      containing a local named operator, a named long-range product, a reversed
+      nonadjacent custom Hermitian matrix, a Pauli sum, a supplied full-chain
+      MPO with a virtual bond dimension above one, and a bitstring projector.
+      Build the supplied MPO directly as a two-term global operator, then
+      assemble both terms independently for the dense reference.
+- [x] Calculate each expected value as `real(vdot(psi, operator @ psi))` from
+      the Qiskit state vector and independently assembled dense operator. For
+      the bitstring, use the matching state-vector probability. Choose the
+      circuit and operators so the expected values are finite, nonzero, and
+      distinct enough that a site reversal or result-order error cannot pass by
+      accident.
+- [x] Add a `SAMPLE_OBSERVABLES` barrier and compare the initial, intermediate,
+      and final result columns with Qiskit prefix circuits. Assert observable
+      order, duplicate handling, result shapes, and real-valued output through
+      the public `Result` object.
+- [x] Add a cross-representation analog test with an entangled state and the
+      long-range, Pauli-sum, and global MPO cases. Obtain exact MPS tensors
+      through a small test-only SVD, and first verify that their dense vector
+      equals the Qiskit state vector. Use a zero Hamiltonian to isolate
+      measurement from time-integration error. Compare MPS, MCWF vector, and
+      Lindblad density-matrix results with the same independent dense
+      references.
+- [x] Confirm that the tests are sensitive to the main failure modes: reversed
+      site order, missing identity transport across a gap, a compact MPO treated
+      as a full-chain MPO, incorrect MPS/Qiskit basis order, skipped MPO terms,
+      and reordered results. Keep these as numerical assertions on supported
+      behavior rather than mocks of implementation details.
+- [x] Run the new test file alone, then the affected analog and simulator tests,
+      the full suite, the documentation build, and `uvx nox -s lint`.
+- [x] Run an isolated external spot check without adding a dependency. At the
+      five-qubit test point, Qiskit 2.5.2 agreed with the digital workflow to a
+      maximum absolute error of `1.39e-16`. QuTiP 5.3.1 evolved the same
+      entangled state under a nonzero Ising Hamiltonian for 21 sample times. The
+      maximum absolute errors were `1.42e-11` for the MPS representation,
+      `1.41e-11` for the statevector representation, and `3.60e-12` for the
+      density-matrix representation. The three YAQS results agreed with one
+      another to `3.06e-14`. Median complete-workflow times after one warmup and
+      five repeats were 233 ms for MPS, 16.4 ms for statevector, and 801 ms for
+      density matrix. The matching QuTiP statevector and density-matrix times
+      were 0.576 ms and 164 ms. These small-system times measure framework and
+      representation overhead; they are not scaling results. The comparison
+      included a long-range product, a reversed nonadjacent custom operator, a
+      Pauli sum, a full-chain bond-2 MPO, and a bitstring projector.
+
+Acceptance: every observable form agrees with an independently calculated
+reference at every requested sample point. The same general observables agree
+across all supported state representations. The tests use only existing test
+dependencies and fail when any stated ordering, support, or aggregation contract
+is broken.
+
 For every implementation batch, add or update tests in the owning component's
 test tree, run the affected tests, and run `uvx nox -s lint`. Update affected
-docstrings and user-facing notes with the behavior change; 5C is the final
-audit.
+docstrings and user-facing notes with the behavior change; 5D is the final
+correctness audit.
 
 ## Completion criteria
 
@@ -354,4 +418,6 @@ audit.
 - [x] Measurements preserve the state and retain local-observable efficiency.
 - [x] Diagnostics and projectors have explicit behavior across sampling and
   result aggregation paths.
+- [x] Independent public-workflow tests verify long-range and global MPO
+  observables on entangled states across supported backends.
 - [ ] Tests, examples, release notes, and required checks cover the final API.

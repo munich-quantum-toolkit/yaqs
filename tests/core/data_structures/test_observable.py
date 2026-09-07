@@ -5,16 +5,24 @@
 #
 # Licensed under the MIT License
 
-"""Tests for user-facing observable definitions."""
+"""Tests for user-facing observable definitions and workflows."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 
+from mqt.yaqs import MPS, AnalogSimParams, DigitalSimParams, Hamiltonian, Simulator, State
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable, prepare_observables
 from mqt.yaqs.core.libraries.gate_library import BaseGate
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def _embed_dense_on_support(
@@ -476,3 +484,338 @@ def test_to_mpo_returns_an_independent_compact_support_mpo() -> None:
     assert all(left is not right for left, right in zip(first.tensors, second.tensors, strict=True))
     first.tensors[0].fill(0)
     assert np.any(second.tensors[0])
+
+
+_LENGTH = 5
+_IDENTITY = np.eye(2, dtype=np.complex128)
+_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+_Z = np.diag([1, -1]).astype(np.complex128)
+
+
+def _embed_operator_reference(operator: NDArray[np.complex128], sites: list[int]) -> NDArray[np.complex128]:
+    """Embed an operator by direct enumeration in Qiskit's site-0-LSB order.
+
+    Args:
+        operator: Matrix whose tensor factors follow ``sites``.
+        sites: Target sites in the matrix tensor-factor order.
+
+    Returns:
+        Full-chain operator in Qiskit state-vector order.
+    """
+    dimension = 2**_LENGTH
+    embedded = np.zeros((dimension, dimension), dtype=np.complex128)
+    spectators = [site for site in range(_LENGTH) if site not in sites]
+    basis_digits = [[(index >> site) & 1 for site in range(_LENGTH)] for index in range(dimension)]
+    active_shape = (2,) * len(sites)
+
+    for row, row_digits in enumerate(basis_digits):
+        active_row = np.ravel_multi_index(tuple(row_digits[site] for site in sites), active_shape)
+        for column, column_digits in enumerate(basis_digits):
+            if any(row_digits[site] != column_digits[site] for site in spectators):
+                continue
+            active_column = np.ravel_multi_index(tuple(column_digits[site] for site in sites), active_shape)
+            embedded[row, column] = operator[active_row, active_column]
+    return embedded
+
+
+def _site_order_product(factors: list[NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Return a product matrix whose factors follow increasing site order.
+
+    Args:
+        factors: One matrix for each target site, starting with the lowest site.
+
+    Returns:
+        Kronecker product in the matrix convention accepted with ``sites``.
+    """
+    product = factors[0]
+    for factor in factors[1:]:
+        product = np.kron(product, factor)
+    return np.asarray(product, dtype=np.complex128)
+
+
+def _global_two_term_mpo() -> tuple[MPO, NDArray[np.complex128]]:
+    """Build a bond-2 full-chain MPO and its independently assembled matrix.
+
+    Returns:
+        The supplied MPO and its dense matrix in Qiskit state-vector order.
+    """
+    first_factors = [_X] * _LENGTH
+    second_factors = [_Z] * _LENGTH
+    first_coefficient = 0.47
+    second_coefficient = -0.31
+
+    tensors = [np.zeros((1, 2, 2, 2), dtype=np.complex128)]
+    tensors[0][0, 0] = first_coefficient * first_factors[0]
+    tensors[0][0, 1] = second_coefficient * second_factors[0]
+    for first, second in zip(first_factors[1:-1], second_factors[1:-1], strict=True):
+        tensor = np.zeros((2, 2, 2, 2), dtype=np.complex128)
+        tensor[0, 0] = first
+        tensor[1, 1] = second
+        tensors.append(tensor)
+    tensors.append(np.zeros((2, 1, 2, 2), dtype=np.complex128))
+    tensors[-1][0, 0] = first_factors[-1]
+    tensors[-1][1, 0] = second_factors[-1]
+
+    mpo = MPO()
+    mpo.custom(tensors)
+    assert max(max(tensor.shape[2:]) for tensor in mpo.tensors) == 2
+
+    first_matrix = _embed_operator_reference(_site_order_product(first_factors), list(range(_LENGTH)))
+    second_matrix = _embed_operator_reference(_site_order_product(second_factors), list(range(_LENGTH)))
+    dense = first_coefficient * first_matrix + second_coefficient * second_matrix
+    return mpo, dense
+
+
+def _sampled_circuit() -> tuple[QuantumCircuit, list[QuantumCircuit]]:
+    """Return an asymmetric entangling circuit and its sampled prefixes.
+
+    Returns:
+        Circuit with one sampling barrier and the initial, intermediate, and
+        final reference circuits without barriers.
+    """
+    prefix = QuantumCircuit(_LENGTH)
+    prefix.ry(0.63, 0)
+    prefix.rz(0.43, 0)
+    prefix.ry(0.37, 1)
+    prefix.rz(-0.21, 1)
+    prefix.cx(0, 1)
+    prefix.rx(-0.29, 2)
+    prefix.ry(0.17, 2)
+    prefix.cx(1, 2)
+
+    suffix = QuantumCircuit(_LENGTH)
+    suffix.ry(0.61, 3)
+    suffix.cx(2, 3)
+    suffix.rx(0.47, 4)
+    suffix.cx(3, 4)
+    suffix.rz(-0.23, 1)
+    suffix.ry(0.31, 0)
+
+    sampled = QuantumCircuit(_LENGTH)
+    sampled.compose(prefix, inplace=True)
+    sampled.barrier(label="SAMPLE_OBSERVABLES")
+    sampled.compose(suffix, inplace=True)
+    final = prefix.copy()
+    final.compose(suffix, inplace=True)
+    return sampled, [QuantumCircuit(_LENGTH), prefix, final]
+
+
+def _observables_and_references() -> tuple[list[Observable], list[NDArray[np.complex128]]]:
+    """Return each public observable form and an independent dense reference.
+
+    Returns:
+        Observable definitions and matching matrices in the same order.
+    """
+    local = Observable("y", 2)
+    local_matrix = _embed_operator_reference(_Y, [2])
+
+    long_range = Observable("zz", [0, 4])
+    long_range_matrix = _embed_operator_reference(_site_order_product([_Z, _Z]), [0, 4])
+
+    custom_matrix = np.asarray(
+        0.53 * _site_order_product([_Z, _X])
+        + 0.19 * _site_order_product([_X, _Y])
+        + 0.11 * _site_order_product([_IDENTITY, _Z]),
+        dtype=np.complex128,
+    )
+    custom = Observable(custom_matrix, [4, 1])
+    custom_reference = _embed_operator_reference(custom_matrix, [4, 1])
+
+    pauli_sum = Observable.from_pauli_sum(
+        terms=[(0.41, "Z0 Z3"), (-0.29, "Z1"), (0.17, "Z2 Z4")],
+        length=_LENGTH,
+    )
+    pauli_reference = (
+        0.41 * _embed_operator_reference(_site_order_product([_Z, _Z]), [0, 3])
+        - 0.29 * _embed_operator_reference(_Z, [1])
+        + 0.17 * _embed_operator_reference(_site_order_product([_Z, _Z]), [2, 4])
+    )
+
+    global_mpo, global_reference = _global_two_term_mpo()
+    global_observable = Observable(global_mpo)
+
+    bitstring = "10100"
+    basis_index = sum(int(digit) << site for site, digit in enumerate(bitstring))
+    projector_reference = np.zeros((2**_LENGTH, 2**_LENGTH), dtype=np.complex128)
+    projector_reference[basis_index, basis_index] = 1
+
+    observables = [local, long_range, custom, pauli_sum, global_observable, Observable(bitstring), long_range]
+    references = [
+        local_matrix,
+        long_range_matrix,
+        custom_reference,
+        pauli_reference,
+        global_reference,
+        projector_reference,
+        long_range_matrix,
+    ]
+    return observables, references
+
+
+def _expected_values(
+    circuits: list[QuantumCircuit],
+    references: list[NDArray[np.complex128]],
+) -> NDArray[np.float64]:
+    """Calculate reference expectations without YAQS measurement utilities.
+
+    Args:
+        circuits: Qiskit circuits for each requested sample point.
+        references: Dense observable matrices in Qiskit state-vector order.
+
+    Returns:
+        Array indexed by observable and sample point.
+    """
+    vectors = [np.asarray(Statevector(circuit).data, dtype=np.complex128) for circuit in circuits]
+    return np.asarray(
+        [[np.vdot(vector, operator @ vector).real for vector in vectors] for operator in references],
+        dtype=np.float64,
+    )
+
+
+def _statevector_to_mps_tensors(vector: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
+    """Factor a Qiskit-order state vector into exact YAQS-order MPS tensors.
+
+    Args:
+        vector: Normalized five-qubit state vector in Qiskit's site-0-LSB order.
+
+    Returns:
+        MPS tensors ordered from site 0 through site 4.
+    """
+    remainder = np.asarray(vector, dtype=np.complex128).reshape(1, -1)
+    reversed_tensors: list[NDArray[np.complex128]] = []
+    left_bond = 1
+    for _site in range(_LENGTH - 1):
+        matrix = remainder.reshape(left_bond * 2, -1)
+        left_vectors, singular_values, right_vectors = np.linalg.svd(matrix, full_matrices=False)
+        rank = int(np.count_nonzero(singular_values > 1e-13))
+        reversed_tensors.append(left_vectors[:, :rank].reshape(left_bond, 2, rank).transpose(1, 0, 2))
+        remainder = singular_values[:rank, np.newaxis] * right_vectors[:rank]
+        left_bond = rank
+    reversed_tensors.append(remainder.reshape(left_bond, 2, 1).transpose(1, 0, 2))
+    return [tensor.transpose(0, 2, 1) for tensor in reversed(reversed_tensors)]
+
+
+def _assert_reference_case_is_discriminating(
+    vector: NDArray[np.complex128],
+    expected_final: NDArray[np.float64],
+) -> None:
+    """Check that common ordering and omitted-term errors change the oracle.
+
+    Args:
+        vector: Final Qiskit state vector.
+        expected_final: Correct final expectation for each requested observable.
+    """
+    assert np.all(np.abs(expected_final[:-1]) > 1e-6)
+    assert len(np.unique(np.round(expected_final[:-1], decimals=8))) == len(expected_final) - 1
+
+    custom_matrix = np.asarray(
+        0.53 * _site_order_product([_Z, _X])
+        + 0.19 * _site_order_product([_X, _Y])
+        + 0.11 * _site_order_product([_IDENTITY, _Z]),
+        dtype=np.complex128,
+    )
+    wrong_site_order = _embed_operator_reference(custom_matrix, [1, 4])
+    wrong_custom_value = float(np.vdot(vector, wrong_site_order @ vector).real)
+    assert not np.isclose(expected_final[2], wrong_custom_value, rtol=1e-5, atol=1e-6)
+
+    bitstring = "10100"
+    wrong_basis_index = int(bitstring, 2)
+    wrong_probability = float(abs(vector[wrong_basis_index]) ** 2)
+    assert not np.isclose(expected_final[5], wrong_probability, rtol=1e-5, atol=1e-6)
+
+    global_terms = [
+        0.47 * _embed_operator_reference(_site_order_product([_X] * _LENGTH), list(range(_LENGTH))),
+        -0.31 * _embed_operator_reference(_site_order_product([_Z] * _LENGTH), list(range(_LENGTH))),
+    ]
+    pauli_terms = [
+        0.41 * _embed_operator_reference(_site_order_product([_Z, _Z]), [0, 3]),
+        -0.29 * _embed_operator_reference(_Z, [1]),
+        0.17 * _embed_operator_reference(_site_order_product([_Z, _Z]), [2, 4]),
+    ]
+    for term in [*global_terms, *pauli_terms]:
+        assert abs(np.vdot(vector, term @ vector).real) > 1e-3
+
+
+def _observable_signature(observable: Observable) -> tuple[str, str, tuple[int, ...] | int | None]:
+    """Return public metadata used to verify result ordering.
+
+    Args:
+        observable: Observable definition to identify.
+
+    Returns:
+        Name, type, and immutable site specification.
+    """
+    sites = tuple(observable.sites) if isinstance(observable.sites, list) else observable.sites
+    return observable.name, observable.type, sites
+
+
+def test_digital_general_observables_match_independent_references_at_each_sample() -> None:
+    """The public digital workflow measures every operator form correctly."""
+    circuit, reference_circuits = _sampled_circuit()
+    observables, references = _observables_and_references()
+    expected = _expected_values(reference_circuits, references)
+    params = DigitalSimParams(
+        observables=observables,
+        num_traj=1,
+        sample_layers=True,
+        gate_mode="swaps",
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(State(_LENGTH, initial="zeros"), circuit, params)
+
+    assert [_observable_signature(observable) for observable in result.observables] == [
+        _observable_signature(observable) for observable in observables
+    ]
+    actual_rows: list[NDArray[np.float64]] = []
+    for values in result.expectation_values:
+        assert values is not None
+        assert values.shape == (3,)
+        assert np.issubdtype(values.dtype, np.floating)
+        actual_rows.append(values)
+    actual = np.asarray(actual_rows, dtype=np.float64)
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-10, atol=1e-11)
+    np.testing.assert_array_equal(actual[1], actual[-1])
+    final_vector = np.asarray(Statevector(reference_circuits[-1]).data, dtype=np.complex128)
+    _assert_reference_case_is_discriminating(final_vector, expected[:, -1])
+
+
+def test_general_observables_match_across_analog_representations_on_entangled_state() -> None:
+    """MPS, MCWF, and Lindblad return the same general expectations."""
+    _circuit, reference_circuits = _sampled_circuit()
+    vector = np.asarray(Statevector(reference_circuits[-1]).data, dtype=np.complex128)
+    tensors = _statevector_to_mps_tensors(vector)
+    reconstructed = MPS(_LENGTH, tensors=[tensor.copy() for tensor in tensors]).to_vec()
+    np.testing.assert_allclose(reconstructed, vector, rtol=0.0, atol=1e-12)
+
+    observables, references = _observables_and_references()
+    expected = _expected_values([reference_circuits[-1]], references)[:, 0]
+    zero_hamiltonian = Hamiltonian.from_mpo(
+        MPO.from_local_ops([np.zeros((2, 2), dtype=np.complex128), *[_IDENTITY] * (_LENGTH - 1)])
+    )
+    params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+    )
+    states = [
+        State(tensors=[tensor.copy() for tensor in tensors]),
+        State(vector=vector.copy()),
+        State(density_matrix=np.outer(vector, vector.conj())),
+    ]
+
+    simulator = Simulator(parallel=False, show_progress=False)
+    for state in states:
+        result = simulator.run(state, zero_hamiltonian, params)
+        actual = np.asarray([values[-1] for values in result.expectation_values], dtype=np.float64)
+        np.testing.assert_allclose(actual, expected, rtol=1e-9, atol=1e-10)
+        assert [_observable_signature(observable) for observable in result.observables] == [
+            _observable_signature(observable) for observable in observables
+        ]
