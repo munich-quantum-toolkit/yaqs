@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-ObservableKind = Literal["operator", "bitstring", "diagnostic"]
+ObservableType = Literal["operator", "bitstring", "diagnostic"]
 _HERMITIAN_RTOL = 1e-10
 _HERMITIAN_ATOL = 1e-12
 
@@ -77,9 +77,12 @@ def _site_count(sites: int | list[int]) -> int:
         TypeError: If a site is not an integer.
         ValueError: If a list of sites is empty.
     """
+    if isinstance(sites, bool):
+        msg = "sites must be an int or a list of ints."
+        raise TypeError(msg)
     if isinstance(sites, int):
         return 1
-    if not isinstance(sites, list) or any(not isinstance(site, int) for site in sites):
+    if not isinstance(sites, list) or any(isinstance(site, bool) or not isinstance(site, int) for site in sites):
         msg = "sites must be an int or a list of ints."
         raise TypeError(msg)
     if not sites:
@@ -231,7 +234,7 @@ class Observable:
         matrix: Local operator matrix, or ``None`` for diagnostics and bitstrings.
         sites: Site or sites for a local operator or diagnostic.
         interaction: Number of sites used by a local operator.
-        kind: ``"operator"``, ``"bitstring"``, or ``"diagnostic"``.
+        type: ``"operator"``, ``"bitstring"``, or ``"diagnostic"``.
         bitstring: Computational-basis state for a bitstring request, otherwise ``None``.
         mpo: Supplied or prepared MPO, otherwise ``None``.
         mpo_sites: Full-chain sites represented by the prepared MPO tensors.
@@ -278,7 +281,7 @@ class Observable:
                 msg = "Observable MPO must be Hermitian."
                 raise ValueError(msg)
             self.name = "mpo"
-            self.kind: ObservableKind = "operator"
+            self.type: ObservableType = "operator"
             self.matrix: NDArray[np.complex128] | None = None
             self.sites = None
             self.interaction = copied_mpo.length
@@ -294,7 +297,7 @@ class Observable:
                 msg = "Bitstring observables do not accept operator parameters."
                 raise TypeError(msg)
             self.name = "pvm"
-            self.kind = "bitstring"
+            self.type = "bitstring"
             self.matrix: NDArray[np.complex128] | None = None
             self.sites = None
             self.interaction = 0
@@ -307,9 +310,9 @@ class Observable:
                 msg = "sites are required for named observables."
                 raise ValueError(msg)
             count = _site_count(sites)
-            if definition.kind == "diagnostic":
+            if definition.type == "diagnostic":
                 self.name = definition.name
-                self.kind = "diagnostic"
+                self.type = "diagnostic"
                 self.matrix = None
                 self.sites = sites
                 self.interaction = 0
@@ -338,7 +341,7 @@ class Observable:
             name = "local"
 
         self.name = name
-        self.kind = "operator"
+        self.type = "operator"
         self.matrix = matrix
         self.sites = sites
         self.interaction = interaction
@@ -404,12 +407,12 @@ class Observable:
             return self
 
         prepared = copy.deepcopy(self)
-        if prepared.kind == "bitstring":
+        if prepared.type == "bitstring":
             assert prepared.bitstring is not None
             if len(prepared.bitstring) != length:
                 msg = f"Bitstring length {len(prepared.bitstring)} does not match state length {length}."
                 raise ValueError(msg)
-        elif prepared.kind == "diagnostic":
+        elif prepared.type == "diagnostic":
             _validate_sites_for_length(prepared.sites, length)
         elif prepared.full_chain:
             assert prepared.mpo is not None
@@ -484,7 +487,7 @@ class Observable:
         """
         prepared = self.prepare(length, physical_dimensions)
         if prepared.mpo is None:
-            msg = f"Observable kind {prepared.kind!r} does not define an MPO."
+            msg = f"Observable type {prepared.type!r} does not define an MPO."
             raise ValueError(msg)
         return _copy_mpo(prepared.mpo)
 

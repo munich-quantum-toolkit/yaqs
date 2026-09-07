@@ -30,6 +30,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- split observables to be separate from quantum gates ([#583])
+  ([**@aaronleesander**])
 - removed redundant center shifting in long-range TEBD swaps ([#571])
   ([**@Pouri96**])
 - shifted the orthogonality center left without flipping the network ([#574])
@@ -268,6 +270,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#583]: https://github.com/munich-quantum-toolkit/yaqs/pull/583
 [#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
 [#569]: https://github.com/munich-quantum-toolkit/yaqs/pull/569
 [#575]: https://github.com/munich-quantum-toolkit/yaqs/pull/575

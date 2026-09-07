@@ -34,6 +34,20 @@ def test_propagator_rejects_empty_observable_list(noise_test_config: NoiseTestCo
         propagator.set_observable_list([])
 
 
+def test_propagator_requires_explicit_observable_sites(noise_test_config: NoiseTestConfig) -> None:
+    """Noise propagation rejects full-chain observable requests."""
+    hamiltonian, init_state, _observables, sim_params, noise_model, _ = build_propagator(noise_test_config)
+    propagator = Propagator(
+        sim_params=sim_params,
+        hamiltonian=hamiltonian,
+        noise_model=noise_model,
+        init_state=init_state,
+    )
+
+    with pytest.raises(ValueError, match="observables must have explicit sites"):
+        propagator.set_observable_list([Observable("0" * noise_test_config.sites)])
+
+
 def test_propagator_runs(noise_test_config: NoiseTestConfig) -> None:
     """Propagation returns observable trajectories with the expected shape."""
     _hamiltonian, _state, _observables, _sim_params, noise_model, propagator = build_propagator(noise_test_config)

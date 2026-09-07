@@ -10,10 +10,12 @@ of changes including minor and patch releases, please refer to the
 
 `Observable` now accepts a named Hermitian observable, a Hermitian matrix, or a
 binary bitstring. Observable instances expose `name`, `matrix`, `sites`,
-`interaction`, `kind`, and `bitstring` directly. They no longer accept
+`interaction`, `type`, and `bitstring` directly. They no longer accept
 `BaseGate` instances or the `gate=` keyword, and they no longer expose a `.gate`
-attribute. Named gate operations that are not Hermitian are no longer valid
-observables.
+attribute. `ObservableLibrary` resolves only the names that it defines. It does
+not interpret gate names or identity aliases. The gate names `h`, `cx`, `cz`,
+and `swap` are not named observables, although their matrices are Hermitian. Use
+`id` as the identity observable name; `i` and `iden` are not accepted.
 
 Custom matrices now use the tensor-factor order in `sites`. Supplied MPOs act on
 the full chain, and `Observable.from_pauli_sum(...)` constructs full-chain Pauli

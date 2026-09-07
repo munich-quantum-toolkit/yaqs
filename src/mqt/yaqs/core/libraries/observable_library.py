@@ -10,21 +10,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
 from .operator_matrices import (
-    CONTROLLED_X,
-    CONTROLLED_Z,
-    HADAMARD,
     IDENTITY,
     PAULI_X,
     PAULI_Y,
     PAULI_Z,
     PROJECTOR_ONE,
     PROJECTOR_ZERO,
-    SWAP_MATRIX,
 )
 
 if TYPE_CHECKING:
@@ -32,7 +28,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-ObservableKind = Literal["operator", "diagnostic"]
+ObservableType = Literal["operator", "diagnostic"]
 
 
 @dataclass(frozen=True)
@@ -43,14 +39,14 @@ class ObservableDefinition:
         name: Canonical observable name.
         matrix: Local operator matrix, or ``None`` for a state diagnostic.
         interaction: Number of sites used by a local operator.
-        kind: Whether the definition is an operator or a state diagnostic.
-        factors: Optional product factors in public site-list order.
+        type: Whether the definition is an operator or a state diagnostic.
+        factors: Product factors in public site-list order, when available.
     """
 
     name: str
     matrix: NDArray[np.complex128] | None
     interaction: int
-    kind: ObservableKind = "operator"
+    type: ObservableType = "operator"
     factors: tuple[NDArray[np.complex128], ...] | None = None
 
 
@@ -86,93 +82,85 @@ def _operator(
 class ObservableLibrary:
     """Factories for the built-in Hermitian observables."""
 
-    _ALIASES: ClassVar[dict[str, str]] = {"i": "id", "iden": "id"}
-    _NON_HERMITIAN_GATE_NAMES: ClassVar[frozenset[str]] = frozenset({
-        "cp",
-        "create",
-        "destroy",
-        "p",
-        "rx",
-        "rxx",
-        "ry",
-        "ryy",
-        "rz",
-        "rzz",
-        "s",
-        "sdg",
-        "sx",
-        "sxdg",
-        "t",
-        "tdg",
-        "u",
-        "u1",
-        "u2",
-        "u3",
-    })
-
     @staticmethod
     def x() -> ObservableDefinition:
-        """Return the Pauli-X observable."""
+        """Return the Pauli-X observable definition.
+
+        Returns:
+            The Pauli-X observable definition.
+        """
         return _operator("x", PAULI_X, 1)
 
     @staticmethod
     def y() -> ObservableDefinition:
-        """Return the Pauli-Y observable."""
+        """Return the Pauli-Y observable definition.
+
+        Returns:
+            The Pauli-Y observable definition.
+        """
         return _operator("y", PAULI_Y, 1)
 
     @staticmethod
     def z() -> ObservableDefinition:
-        """Return the Pauli-Z observable."""
+        """Return the Pauli-Z observable definition.
+
+        Returns:
+            The Pauli-Z observable definition.
+        """
         return _operator("z", PAULI_Z, 1)
 
     @staticmethod
-    def h() -> ObservableDefinition:
-        """Return the Hadamard observable."""
-        return _operator("h", HADAMARD, 1)
-
-    @staticmethod
     def id() -> ObservableDefinition:
-        """Return the one-site identity observable."""
+        """Return the one-site identity observable definition.
+
+        Returns:
+            The one-site identity observable definition.
+        """
         return _operator("id", IDENTITY, 1)
 
     @staticmethod
     def xx() -> ObservableDefinition:
-        """Return the two-site Pauli-XX observable."""
+        """Return the two-site Pauli-XX observable definition.
+
+        Returns:
+            The two-site Pauli-XX observable definition.
+        """
         return _operator("xx", np.kron(PAULI_X, PAULI_X), 2, factors=(PAULI_X, PAULI_X))
 
     @staticmethod
     def yy() -> ObservableDefinition:
-        """Return the two-site Pauli-YY observable."""
+        """Return the two-site Pauli-YY observable definition.
+
+        Returns:
+            The two-site Pauli-YY observable definition.
+        """
         return _operator("yy", np.kron(PAULI_Y, PAULI_Y), 2, factors=(PAULI_Y, PAULI_Y))
 
     @staticmethod
     def zz() -> ObservableDefinition:
-        """Return the two-site Pauli-ZZ observable."""
+        """Return the two-site Pauli-ZZ observable definition.
+
+        Returns:
+            The two-site Pauli-ZZ observable definition.
+        """
         return _operator("zz", np.kron(PAULI_Z, PAULI_Z), 2, factors=(PAULI_Z, PAULI_Z))
 
     @staticmethod
-    def cx() -> ObservableDefinition:
-        """Return the two-site controlled-X observable."""
-        return _operator("cx", CONTROLLED_X, 2)
-
-    @staticmethod
-    def cz() -> ObservableDefinition:
-        """Return the two-site controlled-Z observable."""
-        return _operator("cz", CONTROLLED_Z, 2)
-
-    @staticmethod
-    def swap() -> ObservableDefinition:
-        """Return the two-site SWAP observable."""
-        return _operator("swap", SWAP_MATRIX, 2)
-
-    @staticmethod
     def p0() -> ObservableDefinition:
-        """Return the one-site projector onto zero."""
+        """Return the one-site projector onto zero.
+
+        Returns:
+            The projector onto the zero state.
+        """
         return _operator("p0", PROJECTOR_ZERO, 1)
 
     @staticmethod
     def p1() -> ObservableDefinition:
-        """Return the one-site projector onto one."""
+        """Return the one-site projector onto one.
+
+        Returns:
+            The projector onto the one state.
+        """
         return _operator("p1", PROJECTOR_ONE, 1)
 
     @staticmethod
@@ -203,12 +191,20 @@ class ObservableLibrary:
 
     @staticmethod
     def entropy() -> ObservableDefinition:
-        """Return an entanglement-entropy diagnostic definition."""
+        """Return an entanglement-entropy diagnostic definition.
+
+        Returns:
+            The entanglement-entropy diagnostic definition.
+        """
         return ObservableDefinition("entropy", None, 0, "diagnostic")
 
     @staticmethod
     def schmidt_spectrum() -> ObservableDefinition:
-        """Return a Schmidt-spectrum diagnostic definition."""
+        """Return a Schmidt-spectrum diagnostic definition.
+
+        Returns:
+            The Schmidt-spectrum diagnostic definition.
+        """
         return ObservableDefinition("schmidt_spectrum", None, 0, "diagnostic")
 
     @classmethod
@@ -223,20 +219,15 @@ class ObservableLibrary:
             The named observable definition.
 
         Raises:
-            ValueError: If the name belongs to a non-Hermitian gate or is unknown.
+            ValueError: If the observable name is unknown.
         """
-        canonical_name = cls._ALIASES.get(name, name)
         factories: dict[str, Callable[..., ObservableDefinition]] = {
-            "cx": cls.cx,
-            "cz": cls.cz,
             "entropy": cls.entropy,
-            "h": cls.h,
             "id": cls.id,
             "p0": cls.p0,
             "p1": cls.p1,
             "position": cls.position,
             "schmidt_spectrum": cls.schmidt_spectrum,
-            "swap": cls.swap,
             "x": cls.x,
             "xx": cls.xx,
             "y": cls.y,
@@ -244,10 +235,7 @@ class ObservableLibrary:
             "z": cls.z,
             "zz": cls.zz,
         }
-        if canonical_name in factories:
-            return factories[canonical_name](**kwargs)
-        if canonical_name in cls._NON_HERMITIAN_GATE_NAMES:
-            msg = f"{name!r} is a gate name, not a Hermitian observable."
-            raise ValueError(msg)
+        if name in factories:
+            return factories[name](**kwargs)
         msg = f"Unknown observable {name!r}."
         raise ValueError(msg)

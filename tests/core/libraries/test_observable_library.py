@@ -12,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.core.libraries.observable_library import ObservableLibrary
 
 
@@ -22,16 +21,12 @@ from mqt.yaqs.core.libraries.observable_library import ObservableLibrary
         ("x", 1),
         ("y", 1),
         ("z", 1),
-        ("h", 1),
         ("id", 1),
         ("p0", 1),
         ("p1", 1),
         ("xx", 2),
         ("yy", 2),
         ("zz", 2),
-        ("cx", 2),
-        ("cz", 2),
-        ("swap", 2),
     ],
 )
 def test_named_operators_are_hermitian(name: str, interaction: int) -> None:
@@ -40,15 +35,9 @@ def test_named_operators_are_hermitian(name: str, interaction: int) -> None:
 
     assert definition.name == name
     assert definition.interaction == interaction
-    assert definition.kind == "operator"
+    assert definition.type == "operator"
     assert definition.matrix is not None
     np.testing.assert_allclose(definition.matrix, definition.matrix.conj().T)
-
-
-@pytest.mark.parametrize("alias", ["i", "iden"])
-def test_identity_aliases_use_canonical_name(alias: str) -> None:
-    """Identity aliases resolve to the canonical ``id`` definition."""
-    assert ObservableLibrary.resolve(alias).name == "id"
 
 
 def test_definitions_do_not_share_mutable_matrix_data() -> None:
@@ -67,15 +56,13 @@ def test_diagnostics_have_no_placeholder_operator() -> None:
     """State diagnostics are distinct from linear operators."""
     definition = ObservableLibrary.schmidt_spectrum()
 
-    assert definition.kind == "diagnostic"
+    assert definition.type == "diagnostic"
     assert definition.matrix is None
     assert definition.interaction == 0
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["xx", "yy", "zz", "p0", "p1", "pvm", "local", "position", "entropy", "schmidt_spectrum"],
-)
-def test_observable_definitions_are_not_in_gate_library(name: str) -> None:
-    """GateLibrary does not expose observable-only factories."""
-    assert not hasattr(GateLibrary, name)
+@pytest.mark.parametrize("name", ["i", "iden", "h", "cx", "cz", "swap", "rx", "unknown"])
+def test_unsupported_names_are_unknown(name: str) -> None:
+    """The observable library rejects each name that it does not define."""
+    with pytest.raises(ValueError, match=f"Unknown observable {name!r}"):
+        ObservableLibrary.resolve(name)

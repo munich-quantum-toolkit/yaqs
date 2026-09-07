@@ -1465,7 +1465,7 @@ class MPS:
         temp_state = copy.deepcopy(self)
         for obs_index, source_observable in enumerate(sim_params.sorted_observables):
             observable = source_observable.prepare(self.length, self.physical_dimensions)
-            if observable.kind == "diagnostic":
+            if observable.type == "diagnostic":
                 assert isinstance(observable.sites, list), "Given metric requires a list of sites"
                 assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
                 max_site = max(observable.sites)
@@ -1485,7 +1485,7 @@ class MPS:
                 elif observable.name == "schmidt_spectrum":
                     results[obs_index, column_index] = temp_state.get_schmidt_spectrum(observable.sites)
 
-            elif observable.kind == "bitstring":
+            elif observable.type == "bitstring":
                 bitstring = observable.bitstring
                 assert bitstring is not None
                 results[obs_index, column_index] = self.project_onto_bitstring(bitstring)

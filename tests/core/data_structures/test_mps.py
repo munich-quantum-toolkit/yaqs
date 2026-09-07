@@ -783,6 +783,14 @@ def test_local_expect_x_on_plus_state() -> None:
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
 
+def test_local_expect_rejects_request_without_local_operator() -> None:
+    """Local expectation requires explicit sites and an operator matrix."""
+    state = MPS(length=2, state="zeros")
+
+    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+        state.local_expect(Observable("00"), sites=0)
+
+
 @pytest.mark.parametrize("center", [3, None], ids=["off_center", "unknown_gauge"])
 def test_local_expect_is_gauge_safe(center: int | None) -> None:
     """Direct one-site local expectation matches a dense result in any tracked gauge."""
@@ -876,6 +884,14 @@ def test_apply_local_rejects_one_site_observable_with_multiple_sites() -> None:
 
     with pytest.raises(ValueError, match=r"One-site local observable requires one site, got \[0, 1\]"):
         psi_mps.apply_local(observable)
+
+
+def test_apply_local_rejects_request_without_local_operator() -> None:
+    """Local application rejects diagnostic and bitstring requests."""
+    state = MPS(length=2, state="zeros")
+
+    with pytest.raises(ValueError, match="requires an operator with explicit sites"):
+        state.apply_local(Observable("00"))
 
 
 def test_apply_local_rejects_mismatched_one_site_dimension() -> None:
@@ -2589,3 +2605,14 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
+
+
+def test_evaluate_observables_rejects_operator_without_sites() -> None:
+    """Batch evaluation checks local-operator sites before measurement."""
+    state = _product_state_mps(2)
+    observable = Observable("z", 0)
+    observable.sites = None
+    sim_params = Mock(sorted_observables=[observable])
+
+    with pytest.raises(ValueError, match="Observable requires explicit sites"):
+        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
