@@ -932,6 +932,68 @@ def test_expect_mpo_uses_a_selected_static_piece_for_piecewise_energy() -> None:
     assert energy == pytest.approx(-2.0 + 0.0j, abs=1e-12)
 
 
+def test_expect_mpo_supports_a_long_range_connected_correlation() -> None:
+    """Raw separated-site and local values form a connected correlation."""
+    length = 5
+    left = np.zeros((2, 1, 2), dtype=np.complex128)
+    left[0, 0, 0] = np.sqrt(3.0)
+    left[1, 0, 1] = 1.0
+    middle = np.zeros((2, 2, 2), dtype=np.complex128)
+    middle[0, 0, 0] = 1.0
+    middle[1, 1, 1] = 1.0
+    right = np.zeros((2, 2, 1), dtype=np.complex128)
+    right[0, 0, 0] = 1.0
+    right[1, 1, 0] = 1.0
+    state = MPS(length, tensors=[left, *[middle.copy() for _ in range(length - 2)], right])
+    correlation = MPO()
+    correlation.from_pauli_sum(terms=[(1.0, "Z0 Z4")], length=length, n_sweeps=0)
+
+    zz = state.expect_mpo(correlation)
+    z0 = state.expect(Observable("z", 0))
+    z4 = state.expect(Observable("z", 4))
+    norm_squared = state.norm() ** 2
+    connected = zz / norm_squared - z0 * z4 / norm_squared**2
+
+    assert zz == pytest.approx(4.0 + 0.0j, abs=1e-12)
+    assert z0 == pytest.approx(2.0, abs=1e-12)
+    assert z4 == pytest.approx(2.0, abs=1e-12)
+    assert connected == pytest.approx(0.75 + 0.0j, abs=1e-12)
+
+
+def test_expect_mpo_returns_a_multi_site_pauli_string() -> None:
+    """A Pauli string can contain separated factors on more than two sites."""
+    x_plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
+    zero = np.array([1.0, 0.0], dtype=np.complex128)
+    y_minus = np.array([1.0, -1.0j], dtype=np.complex128) / np.sqrt(2.0)
+    one = np.array([0.0, 1.0], dtype=np.complex128)
+    state = MPS(
+        5,
+        tensors=[vector.reshape(2, 1, 1) for vector in (x_plus, zero, y_minus, x_plus, one)],
+    )
+    operator = MPO()
+    operator.from_pauli_sum(terms=[(0.625, "X0 Y2 Z4")], length=state.length, n_sweeps=0)
+
+    assert state.expect_mpo(operator) == pytest.approx(0.625 + 0.0j, abs=1e-12)
+
+
+def test_expect_mpo_returns_a_bond_one_product() -> None:
+    """Local matrices form a full-chain bond-one product MPO."""
+    zero = np.array([1.0, 0.0], dtype=np.complex128)
+    x_plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
+    one = np.array([0.0, 1.0], dtype=np.complex128)
+    state = MPS(3, tensors=[vector.reshape(2, 1, 1) for vector in (zero, x_plus, one)])
+    operator = MPO.from_local_ops(
+        [
+            np.diag([2.0, -1.0]),
+            _X2,
+            np.diag([1.0, 3.0]),
+        ],
+    )
+
+    assert all(tensor.shape[2:] == (1, 1) for tensor in operator.tensors)
+    assert state.expect_mpo(operator) == pytest.approx(6.0 + 0.0j, abs=1e-12)
+
+
 def test_expect_remains_independent_of_expect_mpo() -> None:
     """Local observables keep their existing expectation-value path."""
     state = MPS(length=2, state="x+")

@@ -52,7 +52,7 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
 
 ## 4. Support individual long-range correlations
 
-- [ ] Use the existing `MPO.from_pauli_sum` builder for Pauli products and
+- [x] Use the existing `MPO.from_pauli_sum` builder for Pauli products and
       strings:
 
   ```python
@@ -65,13 +65,13 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
   value = state.mps.expect_mpo(correlation)
   ```
 
-- [ ] Also verify a bond-one product created with `MPO.from_local_ops`.
-- [ ] Document that a connected correlation is obtained by subtracting the
+- [x] Also verify a bond-one product created with `MPO.from_local_ops`.
+- [x] Document that a connected correlation is obtained by subtracting the
       product of the two one-site expectations.
-- [ ] Keep arbitrary separated-site dense matrices out of this change. Such an
+- [x] Keep arbitrary separated-site dense matrices out of this change. Such an
       operator needs an operator-Schmidt decomposition and a separate cutoff and
       site-order contract.
-- [ ] Keep optimized all-pairs correlation matrices out of this change. They
+- [x] Keep optimized all-pairs correlation matrices out of this change. They
       need reusable left and right environments.
 
 ## 5. Add focused tests
@@ -82,8 +82,8 @@ source file.
 - [ ] Compare small random MPS-MPO contractions with independent dense
       references.
 - [x] Test a known Ising or Heisenberg energy.
-- [ ] Test a separated-site correlation such as $Z_0Z_{L-1}$.
-- [ ] Test a Pauli string with more than two nonidentity factors.
+- [x] Test a separated-site correlation such as $Z_0Z_{L-1}$.
+- [x] Test a Pauli string with more than two nonidentity factors.
 - [x] Test a non-Hermitian MPO whose expectation value is complex.
 - [ ] Test a zero MPO.
 - [x] Test an unnormalized MPS and verify the expected amplitude-squared
@@ -99,11 +99,11 @@ source file.
 
 ## 6. Document and release the 1.0 feature
 
-- [ ] Add energy and long-range-correlation examples to the Hamiltonian
+- [x] Add energy and long-range-correlation examples to the Hamiltonian
       documentation.
-- [ ] Document the full-chain-only, raw-complex, and no-implicit-normalization
+- [x] Document the full-chain-only, raw-complex, and no-implicit-normalization
       contracts.
-- [ ] Explain that local `Observable` measurements keep their existing fast
+- [x] Explain that local `Observable` measurements keep their existing fast
       path.
 - [ ] Add a `CHANGELOG.md` entry with the pull request and author links.
 - [ ] Disclose AI assistance in the pull request description.
