@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..methods.decompositions import TruncMode
+    from .mpo import MPO
     from .observable import Observable
     from .simulation_parameters import AnalogSimParams, DigitalSimParams
 
@@ -1217,6 +1218,49 @@ class MPS:
 
         msg = f"Invalid `sites` argument: {sites!r}"
         raise ValueError(msg)
+
+    def expect_mpo(self, operator: MPO) -> np.complex128:
+        r"""Return the full-chain MPO expectation value for the stored state.
+
+        The method contracts :math:`\langle\psi|W|\psi\rangle` directly from
+        the MPS and MPO tensors. It does not normalize the state or modify,
+        copy, compress, or densify either tensor network.
+
+        Args:
+            operator: Full-chain MPO with the same length as this MPS.
+
+        Returns:
+            The raw complex expectation value.
+
+        Raises:
+            ValueError: If the MPO length or tensor count does not match the
+                MPS length, or if the contraction leaves open boundary bonds.
+
+        Notes:
+            The operator does not need to be Hermitian. Use the returned
+            complex value directly when measuring a general linear operator.
+        """
+        if operator.length != self.length or len(operator.tensors) != self.length:
+            msg = (
+                f"MPO length {operator.length} and tensor count {len(operator.tensors)} "
+                f"must match MPS length {self.length}."
+            )
+            raise ValueError(msg)
+
+        environment = np.ones((1, 1, 1), dtype=np.complex128)
+        for state_tensor, operator_tensor in zip(self.tensors, operator.tensors, strict=True):
+            environment = oe.contract(
+                "abc,pad,pqbe,qcf->def",
+                environment,
+                np.conj(state_tensor),
+                operator_tensor,
+                state_tensor,
+            )
+
+        if environment.shape != (1, 1, 1):
+            msg = f"MPS-MPO contraction ended with open boundary dimensions {environment.shape}."
+            raise ValueError(msg)
+        return np.complex128(environment[0, 0, 0])
 
     def local_expect(self, operator: Observable, sites: int | list[int]) -> np.complex128:
         """Compute the local expectation value of an operator on an MPS.

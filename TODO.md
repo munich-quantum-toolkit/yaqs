@@ -2,30 +2,28 @@
 
 ## Goal
 
-Add one MPS-level operation that computes the expectation value of a
-full-chain MPO. Use this operation to measure Hamiltonian energy and individual
-long-range correlations.
+Add one MPS-level operation that computes the expectation value of a full-chain
+MPO. Use this operation to measure Hamiltonian energy and individual long-range
+correlations.
 
 MPO-backed `Observable` objects remain a post-1.0 feature.
 
 ## 1. Define the supported contract
 
-- [ ] Add `MPS.expect_mpo(operator: MPO) -> np.complex128`.
-- [ ] Compute the stored-state contraction
-      $\langle\psi|W|\psi\rangle$ directly.
-- [ ] Accept full-chain MPOs only. Require the MPO length to equal the MPS
+- [x] Add `MPS.expect_mpo(operator: MPO) -> np.complex128`.
+- [x] Compute the stored-state contraction $\langle\psi|W|\psi\rangle$ directly.
+- [x] Accept full-chain MPOs only. Require the MPO length to equal the MPS
       length.
-- [ ] Do not mutate the MPS or MPO.
-- [ ] Do not apply the MPO to a copied MPS.
-- [ ] Do not densify or compress the MPO.
-- [ ] Do not normalize the MPS implicitly.
-- [ ] Return the raw complex value. A general MPO need not be Hermitian.
-- [ ] Keep `MPS.expect(Observable(...))` unchanged.
+- [x] Do not mutate the MPS or MPO.
+- [x] Do not apply the MPO to a copied MPS.
+- [x] Do not densify or compress the MPO.
+- [x] Do not normalize the MPS implicitly.
+- [x] Return the raw complex value. A general MPO need not be Hermitian.
+- [x] Keep `MPS.expect(Observable(...))` unchanged.
 
 ## 2. Implement the direct contraction
 
-- [ ] Add the contraction to
-      `src/mqt/yaqs/core/data_structures/mps.py`.
+- [ ] Add the contraction to `src/mqt/yaqs/core/data_structures/mps.py`.
 - [ ] Contract the conjugate MPS, MPO, and MPS from left to right through one
       environment.
 - [ ] Avoid a module import cycle between `mps.py` and `mpo.py`.
@@ -77,8 +75,8 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
 - [ ] Document that a connected correlation is obtained by subtracting the
       product of the two one-site expectations.
 - [ ] Keep arbitrary separated-site dense matrices out of this change. Such an
-      operator needs an operator-Schmidt decomposition and a separate cutoff
-      and site-order contract.
+      operator needs an operator-Schmidt decomposition and a separate cutoff and
+      site-order contract.
 - [ ] Keep optimized all-pairs correlation matrices out of this change. They
       need reusable left and right environments.
 
@@ -149,7 +147,7 @@ source file.
 
 ## Validation
 
-- [ ] Run `uv run pytest tests/core/data_structures/test_mps.py -q`.
+- [x] Run `uv run pytest tests/core/data_structures/test_mps.py -q`.
 - [ ] Run `uvx nox -s lint` after each batch of changes.
-- [ ] Run `uv run pytest` before handoff.
-- [ ] Run `git diff --check`.
+- [x] Run `uv run pytest` before handoff.
+- [x] Run `git diff --check`.

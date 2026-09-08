@@ -21,7 +21,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
+from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -750,6 +750,90 @@ def test_scalar_product_partial_site() -> None:
     site = 0
     partial_val = psi_mps.scalar_product(psi_mps, sites=site)
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
+
+
+def test_expect_mpo_contracts_directly_without_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A full-chain MPO is contracted without application, copying, or conversion."""
+    state = MPS(length=3, state="x+")
+    operator = MPO()
+    operator.from_pauli_sum(
+        terms=[(0.5, "X0"), (0.25, "X1"), (0.75, "X0 X2")],
+        length=state.length,
+        n_sweeps=0,
+    )
+    state_tensor_list = state.tensors
+    operator_tensor_list = operator.tensors
+    state_tensor_ids = [id(tensor) for tensor in state.tensors]
+    operator_tensor_ids = [id(tensor) for tensor in operator.tensors]
+    state_tensors = [tensor.copy() for tensor in state.tensors]
+    operator_tensors = [tensor.copy() for tensor in operator.tensors]
+    center = state.orthogonality_center
+    state_physical_dimensions = state.physical_dimensions.copy()
+    operator_metadata = (operator.length, operator.physical_dimension)
+
+    def fail_indirect_path(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("MPO expectation must use direct tensor contraction.")
+
+    monkeypatch.setattr(mps_mod.copy, "deepcopy", fail_indirect_path)
+    for method in (
+        "compress",
+        "multiply",
+        "to_matrix",
+        "to_matrix_mps_order",
+        "to_mps",
+        "to_sparse_matrix",
+    ):
+        monkeypatch.setattr(MPO, method, fail_indirect_path)
+    monkeypatch.setattr(MPS, "apply_local", fail_indirect_path)
+    monkeypatch.setattr(MPS, "compress", fail_indirect_path)
+
+    value = state.expect_mpo(operator)
+
+    assert isinstance(value, np.complex128)
+    assert value == pytest.approx(1.5 + 0.0j, abs=1e-12)
+    assert state.tensors is state_tensor_list
+    assert operator.tensors is operator_tensor_list
+    assert [id(tensor) for tensor in state.tensors] == state_tensor_ids
+    assert [id(tensor) for tensor in operator.tensors] == operator_tensor_ids
+    assert state.orthogonality_center == center
+    assert state.physical_dimensions == state_physical_dimensions
+    assert (operator.length, operator.physical_dimension) == operator_metadata
+    for before, after in zip(state_tensors, state.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+    for before, after in zip(operator_tensors, operator.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+
+
+def test_expect_mpo_returns_raw_complex_value_without_normalizing() -> None:
+    """A non-Hermitian MPO returns a complex value with raw state scaling."""
+    state = MPS(length=1, state="y+")
+    scale = 2.0 - 1.0j
+    state.tensors[0] *= scale
+    lowering = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
+    operator = MPO.from_local_ops([lowering])
+
+    value = state.expect_mpo(operator)
+
+    assert value == pytest.approx(abs(scale) ** 2 * 0.5j, abs=1e-12)
+
+
+def test_expect_mpo_rejects_an_operator_that_does_not_cover_the_full_chain() -> None:
+    """The first API version accepts full-chain MPOs only."""
+    state = MPS(length=2, state="zeros")
+    one_site_identity = MPO.from_local_ops([_I2])
+
+    with pytest.raises(ValueError, match="must match MPS length 2"):
+        state.expect_mpo(one_site_identity)
+
+
+def test_expect_remains_independent_of_expect_mpo() -> None:
+    """Local observables keep their existing expectation-value path."""
+    state = MPS(length=2, state="x+")
+
+    with patch.object(MPS, "expect_mpo", side_effect=AssertionError("unexpected MPO path")):
+        value = state.expect(Observable("x", 0))
+
+    assert value == pytest.approx(1.0)
 
 
 def test_local_expect_z_on_zero_state() -> None:
