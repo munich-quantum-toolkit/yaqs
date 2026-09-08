@@ -74,6 +74,34 @@ MCWF / Lindblad run or `H.ensure_sparse()`). Both can coexist on one instance. A
 piecewise Hamiltonian is a sequence of static pieces, so it cannot be
 materialized with `ensure_mpo()` or `ensure_sparse()`.
 
+## Hamiltonian energy
+
+For an MPS-backed state, contract the state with a static Hamiltonian's
+materialized MPO:
+
+```{code-cell} ipython3
+from mqt.yaqs import Hamiltonian, State
+
+state = State(4, initial="zeros")
+hamiltonian = Hamiltonian.ising(4, J=1.0, g=0.5)
+hamiltonian.ensure_mpo()
+energy = state.mps.expect_mpo(hamiltonian.mpo)
+```
+
+This computes the raw value $\langle\psi|H_{\mathrm{MPO}}|\psi\rangle$ for the
+cached MPO. If the Hamiltonian came from a dense or sparse matrix, the result
+therefore includes any approximation made when that source was factorized into
+an MPO. The method does not normalize the state.
+
+A piecewise Hamiltonian has no single MPO or energy. Select the applicable
+static piece first:
+
+```python
+selected_hamiltonian, _duration = piecewise_hamiltonian.pieces[piece_index]
+selected_hamiltonian.ensure_mpo()
+energy = state.mps.expect_mpo(selected_hamiltonian.mpo)
+```
+
 ## Time-dependent Hamiltonians
 
 Switch between static Hamiltonians at times that land on the analog `dt` grid.

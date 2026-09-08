@@ -37,18 +37,18 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
 
 ## 3. Support Hamiltonian energy
 
-- [ ] Use the existing `Hamiltonian.ensure_mpo()` and `Hamiltonian.mpo` APIs:
+- [x] Use the existing `Hamiltonian.ensure_mpo()` and `Hamiltonian.mpo` APIs:
 
   ```python
   hamiltonian.ensure_mpo()
   energy = state.mps.expect_mpo(hamiltonian.mpo)
   ```
 
-- [ ] Verify preset and manually supplied static Hamiltonians.
-- [ ] State that the result is the expectation value of the materialized MPO.
-- [ ] For a piecewise Hamiltonian, require the user to select the applicable
+- [x] Verify preset and manually supplied static Hamiltonians.
+- [x] State that the result is the expectation value of the materialized MPO.
+- [x] For a piecewise Hamiltonian, require the user to select the applicable
       static piece.
-- [ ] Do not add an `energy()` wrapper unless it provides a distinct contract.
+- [x] Do not add an `energy()` wrapper unless it provides a distinct contract.
 
 ## 4. Support individual long-range correlations
 
@@ -81,7 +81,7 @@ source file.
 
 - [ ] Compare small random MPS-MPO contractions with independent dense
       references.
-- [ ] Test a known Ising or Heisenberg energy.
+- [x] Test a known Ising or Heisenberg energy.
 - [ ] Test a separated-site correlation such as $Z_0Z_{L-1}$.
 - [ ] Test a Pauli string with more than two nonidentity factors.
 - [x] Test a non-Hermitian MPO whose expectation value is complex.

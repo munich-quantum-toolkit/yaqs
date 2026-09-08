@@ -21,7 +21,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Observable, Simulator, State
+from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -891,6 +891,45 @@ def test_expect_mpo_uses_each_mps_tensor_for_mixed_physical_dimensions() -> None
     operator.physical_dimension = 7
 
     assert state.expect_mpo(operator) == pytest.approx(1.0 + 0.0j)
+
+
+def test_expect_mpo_returns_preset_hamiltonian_energy() -> None:
+    """A preset Hamiltonian's materialized MPO gives its state energy."""
+    state = State(3, initial="zeros")
+    hamiltonian = Hamiltonian.ising(3, J=1.25, g=0.7, n_sweeps=0)
+    hamiltonian.ensure_mpo()
+
+    energy = state.mps.expect_mpo(hamiltonian.mpo)
+
+    assert energy == pytest.approx(-2.5 + 0.0j, abs=1e-12)
+
+
+def test_expect_mpo_returns_manual_hamiltonian_energy() -> None:
+    """A manually supplied dense Hamiltonian can be materialized and measured."""
+    zero = np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1)
+    plus = np.array([1.0, 1.0], dtype=np.complex128).reshape(2, 1, 1) / np.sqrt(2.0)
+    state = State(tensors=[zero, plus])
+    matrix = 0.75 * np.kron(_Z2, _I2) - 0.5 * np.kron(_I2, _X2) + 1.25 * np.kron(_Z2, _X2)
+    hamiltonian = Hamiltonian(matrix=matrix)
+    hamiltonian.ensure_mpo()
+
+    energy = state.mps.expect_mpo(hamiltonian.mpo)
+
+    assert energy == pytest.approx(1.5 + 0.0j, abs=1e-12)
+
+
+def test_expect_mpo_uses_a_selected_static_piece_for_piecewise_energy() -> None:
+    """A piecewise energy is measured from the applicable static piece."""
+    first = Hamiltonian.ising(2, J=1.0, g=0.0, n_sweeps=0)
+    second = Hamiltonian.ising(2, J=2.0, g=0.0, n_sweeps=0)
+    piecewise = Hamiltonian.piecewise([(first, 0.1), (second, 0.2)])
+    state = State(2, initial="zeros")
+
+    selected, _duration = piecewise.pieces[1]
+    selected.ensure_mpo()
+    energy = state.mps.expect_mpo(selected.mpo)
+
+    assert energy == pytest.approx(-2.0 + 0.0j, abs=1e-12)
 
 
 def test_expect_remains_independent_of_expect_mpo() -> None:
