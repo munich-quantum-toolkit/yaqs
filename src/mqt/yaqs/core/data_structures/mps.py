@@ -1233,8 +1233,8 @@ class MPS:
             The raw complex expectation value.
 
         Raises:
-            ValueError: If the MPO length or tensor count does not match the
-                MPS length, or if the contraction leaves open boundary bonds.
+            ValueError: If the MPO length or tensor structure does not match
+                the MPS.
 
         Notes:
             The operator does not need to be Hermitian. Use the returned
@@ -1245,6 +1245,35 @@ class MPS:
                 f"MPO length {operator.length} and tensor count {len(operator.tensors)} "
                 f"must match MPS length {self.length}."
             )
+            raise ValueError(msg)
+
+        previous_right_bond = 1
+        for site, (state_tensor, operator_tensor) in enumerate(zip(self.tensors, operator.tensors, strict=True)):
+            if operator_tensor.ndim != 4:
+                msg = f"MPO tensor at site {site} must have rank 4; got shape {operator_tensor.shape}."
+                raise ValueError(msg)
+
+            output_dimension, input_dimension, left_bond, right_bond = operator_tensor.shape
+            state_dimension = state_tensor.shape[0]
+            if output_dimension != state_dimension or input_dimension != state_dimension:
+                msg = (
+                    f"MPO tensor at site {site} has physical dimensions "
+                    f"({output_dimension}, {input_dimension}); expected ({state_dimension}, {state_dimension})."
+                )
+                raise ValueError(msg)
+            if left_bond != previous_right_bond:
+                if site == 0:
+                    msg = f"MPO left boundary bond dimension must be 1; got {left_bond}."
+                else:
+                    msg = (
+                        f"MPO bond between sites {site - 1} and {site} has dimensions "
+                        f"{previous_right_bond} and {left_bond}."
+                    )
+                raise ValueError(msg)
+            previous_right_bond = right_bond
+
+        if previous_right_bond != 1:
+            msg = f"MPO right boundary bond dimension must be 1; got {previous_right_bond}."
             raise ValueError(msg)
 
         environment = np.ones((1, 1, 1), dtype=np.complex128)

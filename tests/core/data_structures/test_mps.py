@@ -826,6 +826,73 @@ def test_expect_mpo_rejects_an_operator_that_does_not_cover_the_full_chain() -> 
         state.expect_mpo(one_site_identity)
 
 
+def test_expect_mpo_rejects_a_tensor_count_mismatch() -> None:
+    """The tensor data must cover every MPS site even if MPO metadata does."""
+    state = MPS(length=2, state="zeros")
+    operator = MPO.from_local_ops([_I2, _I2])
+    operator.tensors.pop()
+
+    with pytest.raises(ValueError, match="tensor count 1"):
+        state.expect_mpo(operator)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "error"),
+    [
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], "rank 4", id="rank"),
+        pytest.param([np.zeros((3, 2, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-output"),
+        pytest.param([np.zeros((2, 3, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-input"),
+        pytest.param([np.zeros((1, 1, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-broadcast"),
+        pytest.param([np.zeros((2, 2, 2, 1), dtype=np.complex128)], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 2, 1, 2), dtype=np.complex128)], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.zeros((2, 2, 1, 1), dtype=np.complex128),
+                np.zeros((2, 2, 2, 1), dtype=np.complex128),
+            ],
+            "bond between sites 0 and 1",
+            id="internal-bond",
+        ),
+    ],
+)
+def test_expect_mpo_rejects_invalid_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    error: str,
+) -> None:
+    """Malformed MPO tensors are rejected before dimensions can broadcast."""
+    state = MPS(length=len(tensors), state="zeros")
+    operator = MPO()
+    operator.tensors = tensors
+    operator.length = len(tensors)
+    operator.physical_dimension = 2
+
+    with pytest.raises(ValueError, match=error):
+        state.expect_mpo(operator)
+
+
+def test_expect_mpo_uses_each_mps_tensor_for_mixed_physical_dimensions() -> None:
+    """MPO metadata does not override mixed physical dimensions from tensors."""
+    state = MPS(
+        length=2,
+        tensors=[
+            np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1),
+            np.array([1.0, 0.0, 0.0], dtype=np.complex128).reshape(3, 1, 1),
+        ],
+        physical_dimensions=[2, 3],
+    )
+    operator = MPO()
+    operator.custom(
+        [
+            np.eye(2, dtype=np.complex128).reshape(2, 2, 1, 1),
+            np.eye(3, dtype=np.complex128).reshape(3, 3, 1, 1),
+        ],
+        transpose=False,
+    )
+    operator.physical_dimension = 7
+
+    assert state.expect_mpo(operator) == pytest.approx(1.0 + 0.0j)
+
+
 def test_expect_remains_independent_of_expect_mpo() -> None:
     """Local observables keep their existing expectation-value path."""
     state = MPS(length=2, state="x+")

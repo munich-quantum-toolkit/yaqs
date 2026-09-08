@@ -21,25 +21,19 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
 - [x] Return the raw complex value. A general MPO need not be Hermitian.
 - [x] Keep `MPS.expect(Observable(...))` unchanged.
 
-## 2. Implement the direct contraction
+## 2. Validate the MPO tensor chain
 
-- [ ] Add the contraction to `src/mqt/yaqs/core/data_structures/mps.py`.
-- [ ] Contract the conjugate MPS, MPO, and MPS from left to right through one
-      environment.
-- [ ] Avoid a module import cycle between `mps.py` and `mpo.py`.
-- [ ] Validate the operator from its tensor data:
-  - [ ] The argument is an `MPO`.
-  - [ ] The tensor count and MPO length match the MPS length.
-  - [ ] Each MPO tensor has four axes in
-        `(phys_out, phys_in, left_bond, right_bond)` order.
-  - [ ] Physical input and output dimensions are equal and match the
-        corresponding MPS site.
-  - [ ] Neighboring virtual bonds match.
-  - [ ] The two outer virtual bonds have dimension one.
-  - [ ] Tensor values are finite.
-- [ ] Use the tensor shapes as the source of truth. Do not rely only on the
-      scalar `MPO.physical_dimension` metadata.
-- [ ] Check that the final contraction has no open virtual bonds.
+- [x] Validate that the tensor count and MPO length match the MPS length.
+- [x] Require each MPO tensor to have four axes in
+      `(phys_out, phys_in, left_bond, right_bond)` order.
+- [x] Require both physical dimensions to match the corresponding MPS tensor.
+- [x] Require neighboring virtual bond dimensions to match.
+- [x] Require both outer virtual bond dimensions to be one.
+- [x] Validate the full tensor chain before contraction so malformed MPO
+      dimensions cannot broadcast silently.
+- [x] Use tensor shapes as the source of truth. Do not rely on the scalar
+      `MPO.physical_dimension` metadata.
+- [x] Keep the final check that the contraction has no open virtual bonds.
 
 ## 3. Support Hamiltonian energy
 
@@ -90,17 +84,17 @@ source file.
 - [ ] Test a known Ising or Heisenberg energy.
 - [ ] Test a separated-site correlation such as $Z_0Z_{L-1}$.
 - [ ] Test a Pauli string with more than two nonidentity factors.
-- [ ] Test a non-Hermitian MPO whose expectation value is complex.
+- [x] Test a non-Hermitian MPO whose expectation value is complex.
 - [ ] Test a zero MPO.
-- [ ] Test an unnormalized MPS and verify the expected amplitude-squared
+- [x] Test an unnormalized MPS and verify the expected amplitude-squared
       scaling.
 - [ ] Test known and unknown orthogonality-center metadata.
-- [ ] Confirm that neither input changes.
-- [ ] Confirm that the implementation does not call MPO densification,
+- [x] Confirm that neither input changes.
+- [x] Confirm that the implementation does not call MPO densification,
       multiplication, or compression.
-- [ ] Test invalid tensor count, rank, physical dimensions, boundaries, and
+- [x] Test invalid tensor count, rank, physical dimensions, boundaries, and
       internal bonds.
-- [ ] Test mixed local dimensions if they are part of the declared contract.
+- [x] Test mixed local dimensions if they are part of the declared contract.
 - [ ] Keep dense references independent of the contraction under test.
 
 ## 6. Document and release the 1.0 feature
