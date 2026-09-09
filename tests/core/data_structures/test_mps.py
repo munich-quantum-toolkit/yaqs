@@ -752,6 +752,85 @@ def test_scalar_product_partial_site() -> None:
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
 
 
+def _independent_dense_expect_mpo(state: MPS, operator: MPO) -> np.complex128:
+    """Compute an MPO expectation by enumerating the full product basis.
+
+    Args:
+        state: MPS whose amplitudes define the dense state vector.
+        operator: MPO whose entries define the dense operator matrix.
+
+    Returns:
+        The dense value of ``<state|operator|state>``.
+    """
+    physical_dimensions = tuple(tensor.shape[0] for tensor in state.tensors)
+    basis_states = list(np.ndindex(*physical_dimensions))
+
+    state_vector = np.empty(len(basis_states), dtype=np.complex128)
+    for basis_index, physical_indices in enumerate(basis_states):
+        amplitude = np.ones((1, 1), dtype=np.complex128)
+        for tensor, physical_index in zip(state.tensors, physical_indices, strict=True):
+            amplitude = np.matmul(amplitude, tensor[physical_index])
+        state_vector[basis_index] = amplitude.item()
+
+    operator_matrix = np.empty((len(basis_states), len(basis_states)), dtype=np.complex128)
+    for row, output_indices in enumerate(basis_states):
+        for column, input_indices in enumerate(basis_states):
+            matrix_element = np.ones((1, 1), dtype=np.complex128)
+            for tensor, output_index, input_index in zip(
+                operator.tensors,
+                output_indices,
+                input_indices,
+                strict=True,
+            ):
+                matrix_element = np.matmul(matrix_element, tensor[output_index, input_index])
+            operator_matrix[row, column] = matrix_element.item()
+
+    return np.complex128(np.vdot(state_vector, operator_matrix @ state_vector))
+
+
+def test_expect_mpo_matches_independent_dense_reference_for_known_and_unknown_centers() -> None:
+    """Random contractions match a dense reference for known and unknown gauges."""
+    random_generator = np.random.default_rng(20260909)
+    state_bonds = (1, 2, 2, 1)
+    operator_bonds = (1, 2, 3, 1)
+    state_tensors = [
+        crandn((2, state_bonds[site], state_bonds[site + 1]), seed=random_generator) / 2.0
+        for site in range(len(state_bonds) - 1)
+    ]
+    operator_tensors = [
+        crandn((2, 2, operator_bonds[site], operator_bonds[site + 1]), seed=random_generator) / 2.0
+        for site in range(len(operator_bonds) - 1)
+    ]
+    unknown_center_state = MPS(length=len(state_tensors), tensors=state_tensors)
+    known_center_state = copy.deepcopy(unknown_center_state)
+    known_center_state.set_canonical_form(orthogonality_center=1)
+    operator = MPO()
+    operator.tensors = operator_tensors
+    operator.length = len(operator_tensors)
+    operator.physical_dimension = 2
+
+    expected = _independent_dense_expect_mpo(unknown_center_state, operator)
+
+    assert unknown_center_state.orthogonality_center is None
+    assert known_center_state.orthogonality_center == 1
+    assert unknown_center_state.expect_mpo(operator) == pytest.approx(expected, rel=1e-11, abs=1e-12)
+    assert known_center_state.expect_mpo(operator) == pytest.approx(expected, rel=1e-11, abs=1e-12)
+    assert unknown_center_state.orthogonality_center is None
+    assert known_center_state.orthogonality_center == 1
+
+
+def test_expect_mpo_returns_zero_for_a_zero_mpo() -> None:
+    """An empty Pauli sum has zero expectation for a nonzero state."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)], normalize=False, seed=19)
+    operator = MPO()
+    operator.from_pauli_sum(terms=[], length=state.length)
+
+    value = state.expect_mpo(operator)
+
+    assert isinstance(value, np.complex128)
+    assert value == pytest.approx(0.0 + 0.0j, abs=1e-15)
+
+
 def test_expect_mpo_contracts_directly_without_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
     """A full-chain MPO is contracted without application, copying, or conversion."""
     state = MPS(length=3, state="x+")

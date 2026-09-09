@@ -79,23 +79,23 @@ MPO-backed `Observable` objects remain a post-1.0 feature.
 Add tests to `tests/core/data_structures/test_mps.py`, which mirrors the owning
 source file.
 
-- [ ] Compare small random MPS-MPO contractions with independent dense
+- [x] Compare small random MPS-MPO contractions with independent dense
       references.
 - [x] Test a known Ising or Heisenberg energy.
 - [x] Test a separated-site correlation such as $Z_0Z_{L-1}$.
 - [x] Test a Pauli string with more than two nonidentity factors.
 - [x] Test a non-Hermitian MPO whose expectation value is complex.
-- [ ] Test a zero MPO.
+- [x] Test a zero MPO.
 - [x] Test an unnormalized MPS and verify the expected amplitude-squared
       scaling.
-- [ ] Test known and unknown orthogonality-center metadata.
+- [x] Test known and unknown orthogonality-center metadata.
 - [x] Confirm that neither input changes.
 - [x] Confirm that the implementation does not call MPO densification,
       multiplication, or compression.
 - [x] Test invalid tensor count, rank, physical dimensions, boundaries, and
       internal bonds.
 - [x] Test mixed local dimensions if they are part of the declared contract.
-- [ ] Keep dense references independent of the contraction under test.
+- [x] Keep dense references independent of the contraction under test.
 
 ## 6. Document and release the 1.0 feature
 
