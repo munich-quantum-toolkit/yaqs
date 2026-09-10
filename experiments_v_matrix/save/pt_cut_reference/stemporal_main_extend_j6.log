@@ -1,0 +1,24 @@
+J=4.2  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 135.1s
+J=4.4  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 141.2s
+J=4.6  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 132.2s
+J=4.8  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 127.3s
+J=5  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 136.0s
+J=5.2  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 128.9s
+J=5.4  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 136.1s
+J=5.6  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 127.7s
+J=5.8  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 134.9s
+J=6  main sweep (chi<=None, tol=1e-10, cuts=[1, 2, 3])
+  done in 131.8s
+c=2: ΔS/S over [5.6,5.8] = 15.25%, over [5.8,6] = 14.48%
+c=3: ΔS/S over [5.6,5.8] = 11.17%, over [5.8,6] = 11.90%
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/pt_cut_reference/stemporal_main_data.csv
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/pt_cut_reference/pt_response_stemporal_main.png

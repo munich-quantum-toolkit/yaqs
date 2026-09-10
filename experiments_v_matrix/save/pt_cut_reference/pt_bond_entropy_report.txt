@@ -1,0 +1,171 @@
+
+========================================================================
+0. Profile
+========================================================================
+fast (L=2, k=2, cut=2)
+
+========================================================================
+0b. Semantic axis order
+========================================================================
+Process-tensor Choi operator Upsilon (dense matrix shape (2·4^k, 2·4^k)):
+
+  Subsystem index | Semantic label              | Local dim
+  ----------------|-----------------------------|----------
+  0               | final_system (rho_out leg)  | 2
+  1 … k           | channel_t Choi (in/out)     | 4 each
+
+Reshape for subsystem bookkeeping: dims = [2, 4, 4, …, 4]  (k+1 factors).
+
+MPO site mapping (_rank1_mpo_term in data.py):
+  site 0 → final_system (2×2 rho_out)
+  site t → channel_{t-1} dual Choi (4×4), t = 1…k
+
+Assembly (assemble_upsilon):
+  Upsilon = Σ_α w_α · kron(ρ_out(α), dual[α₀].T ⊗ … ⊗ dual[α_{k-1}].T)
+  (no extra transpose on ρ_out; dual legs enter as dual[α].T)
+
+predict() contraction:
+  reshape Upsilon → (2, 4^k, 2, 4^k)
+  past Choi string = kron(encode_cptp_choi(E_t)) with .T on the full past string
+
+Temporal bond index ``cut`` (1 ≤ cut ≤ k):
+  MPO bond sits between sites cut-1 and cut.
+
+``temporal_bond_dimension(cut)`` / dense helper bipartition:
+  LEFT  = subsystems {0, 1, …, cut-1}
+  RIGHT = subsystems {cut, …, k}
+  (vectorized reshape — NOT operator Schmidt; see task 7 for op-Schmidt variant)
+
+``cut_entanglement_entropy(cut)`` (= S_bond / S_PT in benchmarks):
+  Partial trace onto intervention legs KEEP = {1, …, cut-1}
+  Trace OUT leg 0 and legs {cut, …, k}
+  Von Neumann entropy of the reduced state on past intervention legs.
+
+========================================================================
+1. Minimal Markov reference (L=1, k=2, J=0, g=0, ρ₀=|0⟩⟨0|)
+========================================================================
+Production exhaustive vs direct MPO: rel_err = 6.569e-14
+Production vs dual-frame analytic (assemble_upsilon, schedule U₀→int→U₁→int→U₂):
+  rel_err = 4.503e-16  (< 1e-12 PASS)
+Naive kron(ρ₀, J_id, J_id) with encode_cptp_choi: rel_err = 1.369e+00  (FAIL)
+Naive kron(ρ₀, Σ_a D_a.T, Σ_a D_a.T): rel_err = 4.000e+00  (FAIL)
+
+Permutation: subsystem order is [final_system, channel_1, channel_2]; no reorder needed.
+The production object is Σ_α w_α kron(ρ_out(α), dual string), NOT a fixed Kronecker product
+ρ₀⊗J⊗J. For g=0 the dual-frame sum matches simulation to machine precision.
+
+========================================================================
+2/4. Partitions at J=0 (L=2, k=2, cut=2)
+========================================================================
+IMPLEMENTATION bond (subsystems {0,…,1} | {2,…,2}):
+  op-Schmidt SVs (top 8): [0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25]
+  rank=16, op-Schmidt entropy=2.772589
+  chi_MPO=16, chi_dense_helper=-1 (BUG: dense helper reshape fails for k≥2)
+
+S_PT = cut_entanglement_entropy(cut=2) [legs {1,…,1} only]:
+  S_PT=0.693147, past-leg evals (top 4)=[5.00000000e-01 5.00000000e-01 3.45804959e-16 5.99577038e-17]
+  (= ln 2 when cut=2 and k≥2: leg 1 maximally mixed)
+
+CHANNEL-BLOCK bond (trace leg 0; channels {1,…,1} | {2,…,2}):
+  op-Schmidt SVs (top 8): [3.53553391e-01 3.53553391e-01 3.53553391e-01 3.53553391e-01
+ 1.74427247e-16 1.13897781e-16 1.08156186e-16 8.74276537e-17]
+  rank=4, entropy=1.386294
+
+Single-leg-1 Choi in|out split (2|2 within channel_1):
+  entropy=-0.000000
+
+Interpretation: S_PT measures reduced state on past *intervention* legs, not
+channel-block factorization. At J=0, S_PT(c=2)=ln 2 while S_V≈0.
+
+========================================================================
+4b. Direct Markov product test (L=2, k=2, J=0)
+========================================================================
+ε_markov = ||Υ - kron(ρ_ref, J, …, J)|| / ||Υ|| = 1.376e+00
+Large ε confirms tomography dual-sum ≠ naive channel Kronecker product.
+
+========================================================================
+3. Operational causal-break test (L=2, k=3, cut=2, J=0)
+========================================================================
+max ||ρ_future(A|M,σ)/p_A - ρ_future(A'|M,σ)/p_A'|| = 1.071e-13
+(Matched measure M and preparation σ at cut; distinct random pasts; same future.)
+Operational S_V(c=2) from characterize() = -0.000000
+PASS: process is operationally Markovian at J=0; S_PT > 0 does not imply memory.
+
+========================================================================
+5. J=0 coupling audit (L=2)
+========================================================================
+H = -J Σ Z_i Z_{i+1} - g Σ X_i  (open chain; probe on site 0)
+||H_SE|| (Z₀Z₁ term only) at J=0: 0.000e+00
+U(dt) operator-Schmidt across site-0|rest: s₁=2.000000, s₂=2.396e-16
+(Result independent of L when J=0: all ZZ terms vanish.)
+
+========================================================================
+6. Continuity near J=0 (L=2, k=2, exhaustive)
+========================================================================
+J           ||ΔΥ||           chi(c=2)   S_PT(c=2)
+     0e+00     0.000e+00        16    0.693147
+     1e-10     1.834e-11        16    0.693147
+     1e-06     1.834e-07        16    0.693147
+     1e-02     1.834e-03        16    0.693147
+
+========================================================================
+6b. Truncation (L=2, k=2, c=2, max_bond_dim=4)
+========================================================================
+S_PT=-0.000000, chi=4, ln(2)=0.693147
+
+========================================================================
+6b. Truncation (L=2, k=2, c=2, max_bond_dim=None)
+========================================================================
+S_PT=0.693147, chi=16, ln(2)=0.693147
+
+========================================================================
+7. Entropy implementation audit (L=2, k=2, J=0)
+========================================================================
+cut_entanglement_entropy: eigvalues of partial trace onto legs {1,…,1}; no SV removal.
+S_PT(c=2)=0.693147 (= ln 2 when cut=2, k≥2)
+temporal_bond_dimension dense helper uses vector SVD — NOT op-Schmidt;
+  op-Schmidt at MPO bond gives entropy=2.772589, SVs=[0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25]…
+No leading-SV drop, no probability floor beyond 1e-15 eig clip.
+
+========================================================================
+8. What the exact MPO represents
+========================================================================
+Case 1: compressed sum of rank-1 terms kron(ρ_out, dual_choi string).
+NOT an environment-only influence functional (Case 2).
+Site 0 = final ρ_out; sites 1…k = dual-frame past legs.
+Free system propagators are applied during simulation before each rank-1 term is added;
+they are not inserted as separate MPO sites after compression.
+
+========================================================================
+9. Tomography basis audit
+========================================================================
+Choi basis frame matrix shape (16, 16) per leg.
+max|Φ†Φ - I| = 3.333e-01  (identity ⇒ orthonormal in Frobenius inner product)
+max|Tr(D_i† B_j) - δ_ij| = 7.440e-16  (dual frame biorthogonality)
+Tomography uses tetrahedral 4-state CP basis; dual from pinv(frame).T.
+
+========================================================================
+10. FINAL VERDICT
+========================================================================
+PRIMARY CONCLUSION: (C) inappropriate bond definition — NOT (A) physical non-Markovianity at J=0.
+
+Diagnostics run at L=2, k=2, c=2 (fast profile). Conclusions are independent of
+bath size: at J=0 the probe–env coupling vanishes for any L.
+
+  Axis order:           [final_system(2), channel_1(4), …, channel_k(4)]
+  Current S_bond cut:   partial trace onto legs {1,…,c-1}; trace out leg 0 and {c,…,k}
+  MPO chi(c) bond:      between sites c-1|c = subsystems {0,…,c-1} | {c,…,k}
+  S_PT(c=2) at J=0:     ln 2 ≈ 0.693 (leg 1 maximally mixed in Choi state)
+  S_V at J=0:           ≈ 0 (operational Markovianity; causal-break PASS)
+  Naive Markov product: FAIL (dual-frame sum ≠ kron(ρ, J, …))
+  H_SE at J=0:          0; U factorizes across S|E
+
+Issue classification:
+  • NOT physical residual coupling at J=0
+  • NOT process-tensor construction bug (exhaustive/direct/tomography agree)
+  • NOT entropy normalization bug in cut_entanglement_entropy
+  • YES: S_bond / chi measure Choi-leg structure, not operational memory
+  • SECONDARY: max_bond_dim truncation lowers S_bond (see L=6 benchmark: 0.37 vs ln2)
+
+Minimal analytic reference (Task 1): dual-frame assemble_upsilon matches production to < 1e-12
+at L=1, k=2, g=0. Naive Kronecker ρ₀⊗J⊗J is the wrong object for this codebase convention.

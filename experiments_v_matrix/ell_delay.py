@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Memory entropy vs delay length ``ell`` at fixed window geometry.
+
+Geometry: ``past(15) + [measure, prepare|0>] + [(|0><0|,|0>)]^ell + [(|0><0|,sigma_p)] + future(5)``.
+
+The past/future random probe ensemble is sampled once; each ``ell`` only extends the
+intermediate soft-reset bridge. Uses :func:`common.characterize_custom_sequences` because
+``MemoryCharacterizer.characterize()`` does not yet accept custom ``psi_pairs_list`` grids.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+
+from common import (
+    BETA,
+    DT_DEFAULT,
+    G_DEFAULT,
+    HEATMAP_VMIN,
+    L_DEFAULT,
+    build_ell_delay_probes,
+    sample_ell_base_ensemble,
+    characterize_custom_sequences,
+    characterizer,
+    configure_matplotlib_prl,
+    initial_states_sys_env0,
+    ising_chain,
+    load_csv,
+    mean_metrics,
+    metrics_from,
+    sim_params,
+    write_csv,
+)
+
+J_VALUES = [0.5, 1.0, 1.5, 2.0]
+PAST_LEN = 15
+FUTURE_LEN = 5
+ELL_MAX = 15
+ELL_DEFAULT = tuple(range(0, ELL_MAX + 1))
+PANEL_JS = (0.5, 1.0, 1.5, 2.0)
+
+
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--n-pasts", type=int, default=64)
+    p.add_argument("--n-futures", type=int, default=64)
+    p.add_argument("--ells", type=str, default=",".join(str(g) for g in ELL_DEFAULT))
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n-seeds", type=int, default=5)
+    p.add_argument("--out-dir", type=Path, default=Path("results/ell_delay"))
+    p.add_argument("--parallel", action="store_true", default=True)
+    p.add_argument("--no-parallel", dest="parallel", action="store_false")
+    p.add_argument("--unitary-ensemble", type=str, default="haar", choices=("haar", "clifford"))
+    p.add_argument("--past-len", type=int, default=PAST_LEN)
+    p.add_argument("--future-len", type=int, default=FUTURE_LEN)
+    p.add_argument("--plot-only", action="store_true")
+    p.add_argument("--summary-csv", type=Path, default=None)
+    return p.parse_args()
+
+
+def _parse_ells(spec: str) -> list[int]:
+    vals = sorted({int(tok.strip()) for tok in spec.split(",") if tok.strip()})
+    if not vals:
+        raise ValueError("expected at least one ell")
+    for g in vals:
+        if g < 0 or g > ELL_MAX:
+            raise ValueError(f"ell must satisfy 0 <= ell <= {ELL_MAX}, got {g}")
+    return vals
+
+
+def plot_entropy_vs_ell(rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
+    """Plot representative ``S_V`` vs ``ell`` curves at fixed couplings ``J``."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    from matplotlib.ticker import LogFormatterMathtext, LogLocator, NullLocator
+
+    if not rows:
+        return
+    configure_matplotlib_prl()
+    ells = sorted({int(float(r["ell"])) for r in rows})
+    j_vals = sorted({float(r["J"]) for r in rows})
+    j_arr = np.asarray(j_vals, dtype=np.float64)
+    ell_arr = np.asarray(ells, dtype=np.float64)
+
+    fig, ax = plt.subplots(1, 1, figsize=(5.0, 3.2), constrained_layout=True)
+    ax.set_facecolor("white")
+    target_js = [float(j_arr[int(np.argmin(np.abs(j_arr - t)))]) for t in PANEL_JS]
+    target_js = list(dict.fromkeys(target_js))
+    cmap = plt.get_cmap("Reds")
+    norm = Normalize(vmin=0.0, vmax=2.0)
+    for jv in target_js:
+        sub = sorted((r for r in rows if float(r["J"]) == float(jv)), key=lambda r: int(float(r["ell"])))
+        if not sub:
+            continue
+        ax.semilogy(
+            [int(float(r["ell"])) for r in sub],
+            [max(float(r["entropy"]), HEATMAP_VMIN) for r in sub],
+            lw=1.9,
+            marker="o",
+            ms=3.8,
+            markeredgewidth=0.0,
+            color=cmap(norm(jv)),
+            alpha=0.94,
+            label=rf"$J={jv:g}$",
+        )
+
+    ax.set_xlabel(r"Delay $\ell$")
+    ax.set_ylabel(r"$S_V$")
+    ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+    ax.yaxis.set_minor_locator(NullLocator())
+    ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
+    ax.grid(True, which="major", axis="y", alpha=0.10, linewidth=0.35)
+    if len(ell_arr) > 1:
+        ax.set_xlim(ell_arr[0] - 0.4, ell_arr[-1] + 0.4)
+    y_all = [max(float(r["entropy"]), HEATMAP_VMIN) for r in rows]
+    y_hi = min(1.0, max(HEATMAP_VMIN * 1.2, (float(np.nanmax(y_all)) * 1.25 if y_all else 1.0)))
+    ax.set_ylim(HEATMAP_VMIN, y_hi)
+    ax.legend(frameon=False, fontsize=7.0, handlelength=1.4, borderaxespad=0.2, loc="upper right")
+
+    fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    plt.close(fig)
+
+
+def main() -> None:
+    args = _parse_args()
+    out_dir = args.out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if bool(args.plot_only):
+        csv_path = Path(args.summary_csv) if args.summary_csv is not None else out_dir / "summary.csv"
+        if not csv_path.is_file():
+            raise FileNotFoundError(f"summary CSV not found: {csv_path}")
+        plot_entropy_vs_ell(load_csv(csv_path), out_dir / "fig_entropy_vs_ell")
+        print(f"Wrote figure: {out_dir / 'fig_entropy_vs_ell.pdf'}", flush=True)
+        return
+
+    ells = _parse_ells(str(args.ells))
+    n_seeds = int(args.n_seeds)
+    past_len = int(args.past_len)
+    future_len = int(args.future_len)
+    init_rng = np.random.default_rng(int(args.seed) + 77_777)
+    initial_list = initial_states_sys_env0(length=L_DEFAULT, n_seeds=n_seeds, rng=init_rng)
+    np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
+
+    mc = characterizer(parallel=bool(args.parallel))
+    params = sim_params(dt=DT_DEFAULT)
+    probe_rng = np.random.default_rng(int(args.seed) + 999_991)
+    past_pairs, past_cut_meas, future_prep_cut, future_pairs = sample_ell_base_ensemble(
+        n_pasts=int(args.n_pasts),
+        n_futures=int(args.n_futures),
+        rng=probe_rng,
+        past_len=past_len,
+        future_len=future_len,
+        style=str(args.unitary_ensemble),
+    )
+    rows: list[dict[str, float | int]] = []
+
+    for ell in ells:
+        probe_set, psi_pairs_list = build_ell_delay_probes(
+            past_pairs=past_pairs,
+            past_cut_meas=past_cut_meas,
+            future_prep_cut=future_prep_cut,
+            future_pairs=future_pairs,
+            past_len=past_len,
+            future_len=future_len,
+            ell=int(ell),
+        )
+        left_cut = int(past_len + 1)
+        k_this = int(past_len + 1 + int(ell) + 1 + future_len)
+        print(f"ell={ell:2d}, k={k_this}, left_cut={left_cut}", flush=True)
+
+        for jv in J_VALUES:
+            ham = ising_chain(length=L_DEFAULT, j=float(jv), g=G_DEFAULT)
+            per_seed = []
+            for psi0 in initial_list:
+                result = characterize_custom_sequences(
+                    mc,
+                    ham,
+                    params,
+                    probe_set=probe_set,
+                    psi_pairs_list=psi_pairs_list,
+                    initial_psi=psi0,
+                    cut=left_cut,
+                )
+                per_seed.append(metrics_from(result, left_cut))
+            agg = mean_metrics(per_seed)
+            rows.append(
+                {
+                    "L": L_DEFAULT,
+                    "k": k_this,
+                    "dt": DT_DEFAULT,
+                    "g": G_DEFAULT,
+                    "left_cut": left_cut,
+                    "ell": int(ell),
+                    "right_cut": int(left_cut + ell + 1),
+                    "past_len": past_len,
+                    "future_len": future_len,
+                    "J": float(jv),
+                    "n_pasts": int(args.n_pasts),
+                    "n_futures": int(args.n_futures),
+                    "n_seeds": n_seeds,
+                    "branch_weight_beta": BETA,
+                    "entropy": float(agg["entropy"]),
+                    "entropy_std": float(agg["entropy_std"]),
+                    "delta_norm": float(agg["delta_norm"]),
+                    "rank": int(agg["rank"]),
+                }
+            )
+            print(f"ell={ell:2d}, J={jv:>4.2f}, S_mean={rows[-1]['entropy']:.6e}", flush=True)
+
+    write_csv(out_dir / "summary.csv", rows)
+    (out_dir / "summary.json").write_text(json.dumps(rows, indent=2))
+    plot_entropy_vs_ell(rows, out_dir / "fig_entropy_vs_ell")
+    print(f"Wrote results to: {out_dir}", flush=True)
+
+
+if __name__ == "__main__":
+    main()

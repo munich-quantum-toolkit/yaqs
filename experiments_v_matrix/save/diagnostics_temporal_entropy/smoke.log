@@ -1,0 +1,16 @@
+=== Main J sweep (scalar summaries) ===
+  build J=0 L=6 k=3 dt=0.1 (main)
+    done in 2.0s
+  build J=1 L=6 k=3 dt=0.1 (main)
+    done in 1.9s
+  build J=2 L=6 k=3 dt=0.1 (main)
+    done in 1.9s
+=== Selected-J spectra ===
+  build J=1 L=6 k=3 dt=0.1 (spectra)
+    done in 139.7s
+  build J=3 L=6 k=3 dt=0.1 (spectra)
+    done in 131.8s
+=== Timestep robustness ===
+  build J=3 L=6 k=3 dt=0.1 (timestep)
+    done in 1.9s
+  build J=3 L=6 k=7 dt=0.05 (timestep)

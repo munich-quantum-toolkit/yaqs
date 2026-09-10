@@ -1,0 +1,84 @@
+=== Timestep robustness (fixed k, varying dt and T) ===
+  build J=3 L=6 k=3 dt=0.1 T=0.4 (timestep, direct_mpo)
+    done in 128.4s (direct_mpo)
+  build J=3 L=6 k=3 dt=0.05 T=0.2 (timestep, direct_mpo)
+    done in 128.4s (direct_mpo)
+  build J=3 L=6 k=3 dt=0.025 T=0.1 (timestep, direct_mpo)
+    done in 129.1s (direct_mpo)
+Traceback (most recent call last):
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 1145, in <module>
+    main()
+    ~~~~^^
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 1135, in main
+    run_main_diagnostics(
+    ~~~~~~~~~~~~~~~~~~~~^
+        cfg,
+        ^^^^
+    ...<3 lines>...
+        phase=phase,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 770, in run_main_diagnostics
+    _record_point(
+    ~~~~~~~~~~~~~^
+        jv=jv,
+        ^^^^^^
+    ...<7 lines>...
+        build_method=None if smoke else "direct_mpo",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 702, in _record_point
+    rows, vals, arrays, mpo = evaluate_point(
+                              ~~~~~~~~~~~~~~^
+        jv=jv,
+        ^^^^^^
+    ...<10 lines>...
+        smoke=smoke,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 554, in evaluate_point
+    val = _validation_row(
+        jv=jv, cut=cut, k=k, length=length, dt=dt, pt=pt, upsilon=upsilon, cfg=cfg
+    )
+  File "/home/aaron/Desktop/experiments_v_matrix/pt_temporal_entropy_diagnostics.py", line 394, in _validation_row
+    mi = pt.causal_block_mutual_information(cut)
+  File "/home/aaron/Github/yaqs/src/mqt/yaqs/characterization/memory/backends/tomography/process_tensors.py", line 733, in causal_block_mutual_information
+    return causal_block_mutual_information(
+        self.upsilon,
+    ...<3 lines>...
+        psd_tol=psd_tol,
+    )
+  File "/home/aaron/Github/yaqs/src/mqt/yaqs/characterization/memory/backends/tomography/process_tensors.py", line 507, in causal_block_mutual_information
+    raise ValueError(msg)
+ValueError: Regrouped Choi state min eigenvalue -1.248e-10 below PSD tolerance 1.000e-10.
+=== Timestep robustness (fixed k, varying dt and T) ===
+  skip timestep|J=3|k=3|L=6|dt=0.1 (already done)
+  skip timestep|J=3|k=3|L=6|dt=0.05 (already done)
+  build J=3 L=6 k=3 dt=0.025 T=0.1 (timestep, direct_mpo)
+    done in 124.8s (direct_mpo)
+  build J=6 L=6 k=3 dt=0.1 T=0.4 (timestep, direct_mpo)
+    done in 127.9s (direct_mpo)
+  build J=6 L=6 k=3 dt=0.05 T=0.2 (timestep, direct_mpo)
+    done in 134.2s (direct_mpo)
+  build J=6 L=6 k=3 dt=0.025 T=0.1 (timestep, direct_mpo)
+    done in 138.2s (direct_mpo)
+=== Finite environment (L and k grid at k<=4) ===
+  build J=3 L=6 k=3 dt=0.1 T=0.4 (finite_env, direct_mpo)
+    done in 142.1s (direct_mpo)
+  build J=3 L=6 k=4 dt=0.1 T=0.5 (finite_env, direct_mpo)
+    done in 5957.3s (direct_mpo)
+  build J=3 L=8 k=3 dt=0.1 T=0.4 (finite_env, direct_mpo)
+    done in 126.2s (direct_mpo)
+  build J=3 L=8 k=4 dt=0.1 T=0.5 (finite_env, direct_mpo)
+    done in 5849.1s (direct_mpo)
+  build J=6 L=6 k=3 dt=0.1 T=0.4 (finite_env, direct_mpo)
+    done in 131.8s (direct_mpo)
+  build J=6 L=6 k=4 dt=0.1 T=0.5 (finite_env, direct_mpo)
+    done in 5848.4s (direct_mpo)
+  build J=6 L=8 k=3 dt=0.1 T=0.4 (finite_env, direct_mpo)
+    done in 124.4s (direct_mpo)
+  build J=6 L=8 k=4 dt=0.1 T=0.5 (finite_env, direct_mpo)
+    done in 5905.5s (direct_mpo)

@@ -1,0 +1,92 @@
+[
+  {
+    "cut": 1,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.7481246182805327,
+    "max_rel_singular_value_error": 2521425.7811560906,
+    "entropy_difference": 1.3862654198278526,
+    "dense_rank": 4,
+    "mpo_rank": 4
+  },
+  {
+    "cut": 2,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.936902398766577,
+    "max_rel_singular_value_error": 13917784840586.521,
+    "entropy_difference": 2.7723072040531247,
+    "dense_rank": 64,
+    "mpo_rank": 64
+  },
+  {
+    "cut": 3,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.9367171557250662,
+    "max_rel_singular_value_error": 17829855378639.22,
+    "entropy_difference": 2.771997062659209,
+    "dense_rank": 16,
+    "mpo_rank": 16
+  },
+  {
+    "cut": 1,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.7426168714346943,
+    "max_rel_singular_value_error": 89726.65073635972,
+    "entropy_difference": 1.385838195150114,
+    "dense_rank": 4,
+    "mpo_rank": 4
+  },
+  {
+    "cut": 2,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.9342108535056332,
+    "max_rel_singular_value_error": 10522039088912.137,
+    "entropy_difference": 2.7676296541344154,
+    "dense_rank": 64,
+    "mpo_rank": 64
+  },
+  {
+    "cut": 3,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.9332412776557715,
+    "max_rel_singular_value_error": 15614682764500.506,
+    "entropy_difference": 2.7632826193358317,
+    "dense_rank": 16,
+    "mpo_rank": 16
+  },
+  {
+    "cut": 1,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.7451277037499828,
+    "max_rel_singular_value_error": 13307.276625035698,
+    "entropy_difference": 1.3860522180232897,
+    "dense_rank": 4,
+    "mpo_rank": 4
+  },
+  {
+    "cut": 2,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.933879360160167,
+    "max_rel_singular_value_error": 7829110670015.629,
+    "entropy_difference": 2.767965879372604,
+    "dense_rank": 64,
+    "mpo_rank": 64
+  },
+  {
+    "cut": 3,
+    "k": 3,
+    "mpo_available": true,
+    "max_abs_weight_error": 0.9345903038565497,
+    "max_rel_singular_value_error": 20479946167516.367,
+    "entropy_difference": 2.766662539315014,
+    "dense_rank": 16,
+    "mpo_rank": 16
+  }
+]

@@ -1,0 +1,824 @@
+=== Benchmark: S_V vs J by cut (linear branch weights, beta=1) ===
+L=6, k=20, dt=0.1, g=1.0, N_p=32, N_f=32, n_seeds=1, cuts=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], branch_weight_beta=1.0
+cut= 1, J=0.0, S_mean=2.141404e-27
+cut= 1, J=0.1, S_mean=2.329744e-10
+cut= 1, J=0.1, S_mean=3.307724e-09
+cut= 1, J=0.2, S_mean=1.550659e-08
+cut= 1, J=0.2, S_mean=4.623815e-08
+cut= 1, J=0.2, S_mean=1.076698e-07
+cut= 1, J=0.3, S_mean=2.144041e-07
+cut= 1, J=0.4, S_mean=3.830292e-07
+cut= 1, J=0.4, S_mean=6.315533e-07
+cut= 1, J=0.5, S_mean=9.787069e-07
+cut= 1, J=0.5, S_mean=1.443087e-06
+cut= 1, J=0.6, S_mean=2.042482e-06
+cut= 1, J=0.6, S_mean=2.793443e-06
+cut= 1, J=0.7, S_mean=3.711085e-06
+cut= 1, J=0.7, S_mean=4.809600e-06
+cut= 1, J=0.8, S_mean=6.103183e-06
+cut= 1, J=0.8, S_mean=7.607392e-06
+cut= 1, J=0.9, S_mean=9.340556e-06
+cut= 1, J=0.9, S_mean=1.132472e-05
+cut= 1, J=1.0, S_mean=1.358587e-05
+cut= 1, J=1.0, S_mean=1.615256e-05
+cut= 1, J=1.1, S_mean=1.905367e-05
+cut= 1, J=1.1, S_mean=2.231359e-05
+cut= 1, J=1.2, S_mean=2.594890e-05
+cut= 1, J=1.2, S_mean=2.996323e-05
+cut= 1, J=1.2, S_mean=3.434571e-05
+cut= 1, J=1.3, S_mean=3.907020e-05
+cut= 1, J=1.4, S_mean=4.409712e-05
+cut= 1, J=1.4, S_mean=4.937623e-05
+cut= 1, J=1.5, S_mean=5.485050e-05
+cut= 1, J=1.5, S_mean=6.045922e-05
+cut= 1, J=1.6, S_mean=6.614109e-05
+cut= 1, J=1.6, S_mean=7.183652e-05
+cut= 1, J=1.7, S_mean=7.748959e-05
+cut= 1, J=1.7, S_mean=8.305123e-05
+cut= 1, J=1.8, S_mean=8.848175e-05
+cut= 1, J=1.8, S_mean=9.375339e-05
+cut= 1, J=1.9, S_mean=9.885407e-05
+cut= 1, J=1.9, S_mean=1.037881e-04
+cut= 1, J=2.0, S_mean=1.085774e-04
+cut= 1, J=2.0, S_mean=1.132605e-04
+cut= 2, J=0.0, S_mean=2.141404e-27
+cut= 2, J=0.1, S_mean=5.578651e-08
+cut= 2, J=0.1, S_mean=7.703036e-07
+cut= 2, J=0.2, S_mean=3.595231e-06
+cut= 2, J=0.2, S_mean=1.085027e-05
+cut= 2, J=0.2, S_mean=2.584498e-05
+cut= 2, J=0.3, S_mean=5.295587e-05
+cut= 2, J=0.4, S_mean=9.756555e-05
+cut= 2, J=0.4, S_mean=1.658392e-04
+cut= 2, J=0.5, S_mean=2.643761e-04
+cut= 2, J=0.5, S_mean=3.998109e-04
+cut= 2, J=0.6, S_mean=5.784679e-04
+cut= 2, J=0.6, S_mean=8.061573e-04
+cut= 2, J=0.7, S_mean=1.088189e-03
+cut= 2, J=0.7, S_mean=1.429620e-03
+cut= 2, J=0.8, S_mean=1.835715e-03
+cut= 2, J=0.8, S_mean=2.312529e-03
+cut= 2, J=0.9, S_mean=2.867455e-03
+cut= 2, J=0.9, S_mean=3.509562e-03
+cut= 2, J=1.0, S_mean=4.249496e-03
+cut= 2, J=1.0, S_mean=5.098759e-03
+cut= 2, J=1.1, S_mean=6.068276e-03
+cut= 2, J=1.1, S_mean=7.166282e-03
+cut= 2, J=1.2, S_mean=8.395816e-03
+cut= 2, J=1.2, S_mean=9.752256e-03
+cut= 2, J=1.2, S_mean=1.122157e-02
+cut= 2, J=1.3, S_mean=1.277987e-02
+cut= 2, J=1.4, S_mean=1.439472e-02
+cut= 2, J=1.4, S_mean=1.602817e-02
+cut= 2, J=1.5, S_mean=1.764093e-02
+cut= 2, J=1.5, S_mean=1.919680e-02
+cut= 2, J=1.6, S_mean=2.066635e-02
+cut= 2, J=1.6, S_mean=2.202920e-02
+cut= 2, J=1.7, S_mean=2.327467e-02
+cut= 2, J=1.7, S_mean=2.440102e-02
+cut= 2, J=1.8, S_mean=2.541392e-02
+cut= 2, J=1.8, S_mean=2.632442e-02
+cut= 2, J=1.9, S_mean=2.714710e-02
+cut= 2, J=1.9, S_mean=2.789842e-02
+cut= 2, J=2.0, S_mean=2.859537e-02
+cut= 2, J=2.0, S_mean=2.925445e-02
+cut= 3, J=0.0, S_mean=2.141404e-27
+cut= 3, J=0.1, S_mean=1.986312e-07
+cut= 3, J=0.1, S_mean=2.829830e-06
+cut= 3, J=0.2, S_mean=1.359682e-05
+cut= 3, J=0.2, S_mean=4.202133e-05
+cut= 3, J=0.2, S_mean=1.018569e-04
+cut= 3, J=0.3, S_mean=2.110690e-04
+cut= 3, J=0.4, S_mean=3.911066e-04
+cut= 3, J=0.4, S_mean=6.654472e-04
+cut= 3, J=0.5, S_mean=1.057600e-03
+cut= 3, J=0.5, S_mean=1.588904e-03
+cut= 3, J=0.6, S_mean=2.276499e-03
+cut= 3, J=0.6, S_mean=3.131847e-03
+cut= 3, J=0.7, S_mean=4.160107e-03
+cut= 3, J=0.7, S_mean=5.360542e-03
+cut= 3, J=0.8, S_mean=6.728025e-03
+cut= 3, J=0.8, S_mean=8.255540e-03
+cut= 3, J=0.9, S_mean=9.937405e-03
+cut= 3, J=0.9, S_mean=1.177276e-02
+cut= 3, J=1.0, S_mean=1.376857e-02
+cut= 3, J=1.0, S_mean=1.594124e-02
+cut= 3, J=1.1, S_mean=1.831605e-02
+cut= 3, J=1.1, S_mean=2.092358e-02
+cut= 3, J=1.2, S_mean=2.379358e-02
+cut= 3, J=1.2, S_mean=2.694719e-02
+cut= 3, J=1.2, S_mean=3.038942e-02
+cut= 3, J=1.3, S_mean=3.410383e-02
+cut= 3, J=1.4, S_mean=3.805085e-02
+cut= 3, J=1.4, S_mean=4.217025e-02
+cut= 3, J=1.5, S_mean=4.638704e-02
+cut= 3, J=1.5, S_mean=5.061931e-02
+cut= 3, J=1.6, S_mean=5.478646e-02
+cut= 3, J=1.6, S_mean=5.881640e-02
+cut= 3, J=1.7, S_mean=6.265076e-02
+cut= 3, J=1.7, S_mean=6.624797e-02
+cut= 3, J=1.8, S_mean=6.958433e-02
+cut= 3, J=1.8, S_mean=7.265354e-02
+cut= 3, J=1.9, S_mean=7.546500e-02
+cut= 3, J=1.9, S_mean=7.804135e-02
+cut= 3, J=2.0, S_mean=8.041548e-02
+cut= 3, J=2.0, S_mean=8.262709e-02
+cut= 4, J=0.0, S_mean=2.141404e-27
+cut= 4, J=0.1, S_mean=4.379397e-07
+cut= 4, J=0.1, S_mean=5.882443e-06
+cut= 4, J=0.2, S_mean=2.677053e-05
+cut= 4, J=0.2, S_mean=7.879148e-05
+cut= 4, J=0.2, S_mean=1.829378e-04
+cut= 4, J=0.3, S_mean=3.650693e-04
+cut= 4, J=0.4, S_mean=6.544060e-04
+cut= 4, J=0.4, S_mean=1.080971e-03
+cut= 4, J=0.5, S_mean=1.672471e-03
+cut= 4, J=0.5, S_mean=2.451378e-03
+cut= 4, J=0.6, S_mean=3.433063e-03
+cut= 4, J=0.6, S_mean=4.625733e-03
+cut= 4, J=0.7, S_mean=6.032657e-03
+cut= 4, J=0.7, S_mean=7.656858e-03
+cut= 4, J=0.8, S_mean=9.507917e-03
+cut= 4, J=0.8, S_mean=1.160995e-02
+cut= 4, J=0.9, S_mean=1.400897e-02
+cut= 4, J=0.9, S_mean=1.677697e-02
+cut= 4, J=1.0, S_mean=2.000965e-02
+cut= 4, J=1.0, S_mean=2.381555e-02
+cut= 4, J=1.1, S_mean=2.829712e-02
+cut= 4, J=1.1, S_mean=3.352708e-02
+cut= 4, J=1.2, S_mean=3.952590e-02
+cut= 4, J=1.2, S_mean=4.624583e-02
+cut= 4, J=1.2, S_mean=5.356625e-02
+cut= 4, J=1.3, S_mean=6.130219e-02
+cut= 4, J=1.4, S_mean=6.922451e-02
+cut= 4, J=1.4, S_mean=7.708712e-02
+cut= 4, J=1.5, S_mean=8.465502e-02
+cut= 4, J=1.5, S_mean=9.172784e-02
+cut= 4, J=1.6, S_mean=9.815579e-02
+cut= 4, J=1.6, S_mean=1.038472e-01
+cut= 4, J=1.7, S_mean=1.087687e-01
+cut= 4, J=1.7, S_mean=1.129401e-01
+cut= 4, J=1.8, S_mean=1.164255e-01
+cut= 4, J=1.8, S_mean=1.193221e-01
+cut= 4, J=1.9, S_mean=1.217485e-01
+cut= 4, J=1.9, S_mean=1.238323e-01
+cut= 4, J=2.0, S_mean=1.256992e-01
+cut= 4, J=2.0, S_mean=1.274634e-01
+cut= 5, J=0.0, S_mean=2.141404e-27
+cut= 5, J=0.1, S_mean=6.317788e-07
+cut= 5, J=0.1, S_mean=8.772140e-06
+cut= 5, J=0.2, S_mean=4.102886e-05
+cut= 5, J=0.2, S_mean=1.232553e-04
+cut= 5, J=0.2, S_mean=2.901833e-04
+cut= 5, J=0.3, S_mean=5.839884e-04
+cut= 5, J=0.4, S_mean=1.051309e-03
+cut= 5, J=0.4, S_mean=1.738931e-03
+cut= 5, J=0.5, S_mean=2.688819e-03
+cut= 5, J=0.5, S_mean=3.933449e-03
+cut= 5, J=0.6, S_mean=5.492443e-03
+cut= 5, J=0.6, S_mean=7.371391e-03
+cut= 5, J=0.7, S_mean=9.563450e-03
+cut= 5, J=0.7, S_mean=1.205393e-02
+cut= 5, J=0.8, S_mean=1.482759e-02
+cut= 5, J=0.8, S_mean=1.787779e-02
+cut= 5, J=0.9, S_mean=2.121601e-02
+cut= 5, J=0.9, S_mean=2.487936e-02
+cut= 5, J=1.0, S_mean=2.893343e-02
+cut= 5, J=1.0, S_mean=3.346753e-02
+cut= 5, J=1.1, S_mean=3.858114e-02
+cut= 5, J=1.1, S_mean=4.436295e-02
+cut= 5, J=1.2, S_mean=5.086716e-02
+cut= 5, J=1.2, S_mean=5.809295e-02
+cut= 5, J=1.2, S_mean=6.597251e-02
+cut= 5, J=1.3, S_mean=7.437089e-02
+cut= 5, J=1.4, S_mean=8.309783e-02
+cut= 5, J=1.4, S_mean=9.192914e-02
+cut= 5, J=1.5, S_mean=1.006322e-01
+cut= 5, J=1.5, S_mean=1.089904e-01
+cut= 5, J=1.6, S_mean=1.168226e-01
+cut= 5, J=1.6, S_mean=1.239951e-01
+cut= 5, J=1.7, S_mean=1.304262e-01
+cut= 5, J=1.7, S_mean=1.360844e-01
+cut= 5, J=1.8, S_mean=1.409824e-01
+cut= 5, J=1.8, S_mean=1.451682e-01
+cut= 5, J=1.9, S_mean=1.487150e-01
+cut= 5, J=1.9, S_mean=1.517113e-01
+cut= 5, J=2.0, S_mean=1.542515e-01
+cut= 5, J=2.0, S_mean=1.564279e-01
+cut= 6, J=0.0, S_mean=2.141404e-27
+cut= 6, J=0.1, S_mean=1.627851e-06
+cut= 6, J=0.1, S_mean=2.239899e-05
+cut= 6, J=0.2, S_mean=1.036656e-04
+cut= 6, J=0.2, S_mean=3.076505e-04
+cut= 6, J=0.2, S_mean=7.147701e-04
+cut= 6, J=0.3, S_mean=1.418880e-03
+cut= 6, J=0.4, S_mean=2.519598e-03
+cut= 6, J=0.4, S_mean=4.112302e-03
+cut= 6, J=0.5, S_mean=6.277275e-03
+cut= 6, J=0.5, S_mean=9.070016e-03
+cut= 6, J=0.6, S_mean=1.251483e-02
+cut= 6, J=0.6, S_mean=1.660362e-02
+cut= 6, J=0.7, S_mean=2.130150e-02
+cut= 6, J=0.7, S_mean=2.655994e-02
+cut= 6, J=0.8, S_mean=3.233767e-02
+cut= 6, J=0.8, S_mean=3.862746e-02
+cut= 6, J=0.9, S_mean=4.548469e-02
+cut= 6, J=0.9, S_mean=5.304877e-02
+cut= 6, J=1.0, S_mean=6.154391e-02
+cut= 6, J=1.0, S_mean=7.124771e-02
+cut= 6, J=1.1, S_mean=8.243065e-02
+cut= 6, J=1.1, S_mean=9.528639e-02
+cut= 6, J=1.2, S_mean=1.098733e-01
+cut= 6, J=1.2, S_mean=1.260776e-01
+cut= 6, J=1.2, S_mean=1.436045e-01
+cut= 6, J=1.3, S_mean=1.619991e-01
+cut= 6, J=1.4, S_mean=1.806955e-01
+cut= 6, J=1.4, S_mean=1.990852e-01
+cut= 6, J=1.5, S_mean=2.165888e-01
+cut= 6, J=1.5, S_mean=2.327199e-01
+cut= 6, J=1.6, S_mean=2.471305e-01
+cut= 6, J=1.6, S_mean=2.596335e-01
+cut= 6, J=1.7, S_mean=2.702025e-01
+cut= 6, J=1.7, S_mean=2.789527e-01
+cut= 6, J=1.8, S_mean=2.861076e-01
+cut= 6, J=1.8, S_mean=2.919586e-01
+cut= 6, J=1.9, S_mean=2.968233e-01
+cut= 6, J=1.9, S_mean=3.010065e-01
+cut= 6, J=2.0, S_mean=3.047705e-01
+cut= 6, J=2.0, S_mean=3.083144e-01
+cut= 7, J=0.0, S_mean=2.141404e-27
+cut= 7, J=0.1, S_mean=1.372439e-06
+cut= 7, J=0.1, S_mean=1.895405e-05
+cut= 7, J=0.2, S_mean=8.817243e-05
+cut= 7, J=0.2, S_mean=2.633900e-04
+cut= 7, J=0.2, S_mean=6.167223e-04
+cut= 7, J=0.3, S_mean=1.235129e-03
+cut= 7, J=0.4, S_mean=2.214926e-03
+cut= 7, J=0.4, S_mean=3.654184e-03
+cut= 7, J=0.5, S_mean=5.644316e-03
+cut= 7, J=0.5, S_mean=8.262700e-03
+cut= 7, J=0.6, S_mean=1.156828e-02
+cut= 7, J=0.6, S_mean=1.560185e-02
+cut= 7, J=0.7, S_mean=2.039223e-02
+cut= 7, J=0.7, S_mean=2.596852e-02
+cut= 7, J=0.8, S_mean=3.237735e-02
+cut= 7, J=0.8, S_mean=3.970176e-02
+cut= 7, J=0.9, S_mean=4.807582e-02
+cut= 7, J=0.9, S_mean=5.768591e-02
+cut= 7, J=1.0, S_mean=6.874992e-02
+cut= 7, J=1.0, S_mean=8.147171e-02
+cut= 7, J=1.1, S_mean=9.597999e-02
+cut= 7, J=1.1, S_mean=1.122681e-01
+cut= 7, J=1.2, S_mean=1.301512e-01
+cut= 7, J=1.2, S_mean=1.492521e-01
+cut= 7, J=1.2, S_mean=1.690221e-01
+cut= 7, J=1.3, S_mean=1.887919e-01
+cut= 7, J=1.4, S_mean=2.078450e-01
+cut= 7, J=1.4, S_mean=2.254947e-01
+cut= 7, J=1.5, S_mean=2.411516e-01
+cut= 7, J=1.5, S_mean=2.543701e-01
+cut= 7, J=1.6, S_mean=2.648721e-01
+cut= 7, J=1.6, S_mean=2.725497e-01
+cut= 7, J=1.7, S_mean=2.774525e-01
+cut= 7, J=1.7, S_mean=2.797654e-01
+cut= 7, J=1.8, S_mean=2.797807e-01
+cut= 7, J=1.8, S_mean=2.778680e-01
+cut= 7, J=1.9, S_mean=2.744427e-01
+cut= 7, J=1.9, S_mean=2.699356e-01
+cut= 7, J=2.0, S_mean=2.647633e-01
+cut= 7, J=2.0, S_mean=2.593027e-01
+cut= 8, J=0.0, S_mean=2.141404e-27
+cut= 8, J=0.1, S_mean=2.326682e-06
+cut= 8, J=0.1, S_mean=3.250157e-05
+cut= 8, J=0.2, S_mean=1.526924e-04
+cut= 8, J=0.2, S_mean=4.594831e-04
+cut= 8, J=0.2, S_mean=1.080807e-03
+cut= 8, J=0.3, S_mean=2.168655e-03
+cut= 8, J=0.4, S_mean=3.886622e-03
+cut= 8, J=0.4, S_mean=6.393637e-03
+cut= 8, J=0.5, S_mean=9.826666e-03
+cut= 8, J=0.5, S_mean=1.428585e-02
+cut= 8, J=0.6, S_mean=1.982559e-02
+cut= 8, J=0.6, S_mean=2.645450e-02
+cut= 8, J=0.7, S_mean=3.414675e-02
+cut= 8, J=0.7, S_mean=4.286612e-02
+cut= 8, J=0.8, S_mean=5.260361e-02
+cut= 8, J=0.8, S_mean=6.342727e-02
+cut= 8, J=0.9, S_mean=7.553775e-02
+cut= 8, J=0.9, S_mean=8.931099e-02
+cut= 8, J=1.0, S_mean=1.052916e-01
+cut= 8, J=1.0, S_mean=1.240956e-01
+cut= 8, J=1.1, S_mean=1.462284e-01
+cut= 8, J=1.1, S_mean=1.718865e-01
+cut= 8, J=1.2, S_mean=2.008212e-01
+cut= 8, J=1.2, S_mean=2.322996e-01
+cut= 8, J=1.2, S_mean=2.651764e-01
+cut= 8, J=1.3, S_mean=2.980653e-01
+cut= 8, J=1.4, S_mean=3.295630e-01
+cut= 8, J=1.4, S_mean=3.584621e-01
+cut= 8, J=1.5, S_mean=3.838989e-01
+cut= 8, J=1.5, S_mean=4.054139e-01
+cut= 8, J=1.6, S_mean=4.229337e-01
+cut= 8, J=1.6, S_mean=4.367036e-01
+cut= 8, J=1.7, S_mean=4.471980e-01
+cut= 8, J=1.7, S_mean=4.550308e-01
+cut= 8, J=1.8, S_mean=4.608753e-01
+cut= 8, J=1.8, S_mean=4.653976e-01
+cut= 8, J=1.9, S_mean=4.692039e-01
+cut= 8, J=1.9, S_mean=4.728002e-01
+cut= 8, J=2.0, S_mean=4.765664e-01
+cut= 8, J=2.0, S_mean=4.807434e-01
+cut= 9, J=0.0, S_mean=2.141404e-27
+cut= 9, J=0.1, S_mean=2.063798e-06
+cut= 9, J=0.1, S_mean=2.796926e-05
+cut= 9, J=0.2, S_mean=1.284789e-04
+cut= 9, J=0.2, S_mean=3.806604e-04
+cut= 9, J=0.2, S_mean=8.864816e-04
+cut= 9, J=0.3, S_mean=1.768135e-03
+cut= 9, J=0.4, S_mean=3.158670e-03
+cut= 9, J=0.4, S_mean=5.189272e-03
+cut= 9, J=0.5, S_mean=7.976277e-03
+cut= 9, J=0.5, S_mean=1.161172e-02
+cut= 9, J=0.6, S_mean=1.616101e-02
+cut= 9, J=0.6, S_mean=2.167025e-02
+cut= 9, J=0.7, S_mean=2.818426e-02
+cut= 9, J=0.7, S_mean=3.577387e-02
+cut= 9, J=0.8, S_mean=4.456812e-02
+cut= 9, J=0.8, S_mean=5.478189e-02
+cut= 9, J=0.9, S_mean=6.672316e-02
+cut= 9, J=0.9, S_mean=8.076056e-02
+cut= 9, J=1.0, S_mean=9.723862e-02
+cut= 9, J=1.0, S_mean=1.163524e-01
+cut= 9, J=1.1, S_mean=1.380208e-01
+cut= 9, J=1.1, S_mean=1.618056e-01
+cut= 9, J=1.2, S_mean=1.869102e-01
+cut= 9, J=1.2, S_mean=2.122714e-01
+cut= 9, J=1.2, S_mean=2.367225e-01
+cut= 9, J=1.3, S_mean=2.591774e-01
+cut= 9, J=1.4, S_mean=2.787844e-01
+cut= 9, J=1.4, S_mean=2.950144e-01
+cut= 9, J=1.5, S_mean=3.076785e-01
+cut= 9, J=1.5, S_mean=3.168870e-01
+cut= 9, J=1.6, S_mean=3.229766e-01
+cut= 9, J=1.6, S_mean=3.264285e-01
+cut= 9, J=1.7, S_mean=3.277941e-01
+cut= 9, J=1.7, S_mean=3.276347e-01
+cut= 9, J=1.8, S_mean=3.264778e-01
+cut= 9, J=1.8, S_mean=3.247865e-01
+cut= 9, J=1.9, S_mean=3.229401e-01
+cut= 9, J=1.9, S_mean=3.212240e-01
+cut= 9, J=2.0, S_mean=3.198268e-01
+cut= 9, J=2.0, S_mean=3.188435e-01
+cut=10, J=0.0, S_mean=2.141404e-27
+cut=10, J=0.1, S_mean=2.331530e-06
+cut=10, J=0.1, S_mean=3.127568e-05
+cut=10, J=0.2, S_mean=1.411835e-04
+cut=10, J=0.2, S_mean=4.092567e-04
+cut=10, J=0.2, S_mean=9.308801e-04
+cut=10, J=0.3, S_mean=1.814252e-03
+cut=10, J=0.4, S_mean=3.172752e-03
+cut=10, J=0.4, S_mean=5.115154e-03
+cut=10, J=0.5, S_mean=7.734930e-03
+cut=10, J=0.5, S_mean=1.110058e-02
+cut=10, J=0.6, S_mean=1.524905e-02
+cut=10, J=0.6, S_mean=2.018388e-02
+cut=10, J=0.7, S_mean=2.587892e-02
+cut=10, J=0.7, S_mean=3.228746e-02
+cut=10, J=0.8, S_mean=3.935542e-02
+cut=10, J=0.8, S_mean=4.703618e-02
+cut=10, J=0.9, S_mean=5.530400e-02
+cut=10, J=0.9, S_mean=6.416186e-02
+cut=10, J=1.0, S_mean=7.363989e-02
+cut=10, J=1.0, S_mean=8.378152e-02
+cut=10, J=1.1, S_mean=9.461699e-02
+cut=10, J=1.1, S_mean=1.061280e-01
+cut=10, J=1.2, S_mean=1.182128e-01
+cut=10, J=1.2, S_mean=1.306673e-01
+cut=10, J=1.2, S_mean=1.431958e-01
+cut=10, J=1.3, S_mean=1.554450e-01
+cut=10, J=1.4, S_mean=1.670508e-01
+cut=10, J=1.4, S_mean=1.776859e-01
+cut=10, J=1.5, S_mean=1.871002e-01
+cut=10, J=1.5, S_mean=1.951482e-01
+cut=10, J=1.6, S_mean=2.017991e-01
+cut=10, J=1.6, S_mean=2.071299e-01
+cut=10, J=1.7, S_mean=2.113061e-01
+cut=10, J=1.7, S_mean=2.145539e-01
+cut=10, J=1.8, S_mean=2.171294e-01
+cut=10, J=1.8, S_mean=2.192890e-01
+cut=10, J=1.9, S_mean=2.212648e-01
+cut=10, J=1.9, S_mean=2.232470e-01
+cut=10, J=2.0, S_mean=2.253735e-01
+cut=10, J=2.0, S_mean=2.277261e-01
+cut=11, J=0.0, S_mean=2.141404e-27
+cut=11, J=0.1, S_mean=6.917309e-07
+cut=11, J=0.1, S_mean=1.020551e-05
+cut=11, J=0.2, S_mean=5.244360e-05
+cut=11, J=0.2, S_mean=1.743093e-04
+cut=11, J=0.2, S_mean=4.498697e-04
+cut=11, J=0.3, S_mean=9.762477e-04
+cut=11, J=0.4, S_mean=1.860855e-03
+cut=11, J=0.4, S_mean=3.203564e-03
+cut=11, J=0.5, S_mean=5.079753e-03
+cut=11, J=0.5, S_mean=7.530732e-03
+cut=11, J=0.6, S_mean=1.056723e-02
+cut=11, J=0.6, S_mean=1.418969e-02
+cut=11, J=0.7, S_mean=1.842676e-02
+cut=11, J=0.7, S_mean=2.338965e-02
+cut=11, J=0.8, S_mean=2.933535e-02
+cut=11, J=0.8, S_mean=3.672327e-02
+cut=11, J=0.9, S_mean=4.624024e-02
+cut=11, J=0.9, S_mean=5.876285e-02
+cut=11, J=1.0, S_mean=7.523814e-02
+cut=11, J=1.0, S_mean=9.649720e-02
+cut=11, J=1.1, S_mean=1.230478e-01
+cut=11, J=1.1, S_mean=1.548984e-01
+cut=11, J=1.2, S_mean=1.914582e-01
+cut=11, J=1.2, S_mean=2.315491e-01
+cut=11, J=1.2, S_mean=2.735335e-01
+cut=11, J=1.3, S_mean=3.155306e-01
+cut=11, J=1.4, S_mean=3.556734e-01
+cut=11, J=1.4, S_mean=3.923489e-01
+cut=11, J=1.5, S_mean=4.243695e-01
+cut=11, J=1.5, S_mean=4.510513e-01
+cut=11, J=1.6, S_mean=4.722045e-01
+cut=11, J=1.6, S_mean=4.880596e-01
+cut=11, J=1.7, S_mean=4.991596e-01
+cut=11, J=1.7, S_mean=5.062454e-01
+cut=11, J=1.8, S_mean=5.101495e-01
+cut=11, J=1.8, S_mean=5.117081e-01
+cut=11, J=1.9, S_mean=5.116919e-01
+cut=11, J=1.9, S_mean=5.107561e-01
+cut=11, J=2.0, S_mean=5.094061e-01
+cut=11, J=2.0, S_mean=5.079789e-01
+cut=12, J=0.0, S_mean=2.141404e-27
+cut=12, J=0.1, S_mean=7.343670e-07
+cut=12, J=0.1, S_mean=1.029019e-05
+cut=12, J=0.2, S_mean=4.881719e-05
+cut=12, J=0.2, S_mean=1.490799e-04
+cut=12, J=0.2, S_mean=3.568220e-04
+cut=12, J=0.3, S_mean=7.292121e-04
+cut=12, J=0.4, S_mean=1.331084e-03
+cut=12, J=0.4, S_mean=2.229994e-03
+cut=12, J=0.5, S_mean=3.491929e-03
+cut=12, J=0.5, S_mean=5.179731e-03
+cut=12, J=0.6, S_mean=7.355992e-03
+cut=12, J=0.6, S_mean=1.009137e-02
+cut=12, J=0.7, S_mean=1.347794e-02
+cut=12, J=0.7, S_mean=1.764562e-02
+cut=12, J=0.8, S_mean=2.277750e-02
+cut=12, J=0.8, S_mean=2.911783e-02
+cut=12, J=0.9, S_mean=3.696530e-02
+cut=12, J=0.9, S_mean=4.664565e-02
+cut=12, J=1.0, S_mean=5.846326e-02
+cut=12, J=1.0, S_mean=7.263917e-02
+cut=12, J=1.1, S_mean=8.924936e-02
+cut=12, J=1.1, S_mean=1.081786e-01
+cut=12, J=1.2, S_mean=1.291009e-01
+cut=12, J=1.2, S_mean=1.514961e-01
+cut=12, J=1.2, S_mean=1.746993e-01
+cut=12, J=1.3, S_mean=1.979736e-01
+cut=12, J=1.4, S_mean=2.205937e-01
+cut=12, J=1.4, S_mean=2.419246e-01
+cut=12, J=1.5, S_mean=2.614842e-01
+cut=12, J=1.5, S_mean=2.789790e-01
+cut=12, J=1.6, S_mean=2.943127e-01
+cut=12, J=1.6, S_mean=3.075677e-01
+cut=12, J=1.7, S_mean=3.189670e-01
+cut=12, J=1.7, S_mean=3.288226e-01
+cut=12, J=1.8, S_mean=3.374790e-01
+cut=12, J=1.8, S_mean=3.452593e-01
+cut=12, J=1.9, S_mean=3.524213e-01
+cut=12, J=1.9, S_mean=3.591280e-01
+cut=12, J=2.0, S_mean=3.654358e-01
+cut=12, J=2.0, S_mean=3.713016e-01
+cut=13, J=0.0, S_mean=2.141404e-27
+cut=13, J=0.1, S_mean=6.506887e-07
+cut=13, J=0.1, S_mean=9.001010e-06
+cut=13, J=0.2, S_mean=4.280085e-05
+cut=13, J=0.2, S_mean=1.324780e-04
+cut=13, J=0.2, S_mean=3.234322e-04
+cut=13, J=0.3, S_mean=6.758270e-04
+cut=13, J=0.4, S_mean=1.261042e-03
+cut=13, J=0.4, S_mean=2.155954e-03
+cut=13, J=0.5, S_mean=3.437662e-03
+cut=13, J=0.5, S_mean=5.181935e-03
+cut=13, J=0.6, S_mean=7.468418e-03
+cut=13, J=0.6, S_mean=1.039455e-02
+cut=13, J=0.7, S_mean=1.409816e-02
+cut=13, J=0.7, S_mean=1.878559e-02
+cut=13, J=0.8, S_mean=2.475801e-02
+cut=13, J=0.8, S_mean=3.242277e-02
+cut=13, J=0.9, S_mean=4.227281e-02
+cut=13, J=0.9, S_mean=5.482121e-02
+cut=13, J=1.0, S_mean=7.049436e-02
+cut=13, J=1.0, S_mean=8.950741e-02
+cut=13, J=1.1, S_mean=1.117556e-01
+cut=13, J=1.1, S_mean=1.367523e-01
+cut=13, J=1.2, S_mean=1.636354e-01
+cut=13, J=1.2, S_mean=1.912499e-01
+cut=13, J=1.2, S_mean=2.182967e-01
+cut=13, J=1.3, S_mean=2.435142e-01
+cut=13, J=1.4, S_mean=2.658517e-01
+cut=13, J=1.4, S_mean=2.845931e-01
+cut=13, J=1.5, S_mean=2.994109e-01
+cut=13, J=1.5, S_mean=3.103489e-01
+cut=13, J=1.6, S_mean=3.177529e-01
+cut=13, J=1.6, S_mean=3.221747e-01
+cut=13, J=1.7, S_mean=3.242708e-01
+cut=13, J=1.7, S_mean=3.247151e-01
+cut=13, J=1.8, S_mean=3.241308e-01
+cut=13, J=1.8, S_mean=3.230435e-01
+cut=13, J=1.9, S_mean=3.218535e-01
+cut=13, J=1.9, S_mean=3.208239e-01
+cut=13, J=2.0, S_mean=3.200888e-01
+cut=13, J=2.0, S_mean=3.196765e-01
+cut=14, J=0.0, S_mean=2.141404e-27
+cut=14, J=0.1, S_mean=1.027124e-06
+cut=14, J=0.1, S_mean=1.392689e-05
+cut=14, J=0.2, S_mean=6.293616e-05
+cut=14, J=0.2, S_mean=1.811436e-04
+cut=14, J=0.2, S_mean=4.063362e-04
+cut=14, J=0.3, S_mean=7.771529e-04
+cut=14, J=0.4, S_mean=1.330352e-03
+cut=14, J=0.4, S_mean=2.100681e-03
+cut=14, J=0.5, S_mean=3.125092e-03
+cut=14, J=0.5, S_mean=4.452796e-03
+cut=14, J=0.6, S_mean=6.161777e-03
+cut=14, J=0.6, S_mean=8.380873e-03
+cut=14, J=0.7, S_mean=1.131414e-02
+cut=14, J=0.7, S_mean=1.526143e-02
+cut=14, J=0.8, S_mean=2.062656e-02
+cut=14, J=0.8, S_mean=2.790323e-02
+cut=14, J=0.9, S_mean=3.763081e-02
+cut=14, J=0.9, S_mean=5.031762e-02
+cut=14, J=1.0, S_mean=6.633859e-02
+cut=14, J=1.0, S_mean=8.582602e-02
+cut=14, J=1.1, S_mean=1.085808e-01
+cut=14, J=1.1, S_mean=1.340331e-01
+cut=14, J=1.2, S_mean=1.612704e-01
+cut=14, J=1.2, S_mean=1.891348e-01
+cut=14, J=1.2, S_mean=2.163692e-01
+cut=14, J=1.3, S_mean=2.417808e-01
+cut=14, J=1.4, S_mean=2.643832e-01
+cut=14, J=1.4, S_mean=2.834893e-01
+cut=14, J=1.5, S_mean=2.987449e-01
+cut=14, J=1.5, S_mean=3.101088e-01
+cut=14, J=1.6, S_mean=3.177974e-01
+cut=14, J=1.6, S_mean=3.222138e-01
+cut=14, J=1.7, S_mean=3.238757e-01
+cut=14, J=1.7, S_mean=3.233524e-01
+cut=14, J=1.8, S_mean=3.212134e-01
+cut=14, J=1.8, S_mean=3.179888e-01
+cut=14, J=1.9, S_mean=3.141433e-01
+cut=14, J=1.9, S_mean=3.100644e-01
+cut=14, J=2.0, S_mean=3.060636e-01
+cut=14, J=2.0, S_mean=3.023870e-01
+cut=15, J=0.0, S_mean=2.141404e-27
+cut=15, J=0.1, S_mean=1.959095e-06
+cut=15, J=0.1, S_mean=2.735672e-05
+cut=15, J=0.2, S_mean=1.284329e-04
+cut=15, J=0.2, S_mean=3.858506e-04
+cut=15, J=0.2, S_mean=9.047960e-04
+cut=15, J=0.3, S_mean=1.806818e-03
+cut=15, J=0.4, S_mean=3.217764e-03
+cut=15, J=0.4, S_mean=5.254764e-03
+cut=15, J=0.5, S_mean=8.016600e-03
+cut=15, J=0.5, S_mean=1.158203e-02
+cut=15, J=0.6, S_mean=1.601965e-02
+cut=15, J=0.6, S_mean=2.141112e-02
+cut=15, J=0.7, S_mean=2.788626e-02
+cut=15, J=0.7, S_mean=3.566494e-02
+cut=15, J=0.8, S_mean=4.509454e-02
+cut=15, J=0.8, S_mean=5.666552e-02
+cut=15, J=0.9, S_mean=7.098224e-02
+cut=15, J=0.9, S_mean=8.866702e-02
+cut=15, J=1.0, S_mean=1.101909e-01
+cut=15, J=1.0, S_mean=1.356557e-01
+cut=15, J=1.1, S_mean=1.645911e-01
+cut=15, J=1.1, S_mean=1.958542e-01
+cut=15, J=1.2, S_mean=2.277024e-01
+cut=15, J=1.2, S_mean=2.580498e-01
+cut=15, J=1.2, S_mean=2.848433e-01
+cut=15, J=1.3, S_mean=3.064420e-01
+cut=15, J=1.4, S_mean=3.218781e-01
+cut=15, J=1.4, S_mean=3.309325e-01
+cut=15, J=1.5, S_mean=3.340384e-01
+cut=15, J=1.5, S_mean=3.320800e-01
+cut=15, J=1.6, S_mean=3.261709e-01
+cut=15, J=1.6, S_mean=3.174706e-01
+cut=15, J=1.7, S_mean=3.070609e-01
+cut=15, J=1.7, S_mean=2.958784e-01
+cut=15, J=1.8, S_mean=2.846844e-01
+cut=15, J=1.8, S_mean=2.740549e-01
+cut=15, J=1.9, S_mean=2.643815e-01
+cut=15, J=1.9, S_mean=2.558805e-01
+cut=15, J=2.0, S_mean=2.486107e-01
+cut=15, J=2.0, S_mean=2.425003e-01
+cut=16, J=0.0, S_mean=2.141404e-27
+cut=16, J=0.1, S_mean=7.753103e-07
+cut=16, J=0.1, S_mean=1.125674e-05
+cut=16, J=0.2, S_mean=5.539385e-05
+cut=16, J=0.2, S_mean=1.745347e-04
+cut=16, J=0.2, S_mean=4.269846e-04
+cut=16, J=0.3, S_mean=8.819084e-04
+cut=16, J=0.4, S_mean=1.608012e-03
+cut=16, J=0.4, S_mean=2.660302e-03
+cut=16, J=0.5, S_mean=4.069765e-03
+cut=16, J=0.5, S_mean=5.840928e-03
+cut=16, J=0.6, S_mean=7.961021e-03
+cut=16, J=0.6, S_mean=1.042245e-02
+cut=16, J=0.7, S_mean=1.325748e-02
+cut=16, J=0.7, S_mean=1.658047e-02
+cut=16, J=0.8, S_mean=2.062846e-02
+cut=16, J=0.8, S_mean=2.578548e-02
+cut=16, J=0.9, S_mean=3.257189e-02
+cut=16, J=0.9, S_mean=4.158307e-02
+cut=16, J=1.0, S_mean=5.337718e-02
+cut=16, J=1.0, S_mean=6.833604e-02
+cut=16, J=1.1, S_mean=8.654144e-02
+cut=16, J=1.1, S_mean=1.077068e-01
+cut=16, J=1.2, S_mean=1.311855e-01
+cut=16, J=1.2, S_mean=1.560521e-01
+cut=16, J=1.2, S_mean=1.812330e-01
+cut=16, J=1.3, S_mean=2.056520e-01
+cut=16, J=1.4, S_mean=2.283602e-01
+cut=16, J=1.4, S_mean=2.486264e-01
+cut=16, J=1.5, S_mean=2.659822e-01
+cut=16, J=1.5, S_mean=2.802253e-01
+cut=16, J=1.6, S_mean=2.913950e-01
+cut=16, J=1.6, S_mean=2.997302e-01
+cut=16, J=1.7, S_mean=3.056220e-01
+cut=16, J=1.7, S_mean=3.095658e-01
+cut=16, J=1.8, S_mean=3.121145e-01
+cut=16, J=1.8, S_mean=3.138351e-01
+cut=16, J=1.9, S_mean=3.152674e-01
+cut=16, J=1.9, S_mean=3.168857e-01
+cut=16, J=2.0, S_mean=3.190679e-01
+cut=16, J=2.0, S_mean=3.220747e-01
+cut=17, J=0.0, S_mean=2.141404e-27
+cut=17, J=0.1, S_mean=9.174964e-07
+cut=17, J=0.1, S_mean=1.300599e-05
+cut=17, J=0.2, S_mean=6.167578e-05
+cut=17, J=0.2, S_mean=1.863378e-04
+cut=17, J=0.2, S_mean=4.378066e-04
+cut=17, J=0.3, S_mean=8.738710e-04
+cut=17, J=0.4, S_mean=1.554595e-03
+cut=17, J=0.4, S_mean=2.540261e-03
+cut=17, J=0.5, S_mean=3.895126e-03
+cut=17, J=0.5, S_mean=5.699271e-03
+cut=17, J=0.6, S_mean=8.068966e-03
+cut=17, J=0.6, S_mean=1.118310e-02
+cut=17, J=0.7, S_mean=1.530979e-02
+cut=17, J=0.7, S_mean=2.082348e-02
+cut=17, J=0.8, S_mean=2.820049e-02
+cut=17, J=0.8, S_mean=3.798086e-02
+cut=17, J=0.9, S_mean=5.068964e-02
+cut=17, J=0.9, S_mean=6.672056e-02
+cut=17, J=1.0, S_mean=8.619934e-02
+cut=17, J=1.0, S_mean=1.088581e-01
+cut=17, J=1.1, S_mean=1.339609e-01
+cut=17, J=1.1, S_mean=1.603156e-01
+cut=17, J=1.2, S_mean=1.863888e-01
+cut=17, J=1.2, S_mean=2.105073e-01
+cut=17, J=1.2, S_mean=2.310996e-01
+cut=17, J=1.3, S_mean=2.469193e-01
+cut=17, J=1.4, S_mean=2.571980e-01
+cut=17, J=1.4, S_mean=2.617074e-01
+cut=17, J=1.5, S_mean=2.607385e-01
+cut=17, J=1.5, S_mean=2.550263e-01
+cut=17, J=1.6, S_mean=2.456490e-01
+cut=17, J=1.6, S_mean=2.339164e-01
+cut=17, J=1.7, S_mean=2.212535e-01
+cut=17, J=1.7, S_mean=2.090724e-01
+cut=17, J=1.8, S_mean=1.986353e-01
+cut=17, J=1.8, S_mean=1.909174e-01
+cut=17, J=1.9, S_mean=1.864999e-01
+cut=17, J=1.9, S_mean=1.855219e-01
+cut=17, J=2.0, S_mean=1.877123e-01
+cut=17, J=2.0, S_mean=1.924927e-01
+cut=18, J=0.0, S_mean=2.141404e-27
+cut=18, J=0.1, S_mean=8.916812e-07
+cut=18, J=0.1, S_mean=1.398595e-05
+cut=18, J=0.2, S_mean=7.241840e-05
+cut=18, J=0.2, S_mean=2.350147e-04
+cut=18, J=0.2, S_mean=5.830428e-04
+cut=18, J=0.3, S_mean=1.208026e-03
+cut=18, J=0.4, S_mean=2.192492e-03
+cut=18, J=0.4, S_mean=3.588500e-03
+cut=18, J=0.5, S_mean=5.400312e-03
+cut=18, J=0.5, S_mean=7.577641e-03
+cut=18, J=0.6, S_mean=1.002495e-02
+cut=18, J=0.6, S_mean=1.263037e-02
+cut=18, J=0.7, S_mean=1.531546e-02
+cut=18, J=0.7, S_mean=1.810373e-02
+cut=18, J=0.8, S_mean=2.119973e-02
+cut=18, J=0.8, S_mean=2.506028e-02
+cut=18, J=0.9, S_mean=3.042350e-02
+cut=18, J=0.9, S_mean=3.825030e-02
+cut=18, J=1.0, S_mean=4.954909e-02
+cut=18, J=1.0, S_mean=6.510992e-02
+cut=18, J=1.1, S_mean=8.523563e-02
+cut=18, J=1.1, S_mean=1.095693e-01
+cut=18, J=1.2, S_mean=1.370785e-01
+cut=18, J=1.2, S_mean=1.662063e-01
+cut=18, J=1.2, S_mean=1.951509e-01
+cut=18, J=1.3, S_mean=2.221947e-01
+cut=18, J=1.4, S_mean=2.459854e-01
+cut=18, J=1.4, S_mean=2.656968e-01
+cut=18, J=1.5, S_mean=2.810472e-01
+cut=18, J=1.5, S_mean=2.922058e-01
+cut=18, J=1.6, S_mean=2.996444e-01
+cut=18, J=1.6, S_mean=3.039850e-01
+cut=18, J=1.7, S_mean=3.058767e-01
+cut=18, J=1.7, S_mean=3.059109e-01
+cut=18, J=1.8, S_mean=3.045728e-01
+cut=18, J=1.8, S_mean=3.022207e-01
+cut=18, J=1.9, S_mean=2.990862e-01
+cut=18, J=1.9, S_mean=2.952891e-01
+cut=18, J=2.0, S_mean=2.908651e-01
+cut=18, J=2.0, S_mean=2.858008e-01
+cut=19, J=0.0, S_mean=2.141404e-27
+cut=19, J=0.1, S_mean=6.823289e-07
+cut=19, J=0.1, S_mean=1.023152e-05
+cut=19, J=0.2, S_mean=5.164091e-05
+cut=19, J=0.2, S_mean=1.658926e-04
+cut=19, J=0.2, S_mean=4.119454e-04
+cut=19, J=0.3, S_mean=8.610880e-04
+cut=19, J=0.4, S_mean=1.586230e-03
+cut=19, J=0.4, S_mean=2.649427e-03
+cut=19, J=0.5, S_mean=4.092340e-03
+cut=19, J=0.5, S_mean=5.934043e-03
+cut=19, J=0.6, S_mean=8.178746e-03
+cut=19, J=0.6, S_mean=1.083318e-02
+cut=19, J=0.7, S_mean=1.393022e-02
+cut=19, J=0.7, S_mean=1.755211e-02
+cut=19, J=0.8, S_mean=2.184478e-02
+cut=19, J=0.8, S_mean=2.701382e-02
+cut=19, J=0.9, S_mean=3.329606e-02
+cut=19, J=0.9, S_mean=4.090736e-02
+cut=19, J=1.0, S_mean=4.997643e-02
+cut=19, J=1.0, S_mean=6.048271e-02
+cut=19, J=1.1, S_mean=7.221775e-02
+cut=19, J=1.1, S_mean=8.478423e-02
+cut=19, J=1.2, S_mean=9.763574e-02
+cut=19, J=1.2, S_mean=1.101487e-01
+cut=19, J=1.2, S_mean=1.217097e-01
+cut=19, J=1.3, S_mean=1.318002e-01
+cut=19, J=1.4, S_mean=1.400635e-01
+cut=19, J=1.4, S_mean=1.463464e-01
+cut=19, J=1.5, S_mean=1.507141e-01
+cut=19, J=1.5, S_mean=1.534409e-01
+cut=19, J=1.6, S_mean=1.549785e-01
+cut=19, J=1.6, S_mean=1.559066e-01
+cut=19, J=1.7, S_mean=1.568671e-01
+cut=19, J=1.7, S_mean=1.584866e-01
+cut=19, J=1.8, S_mean=1.612982e-01
+cut=19, J=1.8, S_mean=1.656737e-01
+cut=19, J=1.9, S_mean=1.717817e-01
+cut=19, J=1.9, S_mean=1.795819e-01
+cut=19, J=2.0, S_mean=1.888526e-01
+cut=19, J=2.0, S_mean=1.992453e-01
+cut=20, J=0.0, S_mean=2.141404e-27
+cut=20, J=0.1, S_mean=4.574947e-07
+cut=20, J=0.1, S_mean=6.375638e-06
+cut=20, J=0.2, S_mean=2.969829e-05
+cut=20, J=0.2, S_mean=8.836227e-05
+cut=20, J=0.2, S_mean=2.052452e-04
+cut=20, J=0.3, S_mean=4.064528e-04
+cut=20, J=0.4, S_mean=7.188105e-04
+cut=20, J=0.4, S_mean=1.166915e-03
+cut=20, J=0.5, S_mean=1.770436e-03
+cut=20, J=0.5, S_mean=2.542467e-03
+cut=20, J=0.6, S_mean=3.489543e-03
+cut=20, J=0.6, S_mean=4.613566e-03
+cut=20, J=0.7, S_mean=5.915247e-03
+cut=20, J=0.7, S_mean=7.398197e-03
+cut=20, J=0.8, S_mean=9.072313e-03
+cut=20, J=0.8, S_mean=1.095522e-02
+cut=20, J=0.9, S_mean=1.307092e-02
+cut=20, J=0.9, S_mean=1.544580e-02
+cut=20, J=1.0, S_mean=1.810344e-02
+cut=20, J=1.0, S_mean=2.106025e-02
+cut=20, J=1.1, S_mean=2.432454e-02
+cut=20, J=1.1, S_mean=2.789999e-02
+cut=20, J=1.2, S_mean=3.179310e-02
+cut=20, J=1.2, S_mean=3.602204e-02
+cut=20, J=1.2, S_mean=4.062323e-02
+cut=20, J=1.3, S_mean=4.565213e-02
+cut=20, J=1.4, S_mean=5.117691e-02
+cut=20, J=1.4, S_mean=5.726527e-02
+cut=20, J=1.5, S_mean=6.396754e-02
+cut=20, J=1.5, S_mean=7.129982e-02
+cut=20, J=1.6, S_mean=7.923089e-02
+cut=20, J=1.6, S_mean=8.767570e-02
+cut=20, J=1.7, S_mean=9.649671e-02
+cut=20, J=1.7, S_mean=1.055127e-01
+cut=20, J=1.8, S_mean=1.145133e-01
+cut=20, J=1.8, S_mean=1.232777e-01
+cut=20, J=1.9, S_mean=1.315935e-01
+cut=20, J=1.9, S_mean=1.392737e-01
+cut=20, J=2.0, S_mean=1.461699e-01
+cut=20, J=2.0, S_mean=1.521792e-01
+
+Wrote results to: /home/aaron/Desktop/experiments_v_matrix/save/cut_check

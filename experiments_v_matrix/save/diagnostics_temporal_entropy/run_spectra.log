@@ -1,0 +1,7 @@
+=== Selected-J spectra (direct MPO, one build per J) ===
+  build J=1 L=6 k=3 dt=0.1 T=0.4 (spectra, direct_mpo)
+    done in 127.2s (direct_mpo)
+  build J=3 L=6 k=3 dt=0.1 T=0.4 (spectra, direct_mpo)
+    done in 125.3s (direct_mpo)
+  build J=6 L=6 k=3 dt=0.1 T=0.4 (spectra, direct_mpo)
+    done in 129.2s (direct_mpo)

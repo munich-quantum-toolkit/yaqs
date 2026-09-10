@@ -1,0 +1,31 @@
+ell= 0, left_cut=16, right_cut=17, k=22, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell= 0, J=0.50, S_mean=1.253545e-02
+ell= 0, J=1.00, S_mean=7.692710e-02
+ell= 0, J=1.50, S_mean=2.606602e-01
+ell= 0, J=2.00, S_mean=3.337583e-01
+ell= 1, left_cut=16, right_cut=18, k=23, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell= 1, J=0.50, S_mean=1.473207e-02
+ell= 1, J=1.00, S_mean=6.189368e-02
+ell= 1, J=1.50, S_mean=2.332513e-01
+ell= 1, J=2.00, S_mean=3.076465e-01
+ell= 2, left_cut=16, right_cut=19, k=24, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell= 2, J=0.50, S_mean=1.638276e-02
+ell= 2, J=1.00, S_mean=4.720805e-02
+ell= 2, J=1.50, S_mean=2.131440e-01
+ell= 2, J=2.00, S_mean=2.844729e-01
+ell= 5, left_cut=16, right_cut=22, k=27, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell= 5, J=0.50, S_mean=1.613606e-02
+ell= 5, J=1.00, S_mean=1.506939e-02
+ell= 5, J=1.50, S_mean=1.399741e-01
+ell= 5, J=2.00, S_mean=2.165087e-01
+ell=10, left_cut=16, right_cut=27, k=32, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell=10, J=0.50, S_mean=6.333199e-03
+ell=10, J=1.00, S_mean=1.526039e-03
+ell=10, J=1.50, S_mean=1.033377e-01
+ell=10, J=2.00, S_mean=5.627463e-02
+ell=15, left_cut=16, right_cut=32, k=37, past=15, future=5, bridge=ell measure+prepare(|0>), shared ensemble
+ell=15, J=0.50, S_mean=6.502056e-03
+ell=15, J=1.00, S_mean=1.727104e-03
+ell=15, J=1.50, S_mean=2.756025e-02
+ell=15, J=2.00, S_mean=2.506955e-02
+Wrote results to: /home/aaron/Desktop/experiments_v_matrix/save/ell_check

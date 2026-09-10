@@ -1,0 +1,57 @@
+{
+  "out_dir": "/home/aaron/Desktop/experiments_v_matrix/save/diagnostics_temporal_entropy_smoke",
+  "L_ref": 6,
+  "k_ref": 3,
+  "g": 1.0,
+  "dt_ref": 0.1,
+  "cuts": [
+    1,
+    2,
+    3
+  ],
+  "j_spectra": [
+    1.0,
+    3.0,
+    6.0
+  ],
+  "j_step": 0.2,
+  "j_max": 6.0,
+  "rank_rtol": 1e-12,
+  "validation": {
+    "min_eigenvalue": -1e-10,
+    "causal_break_error": 0.05,
+    "hermiticity_error": 1e-10
+  },
+  "timestep_dt_values": [
+    0.1,
+    0.05,
+    0.025
+  ],
+  "timestep_js": [
+    3.0,
+    6.0
+  ],
+  "timestep_cuts": [
+    1,
+    2,
+    3
+  ],
+  "finite_L_values": [
+    6,
+    8
+  ],
+  "finite_k_values": [
+    3,
+    4
+  ],
+  "finite_js": [
+    3.0,
+    6.0
+  ],
+  "finite_cuts": [
+    1,
+    2,
+    3
+  ],
+  "mpo_cross_check_note": "Dense causal-block SVD is the exact operator-Schmidt spectrum for the causal channel-block grouping. MPOProcessTensor.compute_schmidt_spectrum(cut) uses the canonical MPO tensor bond between sites cut-1 and cut; these blockings coincide only when the MPO site cut matches the causal-block partition."
+}

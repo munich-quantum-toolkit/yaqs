@@ -1,0 +1,33 @@
+PRX response-comparison validation report
+========================================
+Full past basis size |P_full| = 64
+Full future basis size |F_full| = 64
+Complete response ensemble = 64 x 64 (S_V^full = S_V at m=64)
+
+J=0 checks:
+  I_PT(J=0) = 0.000e+00
+  S_V^full(J=0) = -0.000e+00
+  max |trace - 8| = 3.197e-14
+  min Choi eigenvalue = -1.474e-14
+  max |S_V^full - S_V_64| = 5.204e-18
+
+Subsampling: N_subsets = 100, master_seed = 20260704
+Log-log fit (J>0): alpha = 1.883 (bootstrap 95% CI [1.878, 1.896])
+Pearson r_log = 0.999992, Spearman rho = 1.000000
+Plotting floor y_lo = 1.529e-07
+
+Figure verification:
+  panel (a) connected curves = 3 (expect 3)
+  panel (a) uncertainty band present = True
+  panel (a) no S_V(64) curve = True
+  J=0 not connected to J=0.2 = True
+  panel (b) legend entries = 0 (expect 0)
+  panel (b) positive-J points = 10
+
+Output file checksums:
+  pt_response_comparison_prx.pdf: mtime=2026-07-04T19:31:11.314814+00:00, sha256=47198afef0d3130d6a7877c373263f0428b971f666b6d4080596eff57eeff05e
+  pt_response_comparison_prx.svg: mtime=2026-07-04T19:31:11.463819+00:00, sha256=1b650e851e5d02c21e4ae3b8518681715ccbef2cc5c5e52095de370410f7b28c
+  pt_response_comparison_prx.png: mtime=2026-07-04T19:31:11.803830+00:00, sha256=33ea7b42029f7c8002976040c9f86ec4cacb3b8b51eee873cd9a565b873c4f96
+  pt_response_comparison_data.csv: mtime=2026-07-04T19:31:10.723795+00:00, sha256=a07d8f73fd7e4974b82ef436e97423705793cf36c2dc3beb7a08555839aa5ea2
+  pt_response_subsampling_statistics.csv: mtime=2026-07-04T19:31:10.723795+00:00, sha256=7ec355db44e83e01af0af28095fd1cbd85538a306d0be222662ff34ea89df4fe
+  pt_response_convergence_supplement.pdf: mtime=2026-07-04T19:31:12.122840+00:00, sha256=6ab96556922e073e3058c63a60e0bab1e893b07356fdcac3b1ff12f5f3630071

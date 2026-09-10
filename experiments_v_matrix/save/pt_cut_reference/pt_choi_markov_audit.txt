@@ -1,0 +1,63 @@
+
+========================================================================
+A. Unfused axis labels (from encode_cptp_choi: kron(output, input), f=2·out+in)
+========================================================================
+Production reshape dims = [final(2), slot1(4), slot2(4), …]
+Unfused labels: final_out_k, final_out_b, slot1_out_k, slot1_in_k, slot1_out_b, slot1_in_b, slot2_out_k, slot2_in_k, slot2_out_b, slot2_in_b
+predict contracts past as kron(encode_cptp_choi(E_t)).T on fused legs 1…k.
+Unfused tensor shape: (2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
+
+========================================================================
+B. Markov product equivalence search (L=1, k=2, J=0, g=0)
+========================================================================
+Best relative error: 1.224745e+00
+Best transform: perm(1, 0, 2), scale=1.0
+Standard Markov product verified (err < 1e-10): False
+
+If not verified: equivalence to standard ρ₀⊗J⊗… Choi operator remains UNVERIFIED
+under tested permutations, in/out swaps, transposes, and scalar normalizations.
+
+========================================================================
+C. Genuine operator-Schmidt (unfused ket/bra matricization)
+========================================================================
+Production Υ (J=0, L=1, k=2):
+  {final,slot1} | {slot2}: rank=16, ent=2.772589, SVs=[0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25]
+  {slot1} | {slot2} (channel blocks): rank=4, ent=1.386294, SVs=[3.53553391e-01 3.53553391e-01 3.53553391e-01 3.53553391e-01
+ 7.21382684e-17 5.29770446e-17 4.46340284e-17 4.05253023e-17]
+Naive product ρ₀⊗J⊗J (same unfused convention):
+  {slot1} | {slot2}: rank=1, ent=0.000000, SVs=[1.00000000e+00 2.08166817e-17 1.02634165e-48 1.26506375e-80
+ 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00]
+Expected for exact Markov product across complete channels: rank=1, one SV.
+
+========================================================================
+D. Total correlations I(L:R) on normalized Υ (subsystems 0=final, 1..k slots)
+========================================================================
+I({0,1}:{2}) = 2.772589
+I({1}:{2}) = 2.079442
+Product reference I({1}:{2}) = -0.000000
+For true product across {1}|{2}, I should be 0.
+
+========================================================================
+E. Identity-channel sanity test
+========================================================================
+encode_cptp_choi(identity) 4x4 matrix rank (as trace-norm state) = 1
+Tr(J)=2.0000+0.0000j, normalized diag=[0.5 0.  0.  0.5]
+Fidelity to |Phi+> vector = 1.000000
+State mutual info I(out:in) on vectorized J = 1.386294 (ln2=0.693147)
+Op-Schmidt SVs across output|input (ket legs): [1. 1. 1. 1.]
+Op-Schmidt entropy (s^2 weights): 1.386294
+Two-slot product (subs {1}|{2}): op-Schmidt rank=1, SVs=[1.00000000e+00 2.08166817e-17 1.02634165e-48 1.26506375e-80], ent=0.000000
+
+========================================================================
+F. Four-way classification (L=2, k=2, cut=2, J=0)
+========================================================================
+1. Reduced Choi marginal entropy S_PT = cut_entanglement_entropy(c=2):
+   0.693147  [NOT temporal memory entropy]
+2. MPO bond dimension chi (intervention-slot ordering {0,1}|{2}):
+   16  [NOT temporal memory entropy]
+3. Operator-Schmidt across complete channel blocks {1}|{2}:
+   rank=4, entropy=1.386294, SVs=[3.53553391e-01 3.53553391e-01 3.53553391e-01 3.53553391e-01
+ 1.74427247e-16 1.13897781e-16]
+4. Influence-functional / environment memory bond: N/A (Case-1 full Choi MPO)
+
+Standard Markov product equivalence to production: UNVERIFIED

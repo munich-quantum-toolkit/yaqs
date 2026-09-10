@@ -1,0 +1,58 @@
+Entropy metric comparison  L=2, k=2, c=2
+
+Probe ensemble: |P|=64, |F|=4
+
+J=0 diagnosis (Markov / uncoupled limit)
+--------------------------------------
+  S_V^full     = -0.000e+00  (operational memory; expect ~0)
+  I_PT (VN)    = 6.661e-16  (causal-block MI; expect ~0)
+  S_PT (VN)    = 6.931e-01  (past-leg marginal; often ~ln 2 at c=2)
+  S_mpo Schmidt= 2.773e+00  (operator Schmidt on bond {0..1}|{2..2})
+  S_PT^cb      = -0.000e+00  (operator Schmidt on causal blocks)
+  chi_MPO      = 16
+
+Why S_PT can be large at J=0:
+  S_PT traces out the final system leg and future intervention legs, then
+  computes S(rho_{legs 1..c-1}) in the *fused* Choi slot ordering.
+  At J=0 the dynamics are Markovian, but the dual-frame tomography ensemble
+  leaves the first intervention leg in a maximally mixed reduced state when
+  cut>=2 and k>=2 — hence S_PT(c=2) ≈ ln 2 = 0.693147 even when I_PT=0.
+
+  I_PT and S_V^full use the *causal* past|future split (complete channel blocks)
+  and measure correlations / operational response — both vanish when there is
+  no memory.
+
+Renyi-2 at J=0:
+  S_PT_renyi2 = 0.693
+  I_PT_renyi2 = 0.000e+00
+  S_mpo_schmidt_renyi2 = 2.773
+
+Control benchmarks (literature-relevant validation of S_V)
+------------------------------------------------------------
+1. Markov limit (J=0):
+   Expect S_V^full ≈ 0 and I_PT ≈ 0. S_PT may remain O(1) — not a failure of S_V.
+
+2. Causal-break / compositionality:
+   Past-intervention swaps at the cut should not change future statistics
+   (see pt_cut_reference._causal_break_error). Operational Markov test.
+
+3. Monotonicity with coupling:
+   For fixed (c,k,L), S_V^full and I_PT should increase with |J| on this benchmark.
+
+4. Exhaustive vs finite budget:
+   S_V^full from complete 64×64 ensemble; finite 8×8 subsets overestimate
+   (see pt_response_comparison_prx subsampling bands).
+
+5. Cross-metric ordering:
+   I_PT ≥ 0 always; S_V^full ≤ I_PT not required (different objects).
+   Correlation across J is empirical, not universal (see multi-cut figure).
+
+6. Alternative PT entropies (this script):
+   - S_mpo_schmidt: normalized |Schmidt|^2 across MPO vector bond
+   - S_PT^cb: operator Schmidt on causal blocks (unnormalized operator)
+   Compare which tracks S_V; I_PT is the causal-state analogue of S_V's split.
+
+7. Known literature context:
+   - Process-tensor / process-matrix frameworks: temporal correlations in Choi space
+   - Operational probing / intervention ensembles: memory from conditioned responses
+   S_V is the latter; S_PT is a bond diagnostic that need not vanish Markovianly.

@@ -1,0 +1,14 @@
+[
+  {
+    "J": 0.0,
+    "pauli_rel_fro_error": 1.907647207072386e-08,
+    "response_rel_fro_error_analytic_weights": 2.6978205785078235e-08,
+    "weight_max_abs_diff_sim_vs_analytic": 0.07284427938678734
+  },
+  {
+    "J": 1.0,
+    "pauli_rel_fro_error": 1.829997649584854e-08,
+    "response_rel_fro_error_analytic_weights": 3.869413909445967e-08,
+    "weight_max_abs_diff_sim_vs_analytic": 0.13306247341120597
+  }
+]

@@ -1,0 +1,47 @@
+S_temporal (direct PT-MPO) vs exhaustive S_PT^cb
+================================================
+Parameters: L=6, k=3, g=1.0, dt=0.1
+Direct build: method=direct, return_type=mpo, max_bond_dim=None, tol=1.000e-10
+Causal-block SVD rtol: 1.000e-10
+
+Max relative diff (J>0): 3.566e-09
+Median relative diff (J>0): 1.691e-12
+Max absolute diff (J>0): 1.568e-15
+
+Per (cut, J):
+  c=1 J=    0  S_temporal=-0.000000e+00  S_PT_cb=2.010970e-28  rel=2.011e-13
+  c=1 J=  0.2  S_temporal=1.964263e-09  S_PT_cb=1.964263e-09  rel=3.566e-09
+  c=1 J=  0.4  S_temporal=2.744609e-08  S_PT_cb=2.744609e-08  rel=1.264e-10
+  c=1 J=  0.6  S_temporal=1.254938e-07  S_PT_cb=1.254938e-07  rel=2.083e-10
+  c=1 J=  0.8  S_temporal=3.616595e-07  S_PT_cb=3.616595e-07  rel=1.339e-10
+  c=1 J=    1  S_temporal=8.063439e-07  S_PT_cb=8.063439e-07  rel=6.445e-11
+  c=1 J=  1.2  S_temporal=1.523584e-06  S_PT_cb=1.523584e-06  rel=3.766e-11
+  c=1 J=  1.4  S_temporal=2.561195e-06  S_PT_cb=2.561195e-06  rel=2.415e-12
+  c=1 J=  1.6  S_temporal=3.943387e-06  S_PT_cb=3.943387e-06  rel=3.395e-12
+  c=1 J=  1.8  S_temporal=5.666835e-06  S_PT_cb=5.666835e-06  rel=1.968e-12
+  c=1 J=    2  S_temporal=7.700751e-06  S_PT_cb=7.700751e-06  rel=1.283e-12
+  c=2 J=    0  S_temporal=-0.000000e+00  S_PT_cb=8.576002e-29  rel=8.576e-14
+  c=2 J=  0.2  S_temporal=6.436000e-07  S_PT_cb=6.436000e-07  rel=3.356e-10
+  c=2 J=  0.4  S_temporal=8.593110e-06  S_PT_cb=8.593110e-06  rel=2.287e-12
+  c=2 J=  0.6  S_temporal=3.794909e-05  S_PT_cb=3.794909e-05  rel=1.154e-12
+  c=2 J=  0.8  S_temporal=1.061193e-04  S_PT_cb=1.061193e-04  rel=8.799e-13
+  c=2 J=    1  S_temporal=2.301348e-04  S_PT_cb=2.301348e-04  rel=1.638e-12
+  c=2 J=  1.2  S_temporal=4.235005e-04  S_PT_cb=4.235005e-04  rel=3.912e-13
+  c=2 J=  1.4  S_temporal=6.937281e-04  S_PT_cb=6.937281e-04  rel=2.501e-14
+  c=2 J=  1.6  S_temporal=1.040764e-03  S_PT_cb=1.040764e-03  rel=8.655e-13
+  c=2 J=  1.8  S_temporal=1.456476e-03  S_PT_cb=1.456476e-03  rel=4.082e-13
+  c=2 J=    2  S_temporal=1.925254e-03  S_PT_cb=1.925254e-03  rel=3.463e-13
+  c=3 J=    0  S_temporal=-0.000000e+00  S_PT_cb=9.964872e-28  rel=9.965e-13
+  c=3 J=  0.2  S_temporal=1.431282e-06  S_PT_cb=1.431282e-06  rel=1.442e-10
+  c=3 J=  0.4  S_temporal=1.891693e-05  S_PT_cb=1.891693e-05  rel=5.391e-12
+  c=3 J=  0.6  S_temporal=8.279232e-05  S_PT_cb=8.279232e-05  rel=3.203e-13
+  c=3 J=  0.8  S_temporal=2.294567e-04  S_PT_cb=2.294567e-04  rel=8.198e-14
+  c=3 J=    1  S_temporal=4.930176e-04  S_PT_cb=4.930176e-04  rel=1.884e-12
+  c=3 J=  1.2  S_temporal=8.984014e-04  S_PT_cb=8.984014e-04  rel=1.745e-12
+  c=3 J=  1.4  S_temporal=1.456260e-03  S_PT_cb=1.456260e-03  rel=7.966e-14
+  c=3 J=  1.6  S_temporal=2.160110e-03  S_PT_cb=2.160110e-03  rel=1.353e-13
+  c=3 J=  1.8  S_temporal=2.985992e-03  S_PT_cb=2.985992e-03  rel=1.002e-13
+  c=3 J=    2  S_temporal=3.894639e-03  S_PT_cb=3.894639e-03  rel=2.550e-13
+
+S_temporal: causal-block operator entropy on upsilon = direct_MPO.to_matrix(),
+keeping Schmidt values s_i > rtol * s_0 before normalizing weights.

@@ -1,0 +1,62 @@
+[
+  {
+    "L": 2,
+    "J": 0.5,
+    "peak_entropy": 0.00022681249320707906,
+    "integrated_entropy": 0.00044533268445779876,
+    "mean_entropy": 0.00011133317111444969,
+    "peak_cut": 3,
+    "k": 4,
+    "dt": 0.1,
+    "g": 1.0,
+    "n_pasts": 6,
+    "n_futures": 6,
+    "n_seeds": 1,
+    "branch_weight_beta": 1.0
+  },
+  {
+    "L": 2,
+    "J": 1.0,
+    "peak_entropy": 0.0025445870961209646,
+    "integrated_entropy": 0.005087986609752433,
+    "mean_entropy": 0.0012719966524381082,
+    "peak_cut": 3,
+    "k": 4,
+    "dt": 0.1,
+    "g": 1.0,
+    "n_pasts": 6,
+    "n_futures": 6,
+    "n_seeds": 1,
+    "branch_weight_beta": 1.0
+  },
+  {
+    "L": 3,
+    "J": 0.5,
+    "peak_entropy": 0.00023955787996358656,
+    "integrated_entropy": 0.00043902630771709776,
+    "mean_entropy": 0.00010975657692927444,
+    "peak_cut": 3,
+    "k": 4,
+    "dt": 0.1,
+    "g": 1.0,
+    "n_pasts": 6,
+    "n_futures": 6,
+    "n_seeds": 1,
+    "branch_weight_beta": 1.0
+  },
+  {
+    "L": 3,
+    "J": 1.0,
+    "peak_entropy": 0.002727105823026735,
+    "integrated_entropy": 0.0046943953808290875,
+    "mean_entropy": 0.0011735988452072719,
+    "peak_cut": 3,
+    "k": 4,
+    "dt": 0.1,
+    "g": 1.0,
+    "n_pasts": 6,
+    "n_futures": 6,
+    "n_seeds": 1,
+    "branch_weight_beta": 1.0
+  }
+]

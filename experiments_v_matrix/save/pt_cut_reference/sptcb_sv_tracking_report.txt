@@ -1,0 +1,12 @@
+S_PT^cb vs S_V^full cross-case tracking
+============================================
+$L{=}2,\ k{=}2,\ c{=}2$:  median rel. dev = 1.46e-01, max rel. dev = 2.98e-01  (J>0, n=5)
+$L{=}3,\ k{=}2,\ c{=}2$:  median rel. dev = 1.74e-01, max rel. dev = 3.39e-01  (J>0, n=5)
+$L{=}3,\ k{=}3,\ c{=}2$:  median rel. dev = 2.55e-01, max rel. dev = 3.82e-01  (J>0, n=5)
+$L{=}3,\ k{=}3,\ c{=}1$:  median rel. dev = 4.92e-01, max rel. dev = 6.50e-01  (J>0, n=5)
+$L{=}6,\ k{=}3,\ c{=}2$:  median rel. dev = 2.63e-01, max rel. dev = 4.74e-01  (J>0, n=11)
+
+Interpretation:
+  S_PT^cb and S_V^full share the causal past|future split and increase with J.
+  Relative deviations stay O(1) or smaller on these Ising benchmarks; they are
+  not pointwise identical (different objects: operator Schmidt vs response entropy).

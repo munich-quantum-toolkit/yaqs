@@ -1,0 +1,3 @@
+# Run from the YAQS repo: uv pip install -r /path/to/experiments_v_matrix/requirements.txt
+matplotlib>=3.8
+numpy>=1.26

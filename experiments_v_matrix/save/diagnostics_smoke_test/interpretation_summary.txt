@@ -1,0 +1,17 @@
+=== Interpretation table (valid main-run points) ===
+ c    J object                        S     exp(S)         p1    r99
+--------------------------------------------------------------------
+ 1  1.0 process_tensor       8.0634e-07 1.0000e+00 1.0000e+00      1
+ 1  1.0 response_centered    1.4495e-06 1.0000e+00 1.0000e+00      1
+ 1  1.0 response_uncentered  4.0166e-07 1.0000e+00 1.0000e+00      1
+ 2  1.0 process_tensor       2.3013e-04 1.0002e+00 9.9998e-01      1
+ 2  1.0 response_centered    2.0234e-04 1.0002e+00 9.9998e-01      1
+ 2  1.0 response_uncentered  9.4660e-05 1.0001e+00 9.9999e-01      1
+ 3  1.0 process_tensor       4.9302e-04 1.0005e+00 9.9996e-01      1
+ 3  1.0 response_centered    4.4951e-04 1.0004e+00 9.9996e-01      1
+ 3  1.0 response_uncentered  2.7317e-04 1.0003e+00 9.9998e-01      1
+
+=== Strong-coupling divergence mechanisms (J=1 vs J=6, c=2) ===
+  - No single mechanism dominates; inspect spectra plots and CSV rows.
+Catalog ceiling: log(4096) = 8.3178 nats for S_V^full at k=3.
+Dense causal-block SVD is the exact operator-Schmidt spectrum for the causal channel-block grouping. MPOProcessTensor.compute_schmidt_spectrum(cut) uses the canonical MPO tensor bond between sites cut-1 and cut; these blockings coincide only when the MPO site cut matches the causal-block partition.

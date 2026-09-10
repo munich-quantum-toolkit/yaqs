@@ -1,0 +1,182 @@
+[
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__process_tensor__sv",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__process_tensor__p",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__response_centered__sv",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__response_centered__p",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__response_uncentered__sv",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut1_k3_L6_dt0.1__response_uncentered__p",
+    "J": 1.0,
+    "cut": 1,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__process_tensor__sv",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__process_tensor__p",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__response_centered__sv",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__response_centered__p",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__response_uncentered__sv",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut2_k3_L6_dt0.1__response_uncentered__p",
+    "J": 1.0,
+    "cut": 2,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__process_tensor__sv",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__process_tensor__p",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "process_tensor",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__response_centered__sv",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__response_centered__p",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_centered",
+    "field": "p"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__response_uncentered__sv",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "sv"
+  },
+  {
+    "key": "J1_cut3_k3_L6_dt0.1__response_uncentered__p",
+    "J": 1.0,
+    "cut": 3,
+    "k": 3,
+    "L": 6,
+    "dt": 0.1,
+    "object_type": "response_uncentered",
+    "field": "p"
+  }
+]

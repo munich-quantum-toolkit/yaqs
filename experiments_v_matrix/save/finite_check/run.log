@@ -1,0 +1,43 @@
+L=2 J=0.5 S_max=0.01275 S_int=0.1196 S_mean=0.00598 c_max=12
+L=2 J=1 S_max=0.19521 S_int=1.8742 S_mean=0.09371 c_max=10
+L=2 J=1.5 S_max=0.69176 S_int=7.2276 S_mean=0.36138 c_max=10
+L=2 J=2 S_max=1.06244 S_int=12.8279 S_mean=0.64139 c_max=10
+L=3 J=0.5 S_max=0.01561 S_int=0.1336 S_mean=0.00668 c_max=10
+L=3 J=1 S_max=0.21216 S_int=2.1374 S_mean=0.10687 c_max=10
+L=3 J=1.5 S_max=0.59919 S_int=6.5820 S_mean=0.32910 c_max=16
+L=3 J=2 S_max=0.83762 S_int=9.6051 S_mean=0.48026 c_max=10
+L=4 J=0.5 S_max=0.01279 S_int=0.1101 S_mean=0.00550 c_max=10
+L=4 J=1 S_max=0.12290 S_int=1.1048 S_mean=0.05524 c_max=10
+L=4 J=1.5 S_max=0.39986 S_int=3.9964 S_mean=0.19982 c_max=10
+L=4 J=2 S_max=0.63436 S_int=6.3448 S_mean=0.31724 c_max=14
+L=5 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=5 J=1 S_max=0.12752 S_int=1.2235 S_mean=0.06117 c_max=10
+L=5 J=1.5 S_max=0.41918 S_int=3.8431 S_mean=0.19215 c_max=10
+L=5 J=2 S_max=0.59615 S_int=5.5450 S_mean=0.27725 c_max=14
+L=6 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=6 J=1 S_max=0.12816 S_int=1.2601 S_mean=0.06300 c_max=10
+L=6 J=1.5 S_max=0.43647 S_int=4.1429 S_mean=0.20715 c_max=10
+L=6 J=2 S_max=0.55851 S_int=5.2951 S_mean=0.26475 c_max=14
+L=7 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=7 J=1 S_max=0.12818 S_int=1.2615 S_mean=0.06308 c_max=10
+L=7 J=1.5 S_max=0.43776 S_int=4.1794 S_mean=0.20897 c_max=10
+L=7 J=2 S_max=0.55094 S_int=5.2816 S_mean=0.26408 c_max=14
+L=8 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=8 J=1 S_max=0.12818 S_int=1.2615 S_mean=0.06308 c_max=10
+L=8 J=1.5 S_max=0.43781 S_int=4.1809 S_mean=0.20905 c_max=10
+L=8 J=2 S_max=0.55041 S_int=5.2841 S_mean=0.26421 c_max=14
+L=9 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=9 J=1 S_max=0.12818 S_int=1.2615 S_mean=0.06308 c_max=10
+L=9 J=1.5 S_max=0.43781 S_int=4.1810 S_mean=0.20905 c_max=10
+L=9 J=2 S_max=0.55039 S_int=5.2843 S_mean=0.26422 c_max=14
+L=10 J=0.5 S_max=0.01264 S_int=0.1092 S_mean=0.00546 c_max=10
+L=10 J=1 S_max=0.12818 S_int=1.2615 S_mean=0.06308 c_max=10
+L=10 J=1.5 S_max=0.43781 S_int=4.1810 S_mean=0.20905 c_max=10
+L=10 J=2 S_max=0.55039 S_int=5.2844 S_mean=0.26422 c_max=14
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/finite_check/finite_size_detail.csv
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/finite_check/finite_size_summary.csv
+findfont: Failed to find font weight semibold, now using 700.
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/finite_check/fig_finite_size_scaling_summary.pdf
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/finite_check/fig_peak_cut_vs_L.pdf
+Wrote /home/aaron/Desktop/experiments_v_matrix/save/finite_check/fig_entropy_vs_L_cuts_5_10_15.pdf
+Done. Results in /home/aaron/Desktop/experiments_v_matrix/save/finite_check

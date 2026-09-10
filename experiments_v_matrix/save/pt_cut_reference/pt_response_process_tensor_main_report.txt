@@ -1,0 +1,31 @@
+Process-tensor main-figure validation report
+=========================================
+Parameters: L=6, k=3, g=1.0, dt=0.1
+
+Cut retention:
+  c=1: retained: S_PT^cb range=7.699e-06, S_V^full range=2.202e-05 over J>0
+  c=2: retained: S_PT^cb range=1.925e-03, S_V^full range=3.070e-03 over J>0
+  c=3: retained: S_PT^cb range=3.893e-03, S_V^full range=5.154e-03 over J>0
+Retained cuts for figure: [1, 2, 3]
+
+Max causal-break probe error: 2.226e-02
+(Swap-probe upper bound; Choi trace and min-eigenvalue checks enforced separately.)
+
+J=0 validation (all cuts):
+  c=1: S_PT^cb=2.011e-28, S_V^full=2.638e-26
+  c=2: S_PT^cb=8.576e-29, S_V^full=-0.000e+00
+  c=3: S_PT^cb=9.965e-28, S_V^full=2.184e-27
+
+Fit diagnostics (not shown on figure unless collapse tests pass):
+  c=1: alpha=1.0649, CI=[1.0369, 1.1565], Pearson r_log=0.999178, Spearman=1.000000
+  c=2: alpha=1.1012, CI=[1.0660, 1.2110], Pearson r_log=0.998708, Spearman=1.000000
+  c=3: alpha=1.0613, CI=[1.0399, 1.1357], Pearson r_log=0.999425, Spearman=1.000000
+  pooled: alpha=0.9654, CI=[0.9352, 0.9926], Pearson r_log=0.994661, Spearman=0.995106
+  collapse tests: {'spearman_all_gt_0.98': True, 'slope_agreement': True, 'residual_cut_spread_log10': 0.22134781461979913, 'residual_separation_ok': False}
+  pooled fit plotted: False
+
+Output file checksums:
+  pt_response_process_tensor_main.pdf: mtime=2026-07-07T15:53:56.960379+00:00, sha256=5806ff50267f0f518bb999665cbbffb5d7424ff3cab746d6d099f761e53a8b71
+  pt_response_process_tensor_main.svg: mtime=2026-07-07T15:53:57.120381+00:00, sha256=56779deb24870ce20eada3019b10af04fc5afd9f44614fcda38d1bd3dbfcc3b2
+  pt_response_process_tensor_main.png: mtime=2026-07-07T15:53:57.452386+00:00, sha256=c81ea396a92e623a04101e43f26831a85caad6f917f1617d99a16d4f6ec02de3
+  pt_response_process_tensor_main_data.csv: mtime=2026-07-07T15:53:56.231369+00:00, sha256=6ec1c36e8a2236080251140e5ccb22fe7efb8968edd2a292ada059fd8dcf9ed6

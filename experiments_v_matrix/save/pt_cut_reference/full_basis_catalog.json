@@ -1,0 +1,12 @@
+{
+  "len_P_full": 64,
+  "len_F_full": 64,
+  "n_response_entries": 4096,
+  "n_obs_channels": 3,
+  "intervention_tomographically_complete": true,
+  "output_informationally_complete": true,
+  "n_pasts_8": 8,
+  "n_futures_8": 8,
+  "n_pasts_64": 64,
+  "n_futures_64": 64
+}
