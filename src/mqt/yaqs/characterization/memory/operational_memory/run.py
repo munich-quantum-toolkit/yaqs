@@ -10,12 +10,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
 
 from ..shared.interventions import DEFAULT_INTERVENTION_STYLE
-from .branch_weights import compute_branch_weights
 from .grid import assemble_probe_grid, compute_delayed_length
 from .response_matrix import assemble_response_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
@@ -24,25 +23,11 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
-class SupportsEvaluateProbes(Protocol):
-    """Protocol for backends that implement :meth:`evaluate_probes`."""
-
-    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate unweighted probe responses.
-
-        Args:
-            probe_set: Sampled split-cut probes.
-
-        Returns:
-            Pauli tomography array of shape ``(n_pasts, n_futures, 4)``.
-        """
-
-
 class SupportsEvaluateProbesWeighted(Protocol):
     """Protocol for backends that implement :meth:`evaluate_probes_weighted`."""
 
     def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate weighted probe responses.
+        """Evaluate probe responses with complete retained-record probabilities.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -53,13 +38,11 @@ class SupportsEvaluateProbesWeighted(Protocol):
         """
 
 
-OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbes | SupportsEvaluateProbesWeighted
-"""Union of split-cut probing backends.
+OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbesWeighted
+"""Split-cut backend returning normalized responses and complete record probabilities.
 
-Implement **either** :meth:`evaluate_probes_weighted` (simulation branch weights, e.g.
-:class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
-:meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
-:func:`evaluate_probes_with_weights` dispatches to the implemented method.
+Backends must implement :meth:`evaluate_probes_weighted`. Normalized Pauli responses alone are
+insufficient because retained-outcome probabilities depend on the process dynamics.
 """
 
 
@@ -67,27 +50,26 @@ def evaluate_probes_with_weights(
     process: OperationalMemoryBackend,
     probe_set: ProbeSet,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Evaluate weighted probe responses; analytic weights unless the class overrides.
+    """Evaluate responses and complete process-aware retained-record probabilities.
 
     Args:
-        process: Backend implementing :meth:`evaluate_probes_weighted` or :meth:`evaluate_probes`.
+        process: Backend implementing :meth:`evaluate_probes_weighted`.
         probe_set: Sampled split-cut probes.
 
     Returns:
-        Tuple ``(pauli_ixyz_ij, weights_ij)``.
+        Tuple ``(pauli_ixyz_ij, weights_ij)`` supplied by the backend.
 
     Raises:
-        TypeError: If ``process`` implements neither weighted nor unweighted probing.
+        TypeError: If ``process`` does not implement weighted probing.
     """
     weighted_fn = getattr(process, "evaluate_probes_weighted", None)
     if callable(weighted_fn):
         pauli_ixyz_ij, weights_ij = weighted_fn(probe_set)
         return np.asarray(pauli_ixyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
-    evaluate_fn = getattr(process, "evaluate_probes", None)
-    if callable(evaluate_fn):
-        pauli_ixyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
-        return pauli_ixyz_ij, compute_branch_weights(probe_set)
-    msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
+    msg = (
+        f"{type(process).__name__} must implement evaluate_probes_weighted; "
+        "normalized probe responses do not determine retained-outcome probabilities"
+    )
     raise TypeError(msg)
 
 
@@ -238,8 +220,7 @@ def _evaluate_operational_memory_probes(
         eval_kwargs["intervention_steps_list"] = intervention_steps_list
     if execution_override is not None:
         eval_kwargs["_execution"] = execution_override
-    weighted_process = cast("SupportsEvaluateProbesWeighted", process)
-    return weighted_process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
+    return process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
 
 
 def run_memory_characterization(
@@ -278,7 +259,7 @@ def run_memory_characterization(
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
             different ``cut`` or ``num_interventions``, or ``delay > 0`` with a backend that does not
-            support custom sequences.
+            support custom sequences, or a backend returns invalid weighted responses.
     """
     if delay < 0:
         msg = f"delay must be >= 0, got {delay}"

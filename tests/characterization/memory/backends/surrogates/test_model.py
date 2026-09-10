@@ -66,15 +66,16 @@ def _make_probe_set(*, cut: int = 1, num_interventions: int = 1, n_p: int = 2, n
         A probe set with zero feature rows and |0> cut kets.
     """
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    identity_step = {"type": "unitary", "U": np.eye(2, dtype=np.complex128)}
     return ProbeSet(
         cut=cut,
         num_interventions=num_interventions,
         past_features=np.zeros((n_p, cut, 32), dtype=np.float32),
         future_features=np.zeros((n_f, num_interventions - cut + 1, 32), dtype=np.float32),
-        past_pairs=[[] for _ in range(n_p)],
+        past_pairs=[[identity_step.copy() for _ in range(cut - 1)] for _ in range(n_p)],
         past_cut_meas=[z.copy() for _ in range(n_p)],
         future_prep_cut=[z.copy() for _ in range(n_f)],
-        future_pairs=[[] for _ in range(n_f)],
+        future_pairs=[[identity_step.copy() for _ in range(num_interventions - cut)] for _ in range(n_f)],
     )
 
 
@@ -314,6 +315,43 @@ def test_process_tensor_surrogate_evaluate_probes_shape_and_restores_mode() -> N
     assert out.shape == (2, 3, 4)
     assert out.dtype == np.float32
     assert model.training is True
+
+
+def test_process_tensor_surrogate_estimates_selected_future_probability(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Surrogate complete weights use its predicted state before each retained outcome."""
+    torch = import_torch()
+    model = _tiny_model(num_interventions=2)
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
+    rho_z = np.outer(z, z.conj())
+    rho_plus = np.outer(plus, plus.conj())
+
+    def _fake_forward(e_features: object, rho0: object) -> object:
+        _ = (e_features, rho0)
+        packed_z = pack_rho8(rho_z)
+        packed_plus = pack_rho8(rho_plus)
+        return torch.as_tensor(
+            np.array([[packed_z, packed_z], [packed_plus, packed_z]], dtype=np.float32),
+            dtype=torch.float32,
+        )
+
+    monkeypatch.setattr(model, "forward", _fake_forward)
+    future_features = np.empty((2, 2, 32), dtype=np.float32)
+    future_features[0, 0] = encode_choi_features(rho_z, np.eye(2, dtype=np.complex128))
+    future_features[1, 0] = encode_choi_features(rho_plus, np.eye(2, dtype=np.complex128))
+    future_features[:, 1] = encode_choi_features(rho_z, rho_z)
+    probe_set = ProbeSet(
+        cut=1,
+        num_interventions=2,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=future_features,
+        past_pairs=[[]],
+        past_cut_meas=[z.copy()],
+        future_prep_cut=[z.copy(), plus.copy()],
+        future_pairs=[[(z, z)], [(z, z)]],
+    )
+    _pauli, weights = model.evaluate_probes_weighted(probe_set)
+    np.testing.assert_allclose(weights, np.array([[1.0, 0.5]], dtype=np.float64), atol=1e-7)
 
 
 def test_process_tensor_surrogate_evaluate_probes_with_past_and_future_segments() -> None:

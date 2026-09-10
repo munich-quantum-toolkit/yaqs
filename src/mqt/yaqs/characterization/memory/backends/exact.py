@@ -59,15 +59,13 @@ def _branch_weights_from_simulation(
     *,
     n_pasts: int,
     n_futures: int,
-    cut: int,
 ) -> np.ndarray:
-    """Compute branch weights from simulated step probabilities through ``cut``.
+    """Read complete retained-record probabilities from simulation diagnostics.
 
     Args:
         simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
-        cut: Causal cut index.
 
     Returns:
         Branch-weight array of shape ``(n_pasts, n_futures)``.
@@ -75,9 +73,8 @@ def _branch_weights_from_simulation(
     w = np.zeros((n_pasts, n_futures), dtype=np.float64)
     for past_idx in range(n_pasts):
         for future_idx in range(n_futures):
-            probs = simulation_diagnostics[past_idx * n_futures + future_idx]["step_probs"]
-            n = min(cut, len(probs))
-            w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
+            diagnostic = simulation_diagnostics[past_idx * n_futures + future_idx]
+            w[past_idx, future_idx] = float(diagnostic["cumulative_weight_final"])
     return w
 
 
@@ -210,7 +207,7 @@ def simulate_exact(
 
     Returns:
         ``(pauli_ij, weights_ij, simulation_diagnostics)`` where ``pauli_ij`` has shape
-        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds break weights through cut ``c``,
+        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds complete retained-record probabilities,
         and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
 
     Raises:
@@ -245,5 +242,5 @@ def simulate_exact(
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
     pauli_ixyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
-    w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
+    w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f)
     return pauli_ixyz, w, simulation_diagnostics

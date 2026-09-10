@@ -20,10 +20,11 @@ def sanitize_branch_weights(
     *,
     log_warnings: bool = True,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    """Sanitize branch weights for weighted matrix assembly.
+    """Sanitize branch weights for standalone diagnostics.
 
-    Clamps negative values to zero for ``w**beta`` construction. Does **not**
-    renormalize weights across grid entries.
+    Clamps invalid values without renormalizing across grid entries. Canonical
+    response-matrix assembly does not call this helper: it rejects invalid
+    probabilities so that reported weights and identity rows cannot disagree.
 
     Args:
         weights_ij: Branch weights of shape ``(n_pasts, n_futures)``.
@@ -60,23 +61,20 @@ def sanitize_branch_weights(
 def assemble_response_matrix(
     pauli_ij: np.ndarray,
     weights_ij: np.ndarray,
-    *,
-    beta: float = 1.0,
-    log_weight_warnings: bool = True,
 ) -> np.ndarray:
     r"""Build the raw weighted response matrix.
 
-    Computes :math:`V^{(\beta)}_{(j,\alpha),i} = w_{ij}^{\beta} f_{ij,\alpha}` from Pauli
-    tomography in ``(I, X, Y, Z)`` order. Rows label future-probe response channels and columns
-    label conditioned histories. At the paper-facing default :math:`\beta=1`, normalized
-    tomography has identity entries :math:`V_{(j,I),i}=w_{ij}`.
+    Computes :math:`V_{(j,\alpha),i} = p_{ij} f_{ij,\alpha}` from Pauli tomography in
+    ``(I, X, Y, Z)`` order, where :math:`p_{ij}` is the probability of every retained outcome
+    in the complete history and future record. Rows label future-probe response channels and
+    columns label conditioned histories. Normalized tomography has identity entries
+    :math:`V_{(j,I),i}=p_{ij}`.
 
     Args:
         pauli_ij: Pauli tomography with shape ``(n_histories, n_futures, 4)`` and channel order
             ``(I, X, Y, Z)``.
-        weights_ij: Branch weights with shape ``(n_histories, n_futures)``.
-        beta: Weight exponent applied to branch weights.
-        log_weight_warnings: Passed to :func:`sanitize_branch_weights`.
+        weights_ij: Complete retained-record probabilities with shape
+            ``(n_histories, n_futures)``.
 
     Returns:
         Raw branch-weighted response matrix with shape
@@ -84,21 +82,28 @@ def assemble_response_matrix(
         ``(I, X, Y, Z)`` order.
 
     Raises:
-        ValueError: If ``pauli_ij`` is not a three-dimensional four-channel array, or if
-            ``weights_ij`` does not match its history and future dimensions.
+        ValueError: If the tomography shape or identity channel is invalid, or if
+            ``weights_ij`` has the wrong shape or contains values outside ``[0, 1]``.
     """
     features = np.asarray(pauli_ij, dtype=np.float64)
     if features.ndim != 3 or features.shape[-1] != 4:
         msg = f"pauli_ij must have shape (n_histories, n_futures, 4), got {features.shape}."
+        raise ValueError(msg)
+    if not np.all(np.isfinite(features)):
+        msg = "pauli_ij must contain only finite values."
         raise ValueError(msg)
     n_p, n_f, d_out = features.shape
     weights = np.asarray(weights_ij, dtype=np.float64)
     if weights.shape != (n_p, n_f):
         msg = f"weights_ij must have shape {(n_p, n_f)}, got {weights.shape}."
         raise ValueError(msg)
-    w_clean, _ = sanitize_branch_weights(weights, log_warnings=log_weight_warnings)
-    scale = np.power(w_clean, float(beta))
-    weighted = features * scale[:, :, np.newaxis]
+    if not np.allclose(features[..., 0], 1.0, rtol=0.0, atol=1e-8):
+        msg = "pauli_ij identity expectations must equal 1 for normalized conditional states."
+        raise ValueError(msg)
+    if not np.all(np.isfinite(weights)) or np.any((weights < 0.0) | (weights > 1.0)):
+        msg = "weights_ij must contain finite complete-record probabilities in [0, 1]."
+        raise ValueError(msg)
+    weighted = features * weights[:, :, np.newaxis]
     return weighted.transpose(1, 2, 0).reshape(n_f * d_out, n_p)
 
 

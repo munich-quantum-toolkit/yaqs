@@ -68,12 +68,12 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     """run_memory_characterization delegates evaluation to a user-supplied process object."""
 
     class DummyProcess:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
             pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
             pauli_ixyz[..., 0] = 1.0
-            return pauli_ixyz
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
 
     out = run_memory_characterization(
         process=DummyProcess(), cut=1, num_interventions=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7)
@@ -83,8 +83,8 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     assert "entropy" in out
 
 
-def test_branch_weights_constant_across_future_columns() -> None:
-    """Branch weights are constant across future columns for a fixed past."""
+def test_deterministic_future_weights_reduce_to_history_probability() -> None:
+    """Unitary future probes do not change each history's retained probability."""
     rng = np.random.default_rng(3)
     probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=5, n_futures=4, rng=rng)
     w = compute_branch_weights(probe_set)
@@ -98,11 +98,11 @@ def test_compute_branch_weight_from_steps() -> None:
         {"type": "unitary", "U": np.eye(2, dtype=np.complex128)},
         (z, z),
     ]
-    assert _compute_branch_weight_for_sequence(steps, cut=2) == pytest.approx(1.0)
+    assert _compute_branch_weight_for_sequence(steps) == pytest.approx(1.0)
 
 
-def test_process_tensor_run_memory_characterization_returns_cut_weights() -> None:
-    """Dense process-tensor orchestration returns positive cut weights."""
+def test_process_tensor_run_memory_characterization_returns_complete_weights() -> None:
+    """Dense process-tensor orchestration returns positive complete-record weights."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -205,8 +205,8 @@ def test_mpo_process_tensor_entropy_matches_dense() -> None:
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
 
-def test_evaluate_probes_with_weights_process_tensor_uses_analytic_weights() -> None:
-    """Process-tensor backends without weighted evaluate use analytic branch weights."""
+def test_evaluate_probes_with_weights_process_tensor_uses_subnormalized_weights() -> None:
+    """Process tensors supply complete weights from subnormalized contractions."""
     rng = np.random.default_rng(2)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -225,26 +225,38 @@ def test_evaluate_probes_with_weights_process_tensor_uses_analytic_weights() -> 
 
 
 def test_evaluate_probes_with_weights_missing_method_raises() -> None:
-    """Objects without probe methods raise TypeError."""
+    """Objects without weighted probe responses raise TypeError."""
 
     class NoProbes:
         pass
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    with pytest.raises(TypeError, match="evaluate_probes"):
+    with pytest.raises(TypeError, match="evaluate_probes_weighted"):
         evaluate_probes_with_weights(cast("OperationalMemoryBackend", NoProbes()), probe_set)
+
+
+def test_evaluate_probes_with_weights_rejects_normalized_only_backend() -> None:
+    """Normalized responses alone cannot determine retained-outcome probabilities."""
+
+    class UnweightedBackend:
+        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+            return np.zeros((len(probe_set.past_pairs), len(probe_set.future_pairs), 4), dtype=np.float64)
+
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    with pytest.raises(TypeError, match="normalized probe responses do not determine"):
+        evaluate_probes_with_weights(cast("OperationalMemoryBackend", UnweightedBackend()), probe_set)
 
 
 def test_evaluate_probes_with_weights_inherited_method() -> None:
     """Subclasses that inherit probe methods dispatch without TypeError."""
 
     class BaseBackend:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
             pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
             pauli_ixyz[..., 0] = 1.0
-            return pauli_ixyz
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
 
     class ChildBackend(BaseBackend):
         pass
@@ -319,7 +331,7 @@ def _entropy_from_cumulative_weights(
     for ii in range(n_p):
         for jj in range(n_f):
             weights[ii, jj] = _diagnostics_final_weight(simulation_diagnostics[ii * n_f + jj])
-    response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    response_matrix = assemble_response_matrix(pauli, weights)
     return float(compute_spectrum(response_matrix)["entropy"])
 
 
@@ -335,6 +347,7 @@ def test_run_memory_characterization_matches_cumulative_weight_entropy() -> None
     out = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
     exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
     assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
+    np.testing.assert_allclose(out["response_matrix"][0::4], out["weights_ij"].T)
 
 
 def test_run_memory_characterization_rejects_mismatched_probe_set() -> None:
@@ -343,10 +356,10 @@ def test_run_memory_characterization_rejects_mismatched_probe_set() -> None:
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
 
     class DummyProcess:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float64)
+            return np.zeros((n_p, n_f, 4), dtype=np.float64), np.ones((n_p, n_f), dtype=np.float64)
 
     with pytest.raises(ValueError, match="probe_set was built for"):
         run_memory_characterization(process=DummyProcess(), cut=2, num_interventions=2, probe_set=probe_set)
@@ -356,13 +369,13 @@ def test_evaluate_probes_with_weights_preserves_float64() -> None:
     """Probe responses are not downcast to float32 before memory assembly."""
 
     class HighPrecisionBackend:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
             out = np.zeros((n_p, n_f, 4), dtype=np.float64)
             out[..., 0] = 1.0
             out[..., 1] = 1e-7
-            return out
+            return out, np.ones((n_p, n_f), dtype=np.float64)
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=1, n_futures=1, rng=np.random.default_rng(0))
     pauli, _weights = evaluate_probes_with_weights(HighPrecisionBackend(), probe_set)

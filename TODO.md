@@ -84,18 +84,18 @@ This requirement does not change the current unitary-future benchmarks. It is
 required for selected future outcomes, the reset-bridge experiment, and the
 later witness experiment.
 
-- [ ] Define `weights[i, j]` as the probability of all retained outcomes in the
+- [x] Define `weights[i, j]` as the probability of all retained outcomes in the
       history and future record represented by matrix entry `(j, i)`.
-- [ ] For deterministic future operations, verify that this reduces to the
+- [x] For deterministic future operations, verify that this reduces to the
       history-branch probability.
-- [ ] For non-trace-preserving future operations, include their outcome
+- [x] For non-trace-preserving future operations, include their outcome
       probabilities instead of stopping the product at the causal cut.
-- [ ] Prefer returning a subnormalized final branch from a backend. If a backend
+- [x] Prefer returning a subnormalized final branch from a backend. If a backend
       returns a normalized state and a separate probability, verify that their
       product equals the subnormalized response entry.
-- [ ] Keep the canonical construction linear in probabilities. The paper's
-      response matrix uses `beta = 1`; treat other powers as separately named
-      diagnostics if YAQS retains them.
+- [x] Keep the canonical construction linear in probabilities. The canonical API
+      multiplies by `p_ij` directly; any nonlinear probability powers must be
+      separately named diagnostics.
 
 ## 5. Update the public API and documentation
 
@@ -131,7 +131,7 @@ Likely files include:
 - [x] Add a memoryless example whose raw response matrix has rank one.
 - [x] Verify that transposing the old raw XYZ block preserves its singular
       values before adding the identity block.
-- [ ] Test a retained future outcome whose probability depends on both history
+- [x] Test a retained future outcome whose probability depends on both history
       and future indices.
 - [x] Update public-run and result-container tests for the single canonical
       response matrix.

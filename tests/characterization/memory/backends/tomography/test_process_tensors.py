@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     DenseProcessTensor,
@@ -28,7 +29,9 @@ from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import
     evaluate_probes,
     trace_partial_dense,
 )
+from mqt.yaqs.characterization.memory.operational_memory.grid import assemble_probe_sequence
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
+from mqt.yaqs.characterization.memory.shared.encoding import encode_rho_pauli
 from mqt.yaqs.characterization.memory.shared.intervention_steps import build_intervention_operator
 from mqt.yaqs.characterization.memory.shared.interventions import InterventionMap
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -317,6 +320,84 @@ def test_dense_process_tensor_evaluate_probes_smoke() -> None:
     np.testing.assert_allclose(wrapped, pauli)
 
 
+def test_dense_process_tensor_weighted_responses_reconstruct_subnormalized_tomography() -> None:
+    """Normalized responses times complete weights recover each raw PT contraction."""
+    pt = _tiny_process_tensor(num_interventions=2)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=3,
+        rng=np.random.default_rng(73),
+        intervention_style="measure_prepare",
+    )
+    pauli, weights = pt.evaluate_probes_weighted(probe_set)
+    for i in range(2):
+        for j in range(3):
+            steps = assemble_probe_sequence(probe_set, i, j)
+            raw = pt._predict_raw([convert_probe_callable(step) for step in steps])
+            np.testing.assert_allclose(weights[i, j] * pauli[i, j], encode_rho_pauli(raw), atol=1e-12)
+    wrapped_pauli, wrapped_weights = pt.evaluate_probes_weighted(probe_set)
+    np.testing.assert_allclose(wrapped_pauli, pauli)
+    np.testing.assert_allclose(wrapped_weights, weights)
+
+
+def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
+    """Raw PT traces reproduce exact complete probabilities for selected future outcomes."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    pt = build_process_tensor(
+        ham.mpo,
+        params,
+        timesteps=[0.0, 0.0, 0.0],
+        parallel=False,
+        return_type="dense",
+    )
+    assert isinstance(pt, DenseProcessTensor)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=3,
+        rng=np.random.default_rng(73),
+        intervention_style="measure_prepare",
+    )
+
+    pauli_pt, weights_pt = pt.evaluate_probes_weighted(probe_set)
+    pauli_exact, weights_exact, _ = simulate_exact(
+        probe_set=probe_set,
+        operator=ham.mpo,
+        sim_params=params,
+        initial_psi=np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128),
+        parallel=False,
+    )
+
+    assert np.any(np.ptp(weights_exact, axis=1) > 1e-8)
+    np.testing.assert_allclose(weights_pt, weights_exact, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(
+        weights_pt[..., np.newaxis] * pauli_pt,
+        weights_exact[..., np.newaxis] * pauli_exact,
+        rtol=1e-7,
+        atol=1e-8,
+    )
+
+
+def test_impossible_branch_predict_matches_between_dense_and_mpo() -> None:
+    """Dense and MPO predictors preserve the same near-zero impossible branch."""
+    mpo_pt = _tiny_mpo_process_tensor(num_interventions=1)
+    dense_pt = mpo_pt.to_dense()
+    zero = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    one = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
+    impossible = convert_probe_callable((one, zero))
+
+    dense_prediction = dense_pt.predict([impossible])
+    mpo_prediction = mpo_pt.predict([impossible])
+
+    assert np.linalg.norm(dense_prediction) < 1e-12
+    assert np.linalg.norm(mpo_prediction) < 1e-12
+    np.testing.assert_allclose(mpo_prediction, dense_prediction, atol=1e-12)
+
+
 def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -330,7 +411,14 @@ def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
     )
     dense_pt = mpo_pt.to_dense()
 
-    probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=np.random.default_rng(1))
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=2,
+        rng=np.random.default_rng(1),
+        intervention_style="measure_prepare",
+    )
 
     def _fail_to_dense(self: MPOProcessTensor) -> DenseProcessTensor:
         _ = self
@@ -339,10 +427,14 @@ def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
 
     monkeypatch.setattr(MPOProcessTensor, "to_dense", _fail_to_dense)
     mpo_pauli = mpo_pt.evaluate_probes(probe_set)
+    mpo_pauli_weighted, mpo_weights = mpo_pt.evaluate_probes_weighted(probe_set)
 
     dense_pauli = dense_pt.evaluate_probes(probe_set)
+    dense_pauli_weighted, dense_weights = dense_pt.evaluate_probes_weighted(probe_set)
     assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
     np.testing.assert_allclose(mpo_pauli, dense_pauli, atol=1e-6)
+    np.testing.assert_allclose(mpo_pauli_weighted, dense_pauli_weighted, atol=1e-6)
+    np.testing.assert_allclose(mpo_weights, dense_weights, atol=1e-6)
 
     # Restore before methods that still densify (qmi/cmi).
     monkeypatch.undo()

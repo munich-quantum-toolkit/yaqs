@@ -42,7 +42,7 @@ def test_assemble_response_matrix_requires_matching_weight_shape() -> None:
 
 
 def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
-    """Negative and non-finite weights are clamped for matrix assembly."""
+    """The standalone diagnostic sanitizer reports and clamps invalid weights."""
     w = np.array([[1.0, -0.5], [np.nan, np.inf]], dtype=np.float64)
     clean, meta = sanitize_branch_weights(w, log_warnings=False)
     assert meta["negative_count"] == 1
@@ -53,7 +53,8 @@ def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
 def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None:
     """A non-square sentinel fixes every response-matrix index and flattening convention."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
-    weights = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
+    pauli[..., 0] = 1.0
+    weights = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float64)
     response_matrix = assemble_response_matrix(pauli, weights)
     expected = np.empty((12, 2), dtype=np.float64)
     for i in range(2):
@@ -68,6 +69,7 @@ def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None
 def test_transpose_preserves_raw_xyz_block_singular_values() -> None:
     """The transposed XYZ block retains its pre-identity scalar diagnostics."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
+    pauli[..., 0] = 1.0
     weights = np.array([[1.0, 0.5, 0.25], [0.75, 0.4, 0.2]], dtype=np.float64)
     old_orientation = (pauli[..., 1:] * weights[..., np.newaxis]).reshape(2, 9)
     full_orientation = assemble_response_matrix(pauli, weights)
@@ -84,14 +86,32 @@ def test_transpose_preserves_raw_xyz_block_singular_values() -> None:
     )
 
 
-def test_assemble_response_matrix_beta_scales_weights() -> None:
-    """Beta exponent scales branch weights in the raw response matrix."""
+def test_assemble_response_matrix_is_linear_in_probabilities() -> None:
+    """The canonical response matrix uses probabilities linearly."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
+    weights = np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64)
+    response_matrix = assemble_response_matrix(pauli, weights)
+    np.testing.assert_allclose(assemble_response_matrix(pauli, 2.0 * weights), 2.0 * response_matrix)
+
+
+@pytest.mark.parametrize(
+    "invalid_weight",
+    [-0.1, 1.1, np.nan, np.inf],
+)
+def test_assemble_response_matrix_rejects_invalid_probabilities(invalid_weight: float) -> None:
+    """Canonical assembly never silently changes invalid backend probabilities."""
+    pauli = np.zeros((1, 1, 4), dtype=np.float64)
     pauli[..., 0] = 1.0
-    weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)
-    m1 = assemble_response_matrix(pauli, weights, beta=1.0)
-    m2 = assemble_response_matrix(pauli, weights, beta=2.0)
-    assert m2[4, 0] == pytest.approx(2.0 * m1[4, 0], rel=1e-6)
+    with pytest.raises(ValueError, match="probabilities in \\[0, 1\\]"):
+        assemble_response_matrix(pauli, np.array([[invalid_weight]], dtype=np.float64))
+
+
+def test_assemble_response_matrix_requires_normalized_identity_channel() -> None:
+    """The I response must expose the supplied probability without rescaling."""
+    pauli = np.zeros((1, 1, 4), dtype=np.float64)
+    pauli[..., 0] = 0.75
+    with pytest.raises(ValueError, match="identity expectations must equal 1"):
+        assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
 
 
 def test_identity_rows_equal_branch_weights() -> None:
@@ -162,7 +182,7 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
         initial_psi=psi0,
         parallel=False,
     )
-    response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    response_matrix = assemble_response_matrix(pauli, weights)
     s_direct = np.linalg.svd(response_matrix, compute_uv=False)
     ana = compute_spectrum(response_matrix)
     np.testing.assert_allclose(
@@ -203,10 +223,6 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
         p_sub = np.asarray(pauli[:m, :m, ...])
         w = np.asarray(weights)
         w_sub = w[:m, :m, ...] if w.ndim >= 2 else w[:m, ...]
-        response_matrix = assemble_response_matrix(
-            p_sub,
-            w_sub,
-            log_weight_warnings=False,
-        )
+        response_matrix = assemble_response_matrix(p_sub, w_sub)
         entropies.append(float(compute_spectrum(response_matrix, discarded_weight_threshold=None)["entropy"]))
     assert entropies[-1] > entropies[0] * 1.05

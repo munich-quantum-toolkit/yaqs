@@ -27,7 +27,15 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ...shared.encoding import DEFAULT_INITIAL_RHO0, decode_packed_pauli_batch, normalize_backend_rho, pack_rho8
+from ...operational_memory.grid import assemble_probe_sequence
+from ...shared.encoding import (
+    DEFAULT_INITIAL_RHO0,
+    decode_packed_pauli_batch,
+    normalize_backend_rho,
+    pack_rho8,
+    unpack_rho8,
+)
+from ...shared.intervention_steps import compute_intervention_probability
 from ...shared.interventions import encode_choi_features
 
 if TYPE_CHECKING:
@@ -263,6 +271,23 @@ class ProcessTensorSurrogate(nn.Module):
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
 
+        """
+        pauli_ixyz, _weights = self.evaluate_probes_weighted(probe_set)
+        return pauli_ixyz
+
+    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate responses and model-estimated complete retained-record probabilities.
+
+        Each local outcome probability is evaluated on the model's predicted reduced state
+        immediately before that intervention.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
+            ``(n_pasts, n_futures)``.
+
         Raises:
             ValueError: If ``probe_set.num_interventions`` differs from the model training horizon.
         """
@@ -278,8 +303,10 @@ class ProcessTensorSurrogate(nn.Module):
         past_len = int(probe_set.cut) - 1
         suffix_len = int(probe_set.num_interventions) - int(probe_set.cut)
         v_rows = np.empty((n_p, n_f, 4), dtype=np.float32)
+        weights = np.empty((n_p, n_f), dtype=np.float64)
         dev = next(self.parameters()).device
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
+        rho0_matrix = normalize_backend_rho(unpack_rho8(rho0.detach().cpu().numpy()))
         was_training = self.training
         self.eval()
         try:
@@ -305,13 +332,22 @@ class ProcessTensorSurrogate(nn.Module):
                 )
                 seq = np.concatenate([past_batch, cut_step, future_suffix], axis=1)
                 seq_t = torch.from_numpy(seq).to(device=dev, dtype=torch.float32)
-                rho_pred_batch = self.predict_final_state_batch(rho0, seq_t, restore_training=False)
-                packed_np = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
-                v_rows[i] = decode_packed_pauli_batch(packed_np).astype(np.float32)
+                rho0_batch = rho0.unsqueeze(0).expand(n_f, -1)
+                with torch.no_grad():
+                    rho_pred_sequence = self.forward(seq_t, rho0_batch)
+                packed_sequence = rho_pred_sequence.detach().cpu().numpy().astype(np.float32)
+                v_rows[i] = decode_packed_pauli_batch(packed_sequence[:, -1, :]).astype(np.float32)
+                for j in range(n_f):
+                    rho_before = rho0_matrix
+                    probability = 1.0
+                    for step_index, step in enumerate(assemble_probe_sequence(probe_set, i, j)):
+                        probability *= compute_intervention_probability(rho_before, step)
+                        rho_before = normalize_backend_rho(unpack_rho8(packed_sequence[j, step_index]))
+                    weights[i, j] = probability
         finally:
             if was_training:
                 self.train()
-        return v_rows
+        return v_rows, weights
 
     def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.

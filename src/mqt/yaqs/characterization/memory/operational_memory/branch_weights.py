@@ -25,41 +25,44 @@ if TYPE_CHECKING:
     from .samples import ProbeSet
 
 
-def _compute_branch_weight_for_sequence(steps: list[Any], *, cut: int) -> float:
-    """Compute analytic branch weight from step probabilities up to ``cut``.
+def _compute_branch_weight_for_sequence(steps: list[Any]) -> float:
+    """Compute the analytic probability of all retained outcomes in a sequence.
 
     Args:
         steps: Full intervention sequence.
-        cut: Causal cut index.
 
     Returns:
-        Cumulative branch weight ``prod_t p_t`` for ``t < cut``.
+        Complete cumulative branch weight ``prod_t p_t``.
     """
     rho = DEFAULT_INITIAL_RHO0.copy()
     weight = 1.0
-    for t in range(min(int(cut), len(steps))):
-        sp = compute_intervention_probability(rho, steps[t])
+    for step in steps:
+        sp = compute_intervention_probability(rho, step)
         weight *= sp
         if weight < 1e-15:
             return float(weight)
-        rho = apply_intervention_to_rho(rho, steps[t])
+        rho = apply_intervention_to_rho(rho, step)
     return float(weight)
 
 
 def compute_branch_weights(probe_set: ProbeSet) -> np.ndarray:
-    r"""Compute analytic branch weights :math:`w_{\alpha,m}` at the causal cut.
+    """Compute isolated-probe complete-record weight diagnostics.
+
+    This helper propagates only a single-qubit reference state through the probe
+    interventions. It does not include target dynamics or environmental correlations and is
+    therefore not used by the canonical response-matrix path.
 
     Args:
         probe_set: Sampled split-cut probes.
 
     Returns:
-        Array of shape ``(n_pasts, n_futures)`` constant across future columns per past.
+        Array of shape ``(n_pasts, n_futures)``. Entries can vary along both axes when future
+        probe steps retain non-deterministic outcomes.
     """
     n_pasts = len(probe_set.past_pairs)
     n_futures = len(probe_set.future_pairs)
-    cut = probe_set.cut
     w = np.empty((n_pasts, n_futures), dtype=np.float64)
     for i in range(n_pasts):
-        w_i = _compute_branch_weight_for_sequence(assemble_probe_sequence(probe_set, i, 0), cut=cut)
-        w[i, :] = w_i
+        for j in range(n_futures):
+            w[i, j] = _compute_branch_weight_for_sequence(assemble_probe_sequence(probe_set, i, j))
     return w

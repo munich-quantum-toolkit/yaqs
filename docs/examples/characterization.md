@@ -129,10 +129,11 @@ For an SVD $V=U\Sigma W^\dagger$, the columns of $U$ describe resolved
 future-response directions, while the columns of $W$ describe combinations of
 conditioned histories.
 
-Hamiltonian `characterize` obtains weights from simulated intervention
-probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`). Surrogate
-and exact-reference backends use the same probing protocol with analytic weights
-on the reference probe path.
+Hamiltonian `characterize` obtains complete retained-record probabilities from
+the simulated intervention sequence (MCWF or TJM/MPS, per `representation`).
+Process-tensor backends obtain the same probabilities from the trace of each
+subnormalized contraction, while surrogates estimate them from their predicted
+pre-intervention reduced states.
 
 ### Coupling strength and memory
 

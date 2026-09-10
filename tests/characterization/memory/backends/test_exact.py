@@ -174,8 +174,8 @@ def test_exact_run_memory_characterization_builds_static_ctx_internally(monkeypa
     assert calls["simulate_kwargs"]["static_ctx"] == "CTX"
 
 
-def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatch) -> None:
-    """simulate_exact weights prod(step_probs[:cut])."""
+def test_exact_diagnostics_use_complete_branch_weights(monkeypatch: pytest.MonkeyPatch) -> None:
+    """simulate_exact uses the final cumulative probability, including future outcomes."""
 
     def _fake_simulate(**kwargs) -> tuple[np.ndarray, list[dict[str, object]]]:  # ruff:ignore[missing-type-kwargs]
         n_tot = len(kwargs["intervention_steps_list"])
@@ -209,7 +209,7 @@ def test_exact_diagnostics_use_cut_branch_weights(monkeypatch: pytest.MonkeyPatc
         parallel=False,
     )
     assert weights.shape == (1, 1)
-    assert float(weights[0, 0]) == pytest.approx(0.4)
+    assert float(weights[0, 0]) == pytest.approx(0.99)
 
 
 def test_exact_backend_rejects_invalid_solver() -> None:
@@ -332,38 +332,21 @@ def test_exact_backend_execution_config_override() -> None:
     assert backend.execution_config(parallel=False).parallel is False
 
 
-def _diagnostics_final_weight(diagnostics: dict[str, object]) -> float:
-    """Extract the final cumulative weight from simulation diagnostics.
-
-    Args:
-        diagnostics: Per-sequence diagnostics dict from :func:`simulate_exact`.
-
-    Returns:
-        Final cumulative branch weight as a float.
-
-    Raises:
-        TypeError: If ``cumulative_weight_final`` is not numeric.
-    """
-    val = diagnostics["cumulative_weight_final"]
-    if not isinstance(val, (int, float)):
-        msg = "cumulative_weight_final must be numeric"
-        raise TypeError(msg)
-    return float(val)
-
-
-def _cumulative_weights_from_simulation_diagnostics(
+def _weights_from_step_probabilities(
     simulation_diagnostics: list[dict[str, object]],
     *,
     n_pasts: int,
     n_futures: int,
+    stop: int | None = None,
 ) -> np.ndarray:
-    """Mirror experiments/_benchmark_memory.py cumulative_weight_final weighting.
+    """Independently multiply recorded per-step probabilities.
 
     Args:
         simulation_diagnostics: Flat list of per-(past, future) diagnostics from
             :func:`simulate_exact`.
         n_pasts: Number of past probe rows.
         n_futures: Number of future probe columns.
+        stop: Optional exclusive step index for a history-only product.
 
     Returns:
         Branch-weight matrix of shape ``(n_pasts, n_futures)``.
@@ -372,7 +355,9 @@ def _cumulative_weights_from_simulation_diagnostics(
     weights = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
-            weights[ii, jj] = _diagnostics_final_weight(simulation_diagnostics[ii * n_f + jj])
+            step_probs = np.asarray(simulation_diagnostics[ii * n_f + jj]["step_probs"], dtype=np.float64)
+            selected = step_probs if stop is None else step_probs[:stop]
+            weights[ii, jj] = float(np.prod(selected)) if selected.size else 1.0
     return weights
 
 
@@ -381,7 +366,7 @@ _PSI0_L2[0] = 1.0 + 0.0j
 
 
 def test_simulation_branch_weights_match_cumulative_final_split_cut_unitary() -> None:
-    """Paper metric path: cumulative_weight_final agrees with cut-truncated step_probs."""
+    """Complete and history-only weights agree when all future probes are unitary."""
     rng = np.random.default_rng(21)
     op = MPO.ising(length=2, J=0.5, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=12, order=1)
@@ -393,26 +378,64 @@ def test_simulation_branch_weights_match_cumulative_final_split_cut_unitary() ->
         rng=rng,
         intervention_style="haar",
     )
-    _, weights_cut, simulation_diagnostics = simulate_exact(
+    _, weights_complete, simulation_diagnostics = simulate_exact(
         probe_set=probe_set,
         operator=op,
         sim_params=params,
         initial_psi=_PSI0_L2,
         parallel=False,
     )
-    w_cumulative = _cumulative_weights_from_simulation_diagnostics(
+    complete_product = _weights_from_step_probabilities(
         simulation_diagnostics,
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),
+    )
+    history_product = _weights_from_step_probabilities(
+        simulation_diagnostics,
+        n_pasts=len(probe_set.past_pairs),
+        n_futures=len(probe_set.future_pairs),
+        stop=probe_set.cut,
     )
     w_sim = _branch_weights_from_simulation(
         simulation_diagnostics,
         n_pasts=len(probe_set.past_pairs),
         n_futures=len(probe_set.future_pairs),
-        cut=probe_set.cut,
     )
-    np.testing.assert_allclose(w_sim, weights_cut, rtol=1e-10, atol=1e-12)
-    np.testing.assert_allclose(w_cumulative, weights_cut, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(w_sim, weights_complete, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(complete_product, weights_complete, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(history_product, weights_complete, rtol=1e-10, atol=1e-12)
+
+
+def test_simulation_branch_weights_include_selected_future_outcomes() -> None:
+    """Complete exact weights retain non-deterministic outcomes after the cut."""
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=3,
+        rng=np.random.default_rng(73),
+        intervention_style="measure_prepare",
+    )
+    _, weights_complete, simulation_diagnostics = simulate_exact(
+        probe_set=probe_set,
+        operator=MPO.ising(length=1, J=0.0, g=0.0),
+        sim_params=AnalogSimParams(dt=0.1, max_bond_dim=8, order=1),
+        initial_psi=np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128),
+        parallel=False,
+    )
+    complete_product = _weights_from_step_probabilities(
+        simulation_diagnostics,
+        n_pasts=2,
+        n_futures=3,
+    )
+    history_product = _weights_from_step_probabilities(
+        simulation_diagnostics,
+        n_pasts=2,
+        n_futures=3,
+        stop=probe_set.cut,
+    )
+    np.testing.assert_allclose(weights_complete, complete_product, rtol=1e-10, atol=1e-12)
+    assert np.any(np.abs(weights_complete - history_product) > 1e-8)
 
 
 def test_exact_weights_positive_l2_quick_geometry() -> None:
