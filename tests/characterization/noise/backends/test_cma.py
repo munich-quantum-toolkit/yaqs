@@ -100,24 +100,24 @@ def test_cma_opt_scalar_fallback() -> None:
     assert len(param_history) == len(loss_history)
 
 
-@pytest.mark.filterwarnings("ignore:Initial solution argument x0.*:UserWarning")
-def test_cma_opt_default_bounds() -> None:
+def test_cma_opt_default_bounds(monkeypatch: MonkeyPatch) -> None:
     """Unbounded optimization uses infinite lower and upper limits."""
     pytest.importorskip("cma")
+    created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
         def __call__(self, x: np.ndarray) -> float:
             return float(np.sum(x**2))
 
-    xbest, fbest, _, _ = cma_backend.cma_opt(
+    cma_backend.cma_opt(
         Objective(),
         np.array([0.5, 0.5]),
         sigma0=0.1,
-        max_iter=2,
+        max_iter=1,
         popsize=4,
     )
-    assert xbest.shape == (2,)
-    assert fbest >= 0.0
+
+    assert created[0].options["bounds"] == [[-np.inf, -np.inf], [np.inf, np.inf]]
 
 
 def test_backend_exports_cma_opt() -> None:
@@ -143,7 +143,7 @@ def test_cma_opt_integration_smoke() -> None:
         sigma0=0.05,
         max_iter=2,
         popsize=4,
-        seed=0,
+        seed=42,
     )
 
     assert fbest < 1.0

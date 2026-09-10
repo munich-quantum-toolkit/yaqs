@@ -74,6 +74,77 @@ MCWF / Lindblad run or `H.ensure_sparse()`). Both can coexist on one instance. A
 piecewise Hamiltonian is a sequence of static pieces, so it cannot be
 materialized with `ensure_mpo()` or `ensure_sparse()`.
 
+## Hamiltonian energy
+
+For an MPS-backed state, contract the state with a static Hamiltonian's
+materialized MPO:
+
+```{code-cell} ipython3
+from mqt.yaqs import Hamiltonian, State
+
+state = State(4, initial="zeros")
+hamiltonian = Hamiltonian.ising(4, J=1.0, g=0.5)
+hamiltonian.ensure_mpo()
+energy = state.mps.expect_mpo(hamiltonian.mpo)
+```
+
+This computes the raw value $\langle\psi|H_{\mathrm{MPO}}|\psi\rangle$ for the
+cached MPO. If the Hamiltonian came from a dense or sparse matrix, the result
+therefore includes any approximation made when that source was factorized into
+an MPO. The method does not normalize the state. It returns the raw complex
+value and does not require the MPO to be Hermitian. A Hamiltonian energy should
+be real up to numerical error.
+
+A piecewise Hamiltonian has no single MPO or energy. Select the applicable
+static piece first:
+
+```python
+selected_hamiltonian, _duration = piecewise_hamiltonian.pieces[piece_index]
+selected_hamiltonian.ensure_mpo()
+energy = state.mps.expect_mpo(selected_hamiltonian.mpo)
+```
+
+## Long-range correlations
+
+Build an individual Pauli product or string as a full-chain MPO. Sites omitted
+from the string act as identities, so the listed sites do not need to be
+adjacent:
+
+```{code-cell} ipython3
+from mqt.yaqs import MPO, Observable, State
+
+state = State(8, initial="zeros")
+correlation = MPO()
+correlation.from_pauli_sum(
+    terms=[(1.0, "Z0 Z7")],
+    length=state.mps.length,
+    n_sweeps=0,
+)
+zz_raw = state.mps.expect_mpo(correlation)
+```
+
+For a connected correlation, normalize each raw expectation value by the squared
+state norm. For example,
+
+```{code-cell} ipython3
+norm_squared = state.mps.norm() ** 2
+z0_raw = state.mps.expect(Observable("z", 0))
+z7_raw = state.mps.expect(Observable("z", 7))
+zz_connected = zz_raw / norm_squared - z0_raw * z7_raw / norm_squared**2
+```
+
+For a normalized state, this is
+$\langle Z_0Z_7\rangle-\langle Z_0\rangle\langle Z_7\rangle$. The one-site terms
+continue to use the existing local-observable API, including fast local
+contraction when the tracked center covers the site.
+
+If one local matrix per site is already available, with identity matrices
+between separated factors, `MPO.from_local_ops` builds the corresponding
+bond-one tensor product. This workflow does not factor an arbitrary joint,
+non-product matrix acting on separated sites or construct an optimized all-pairs
+correlation matrix. Those features need separate decomposition, cutoff,
+site-order, and environment-reuse contracts.
+
 ## Time-dependent Hamiltonians
 
 Switch between static Hamiltonians at times that land on the analog `dt` grid.

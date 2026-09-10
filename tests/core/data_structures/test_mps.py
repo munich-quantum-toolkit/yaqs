@@ -21,7 +21,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable, Simulator, State
+from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
@@ -750,6 +750,311 @@ def test_scalar_product_partial_site() -> None:
     site = 0
     partial_val = psi_mps.scalar_product(psi_mps, sites=site)
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
+
+
+def _independent_dense_expect_mpo(state: MPS, operator: MPO) -> np.complex128:
+    """Compute an MPO expectation by enumerating the full product basis.
+
+    Args:
+        state: MPS whose amplitudes define the dense state vector.
+        operator: MPO whose entries define the dense operator matrix.
+
+    Returns:
+        The dense value of ``<state|operator|state>``.
+    """
+    physical_dimensions = tuple(tensor.shape[0] for tensor in state.tensors)
+    basis_states = list(np.ndindex(*physical_dimensions))
+
+    state_vector = np.empty(len(basis_states), dtype=np.complex128)
+    for basis_index, physical_indices in enumerate(basis_states):
+        amplitude = np.ones((1, 1), dtype=np.complex128)
+        for tensor, physical_index in zip(state.tensors, physical_indices, strict=True):
+            amplitude = np.matmul(amplitude, tensor[physical_index])
+        state_vector[basis_index] = amplitude.item()
+
+    operator_matrix = np.empty((len(basis_states), len(basis_states)), dtype=np.complex128)
+    for row, output_indices in enumerate(basis_states):
+        for column, input_indices in enumerate(basis_states):
+            matrix_element = np.ones((1, 1), dtype=np.complex128)
+            for tensor, output_index, input_index in zip(
+                operator.tensors,
+                output_indices,
+                input_indices,
+                strict=True,
+            ):
+                matrix_element = np.matmul(matrix_element, tensor[output_index, input_index])
+            operator_matrix[row, column] = matrix_element.item()
+
+    return np.complex128(np.vdot(state_vector, operator_matrix @ state_vector))
+
+
+def test_expect_mpo_matches_independent_dense_reference_for_known_and_unknown_centers() -> None:
+    """Random contractions match a dense reference for known and unknown gauges."""
+    random_generator = np.random.default_rng(20260909)
+    state_bonds = (1, 2, 2, 1)
+    operator_bonds = (1, 2, 3, 1)
+    state_tensors = [
+        crandn((2, state_bonds[site], state_bonds[site + 1]), seed=random_generator) / 2.0
+        for site in range(len(state_bonds) - 1)
+    ]
+    operator_tensors = [
+        crandn((2, 2, operator_bonds[site], operator_bonds[site + 1]), seed=random_generator) / 2.0
+        for site in range(len(operator_bonds) - 1)
+    ]
+    unknown_center_state = MPS(length=len(state_tensors), tensors=state_tensors)
+    known_center_state = copy.deepcopy(unknown_center_state)
+    known_center_state.set_canonical_form(orthogonality_center=1)
+    operator = MPO()
+    operator.tensors = operator_tensors
+    operator.length = len(operator_tensors)
+    operator.physical_dimension = 2
+
+    expected = _independent_dense_expect_mpo(unknown_center_state, operator)
+
+    assert unknown_center_state.orthogonality_center is None
+    assert known_center_state.orthogonality_center == 1
+    assert unknown_center_state.expect_mpo(operator) == pytest.approx(expected, rel=1e-11, abs=1e-12)
+    assert known_center_state.expect_mpo(operator) == pytest.approx(expected, rel=1e-11, abs=1e-12)
+    assert unknown_center_state.orthogonality_center is None
+    assert known_center_state.orthogonality_center == 1
+
+
+def test_expect_mpo_returns_zero_for_a_zero_mpo() -> None:
+    """An empty Pauli sum has zero expectation for a nonzero state."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)], normalize=False, seed=19)
+    operator = MPO()
+    operator.from_pauli_sum(terms=[], length=state.length)
+
+    value = state.expect_mpo(operator)
+
+    assert isinstance(value, np.complex128)
+    assert value == pytest.approx(0.0 + 0.0j, abs=1e-15)
+
+
+def test_expect_mpo_contracts_directly_without_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A full-chain MPO is contracted without application, copying, or conversion."""
+    state = MPS(length=3, state="x+")
+    operator = MPO()
+    operator.from_pauli_sum(
+        terms=[(0.5, "X0"), (0.25, "X1"), (0.75, "X0 X2")],
+        length=state.length,
+        n_sweeps=0,
+    )
+    state_tensor_list = state.tensors
+    operator_tensor_list = operator.tensors
+    state_tensor_ids = [id(tensor) for tensor in state.tensors]
+    operator_tensor_ids = [id(tensor) for tensor in operator.tensors]
+    state_tensors = [tensor.copy() for tensor in state.tensors]
+    operator_tensors = [tensor.copy() for tensor in operator.tensors]
+    center = state.orthogonality_center
+    state_physical_dimensions = state.physical_dimensions.copy()
+    operator_metadata = (operator.length, operator.physical_dimension)
+
+    def fail_indirect_path(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("MPO expectation must use direct tensor contraction.")
+
+    monkeypatch.setattr(mps_mod.copy, "deepcopy", fail_indirect_path)
+    for method in (
+        "compress",
+        "multiply",
+        "to_matrix",
+        "to_matrix_mps_order",
+        "to_mps",
+        "to_sparse_matrix",
+    ):
+        monkeypatch.setattr(MPO, method, fail_indirect_path)
+    monkeypatch.setattr(MPS, "apply_local", fail_indirect_path)
+    monkeypatch.setattr(MPS, "compress", fail_indirect_path)
+
+    value = state.expect_mpo(operator)
+
+    assert isinstance(value, np.complex128)
+    assert value == pytest.approx(1.5 + 0.0j, abs=1e-12)
+    assert state.tensors is state_tensor_list
+    assert operator.tensors is operator_tensor_list
+    assert [id(tensor) for tensor in state.tensors] == state_tensor_ids
+    assert [id(tensor) for tensor in operator.tensors] == operator_tensor_ids
+    assert state.orthogonality_center == center
+    assert state.physical_dimensions == state_physical_dimensions
+    assert (operator.length, operator.physical_dimension) == operator_metadata
+    for before, after in zip(state_tensors, state.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+    for before, after in zip(operator_tensors, operator.tensors, strict=True):
+        np.testing.assert_array_equal(after, before)
+
+
+def test_expect_mpo_returns_raw_complex_value_without_normalizing() -> None:
+    """A non-Hermitian MPO returns a complex value with raw state scaling."""
+    state = MPS(length=1, state="y+")
+    scale = 2.0 - 1.0j
+    state.tensors[0] *= scale
+    lowering = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.complex128)
+    operator = MPO.from_local_ops([lowering])
+
+    value = state.expect_mpo(operator)
+
+    assert value == pytest.approx(abs(scale) ** 2 * 0.5j, abs=1e-12)
+
+
+def test_expect_mpo_rejects_an_operator_that_does_not_cover_the_full_chain() -> None:
+    """The first API version accepts full-chain MPOs only."""
+    state = MPS(length=2, state="zeros")
+    one_site_identity = MPO.from_local_ops([_I2])
+
+    with pytest.raises(ValueError, match="must match MPS length 2"):
+        state.expect_mpo(one_site_identity)
+
+
+def test_expect_mpo_rejects_a_tensor_count_mismatch() -> None:
+    """The tensor data must cover every MPS site even if MPO metadata does."""
+    state = MPS(length=2, state="zeros")
+    operator = MPO.from_local_ops([_I2, _I2])
+    operator.tensors.pop()
+
+    with pytest.raises(ValueError, match="tensor count 1"):
+        state.expect_mpo(operator)
+
+
+def test_expect_mpo_rejects_an_mps_tensor_count_mismatch() -> None:
+    """The stored MPS tensors must cover every declared state site."""
+    state = MPS(length=2, state="zeros")
+    state.tensors.pop()
+    operator = MPO.identity(2)
+
+    with pytest.raises(ValueError, match="MPS tensor count 1 must match MPS length 2"):
+        state.expect_mpo(operator)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "error"),
+    [
+        pytest.param([np.zeros((2, 1), dtype=np.complex128)], "rank 3", id="rank"),
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 1, 2), dtype=np.complex128)], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.ones((2, 1, 1), dtype=np.complex128),
+                np.ones((2, 2, 1), dtype=np.complex128),
+            ],
+            "MPS bond between sites 0 and 1 has dimensions 1 and 2",
+            id="internal-singleton-expand",
+        ),
+        pytest.param(
+            [
+                np.ones((2, 1, 2), dtype=np.complex128),
+                np.ones((2, 1, 1), dtype=np.complex128),
+            ],
+            "MPS bond between sites 0 and 1 has dimensions 2 and 1",
+            id="internal-singleton-contract",
+        ),
+    ],
+)
+def test_expect_mpo_rejects_invalid_mps_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    error: str,
+) -> None:
+    """Malformed MPS tensors are rejected before singleton bonds can broadcast."""
+    state = MPS(length=len(tensors), tensors=tensors)
+    operator = MPO.identity(len(tensors))
+
+    with pytest.raises(ValueError, match=error):
+        state.expect_mpo(operator)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "error"),
+    [
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], "rank 4", id="rank"),
+        pytest.param([np.zeros((3, 2, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-output"),
+        pytest.param([np.zeros((2, 3, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-input"),
+        pytest.param([np.zeros((1, 1, 1, 1), dtype=np.complex128)], "physical dimensions", id="physical-broadcast"),
+        pytest.param([np.zeros((2, 2, 2, 1), dtype=np.complex128)], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 2, 1, 2), dtype=np.complex128)], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.zeros((2, 2, 1, 1), dtype=np.complex128),
+                np.zeros((2, 2, 2, 1), dtype=np.complex128),
+            ],
+            "bond between sites 0 and 1",
+            id="internal-bond",
+        ),
+    ],
+)
+def test_expect_mpo_rejects_invalid_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    error: str,
+) -> None:
+    """Malformed MPO tensors are rejected before dimensions can broadcast."""
+    state = MPS(length=len(tensors), state="zeros")
+    operator = MPO()
+    operator.tensors = tensors
+    operator.length = len(tensors)
+    operator.physical_dimension = 2
+
+    with pytest.raises(ValueError, match=error):
+        state.expect_mpo(operator)
+
+
+def test_expect_mpo_uses_each_mps_tensor_for_mixed_physical_dimensions() -> None:
+    """MPO metadata does not override mixed physical dimensions from tensors."""
+    state = MPS(
+        length=2,
+        tensors=[
+            np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1),
+            np.array([1.0, 0.0, 0.0], dtype=np.complex128).reshape(3, 1, 1),
+        ],
+        physical_dimensions=[2, 3],
+    )
+    operator = MPO()
+    operator.custom(
+        [
+            np.eye(2, dtype=np.complex128).reshape(2, 2, 1, 1),
+            np.eye(3, dtype=np.complex128).reshape(3, 3, 1, 1),
+        ],
+        transpose=False,
+    )
+    operator.physical_dimension = 7
+
+    assert state.expect_mpo(operator) == pytest.approx(1.0 + 0.0j)
+
+
+def test_expect_mpo_returns_preset_hamiltonian_energy() -> None:
+    """A preset Hamiltonian's materialized MPO gives its state energy."""
+    state = State(3, initial="zeros")
+    hamiltonian = Hamiltonian.ising(3, J=1.25, g=0.7, n_sweeps=0)
+    hamiltonian.ensure_mpo()
+
+    energy = state.mps.expect_mpo(hamiltonian.mpo)
+
+    assert energy == pytest.approx(-2.5 + 0.0j, abs=1e-12)
+
+
+def test_expect_mpo_supports_a_long_range_connected_correlation() -> None:
+    """Raw separated-site and local values form a connected correlation."""
+    length = 5
+    left = np.zeros((2, 1, 2), dtype=np.complex128)
+    left[0, 0, 0] = np.sqrt(3.0)
+    left[1, 0, 1] = 1.0
+    middle = np.zeros((2, 2, 2), dtype=np.complex128)
+    middle[0, 0, 0] = 1.0
+    middle[1, 1, 1] = 1.0
+    right = np.zeros((2, 2, 1), dtype=np.complex128)
+    right[0, 0, 0] = 1.0
+    right[1, 1, 0] = 1.0
+    state = MPS(length, tensors=[left, *[middle.copy() for _ in range(length - 2)], right])
+    correlation = MPO()
+    correlation.from_pauli_sum(terms=[(1.0, "Z0 Z4")], length=length, n_sweeps=0)
+
+    zz = state.expect_mpo(correlation)
+    z0 = state.expect(Observable("z", 0))
+    z4 = state.expect(Observable("z", 4))
+    norm_squared = state.norm() ** 2
+    connected = zz / norm_squared - z0 * z4 / norm_squared**2
+
+    assert zz == pytest.approx(4.0 + 0.0j, abs=1e-12)
+    assert z0 == pytest.approx(2.0, abs=1e-12)
+    assert z4 == pytest.approx(2.0, abs=1e-12)
+    assert connected == pytest.approx(0.75 + 0.0j, abs=1e-12)
 
 
 def test_local_expect_z_on_zero_state() -> None:
