@@ -1,9 +1,10 @@
 # Updated response-matrix experiments
 
 This directory contains the Figure 2 through Figure 5 and appendix consistency
-experiments after the response-matrix update. The updated matrix is uncentered,
-uses future-response rows and history columns, includes the `I, X, Y, Z`
-channels, and uses complete retained-record probabilities.
+experiments after the response-matrix update, together with an exact
+quantum-memory-witness benchmark. The updated matrix is uncentered, uses
+future-response rows and history columns, includes the `I, X, Y, Z` channels,
+and uses complete retained-record probabilities.
 
 The stored Figure 2 and Figure 3 results use the paper settings: `L=6`, `k=20`,
 `dt=0.1`, `g=1`, the initial state `|0>^6`, 64 history probes, 64 future probes,
@@ -24,6 +25,12 @@ five Haar-probe draws, `m=4,8,16,32,64`, and `J=0,0.2,...,2`.
 The appendix finite-size sweep uses `L=2,...,10`, `k=20`, `dt=0.1`, `g=1`, cuts
 `5,10,15`, `J=0.5,1,1.5,2`, and 32 history and future probes.
 
+The quantum-memory benchmark evolves six Pauli eigenstate inputs through an
+exact two-qubit SWAP-reset-SWAP protocol. It uses 101 depolarization values,
+including `p=2/3` exactly, and constructs the raw `4 x 6` response matrix in
+fixed `I, X, Y, Z` row and `+X, -X, +Y, -Y, +Z, -Z` column order. No finite-shot
+sampling is used.
+
 ## Contents
 
 - `experiments/common.py`: shared simulation and plotting functions.
@@ -37,6 +44,8 @@ The appendix finite-size sweep uses `L=2,...,10`, `k=20`, `dt=0.1`, `g=1`, cuts
   displayed cuts.
 - `experiments/memory_persistence.py`: Figure 5 conditioned-reset persistence
   sweep.
+- `experiments/quantum_memory_witness.py`: exact noisy SWAP-reset-SWAP
+  quantum-memory benchmark, response entropy, and fixed linear witness.
 - `results/figure2`: the Figure 2 PDF and PNG, scalar data, initial state, and
   run manifest.
 - `results/figure3`: the Figure 3 PDF and PNG, scalar data, full plotted
@@ -49,6 +58,8 @@ The appendix finite-size sweep uses `L=2,...,10`, `k=20`, `dt=0.1`, `g=1`, cuts
   and run manifest.
 - `results/finite_size`: the appendix PDF and PNG, plotted scalar data, and run
   manifest.
+- `results/quantum_memory_witness`: the witness PDF and PNG, scalar CSV, raw
+  response arrays, and run manifest.
 
 The Figure 2 logarithmic color range is `1e-4` to `5e-1`, which preserves the
 visual balance of the earlier figure at the updated entropy scale. The Figure 3
@@ -74,6 +85,18 @@ Figure 5 spans `1e-4` to `1e-1`. It retains the original qualitative profile:
 the weak-coupling curve is nonmonotonic, the `J=1` curve has a small late
 increase, and the `J=1.5` and `J=2` curves cross and approach similar values by
 `ell=15`.
+
+## Certifying quantum memory from response data
+
+The intended paper subsection title is
+`\subsection{Certifying quantum memory from response data}`. The benchmark's
+simulated output states, response singular values, entropy, and witness agree
+with the independent analytic predictions to floating-point precision. The
+witness crosses zero at `p=2/3`; `S_V(2/3) = 0.434944202258` while
+`S_V(1) = 0`. Thus `p<2/3` certifies quantum memory under the stated classical
+feed-forward model, `2/3 <= p < 1` is classically reproducible for this known
+benchmark, and `p=1` is memoryless. A nonnegative witness is generally
+inconclusive outside this benchmark-specific classification.
 
 The updated figures retain the qualitative conclusions of the earlier figures:
 
@@ -134,14 +157,20 @@ python -m updated_experiments.experiments.finite_size \
 python -m updated_experiments.experiments.memory_persistence \
   --plot-only \
   --output-dir updated_experiments/results/figure5
+
+python -m updated_experiments.experiments.quantum_memory_witness \
+  --plot-only \
+  --output-dir updated_experiments/results/quantum_memory_witness
 ```
 
 ## Repeat the simulations
 
 The simulation commands require the implementation from
-`response-matrix-update`. The stored runs used implementation commit `c6744d1f`
-with experiment commit `1919c615` through temporary integration commits recorded
-in each `run_manifest.json`.
+`response-matrix-update`. The stored Figure 2--5 and appendix runs used
+implementation commit `c6744d1f` with experiment commit `1919c615` through
+temporary integration commits recorded in their `run_manifest.json` files. The
+quantum-memory manifest separately records the exact imported YAQS source file,
+source hash, and implementation commit.
 
 ```bash
 python updated_experiments/experiments/cut_vs_j.py \
@@ -183,6 +212,9 @@ python -m updated_experiments.experiments.memory_persistence \
   --parallel \
   --max-workers 8 \
   --output-dir results/updated_figure5
+
+python -m updated_experiments.experiments.quantum_memory_witness \
+  --output-dir updated_experiments/results/quantum_memory_witness
 ```
 
 The complete per-point raw matrices occupy approximately 185 MB and are not

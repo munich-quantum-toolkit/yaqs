@@ -1,0 +1,90 @@
+{
+  "experiment": "noisy SWAP-reset-SWAP quantum-memory benchmark",
+  "paper_subsection": "\\subsection{Certifying quantum memory from response data}",
+  "response_matrix_update_commit": "c6744d1ff97ad163b53682e71dda858a3454718b",
+  "response_matrix_implementation": {
+    "source_file": "src/mqt/yaqs/characterization/memory/operational_memory/response_matrix.py",
+    "source_sha256": "5058fb7fe455f2737ef30bdc7df83951d63904cf0cb29f63aaea03e46133dd7e",
+    "git_commit": "c6744d1ff97ad163b53682e71dda858a3454718b",
+    "source_status": [],
+    "matches_recorded_update_commit": true
+  },
+  "experiment_worktree": {
+    "commit_before_run": "ed3d5d37df445ad4e280425db5eeef63f8feea95",
+    "status_before_run": [
+      " M updated_experiments/README.md",
+      "?? updated_experiments/experiments/quantum_memory_witness.py",
+      "?? updated_experiments/results/quantum_memory_witness/"
+    ]
+  },
+  "python": "3.14.2",
+  "numpy": "2.5.2",
+  "configuration": {
+    "basis_order": "|S,E>",
+    "column_order": [
+      "+X",
+      "-X",
+      "+Y",
+      "-Y",
+      "+Z",
+      "-Z"
+    ],
+    "response_rows": [
+      "I",
+      "X",
+      "Y",
+      "Z"
+    ],
+    "num_p_values": 101,
+    "p_includes_2_over_3": true,
+    "finite_shots": false,
+    "retained_history_probability": 1.0,
+    "centered": false,
+    "response_orientation": "future_response_rows_history_columns",
+    "weight_scope": "complete_retained_record",
+    "spectrum_logarithm": "natural",
+    "zero_mode_resolution": "eps * max(V.shape) * sigma_max",
+    "yaqs_spectrum_discarded_weight_threshold": null,
+    "check_tolerance": 5e-12
+  },
+  "witness": {
+    "definition": "w = 2/3 - F_av",
+    "certification_rule": "w < 0 certifies quantum memory",
+    "classification_scope": "p >= 2/3 is classically reproducible only for this known benchmark"
+  },
+  "checks": {
+    "max_output_state_abs_error": 0.0,
+    "max_response_matrix_assembly_abs_error": 0.0,
+    "max_yaqs_spectrum_singular_value_abs_error": 0.0,
+    "max_yaqs_spectrum_entropy_abs_error": 2.0723265836946412e-28,
+    "max_singular_value_abs_error": 2.220446049250313e-16,
+    "max_entropy_abs_error": 4.440892098500626e-16,
+    "max_witness_analytic_abs_error": 2.220446049250313e-16,
+    "max_witness_linear_abs_error": 2.7755575615628914e-16,
+    "max_retained_probability_abs_error": 0.0,
+    "S_V_at_p_1": 0.0,
+    "S_V_at_p_2_over_3": 0.4349442022582594,
+    "w_at_p_2_over_3": -2.220446049250313e-16
+  },
+  "runtime_seconds": 0.599347956944257,
+  "script_sha256": "787d3f02cc27da59ea7dd83da78c7c004b0c971e6524d927af6c5bfe79644cb3",
+  "artifacts": {
+    "witness_summary.csv": {
+      "bytes": 7631,
+      "sha256": "8e01a58247471b1eec8a01b73116cbb85332a0ad91c4ba4f6907976f1ab43c08"
+    },
+    "raw_responses.npz": {
+      "bytes": 25716,
+      "sha256": "1a3ff832105002a58abafd974de2a30dafbb4c414cfb58800f8fe683cfa0cc37"
+    },
+    "quantum_memory_witness.pdf": {
+      "bytes": 30044,
+      "sha256": "f878236f06d5f78e6872c5befb40614c4b61c5de2979c9c0bcb2dec7b03a7c68"
+    },
+    "quantum_memory_witness.png": {
+      "bytes": 396529,
+      "sha256": "c77390f4ced37cf1c5a4052fae7a60c72743268367735b2839398aa7fc45ea94"
+    }
+  },
+  "plot_script_sha256": "787d3f02cc27da59ea7dd83da78c7c004b0c971e6524d927af6c5bfe79644cb3"
+}
