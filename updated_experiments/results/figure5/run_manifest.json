@@ -1,0 +1,61 @@
+{
+  "figure": 5,
+  "implementation_git_commit": "c6744d1ff97ad163b53682e71dda858a3454718b",
+  "configuration": {
+    "L": 6,
+    "J_values": [
+      0.5,
+      1.0,
+      1.5,
+      2.0
+    ],
+    "ell_values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "past_length": 15,
+    "future_length": 5,
+    "n_pasts": 64,
+    "n_futures": 64,
+    "initial_state": "|0>^6",
+    "seed": 0,
+    "probe_style": "haar",
+    "centered": false,
+    "response_channels": "IXYZ",
+    "response_orientation": "future_rows_history_columns",
+    "weight_scope": "complete_retained_record"
+  },
+  "plot_y_limits": [
+    0.0001,
+    0.1
+  ],
+  "runtime_seconds": 39.963057891931385,
+  "artifacts": {
+    "memory_persistence.csv": {
+      "bytes": 2384,
+      "sha256": "8c37c66d1c5433b3e26cafcb59b71a0423af57f607be24b54adaca3ddfa9d4ef"
+    },
+    "memory_length.pdf": {
+      "bytes": 18864,
+      "sha256": "bbd3560854d8ab8a05a239010c3691cdc8e805000a367d7715137e1b0c79b42f"
+    },
+    "memory_length.png": {
+      "bytes": 247992,
+      "sha256": "84d7b25f37ea0fc21c94c24e152f8b4de2fe6932311e77134d47283ed3e63f4c"
+    }
+  }
+}

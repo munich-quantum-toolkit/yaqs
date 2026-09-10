@@ -1,9 +1,9 @@
 # Updated response-matrix experiments
 
-This directory contains the Figure 2, Figure 3, Figure 4, and appendix
-consistency experiments after the response-matrix update. The updated matrix is
-uncentered, uses future-response rows and history columns, includes the
-`I, X, Y, Z` channels, and uses complete retained-record probabilities.
+This directory contains the Figure 2 through Figure 5 and appendix consistency
+experiments after the response-matrix update. The updated matrix is uncentered,
+uses future-response rows and history columns, includes the `I, X, Y, Z`
+channels, and uses complete retained-record probabilities.
 
 The stored Figure 2 and Figure 3 results use the paper settings: `L=6`, `k=20`,
 `dt=0.1`, `g=1`, the initial state `|0>^6`, 64 history probes, 64 future probes,
@@ -13,6 +13,10 @@ seed 0, and one Haar-probe draw. The Figure 2 sweep uses all cuts from 1 through
 Figure 4 uses the original small-process comparison: `L=6`, `k=3`, `dt=0.1`,
 `g=1`, exhaustive tetrahedral probe grids, cuts `1,2,3`, and `J=0,0.2,...,6`.
 Its spectrum panels use cut 2 at `J=0.1,1,2,4`.
+
+Figure 5 uses `L=6`, `dt=0.1`, `g=1`, a fixed 15-step history and five-step
+future, 64 history and future probes, `J=0.5,1,1.5,2`, and conditioned-reset
+bridge lengths `ell=0,...,15`. The initial state is `|0>^6`.
 
 The appendix probe-budget sweep uses `L=6`, `k=20`, `dt=0.1`, `g=1`, cut 10,
 five Haar-probe draws, `m=4,8,16,32,64`, and `J=0,0.2,...,2`.
@@ -31,12 +35,16 @@ The appendix finite-size sweep uses `L=2,...,10`, `k=20`, `dt=0.1`, `g=1`, cuts
 - `experiments/probe_budget.py`: appendix probe-budget convergence sweep.
 - `experiments/finite_size.py`: appendix finite-environment sweep at the three
   displayed cuts.
+- `experiments/memory_persistence.py`: Figure 5 conditioned-reset persistence
+  sweep.
 - `results/figure2`: the Figure 2 PDF and PNG, scalar data, initial state, and
   run manifest.
 - `results/figure3`: the Figure 3 PDF and PNG, scalar data, full plotted
   spectra, initial state, and run manifest.
 - `results/figure4`: the Figure 4 PDF and PNG, 93-point entropy table, full
   plotted spectra, qualitative checks, and run manifest.
+- `results/figure5`: the Figure 5 PDF and PNG, plotted scalar data, and run
+  manifest.
 - `results/probe_budget`: the appendix PDF and PNG, per-draw and summary data,
   and run manifest.
 - `results/finite_size`: the appendix PDF and PNG, plotted scalar data, and run
@@ -61,6 +69,11 @@ The finite-size figure rescales its shared vertical axis from 0 to approximately
 `0.209`. Its old/new log-value correlations are `0.9869`, `0.9906`, and `0.9939`
 at cuts 5, 10, and 15. The smallest environments remain the most size-dependent,
 followed by broad plateaus after several environmental sites.
+
+Figure 5 spans `1e-4` to `1e-1`. It retains the original qualitative profile:
+the weak-coupling curve is nonmonotonic, the `J=1` curve has a small late
+increase, and the `J=1.5` and `J=2` curves cross and approach similar values by
+`ell=15`.
 
 The updated figures retain the qualitative conclusions of the earlier figures:
 
@@ -117,6 +130,10 @@ python -m updated_experiments.experiments.probe_budget \
 python -m updated_experiments.experiments.finite_size \
   --plot-only \
   --output-dir updated_experiments/results/finite_size
+
+python -m updated_experiments.experiments.memory_persistence \
+  --plot-only \
+  --output-dir updated_experiments/results/figure5
 ```
 
 ## Repeat the simulations
@@ -161,6 +178,11 @@ python -m updated_experiments.experiments.finite_size \
   --parallel \
   --max-workers 8 \
   --output-dir results/updated_finite_size
+
+python -m updated_experiments.experiments.memory_persistence \
+  --parallel \
+  --max-workers 8 \
+  --output-dir results/updated_figure5
 ```
 
 The complete per-point raw matrices occupy approximately 185 MB and are not
