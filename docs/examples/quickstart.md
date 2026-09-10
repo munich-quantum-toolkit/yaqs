@@ -185,7 +185,7 @@ axes[0].set_ylabel("singular value")
 axes[0].set_title(rf"Memory spectrum: $S_V(c={cut})={result.entropy(cut):.2f}$")
 
 im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
-axes[1].set_title(rf"$|\widetilde{{V}}(c)|$, $R(c)={result.modes(cut):.1f}$")
+axes[1].set_title(rf"$|V(c)|$, $R(c)={result.modes(cut):.1f}$")
 axes[1].set_xlabel("future probe")
 axes[1].set_ylabel("past probe")
 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)

@@ -17,7 +17,6 @@ import pytest
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,
-    center_rows,
     compute_spectrum,
     extract_xyz_channels,
     sanitize_branch_weights,
@@ -42,9 +41,8 @@ def test_four_component_response_metric_matches_xyz_only() -> None:
         parallel=False,
     )
     pauli3 = extract_xyz_channels(pauli4)
-    m4_raw, m4 = assemble_response_matrix(pauli4, weights)
-    m3_raw, m3 = assemble_response_matrix(pauli3, weights)
-    np.testing.assert_allclose(m4_raw, m3_raw, atol=1e-12)
+    m4 = assemble_response_matrix(pauli4, weights)
+    m3 = assemble_response_matrix(pauli3, weights)
     np.testing.assert_allclose(m4, m3, atol=1e-12)
     out4 = compute_spectrum(m4)
     out3 = compute_spectrum(m3)
@@ -61,20 +59,23 @@ def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
     np.testing.assert_allclose(clean, [[1.0, 0.0], [0.0, 0.0]])
 
 
-def test_center_rows_removes_past_mean() -> None:
-    """Past-row centering subtracts the column mean along axis 0."""
-    m = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float64)
-    centered = center_rows(m)
-    np.testing.assert_allclose(centered.mean(axis=0), [0.0, 0.0], atol=1e-14)
+def test_assemble_response_matrix_returns_raw_weighted_values() -> None:
+    """Response-matrix assembly preserves raw weighted values without centering."""
+    pauli = np.arange(1.0, 13.0, dtype=np.float64).reshape(2, 2, 3)
+    weights = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    response_matrix = assemble_response_matrix(pauli, weights)
+    expected = (pauli * weights[..., np.newaxis]).reshape(2, 6)
+    np.testing.assert_allclose(response_matrix, expected)
+    assert not np.allclose(response_matrix.mean(axis=0), 0.0)
 
 
 def test_assemble_response_matrix_beta_scales_rows() -> None:
-    """Beta exponent scales branch weights before centering."""
+    """Beta exponent scales branch weights in the raw response matrix."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
     pauli[..., 0] = 1.0
     weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)
-    _raw1, m1 = assemble_response_matrix(pauli, weights, beta=1.0, center=False)
-    _raw2, m2 = assemble_response_matrix(pauli, weights, beta=2.0, center=False)
+    m1 = assemble_response_matrix(pauli, weights, beta=1.0)
+    m2 = assemble_response_matrix(pauli, weights, beta=2.0)
     assert m2[0, 3] == pytest.approx(2.0 * m1[0, 3], rel=1e-6)
 
 
@@ -106,8 +107,7 @@ def test_compute_spectrum_tail_truncation_keeps_significant_mode_near_threshold(
 def test_compute_spectrum_modes_equals_exp_entropy() -> None:
     """compute_spectrum reports R(c)=exp(S_V(c))."""
     m = np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]], dtype=np.float64)
-    response_matrix = m - m.mean(axis=0, keepdims=True)
-    out = compute_spectrum(response_matrix)
+    out = compute_spectrum(m)
     assert out["modes"] == pytest.approx(math.exp(out["entropy"]), rel=1e-12, abs=1e-12)
 
 
@@ -126,7 +126,7 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
         initial_psi=psi0,
         parallel=False,
     )
-    _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
     s_direct = np.linalg.svd(response_matrix, compute_uv=False)
     ana = compute_spectrum(response_matrix)
     np.testing.assert_allclose(
@@ -167,12 +167,11 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
         p_sub = np.asarray(pauli[:m, :m, ...])
         w = np.asarray(weights)
         w_sub = w[:m, :m, ...] if w.ndim >= 2 else w[:m, ...]
-        _raw, response_matrix = assemble_response_matrix(
+        response_matrix = assemble_response_matrix(
             p_sub,
             w_sub,
-            center=True,
             log_weight_warnings=False,
         )
         entropies.append(float(compute_spectrum(response_matrix, discarded_weight_threshold=None)["entropy"]))
     assert entropies[-1] > entropies[0] * 1.05
-    assert entropies[-1] > 0.015
+    assert entropies[-1] > 0.01

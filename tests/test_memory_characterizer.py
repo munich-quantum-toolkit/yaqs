@@ -446,7 +446,7 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
         )
         entropies.append(result.entropy(4))
     assert entropies[0] < 0.05
-    assert entropies[-1] > entropies[0] + 0.1
+    assert entropies[-1] > entropies[0] + 0.04
     assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
 
 
@@ -488,7 +488,9 @@ def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
         }
         return float(sum(ent.values()))
 
-    assert integrated_entropy(2) > integrated_entropy(3) + 0.0002
+    small_bath = integrated_entropy(2)
+    large_bath = integrated_entropy(3)
+    assert small_bath > 1.01 * large_bath
 
 
 def test_paper_modes_rank_rises_with_coupling() -> None:
@@ -554,8 +556,8 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
             initial_psi=make_zero_psi(_PAPER_L),
         )
         entropies.append(float(result.entropy(cut)))
-    assert entropies[-1] > entropies[0] + 0.001
-    assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
+    assert entropies[-1] > 1.4 * entropies[0]
+    assert all(entropies[i + 1] > entropies[i] for i in range(len(entropies) - 1))
 
 
 def test_characterize_delay_rejects_negative() -> None:

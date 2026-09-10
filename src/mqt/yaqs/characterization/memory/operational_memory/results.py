@@ -24,7 +24,7 @@ class _CutResult:
         entropy: Cross-cut memory entropy :math:`S_V(c)`.
         modes: Effective mode number :math:`R(c)=\exp(S_V(c))`.
         singular_values: Singular spectrum (possibly tail-truncated for entropy).
-        response_matrix: Past-row-centered weighted response matrix.
+        response_matrix: Raw branch-weighted response matrix.
         probe_set: Optional :class:`~mqt.yaqs.characterization.memory.operational_memory.samples.ProbeSet`.
     """
 
@@ -105,13 +105,13 @@ class CharacterizationResult:
         return np.asarray(self.by_cut[c].singular_values)
 
     def response_matrix(self, cut: int | None = None) -> np.ndarray:
-        r"""Past-row-centered weighted response matrix at ``cut``.
+        r"""Raw branch-weighted response matrix at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
 
         Returns:
-            Centered response matrix :math:`\\widetilde{V}(c)`.
+            Raw response matrix :math:`V(c)`.
         """
         c = self._resolve_cut(cut)
         return np.asarray(self.by_cut[c].response_matrix)

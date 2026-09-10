@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Centered response matrix construction and spectrum analysis."""
+"""Response matrix construction and spectrum analysis."""
 
 from __future__ import annotations
 
@@ -13,19 +13,6 @@ import warnings
 from typing import Any
 
 import numpy as np
-
-
-def center_rows(matrix: np.ndarray) -> np.ndarray:
-    """Center response-matrix rows by subtracting the past mean.
-
-    Args:
-        matrix: Weighted response matrix with past index along axis 0.
-
-    Returns:
-        Past-row-centered matrix with the same shape as ``matrix``.
-    """
-    m = np.asarray(matrix, dtype=np.float64)
-    return m - m.mean(axis=0, keepdims=True)
 
 
 def sanitize_branch_weights(
@@ -97,25 +84,22 @@ def assemble_response_matrix(
     weights_ij: np.ndarray,
     *,
     beta: float = 1.0,
-    center: bool = True,
     log_weight_warnings: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
-    r"""Build the weighted response matrix and optionally center past rows.
+) -> np.ndarray:
+    r"""Build the raw weighted response matrix.
 
     Computes :math:`M^{(\beta)}_{i,(j,\alpha)} = w_{ij}^{\beta} f_{ij,\alpha}` from Pauli
-    tomography ``(I,X,Y,Z)`` or XYZ channels, then subtracts the past-row mean when
-    ``center=True`` (paper Eq. 14 at ``beta=1``).
+    tomography ``(I,X,Y,Z)`` or XYZ channels. For four-component tomography, the response
+    matrix uses the X, Y, and Z channels.
 
     Args:
         pauli_ij: Pauli tomography ``(n_pasts, n_futures, 4)`` or XYZ ``(..., 3)``.
         weights_ij: Branch weights ``(n_pasts, n_futures)``.
         beta: Weight exponent applied to branch weights.
-        center: If ``True``, return past-row-centered matrix as the second element.
         log_weight_warnings: Passed to :func:`sanitize_branch_weights`.
 
     Returns:
-        Tuple ``(response_matrix_raw, response_matrix)`` where ``response_matrix`` is centered
-        when ``center=True``, otherwise equal to ``response_matrix_raw``.
+        Raw branch-weighted response matrix.
     """
     w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=log_weight_warnings)
     xyz = extract_xyz_channels(pauli_ij) if np.asarray(pauli_ij).shape[-1] == 4 else pauli_ij
@@ -123,9 +107,7 @@ def assemble_response_matrix(
     w = np.asarray(w_clean, dtype=np.float64).reshape(n_p, n_f)
     features = np.asarray(xyz, dtype=np.float64).reshape(n_p, n_f, d_out)
     scale = np.power(w, float(beta))
-    m_raw = (features * np.repeat(scale[:, :, np.newaxis], d_out, axis=2)).reshape(n_p, n_f * d_out)
-    response_matrix = center_rows(m_raw) if center else m_raw
-    return m_raw, response_matrix
+    return (features * np.repeat(scale[:, :, np.newaxis], d_out, axis=2)).reshape(n_p, n_f * d_out)
 
 
 def compute_spectrum(
@@ -137,7 +119,7 @@ def compute_spectrum(
     r"""Cross-cut memory spectrum: :math:`S_V(c)` and :math:`R(c)=\exp(S_V(c))`.
 
     Args:
-        response_matrix: Past-row-centered response matrix.
+        response_matrix: Raw branch-weighted response matrix.
         discarded_weight_threshold: Relative tail weight above which singular values are
             discarded when computing entropy. ``None`` keeps the full spectrum.
         min_keep: Minimum number of singular values to retain after tail truncation.

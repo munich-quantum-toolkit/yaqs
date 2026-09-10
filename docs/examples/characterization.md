@@ -21,9 +21,8 @@ relevant for future probe responses, evaluated at a temporal cut $c$ in a
 sequence of interventions.
 
 Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
-probe **operational memory**: assemble the weighted **response matrix**
-$\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode
-spectrum.
+probe **operational memory**: assemble the weighted **response matrix** $V(c)$,
+then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
 
 Alternatively, build a process tensor (default: direct MPO) and call
 `compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the
@@ -49,7 +48,7 @@ psi0 = make_zero_psi(length)
 Throughout, `num_interventions` is the probe-sequence length $k$ and `cut` is
 the causal-break index $c$ (the break sits at step $c-1$; future legs use steps
 $c+1,\ldots,k$). Use $k>1$ and an interior cut so both past and future probe
-legs contribute to $\widetilde{V}(c)$.
+legs contribute to $V(c)$.
 
 ## Characterize with the Hamiltonian backend
 
@@ -78,7 +77,7 @@ axes[0].set_title(r"Memory spectrum at cut $c=4$")
 
 v = ham_result.response_matrix(cut)
 im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
-axes[1].set_title(r"$|\widetilde{V}(c)|$")
+axes[1].set_title(r"$|V(c)|$")
 axes[1].set_xlabel("future probe index")
 axes[1].set_ylabel("past probe index")
 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
@@ -100,7 +99,7 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 | `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
 | `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
 | `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Cross-cut memory matrix $\widetilde{V}(c)$ (see theory below)                |
+| `result.response_matrix(c)` | Raw cross-cut memory matrix $V(c)$ (see theory below)                        |
 | `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
 | `result.summary()`          | Human-readable table of entropies and modes                                  |
 
@@ -121,8 +120,8 @@ The split-cut protocol:
 3. For each grid entry, simulate the open system, record probe weights and the
    output Pauli vector
    $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the weighted probe responses into $\widetilde{V}(c)$ and compute
-   $S_V(c)$ from the normalized mode spectrum.
+4. Assemble the raw weighted probe responses into $V(c)$ and compute $S_V(c)$
+   from the normalized mode spectrum.
 
 Hamiltonian `characterize` obtains weights from simulated intervention
 probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`). Surrogate

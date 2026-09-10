@@ -174,7 +174,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
         initial_psi=exact.initial_psi,
         parallel=exact.parallel,
     )
-    _m_e_raw, response_matrix_e = assemble_response_matrix(pauli_e, weights_e)
+    response_matrix_e = assemble_response_matrix(pauli_e, weights_e)
     out_exact = compute_spectrum(response_matrix_e)
     out_pt = run_memory_characterization(process=pt, cut=2, num_interventions=2, probe_set=probe_set)
     assert out_pt["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
@@ -259,8 +259,8 @@ def test_run_memory_characterization_parallel_override_does_not_mutate_backend()
     assert backend.parallel is True
 
 
-def test_run_memory_characterization_return_raw_includes_uncentered_matrix() -> None:
-    """return_raw=True exposes the uncentered memory matrix."""
+def test_run_memory_characterization_returns_raw_matrix() -> None:
+    """run_memory_characterization exposes one canonical raw response matrix."""
     rng = np.random.default_rng(9)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -278,10 +278,10 @@ def test_run_memory_characterization_return_raw_includes_uncentered_matrix() -> 
         n_pasts=3,
         n_futures=2,
         rng=rng,
-        return_raw=True,
     )
-    assert "response_matrix_raw" in out
-    assert out["response_matrix_raw"].shape == out["response_matrix"].shape
+    expected = assemble_response_matrix(out["pauli_xyz_ij"], out["weights_ij"])
+    np.testing.assert_allclose(out["response_matrix"], expected)
+    assert "response_matrix_raw" not in out
 
 
 def _entropy_from_cumulative_weights(
@@ -313,7 +313,7 @@ def _entropy_from_cumulative_weights(
     for ii in range(n_p):
         for jj in range(n_f):
             weights[ii, jj] = _diagnostics_final_weight(simulation_diagnostics[ii * n_f + jj])
-    _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
     return float(compute_spectrum(response_matrix)["entropy"])
 
 

@@ -790,7 +790,6 @@ class MemoryCharacterizer:
             n_futures=n_futures,
             rng=rng,
             probe_set=probe_set,
-            return_raw=True,
             parallel=parallel if parallel is not None else self._execution.parallel,
             delay=delay,
             intervention_style=intervention_style,
@@ -862,7 +861,6 @@ class MemoryCharacterizer:
                 cut=resolved_cut,
                 num_interventions=int(num_interventions),
                 probe_set=local_probe_set,
-                return_raw=True,
                 delay=delay,
             )
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)

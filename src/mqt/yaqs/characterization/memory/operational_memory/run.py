@@ -251,7 +251,6 @@ def run_memory_characterization(
     n_futures: int = 32,
     rng: np.random.Generator | None = None,
     probe_set: ProbeSet | None = None,
-    return_raw: bool = False,
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     parallel: bool | None = None,
     delay: int = 0,
@@ -266,7 +265,6 @@ def run_memory_characterization(
         n_futures: Future probe count when sampling internally.
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
-        return_raw: If True, include uncentered ``response_matrix_raw``.
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
@@ -316,7 +314,7 @@ def run_memory_characterization(
         execution_override=execution_override,
         intervention_steps_list=intervention_steps_list,
     )
-    m_raw, response_matrix = assemble_response_matrix(pauli_xyz_ij, weights_ij)
+    response_matrix = assemble_response_matrix(pauli_xyz_ij, weights_ij)
     ana = compute_spectrum(response_matrix)
     out: dict[str, Any] = {
         "pauli_xyz_ij": pauli_xyz_ij,
@@ -325,6 +323,4 @@ def run_memory_characterization(
         "response_matrix": response_matrix,
         "weights_ij": weights_ij,
     }
-    if return_raw:
-        out["response_matrix_raw"] = m_raw
     return out
