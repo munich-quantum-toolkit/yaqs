@@ -152,9 +152,9 @@ class ExactBackend:
             _execution: Optional one-shot execution override for this evaluation.
 
         Returns:
-            Tuple ``(pauli_xyz_ij, weights_ij)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)``.
         """
-        pauli_xyz, weights_ij, _simulation_diagnostics = simulate_exact(
+        pauli_ixyz, weights_ij, _simulation_diagnostics = simulate_exact(
             probe_set=probe_set,
             operator=self.operator,
             sim_params=self.sim_params,
@@ -166,7 +166,7 @@ class ExactBackend:
             intervention_steps_list=intervention_steps_list,
             static_ctx=self._static_ctx,
         )
-        return pauli_xyz, weights_ij
+        return pauli_ixyz, weights_ij
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate unweighted Pauli probe responses.
@@ -177,8 +177,8 @@ class ExactBackend:
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
-        pauli_xyz_ij, _weights_ij = self.evaluate_probes_weighted(probe_set)
-        return pauli_xyz_ij
+        pauli_ixyz_ij, _weights_ij = self.evaluate_probes_weighted(probe_set)
+        return pauli_ixyz_ij
 
 
 def simulate_exact(
@@ -244,6 +244,6 @@ def simulate_exact(
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
-    pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
+    pauli_ixyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
     w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
-    return pauli_xyz, w, simulation_diagnostics
+    return pauli_ixyz, w, simulation_diagnostics

@@ -57,28 +57,6 @@ def sanitize_branch_weights(
     return w_clean, meta
 
 
-def extract_xyz_channels(pauli_ij: np.ndarray) -> np.ndarray:
-    """Extract :math:`X,Y,Z` response channels from Pauli tomography.
-
-    The identity component is stored but omitted here because it is fixed for
-    physical states.
-
-    Args:
-        pauli_ij: Array with last dimension 4 (I, X, Y, Z).
-
-    Returns:
-        Array with shape ``(..., 3)`` containing X, Y, Z expectations.
-
-    Raises:
-        ValueError: If the last dimension is not 4.
-    """
-    p = np.asarray(pauli_ij, dtype=np.float64)
-    if p.shape[-1] != 4:
-        msg = f"Expected Pauli tomography with last dim 4, got shape {p.shape}."
-        raise ValueError(msg)
-    return p[..., 1:4]
-
-
 def assemble_response_matrix(
     pauli_ij: np.ndarray,
     weights_ij: np.ndarray,
@@ -89,27 +67,37 @@ def assemble_response_matrix(
     r"""Build the raw weighted response matrix.
 
     Computes :math:`V^{(\beta)}_{(j,\alpha),i} = w_{ij}^{\beta} f_{ij,\alpha}` from Pauli
-    tomography ``(I,X,Y,Z)`` or XYZ channels. For four-component tomography, the response
-    matrix uses the X, Y, and Z channels. Rows label future-probe response channels and columns
-    label conditioned histories.
+    tomography in ``(I, X, Y, Z)`` order. Rows label future-probe response channels and columns
+    label conditioned histories. At the paper-facing default :math:`\beta=1`, normalized
+    tomography has identity entries :math:`V_{(j,I),i}=w_{ij}`.
 
     Args:
-        pauli_ij: Pauli tomography ``(n_pasts, n_futures, 4)`` or XYZ ``(..., 3)``.
-        weights_ij: Branch weights ``(n_pasts, n_futures)``.
+        pauli_ij: Pauli tomography with shape ``(n_histories, n_futures, 4)`` and channel order
+            ``(I, X, Y, Z)``.
+        weights_ij: Branch weights with shape ``(n_histories, n_futures)``.
         beta: Weight exponent applied to branch weights.
         log_weight_warnings: Passed to :func:`sanitize_branch_weights`.
 
     Returns:
         Raw branch-weighted response matrix with shape
-        ``(n_futures * n_output_channels, n_pasts)``. Within each future probe, output channels
-        vary fastest.
+        ``(4 * n_futures, n_histories)``. Within each future probe, channels vary fastest in
+        ``(I, X, Y, Z)`` order.
+
+    Raises:
+        ValueError: If ``pauli_ij`` is not a three-dimensional four-channel array, or if
+            ``weights_ij`` does not match its history and future dimensions.
     """
-    w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=log_weight_warnings)
-    xyz = extract_xyz_channels(pauli_ij) if np.asarray(pauli_ij).shape[-1] == 4 else pauli_ij
-    n_p, n_f, d_out = np.asarray(xyz, dtype=np.float64).shape
-    w = np.asarray(w_clean, dtype=np.float64).reshape(n_p, n_f)
-    features = np.asarray(xyz, dtype=np.float64).reshape(n_p, n_f, d_out)
-    scale = np.power(w, float(beta))
+    features = np.asarray(pauli_ij, dtype=np.float64)
+    if features.ndim != 3 or features.shape[-1] != 4:
+        msg = f"pauli_ij must have shape (n_histories, n_futures, 4), got {features.shape}."
+        raise ValueError(msg)
+    n_p, n_f, d_out = features.shape
+    weights = np.asarray(weights_ij, dtype=np.float64)
+    if weights.shape != (n_p, n_f):
+        msg = f"weights_ij must have shape {(n_p, n_f)}, got {weights.shape}."
+        raise ValueError(msg)
+    w_clean, _ = sanitize_branch_weights(weights, log_warnings=log_weight_warnings)
+    scale = np.power(w_clean, float(beta))
     weighted = features * scale[:, :, np.newaxis]
     return weighted.transpose(1, 2, 0).reshape(n_f * d_out, n_p)
 

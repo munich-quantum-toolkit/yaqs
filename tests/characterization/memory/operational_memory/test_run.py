@@ -71,12 +71,15 @@ def test_run_memory_characterization_uses_object_backend() -> None:
         def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz
 
     out = run_memory_characterization(
         process=DummyProcess(), cut=1, num_interventions=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7)
     )
-    assert out["pauli_xyz_ij"].shape == (2, 3, 4)
+    assert out["pauli_ixyz_ij"].shape == (2, 3, 4)
+    assert out["response_matrix"].shape == (12, 2)
     assert "entropy" in out
 
 
@@ -239,7 +242,9 @@ def test_evaluate_probes_with_weights_inherited_method() -> None:
         def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz
 
     class ChildBackend(BaseBackend):
         pass
@@ -279,8 +284,9 @@ def test_run_memory_characterization_returns_raw_matrix() -> None:
         n_futures=2,
         rng=rng,
     )
-    expected = assemble_response_matrix(out["pauli_xyz_ij"], out["weights_ij"])
+    expected = assemble_response_matrix(out["pauli_ixyz_ij"], out["weights_ij"])
     np.testing.assert_allclose(out["response_matrix"], expected)
+    np.testing.assert_allclose(out["response_matrix"][0::4], out["weights_ij"].T)
     assert "response_matrix_raw" not in out
 
 
@@ -354,6 +360,7 @@ def test_evaluate_probes_with_weights_preserves_float64() -> None:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
             out = np.zeros((n_p, n_f, 4), dtype=np.float64)
+            out[..., 0] = 1.0
             out[..., 1] = 1e-7
             return out
 
@@ -413,4 +420,4 @@ def test_run_memory_characterization_delay_exact_returns_finite_entropy() -> Non
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
     out = run_memory_characterization(process=backend, cut=3, num_interventions=5, probe_set=probe_set, delay=2)
     assert np.isfinite(out["entropy"])
-    assert out["pauli_xyz_ij"].shape == (3, 2, 4)
+    assert out["pauli_ixyz_ij"].shape == (3, 2, 4)

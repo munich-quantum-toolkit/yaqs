@@ -177,6 +177,7 @@ result = mc.characterize(
 )
 sv = result.singular_values(cut)
 v = result.response_matrix(cut)
+# v.shape == (4 * n_futures, n_pasts), with I, X, Y, Z rows per future probe
 
 fig, axes = plt.subplots(1, 2, figsize=(8, 3))
 axes[0].semilogy(sv, "o-")

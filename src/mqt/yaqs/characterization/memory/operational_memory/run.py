@@ -48,8 +48,8 @@ class SupportsEvaluateProbesWeighted(Protocol):
             probe_set: Sampled split-cut probes.
 
         Returns:
-            Tuple ``(pauli_xyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
-            ``(n_pasts, n_futures)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
+            ``(n_pasts, n_futures)``. Pauli channels are ordered ``(I, X, Y, Z)``.
         """
 
 
@@ -74,19 +74,19 @@ def evaluate_probes_with_weights(
         probe_set: Sampled split-cut probes.
 
     Returns:
-        Tuple ``(pauli_xyz_ij, weights_ij)``.
+        Tuple ``(pauli_ixyz_ij, weights_ij)``.
 
     Raises:
         TypeError: If ``process`` implements neither weighted nor unweighted probing.
     """
     weighted_fn = getattr(process, "evaluate_probes_weighted", None)
     if callable(weighted_fn):
-        pauli_xyz_ij, weights_ij = weighted_fn(probe_set)
-        return np.asarray(pauli_xyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
+        pauli_ixyz_ij, weights_ij = weighted_fn(probe_set)
+        return np.asarray(pauli_ixyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
     evaluate_fn = getattr(process, "evaluate_probes", None)
     if callable(evaluate_fn):
-        pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
-        return pauli_xyz_ij, compute_branch_weights(probe_set)
+        pauli_ixyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
+        return pauli_ixyz_ij, compute_branch_weights(probe_set)
     msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
     raise TypeError(msg)
 
@@ -224,7 +224,7 @@ def _evaluate_operational_memory_probes(
         intervention_steps_list: Optional per-probe custom intervention sequences.
 
     Returns:
-        Tuple ``(pauli_xyz_ij, weights_ij)``.
+        Tuple ``(pauli_ixyz_ij, weights_ij)``.
     """
     use_exact_weighted = (
         exact_backend_cls is not None
@@ -271,8 +271,9 @@ def run_memory_characterization(
 
     Returns:
         Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
-        ``probe_set``, and ``weights_ij``. The response matrix has future-response rows and
-        history columns.
+        ``pauli_ixyz_ij``, ``probe_set``, and ``weights_ij``. The response matrix has shape
+        ``(4 * n_futures, n_pasts)`` with future-probe ``(I, X, Y, Z)`` rows and history
+        columns.
 
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
@@ -308,17 +309,17 @@ def run_memory_characterization(
         process=process,
         exact_backend_cls=exact_backend_cls,
     )
-    pauli_xyz_ij, weights_ij = _evaluate_operational_memory_probes(
+    pauli_ixyz_ij, weights_ij = _evaluate_operational_memory_probes(
         process,
         sim_probe_set,
         exact_backend_cls=exact_backend_cls,
         execution_override=execution_override,
         intervention_steps_list=intervention_steps_list,
     )
-    response_matrix = assemble_response_matrix(pauli_xyz_ij, weights_ij)
+    response_matrix = assemble_response_matrix(pauli_ixyz_ij, weights_ij)
     ana = compute_spectrum(response_matrix)
     out: dict[str, Any] = {
-        "pauli_xyz_ij": pauli_xyz_ij,
+        "pauli_ixyz_ij": pauli_ixyz_ij,
         **ana,
         "probe_set": probe_set,
         "response_matrix": response_matrix,

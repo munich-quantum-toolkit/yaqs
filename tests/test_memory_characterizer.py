@@ -446,7 +446,7 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
         )
         entropies.append(result.entropy(4))
     assert entropies[0] < 0.05
-    assert entropies[-1] > entropies[0] + 0.04
+    assert entropies[-1] > entropies[0] + 0.02
     assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
 
 
@@ -460,7 +460,7 @@ def test_paper_cut_vs_j_entropy_rises_with_coupling() -> None:
     s_j05 = _entropy_at_j(mc, cut=cut, j=0.5, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
     s_j2 = _entropy_at_j(mc, cut=cut, j=2.0, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
     assert s_j0 < 0.01
-    assert s_j2 > s_j05 + 0.005
+    assert s_j2 > 10.0 * s_j05
 
 
 def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:

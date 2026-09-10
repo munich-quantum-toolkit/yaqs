@@ -52,7 +52,7 @@ need later.
 response_matrix[j * n_output_channels + alpha, i] = weights[i, j] * pauli[i, j, alpha]
 ```
 
-- [ ] Order each future probe's output channels as `I, X, Y, Z`.
+- [x] Order each future probe's output channels as `I, X, Y, Z`.
 - [x] Document that left singular vectors describe future-response directions
       and right singular vectors describe combinations of histories.
 - [x] Update examples and plot labels that place histories on the row axis.
@@ -65,16 +65,16 @@ matrix indexing.
 
 ## 3. Include the identity response
 
-- [ ] Preserve all four tomography channels during assembly. Do not reduce
+- [x] Preserve all four tomography channels during assembly. Do not reduce
       `I, X, Y, Z` data to `X, Y, Z`.
-- [ ] Require a four-channel input for the canonical paper-facing method, or
+- [x] Require a four-channel input for the canonical paper-facing method, or
       provide an explicit and validated conversion for older three-channel
       inputs. Do not infer ambiguous input semantics silently.
-- [ ] Multiply the identity expectation by the branch weight. The identity entry
+- [x] Multiply the identity expectation by the branch weight. The identity entry
       is `p_ij`, not `1`.
-- [ ] Update the formal future-record dimension from `3 * n_future_probes` to
+- [x] Update the formal future-record dimension from `3 * n_future_probes` to
       `4 * n_future_probes` wherever applicable.
-- [ ] Verify that the identity rows provide the deterministic normalization
+- [x] Verify that the identity rows provide the deterministic normalization
       direction required by the paper's history-branch probability and rank-one
       result.
 
@@ -99,11 +99,11 @@ later witness experiment.
 
 ## 5. Update the public API and documentation
 
-- [ ] Update the response-matrix implementation and exports.
-- [ ] Update `run_memory_characterization` and `CharacterizationResult`.
-- [ ] Rename variables and text that call four-channel data `pauli_xyz`.
-- [ ] Update the characterization and quick-start documentation.
-- [ ] State the exact shape, channel order, axis meaning, and weighting rule in
+- [x] Update the response-matrix implementation and exports.
+- [x] Update `run_memory_characterization` and `CharacterizationResult`.
+- [x] Rename variables and text that call four-channel data `pauli_xyz`.
+- [x] Update the characterization and quick-start documentation.
+- [x] State the exact shape, channel order, axis meaning, and weighting rule in
       every public return-value description.
 - [ ] Update `CHANGELOG.md` and `UPGRADING.md` because the matrix values, shape,
       orientation, and public API change.
@@ -119,23 +119,23 @@ Likely files include:
 
 ## 6. Add contract tests on `response-matrix-update`
 
-- [ ] Use a non-square sentinel input, such as two histories and three future
+- [x] Use a non-square sentinel input, such as two histories and three future
       probes, to test every output index and prevent an unnoticed transpose.
-- [ ] Assert the output shape `(4 * n_future_probes, n_histories)`.
-- [ ] Assert the exact mapping
+- [x] Assert the output shape `(4 * n_future_probes, n_histories)`.
+- [x] Assert the exact mapping
       `V[4 * j + alpha, i] == weights[i, j] * pauli[i, j, alpha]`.
-- [ ] Assert that no mean subtraction occurs.
-- [ ] Assert that the identity entry equals the weighted branch probability.
-- [ ] Add a maximally mixed output test. The `X, Y, Z` entries may vanish, but
+- [x] Assert that no mean subtraction occurs.
+- [x] Assert that the identity entry equals the weighted branch probability.
+- [x] Add a maximally mixed output test. The `X, Y, Z` entries may vanish, but
       the response matrix must remain nonzero because of `I`.
-- [ ] Add a memoryless example whose raw response matrix has rank one.
+- [x] Add a memoryless example whose raw response matrix has rank one.
 - [x] Verify that transposing the old raw XYZ block preserves its singular
       values before adding the identity block.
 - [ ] Test a retained future outcome whose probability depends on both history
       and future indices.
-- [ ] Update public-run and result-container tests for the single canonical
+- [x] Update public-run and result-container tests for the single canonical
       response matrix.
-- [ ] Remove tests that require centering or require IXYZ and XYZ inputs to
+- [x] Remove tests that require centering or require IXYZ and XYZ inputs to
       produce the same matrix.
 
 Run targeted tests during implementation:

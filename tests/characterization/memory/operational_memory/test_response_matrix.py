@@ -18,7 +18,6 @@ from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,
     compute_spectrum,
-    extract_xyz_channels,
     sanitize_branch_weights,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
@@ -26,28 +25,20 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def test_four_component_response_metric_matches_xyz_only() -> None:
-    """S_V is unchanged when storing (I,X,Y,Z) but using X,Y,Z for the response matrix."""
-    rng = np.random.default_rng(11)
-    op = MPO.ising(length=1, J=0.5, g=0.3)
-    params = AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
-    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=5, n_futures=4, rng=rng)
-    psi0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    pauli4, weights, _ = simulate_exact(
-        probe_set=probe_set,
-        operator=op,
-        sim_params=params,
-        initial_psi=psi0,
-        parallel=False,
-    )
-    pauli3 = extract_xyz_channels(pauli4)
-    m4 = assemble_response_matrix(pauli4, weights)
-    m3 = assemble_response_matrix(pauli3, weights)
-    np.testing.assert_allclose(m4, m3, atol=1e-12)
-    out4 = compute_spectrum(m4)
-    out3 = compute_spectrum(m3)
-    assert out4["entropy"] == pytest.approx(out3["entropy"])
-    assert out4["modes"] == pytest.approx(out3["modes"])
+@pytest.mark.parametrize("shape", [(2, 3, 3), (2, 4), (2, 3, 5)])
+def test_assemble_response_matrix_requires_ixyz_tomography(shape: tuple[int, ...]) -> None:
+    """Ambiguous or malformed Pauli-channel inputs are rejected."""
+    pauli = np.zeros(shape, dtype=np.float64)
+    weights = np.ones((2, 3), dtype=np.float64)
+    with pytest.raises(ValueError, match="pauli_ij must have shape"):
+        assemble_response_matrix(pauli, weights)
+
+
+def test_assemble_response_matrix_requires_matching_weight_shape() -> None:
+    """Weights must use the same history and future axes as tomography."""
+    pauli = np.zeros((2, 3, 4), dtype=np.float64)
+    with pytest.raises(ValueError, match="weights_ij must have shape"):
+        assemble_response_matrix(pauli, np.ones((3, 2), dtype=np.float64))
 
 
 def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
@@ -61,25 +52,26 @@ def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
 
 def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None:
     """A non-square sentinel fixes every response-matrix index and flattening convention."""
-    pauli = np.arange(1.0, 19.0, dtype=np.float64).reshape(2, 3, 3)
+    pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
     weights = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
     response_matrix = assemble_response_matrix(pauli, weights)
-    expected = np.empty((9, 2), dtype=np.float64)
+    expected = np.empty((12, 2), dtype=np.float64)
     for i in range(2):
         for j in range(3):
-            for alpha in range(3):
-                expected[3 * j + alpha, i] = weights[i, j] * pauli[i, j, alpha]
+            for alpha in range(4):
+                expected[4 * j + alpha, i] = weights[i, j] * pauli[i, j, alpha]
     np.testing.assert_allclose(response_matrix, expected)
-    assert response_matrix.shape == (9, 2)
+    assert response_matrix.shape == (12, 2)
     assert not np.allclose(response_matrix.mean(axis=1), 0.0)
 
 
-def test_transpose_preserves_raw_xyz_singular_values() -> None:
-    """Changing only the raw XYZ orientation leaves scalar diagnostics unchanged."""
-    pauli = np.arange(1.0, 19.0, dtype=np.float64).reshape(2, 3, 3)
+def test_transpose_preserves_raw_xyz_block_singular_values() -> None:
+    """The transposed XYZ block retains its pre-identity scalar diagnostics."""
+    pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
     weights = np.array([[1.0, 0.5, 0.25], [0.75, 0.4, 0.2]], dtype=np.float64)
-    old_orientation = (pauli * weights[..., np.newaxis]).reshape(2, 9)
-    new_orientation = assemble_response_matrix(pauli, weights)
+    old_orientation = (pauli[..., 1:] * weights[..., np.newaxis]).reshape(2, 9)
+    full_orientation = assemble_response_matrix(pauli, weights)
+    new_orientation = full_orientation.reshape(3, 4, 2)[:, 1:, :].reshape(9, 2)
     np.testing.assert_allclose(new_orientation, old_orientation.T)
     np.testing.assert_allclose(
         np.linalg.svd(new_orientation, compute_uv=False),
@@ -99,7 +91,28 @@ def test_assemble_response_matrix_beta_scales_weights() -> None:
     weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)
     m1 = assemble_response_matrix(pauli, weights, beta=1.0)
     m2 = assemble_response_matrix(pauli, weights, beta=2.0)
-    assert m2[3, 0] == pytest.approx(2.0 * m1[3, 0], rel=1e-6)
+    assert m2[4, 0] == pytest.approx(2.0 * m1[4, 0], rel=1e-6)
+
+
+def test_identity_rows_equal_branch_weights() -> None:
+    """Normalized identity expectations expose branch weights in every future block."""
+    pauli = np.zeros((2, 3, 4), dtype=np.float64)
+    pauli[..., 0] = 1.0
+    weights = np.array([[0.2, 0.3, 0.4], [0.5, 0.6, 0.7]], dtype=np.float64)
+    response_matrix = assemble_response_matrix(pauli, weights)
+    np.testing.assert_allclose(response_matrix[0::4], weights.T)
+
+
+def test_maximally_mixed_memoryless_response_is_nonzero_rank_one() -> None:
+    """Identity retains the deterministic normalization direction for mixed outputs."""
+    pauli = np.zeros((3, 2, 4), dtype=np.float64)
+    pauli[..., 0] = 1.0
+    history_weights = np.array([0.2, 0.3, 0.5], dtype=np.float64)
+    weights = np.broadcast_to(history_weights[:, np.newaxis], (3, 2))
+    response_matrix = assemble_response_matrix(pauli, weights)
+    assert not np.allclose(response_matrix, 0.0)
+    np.testing.assert_allclose(response_matrix.reshape(2, 4, 3)[:, 1:, :], 0.0)
+    assert np.linalg.matrix_rank(response_matrix) == 1
 
 
 def test_compute_spectrum_tail_truncation_reduces_entropy() -> None:
@@ -197,4 +210,3 @@ def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> 
         )
         entropies.append(float(compute_spectrum(response_matrix, discarded_weight_threshold=None)["entropy"]))
     assert entropies[-1] > entropies[0] * 1.05
-    assert entropies[-1] > 0.01

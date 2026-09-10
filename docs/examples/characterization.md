@@ -99,7 +99,7 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 | `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
 | `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
 | `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Raw cross-cut matrix $V(c)$, with future-response rows and history columns   |
+| `result.response_matrix(c)` | Raw $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns   |
 | `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
 | `result.summary()`          | Human-readable table of entropies and modes                                  |
 
@@ -117,11 +117,13 @@ The split-cut protocol:
    $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
 2. Insert a **causal break** at step $c$: measure on the past side and prepare
    on the future side while the environment continues to evolve.
-3. For each grid entry, simulate the open system, record probe weights and the
-   output Pauli vector
-   $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the raw weighted probe responses into $V(c)$ and compute $S_V(c)$
-   from the normalized mode spectrum.
+3. For each grid entry, simulate the open system, record the complete retained
+   branch weight and the output Pauli vector
+   $\mathbf{r}=(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
+4. Assemble the raw weighted probe responses into $V(c)$. Its rows contain one
+   $(I,X,Y,Z)$ block per future probe, its columns label conditioned histories,
+   and $V_{(j,I),i}=p_{ij}$ for normalized output states. Compute $S_V(c)$ from
+   the normalized mode spectrum.
 
 For an SVD $V=U\Sigma W^\dagger$, the columns of $U$ describe resolved
 future-response directions, while the columns of $W$ describe combinations of
