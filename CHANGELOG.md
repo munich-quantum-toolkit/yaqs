@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added functionality for full-chain MPO expectation values ([#587])
+  ([**@aaronleesander**])
 - added stronger tracking and validation of orthogonality center ([#575])
   ([**@aaronleesander**])
 - added noisy equivalence checking ([#545])
@@ -270,6 +272,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#587]: https://github.com/munich-quantum-toolkit/yaqs/pull/587
 [#583]: https://github.com/munich-quantum-toolkit/yaqs/pull/583
 [#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
 [#569]: https://github.com/munich-quantum-toolkit/yaqs/pull/569
