@@ -1,0 +1,48 @@
+{
+  "J0_max_entropy": 1.7119826799505862e-27,
+  "J0_rank_one_baseline": true,
+  "finite": true,
+  "mpo_tail_growth_J0p1_to_J4": 0.0005741225901535474,
+  "nonnegative": true,
+  "peak_by_cut": {
+    "1": {
+      "mpo_J": 6.0,
+      "mpo_entropy": 5.277176602236598e-05,
+      "response_J": 6.0,
+      "response_entropy": 1.4182130260698999e-05
+    },
+    "2": {
+      "mpo_J": 4.0,
+      "mpo_entropy": 0.005070483626660386,
+      "response_J": 4.6,
+      "response_entropy": 0.0028431690730131246
+    },
+    "3": {
+      "mpo_J": 3.6,
+      "mpo_entropy": 0.008524930459487514,
+      "response_J": 4.4,
+      "response_entropy": 0.004655411676339471
+    }
+  },
+  "response_grows_from_J0p2_to_J2": {
+    "1": true,
+    "2": true,
+    "3": true
+  },
+  "response_redistribution_stronger_than_mpo": false,
+  "response_tail_growth_J0p1_to_J4": 0.00028762922461156304,
+  "selected_spectrum_leading_weights": {
+    "S_MPO": {
+      "0.1": 0.9999999977754017,
+      "1": 0.9999806279040736,
+      "2": 0.999799625178504,
+      "4": 0.9994258751852482
+    },
+    "S_V": {
+      "0.1": 0.9999999995928894,
+      "1": 0.9999960661224138,
+      "2": 0.9999468787926076,
+      "4": 0.9997123703682779
+    }
+  }
+}
