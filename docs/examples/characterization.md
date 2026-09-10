@@ -78,8 +78,8 @@ axes[0].set_title(r"Memory spectrum at cut $c=4$")
 v = ham_result.response_matrix(cut)
 im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
 axes[1].set_title(r"$|V(c)|$")
-axes[1].set_xlabel("future probe index")
-axes[1].set_ylabel("past probe index")
+axes[1].set_xlabel("history index")
+axes[1].set_ylabel("future probe and response channel")
 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 fig.suptitle(
     rf"$S_V(c={cut})={ham_result.entropy(cut):.3f}$, "
@@ -99,7 +99,7 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 | `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
 | `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
 | `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Raw cross-cut memory matrix $V(c)$ (see theory below)                        |
+| `result.response_matrix(c)` | Raw cross-cut matrix $V(c)$, with future-response rows and history columns   |
 | `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
 | `result.summary()`          | Human-readable table of entropies and modes                                  |
 
@@ -122,6 +122,10 @@ The split-cut protocol:
    $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
 4. Assemble the raw weighted probe responses into $V(c)$ and compute $S_V(c)$
    from the normalized mode spectrum.
+
+For an SVD $V=U\Sigma W^\dagger$, the columns of $U$ describe resolved
+future-response directions, while the columns of $W$ describe combinations of
+conditioned histories.
 
 Hamiltonian `characterize` obtains weights from simulated intervention
 probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`). Surrogate

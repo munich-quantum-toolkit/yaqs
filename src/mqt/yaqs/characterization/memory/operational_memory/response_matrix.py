@@ -88,9 +88,10 @@ def assemble_response_matrix(
 ) -> np.ndarray:
     r"""Build the raw weighted response matrix.
 
-    Computes :math:`M^{(\beta)}_{i,(j,\alpha)} = w_{ij}^{\beta} f_{ij,\alpha}` from Pauli
+    Computes :math:`V^{(\beta)}_{(j,\alpha),i} = w_{ij}^{\beta} f_{ij,\alpha}` from Pauli
     tomography ``(I,X,Y,Z)`` or XYZ channels. For four-component tomography, the response
-    matrix uses the X, Y, and Z channels.
+    matrix uses the X, Y, and Z channels. Rows label future-probe response channels and columns
+    label conditioned histories.
 
     Args:
         pauli_ij: Pauli tomography ``(n_pasts, n_futures, 4)`` or XYZ ``(..., 3)``.
@@ -99,7 +100,9 @@ def assemble_response_matrix(
         log_weight_warnings: Passed to :func:`sanitize_branch_weights`.
 
     Returns:
-        Raw branch-weighted response matrix.
+        Raw branch-weighted response matrix with shape
+        ``(n_futures * n_output_channels, n_pasts)``. Within each future probe, output channels
+        vary fastest.
     """
     w_clean, _ = sanitize_branch_weights(weights_ij, log_warnings=log_weight_warnings)
     xyz = extract_xyz_channels(pauli_ij) if np.asarray(pauli_ij).shape[-1] == 4 else pauli_ij
@@ -107,7 +110,8 @@ def assemble_response_matrix(
     w = np.asarray(w_clean, dtype=np.float64).reshape(n_p, n_f)
     features = np.asarray(xyz, dtype=np.float64).reshape(n_p, n_f, d_out)
     scale = np.power(w, float(beta))
-    return (features * np.repeat(scale[:, :, np.newaxis], d_out, axis=2)).reshape(n_p, n_f * d_out)
+    weighted = features * scale[:, :, np.newaxis]
+    return weighted.transpose(1, 2, 0).reshape(n_f * d_out, n_p)
 
 
 def compute_spectrum(
@@ -119,7 +123,9 @@ def compute_spectrum(
     r"""Cross-cut memory spectrum: :math:`S_V(c)` and :math:`R(c)=\exp(S_V(c))`.
 
     Args:
-        response_matrix: Raw branch-weighted response matrix.
+        response_matrix: Raw branch-weighted response matrix with future-response rows and
+            history columns. Left singular vectors describe future-response directions; right
+            singular vectors describe combinations of histories.
         discarded_weight_threshold: Relative tail weight above which singular values are
             discarded when computing entropy. ``None`` keeps the full spectrum.
         min_keep: Minimum number of singular values to retain after tail truncation.

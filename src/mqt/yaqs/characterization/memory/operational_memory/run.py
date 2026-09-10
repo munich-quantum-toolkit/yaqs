@@ -271,7 +271,8 @@ def run_memory_characterization(
 
     Returns:
         Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
-        ``probe_set``, and optional ``weights_ij``.
+        ``probe_set``, and ``weights_ij``. The response matrix has future-response rows and
+        history columns.
 
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a

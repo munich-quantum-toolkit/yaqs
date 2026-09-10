@@ -59,24 +59,47 @@ def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
     np.testing.assert_allclose(clean, [[1.0, 0.0], [0.0, 0.0]])
 
 
-def test_assemble_response_matrix_returns_raw_weighted_values() -> None:
-    """Response-matrix assembly preserves raw weighted values without centering."""
-    pauli = np.arange(1.0, 13.0, dtype=np.float64).reshape(2, 2, 3)
-    weights = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None:
+    """A non-square sentinel fixes every response-matrix index and flattening convention."""
+    pauli = np.arange(1.0, 19.0, dtype=np.float64).reshape(2, 3, 3)
+    weights = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
     response_matrix = assemble_response_matrix(pauli, weights)
-    expected = (pauli * weights[..., np.newaxis]).reshape(2, 6)
+    expected = np.empty((9, 2), dtype=np.float64)
+    for i in range(2):
+        for j in range(3):
+            for alpha in range(3):
+                expected[3 * j + alpha, i] = weights[i, j] * pauli[i, j, alpha]
     np.testing.assert_allclose(response_matrix, expected)
-    assert not np.allclose(response_matrix.mean(axis=0), 0.0)
+    assert response_matrix.shape == (9, 2)
+    assert not np.allclose(response_matrix.mean(axis=1), 0.0)
 
 
-def test_assemble_response_matrix_beta_scales_rows() -> None:
+def test_transpose_preserves_raw_xyz_singular_values() -> None:
+    """Changing only the raw XYZ orientation leaves scalar diagnostics unchanged."""
+    pauli = np.arange(1.0, 19.0, dtype=np.float64).reshape(2, 3, 3)
+    weights = np.array([[1.0, 0.5, 0.25], [0.75, 0.4, 0.2]], dtype=np.float64)
+    old_orientation = (pauli * weights[..., np.newaxis]).reshape(2, 9)
+    new_orientation = assemble_response_matrix(pauli, weights)
+    np.testing.assert_allclose(new_orientation, old_orientation.T)
+    np.testing.assert_allclose(
+        np.linalg.svd(new_orientation, compute_uv=False),
+        np.linalg.svd(old_orientation, compute_uv=False),
+    )
+    assert np.linalg.matrix_rank(new_orientation) == np.linalg.matrix_rank(old_orientation)
+    assert np.linalg.norm(new_orientation) == pytest.approx(np.linalg.norm(old_orientation))
+    assert compute_spectrum(new_orientation, discarded_weight_threshold=None)["entropy"] == pytest.approx(
+        compute_spectrum(old_orientation, discarded_weight_threshold=None)["entropy"]
+    )
+
+
+def test_assemble_response_matrix_beta_scales_weights() -> None:
     """Beta exponent scales branch weights in the raw response matrix."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
     pauli[..., 0] = 1.0
     weights = np.array([[1.0, 2.0], [1.0, 2.0]], dtype=np.float64)
     m1 = assemble_response_matrix(pauli, weights, beta=1.0)
     m2 = assemble_response_matrix(pauli, weights, beta=2.0)
-    assert m2[0, 3] == pytest.approx(2.0 * m1[0, 3], rel=1e-6)
+    assert m2[3, 0] == pytest.approx(2.0 * m1[3, 0], rel=1e-6)
 
 
 def test_compute_spectrum_tail_truncation_reduces_entropy() -> None:

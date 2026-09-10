@@ -5,15 +5,12 @@
 Align the YAQS operational-memory response matrix with the definition used in
 the response-matrix paper. The paper defines
 
-\[
-(V_c)_{(j,\alpha),i}
-= p_{ij}\,\operatorname{Tr}(P_\alpha\rho_{ij}),
-\qquad P_\alpha\in\{I,X,Y,Z\},
-\]
+\[ (V_c)_{(j,\alpha),i} = p_{ij}\,\operatorname{Tr}(P_\alpha\rho_{ij}), \qquad
+P_\alpha\in\{I,X,Y,Z\}, \]
 
-where `i` labels a conditioned history, `j` labels a future probe, and
-`p_ij` is the probability of every retained outcome in the complete record.
-Rows therefore label future records and columns label histories.
+where `i` labels a conditioned history, `j` labels a future probe, and `p_ij` is
+the probability of every retained outcome in the complete record. Rows therefore
+label future records and columns label histories.
 
 Use these branches as follows:
 
@@ -45,22 +42,20 @@ need later.
 
 ## 2. Use the paper's matrix orientation
 
-- [ ] Keep evaluated probe data in its current three-dimensional layout:
+- [x] Keep evaluated probe data in its current three-dimensional layout:
       `(n_histories, n_future_probes, n_output_channels)`.
-- [ ] Assemble the public two-dimensional matrix with shape
+- [x] Assemble the public two-dimensional matrix with shape
       `(n_future_probes * n_output_channels, n_histories)`.
-- [ ] Use the following element mapping:
+- [x] Use the following element mapping:
 
-      ```python
-      response_matrix[j * n_output_channels + alpha, i] = (
-          weights[i, j] * pauli[i, j, alpha]
-      )
-      ```
+```python
+response_matrix[j * n_output_channels + alpha, i] = weights[i, j] * pauli[i, j, alpha]
+```
 
 - [ ] Order each future probe's output channels as `I, X, Y, Z`.
-- [ ] Document that left singular vectors describe future-response directions
+- [x] Document that left singular vectors describe future-response directions
       and right singular vectors describe combinations of histories.
-- [ ] Update examples and plot labels that place histories on the row axis.
+- [x] Update examples and plot labels that place histories on the row axis.
 - [ ] Add an upgrade note: the old public matrix is the transpose of the new
       matrix, apart from the other changes in this update.
 
@@ -75,13 +70,13 @@ matrix indexing.
 - [ ] Require a four-channel input for the canonical paper-facing method, or
       provide an explicit and validated conversion for older three-channel
       inputs. Do not infer ambiguous input semantics silently.
-- [ ] Multiply the identity expectation by the branch weight. The identity
-      entry is `p_ij`, not `1`.
-- [ ] Update the formal future-record dimension from
-      `3 * n_future_probes` to `4 * n_future_probes` wherever applicable.
+- [ ] Multiply the identity expectation by the branch weight. The identity entry
+      is `p_ij`, not `1`.
+- [ ] Update the formal future-record dimension from `3 * n_future_probes` to
+      `4 * n_future_probes` wherever applicable.
 - [ ] Verify that the identity rows provide the deterministic normalization
-      direction required by the paper's history-branch probability and
-      rank-one result.
+      direction required by the paper's history-branch probability and rank-one
+      result.
 
 ## 4. Use complete retained-outcome weights
 
@@ -134,7 +129,7 @@ Likely files include:
 - [ ] Add a maximally mixed output test. The `X, Y, Z` entries may vanish, but
       the response matrix must remain nonzero because of `I`.
 - [ ] Add a memoryless example whose raw response matrix has rank one.
-- [ ] Verify that transposing the old raw XYZ block preserves its singular
+- [x] Verify that transposing the old raw XYZ block preserves its singular
       values before adding the identity block.
 - [ ] Test a retained future outcome whose probability depends on both history
       and future indices.
