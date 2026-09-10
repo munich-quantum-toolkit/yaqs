@@ -1,0 +1,61 @@
+{
+  "figure": "appendix probe budget",
+  "implementation_git_commit": "c6744d1ff97ad163b53682e71dda858a3454718b",
+  "configuration": {
+    "L": 6,
+    "k": 20,
+    "dt": 0.1,
+    "g": 1.0,
+    "cut": 10,
+    "m_values": [
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "J_values": [
+      0.0,
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0,
+      1.2,
+      1.4,
+      1.6,
+      1.8,
+      2.0
+    ],
+    "probe_draws": 5,
+    "seed": 0,
+    "probe_style": "haar",
+    "centered": false,
+    "response_channels": "IXYZ",
+    "response_orientation": "future_rows_history_columns",
+    "weight_scope": "complete_retained_record"
+  },
+  "plot_y_limits": [
+    1e-05,
+    0.1
+  ],
+  "runtime_seconds": 37.25567790912464,
+  "artifacts": {
+    "convergence_detail.csv": {
+      "bytes": 8550,
+      "sha256": "f62f658f4f2e1e9bc4cdd7ea8f76989173137215a14475792e38327b9202a210"
+    },
+    "convergence_summary.csv": {
+      "bytes": 3814,
+      "sha256": "af5b93d4e8dba0b0f07e130e9e1e540b28548ae5d337e521739071a28156b7f6"
+    },
+    "probe_budget.pdf": {
+      "bytes": 20085,
+      "sha256": "117c63eaccb2b216ab8c56e677705b904e72688168f51ecbb52ebf7d5b888d3b"
+    },
+    "probe_budget.png": {
+      "bytes": 136281,
+      "sha256": "5552020a3eb45ef8dda3372349e2f3441f0519cab4e8964ff1bd205fc463b6a7"
+    }
+  }
+}
