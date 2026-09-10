@@ -1233,13 +1233,16 @@ class MPS:
             The raw complex expectation value.
 
         Raises:
-            ValueError: If the MPO length or tensor structure does not match
-                the MPS.
+            ValueError: If the MPS or MPO tensor structure is invalid, or if
+                their lengths or physical dimensions do not match.
 
         Notes:
             The operator does not need to be Hermitian. Use the returned
             complex value directly when measuring a general linear operator.
         """
+        if len(self.tensors) != self.length:
+            msg = f"MPS tensor count {len(self.tensors)} must match MPS length {self.length}."
+            raise ValueError(msg)
         if operator.length != self.length or len(operator.tensors) != self.length:
             msg = (
                 f"MPO length {operator.length} and tensor count {len(operator.tensors)} "
@@ -1247,33 +1250,51 @@ class MPS:
             )
             raise ValueError(msg)
 
-        previous_right_bond = 1
+        previous_state_right_bond = 1
+        previous_operator_right_bond = 1
         for site, (state_tensor, operator_tensor) in enumerate(zip(self.tensors, operator.tensors, strict=True)):
+            if state_tensor.ndim != 3:
+                msg = f"MPS tensor at site {site} must have rank 3; got shape {state_tensor.shape}."
+                raise ValueError(msg)
+            state_dimension, state_left_bond, state_right_bond = state_tensor.shape
+            if state_left_bond != previous_state_right_bond:
+                if site == 0:
+                    msg = f"MPS left boundary bond dimension must be 1; got {state_left_bond}."
+                else:
+                    msg = (
+                        f"MPS bond between sites {site - 1} and {site} has dimensions "
+                        f"{previous_state_right_bond} and {state_left_bond}."
+                    )
+                raise ValueError(msg)
+            previous_state_right_bond = state_right_bond
+
             if operator_tensor.ndim != 4:
                 msg = f"MPO tensor at site {site} must have rank 4; got shape {operator_tensor.shape}."
                 raise ValueError(msg)
 
             output_dimension, input_dimension, left_bond, right_bond = operator_tensor.shape
-            state_dimension = state_tensor.shape[0]
             if output_dimension != state_dimension or input_dimension != state_dimension:
                 msg = (
                     f"MPO tensor at site {site} has physical dimensions "
                     f"({output_dimension}, {input_dimension}); expected ({state_dimension}, {state_dimension})."
                 )
                 raise ValueError(msg)
-            if left_bond != previous_right_bond:
+            if left_bond != previous_operator_right_bond:
                 if site == 0:
                     msg = f"MPO left boundary bond dimension must be 1; got {left_bond}."
                 else:
                     msg = (
                         f"MPO bond between sites {site - 1} and {site} has dimensions "
-                        f"{previous_right_bond} and {left_bond}."
+                        f"{previous_operator_right_bond} and {left_bond}."
                     )
                 raise ValueError(msg)
-            previous_right_bond = right_bond
+            previous_operator_right_bond = right_bond
 
-        if previous_right_bond != 1:
-            msg = f"MPO right boundary bond dimension must be 1; got {previous_right_bond}."
+        if previous_state_right_bond != 1:
+            msg = f"MPS right boundary bond dimension must be 1; got {previous_state_right_bond}."
+            raise ValueError(msg)
+        if previous_operator_right_bond != 1:
+            msg = f"MPO right boundary bond dimension must be 1; got {previous_operator_right_bond}."
             raise ValueError(msg)
 
         environment = np.ones((1, 1, 1), dtype=np.complex128)

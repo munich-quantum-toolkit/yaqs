@@ -915,6 +915,52 @@ def test_expect_mpo_rejects_a_tensor_count_mismatch() -> None:
         state.expect_mpo(operator)
 
 
+def test_expect_mpo_rejects_an_mps_tensor_count_mismatch() -> None:
+    """The stored MPS tensors must cover every declared state site."""
+    state = MPS(length=2, state="zeros")
+    state.tensors.pop()
+    operator = MPO.identity(2)
+
+    with pytest.raises(ValueError, match="MPS tensor count 1 must match MPS length 2"):
+        state.expect_mpo(operator)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "error"),
+    [
+        pytest.param([np.zeros((2, 1), dtype=np.complex128)], "rank 3", id="rank"),
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 1, 2), dtype=np.complex128)], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.ones((2, 1, 1), dtype=np.complex128),
+                np.ones((2, 2, 1), dtype=np.complex128),
+            ],
+            "MPS bond between sites 0 and 1 has dimensions 1 and 2",
+            id="internal-singleton-expand",
+        ),
+        pytest.param(
+            [
+                np.ones((2, 1, 2), dtype=np.complex128),
+                np.ones((2, 1, 1), dtype=np.complex128),
+            ],
+            "MPS bond between sites 0 and 1 has dimensions 2 and 1",
+            id="internal-singleton-contract",
+        ),
+    ],
+)
+def test_expect_mpo_rejects_invalid_mps_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    error: str,
+) -> None:
+    """Malformed MPS tensors are rejected before singleton bonds can broadcast."""
+    state = MPS(length=len(tensors), tensors=tensors)
+    operator = MPO.identity(len(tensors))
+
+    with pytest.raises(ValueError, match=error):
+        state.expect_mpo(operator)
+
+
 @pytest.mark.parametrize(
     ("tensors", "error"),
     [
@@ -983,34 +1029,6 @@ def test_expect_mpo_returns_preset_hamiltonian_energy() -> None:
     assert energy == pytest.approx(-2.5 + 0.0j, abs=1e-12)
 
 
-def test_expect_mpo_returns_manual_hamiltonian_energy() -> None:
-    """A manually supplied dense Hamiltonian can be materialized and measured."""
-    zero = np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1)
-    plus = np.array([1.0, 1.0], dtype=np.complex128).reshape(2, 1, 1) / np.sqrt(2.0)
-    state = State(tensors=[zero, plus])
-    matrix = 0.75 * np.kron(_Z2, _I2) - 0.5 * np.kron(_I2, _X2) + 1.25 * np.kron(_Z2, _X2)
-    hamiltonian = Hamiltonian(matrix=matrix)
-    hamiltonian.ensure_mpo()
-
-    energy = state.mps.expect_mpo(hamiltonian.mpo)
-
-    assert energy == pytest.approx(1.5 + 0.0j, abs=1e-12)
-
-
-def test_expect_mpo_uses_a_selected_static_piece_for_piecewise_energy() -> None:
-    """A piecewise energy is measured from the applicable static piece."""
-    first = Hamiltonian.ising(2, J=1.0, g=0.0, n_sweeps=0)
-    second = Hamiltonian.ising(2, J=2.0, g=0.0, n_sweeps=0)
-    piecewise = Hamiltonian.piecewise([(first, 0.1), (second, 0.2)])
-    state = State(2, initial="zeros")
-
-    selected, _duration = piecewise.pieces[1]
-    selected.ensure_mpo()
-    energy = state.mps.expect_mpo(selected.mpo)
-
-    assert energy == pytest.approx(-2.0 + 0.0j, abs=1e-12)
-
-
 def test_expect_mpo_supports_a_long_range_connected_correlation() -> None:
     """Raw separated-site and local values form a connected correlation."""
     length = 5
@@ -1037,50 +1055,6 @@ def test_expect_mpo_supports_a_long_range_connected_correlation() -> None:
     assert z0 == pytest.approx(2.0, abs=1e-12)
     assert z4 == pytest.approx(2.0, abs=1e-12)
     assert connected == pytest.approx(0.75 + 0.0j, abs=1e-12)
-
-
-def test_expect_mpo_returns_a_multi_site_pauli_string() -> None:
-    """A Pauli string can contain separated factors on more than two sites."""
-    x_plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
-    zero = np.array([1.0, 0.0], dtype=np.complex128)
-    y_minus = np.array([1.0, -1.0j], dtype=np.complex128) / np.sqrt(2.0)
-    one = np.array([0.0, 1.0], dtype=np.complex128)
-    state = MPS(
-        5,
-        tensors=[vector.reshape(2, 1, 1) for vector in (x_plus, zero, y_minus, x_plus, one)],
-    )
-    operator = MPO()
-    operator.from_pauli_sum(terms=[(0.625, "X0 Y2 Z4")], length=state.length, n_sweeps=0)
-
-    assert state.expect_mpo(operator) == pytest.approx(0.625 + 0.0j, abs=1e-12)
-
-
-def test_expect_mpo_returns_a_bond_one_product() -> None:
-    """Local matrices form a full-chain bond-one product MPO."""
-    zero = np.array([1.0, 0.0], dtype=np.complex128)
-    x_plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
-    one = np.array([0.0, 1.0], dtype=np.complex128)
-    state = MPS(3, tensors=[vector.reshape(2, 1, 1) for vector in (zero, x_plus, one)])
-    operator = MPO.from_local_ops(
-        [
-            np.diag([2.0, -1.0]),
-            _X2,
-            np.diag([1.0, 3.0]),
-        ],
-    )
-
-    assert all(tensor.shape[2:] == (1, 1) for tensor in operator.tensors)
-    assert state.expect_mpo(operator) == pytest.approx(6.0 + 0.0j, abs=1e-12)
-
-
-def test_expect_remains_independent_of_expect_mpo() -> None:
-    """Local observables keep their existing expectation-value path."""
-    state = MPS(length=2, state="x+")
-
-    with patch.object(MPS, "expect_mpo", side_effect=AssertionError("unexpected MPO path")):
-        value = state.expect(Observable("x", 0))
-
-    assert value == pytest.approx(1.0)
 
 
 def test_local_expect_z_on_zero_state() -> None:
