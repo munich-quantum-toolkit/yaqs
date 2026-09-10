@@ -1,0 +1,69 @@
+{
+  "figure": "appendix finite environment",
+  "implementation_git_commit": "c6744d1ff97ad163b53682e71dda858a3454718b",
+  "configuration": {
+    "L_values": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "environment_sites": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "J_values": [
+      0.5,
+      1.0,
+      1.5,
+      2.0
+    ],
+    "cuts": [
+      5,
+      10,
+      15
+    ],
+    "k": 20,
+    "dt": 0.1,
+    "g": 1.0,
+    "n_pasts": 32,
+    "n_futures": 32,
+    "seed": 0,
+    "probe_style": "haar",
+    "centered": false,
+    "response_channels": "IXYZ",
+    "response_orientation": "future_rows_history_columns",
+    "weight_scope": "complete_retained_record"
+  },
+  "plot_y_limits": [
+    0.0,
+    0.20855625371218933
+  ],
+  "runtime_seconds": 51.67896960210055,
+  "artifacts": {
+    "finite_size.csv": {
+      "bytes": 3433,
+      "sha256": "ce335a1a2abdf7ba75493826a8765fbb60d54aa96d0e9148e43a2f8350d6fa83"
+    },
+    "finite_size.pdf": {
+      "bytes": 27775,
+      "sha256": "42456bcdcdac79caf1dbaea6c2a4451eb098de029cba5d1e0f55b98bc1c20e22"
+    },
+    "finite_size.png": {
+      "bytes": 316586,
+      "sha256": "3ba2df92d55fcf4afe7347c115ce5e0648e0e4415dc4a0dfa044e5a9ac8446e6"
+    }
+  }
+}

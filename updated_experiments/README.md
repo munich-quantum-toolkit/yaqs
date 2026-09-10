@@ -1,7 +1,7 @@
 # Updated response-matrix experiments
 
 This directory contains the Figure 2, Figure 3, Figure 4, and appendix
-probe-budget experiments after the response-matrix update. The updated matrix is
+consistency experiments after the response-matrix update. The updated matrix is
 uncentered, uses future-response rows and history columns, includes the
 `I, X, Y, Z` channels, and uses complete retained-record probabilities.
 
@@ -17,6 +17,9 @@ Its spectrum panels use cut 2 at `J=0.1,1,2,4`.
 The appendix probe-budget sweep uses `L=6`, `k=20`, `dt=0.1`, `g=1`, cut 10,
 five Haar-probe draws, `m=4,8,16,32,64`, and `J=0,0.2,...,2`.
 
+The appendix finite-size sweep uses `L=2,...,10`, `k=20`, `dt=0.1`, `g=1`, cuts
+`5,10,15`, `J=0.5,1,1.5,2`, and 32 history and future probes.
+
 ## Contents
 
 - `experiments/common.py`: shared simulation and plotting functions.
@@ -26,6 +29,8 @@ five Haar-probe draws, `m=4,8,16,32,64`, and `J=0,0.2,...,2`.
   package. Its local `full_basis.py` preserves the probe catalog removed from
   the current public YAQS API.
 - `experiments/probe_budget.py`: appendix probe-budget convergence sweep.
+- `experiments/finite_size.py`: appendix finite-environment sweep at the three
+  displayed cuts.
 - `results/figure2`: the Figure 2 PDF and PNG, scalar data, initial state, and
   run manifest.
 - `results/figure3`: the Figure 3 PDF and PNG, scalar data, full plotted
@@ -34,6 +39,8 @@ five Haar-probe draws, `m=4,8,16,32,64`, and `J=0,0.2,...,2`.
   plotted spectra, qualitative checks, and run manifest.
 - `results/probe_budget`: the appendix PDF and PNG, per-draw and summary data,
   and run manifest.
+- `results/finite_size`: the appendix PDF and PNG, plotted scalar data, and run
+  manifest.
 
 The Figure 2 logarithmic color range is `1e-4` to `5e-1`, which preserves the
 visual balance of the earlier figure at the updated entropy scale. The Figure 3
@@ -49,6 +56,11 @@ The probe-budget figure spans `1e-5` to `1e-1`. Its old/new matched log-value
 correlation is `0.9939`: the absolute entropy decreases, while the coupling
 ordering and broad stabilization with increasing budget remain qualitatively the
 same.
+
+The finite-size figure rescales its shared vertical axis from 0 to approximately
+`0.209`. Its old/new log-value correlations are `0.9869`, `0.9906`, and `0.9939`
+at cuts 5, 10, and 15. The smallest environments remain the most size-dependent,
+followed by broad plateaus after several environmental sites.
 
 The updated figures retain the qualitative conclusions of the earlier figures:
 
@@ -101,6 +113,10 @@ python -m updated_experiments.experiments.mpo_comparison.run \
 python -m updated_experiments.experiments.probe_budget \
   --plot-only \
   --output-dir updated_experiments/results/probe_budget
+
+python -m updated_experiments.experiments.finite_size \
+  --plot-only \
+  --output-dir updated_experiments/results/finite_size
 ```
 
 ## Repeat the simulations
@@ -140,6 +156,11 @@ python -m updated_experiments.experiments.probe_budget \
   --parallel \
   --max-workers 8 \
   --output-dir results/updated_probe_budget
+
+python -m updated_experiments.experiments.finite_size \
+  --parallel \
+  --max-workers 8 \
+  --output-dir results/updated_finite_size
 ```
 
 The complete per-point raw matrices occupy approximately 185 MB and are not
