@@ -60,6 +60,7 @@ torch = [
     "torch>=2.2",
     "torch>=2.6; python_version >= '3.13'",
     "torch>=2.9; python_version >= '3.14'",
+    "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
 ]
 
 [project.urls]
@@ -211,6 +212,7 @@ test = [
     "torch>=2.2",
     "torch>=2.6; python_version >= '3.13'",
     "torch>=2.9; python_version >= '3.14'",
+    "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
 ]
 docs = [
     "furo>=2025.09.25",
@@ -226,6 +228,7 @@ docs = [
     "torch>=2.2",
     "torch>=2.6; python_version >= '3.13'",
     "torch>=2.9; python_version >= '3.14'",
+    "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
 ]
 dev = [
     {include-group = "test"},
