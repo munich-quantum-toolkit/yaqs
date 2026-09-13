@@ -80,13 +80,12 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "qiskit": ("https://docs.quantum.ibm.com/api/qiskit", None),
-    "mqt": ("https://mqt.readthedocs.io/en/latest", None),
-    "core": ("https://mqt.readthedocs.io/projects/core/en/latest", None),
-    "ddsim": ("https://mqt.readthedocs.io/projects/ddsim/en/latest", None),
-    "qmap": ("https://mqt.readthedocs.io/projects/qmap/en/latest", None),
-    "qcec": ("https://mqt.readthedocs.io/projects/qcec/en/latest", None),
-    "qecc": ("https://mqt.readthedocs.io/projects/qecc/en/latest", None),
-    "syrec": ("https://mqt.readthedocs.io/projects/syrec/en/latest", None),
+    "mqt": ("https://mqt.readthedocs.io/en/stable", None),
+    "core": ("https://mqt.readthedocs.io/projects/core/en/stable", None),
+    "ddsim": ("https://mqt.readthedocs.io/projects/ddsim/en/stable", None),
+    "qmap": ("https://mqt.readthedocs.io/projects/qmap/en/stable", None),
+    "qcec": ("https://mqt.readthedocs.io/projects/qcec/en/stable", None),
+    "syrec": ("https://mqt.readthedocs.io/projects/syrec/en/stable", None),
 }
 
 myst_enable_extensions = [
@@ -110,7 +109,6 @@ nb_prolog = """
 import warnings
 
 warnings.filterwarnings("ignore", message=".*cast.*complex.*")
-warnings.filterwarnings("ignore", message=".*Casting complex values to real.*")
 try:
     from numpy.exceptions import ComplexWarning
 except ImportError:

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![CI](https://img.shields.io/github/actions/workflow/status/munich-quantum-toolkit/yaqs/ci.yml?branch=main&style=flat-square&logo=github&label=ci)](https://github.com/munich-quantum-toolkit/yaqs/actions/workflows/ci.yml)
 [![CD](https://img.shields.io/github/actions/workflow/status/munich-quantum-toolkit/yaqs/cd.yml?style=flat-square&logo=github&label=cd)](https://github.com/munich-quantum-toolkit/yaqs/actions/workflows/cd.yml)
-[![Documentation](https://img.shields.io/readthedocs/mqt-yaqs?logo=readthedocs&style=flat-square)](https://mqt.readthedocs.io/projects/yaqs)
+[![Documentation](https://img.shields.io/readthedocs/mqt-yaqs?logo=readthedocs&style=flat-square)](https://mqt.readthedocs.io/projects/yaqs/en/latest/)
 [![codecov](https://img.shields.io/codecov/c/github/munich-quantum-toolkit/yaqs?style=flat-square&logo=codecov)](https://codecov.io/gh/munich-quantum-toolkit/yaqs)
 
 <p align="center">
@@ -25,7 +25,7 @@ wherever possible (see [Cite This](#cite-this)). It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 <p align="center">
-  <a href="https://mqt.readthedocs.io/projects/yaqs">
+  <a href="https://mqt.readthedocs.io/projects/yaqs/en/latest/">
   <img width=30% src="https://img.shields.io/badge/documentation-blue?style=for-the-badge&logo=read%20the%20docs" alt="Documentation" />
   </a>
 </p>
@@ -53,7 +53,7 @@ wherever possible (see [Cite This](#cite-this)). It is part of the
   ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
 - **Noise model characterization**: Fit Markovian Lindblad jump rates from
   observable dynamics
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html)).
+  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)).
 - **Hardware-oriented modeling**: Realistic noise models including Gaussian and
   other strength distributions, plus hardware dynamics such as
   transmon–resonator systems, and heterogeneous site dimensions
@@ -186,7 +186,7 @@ result = MemoryCharacterizer(show_progress=False).characterize(
 print(result.summary())
 ```
 
-[Noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html)
+[Noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
 
 Noise model characterization
 
@@ -227,8 +227,8 @@ print(result.optimal_model)
 ·
 [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
 ·
-[Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/noise_characterization.html)
-· [full guide](https://mqt.readthedocs.io/projects/yaqs)
+[Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
+· [full guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/)
 
 ## System Requirements
 
