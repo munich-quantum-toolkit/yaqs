@@ -59,7 +59,7 @@ flowchart LR
 | Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
 | Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
 | Model realistic noise (log-normal and other distributions)                 | {doc}`examples/realistic_noise_models`                                      |
-| Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models` § 6                                  |
+| Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models`                                      |
 | Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
 | Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
 | Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |

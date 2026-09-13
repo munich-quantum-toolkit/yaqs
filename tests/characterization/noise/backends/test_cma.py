@@ -126,7 +126,6 @@ def test_backend_exports_cma_opt() -> None:
 
 
 @pytest.mark.filterwarnings("ignore:sigma change np.exp:UserWarning")
-@pytest.mark.filterwarnings("ignore:Initial solution argument x0.*:UserWarning")
 def test_cma_opt_integration_smoke() -> None:
     """Real CMA-ES backend minimizes a simple quadratic objective."""
     pytest.importorskip("cma")

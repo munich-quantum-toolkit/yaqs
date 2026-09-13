@@ -73,7 +73,6 @@ def test_prepare_state_for_representation_density_matrix() -> None:
     assert prepared.density_matrix.shape == (2, 2)
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_lindblad_loss_is_deterministic() -> None:
     """Repeated loss evaluations at the same rates return identical values under Lindblad."""
     test = NoiseTestConfig(sites=1, ntraj=4)
