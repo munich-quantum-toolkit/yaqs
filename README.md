@@ -124,9 +124,8 @@ uv pip install mqt.yaqs
 
 ### Simulation
 
-[Analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
-
 Noisy analog Hamiltonian simulation
+([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)):
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
@@ -145,9 +144,8 @@ params = AnalogSimParams(
 print(sim.run(state, H, params, noise).expectation_values[0][-1])
 ```
 
-[Circuit simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
-
-Noisy digital circuit simulation (observables)
+Noisy digital circuit simulation
+([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)):
 
 ```python
 from qiskit.circuit import QuantumCircuit
@@ -166,9 +164,8 @@ print(result.expectation_values[0])
 
 ### Characterization
 
-[Environmental memory guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
-
 Environmental memory characterization
+([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)):
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
@@ -186,9 +183,8 @@ result = MemoryCharacterizer(show_progress=False).characterize(
 print(result.summary())
 ```
 
-[Noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
-
 Noise model characterization
+([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)):
 
 ```python
 import numpy as np
@@ -228,7 +224,7 @@ print(result.optimal_model)
 [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
 ·
 [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
-· [full guide](https://mqt.readthedocs.io/projects/yaqs)
+· [Full guide](https://mqt.readthedocs.io/projects/yaqs)
 
 ## System Requirements
 
