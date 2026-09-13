@@ -67,7 +67,7 @@ torch = [
 
 [project.urls]
 Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
-Documentation = "https://mqt.readthedocs.io/projects/yaqs/en/latest/"
+Documentation = "https://mqt.readthedocs.io/projects/yaqs"
 Issues = "https://github.com/munich-quantum-toolkit/yaqs/issues"
 Discussions = "https://github.com/munich-quantum-toolkit/yaqs/discussions"
 
