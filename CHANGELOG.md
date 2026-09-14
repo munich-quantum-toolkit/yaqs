@@ -32,6 +32,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- raise the minimum Qiskit version from 1.1.0 to 2.1.0
+  ([**@denialhaag**])
 - split observables to be separate from quantum gates ([#583])
   ([**@aaronleesander**])
 - removed redundant center shifting in long-range TEBD swaps ([#571])

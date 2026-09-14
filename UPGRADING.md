@@ -148,6 +148,11 @@ DigitalSimParams(
 | Combined       | Set both `observables` and `shots`      |
 | Example docs   | `circuit_observables` / `circuit_shots` |
 
+### Qiskit 2.1 minimum
+
+The minimum Qiskit version increases from **1.1.0 to 2.1.0**, dropping support
+for all Qiskit 1.x releases and Qiskit 2.0. Upgrade Qiskit to 2.1.0 or newer.
+
 ### Restored testing on Python 3.13 and 3.14
 
 MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
