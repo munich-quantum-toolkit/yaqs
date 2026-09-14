@@ -96,6 +96,16 @@ def test_assemble_response_matrix_rejects_invalid_probabilities(invalid_weight: 
         assemble_response_matrix(pauli, np.array([[invalid_weight]], dtype=np.float64))
 
 
+def test_assemble_response_matrix_clips_probability_roundoff() -> None:
+    """A probability one ulp above one is accepted and clipped to one."""
+    pauli = np.array([[[1.0, 0.5, 0.0, -0.5]]], dtype=np.float64)
+    weights = np.array([[np.nextafter(1.0, np.inf)]], dtype=np.float64)
+
+    response_matrix = assemble_response_matrix(pauli, weights)
+
+    np.testing.assert_array_equal(response_matrix[:, 0], pauli[0, 0])
+
+
 def test_assemble_response_matrix_requires_normalized_identity_channel() -> None:
     """The I response must expose the supplied probability without rescaling."""
     pauli = np.zeros((1, 1, 4), dtype=np.float64)

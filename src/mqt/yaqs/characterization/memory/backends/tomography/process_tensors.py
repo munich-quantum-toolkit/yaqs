@@ -18,6 +18,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import DEFAULT_INITIAL_RHO0, encode_rho_pauli
 from ...shared.intervention_steps import AnyInterventionStep, build_intervention_operator
+from ...shared.probabilities import PROBABILITY_ATOL
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -180,8 +181,13 @@ def _evaluate_probes_weighted(
             rho_hermitian = 0.5 * (rho_subnormalized + rho_subnormalized.conj().T)
             trace = np.trace(rho_hermitian)
             weight = float(trace.real)
-            if not np.isfinite(weight) or weight < -1e-12 or weight > 1.0 + 1e-8:
-                msg = f"Process-tensor branch trace must be a probability in [0, 1], got {weight}."
+            if not np.isfinite(weight) or weight < -PROBABILITY_ATOL or weight > 1.0 + PROBABILITY_ATOL:
+                msg = (
+                    f"Process-tensor branch trace must be a probability in [0, 1], got {weight}. "
+                    "Direct-MPO compression or tomography error can make a reconstructed process tensor "
+                    "nonphysical. For a noiseless process, increase max_bond_dim, set max_bond_dim=None, or "
+                    "use return_type='dense'; for sampled tomography, improve the reconstruction."
+                )
                 raise ValueError(msg)
             weight = float(np.clip(weight, 0.0, 1.0))
             if weight <= 1e-12 and np.linalg.norm(rho_hermitian) > 1e-10:

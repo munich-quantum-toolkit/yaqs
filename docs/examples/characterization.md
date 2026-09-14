@@ -288,7 +288,12 @@ k = 3
 cut_pt = 2
 timesteps = [0.1] * (k + 1)
 
-pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
+pt_mpo = mc.build_process_tensor(
+    ham,
+    params,
+    timesteps=timesteps,
+    max_bond_dim=None,
+)
 pt_dense = mc.build_process_tensor(
     ham,
     params,
@@ -303,7 +308,7 @@ print(
     f"dense={s_dense['entropy']:.4f}, schmidt_rank={s_mpo['schmidt_rank']}"
 )
 
-# Same process tensor also supports operational memory via characterize:
+# The same exact process tensor also supports operational memory via characterize:
 pt_result = mc.characterize(
     pt_mpo,
     cut=cut_pt,
@@ -317,10 +322,14 @@ print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.
 
 Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for
 small $k$. Use `return_type="dense"` when you need noise. The default
-`max_bond_dim=64` keeps direct construction scalable; pass `max_bond_dim=None`
-for an exact noiseless MPO. `characterize(pt, ...)` still builds $S_V$ from
-probe responses (native MPO `evaluate_probes`, without densifying for the
-V-matrix path).
+`max_bond_dim=64` keeps direct construction scalable, but direct-MPO compression
+is not guaranteed to preserve positivity or causal normalization. Operational
+characterization requires every contracted branch trace to be a probability in
+$[0,1]$ and rejects a process tensor that violates this condition. Increase
+`max_bond_dim`, set `max_bond_dim=None` for an exact noiseless MPO, or use a
+sufficiently accurate dense reconstruction when you need $S_V$ from a process
+tensor. `characterize(pt, ...)` uses native MPO `evaluate_probes_weighted`
+without densifying the V-matrix path.
 
 ## Related topics
 

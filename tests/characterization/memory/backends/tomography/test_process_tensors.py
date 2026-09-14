@@ -415,6 +415,75 @@ def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
     )
 
 
+def test_uncapped_mpo_weighted_selected_future_matches_exact() -> None:
+    """An uncapped direct MPO reproduces exact complete weighted responses."""
+    ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.1, 0.1, 0.1]
+    pt = build_process_tensor(
+        ham.mpo,
+        params,
+        timesteps=timesteps,
+        parallel=False,
+        max_bond_dim=None,
+        compress_every=1,
+    )
+    assert isinstance(pt, MPOProcessTensor)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=2,
+        rng=np.random.default_rng(73),
+        intervention_style="measure_prepare",
+    )
+
+    pauli_pt, weights_pt = pt.evaluate_probes_weighted(probe_set)
+    initial_psi = np.zeros(4, dtype=np.complex128)
+    initial_psi[0] = 1.0
+    pauli_exact, weights_exact, _ = simulate_exact(
+        probe_set=probe_set,
+        operator=ham.mpo,
+        sim_params=params,
+        initial_psi=initial_psi,
+        parallel=False,
+    )
+
+    np.testing.assert_allclose(weights_pt, weights_exact, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(
+        weights_pt[..., np.newaxis] * pauli_pt,
+        weights_exact[..., np.newaxis] * pauli_exact,
+        rtol=1e-7,
+        atol=1e-8,
+    )
+
+
+def test_mpo_weighted_probes_reject_nonphysical_reconstruction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An invalid reconstructed MPO is rejected with actionable remedies."""
+    pt = _tiny_mpo_process_tensor(num_interventions=1)
+
+    def _predict_invalid_branch(self: MPOProcessTensor, interventions: object) -> np.ndarray:
+        _ = (self, interventions)
+        return -0.1 * _REF_RHO0
+
+    monkeypatch.setattr(MPOProcessTensor, "_predict_raw", _predict_invalid_branch)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(0),
+        intervention_style="measure_prepare",
+    )
+
+    with pytest.raises(ValueError, match="branch trace must be a probability") as exc_info:
+        pt.evaluate_probes_weighted(probe_set)
+
+    assert "Direct-MPO compression or tomography error" in str(exc_info.value)
+    assert "max_bond_dim=None" in str(exc_info.value)
+    assert "return_type='dense'" in str(exc_info.value)
+
+
 def test_impossible_branch_predict_matches_between_dense_and_mpo() -> None:
     """Dense and MPO predictors preserve the same near-zero impossible branch."""
     mpo_pt = _tiny_mpo_process_tensor(num_interventions=1)
