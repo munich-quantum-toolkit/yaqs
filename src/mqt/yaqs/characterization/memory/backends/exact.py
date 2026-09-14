@@ -63,7 +63,8 @@ def _branch_weights_from_simulation(
     """Read complete retained-record probabilities from simulation diagnostics.
 
     Args:
-        simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
+        simulation_diagnostics: Per-sequence diagnostic dicts with ``cumulative_weight_final``
+            (flat grid order).
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
 

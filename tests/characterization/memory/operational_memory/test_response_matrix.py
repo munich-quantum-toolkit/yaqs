@@ -86,7 +86,7 @@ def test_assemble_response_matrix_is_linear_in_probabilities() -> None:
 
 @pytest.mark.parametrize(
     "invalid_weight",
-    [-0.1, 1.1, np.nan, np.inf],
+    [np.nextafter(0.0, -np.inf), -0.1, 1.1, np.nan, np.inf],
 )
 def test_assemble_response_matrix_rejects_invalid_probabilities(invalid_weight: float) -> None:
     """Canonical assembly never silently changes invalid backend probabilities."""

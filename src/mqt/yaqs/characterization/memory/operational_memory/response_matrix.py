@@ -41,8 +41,8 @@ def assemble_response_matrix(
 
     Raises:
         ValueError: If the tomography shape or identity channel is invalid, or if
-            ``weights_ij`` has the wrong shape or contains values outside numerical
-            tolerance of ``[0, 1]``.
+            ``weights_ij`` has the wrong shape, contains negative or non-finite values,
+            or exceeds one beyond numerical tolerance.
     """
     features = np.asarray(pauli_ij, dtype=np.float64)
     if features.ndim != 3 or features.shape[-1] != 4:
@@ -59,8 +59,11 @@ def assemble_response_matrix(
     if not np.allclose(features[..., 0], 1.0, rtol=0.0, atol=1e-8):
         msg = "pauli_ij identity expectations must equal 1 for normalized conditional states."
         raise ValueError(msg)
-    if not np.all(np.isfinite(weights)) or np.any((weights < -PROBABILITY_ATOL) | (weights > 1.0 + PROBABILITY_ATOL)):
-        msg = "weights_ij must contain finite complete-record probabilities in [0, 1] up to numerical tolerance."
+    if not np.all(np.isfinite(weights)) or np.any((weights < 0.0) | (weights > 1.0 + PROBABILITY_ATOL)):
+        msg = (
+            "weights_ij must contain finite complete-record probabilities in [0, 1]; "
+            "only numerical roundoff above 1 is tolerated."
+        )
         raise ValueError(msg)
     weights = np.clip(weights, 0.0, 1.0)
     weighted = features * weights[:, :, np.newaxis]
