@@ -263,8 +263,9 @@ def run_memory_characterization(
             first intervention. Surrogate backends require this state.
 
     Returns:
-        Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
-        ``pauli_ixyz_ij``, ``probe_set``, and ``weights_ij``. The response matrix has shape
+        Dict with scalar diagnostics, the entropy-truncated and full singular spectra,
+        compact left and right singular vectors, the response matrix, probe responses,
+        probe metadata, and complete-record weights. The response matrix has shape
         ``(4 * n_futures, n_pasts)`` with future-probe ``(I, X, Y, Z)`` rows and history
         columns.
 

@@ -9,53 +9,9 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 import numpy as np
-
-
-def sanitize_branch_weights(
-    weights_ij: np.ndarray,
-    *,
-    log_warnings: bool = True,
-) -> tuple[np.ndarray, dict[str, Any]]:
-    """Sanitize branch weights for standalone diagnostics.
-
-    Clamps invalid values without renormalizing across grid entries. Canonical
-    response-matrix assembly does not call this helper: it rejects invalid
-    probabilities so that reported weights and identity rows cannot disagree.
-
-    Args:
-        weights_ij: Branch weights of shape ``(n_pasts, n_futures)``.
-        log_warnings: Whether to emit warnings for negative weights.
-
-    Returns:
-        Tuple ``(weights_clean, meta)`` with diagnostic metadata in ``meta``.
-    """
-    w = np.asarray(weights_ij, dtype=np.float64)
-    meta: dict[str, Any] = {
-        "weight_data_invalid": False,
-        "nan_count": int(np.isnan(w).sum()),
-        "posinf_count": int(np.isposinf(w).sum()),
-        "neginf_count": int(np.isneginf(w).sum()),
-        "negative_count": int((w < 0).sum()),
-        "warnings": [],
-    }
-    if meta["nan_count"] or meta["posinf_count"] or meta["neginf_count"]:
-        meta["weight_data_invalid"] = True
-        meta["warnings"].append("Non-finite weights detected; replaced with 0 for response-matrix construction.")
-    if meta["negative_count"]:
-        meta["warnings"].append("Negative weights clamped to 0.")
-        if log_warnings:
-            warnings.warn(
-                "sanitize_branch_weights: clamped negative cumulative weights to 0.",
-                stacklevel=2,
-            )
-    w_clean = w.copy()
-    w_clean[w_clean < 0] = 0.0
-    w_clean = np.nan_to_num(w_clean, nan=0.0, posinf=0.0, neginf=0.0)
-    return w_clean, meta
 
 
 def assemble_response_matrix(
@@ -125,13 +81,18 @@ def compute_spectrum(
 
     Returns:
         Dictionary with ``entropy``, ``modes`` (:math:`R(c)`), ``singular_values``, and
-        ``singular_values_full``.
+        ``singular_values_full``. ``left_singular_vectors`` and ``right_singular_vectors``
+        contain the compact SVD directions as columns, so that
+        ``response_matrix = left @ diag(singular_values_full) @ right.conj().T``. Left vectors
+        span future responses and right vectors span combinations of histories.
 
     Raises:
         ValueError: If the response matrix has zero Frobenius norm, for which the normalized
             modal weights and their entropy are undefined.
     """
-    s_full = np.linalg.svd(response_matrix, compute_uv=False).astype(np.float64)
+    left_singular_vectors, s_full, right_adjoint = np.linalg.svd(response_matrix, full_matrices=False)
+    s_full = s_full.astype(np.float64)
+    right_singular_vectors = right_adjoint.conj().T
     s = s_full.copy()
     if not s_full.size or s_full[0] <= 0.0:
         msg = "Response matrix must have nonzero Frobenius norm to define a normalized spectrum."
@@ -162,4 +123,6 @@ def compute_spectrum(
         "modes": effective_modes,
         "singular_values": s,
         "singular_values_full": s_full,
+        "left_singular_vectors": left_singular_vectors,
+        "right_singular_vectors": right_singular_vectors,
     }

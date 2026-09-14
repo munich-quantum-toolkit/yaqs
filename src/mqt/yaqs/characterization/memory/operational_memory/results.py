@@ -24,6 +24,9 @@ class _CutResult:
         entropy: Cross-cut memory entropy :math:`S_V(c)`.
         modes: Effective mode number :math:`R(c)=\exp(S_V(c))`.
         singular_values: Singular spectrum (possibly tail-truncated for entropy).
+        singular_values_full: Full singular spectrum from the compact SVD.
+        left_singular_vectors: Compact-SVD columns spanning future-response directions.
+        right_singular_vectors: Compact-SVD columns spanning combinations of histories.
         response_matrix: Raw branch-weighted response matrix with shape
             ``(4 * n_futures, n_histories)``. Rows are grouped by future probe with channels
             ordered ``(I, X, Y, Z)``; columns label histories.
@@ -34,6 +37,9 @@ class _CutResult:
     entropy: float
     modes: float
     singular_values: np.ndarray
+    singular_values_full: np.ndarray
+    left_singular_vectors: np.ndarray
+    right_singular_vectors: np.ndarray
     response_matrix: np.ndarray
     probe_set: Any | None = None
 
@@ -95,7 +101,7 @@ class CharacterizationResult:
         return float(self.by_cut[c].modes)
 
     def singular_values(self, cut: int | None = None) -> np.ndarray:
-        """Singular spectrum of the response matrix at ``cut``.
+        """Tail-truncated singular spectrum used for entropy at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
@@ -105,6 +111,44 @@ class CharacterizationResult:
         """
         c = self._resolve_cut(cut)
         return np.asarray(self.by_cut[c].singular_values)
+
+    def singular_values_full(self, cut: int | None = None) -> np.ndarray:
+        """Full singular spectrum from the compact SVD at ``cut``.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            All compact-SVD singular values, before entropy-tail truncation.
+        """
+        c = self._resolve_cut(cut)
+        return np.asarray(self.by_cut[c].singular_values_full)
+
+    def left_singular_vectors(self, cut: int | None = None) -> np.ndarray:
+        """Future-response directions from the compact SVD at ``cut``.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            Matrix whose columns are left singular vectors over the future-response rows of
+            :math:`V(c)`.
+        """
+        c = self._resolve_cut(cut)
+        return np.asarray(self.by_cut[c].left_singular_vectors)
+
+    def right_singular_vectors(self, cut: int | None = None) -> np.ndarray:
+        """History-combination directions from the compact SVD at ``cut``.
+
+        Args:
+            cut: Causal cut index. Optional when exactly one cut is stored.
+
+        Returns:
+            Matrix whose columns are right singular vectors over the history columns of
+            :math:`V(c)`.
+        """
+        c = self._resolve_cut(cut)
+        return np.asarray(self.by_cut[c].right_singular_vectors)
 
     def response_matrix(self, cut: int | None = None) -> np.ndarray:
         r"""Raw branch-weighted response matrix at ``cut``.
@@ -183,6 +227,9 @@ def parse_cut_result(out: dict[str, Any], *, cut: int) -> _CutResult:
         entropy=float(out["entropy"]),
         modes=float(out["modes"]),
         singular_values=np.asarray(out["singular_values"]),
+        singular_values_full=np.asarray(out["singular_values_full"]),
+        left_singular_vectors=np.asarray(out["left_singular_vectors"]),
+        right_singular_vectors=np.asarray(out["right_singular_vectors"]),
         response_matrix=np.asarray(response_matrix),
         probe_set=out.get("probe_set"),
     )

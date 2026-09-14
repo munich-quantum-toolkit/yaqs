@@ -94,14 +94,17 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 
 ### Reading `CharacterizationResult`
 
-| Access                      | Meaning                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
-| `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
-| `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Raw $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns   |
-| `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
-| `result.summary()`          | Human-readable table of entropies and modes                                  |
+| Access                             | Meaning                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `result.entropy(c)`                | Environmental memory entropy $S_V(c)$                                      |
+| `result.modes(c)`                  | Effective memory modes $R(c)=\exp(S_V(c))$                                 |
+| `result.singular_values(c)`        | Resolution-retained spectrum used to compute $S_V(c)$                      |
+| `result.singular_values_full(c)`   | Every compact-SVD value, including zero and unresolved tail values         |
+| `result.left_singular_vectors(c)`  | All compact-SVD future-response directions as columns                      |
+| `result.right_singular_vectors(c)` | All compact-SVD history-combination directions as columns                  |
+| `result.response_matrix(c)`        | Raw $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns |
+| `result.probes(c)`                 | Probe arrays used at cut $c$ (for reuse or inspection)                     |
+| `result.summary()`                 | Human-readable table of entropies and modes                                |
 
 (memory-theory)=
 
@@ -125,9 +128,16 @@ The split-cut protocol:
    and $V_{(j,I),i}=p_{ij}$ for normalized output states. Compute $S_V(c)$ from
    the normalized mode spectrum.
 
-For an SVD $V=U\Sigma W^\dagger$, the columns of $U$ describe resolved
-future-response directions, while the columns of $W$ describe combinations of
-conditioned histories.
+For an SVD $V=U\Sigma W^\dagger$, each column pair associated with a retained,
+nonzero singular value defines a response mode: the column of $U$ gives the
+future-response direction, while the column of $W$ gives a combination of
+conditioned histories. With `U = result.left_singular_vectors(c)`,
+`s = result.singular_values_full(c)`, and
+`W = result.right_singular_vectors(c)`, the full factors satisfy
+`V = U @ np.diag(s) @ W.conj().T`. The full factors also contain directions
+paired with exact zeros or an unresolved numerical tail. Do not interpret those
+directions as resolved memory modes. Singular vectors are also not unique inside
+a degenerate singular subspace.
 
 Hamiltonian `characterize` obtains complete retained-record probabilities from
 the simulated intervention sequence (MCWF or TJM/MPS, per `representation`).
@@ -189,17 +199,35 @@ that tensor's `initial_rho`.
 
 (reset-delay)=
 
-## Memory persistence: reset delay at the causal break
+## Memory persistence: illustrative reset delay
 
-Pass `delay=N` to insert $N$ soft-reset slots
+For `delay > 0`, pass `delay=N` to insert $N$ soft-reset slots
 $(\lvert 0\rangle, \lvert 0\rangle)$ at the causal cut while the **environment**
 keeps evolving. Extra reset time lets the environment decouple from the past
 before future controls act, so $S_V(c)$ often **decreases** at strong
 probe-environment coupling (weaker coupling can show the opposite trend).
 
-The logical `num_interventions` and `cut` are unchanged; the physical sequence
-length becomes `num_interventions + delay + 1`. Reuse the same `probe_set` when
-sweeping `delay`. `delay > 0` is supported for Hamiltonian characterize only.
+This public sweep is illustrative rather than an exact reproduction of the
+conditioned-reset protocol in Figure 5 of the response-matrix paper. Here,
+`delay=0` keeps the standard one-step causal break: the selected history outcome
+and sampled future preparation form one measure--prepare intervention. For
+`delay > 0`, YAQS instead prepares $\lvert 0\rangle$ at that break, inserts the
+requested reset slots, and adds a selected-zero measurement before the sampled
+future preparation. The physical sequence length is therefore
+`num_interventions` at `delay=0` and `num_interventions + delay + 1` otherwise.
+
+The paper campaign used one custom sequence geometry for every bridge length
+$\ell$, including $\ell=0$: history measurement followed by preparation of
+$\lvert 0\rangle$, then $\ell$ selected-zero reset slots, then a further
+selected-zero measurement followed by the sampled future preparation. Thus its
+$\ell=0$ sequence still contains the two separate boundary interventions. The
+public `delay=` option therefore cannot reproduce the paper's $\ell=0$ point
+exactly. Its positive-delay geometries match the paper protocol, but reproducing
+the complete sweep including $\ell=0$ requires the campaign's custom
+intervention grid.
+
+Reuse the same `probe_set` when sweeping the public `delay` parameter.
+`delay > 0` is supported for Hamiltonian characterization only.
 
 ```{code-cell} ipython3
 delay_length = 6

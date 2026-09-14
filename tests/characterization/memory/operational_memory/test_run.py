@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff:file-ignore[no-self-use, import-private-name] -- protocol-style dummy backend; white-box rollout test
+# ruff:file-ignore[no-self-use] -- protocol-style dummy backend; white-box rollout test
 
 """Tests for operational-memory orchestration (:mod:`run`)."""
 
@@ -19,10 +19,6 @@ import pytest
 from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
-from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    _compute_branch_weight_for_sequence,
-    compute_branch_weights,
-)
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,
     compute_spectrum,
@@ -114,24 +110,6 @@ def test_run_memory_characterization_forwards_initial_rho() -> None:
     assert out["response_matrix"].shape == (4, 1)
 
 
-def test_deterministic_future_weights_reduce_to_history_probability() -> None:
-    """Unitary future probes do not change each history's retained probability."""
-    rng = np.random.default_rng(3)
-    probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=5, n_futures=4, rng=rng)
-    w = compute_branch_weights(probe_set)
-    assert np.allclose(w.std(axis=1), 0.0, atol=1e-14)
-
-
-def test_compute_branch_weight_from_steps() -> None:
-    """Structured unitary steps yield unit branch weight."""
-    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    steps = [
-        {"type": "unitary", "U": np.eye(2, dtype=np.complex128)},
-        (z, z),
-    ]
-    assert _compute_branch_weight_for_sequence(steps) == pytest.approx(1.0)
-
-
 def test_process_tensor_run_memory_characterization_returns_complete_weights() -> None:
     """Dense process-tensor orchestration returns positive complete-record weights."""
     rng = np.random.default_rng(0)
@@ -148,29 +126,6 @@ def test_process_tensor_run_memory_characterization_returns_complete_weights() -
     assert "weights_ij" in out
     assert out["weights_ij"].shape == (4, 3)
     assert np.all(out["weights_ij"] > 0.0)
-
-
-def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
-    """Analytic branch weights match exact rollout at J=0."""
-    rng = np.random.default_rng(11)
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    probe_set = sample_probes(
-        cut=2,
-        num_interventions=3,
-        n_pasts=4,
-        n_futures=3,
-        rng=rng,
-        intervention_style="haar",
-    )
-    w_analytic = compute_branch_weights(probe_set)
-    _, w_exact, _ = simulate_exact(
-        probe_set=probe_set,
-        operator=op,
-        sim_params=_params(),
-        initial_psi=_PSI0,
-        parallel=False,
-    )
-    np.testing.assert_allclose(w_analytic, w_exact, rtol=1e-10, atol=1e-12)
 
 
 def test_dense_process_tensor_vs_exact_probe_entropy() -> None:

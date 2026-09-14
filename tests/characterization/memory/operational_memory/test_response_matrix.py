@@ -18,7 +18,6 @@ from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,
     compute_spectrum,
-    sanitize_branch_weights,
 )
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -39,15 +38,6 @@ def test_assemble_response_matrix_requires_matching_weight_shape() -> None:
     pauli = np.zeros((2, 3, 4), dtype=np.float64)
     with pytest.raises(ValueError, match="weights_ij must have shape"):
         assemble_response_matrix(pauli, np.ones((3, 2), dtype=np.float64))
-
-
-def test_sanitize_branch_weights_clamps_negative_and_nan() -> None:
-    """The standalone diagnostic sanitizer reports and clamps invalid weights."""
-    w = np.array([[1.0, -0.5], [np.nan, np.inf]], dtype=np.float64)
-    clean, meta = sanitize_branch_weights(w, log_warnings=False)
-    assert meta["negative_count"] == 1
-    assert meta["weight_data_invalid"] is True
-    np.testing.assert_allclose(clean, [[1.0, 0.0], [0.0, 0.0]])
 
 
 def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None:
@@ -179,6 +169,23 @@ def test_compute_spectrum_accepts_nonzero_response_below_squared_underflow_scale
     reference = compute_spectrum(np.diag([1.0, 0.5]), discarded_weight_threshold=None)
     assert tiny["entropy"] == pytest.approx(reference["entropy"])
     assert tiny["modes"] == pytest.approx(reference["modes"])
+
+
+def test_compute_spectrum_returns_compact_svd_in_response_matrix_orientation() -> None:
+    """Compact SVD columns represent future responses on the left and histories on the right."""
+    response_matrix = np.array(
+        [[3.0, 0.0], [0.0, 2.0], [1.0, 0.0], [0.0, 0.5]],
+        dtype=np.float64,
+    )
+    out = compute_spectrum(response_matrix, discarded_weight_threshold=None)
+    left = out["left_singular_vectors"]
+    singular_values = out["singular_values_full"]
+    right = out["right_singular_vectors"]
+
+    assert left.shape == (response_matrix.shape[0], 2)
+    assert singular_values.shape == (2,)
+    assert right.shape == (response_matrix.shape[1], 2)
+    np.testing.assert_allclose((left * singular_values) @ right.conj().T, response_matrix)
 
 
 def test_compute_spectrum_singular_values_full_matches_svd() -> None:
