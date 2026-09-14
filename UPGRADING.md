@@ -153,17 +153,17 @@ DigitalSimParams(
 The minimum Qiskit version increases from **1.1.0 to 2.1.0**, dropping support
 for all Qiskit 1.x releases and Qiskit 2.0. Upgrade Qiskit to 2.1.0 or newer.
 
-### Restored testing on Python 3.13 and 3.14
-
-MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
-requires Torch 2.6 or later on Python 3.13 and Torch 2.9 or later on Python
-3.14.
-
 ### End of support for Python 3.10
 
 Starting with this release, MQT YAQS no longer supports Python 3.10. As a
 result, MQT YAQS is no longer tested under Python 3.10 and requires Python 3.11
 or later.
+
+### Restored testing on Python 3.13 and 3.14
+
+MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
+requires Torch 2.6 or later on Python 3.13 and Torch 2.9 or later on Python
+3.14.
 
 ## [0.6.0]
 
