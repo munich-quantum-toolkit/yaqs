@@ -375,6 +375,30 @@ def test_dense_process_tensor_weighted_responses_preserve_small_positive_branch(
     )
 
 
+def test_dense_process_tensor_weighted_responses_reject_nonzero_traceless_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A zero-probability branch cannot have a nonzero raw output."""
+    rho_raw = np.diag([1e-6, -1e-6]).astype(np.complex128)
+    pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0])
+
+    def _predict_traceless_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+        _ = (self, interventions)
+        return rho_raw
+
+    monkeypatch.setattr(DenseProcessTensor, "_predict_raw", _predict_traceless_branch)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(0),
+    )
+
+    with pytest.raises(ValueError, match="near-zero trace but a nonzero subnormalized output"):
+        pt.evaluate_probes_weighted(probe_set)
+
+
 def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
     """Raw PT traces reproduce exact complete probabilities for selected future outcomes."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)

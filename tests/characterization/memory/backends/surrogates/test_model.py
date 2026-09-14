@@ -315,6 +315,25 @@ def test_process_tensor_surrogate_evaluate_probes_requires_boundary_state() -> N
         model.evaluate_probes(probe_set)
 
 
+def test_process_tensor_surrogate_evaluate_probes_requires_rho8_output() -> None:
+    """Probe evaluation rejects a model whose output is not a rho8 encoding."""
+    import_torch()
+
+    model = ProcessTensorSurrogate(
+        d_e=32,
+        d_rho=7,
+        d_model=28,
+        nhead=4,
+        num_layers=1,
+        dim_ff=28,
+        num_interventions=1,
+    )
+    probe_set = _make_probe_set(cut=1, num_interventions=1, n_p=1, n_f=1)
+
+    with pytest.raises(ValueError, match="rho8 packing length 8 does not match d_rho=7"):
+        model.evaluate_probes(probe_set, initial_rho=np.eye(2, dtype=np.complex128) / 2.0)
+
+
 def test_process_tensor_surrogate_estimates_selected_future_probability(monkeypatch: pytest.MonkeyPatch) -> None:
     """Surrogate complete weights use its predicted state before each retained outcome."""
     torch = import_torch()

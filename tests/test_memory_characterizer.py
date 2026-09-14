@@ -528,14 +528,13 @@ def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
     assert small_bath > 1.01 * large_bath
 
 
-def test_paper_modes_rank_rises_with_coupling() -> None:
-    """Smoke modes benchmark: effective rank grows with coupling at a fixed cut."""
+def test_paper_modes_and_spectrum_plot_data_shift_with_coupling() -> None:
+    """The public result provides the mode and spectrum data plotted in the paper."""
     mc = _paper_mc()
     cut = 2
     m_spectrum = 8
-    rank_tol = 1e-16
 
-    def effective_rank(j: float) -> int:
+    def plot_data(j: float) -> tuple[float, float]:
         probe_seed = _PAPER_SEED + 900_000 + 100_000 * cut + 100 * round(100 * j)
         probe_set = sample_probes(
             cut=cut,
@@ -555,11 +554,28 @@ def test_paper_modes_rank_rises_with_coupling() -> None:
             probe_set=probe_set,
             initial_psi=make_zero_psi(_PAPER_L),
         )
-        s = result.singular_values(cut)
-        return int(np.sum(s > rank_tol))
+        response_matrix = result.response_matrix(cut)
+        singular_values = result.singular_values_full(cut)
+        mode_weights = singular_values**2 / np.sum(singular_values**2)
+        retained_values = result.singular_values(cut)
+        retained_weights = retained_values**2 / np.sum(retained_values**2)
+        positive = retained_weights > 0.0
+        expected_entropy = float(-np.sum(retained_weights[positive] * np.log(retained_weights[positive])))
 
-    assert effective_rank(0.5) < effective_rank(2.0)
-    assert effective_rank(2.0) >= 4
+        assert response_matrix.shape == (4 * m_spectrum, m_spectrum)
+        assert np.all(np.isfinite(response_matrix))
+        assert np.all(np.isfinite(singular_values))
+        assert np.all(singular_values >= 0.0)
+        assert np.all(np.diff(singular_values) <= 0.0)
+        assert np.sum(mode_weights) == pytest.approx(1.0, abs=1e-12)
+        assert result.entropy(cut) == pytest.approx(expected_entropy, abs=1e-12)
+        assert result.modes(cut) == pytest.approx(math.exp(expected_entropy), abs=1e-12)
+        return result.modes(cut), float(np.sum(mode_weights[1:]))
+
+    weak_modes, weak_tail_weight = plot_data(0.5)
+    strong_modes, strong_tail_weight = plot_data(2.0)
+    assert strong_modes > weak_modes
+    assert strong_tail_weight > weak_tail_weight
 
 
 def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:

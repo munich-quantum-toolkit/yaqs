@@ -40,6 +40,17 @@ def test_assemble_response_matrix_requires_matching_weight_shape() -> None:
         assemble_response_matrix(pauli, np.ones((3, 2), dtype=np.float64))
 
 
+@pytest.mark.parametrize("invalid_feature", [np.nan, np.inf])
+def test_assemble_response_matrix_rejects_nonfinite_tomography(invalid_feature: float) -> None:
+    """Response assembly rejects non-finite tomography coefficients."""
+    pauli = np.zeros((1, 1, 4), dtype=np.float64)
+    pauli[..., 0] = 1.0
+    pauli[..., 1] = invalid_feature
+
+    with pytest.raises(ValueError, match="pauli_ij must contain only finite values"):
+        assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
+
+
 def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None:
     """A non-square sentinel fixes every response-matrix index and flattening convention."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
@@ -222,6 +233,46 @@ def test_compute_spectrum_singular_values_full_matches_svd() -> None:
         rtol=1e-10,
         atol=1e-10,
     )
+
+
+@pytest.mark.parametrize(
+    ("depolarization", "expected_entropy"),
+    [(0.0, 1.242453324894), (2.0 / 3.0, 0.43494420225825936), (1.0, 0.0)],
+)
+def test_paper_quantum_memory_plot_data_match_analytic_curve(
+    depolarization: float,
+    expected_entropy: float,
+) -> None:
+    """Selected noisy SWAP plot points match analytic entropy and witness values."""
+    history_rows = np.array([1, 1, 2, 2, 3, 3])
+    history_signs = np.array([1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
+    contraction = 1.0 - depolarization
+    pauli = np.zeros((6, 1, 4), dtype=np.float64)
+    pauli[..., 0] = 1.0
+    pauli[np.arange(6), 0, history_rows] = contraction * history_signs
+
+    response_matrix = assemble_response_matrix(pauli, np.ones((6, 1), dtype=np.float64))
+    spectrum = compute_spectrum(response_matrix, discarded_weight_threshold=None)
+    expected_singular_values = np.array([
+        np.sqrt(6.0),
+        np.sqrt(2.0) * contraction,
+        np.sqrt(2.0) * contraction,
+        np.sqrt(2.0) * contraction,
+    ])
+
+    assert response_matrix.shape == (4, 6)
+    np.testing.assert_allclose(spectrum["singular_values_full"], expected_singular_values, atol=1e-12)
+    assert spectrum["entropy"] == pytest.approx(expected_entropy, abs=1e-12)
+
+    average_fidelity = (
+        sum(
+            response_matrix[0, column] + sign * response_matrix[row, column]
+            for column, (row, sign) in enumerate(zip(history_rows, history_signs, strict=True))
+        )
+        / 12.0
+    )
+    witness = 2.0 / 3.0 - average_fidelity
+    assert witness == pytest.approx(depolarization / 2.0 - 1.0 / 3.0, abs=1e-12)
 
 
 def test_paper_convergence_larger_budget_raises_entropy_at_strong_coupling() -> None:
