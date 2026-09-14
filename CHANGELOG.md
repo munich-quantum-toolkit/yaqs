@@ -32,6 +32,7 @@ releases may include breaking changes.
 
 ### Changed
 
+- raised minimum Qiskit version from 1.1.0 to 2.1.0 ([#597]) ([**@denialhaag**])
 - split observables to be separate from quantum gates ([#583])
   ([**@aaronleesander**])
 - removed redundant center shifting in long-range TEBD swaps ([#571])
@@ -272,6 +273,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#597]: https://github.com/munich-quantum-toolkit/yaqs/pull/597
 [#587]: https://github.com/munich-quantum-toolkit/yaqs/pull/587
 [#583]: https://github.com/munich-quantum-toolkit/yaqs/pull/583
 [#571]: https://github.com/munich-quantum-toolkit/yaqs/pull/571
