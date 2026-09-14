@@ -11,7 +11,7 @@ Submodules:
 
 - :mod:`.samples` — :class:`ProbeSet`, :func:`sample_probes`
 - :mod:`.grid` — :func:`assemble_probe_sequence`, :func:`assemble_probe_grid`
-- :mod:`.response_matrix` — weighted assembly and :func:`compute_spectrum`
+- :mod:`.response_matrix` — response-matrix assembly and :func:`compute_spectrum`
 - :mod:`.run` — :func:`run_memory_characterization`, :class:`OperationalMemoryBackend`
 - :mod:`.results` — :class:`CharacterizationResult`
 

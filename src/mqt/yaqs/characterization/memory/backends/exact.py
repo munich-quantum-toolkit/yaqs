@@ -60,7 +60,7 @@ def _branch_weights_from_simulation(
     n_pasts: int,
     n_futures: int,
 ) -> np.ndarray:
-    """Read complete retained-record probabilities from simulation diagnostics.
+    """Read joint probabilities of retained outcomes from simulation diagnostics.
 
     Args:
         simulation_diagnostics: Per-sequence diagnostic dicts with ``cumulative_weight_final``
@@ -80,7 +80,7 @@ def _branch_weights_from_simulation(
 
 
 class ExactBackend:
-    """Exact MCWF/TJM backend for weighted split-cut probe evaluation.
+    """Exact MCWF/TJM backend for split-cut responses and retained-outcome probabilities.
 
     Builds a reusable static MCWF context internally and dispatches sequence
     simulation via :func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
@@ -135,14 +135,14 @@ class ExactBackend:
             return self._execution
         return merge_execution_config(self._execution, parallel=parallel)
 
-    def evaluate_probes_weighted(
+    def evaluate_probes_with_weights(
         self,
         probe_set: ProbeSet,
         *,
         intervention_steps_list: list[list[Any]] | None = None,
         _execution: ExecutionConfig | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate weighted probe responses via exact simulation.
+        """Evaluate normalized final-system responses and retained-outcome probabilities.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -150,7 +150,8 @@ class ExactBackend:
             _execution: Optional one-shot execution override for this evaluation.
 
         Returns:
-            Tuple ``(pauli_ixyz_ij, weights_ij)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` containing normalized Pauli responses and
+            joint probabilities of the retained outcomes.
         """
         pauli_ixyz, weights_ij, _simulation_diagnostics = simulate_exact(
             probe_set=probe_set,
@@ -167,7 +168,7 @@ class ExactBackend:
         return pauli_ixyz, weights_ij
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate unweighted Pauli probe responses.
+        """Evaluate normalized final-system Pauli responses.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -175,7 +176,7 @@ class ExactBackend:
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
-        pauli_ixyz_ij, _weights_ij = self.evaluate_probes_weighted(probe_set)
+        pauli_ixyz_ij, _weights_ij = self.evaluate_probes_with_weights(probe_set)
         return pauli_ixyz_ij
 
 
@@ -208,8 +209,8 @@ def simulate_exact(
 
     Returns:
         ``(pauli_ij, weights_ij, simulation_diagnostics)`` where ``pauli_ij`` has shape
-        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds complete retained-record probabilities,
-        and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
+        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds joint probabilities of the retained
+        outcomes, and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
 
     Raises:
         TypeError: If the backend output is not an ndarray.

@@ -25,7 +25,7 @@ from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import
     compute_entropy_dense,
     compute_temporal_entropy,
     convert_probe_callable,
-    encode_cptp_choi,
+    encode_map_choi,
     evaluate_probes,
     trace_partial_dense,
 )
@@ -73,8 +73,8 @@ def _single_site_mpo_pt(rho: np.ndarray) -> MPOProcessTensor:
     return MPOProcessTensor(mpo, [], initial_rho=_REF_RHO0.copy())
 
 
-def test_dense_process_tensor_predict_matches_helper() -> None:
-    """DenseProcessTensor._predict_raw matches the Choi contraction; predict physicalizes."""
+def test_dense_process_tensor_predict_matches_branch_contraction() -> None:
+    """The dense branch contraction matches the Choi contraction; predict physicalizes."""
     ups = np.eye(2 * 4, dtype=np.complex128)
     timesteps = [0.1]
 
@@ -83,11 +83,11 @@ def test_dense_process_tensor_predict_matches_helper() -> None:
 
     pt = DenseProcessTensor(ups, timesteps)
     # Identity map Choi has trace 2; contract U = I with it gives unnormalized rho = 2*I
-    rho_raw = pt._predict_raw([id_map])
-    np.testing.assert_allclose(rho_raw, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
+    rho_branch = pt._contract_subnormalized_branch([id_map])
+    np.testing.assert_allclose(rho_branch, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
     rho = pt.predict([id_map])
     np.testing.assert_allclose(np.trace(rho), 1.0, atol=1e-12)
-    np.testing.assert_allclose(rho, rho_raw / np.trace(rho_raw), atol=1e-12)
+    np.testing.assert_allclose(rho, rho_branch / np.trace(rho_branch), atol=1e-12)
 
 
 def test_dense_process_tensor_predict_raises_on_length_mismatch() -> None:
@@ -261,13 +261,13 @@ def test_convert_probe_callable_unitary_and_map() -> None:
     assert out.shape == (2, 2)
 
 
-def test_encode_cptp_choi_identity() -> None:
+def test_encode_map_choi_identity() -> None:
     """Choi encoding round-trips the identity channel."""
 
     def id_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
-    choi = encode_cptp_choi(id_map)
+    choi = encode_map_choi(id_map)
     assert choi.shape == (4, 4)
     assert np.linalg.norm(choi - choi.conj().T) < 1e-10
 
@@ -320,8 +320,8 @@ def test_dense_process_tensor_evaluate_probes_smoke() -> None:
     np.testing.assert_allclose(wrapped, pauli)
 
 
-def test_dense_process_tensor_weighted_responses_reconstruct_subnormalized_tomography() -> None:
-    """Normalized responses times complete weights recover each raw PT contraction."""
+def test_dense_process_tensor_responses_with_weights_reconstruct_subnormalized_tomography() -> None:
+    """Normalized responses times joint probabilities recover each outcome branch."""
     pt = _tiny_process_tensor(num_interventions=2)
     probe_set = sample_probes(
         cut=1,
@@ -331,30 +331,30 @@ def test_dense_process_tensor_weighted_responses_reconstruct_subnormalized_tomog
         rng=np.random.default_rng(73),
         intervention_style="measure_prepare",
     )
-    pauli, weights = pt.evaluate_probes_weighted(probe_set)
+    pauli, weights = pt.evaluate_probes_with_weights(probe_set)
     for i in range(2):
         for j in range(3):
             steps = assemble_probe_sequence(probe_set, i, j)
-            raw = pt._predict_raw([convert_probe_callable(step) for step in steps])
-            np.testing.assert_allclose(weights[i, j] * pauli[i, j], encode_rho_pauli(raw), atol=1e-12)
-    wrapped_pauli, wrapped_weights = pt.evaluate_probes_weighted(probe_set)
+            branch = pt._contract_subnormalized_branch([convert_probe_callable(step) for step in steps])
+            np.testing.assert_allclose(weights[i, j] * pauli[i, j], encode_rho_pauli(branch), atol=1e-12)
+    wrapped_pauli, wrapped_weights = pt.evaluate_probes_with_weights(probe_set)
     np.testing.assert_allclose(wrapped_pauli, pauli)
     np.testing.assert_allclose(wrapped_weights, weights)
 
 
-def test_dense_process_tensor_weighted_responses_preserve_small_positive_branch(
+def test_dense_process_tensor_responses_with_weights_preserve_small_positive_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A small positive branch remains part of the response matrix."""
     probability = 1e-13
-    rho_raw = probability * _REF_RHO0
+    rho_branch = probability * _REF_RHO0
     pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0])
 
-    def _predict_small_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+    def _contract_small_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
         _ = (self, interventions)
-        return rho_raw
+        return rho_branch
 
-    monkeypatch.setattr(DenseProcessTensor, "_predict_raw", _predict_small_branch)
+    monkeypatch.setattr(DenseProcessTensor, "_contract_subnormalized_branch", _contract_small_branch)
     probe_set = sample_probes(
         cut=1,
         num_interventions=1,
@@ -363,30 +363,30 @@ def test_dense_process_tensor_weighted_responses_preserve_small_positive_branch(
         rng=np.random.default_rng(0),
     )
 
-    pauli, weights = pt.evaluate_probes_weighted(probe_set)
+    pauli, weights = pt.evaluate_probes_with_weights(probe_set)
 
     assert weights[0, 0] == pytest.approx(probability, rel=1e-12, abs=0.0)
     np.testing.assert_allclose(pauli[0, 0], encode_rho_pauli(_REF_RHO0), rtol=1e-12, atol=0.0)
     np.testing.assert_allclose(
         weights[0, 0] * pauli[0, 0],
-        encode_rho_pauli(rho_raw),
+        encode_rho_pauli(rho_branch),
         rtol=1e-12,
         atol=0.0,
     )
 
 
-def test_dense_process_tensor_weighted_responses_reject_nonzero_traceless_branch(
+def test_dense_process_tensor_responses_with_weights_reject_nonzero_traceless_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A zero-probability branch cannot have a nonzero raw output."""
-    rho_raw = np.diag([1e-6, -1e-6]).astype(np.complex128)
+    """A zero-probability branch cannot have a nonzero subnormalized output."""
+    rho_branch = np.diag([1e-6, -1e-6]).astype(np.complex128)
     pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0])
 
-    def _predict_traceless_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+    def _contract_traceless_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
         _ = (self, interventions)
-        return rho_raw
+        return rho_branch
 
-    monkeypatch.setattr(DenseProcessTensor, "_predict_raw", _predict_traceless_branch)
+    monkeypatch.setattr(DenseProcessTensor, "_contract_subnormalized_branch", _contract_traceless_branch)
     probe_set = sample_probes(
         cut=1,
         num_interventions=1,
@@ -396,11 +396,11 @@ def test_dense_process_tensor_weighted_responses_reject_nonzero_traceless_branch
     )
 
     with pytest.raises(ValueError, match="near-zero trace but a nonzero subnormalized output"):
-        pt.evaluate_probes_weighted(probe_set)
+        pt.evaluate_probes_with_weights(probe_set)
 
 
-def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
-    """Raw PT traces reproduce exact complete probabilities for selected future outcomes."""
+def test_dense_process_tensor_selected_future_with_weights_matches_exact() -> None:
+    """Outcome-branch traces reproduce exact joint probabilities for selected future outcomes."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     pt = build_process_tensor(
@@ -420,7 +420,7 @@ def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
         intervention_style="measure_prepare",
     )
 
-    pauli_pt, weights_pt = pt.evaluate_probes_weighted(probe_set)
+    pauli_pt, weights_pt = pt.evaluate_probes_with_weights(probe_set)
     pauli_exact, weights_exact, _ = simulate_exact(
         probe_set=probe_set,
         operator=ham.mpo,
@@ -439,8 +439,8 @@ def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
     )
 
 
-def test_uncapped_mpo_weighted_selected_future_matches_exact() -> None:
-    """An uncapped direct MPO reproduces exact complete weighted responses."""
+def test_uncapped_mpo_selected_future_with_weights_matches_exact() -> None:
+    """An uncapped direct MPO reproduces exact responses and joint probabilities."""
     ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     timesteps = [0.1, 0.1, 0.1]
@@ -462,7 +462,7 @@ def test_uncapped_mpo_weighted_selected_future_matches_exact() -> None:
         intervention_style="measure_prepare",
     )
 
-    pauli_pt, weights_pt = pt.evaluate_probes_weighted(probe_set)
+    pauli_pt, weights_pt = pt.evaluate_probes_with_weights(probe_set)
     initial_psi = np.zeros(4, dtype=np.complex128)
     initial_psi[0] = 1.0
     pauli_exact, weights_exact, _ = simulate_exact(
@@ -482,15 +482,15 @@ def test_uncapped_mpo_weighted_selected_future_matches_exact() -> None:
     )
 
 
-def test_mpo_weighted_probes_reject_nonphysical_reconstruction(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mpo_probes_with_weights_reject_nonphysical_reconstruction(monkeypatch: pytest.MonkeyPatch) -> None:
     """An invalid reconstructed MPO is rejected with actionable remedies."""
     pt = _tiny_mpo_process_tensor(num_interventions=1)
 
-    def _predict_invalid_branch(self: MPOProcessTensor, interventions: object) -> np.ndarray:
+    def _contract_invalid_branch(self: MPOProcessTensor, interventions: object) -> np.ndarray:
         _ = (self, interventions)
         return -0.1 * _REF_RHO0
 
-    monkeypatch.setattr(MPOProcessTensor, "_predict_raw", _predict_invalid_branch)
+    monkeypatch.setattr(MPOProcessTensor, "_contract_subnormalized_branch", _contract_invalid_branch)
     probe_set = sample_probes(
         cut=1,
         num_interventions=1,
@@ -501,7 +501,7 @@ def test_mpo_weighted_probes_reject_nonphysical_reconstruction(monkeypatch: pyte
     )
 
     with pytest.raises(ValueError, match="branch trace must be a probability") as exc_info:
-        pt.evaluate_probes_weighted(probe_set)
+        pt.evaluate_probes_with_weights(probe_set)
 
     assert "Direct-MPO compression or tomography error" in str(exc_info.value)
     assert "max_bond_dim=None" in str(exc_info.value)
@@ -552,14 +552,14 @@ def test_mpo_process_tensor_evaluate_probes_matches_dense_without_densifying(
         raise AssertionError(msg)
 
     monkeypatch.setattr(MPOProcessTensor, "to_dense", _fail_to_dense)
-    mpo_pauli = mpo_pt.evaluate_probes(probe_set)
-    mpo_pauli_weighted, mpo_weights = mpo_pt.evaluate_probes_weighted(probe_set)
+    mpo_responses = mpo_pt.evaluate_probes(probe_set)
+    mpo_responses_with_weights, mpo_weights = mpo_pt.evaluate_probes_with_weights(probe_set)
 
-    dense_pauli = dense_pt.evaluate_probes(probe_set)
-    dense_pauli_weighted, dense_weights = dense_pt.evaluate_probes_weighted(probe_set)
-    assert mpo_pauli.shape == dense_pauli.shape == (2, 2, 4)
-    np.testing.assert_allclose(mpo_pauli, dense_pauli, atol=1e-6)
-    np.testing.assert_allclose(mpo_pauli_weighted, dense_pauli_weighted, atol=1e-6)
+    dense_responses = dense_pt.evaluate_probes(probe_set)
+    dense_responses_with_weights, dense_weights = dense_pt.evaluate_probes_with_weights(probe_set)
+    assert mpo_responses.shape == dense_responses.shape == (2, 2, 4)
+    np.testing.assert_allclose(mpo_responses, dense_responses, atol=1e-6)
+    np.testing.assert_allclose(mpo_responses_with_weights, dense_responses_with_weights, atol=1e-6)
     np.testing.assert_allclose(mpo_weights, dense_weights, atol=1e-6)
 
     # Restore before methods that still densify (qmi/cmi).

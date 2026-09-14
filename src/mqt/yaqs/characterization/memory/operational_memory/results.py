@@ -27,7 +27,7 @@ class _CutResult:
         singular_values_full: Full singular spectrum from the compact SVD.
         left_singular_vectors: Compact-SVD columns spanning future-response directions.
         right_singular_vectors: Compact-SVD columns spanning combinations of histories.
-        response_matrix: Raw branch-weighted response matrix with shape
+        response_matrix: Response matrix with shape
             ``(4 * n_futures, n_histories)``. Rows are grouped by future probe with channels
             ordered ``(I, X, Y, Z)``; columns label histories.
         probe_set: Optional :class:`~mqt.yaqs.characterization.memory.operational_memory.samples.ProbeSet`.
@@ -151,13 +151,13 @@ class CharacterizationResult:
         return np.asarray(self.by_cut[c].right_singular_vectors)
 
     def response_matrix(self, cut: int | None = None) -> np.ndarray:
-        r"""Raw branch-weighted response matrix at ``cut``.
+        r"""Response matrix at ``cut``.
 
         Args:
             cut: Causal cut index. Optional when exactly one cut is stored.
 
         Returns:
-            Raw response matrix :math:`V(c)` with shape ``(4 * n_futures, n_histories)``.
+            Response matrix :math:`V(c)` with shape ``(4 * n_futures, n_histories)``.
             Rows are grouped by future probe in ``(I, X, Y, Z)`` order; columns label histories.
         """
         c = self._resolve_cut(cut)

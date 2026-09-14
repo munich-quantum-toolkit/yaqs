@@ -26,7 +26,7 @@ class _ProbeBranches(NamedTuple):
     future_pairs: list[Any]
 
 
-def _validated_probe_branches(probe_set: ProbeSet, i: int, j: int) -> _ProbeBranches:
+def _resolve_probe_branches(probe_set: ProbeSet, i: int, j: int) -> _ProbeBranches:
     """Validate probe-set metadata and return branch slices for ``(i, j)``.
 
     Args:
@@ -136,7 +136,7 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int |
         the cut becomes ``(meas, |0>)``, followed by ``delay`` ``(|0>, |0>)`` slots, then
         ``(|0>, prep)`` before the future unitaries.
     """
-    branches = _validated_probe_branches(probe_set, i, j)
+    branches = _resolve_probe_branches(probe_set, i, j)
     full: list[Any] = list(branches.past_pairs)
     _append_cut_steps(full, probe_set, i=i, j=j, delay=delay)
     full.extend(branches.future_pairs)

@@ -256,16 +256,16 @@ class ProcessTensorSurrogate(nn.Module):
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
 
         """
-        pauli_ixyz, _weights = self.evaluate_probes_weighted(probe_set, initial_rho=initial_rho)
+        pauli_ixyz, _weights = self.evaluate_probes_with_weights(probe_set, initial_rho=initial_rho)
         return pauli_ixyz
 
-    def evaluate_probes_weighted(
+    def evaluate_probes_with_weights(
         self,
         probe_set: ProbeSet,
         *,
         initial_rho: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate responses and model-estimated complete retained-record probabilities.
+        """Evaluate normalized final-system responses and retained-outcome probabilities.
 
         Each local outcome probability is evaluated on the model's predicted reduced state
         immediately before that intervention.
@@ -276,8 +276,9 @@ class ProcessTensorSurrogate(nn.Module):
                 first intervention. The state is normalized before use.
 
         Returns:
-            Tuple ``(pauli_ixyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
-            ``(n_pasts, n_futures)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` containing normalized Pauli responses and
+            joint probabilities of the retained outcomes, with shapes
+            ``(n_pasts, n_futures, 4)`` and ``(n_pasts, n_futures)``.
 
         Raises:
             ValueError: If ``initial_rho`` is missing or invalid, or if

@@ -21,8 +21,8 @@ relevant for future probe responses, evaluated at a temporal cut $c$ in a
 sequence of interventions.
 
 Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
-probe **operational memory**: assemble the weighted **response matrix** $V(c)$,
-then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
+probe **operational memory**: assemble the **response matrix** $V(c)$, then read
+$S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
 
 Alternatively, build a process tensor (default: direct MPO) and call
 `compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the
@@ -102,7 +102,7 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 | `result.singular_values_full(c)`   | Every compact-SVD value, including zero and unresolved tail values         |
 | `result.left_singular_vectors(c)`  | All compact-SVD future-response directions as columns                      |
 | `result.right_singular_vectors(c)` | All compact-SVD history-combination directions as columns                  |
-| `result.response_matrix(c)`        | Raw $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns |
+| `result.response_matrix(c)`        | $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns     |
 | `result.probes(c)`                 | Probe arrays used at cut $c$ (for reuse or inspection)                     |
 | `result.summary()`                 | Human-readable table of entropies and modes                                |
 
@@ -120,12 +120,12 @@ The split-cut protocol:
    $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
 2. Insert a **causal break** at step $c$: measure on the past side and prepare
    on the future side while the environment continues to evolve.
-3. For each grid entry, simulate the open system, record the complete retained
-   branch weight and the output Pauli vector
+3. For each grid entry, simulate the open system, record the joint probability
+   of the retained outcomes and the normalized final-system Pauli response
    $\mathbf{r}=(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the raw weighted probe responses into $V(c)$. Its rows contain one
+4. Assemble the sampled response coefficients into $V(c)$. Its rows contain one
    $(I,X,Y,Z)$ block per future probe, its columns label conditioned histories,
-   and $V_{(j,I),i}=p_{ij}$ for normalized output states. Compute $S_V(c)$ from
+   and $V_{(j,I),i}=w_{ij}$ for normalized output states. Compute $S_V(c)$ from
    the normalized mode spectrum.
 
 For an SVD $V=U\Sigma W^\dagger$, each column pair associated with a retained,
@@ -139,11 +139,11 @@ paired with exact zeros or an unresolved numerical tail. Do not interpret those
 directions as resolved memory modes. Singular vectors are also not unique inside
 a degenerate singular subspace.
 
-Hamiltonian `characterize` obtains complete retained-record probabilities from
-the simulated intervention sequence (MCWF or TJM/MPS, per `representation`).
-Process-tensor backends obtain the same probabilities from the trace of each
-subnormalized contraction, while surrogates estimate them from their predicted
-pre-intervention reduced states.
+Hamiltonian `characterize` obtains joint probabilities of the retained outcomes
+from the simulated intervention sequence (MCWF or TJM/MPS, per
+`representation`). Process-tensor backends obtain the same probabilities from
+the trace of each subnormalized contraction, while surrogates estimate them from
+their predicted pre-intervention reduced states.
 
 ### Coupling strength and memory
 
@@ -323,7 +323,7 @@ characterization requires every contracted branch trace to be a probability in
 $[0,1]$ and rejects a process tensor that violates this condition. Increase
 `max_bond_dim`, set `max_bond_dim=None` for an exact noiseless MPO, or use a
 sufficiently accurate dense reconstruction when you need $S_V$ from a process
-tensor. `characterize(pt, ...)` uses native MPO `evaluate_probes_weighted`
+tensor. `characterize(pt, ...)` uses native MPO `evaluate_probes_with_weights`
 without densifying the V-matrix path.
 
 ## Related topics

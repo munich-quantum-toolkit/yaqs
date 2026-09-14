@@ -369,7 +369,7 @@ def test_process_tensor_surrogate_estimates_selected_future_probability(monkeypa
         future_prep_cut=[z.copy(), plus.copy()],
         future_pairs=[[(z, z)], [(z, z)]],
     )
-    _pauli, weights = model.evaluate_probes_weighted(probe_set, initial_rho=rho_plus)
+    _pauli, weights = model.evaluate_probes_with_weights(probe_set, initial_rho=rho_plus)
     np.testing.assert_allclose(weights, np.array([[0.5, 0.25]], dtype=np.float64), atol=1e-7)
     np.testing.assert_allclose(received_rho0[0], np.broadcast_to(pack_rho8(rho_plus), (2, 8)))
 

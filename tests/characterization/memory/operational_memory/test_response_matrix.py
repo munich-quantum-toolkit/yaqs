@@ -67,7 +67,7 @@ def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None
     assert not np.allclose(response_matrix.mean(axis=1), 0.0)
 
 
-def test_transpose_preserves_raw_xyz_block_singular_values() -> None:
+def test_transpose_preserves_xyz_block_singular_values() -> None:
     """The transposed XYZ block retains its pre-identity scalar diagnostics."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
     pauli[..., 0] = 1.0

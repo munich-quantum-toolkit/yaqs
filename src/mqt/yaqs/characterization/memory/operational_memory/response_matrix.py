@@ -20,24 +20,23 @@ def assemble_response_matrix(
     pauli_ij: np.ndarray,
     weights_ij: np.ndarray,
 ) -> np.ndarray:
-    r"""Build the raw weighted response matrix.
+    r"""Build the response matrix from sampled response coefficients.
 
-    Computes :math:`V_{(j,\alpha),i} = p_{ij} f_{ij,\alpha}` from Pauli tomography in
-    ``(I, X, Y, Z)`` order, where :math:`p_{ij}` is the probability of every retained outcome
+    Computes :math:`V_{(j,\mu),i} = w_{ij} f_{ij,\mu}` from Pauli tomography in
+    ``(I, X, Y, Z)`` order, where :math:`w_{ij}` is the probability of every retained outcome
     in the complete history and future record. Rows label future-probe response channels and
     columns label conditioned histories. Normalized tomography has identity entries
-    :math:`V_{(j,I),i}=p_{ij}`.
+    :math:`V_{(j,I),i}=w_{ij}`.
 
     Args:
         pauli_ij: Pauli tomography with shape ``(n_histories, n_futures, 4)`` and channel order
             ``(I, X, Y, Z)``.
-        weights_ij: Complete retained-record probabilities with shape
+        weights_ij: Joint probabilities of the retained outcomes with shape
             ``(n_histories, n_futures)``.
 
     Returns:
-        Raw branch-weighted response matrix with shape
-        ``(4 * n_futures, n_histories)``. Within each future probe, channels vary fastest in
-        ``(I, X, Y, Z)`` order.
+        Response matrix with shape ``(4 * n_futures, n_histories)``. Within each future probe,
+        channels vary fastest in ``(I, X, Y, Z)`` order.
 
     Raises:
         ValueError: If the tomography shape or identity channel is invalid, or if
@@ -61,8 +60,8 @@ def assemble_response_matrix(
         raise ValueError(msg)
     if not np.all(np.isfinite(weights)) or np.any((weights < 0.0) | (weights > 1.0 + PROBABILITY_ATOL)):
         msg = (
-            "weights_ij must contain finite complete-record probabilities in [0, 1]; "
-            "only numerical roundoff above 1 is tolerated."
+            "weights_ij must contain finite probabilities in [0, 1]; each value is the joint "
+            "probability of the retained outcomes. Only numerical roundoff above 1 is tolerated."
         )
         raise ValueError(msg)
     weights = np.clip(weights, 0.0, 1.0)
@@ -79,9 +78,9 @@ def compute_spectrum(
     r"""Cross-cut memory spectrum: :math:`S_V(c)` and :math:`R(c)=\exp(S_V(c))`.
 
     Args:
-        response_matrix: Raw branch-weighted response matrix with future-response rows and
-            history columns. Left singular vectors describe future-response directions; right
-            singular vectors describe combinations of histories.
+        response_matrix: Response matrix with future-response rows and history columns. Left
+            singular vectors describe future-response directions; right singular vectors
+            describe combinations of histories.
         discarded_weight_threshold: Relative tail weight above which singular values are
             discarded when computing entropy. ``None`` keeps the full spectrum.
         min_keep: Minimum number of singular values to retain after tail truncation.
