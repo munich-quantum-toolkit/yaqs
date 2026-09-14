@@ -51,7 +51,6 @@ def _three_site_problem() -> tuple[
     return hamiltonian, init_state, observables, sim_params, reference_model
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_simulate_observable_trajectories_shape() -> None:
     """Simulation helper returns trajectories with the expected shape."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
@@ -67,7 +66,6 @@ def test_simulate_observable_trajectories_shape() -> None:
     assert expectations.shape == (len(observables), len(times))
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_ref_expectations_path_matches_simulation() -> None:
     """Precomputed expectations are accepted when shapes match the fitting set."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
@@ -204,7 +202,6 @@ def test_resolve_prepared_state_encodes_density_matrix() -> None:
     assert prepared.representation == "density_matrix"
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_build_trajectory_loss_wires_propagator() -> None:
     """Loss assembly returns a propagator sharing the fitting topology."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()

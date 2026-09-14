@@ -1,65 +1,67 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+requires = [ "hatch-vcs", "hatchling" ]
+
 
 [project]
 name = "mqt-yaqs"
 description = "Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware"
-license = "MIT"
-license-files = ["LICENSE"]
-authors = [
-  { name="Aaron Sander", email = "aaron.sander@tum.de" },
-]
-maintainers = [
-  { name="Lukas Burgholzer", email = "burgholzer@me.com" },
-]
 readme = "README.md"
+keywords = [ "MQT", "quantum-computing", "quantum-simulation", "tensor-networks" ]
+license = "MIT"
+license-files = [ "LICENSE" ]
 requires-python = ">=3.11"
-dynamic = ["version"]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Information Technology",
-    "Intended Audience :: Science/Research",
-    "Natural Language :: English",
-    "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
-    "Topic :: Scientific/Engineering :: Quantum Computing",
-    "Typing :: Typed",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+  "Topic :: Scientific/Engineering :: Quantum Computing",
+  "Typing :: Typed",
 ]
-keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
-
+dynamic = [ "version" ]
 dependencies = [
-    "numpy>=1.24",
-    "numpy>=1.26; python_version >= '3.12'",
-    "numpy>=2.1; python_version >= '3.13'",
-    "numpy>=2.3.2; python_version >= '3.14'",
-    "scipy>=1.14.1",
-    "scipy>=1.16.1; python_version >= '3.14'",
-    "qiskit>=1.1.0",
-    "qiskit>=1.3.0; python_version >= '3.13'",
-    "opt-einsum>=3.4.0",
-    "tqdm>=4.67.1",
-    "threadpoolctl>=3.1.0",
-    "numba>=0.61.0",
-    "numba>=0.63.0; python_version >= '3.14'",
-    "cma>=4.0.0",
+  "cma>=4",
+  "numba>=0.61",
+  "numba>=0.63; python_version>='3.14'",
+  "numpy>=1.24",
+  "numpy>=1.26; python_version>='3.12'",
+  "numpy>=2.1; python_version>='3.13'",
+  "numpy>=2.3.2; python_version>='3.14'",
+  "opt-einsum>=3.4",
+  "qiskit>=2.1",
+  "scipy>=1.14.1",
+  "scipy>=1.16.1; python_version>='3.14'",
+  "threadpoolctl>=3.1",
+  "tqdm>=4.67.1",
 ]
+
+[[project.maintainers]]
+name = "Lukas Burgholzer"
+email = "burgholzer@me.com"
+
+[[project.authors]]
+name = "Aaron Sander"
+email = "aaron.sander@tum.de"
 
 [project.optional-dependencies]
-qasm3 = ["qiskit-qasm3-import>=0.4.1"]
+qasm3 = [ "qiskit-qasm3-import>=0.5" ]
 torch = [
-    "torch>=2.2",
-    "torch>=2.6; python_version >= '3.13'",
-    "torch>=2.9; python_version >= '3.14'",
+  "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
+  "torch>=2.2",
+  "torch>=2.6; python_version>='3.13'",
+  "torch>=2.9; python_version>='3.14'",
 ]
 
 [project.urls]
@@ -69,79 +71,92 @@ Issues = "https://github.com/munich-quantum-toolkit/yaqs/issues"
 Discussions = "https://github.com/munich-quantum-toolkit/yaqs/discussions"
 
 
-[tool.check-sdist]
-sdist-only = [
-    "src/mqt/yaqs/_version.py",
+[dependency-groups]
+dev = [
+  { include-group = "test" },
+  "nox>=2025.11.12",
 ]
+test = [
+  "pytest>=9.0.1",
+  "pytest-cov>=7.1",
+  "pytest-sugar>=1.1.1",
+  "pytest-xdist[psutil]>=3.8",
+  "qiskit-qasm3-import>=0.5",
+  "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
+  "torch>=2.2",
+]
+docs = [
+  "furo>=2025.12.19",
+  "myst-nb>=1.4",
+  "qiskit[visualization]>=2.1",
+  "sphinx>=9",
+  "sphinx-autoapi>=3.6",
+  "sphinx-copybutton>=0.5.2",
+  "sphinx-design>=0.7",
+  "sphinx-llm>=1",
+  "sphinxcontrib-bibtex>=2.7",
+  "sphinxext-opengraph>=0.13",
+  "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
+  "torch>=2.2",
+  "torch>=2.6; python_version>='3.13'",
+  "torch>=2.9; python_version>='3.14'",
+]
+
 
 [tool.hatch.version]
 source = "vcs"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/mqt"]
-
 [tool.hatch.build.hooks.vcs]
 version-file = "src/mqt/yaqs/_version.py"
 
+[tool.hatch.build.targets.wheel]
+packages = [ "src/mqt" ]
 
-[tool.pytest]
-minversion = "9.0"
-testpaths = ["tests"]
-pythonpath = ["tests"]
-strict = true
-addopts = [
-  "-ra",
-  "--showlocals",
-  "--numprocesses=auto", # Select the worker count in tests/conftest.py
+
+[tool.uv]
+required-version = ">=0.5.20"
+
+[tool.uv.sources]
+mqt-yaqs = { workspace = true }
+
+
+[tool.ruff]
+line-length = 120
+namespace-packages = [ "mqt" ]
+extend-exclude = [ "experiments" ]
+preview = true
+fix = true
+unsafe-fixes = true
+show-fixes = true
+
+[tool.ruff.format]
+preview = true
+docstring-code-format = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [ "INP001", "T20" ]
+"docs/**" = [ "INP001", "T20" ]
+scripts = [ "INP001", "T20" ]
+"noxfile.py" = [ "T20", "TID251" ]
+
+[tool.ruff.lint.isort]
+known-first-party = [ "mqt.yaqs" ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint]
+select = [ "ALL" ]
+ignore = [
+  "C90",     # <...> too complex
+  "COM812",  # Conflicts with formatter
+  "PLR09",   # Too many <...>
+  "PLR2004", # Magic value used in comparison
+  "S101",    # Use of assert detected
+  "S404",    # `subprocess` module is possibly insecure
+  "TID252"  # Prefer absolute imports over relative imports from parent modules
 ]
-log_level = "INFO"
-filterwarnings = [
-  "error",
-  "ignore:Could not import matplotlib.*:UserWarning",
-]
-
-[tool.coverage]
-run.source = ["mqt.yaqs"]
-run.core = "sysmon"
-run.parallel = true
-report.exclude_also = [
-    '\.\.\.',
-    'if TYPE_CHECKING:',
-    'raise AssertionError',
-    'raise NotImplementedError',
-    'def __dir__()',  # Ignore __dir__ method that exists mainly for better IDE support
-    '@overload'  # Overloads are only for static typing
-]
-run.disable_warnings = [
-    "no-sysmon",
-]
-
-
-[tool.ty.terminal]
-# Error if ty emits any warning-level diagnostics.
-error-on-warning = true
-
-[tool.ty.environment]
-extra-paths = ["tests"]
-
-[tool.ty.src]
-exclude = [
-    "docs/**",
-    "experiments/**",
-]
-
-
-[tool.typos]
-default.extend-ignore-re = [
-    "(?Rm)^.*(#|//)\\s*spellchecker:disable-line$",  # ignore line
-    "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on" # ignore block
-]
-
-[tool.typos.default.extend-words]
-wille = "wille"
-aer = "aer"
-ket   = "ket"
-arange = "arange"  # NumPy; typos otherwise "corrects" to arrange
+future-annotations = true
 
 
 [tool.repo-review.ignore]
@@ -150,84 +165,81 @@ PC160 = "We use a mirror of crate-ci/typos"
 PC170 = "We do not use rST files anymore"
 
 
-[tool.ruff]
-line-length = 120
-namespace-packages = ["mqt"]
-preview = true
-fix = true
-unsafe-fixes = true
-show-fixes = true
-extend-exclude = ["experiments"]
-
-[tool.ruff.format]
-preview = true
-docstring-code-format = true
-
-[tool.ruff.lint]
-select = ["ALL"]
-ignore = [
-    "C90",     # <...> too complex
-    "COM812",  # Conflicts with formatter
-    "PLR09",   # Too many <...>
-    "PLR2004", # Magic value used in comparison
-    "S101",    # Use of assert detected
-    "S404",    # `subprocess` module is possibly insecure
-    "TID252"   # Prefer absolute imports over relative imports from parent modules
-]
-future-annotations = true
-
-[tool.ruff.lint.isort]
-known-first-party = ["mqt.yaqs"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["T20", "INP001"]
-"docs/**" = ["T20", "INP001"]
-"scripts" = ["T20", "INP001"]
-"noxfile.py" = ["T20", "TID251"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-
-[tool.uv]
-required-version = ">=0.5.20"
-# symengine>=0.11,<0.14 (optional dependency of qiskit) is incompatible with Python 3.14
-override-dependencies = [
-    "symengine>=0.11,<0.14",
-    "symengine>=0.14.1; python_version >= '3.14'",
+[tool.check-sdist]
+sdist-only = [
+  "src/mqt/yaqs/_version.py",
 ]
 
-[tool.uv.sources]
-mqt-yaqs = { workspace = true }
+
+[tool.pyproject-fmt]
+generate_python_version_classifiers = false
+table_format = "long"
+sub_table_spacing = "\n"
+separate_root_table = "\n\n"
 
 
-[dependency-groups]
-test = [
-    "pytest>=9.0.1",
-    "pytest-cov>=7.1.0",
-    "pytest-sugar>=1.1.1",
-    "pytest-xdist[psutil]>=3.8.0",
-    "qiskit-qasm3-import>=0.4.1",
-    "torch>=2.2",
-    "torch>=2.6; python_version >= '3.13'",
-    "torch>=2.9; python_version >= '3.14'",
+[tool.typos]
+
+[tool.typos.default]
+extend-ignore-re = [
+  "(?Rm)^.*(#|//)\\s*spellchecker:disable-line$",                      # ignore line
+  "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on" # ignore block
 ]
-docs = [
-    "furo>=2025.09.25",
-    "myst-nb>=1.3.0",
-    "sphinx>=8.2.3",
-    "sphinx-autoapi>=3.6.0",
-    "sphinx-copybutton>=0.5.2",
-    "sphinx-design>=0.6.1",
-    "sphinx-llm>=0.4.1",
-    "sphinxcontrib-bibtex>=2.6.5",
-    "sphinxext-opengraph>=0.13.0",
-    "qiskit[visualization]>=1.0.0",
-    "torch>=2.2",
-    "torch>=2.6; python_version >= '3.13'",
-    "torch>=2.9; python_version >= '3.14'",
+
+[tool.typos.default.extend-words]
+wille = "wille"
+aer = "aer"
+ket = "ket"
+arange = "arange"  # NumPy; typos otherwise "corrects" to arrange
+
+
+[tool.ty.src]
+exclude = [
+  "docs/**",
+  "experiments/**",
 ]
-dev = [
-    {include-group = "test"},
-    "nox>=2025.11.12",
+
+[tool.ty.environment]
+extra-paths = [ "tests" ]
+
+[tool.ty.terminal]
+# Error if ty emits any warning-level diagnostics.
+error-on-warning = true
+
+
+[tool.pytest]
+addopts = [
+  "-ra",
+  "--showlocals",
+  "--numprocesses=auto", # Select the worker count in tests/conftest.py
+]
+filterwarnings = [
+  "error",
+  "ignore:Could not import matplotlib.*:UserWarning",
+]
+log_level = "INFO"
+minversion = "9.0"
+pythonpath = [ "tests" ]
+strict = true
+testpaths = [ "tests" ]
+
+
+[tool.coverage]
+
+[tool.coverage.run]
+source = [ "mqt.yaqs" ]
+parallel = true
+disable_warnings = [
+  "no-sysmon",
+]
+core = "sysmon"
+
+[tool.coverage.report]
+exclude_also = [
+  "@overload",                 # Overloads are only for static typing
+  '\.\.\.',
+  "def __dir__()",             # Ignore __dir__ method that exists mainly for better IDE support
+  "if TYPE_CHECKING:",
+  "raise AssertionError",
+  "raise NotImplementedError"
 ]
