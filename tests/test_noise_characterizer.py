@@ -38,7 +38,6 @@ def noise_test_config() -> NoiseTestConfig:
     return NoiseTestConfig()
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_characterize_smoke(noise_test_config: NoiseTestConfig) -> None:
     """One-shot characterize reduces trajectory error on a tiny problem."""
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(noise_test_config)
@@ -66,7 +65,6 @@ def test_characterize_smoke(noise_test_config: NoiseTestConfig) -> None:
     assert result.trajectory_rmse() >= 0.0
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_characterize_ref_expectations_path(noise_test_config: NoiseTestConfig) -> None:
     """Characterize accepts precomputed experimental trajectories."""
     hamiltonian, init_state, observables, sim_params, reference_model, propagator = build_propagator(noise_test_config)
@@ -107,7 +105,6 @@ def test_execution_config_properties() -> None:
     assert CancelledError in nc.retry_exceptions
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_characterize_reference_model_path(noise_test_config: NoiseTestConfig) -> None:
     """Characterize accepts reference_model as a benchmark shortcut."""
     hamiltonian, init_state, observables, sim_params, reference_model, _ = build_propagator(noise_test_config)

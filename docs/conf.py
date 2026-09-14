@@ -104,17 +104,6 @@ myst_heading_anchors = 3
 
 nb_execution_mode = "cache"
 nb_execution_raise_on_error = True
-# Suppress noisy but harmless warnings during notebook execution (complex casts, etc.).
-nb_prolog = """
-import warnings
-
-warnings.filterwarnings("ignore", message=".*cast.*complex.*")
-try:
-    from numpy.exceptions import ComplexWarning
-except ImportError:
-    from numpy import ComplexWarning
-warnings.filterwarnings("ignore", category=ComplexWarning)
-"""
 
 
 class CDAStyle(UnsrtStyle):
