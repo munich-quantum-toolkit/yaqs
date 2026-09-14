@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
 from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
@@ -85,7 +84,6 @@ def _digital_twin_setup() -> tuple[
     )
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_run_optimization_characterization_three_site_digital_twin() -> None:
     """3-site Lindblad fit from experimental trajectories recovers rates and dynamics."""
     (
@@ -125,7 +123,6 @@ def test_run_optimization_characterization_three_site_digital_twin() -> None:
         assert rel_err < 0.05
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_run_optimization_characterization_two_site_crosstalk() -> None:
     """Adjacent two-site crosstalk processes fit via the optimization pipeline."""
     n_sites = 3

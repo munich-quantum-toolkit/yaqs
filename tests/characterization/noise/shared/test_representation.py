@@ -98,7 +98,6 @@ def test_lindblad_loss_is_deterministic() -> None:
     assert loss_a == pytest.approx(loss_b)
 
 
-@pytest.mark.filterwarnings("ignore:.*special injected samples.*:UserWarning")
 def test_mcwf_and_tjm_smoke() -> None:
     """Explicit vector and mps representations still run through characterize."""
     test = NoiseTestConfig(sites=1, ntraj=2, max_bond_dim=4)

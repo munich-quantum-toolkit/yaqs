@@ -200,11 +200,7 @@ Learn Lindblad jump rates from observable trajectories with
 (simulator forward model + CMA-ES trajectory matching).
 
 ```{code-cell} ipython3
-import warnings
-
 import numpy as np
-
-warnings.filterwarnings("ignore", message=".*special injected samples.*")
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
 

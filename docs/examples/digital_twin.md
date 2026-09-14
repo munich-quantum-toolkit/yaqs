@@ -45,12 +45,8 @@ Three-site transverse-field Ising chain with homogeneous Pauli noise. Pass
 shortcut); for lab data use `ref_expectations=` instead (section 3).
 
 ```{code-cell} ipython3
-import warnings
-
 import matplotlib.pyplot as plt
 import numpy as np
-
-warnings.filterwarnings("ignore", message=".*special injected samples.*")
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, Simulator, State
 
