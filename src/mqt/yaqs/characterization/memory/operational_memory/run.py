@@ -49,12 +49,16 @@ insufficient because retained-outcome probabilities depend on the process dynami
 def evaluate_probes_with_weights(
     process: OperationalMemoryBackend,
     probe_set: ProbeSet,
+    *,
+    initial_rho: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate responses and complete process-aware retained-record probabilities.
 
     Args:
         process: Backend implementing :meth:`evaluate_probes_weighted`.
         probe_set: Sampled split-cut probes.
+        initial_rho: Optional site-0 state at the process boundary. Surrogate backends require
+            this state because it conditions their predictions and first outcome probability.
 
     Returns:
         Tuple ``(pauli_ixyz_ij, weights_ij)`` supplied by the backend.
@@ -64,7 +68,10 @@ def evaluate_probes_with_weights(
     """
     weighted_fn = getattr(process, "evaluate_probes_weighted", None)
     if callable(weighted_fn):
-        pauli_ixyz_ij, weights_ij = weighted_fn(probe_set)
+        if initial_rho is None:
+            pauli_ixyz_ij, weights_ij = weighted_fn(probe_set)
+        else:
+            pauli_ixyz_ij, weights_ij = weighted_fn(probe_set, initial_rho=initial_rho)
         return np.asarray(pauli_ixyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
     msg = (
         f"{type(process).__name__} must implement evaluate_probes_weighted; "
@@ -195,6 +202,7 @@ def _evaluate_operational_memory_probes(
     exact_backend_cls: type | None,
     execution_override: ExecutionConfig | None,
     intervention_steps_list: list[Any] | None,
+    initial_rho: np.ndarray | None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate split-cut probe responses on the selected backend.
 
@@ -204,6 +212,7 @@ def _evaluate_operational_memory_probes(
         exact_backend_cls: Exact backend class when delay or parallel overrides apply.
         execution_override: Optional execution configuration for the exact backend.
         intervention_steps_list: Optional per-probe custom intervention sequences.
+        initial_rho: Optional site-0 state passed to a surrogate backend.
 
     Returns:
         Tuple ``(pauli_ixyz_ij, weights_ij)``.
@@ -214,7 +223,7 @@ def _evaluate_operational_memory_probes(
         and (intervention_steps_list is not None or execution_override is not None)
     )
     if not use_exact_weighted:
-        return evaluate_probes_with_weights(process, sim_probe_set)
+        return evaluate_probes_with_weights(process, sim_probe_set, initial_rho=initial_rho)
     eval_kwargs: dict[str, Any] = {}
     if intervention_steps_list is not None:
         eval_kwargs["intervention_steps_list"] = intervention_steps_list
@@ -235,6 +244,7 @@ def run_memory_characterization(
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     parallel: bool | None = None,
     delay: int = 0,
+    initial_rho: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Run split-cut probing and assemble response-matrix diagnostics.
 
@@ -249,6 +259,8 @@ def run_memory_characterization(
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
+        initial_rho: Optional site-0 state after the initial evolution segment and before the
+            first intervention. Surrogate backends require this state.
 
     Returns:
         Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
@@ -296,6 +308,7 @@ def run_memory_characterization(
         exact_backend_cls=exact_backend_cls,
         execution_override=execution_override,
         intervention_steps_list=intervention_steps_list,
+        initial_rho=initial_rho,
     )
     response_matrix = assemble_response_matrix(pauli_ixyz_ij, weights_ij)
     ana = compute_spectrum(response_matrix)

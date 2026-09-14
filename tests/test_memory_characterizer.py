@@ -189,7 +189,14 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    out = mc.characterize(model, cut=1, num_interventions=1, n_pasts=4, n_futures=4)
+    out = mc.characterize(
+        model,
+        cut=1,
+        num_interventions=1,
+        n_pasts=4,
+        n_futures=4,
+        initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
+    )
     assert out.entropy(1) >= 0.0
 
 
@@ -219,6 +226,15 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
     assert out.entropy(1) >= 0.0
+    with pytest.raises(ValueError, match="initial_rho is supported only for surrogate characterization"):
+        mc.characterize(
+            pt,
+            cut=1,
+            num_interventions=1,
+            n_pasts=1,
+            n_futures=1,
+            initial_rho=pt.initial_rho,
+        )
 
 
 def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -272,9 +288,28 @@ def test_process_tensor_surrogate_characterize_singular_values_shape() -> None:
         n_pasts=4,
         n_futures=3,
         rng=np.random.default_rng(0),
+        initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
     ).singular_values(2)
     assert sv.ndim == 1
     assert 1 <= sv.size <= min(4, 3 * 3)
+
+
+@requires_torch
+def test_process_tensor_surrogate_characterize_requires_initial_rho() -> None:
+    """Characterization does not guess the surrogate's post-evolution boundary state."""
+    model = ProcessTensorSurrogate(
+        d_e=32,
+        d_rho=8,
+        d_model=32,
+        nhead=4,
+        num_layers=1,
+        dim_ff=64,
+        dropout=0.0,
+        num_interventions=1,
+    )
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match="initial_rho is required for surrogate characterization"):
+        mc.characterize(model, cut=1, n_pasts=1, n_futures=1)
 
 
 def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:

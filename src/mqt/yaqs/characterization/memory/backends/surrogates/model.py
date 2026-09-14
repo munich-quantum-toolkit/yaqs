@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import (
-    DEFAULT_INITIAL_RHO0,
+    coerce_rho_matrix,
     decode_packed_pauli_batch,
     normalize_backend_rho,
     pack_rho8,
@@ -173,27 +173,6 @@ class ProcessTensorSurrogate(nn.Module):
             raise TypeError(msg)
         return int(in_proj.in_features) - self._d_side
 
-    def _default_rho0(self, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
-        r"""Packed rho8 for the physical |0⟩⟨0| reduced state (same path as training data).
-
-        Uses :func:`~mqt.yaqs.characterization.memory.shared.encoding.pack_rho8` on the
-        trace-1 density matrix for :math:`|0\\rangle\\langle 0|`, after
-        :func:`~mqt.yaqs.characterization.memory.shared.encoding.normalize_backend_rho`,
-        matching surrogate sequences in
-        :mod:`~mqt.yaqs.characterization.memory.backends.surrogates.workflow`.
-
-        Returns:
-            Packed rho8 tensor on ``device`` with dtype ``dtype``.
-
-        Raises:
-            ValueError: If packed length does not match ``d_rho``.
-        """
-        packed = pack_rho8(normalize_backend_rho(DEFAULT_INITIAL_RHO0)).astype(np.float32)
-        if packed.shape[0] != self.d_rho:
-            msg = f"rho8 packing length {packed.shape[0]} does not match d_rho={self.d_rho}."
-            raise ValueError(msg)
-        return torch.as_tensor(packed, device=device, dtype=dtype)
-
     def _rho_to_features(self, rho: torch.Tensor) -> torch.Tensor:
         """Map predicted final density encodings to real feature vectors for the cut matrix.
 
@@ -265,17 +244,27 @@ class ProcessTensorSurrogate(nn.Module):
             raise ValueError(msg)
         return int(self.num_interventions)
 
-    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+    def evaluate_probes(self, probe_set: ProbeSet, *, initial_rho: np.ndarray | None = None) -> np.ndarray:
         """Evaluate split-cut probe responses for :func:`run_memory_characterization`.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+            initial_rho: Site-0 state after the initial evolution segment and before the
+                first intervention. Surrogates do not store this boundary state.
 
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography ``(I, X, Y, Z)``.
 
         """
-        pauli_ixyz, _weights = self.evaluate_probes_weighted(probe_set)
+        pauli_ixyz, _weights = self.evaluate_probes_weighted(probe_set, initial_rho=initial_rho)
         return pauli_ixyz
 
-    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_probes_weighted(
+        self,
+        probe_set: ProbeSet,
+        *,
+        initial_rho: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate responses and model-estimated complete retained-record probabilities.
 
         Each local outcome probability is evaluated on the model's predicted reduced state
@@ -283,13 +272,16 @@ class ProcessTensorSurrogate(nn.Module):
 
         Args:
             probe_set: Sampled split-cut probes.
+            initial_rho: Site-0 state after the initial evolution segment and before the
+                first intervention. The state is normalized before use.
 
         Returns:
             Tuple ``(pauli_ixyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
             ``(n_pasts, n_futures)``.
 
         Raises:
-            ValueError: If ``probe_set.num_interventions`` differs from the model training horizon.
+            ValueError: If ``initial_rho`` is missing or invalid, or if
+                ``probe_set.num_interventions`` differs from the model training horizon.
         """
         expected_num_interventions = self._num_interventions_for_probe()
         if int(probe_set.num_interventions) != expected_num_interventions:
@@ -298,6 +290,17 @@ class ProcessTensorSurrogate(nn.Module):
                 f"model num_interventions={expected_num_interventions}."
             )
             raise ValueError(msg)
+        if initial_rho is None:
+            msg = (
+                "initial_rho is required for surrogate characterization. Pass the site-0 density matrix "
+                "after the initial evolution segment and before the first intervention."
+            )
+            raise ValueError(msg)
+        rho0_matrix = normalize_backend_rho(coerce_rho_matrix(initial_rho))
+        packed_rho0 = pack_rho8(rho0_matrix).astype(np.float32)
+        if packed_rho0.shape[0] != self.d_rho:
+            msg = f"rho8 packing length {packed_rho0.shape[0]} does not match d_rho={self.d_rho}."
+            raise ValueError(msg)
         n_p = len(probe_set.past_pairs)
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1
@@ -305,8 +308,7 @@ class ProcessTensorSurrogate(nn.Module):
         v_rows = np.empty((n_p, n_f, 4), dtype=np.float32)
         weights = np.empty((n_p, n_f), dtype=np.float64)
         dev = next(self.parameters()).device
-        rho0 = self._default_rho0(device=dev, dtype=torch.float32)
-        rho0_matrix = normalize_backend_rho(unpack_rho8(rho0.detach().cpu().numpy()))
+        rho0 = torch.as_tensor(packed_rho0, device=dev, dtype=torch.float32)
         was_training = self.training
         self.eval()
         try:

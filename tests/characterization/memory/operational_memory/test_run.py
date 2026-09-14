@@ -83,6 +83,37 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     assert "entropy" in out
 
 
+def test_run_memory_characterization_forwards_initial_rho() -> None:
+    """Surrogate-style backends receive the explicit process-boundary state."""
+    expected_rho = np.array([[0.25, 0.0], [0.0, 0.75]], dtype=np.complex128)
+
+    class InitialStateBackend:
+        def evaluate_probes_weighted(
+            self,
+            probe_set: ProbeSet,
+            *,
+            initial_rho: np.ndarray | None = None,
+        ) -> tuple[np.ndarray, np.ndarray]:
+            assert initial_rho is not None
+            np.testing.assert_allclose(initial_rho, expected_rho)
+            n_p = len(probe_set.past_pairs)
+            n_f = len(probe_set.future_pairs)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float64)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
+
+    out = run_memory_characterization(
+        process=InitialStateBackend(),
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(9),
+        initial_rho=expected_rho,
+    )
+    assert out["response_matrix"].shape == (4, 1)
+
+
 def test_deterministic_future_weights_reduce_to_history_probability() -> None:
     """Unitary future probes do not change each history's retained probability."""
     rng = np.random.default_rng(3)

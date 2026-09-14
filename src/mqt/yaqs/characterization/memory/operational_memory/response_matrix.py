@@ -126,15 +126,23 @@ def compute_spectrum(
     Returns:
         Dictionary with ``entropy``, ``modes`` (:math:`R(c)`), ``singular_values``, and
         ``singular_values_full``.
+
+    Raises:
+        ValueError: If the response matrix has zero Frobenius norm, for which the normalized
+            modal weights and their entropy are undefined.
     """
     s_full = np.linalg.svd(response_matrix, compute_uv=False).astype(np.float64)
     s = s_full.copy()
-    total_weight = float(np.sum(s_full**2))
+    if not s_full.size or s_full[0] <= 0.0:
+        msg = "Response matrix must have nonzero Frobenius norm to define a normalized spectrum."
+        raise ValueError(msg)
+    scaled_squared = (s_full / s_full[0]) ** 2
+    total_weight = float(np.sum(scaled_squared))
 
-    if s.size and discarded_weight_threshold is not None and total_weight > 0.0:
+    if s.size and discarded_weight_threshold is not None:
         the = max(float(discarded_weight_threshold), 0.0)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
-        tail_cumsum = np.cumsum(s_full[::-1] ** 2)
+        tail_cumsum = np.cumsum(scaled_squared[::-1])
         keep = s_full.size
         for idx, tail_weight in enumerate(tail_cumsum):
             if float(tail_weight / total_weight) > the:
@@ -144,14 +152,10 @@ def compute_spectrum(
             keep = s_full.size
         s = s_full[:keep]
 
-    kept_weight = float(np.sum(s**2))
-    if kept_weight <= 0.0:
-        entropy = 0.0
-        effective_modes = 1.0
-    else:
-        q = np.clip((s**2) / kept_weight, 1e-30, 1.0)
-        entropy = float(-np.sum(q * np.log(q)))
-        effective_modes = float(np.exp(entropy))
+    kept_squared = scaled_squared[: s.size]
+    q = np.clip(kept_squared / np.sum(kept_squared), 1e-30, 1.0)
+    entropy = float(-np.sum(q * np.log(q)))
+    effective_modes = float(np.exp(entropy))
 
     return {
         "entropy": entropy,

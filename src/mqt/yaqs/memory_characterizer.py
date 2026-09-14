@@ -532,6 +532,7 @@ class MemoryCharacterizer:
         intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
+        initial_rho: np.ndarray | None = None,
         parallel: bool | None = None,
         delay: int = 0,
     ) -> CharacterizationResult: ...
@@ -552,6 +553,7 @@ class MemoryCharacterizer:
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
+        initial_rho: np.ndarray | None = None,
         parallel: bool | None = None,
         delay: int = 0,
         **probe_kwargs: Any,
@@ -575,6 +577,9 @@ class MemoryCharacterizer:
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
+            initial_rho: Site-0 state after the initial evolution segment and before the first
+                intervention. Required for surrogate targets and unsupported for Hamiltonian or
+                process-tensor targets.
             parallel: Override parallelism for process-tensor/surrogate probing.
             delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
             **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
@@ -599,6 +604,10 @@ class MemoryCharacterizer:
             raise ValueError(msg)
         resolved_style = normalize_style(intervention_style)
         resolved_probe_set = _coerce_probe_set(probe_set)
+
+        if initial_rho is not None and (_matches_hamiltonian(target) or _matches_process_tensor(target)):
+            msg = "initial_rho is supported only for surrogate characterization."
+            raise ValueError(msg)
 
         if delay > 0 and not _matches_hamiltonian(target):
             msg = "delay > 0 is supported for Hamiltonian characterize() only."
@@ -640,6 +649,7 @@ class MemoryCharacterizer:
                 n_futures=n_f,
                 rng=rng,
                 probe_set=resolved_probe_set,
+                initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
                 delay=delay,
@@ -654,6 +664,7 @@ class MemoryCharacterizer:
                 n_futures=n_f,
                 rng=rng,
                 probe_set=None,
+                initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
                 delay=delay,
@@ -770,6 +781,7 @@ class MemoryCharacterizer:
         n_futures: int,
         rng: Generator | None,
         probe_set: ProbeSet | None,
+        initial_rho: np.ndarray | None,
         parallel: bool | None,
         intervention_style: str,
         delay: int = 0,
@@ -790,6 +802,7 @@ class MemoryCharacterizer:
             n_futures=n_futures,
             rng=rng,
             probe_set=probe_set,
+            initial_rho=initial_rho,
             parallel=parallel if parallel is not None else self._execution.parallel,
             delay=delay,
             intervention_style=intervention_style,

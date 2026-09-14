@@ -167,6 +167,20 @@ def test_compute_spectrum_modes_equals_exp_entropy() -> None:
     assert out["modes"] == pytest.approx(math.exp(out["entropy"]), rel=1e-12, abs=1e-12)
 
 
+def test_compute_spectrum_rejects_zero_response() -> None:
+    """A zero response has no normalized modal distribution."""
+    with pytest.raises(ValueError, match="nonzero Frobenius norm"):
+        compute_spectrum(np.zeros((4, 3), dtype=np.float64))
+
+
+def test_compute_spectrum_accepts_nonzero_response_below_squared_underflow_scale() -> None:
+    """A nonzero response remains defined when direct singular-value squaring would underflow."""
+    tiny = compute_spectrum(np.diag([1e-200, 5e-201]), discarded_weight_threshold=None)
+    reference = compute_spectrum(np.diag([1.0, 0.5]), discarded_weight_threshold=None)
+    assert tiny["entropy"] == pytest.approx(reference["entropy"])
+    assert tiny["modes"] == pytest.approx(reference["modes"])
+
+
 def test_compute_spectrum_singular_values_full_matches_svd() -> None:
     """singular_values_full from compute_spectrum matches a direct SVD."""
     rng = np.random.default_rng(5)

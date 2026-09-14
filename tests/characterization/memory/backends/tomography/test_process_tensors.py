@@ -342,6 +342,39 @@ def test_dense_process_tensor_weighted_responses_reconstruct_subnormalized_tomog
     np.testing.assert_allclose(wrapped_weights, weights)
 
 
+def test_dense_process_tensor_weighted_responses_preserve_small_positive_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A small positive branch remains part of the response matrix."""
+    probability = 1e-13
+    rho_raw = probability * _REF_RHO0
+    pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0])
+
+    def _predict_small_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+        _ = (self, interventions)
+        return rho_raw
+
+    monkeypatch.setattr(DenseProcessTensor, "_predict_raw", _predict_small_branch)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(0),
+    )
+
+    pauli, weights = pt.evaluate_probes_weighted(probe_set)
+
+    assert weights[0, 0] == pytest.approx(probability, rel=1e-12, abs=0.0)
+    np.testing.assert_allclose(pauli[0, 0], encode_rho_pauli(_REF_RHO0), rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(
+        weights[0, 0] * pauli[0, 0],
+        encode_rho_pauli(rho_raw),
+        rtol=1e-12,
+        atol=0.0,
+    )
+
+
 def test_dense_process_tensor_weighted_selected_future_matches_exact() -> None:
     """Raw PT traces reproduce exact complete probabilities for selected future outcomes."""
     ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)

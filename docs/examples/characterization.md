@@ -182,6 +182,10 @@ fig.tight_layout()
 
 Pass `probe_set=` from a Hamiltonian run so surrogate or exact-reference
 backends evaluate the **same** probe ensemble ({doc}`memory_surrogate`).
+Surrogate characterization also requires `initial_rho=`: the site-0 density
+matrix after the schedule's initial evolution segment and before its first
+intervention. For a surrogate trained against a reference process tensor, use
+that tensor's `initial_rho`.
 
 (reset-delay)=
 

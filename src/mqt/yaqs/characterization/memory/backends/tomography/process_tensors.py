@@ -184,14 +184,10 @@ def _evaluate_probes_weighted(
                 msg = f"Process-tensor branch trace must be a probability in [0, 1], got {weight}."
                 raise ValueError(msg)
             weight = float(np.clip(weight, 0.0, 1.0))
-            if weight <= 1e-12:
-                if np.linalg.norm(rho_hermitian) > 1e-10:
-                    msg = "Process-tensor branch has near-zero trace but a nonzero subnormalized output."
-                    raise ValueError(msg)
-                weight = 0.0
-                normalized = np.eye(2, dtype=np.complex128) / 2.0
-            else:
-                normalized = rho_hermitian / weight
+            if weight <= 1e-12 and np.linalg.norm(rho_hermitian) > 1e-10:
+                msg = "Process-tensor branch has near-zero trace but a nonzero subnormalized output."
+                raise ValueError(msg)
+            normalized = np.eye(2, dtype=np.complex128) / 2.0 if weight <= 0.0 else rho_hermitian / weight
             weights[i, j] = weight
             pauli[i, j] = encode_rho_pauli(normalized)
     return pauli, weights
