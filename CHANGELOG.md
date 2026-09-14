@@ -32,6 +32,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- updated memory characterization backend ([#598])
+  ([**@aaronleesander**])
 - raised minimum Qiskit version from 1.1.0 to 2.1.0 ([#597]) ([**@denialhaag**])
 - split observables to be separate from quantum gates ([#583])
   ([**@aaronleesander**])
@@ -273,6 +275,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#598]: https://github.com/munich-quantum-toolkit/yaqs/pull/598
 [#597]: https://github.com/munich-quantum-toolkit/yaqs/pull/597
 [#587]: https://github.com/munich-quantum-toolkit/yaqs/pull/587
 [#583]: https://github.com/munich-quantum-toolkit/yaqs/pull/583
