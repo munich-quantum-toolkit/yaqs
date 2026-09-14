@@ -22,10 +22,10 @@ For comparison, this script also reports entropies for the historical raw-XYZ an
 matrices reconstructed from the same run and evaluated with the same numerical threshold.
 
 Outputs include a **three-panel PRL-style figure**: (1) heatmap of :math:`S_V` (:math:`c` vs :math:`J`, log colors
-on a logarithmic scale with values below :math:`10^{-3}` clipped to the scale floor); (2) :math:`S_V` vs :math:`J`
-for **representative cuts** ``PANEL2_FIXED_CUTS``; (3) :math:`S_V` vs :math:`c` for **representative couplings**
-``PANEL3_TARGET_JS`` with nearest available :math:`J` from the sweep. Regenerate from ``summary.csv`` via
-``--plot-heatmap-only`` (optional ``--summary-csv PATH``).
+on a logarithmic scale with positive values below the scale floor clipped and exact zeros shown in black with
+white hatching); (2) :math:`S_V` vs :math:`J` for **representative cuts** ``PANEL2_FIXED_CUTS``; (3) :math:`S_V`
+vs :math:`c` for **representative couplings** ``PANEL3_TARGET_JS`` with nearest available :math:`J` from the
+sweep. Regenerate from ``summary.csv`` via ``--plot-heatmap-only`` (optional ``--summary-csv PATH``).
 """
 
 from __future__ import annotations
@@ -410,13 +410,22 @@ def plot_entropy_heatmap_cut_vs_j(
     ax1.set_facecolor("white")
     ax2.set_facecolor("white")
 
-    # Show exact zeros explicitly in black via colormap "under" color.
-    # Positive values remain on the log color scale [HEATMAP_COLOR_VMIN, HEATMAP_COLOR_VMAX].
+    zero_j_indices = np.flatnonzero(np.isclose(j_arr, 0.0, rtol=0.0, atol=1e-15))
+    zero_j_candidate = int(zero_j_indices[0]) if zero_j_indices.size == 1 else None
+    zero_j_index = (
+        zero_j_candidate
+        if zero_j_candidate is not None and np.allclose(z[:, zero_j_candidate], 0.0, rtol=0.0, atol=0.0)
+        else None
+    )
+
+    # Positive values remain on the log color scale [HEATMAP_VMIN, HEATMAP_VMAX].
     z_plot = np.where(
         np.isfinite(z),
         np.where(z <= 0.0, HEATMAP_VMIN * 0.1, np.maximum(z, HEATMAP_VMIN)),
         np.nan,
     )
+    if zero_j_index is not None:
+        z_plot[:, zero_j_index] = np.nan
     z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
 
     norm = LogNorm(vmin=HEATMAP_VMIN, vmax=HEATMAP_VMAX)
@@ -436,6 +445,19 @@ def plot_entropy_heatmap_cut_vs_j(
         antialiased=False,
         rasterized=True,
     )
+    if zero_j_index is not None:
+        ax0.add_patch(
+            plt.Rectangle(
+                (c_edges[0], j_edges[zero_j_index]),
+                c_edges[-1] - c_edges[0],
+                j_edges[zero_j_index + 1] - j_edges[zero_j_index],
+                facecolor="black",
+                edgecolor="white",
+                linewidth=0.45,
+                hatch="////",
+                zorder=2,
+            )
+        )
     ax0.set_xlabel(r"Causal cut $c$")
     ax0.set_ylabel(r"Coupling $J$")
 
@@ -444,6 +466,32 @@ def plot_entropy_heatmap_cut_vs_j(
     cbar.ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
     cbar.ax.tick_params(length=3.0, width=0.7, labelsize=13)
     cbar.outline.set_linewidth(0.8)
+    if zero_j_index is not None:
+        zero_key_y = -0.105
+        zero_key_height = 0.055
+        cbar.ax.add_patch(
+            plt.Rectangle(
+                (0.0, zero_key_y),
+                1.0,
+                zero_key_height,
+                transform=cbar.ax.transAxes,
+                facecolor="black",
+                edgecolor="white",
+                linewidth=0.6,
+                hatch="////",
+                clip_on=False,
+            )
+        )
+        cbar.ax.text(
+            1.35,
+            zero_key_y + zero_key_height / 2,
+            r"$0$",
+            transform=cbar.ax.transAxes,
+            va="center",
+            ha="left",
+            fontsize=13,
+            clip_on=False,
+        )
 
     ax0.set_xlim(c_edges[0], c_edges[-1])
     ax0.set_ylim(j_edges[0], j_edges[-1])
@@ -580,8 +628,9 @@ def plot_entropy_heatmap_cut_vs_j(
     ax2.set_ylim(y_floor, y_hi)
 
     for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
+        tag_x = 0.08 if ax is ax0 else 0.04
         ax.text(
-            0.04,
+            tag_x,
             0.955,
             tag,
             transform=ax.transAxes,

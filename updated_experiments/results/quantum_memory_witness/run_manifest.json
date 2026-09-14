@@ -78,13 +78,13 @@
       "sha256": "1a3ff832105002a58abafd974de2a30dafbb4c414cfb58800f8fe683cfa0cc37"
     },
     "quantum_memory_witness.pdf": {
-      "bytes": 30044,
-      "sha256": "f878236f06d5f78e6872c5befb40614c4b61c5de2979c9c0bcb2dec7b03a7c68"
+      "bytes": 27035,
+      "sha256": "4a6608334e063f556c1385a15083ba1de58761fb08581c798d001d99664d6343"
     },
     "quantum_memory_witness.png": {
-      "bytes": 396529,
-      "sha256": "c77390f4ced37cf1c5a4052fae7a60c72743268367735b2839398aa7fc45ea94"
+      "bytes": 349625,
+      "sha256": "a4835bd5b9335aabd78dd4f4c30e8758ca49769979cc2079eabc0071f829d520"
     }
   },
-  "plot_script_sha256": "787d3f02cc27da59ea7dd83da78c7c004b0c971e6524d927af6c5bfe79644cb3"
+  "plot_script_sha256": "97baedb5e27f57970b82d82475dd5145aaa3b0a6264492bd4798c6c6d4c6b83c"
 }

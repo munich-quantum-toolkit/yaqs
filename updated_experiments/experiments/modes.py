@@ -417,8 +417,8 @@ def plot_from_saved(
             alpha=0.95,
             label=rf"$c={cut}$",
         )
-    ax.set_xlabel(r"$J$")
-    ax.set_ylabel(r"$R=\exp(S_V)$")
+    ax.set_xlabel(r"Coupling $J$")
+    ax.set_ylabel(r"Response Modes $R$")
     ax.set_xlim(0.0, float(max(js)) if js else 2.0)
     y_all: list[float] = []
     for cut in cuts:
@@ -446,7 +446,7 @@ def plot_from_saved(
     )
 
     # Inset: selected spectra for c=10 only.
-    inset = ax.inset_axes((0.16, 0.56, 0.36, 0.34))
+    inset = ax.inset_axes((0.21, 0.56, 0.36, 0.34))
     inset.set_facecolor("white")
     inset_cut = 10
     j_inset = [0.5, 1.0, 1.5, 2.0]

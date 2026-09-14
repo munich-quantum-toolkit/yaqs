@@ -62,10 +62,11 @@ sampling is used.
   response arrays, and run manifest.
 
 The Figure 2 logarithmic color range is `1e-4` to `5e-1`, which preserves the
-visual balance of the earlier figure at the updated entropy scale. The Figure 3
-main axis scales automatically from the updated effective-mode values. Its inset
-keeps the full normalized squared singular-value spectrum and displays values
-down to `1e-16`.
+visual balance of the earlier figure at the updated entropy scale. Its black
+`J=0` row with white hatching and matching colorbar swatch denote the exact
+zero-entropy result. The Figure 3 main axis scales automatically from the updated
+effective-mode values. Its inset keeps the full normalized squared
+singular-value spectrum and displays values down to `1e-16`.
 
 Figure 4 retains the original data-driven logarithmic styling. With the updated
 values, panel (a) spans `1e-7` to approximately `2.70e-2`; the spectrum panels

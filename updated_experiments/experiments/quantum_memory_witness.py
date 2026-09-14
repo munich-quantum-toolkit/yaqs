@@ -328,8 +328,8 @@ def plot(arrays: dict[str, np.ndarray], output_stem: Path) -> None:
     line_color = "#8c2d04"
     marker_color = "#d94801"
     for axis in axes:
-        axis.axvspan(0.0, P_CRITICAL, color="#4daf4a", alpha=0.055, linewidth=0.0)
-        axis.axvspan(P_CRITICAL, 1.0, color="#ffb000", alpha=0.065, linewidth=0.0)
+        axis.axvspan(0.0, P_CRITICAL, color="#e1f0e1", linewidth=0.0)
+        axis.axvspan(P_CRITICAL, 1.0, color="#fff0cc", linewidth=0.0)
         axis.axvline(P_CRITICAL, color="0.3", linestyle="--", linewidth=0.9)
         axis.grid(True, axis="y", alpha=0.12, linewidth=0.4)
 
@@ -348,7 +348,7 @@ def plot(arrays: dict[str, np.ndarray], output_stem: Path) -> None:
     axes[0].set_ylabel(r"Response entropy $S_V$")
     axes[0].set_ylim(-0.035, 1.33)
     axes[0].legend(frameon=False, loc="upper right")
-    axes[0].text(0.025, 0.94, "(a)", transform=axes[0].transAxes, fontweight="bold", va="top")
+    axes[0].text(0.025, 0.985, "(a)", transform=axes[0].transAxes, fontweight="bold", va="top")
     axes[0].text(
         P_CRITICAL - 0.015,
         0.94,
@@ -372,46 +372,28 @@ def plot(arrays: dict[str, np.ndarray], output_stem: Path) -> None:
     )
     axes[1].axhline(0.0, color="black", linewidth=0.85)
     axes[1].set_ylabel(r"Witness $w$")
-    axes[1].set_xlabel(r"Environment depolarization $p$")
+    axes[1].set_xlabel(r"Depolarization strength $p$")
     axes[1].set_xlim(0.0, 1.0)
     axes[1].set_ylim(-0.37, 0.22)
     axes[1].set_xticks((0.0, 1.0 / 3.0, P_CRITICAL, 1.0), ("0", r"$1/3$", r"$2/3$", "1"))
-    axes[1].text(0.025, 0.94, "(b)", transform=axes[1].transAxes, fontweight="bold", va="top")
+    axes[1].text(0.025, 0.985, "(b)", transform=axes[1].transAxes, fontweight="bold", va="top")
     axes[1].text(
-        0.30,
-        0.58,
-        "Certified quantum memory",
-        transform=axes[1].transAxes,
+        P_CRITICAL / 2.0,
+        -0.055,
+        "Certified quantum\nmemory",
         color="#216e39",
         ha="center",
+        va="center",
         fontsize=8,
     )
     axes[1].text(
-        0.81,
-        0.28,
-        "Classically reproducible\nmemory",
-        transform=axes[1].transAxes,
+        0.80,
+        0.155,
+        "Classically\nreproducible\nmemory",
         color="#8c510a",
         ha="center",
+        va="center",
         fontsize=7.5,
-    )
-    axes[1].annotate(
-        "Memoryless",
-        xy=(1.0, 1.0 / 6.0),
-        xytext=(0.79, 0.195),
-        arrowprops={"arrowstyle": "->", "color": "0.25", "linewidth": 0.7},
-        color="0.25",
-        fontsize=8,
-    )
-    axes[1].text(
-        0.98,
-        0.02,
-        r"Benchmark-specific classification; $w\geq0$ is generally inconclusive.",
-        transform=axes[1].transAxes,
-        color="0.35",
-        ha="right",
-        va="bottom",
-        fontsize=6.6,
     )
     figure.savefig(output_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     figure.savefig(output_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
