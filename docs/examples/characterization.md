@@ -199,35 +199,30 @@ that tensor's `initial_rho`.
 
 (reset-delay)=
 
-## Memory persistence: illustrative reset delay
+## Memory persistence: conditioned reset delay
 
-For `delay > 0`, pass `delay=N` to insert $N$ soft-reset slots
-$(\lvert 0\rangle, \lvert 0\rangle)$ at the causal cut while the **environment**
-keeps evolving. Extra reset time lets the environment decouple from the past
-before future controls act, so $S_V(c)$ often **decreases** at strong
-probe-environment coupling (weaker coupling can show the opposite trend).
+Pass `delay=N`, for any $N\geq0$, to use the conditioned-reset protocol from
+Figure 5 of the response-matrix paper. The intervention at the history boundary
+applies the selected measurement and prepares $\lvert0\rangle$. YAQS then
+inserts $N$ selected-zero reset slots $(\lvert0\rangle,\lvert0\rangle)$ and
+applies a second selected-zero measurement before the sampled future
+preparation. The environment keeps evolving between these interventions. The
+selected history outcome and every selected-zero outcome contribute to the
+complete branch probability.
 
-This public sweep is illustrative rather than an exact reproduction of the
-conditioned-reset protocol in Figure 5 of the response-matrix paper. Here,
-`delay=0` keeps the standard one-step causal break: the selected history outcome
-and sampled future preparation form one measure--prepare intervention. For
-`delay > 0`, YAQS instead prepares $\lvert 0\rangle$ at that break, inserts the
-requested reset slots, and adds a selected-zero measurement before the sampled
-future preparation. The physical sequence length is therefore
-`num_interventions` at `delay=0` and `num_interventions + delay + 1` otherwise.
+The two boundary interventions remain separate at `delay=0`. The physical
+sequence length is therefore `num_interventions + delay + 1` for every explicit
+delay. Omitting `delay` uses the standard one-step causal break
+`(selected_history_measurement, sampled_future_preparation)` instead. This keeps
+ordinary characterization aligned across Hamiltonian, process-tensor, and
+surrogate backends.
 
-The paper campaign used one custom sequence geometry for every bridge length
-$\ell$, including $\ell=0$: history measurement followed by preparation of
-$\lvert 0\rangle$, then $\ell$ selected-zero reset slots, then a further
-selected-zero measurement followed by the sampled future preparation. Thus its
-$\ell=0$ sequence still contains the two separate boundary interventions. The
-public `delay=` option therefore cannot reproduce the paper's $\ell=0$ point
-exactly. Its positive-delay geometries match the paper protocol, but reproducing
-the complete sweep including $\ell=0$ requires the campaign's custom
-intervention grid.
-
-Reuse the same `probe_set` when sweeping the public `delay` parameter.
-`delay > 0` is supported for Hamiltonian characterization only.
+Extra reset time lets the environment decouple from the past before future
+controls act, so $S_V(c)$ often decreases at strong probe-environment coupling.
+Weaker coupling can show a nonmonotonic profile. The example below uses a
+smaller probe grid and shorter sequences than the paper campaign, but it uses
+the same conditioned-reset geometry. Reuse the same `probe_set` across the delay
+sweep. An explicit `delay` is supported for Hamiltonian characterization only.
 
 ```{code-cell} ipython3
 delay_length = 6

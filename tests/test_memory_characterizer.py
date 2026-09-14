@@ -578,12 +578,12 @@ def test_paper_modes_and_spectrum_plot_data_shift_with_coupling() -> None:
     assert strong_tail_weight > weak_tail_weight
 
 
-def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
-    """Smoke reset-delay benchmark: memory grows with delay at moderate coupling."""
+def test_paper_reset_delay_entropy_decreases_at_strong_coupling() -> None:
+    """A reduced Figure 5 sweep loses memory under a longer reset at strong coupling."""
     mc = _paper_mc()
-    cut = 4
-    k = 6
-    n_pasts = n_futures = 6
+    cut = 16
+    k = 21
+    n_pasts = n_futures = 8
     probe_set = sample_probes(
         cut=cut,
         num_interventions=k,
@@ -592,7 +592,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
         rng=np.random.default_rng(999_991),
         intervention_style="haar",
     )
-    ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
+    ham = Hamiltonian.ising(length=_PAPER_L, J=2.0, g=_PAPER_G)
     entropies: list[float] = []
     for delay in (0, 1, 2):
         result = mc.characterize(
@@ -607,8 +607,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
             initial_psi=make_zero_psi(_PAPER_L),
         )
         entropies.append(float(result.entropy(cut)))
-    assert entropies[-1] > 1.4 * entropies[0]
-    assert all(entropies[i + 1] > entropies[i] for i in range(len(entropies) - 1))
+    assert all(entropies[i + 1] < entropies[i] for i in range(len(entropies) - 1))
 
 
 def test_characterize_delay_rejects_negative() -> None:
@@ -619,13 +618,17 @@ def test_characterize_delay_rejects_negative() -> None:
         mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=-1)
 
 
-def test_characterize_delay_rejects_process_tensor(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+@pytest.mark.parametrize("delay", [0, 1])
+def test_characterize_delay_rejects_process_tensor(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    delay: int,
+) -> None:
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1, 0.1], return_type="dense")
-    with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
-        mc.characterize(pt, cut=1, num_interventions=2, delay=1)
+    with pytest.raises(ValueError, match="delay is supported for Hamiltonian"):
+        mc.characterize(pt, cut=1, num_interventions=2, delay=delay)
 
 
 def test_characterize_delay_reuses_prior_result_probes() -> None:

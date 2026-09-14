@@ -377,7 +377,8 @@ def test_run_memory_characterization_delay_rejects_negative() -> None:
         run_memory_characterization(process=backend, cut=1, num_interventions=2, delay=-1)
 
 
-def test_run_memory_characterization_delay_rejects_process_tensor_backend() -> None:
+@pytest.mark.parametrize("delay", [0, 1])
+def test_run_memory_characterization_delay_rejects_process_tensor_backend(delay: int) -> None:
     """Reset delay requires the exact sequence backend."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
@@ -390,12 +391,12 @@ def test_run_memory_characterization_delay_rejects_process_tensor_backend() -> N
         return_type="dense",
     )
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
-    with pytest.raises(ValueError, match="delay > 0 requires an exact Hamiltonian"):
-        run_memory_characterization(process=pt, cut=1, num_interventions=2, probe_set=probe_set, delay=1)
+    with pytest.raises(ValueError, match="delay requires an exact Hamiltonian"):
+        run_memory_characterization(process=pt, cut=1, num_interventions=2, probe_set=probe_set, delay=delay)
 
 
-def test_run_memory_characterization_delay_zero_matches_default() -> None:
-    """Explicit delay=0 matches the default split-cut path."""
+def test_run_memory_characterization_delay_zero_uses_custom_sequence_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Explicit delay zero adds the paper protocol's second boundary intervention."""
     rng = np.random.default_rng(6)
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
@@ -403,13 +404,36 @@ def test_run_memory_characterization_delay_zero_matches_default() -> None:
     psi0[0] = 1.0 + 0.0j
     probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
-    out_default = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
-    out_zero = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set, delay=0)
-    assert out_zero["entropy"] == pytest.approx(out_default["entropy"], rel=1e-10, abs=1e-10)
+    calls: list[tuple[int, list[list[object]] | None]] = []
+
+    def _capture(
+        self: ExactBackend,
+        evaluated_probes: ProbeSet,
+        *,
+        intervention_steps_list: list[list[object]] | None = None,
+        _execution: object | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        del self, _execution
+        calls.append((evaluated_probes.num_interventions, intervention_steps_list))
+        n_pasts = len(evaluated_probes.past_pairs)
+        n_futures = len(evaluated_probes.future_pairs)
+        pauli = np.zeros((n_pasts, n_futures, 4), dtype=np.float64)
+        pauli[..., 0] = 1.0
+        return pauli, np.ones((n_pasts, n_futures), dtype=np.float64)
+
+    monkeypatch.setattr(ExactBackend, "evaluate_probes_weighted", _capture)
+    run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
+    run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set, delay=0)
+
+    assert calls[0] == (4, None)
+    assert calls[1][0] == 5
+    conditioned_grid = calls[1][1]
+    assert conditioned_grid is not None
+    assert all(len(sequence) == 5 for sequence in conditioned_grid)
 
 
 def test_run_memory_characterization_delay_exact_returns_finite_entropy() -> None:
-    """Exact backend accepts delay>0 and returns finite memory diagnostics."""
+    """Exact backend accepts a conditioned reset and returns finite memory diagnostics."""
     rng = np.random.default_rng(7)
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)

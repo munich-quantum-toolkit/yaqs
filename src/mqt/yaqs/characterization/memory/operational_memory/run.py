@@ -80,17 +80,17 @@ def evaluate_probes_with_weights(
     raise TypeError(msg)
 
 
-def _exact_backend_cls_if_needed(*, delay: int, parallel: bool | None) -> type | None:
+def _exact_backend_cls_if_needed(*, delay: int | None, parallel: bool | None) -> type | None:
     """Return :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` when needed.
 
     Args:
-        delay: Number of soft-reset slots at the causal cut.
+        delay: Conditioned-reset bridge length, or ``None`` for the standard causal break.
         parallel: Optional parallelism override for the exact backend.
 
     Returns:
-        The exact backend class, or ``None`` when delay and parallel are both inactive.
+        The exact backend class, or ``None`` when conditioned reset and parallel overrides are inactive.
     """
-    if delay > 0 or parallel is not None:
+    if delay is not None or parallel is not None:
         from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
 
         return ExactBackend
@@ -162,31 +162,32 @@ def _resolve_probe_set(
 def _setup_delayed_probing(
     probe_set: ProbeSet,
     *,
-    delay: int,
+    delay: int | None,
     num_interventions: int,
     process: OperationalMemoryBackend,
     exact_backend_cls: type | None,
 ) -> tuple[ProbeSet, list[Any] | None]:
-    """Expand probe geometry when soft-reset delay slots are requested.
+    """Prepare custom probe geometry for the conditioned-reset protocol.
 
     Args:
         probe_set: Base probe grid without delay slots.
-        delay: Number of ``(|0>, |0>)`` slots at the causal cut.
-        num_interventions: Base sequence length (excluding delay).
+        delay: Conditioned-reset bridge length, or ``None`` for the standard causal break.
+        num_interventions: Base sequence length before conditioned-reset expansion.
         process: Operational-memory backend under test.
         exact_backend_cls: Exact backend class when delay or parallel overrides apply.
 
     Returns:
         Tuple ``(sim_probe_set, intervention_steps_list)`` where ``intervention_steps_list`` is
-        ``None`` when ``delay == 0``.
+        ``None`` when ``delay is None``.
 
     Raises:
-        ValueError: If ``delay > 0`` with a backend that cannot simulate custom sequences.
+        ValueError: If a conditioned-reset delay is requested from a backend that cannot
+            simulate custom sequences.
     """
-    if delay <= 0:
+    if delay is None:
         return probe_set, None
     if exact_backend_cls is None or not isinstance(process, exact_backend_cls):
-        msg = "delay > 0 requires an exact Hamiltonian characterize backend."
+        msg = "delay requires an exact Hamiltonian characterize backend."
         raise ValueError(msg)
     intervention_steps_list, _, _ = assemble_probe_grid(probe_set, delay=delay)
     sim_probe_set = replace(
@@ -243,7 +244,7 @@ def run_memory_characterization(
     probe_set: ProbeSet | None = None,
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     parallel: bool | None = None,
-    delay: int = 0,
+    delay: int | None = None,
     initial_rho: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Run split-cut probing and assemble response-matrix diagnostics.
@@ -258,7 +259,8 @@ def run_memory_characterization(
         probe_set: Pre-sampled probes (optional).
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
-        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
+        delay: Conditioned-reset bridge length. ``None`` uses the standard one-step causal
+            break. Every nonnegative value uses separate left and right boundary interventions.
         initial_rho: Optional site-0 state after the initial evolution segment and before the
             first intervention. Surrogate backends require this state.
 
@@ -271,10 +273,10 @@ def run_memory_characterization(
 
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
-            different ``cut`` or ``num_interventions``, or ``delay > 0`` with a backend that does not
-            support custom sequences, or a backend returns invalid weighted responses.
+            different ``cut`` or ``num_interventions``, a conditioned-reset delay is used with a
+            backend that does not support custom sequences, or a backend returns invalid weighted responses.
     """
-    if delay < 0:
+    if delay is not None and delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
 

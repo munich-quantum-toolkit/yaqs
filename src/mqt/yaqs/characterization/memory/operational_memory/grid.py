@@ -63,23 +63,25 @@ def _validated_probe_branches(probe_set: ProbeSet, i: int, j: int) -> _ProbeBran
     return _ProbeBranches(cut, num_interventions, past_pairs, future_pairs)
 
 
-def compute_delayed_length(*, num_interventions: int, delay: int) -> int:
+def compute_delayed_length(*, num_interventions: int, delay: int | None) -> int:
     """Compute the physical sequence length with reset delay at the causal break.
 
     Args:
-        num_interventions: Base split-cut sequence length when ``delay=0``.
+        num_interventions: Base split-cut sequence length.
         delay: Number of ``(|0>, |0>)`` soft-reset slots inserted at the break.
+            ``None`` selects the standard single-step causal break.
 
     Returns:
-        ``num_interventions + delay + 1`` when ``delay > 0``; otherwise ``num_interventions``.
+        ``num_interventions`` for the standard causal break, or
+        ``num_interventions + delay + 1`` for the conditioned-reset protocol.
 
     Raises:
         ValueError: If ``delay`` is negative.
     """
-    if delay < 0:
+    if delay is not None and delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
-    return num_interventions + delay + 1 if delay > 0 else num_interventions
+    return num_interventions if delay is None else num_interventions + delay + 1
 
 
 def _append_cut_steps(
@@ -88,7 +90,7 @@ def _append_cut_steps(
     *,
     i: int,
     j: int,
-    delay: int,
+    delay: int | None,
 ) -> None:
     """Append causal-break steps to a probe sequence under construction.
 
@@ -97,13 +99,14 @@ def _append_cut_steps(
         probe_set: Sampled split-cut probes supplying cut measurement and preparation kets.
         i: Past branch index for the cut measurement ket.
         j: Future branch index for the cut preparation ket.
-        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert when ``delay > 0``.
+        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert. ``None`` selects
+            the standard single-step causal break.
 
     Note:
-        When ``delay=0``, appends ``(meas, prep)``. When ``delay > 0``, appends
-        ``(meas, |0>)``, ``delay`` reset slots, then ``(|0>, prep)``.
+        With ``delay=None``, appends ``(meas, prep)``. For every nonnegative delay,
+        appends ``(meas, |0>)``, ``delay`` reset slots, then ``(|0>, prep)``.
     """
-    if delay == 0:
+    if delay is None:
         full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
         return
     full.append((probe_set.past_cut_meas[i], SITE0_KET))
@@ -111,7 +114,7 @@ def _append_cut_steps(
     full.append((SITE0_KET, probe_set.future_prep_cut[j]))
 
 
-def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int = 0) -> list[Any]:
+def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int | None = None) -> list[Any]:
     """Build the full intervention sequence for probe-grid entry ``(i, j)``.
 
     Args:
@@ -119,6 +122,7 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int =
         i: Past index.
         j: Future index.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the break.
+            ``None`` selects the standard single-step causal break.
 
     Returns:
         Intervention sequence of length :func:`compute_delayed_length`.
@@ -128,9 +132,9 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int =
             assembled length does not match the expected length.
 
     Note:
-        When ``delay=0``, the cut step is ``(meas, prep)``. For ``delay > 0``, the cut becomes
-        ``(meas, |0>)``, followed by ``delay`` ``(|0>, |0>)`` slots, then ``(|0>, prep)`` before
-        the future unitaries.
+        With ``delay=None``, the cut step is ``(meas, prep)``. For every nonnegative delay,
+        the cut becomes ``(meas, |0>)``, followed by ``delay`` ``(|0>, |0>)`` slots, then
+        ``(|0>, prep)`` before the future unitaries.
     """
     branches = _validated_probe_branches(probe_set, i, j)
     full: list[Any] = list(branches.past_pairs)
@@ -138,7 +142,7 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int =
     full.extend(branches.future_pairs)
     expected = compute_delayed_length(num_interventions=branches.num_interventions, delay=delay)
     if len(full) != expected:
-        if delay == 0:
+        if delay is None:
             msg = f"assembled probe sequence length {len(full)} != num_interventions={expected}"
         else:
             msg = f"assembled delayed sequence length {len(full)} != num_interventions+delay+1={expected}"
@@ -149,13 +153,14 @@ def assemble_probe_sequence(probe_set: ProbeSet, i: int, j: int, *, delay: int =
 def assemble_probe_grid(
     probe_set: ProbeSet,
     *,
-    delay: int = 0,
+    delay: int | None = None,
 ) -> tuple[list[list[Any]], int, int]:
     """Construct the full ``(past, future)`` sequence pair grid.
 
     Args:
         probe_set: Sampled split-cut probes.
         delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
+            ``None`` selects the standard single-step causal break.
 
     Returns:
         Tuple ``(all_pairs, n_pasts, n_futures)``.
