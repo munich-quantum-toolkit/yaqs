@@ -65,8 +65,8 @@ releases may include breaking changes.
 
 ### Fixed
 
-- fixed inconsistent site ordering across dense, sparse, and MPO representations ([#600])
-  ([**@aaronleesander**])
+- fixed inconsistent site ordering across dense, sparse, and MPO representations
+  ([#600]) ([**@aaronleesander**])
 - fixed small-angle cutoff in MPO rotation gates ([#569]) ([**@Pouri96**])
 - fixed gauge-dependent entanglement entropy and Schmidt spectrum observables
   ([#561]) ([**@Pouri96**])
