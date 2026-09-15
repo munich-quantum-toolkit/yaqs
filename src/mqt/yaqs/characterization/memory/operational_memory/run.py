@@ -10,12 +10,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
 
 from ..shared.interventions import DEFAULT_INTERVENTION_STYLE
-from .branch_weights import compute_branch_weights
 from .grid import assemble_probe_grid, compute_delayed_length
 from .response_matrix import assemble_response_matrix, compute_spectrum
 from .samples import ProbeSet, sample_probes
@@ -24,84 +23,74 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
-class SupportsEvaluateProbes(Protocol):
-    """Protocol for backends that implement :meth:`evaluate_probes`."""
+class SupportsEvaluateProbesWithWeights(Protocol):
+    """Protocol for backends that implement :meth:`evaluate_probes_with_weights`."""
 
-    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate unweighted probe responses.
-
-        Args:
-            probe_set: Sampled split-cut probes.
-
-        Returns:
-            Pauli tomography array of shape ``(n_pasts, n_futures, 4)``.
-        """
-
-
-class SupportsEvaluateProbesWeighted(Protocol):
-    """Protocol for backends that implement :meth:`evaluate_probes_weighted`."""
-
-    def evaluate_probes_weighted(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate weighted probe responses.
+    def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate probe responses with joint probabilities of the retained outcomes.
 
         Args:
             probe_set: Sampled split-cut probes.
 
         Returns:
-            Tuple ``(pauli_xyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
-            ``(n_pasts, n_futures)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` with shapes ``(n_pasts, n_futures, 4)`` and
+            ``(n_pasts, n_futures)``. Pauli channels are ordered ``(I, X, Y, Z)``.
         """
 
 
-OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbes | SupportsEvaluateProbesWeighted
-"""Union of split-cut probing backends.
+OperationalMemoryBackend: TypeAlias = SupportsEvaluateProbesWithWeights
+"""Split-cut backend returning normalized responses and retained-outcome probabilities.
 
-Implement **either** :meth:`evaluate_probes_weighted` (simulation branch weights, e.g.
-:class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`) **or**
-:meth:`evaluate_probes` (black-box Pauli responses for process tensors and surrogates).
-:func:`evaluate_probes_with_weights` dispatches to the implemented method.
+Backends must implement :meth:`evaluate_probes_with_weights`. Normalized Pauli responses alone are
+insufficient because retained-outcome probabilities depend on the process dynamics.
 """
 
 
 def evaluate_probes_with_weights(
     process: OperationalMemoryBackend,
     probe_set: ProbeSet,
+    *,
+    initial_rho: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Evaluate weighted probe responses; analytic weights unless the class overrides.
+    """Evaluate responses and joint probabilities of the retained outcomes.
 
     Args:
-        process: Backend implementing :meth:`evaluate_probes_weighted` or :meth:`evaluate_probes`.
+        process: Backend implementing :meth:`evaluate_probes_with_weights`.
         probe_set: Sampled split-cut probes.
+        initial_rho: Optional site-0 state at the process boundary. Surrogate backends require
+            this state because it conditions their predictions and first outcome probability.
 
     Returns:
-        Tuple ``(pauli_xyz_ij, weights_ij)``.
+        Tuple ``(pauli_ixyz_ij, weights_ij)`` supplied by the backend.
 
     Raises:
-        TypeError: If ``process`` implements neither weighted nor unweighted probing.
+        TypeError: If ``process`` does not return probe responses with their retained-outcome probabilities.
     """
-    weighted_fn = getattr(process, "evaluate_probes_weighted", None)
-    if callable(weighted_fn):
-        pauli_xyz_ij, weights_ij = weighted_fn(probe_set)
-        return np.asarray(pauli_xyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
-    evaluate_fn = getattr(process, "evaluate_probes", None)
+    evaluate_fn = getattr(process, "evaluate_probes_with_weights", None)
     if callable(evaluate_fn):
-        pauli_xyz_ij = np.asarray(evaluate_fn(probe_set), dtype=np.float64)
-        return pauli_xyz_ij, compute_branch_weights(probe_set)
-    msg = f"{type(process).__name__} must implement evaluate_probes_weighted or evaluate_probes"
+        if initial_rho is None:
+            pauli_ixyz_ij, weights_ij = evaluate_fn(probe_set)
+        else:
+            pauli_ixyz_ij, weights_ij = evaluate_fn(probe_set, initial_rho=initial_rho)
+        return np.asarray(pauli_ixyz_ij, dtype=np.float64), np.asarray(weights_ij, dtype=np.float64)
+    msg = (
+        f"{type(process).__name__} must implement evaluate_probes_with_weights; "
+        "normalized probe responses do not determine retained-outcome probabilities"
+    )
     raise TypeError(msg)
 
 
-def _exact_backend_cls_if_needed(*, delay: int, parallel: bool | None) -> type | None:
+def _resolve_exact_backend_cls(*, delay: int | None, parallel: bool | None) -> type | None:
     """Return :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` when needed.
 
     Args:
-        delay: Number of soft-reset slots at the causal cut.
+        delay: Conditioned-reset bridge length, or ``None`` for the standard causal break.
         parallel: Optional parallelism override for the exact backend.
 
     Returns:
-        The exact backend class, or ``None`` when delay and parallel are both inactive.
+        The exact backend class, or ``None`` when conditioned reset and parallel overrides are inactive.
     """
-    if delay > 0 or parallel is not None:
+    if delay is not None or parallel is not None:
         from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
 
         return ExactBackend
@@ -173,31 +162,32 @@ def _resolve_probe_set(
 def _setup_delayed_probing(
     probe_set: ProbeSet,
     *,
-    delay: int,
+    delay: int | None,
     num_interventions: int,
     process: OperationalMemoryBackend,
     exact_backend_cls: type | None,
 ) -> tuple[ProbeSet, list[Any] | None]:
-    """Expand probe geometry when soft-reset delay slots are requested.
+    """Prepare custom probe geometry for the conditioned-reset protocol.
 
     Args:
         probe_set: Base probe grid without delay slots.
-        delay: Number of ``(|0>, |0>)`` slots at the causal cut.
-        num_interventions: Base sequence length (excluding delay).
+        delay: Conditioned-reset bridge length, or ``None`` for the standard causal break.
+        num_interventions: Base sequence length before conditioned-reset expansion.
         process: Operational-memory backend under test.
         exact_backend_cls: Exact backend class when delay or parallel overrides apply.
 
     Returns:
         Tuple ``(sim_probe_set, intervention_steps_list)`` where ``intervention_steps_list`` is
-        ``None`` when ``delay == 0``.
+        ``None`` when ``delay is None``.
 
     Raises:
-        ValueError: If ``delay > 0`` with a backend that cannot simulate custom sequences.
+        ValueError: If a conditioned-reset delay is requested from a backend that cannot
+            simulate custom sequences.
     """
-    if delay <= 0:
+    if delay is None:
         return probe_set, None
     if exact_backend_cls is None or not isinstance(process, exact_backend_cls):
-        msg = "delay > 0 requires an exact Hamiltonian characterize backend."
+        msg = "delay requires an exact Hamiltonian characterize backend."
         raise ValueError(msg)
     intervention_steps_list, _, _ = assemble_probe_grid(probe_set, delay=delay)
     sim_probe_set = replace(
@@ -206,13 +196,14 @@ def _setup_delayed_probing(
     return sim_probe_set, intervention_steps_list
 
 
-def _evaluate_operational_memory_probes(
+def _evaluate_backend_probes(
     process: OperationalMemoryBackend,
     sim_probe_set: ProbeSet,
     *,
     exact_backend_cls: type | None,
     execution_override: ExecutionConfig | None,
     intervention_steps_list: list[Any] | None,
+    initial_rho: np.ndarray | None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate split-cut probe responses on the selected backend.
 
@@ -222,24 +213,24 @@ def _evaluate_operational_memory_probes(
         exact_backend_cls: Exact backend class when delay or parallel overrides apply.
         execution_override: Optional execution configuration for the exact backend.
         intervention_steps_list: Optional per-probe custom intervention sequences.
+        initial_rho: Optional site-0 state passed to a surrogate backend.
 
     Returns:
-        Tuple ``(pauli_xyz_ij, weights_ij)``.
+        Tuple ``(pauli_ixyz_ij, weights_ij)``.
     """
-    use_exact_weighted = (
+    use_exact_with_weights = (
         exact_backend_cls is not None
         and isinstance(process, exact_backend_cls)
         and (intervention_steps_list is not None or execution_override is not None)
     )
-    if not use_exact_weighted:
-        return evaluate_probes_with_weights(process, sim_probe_set)
+    if not use_exact_with_weights:
+        return evaluate_probes_with_weights(process, sim_probe_set, initial_rho=initial_rho)
     eval_kwargs: dict[str, Any] = {}
     if intervention_steps_list is not None:
         eval_kwargs["intervention_steps_list"] = intervention_steps_list
     if execution_override is not None:
         eval_kwargs["_execution"] = execution_override
-    weighted_process = cast("SupportsEvaluateProbesWeighted", process)
-    return weighted_process.evaluate_probes_weighted(sim_probe_set, **eval_kwargs)
+    return process.evaluate_probes_with_weights(sim_probe_set, **eval_kwargs)
 
 
 def run_memory_characterization(
@@ -251,10 +242,10 @@ def run_memory_characterization(
     n_futures: int = 32,
     rng: np.random.Generator | None = None,
     probe_set: ProbeSet | None = None,
-    return_raw: bool = False,
     intervention_style: str = DEFAULT_INTERVENTION_STYLE,
     parallel: bool | None = None,
-    delay: int = 0,
+    delay: int | None = None,
+    initial_rho: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Run split-cut probing and assemble response-matrix diagnostics.
 
@@ -266,25 +257,31 @@ def run_memory_characterization(
         n_futures: Future probe count when sampling internally.
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
-        return_raw: If True, include uncentered ``response_matrix_raw``.
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
-        delay: Number of ``(|0>, |0>)`` soft-reset slots to insert at the causal break.
+        delay: Conditioned-reset bridge length. ``None`` uses the standard one-step causal
+            break. Every nonnegative value uses separate left and right boundary interventions.
+        initial_rho: Optional site-0 state after the initial evolution segment and before the
+            first intervention. Surrogate backends require this state.
 
     Returns:
-        Dict with ``entropy``, ``modes``, ``singular_values``, ``response_matrix``,
-        ``probe_set``, and optional ``weights_ij``.
+        Dict with scalar diagnostics, the entropy-truncated and full singular spectra,
+        compact left and right singular vectors, the response matrix, probe responses,
+        probe metadata, and joint probabilities of the retained outcomes. The response matrix has shape
+        ``(4 * n_futures, n_pasts)`` with future-probe ``(I, X, Y, Z)`` rows and history
+        columns.
 
     Raises:
         ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
-            different ``cut`` or ``num_interventions``, or ``delay > 0`` with a backend that does not
-            support custom sequences.
+            different ``cut`` or ``num_interventions``, a conditioned-reset delay is used with a
+            backend that does not support custom sequences, or a backend returns invalid responses
+            or retained-outcome probabilities.
     """
-    if delay < 0:
+    if delay is not None and delay < 0:
         msg = f"delay must be >= 0, got {delay}"
         raise ValueError(msg)
 
-    exact_backend_cls = _exact_backend_cls_if_needed(delay=delay, parallel=parallel)
+    exact_backend_cls = _resolve_exact_backend_cls(delay=delay, parallel=parallel)
     execution_override: ExecutionConfig | None = None
     if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
         from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
@@ -309,22 +306,21 @@ def run_memory_characterization(
         process=process,
         exact_backend_cls=exact_backend_cls,
     )
-    pauli_xyz_ij, weights_ij = _evaluate_operational_memory_probes(
+    pauli_ixyz_ij, weights_ij = _evaluate_backend_probes(
         process,
         sim_probe_set,
         exact_backend_cls=exact_backend_cls,
         execution_override=execution_override,
         intervention_steps_list=intervention_steps_list,
+        initial_rho=initial_rho,
     )
-    m_raw, response_matrix = assemble_response_matrix(pauli_xyz_ij, weights_ij)
+    response_matrix = assemble_response_matrix(pauli_ixyz_ij, weights_ij)
     ana = compute_spectrum(response_matrix)
     out: dict[str, Any] = {
-        "pauli_xyz_ij": pauli_xyz_ij,
+        "pauli_ixyz_ij": pauli_ixyz_ij,
         **ana,
         "probe_set": probe_set,
         "response_matrix": response_matrix,
         "weights_ij": weights_ij,
     }
-    if return_raw:
-        out["response_matrix_raw"] = m_raw
     return out

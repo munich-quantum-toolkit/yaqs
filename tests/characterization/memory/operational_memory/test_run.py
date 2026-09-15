@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-# ruff:file-ignore[no-self-use, import-private-name] -- protocol-style dummy backend; white-box rollout test
+# ruff:file-ignore[no-self-use] -- protocol-style dummy backend; white-box rollout test
 
 """Tests for operational-memory orchestration (:mod:`run`)."""
 
@@ -19,10 +19,6 @@ import pytest
 from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
-from mqt.yaqs.characterization.memory.operational_memory.branch_weights import (
-    _compute_branch_weight_for_sequence,
-    compute_branch_weights,
-)
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,
     compute_spectrum,
@@ -68,38 +64,54 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     """run_memory_characterization delegates evaluation to a user-supplied process object."""
 
     class DummyProcess:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
 
     out = run_memory_characterization(
         process=DummyProcess(), cut=1, num_interventions=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7)
     )
-    assert out["pauli_xyz_ij"].shape == (2, 3, 4)
+    assert out["pauli_ixyz_ij"].shape == (2, 3, 4)
+    assert out["response_matrix"].shape == (12, 2)
     assert "entropy" in out
 
 
-def test_branch_weights_constant_across_future_columns() -> None:
-    """Branch weights are constant across future columns for a fixed past."""
-    rng = np.random.default_rng(3)
-    probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=5, n_futures=4, rng=rng)
-    w = compute_branch_weights(probe_set)
-    assert np.allclose(w.std(axis=1), 0.0, atol=1e-14)
+def test_run_memory_characterization_forwards_initial_rho() -> None:
+    """Surrogate-style backends receive the explicit process-boundary state."""
+    expected_rho = np.array([[0.25, 0.0], [0.0, 0.75]], dtype=np.complex128)
+
+    class InitialStateBackend:
+        def evaluate_probes_with_weights(
+            self,
+            probe_set: ProbeSet,
+            *,
+            initial_rho: np.ndarray | None = None,
+        ) -> tuple[np.ndarray, np.ndarray]:
+            assert initial_rho is not None
+            np.testing.assert_allclose(initial_rho, expected_rho)
+            n_p = len(probe_set.past_pairs)
+            n_f = len(probe_set.future_pairs)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float64)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
+
+    out = run_memory_characterization(
+        process=InitialStateBackend(),
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(9),
+        initial_rho=expected_rho,
+    )
+    assert out["response_matrix"].shape == (4, 1)
 
 
-def test_compute_branch_weight_from_steps() -> None:
-    """Structured unitary steps yield unit branch weight."""
-    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    steps = [
-        {"type": "unitary", "U": np.eye(2, dtype=np.complex128)},
-        (z, z),
-    ]
-    assert _compute_branch_weight_for_sequence(steps, cut=2) == pytest.approx(1.0)
-
-
-def test_process_tensor_run_memory_characterization_returns_cut_weights() -> None:
-    """Dense process-tensor orchestration returns positive cut weights."""
+def test_process_tensor_run_memory_characterization_returns_joint_probabilities() -> None:
+    """Dense process-tensor orchestration returns positive joint retained-outcome probabilities."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -116,31 +128,8 @@ def test_process_tensor_run_memory_characterization_returns_cut_weights() -> Non
     assert np.all(out["weights_ij"] > 0.0)
 
 
-def test_analytic_weights_match_exact_for_trivial_dynamics() -> None:
-    """Analytic branch weights match exact rollout at J=0."""
-    rng = np.random.default_rng(11)
-    op = MPO.ising(length=1, J=0.0, g=0.0)
-    probe_set = sample_probes(
-        cut=2,
-        num_interventions=3,
-        n_pasts=4,
-        n_futures=3,
-        rng=rng,
-        intervention_style="haar",
-    )
-    w_analytic = compute_branch_weights(probe_set)
-    _, w_exact, _ = simulate_exact(
-        probe_set=probe_set,
-        operator=op,
-        sim_params=_params(),
-        initial_psi=_PSI0,
-        parallel=False,
-    )
-    np.testing.assert_allclose(w_analytic, w_exact, rtol=1e-10, atol=1e-12)
-
-
 def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
-    """DenseProcessTensor weighted entropy agrees with exact rollout on small k."""
+    """Dense-process-tensor response entropy agrees with exact rollout on small k."""
     rng = np.random.default_rng(42)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = _params()
@@ -174,7 +163,7 @@ def test_dense_process_tensor_vs_exact_probe_entropy() -> None:
         initial_psi=exact.initial_psi,
         parallel=exact.parallel,
     )
-    _m_e_raw, response_matrix_e = assemble_response_matrix(pauli_e, weights_e)
+    response_matrix_e = assemble_response_matrix(pauli_e, weights_e)
     out_exact = compute_spectrum(response_matrix_e)
     out_pt = run_memory_characterization(process=pt, cut=2, num_interventions=2, probe_set=probe_set)
     assert out_pt["entropy"] == pytest.approx(out_exact["entropy"], rel=0.15, abs=0.05)
@@ -202,8 +191,8 @@ def test_mpo_process_tensor_entropy_matches_dense() -> None:
     assert out_mpo["entropy"] == pytest.approx(out_dense["entropy"], rel=1e-10, abs=1e-10)
 
 
-def test_evaluate_probes_with_weights_process_tensor_uses_analytic_weights() -> None:
-    """Process-tensor backends without weighted evaluate use analytic branch weights."""
+def test_evaluate_probes_with_weights_process_tensor_uses_subnormalized_weights() -> None:
+    """Process tensors supply complete weights from subnormalized contractions."""
     rng = np.random.default_rng(2)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -222,24 +211,38 @@ def test_evaluate_probes_with_weights_process_tensor_uses_analytic_weights() -> 
 
 
 def test_evaluate_probes_with_weights_missing_method_raises() -> None:
-    """Objects without probe methods raise TypeError."""
+    """Objects without probe responses and retained-outcome probabilities raise TypeError."""
 
     class NoProbes:
         pass
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
-    with pytest.raises(TypeError, match="evaluate_probes"):
+    with pytest.raises(TypeError, match="evaluate_probes_with_weights"):
         evaluate_probes_with_weights(cast("OperationalMemoryBackend", NoProbes()), probe_set)
+
+
+def test_evaluate_probes_with_weights_rejects_normalized_only_backend() -> None:
+    """Normalized responses alone cannot determine retained-outcome probabilities."""
+
+    class NormalizedOnlyBackend:
+        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+            return np.zeros((len(probe_set.past_pairs), len(probe_set.future_pairs), 4), dtype=np.float64)
+
+    probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=2, n_futures=2, rng=np.random.default_rng(0))
+    with pytest.raises(TypeError, match="normalized probe responses do not determine"):
+        evaluate_probes_with_weights(cast("OperationalMemoryBackend", NormalizedOnlyBackend()), probe_set)
 
 
 def test_evaluate_probes_with_weights_inherited_method() -> None:
     """Subclasses that inherit probe methods dispatch without TypeError."""
 
     class BaseBackend:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz = np.zeros((n_p, n_f, 4), dtype=np.float32)
+            pauli_ixyz[..., 0] = 1.0
+            return pauli_ixyz, np.ones((n_p, n_f), dtype=np.float64)
 
     class ChildBackend(BaseBackend):
         pass
@@ -259,8 +262,8 @@ def test_run_memory_characterization_parallel_override_does_not_mutate_backend()
     assert backend.parallel is True
 
 
-def test_run_memory_characterization_return_raw_includes_uncentered_matrix() -> None:
-    """return_raw=True exposes the uncentered memory matrix."""
+def test_run_memory_characterization_returns_response_matrix() -> None:
+    """run_memory_characterization exposes one canonical response matrix."""
     rng = np.random.default_rng(9)
     op = MPO.ising(length=1, J=0.0, g=0.0)
     pt = build_process_tensor(
@@ -278,10 +281,11 @@ def test_run_memory_characterization_return_raw_includes_uncentered_matrix() -> 
         n_pasts=3,
         n_futures=2,
         rng=rng,
-        return_raw=True,
     )
-    assert "response_matrix_raw" in out
-    assert out["response_matrix_raw"].shape == out["response_matrix"].shape
+    expected = assemble_response_matrix(out["pauli_ixyz_ij"], out["weights_ij"])
+    np.testing.assert_allclose(out["response_matrix"], expected)
+    np.testing.assert_allclose(out["response_matrix"][0::4], out["weights_ij"].T)
+    assert "response_matrix_raw" not in out
 
 
 def _entropy_from_cumulative_weights(
@@ -313,7 +317,7 @@ def _entropy_from_cumulative_weights(
     for ii in range(n_p):
         for jj in range(n_f):
             weights[ii, jj] = _diagnostics_final_weight(simulation_diagnostics[ii * n_f + jj])
-    _raw, response_matrix = assemble_response_matrix(pauli, weights, log_weight_warnings=False)
+    response_matrix = assemble_response_matrix(pauli, weights)
     return float(compute_spectrum(response_matrix)["entropy"])
 
 
@@ -329,6 +333,7 @@ def test_run_memory_characterization_matches_cumulative_weight_entropy() -> None
     out = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
     exp = _entropy_from_cumulative_weights(probe_set, op, params, psi0)
     assert out["entropy"] == pytest.approx(exp, rel=1e-10, abs=1e-10)
+    np.testing.assert_allclose(out["response_matrix"][0::4], out["weights_ij"].T)
 
 
 def test_run_memory_characterization_rejects_mismatched_probe_set() -> None:
@@ -337,10 +342,10 @@ def test_run_memory_characterization_rejects_mismatched_probe_set() -> None:
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
 
     class DummyProcess:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 4), dtype=np.float64)
+            return np.zeros((n_p, n_f, 4), dtype=np.float64), np.ones((n_p, n_f), dtype=np.float64)
 
     with pytest.raises(ValueError, match="probe_set was built for"):
         run_memory_characterization(process=DummyProcess(), cut=2, num_interventions=2, probe_set=probe_set)
@@ -350,12 +355,13 @@ def test_evaluate_probes_with_weights_preserves_float64() -> None:
     """Probe responses are not downcast to float32 before memory assembly."""
 
     class HighPrecisionBackend:
-        def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
             out = np.zeros((n_p, n_f, 4), dtype=np.float64)
+            out[..., 0] = 1.0
             out[..., 1] = 1e-7
-            return out
+            return out, np.ones((n_p, n_f), dtype=np.float64)
 
     probe_set = sample_probes(cut=1, num_interventions=1, n_pasts=1, n_futures=1, rng=np.random.default_rng(0))
     pauli, _weights = evaluate_probes_with_weights(HighPrecisionBackend(), probe_set)
@@ -371,7 +377,8 @@ def test_run_memory_characterization_delay_rejects_negative() -> None:
         run_memory_characterization(process=backend, cut=1, num_interventions=2, delay=-1)
 
 
-def test_run_memory_characterization_delay_rejects_process_tensor_backend() -> None:
+@pytest.mark.parametrize("delay", [0, 1])
+def test_run_memory_characterization_delay_rejects_process_tensor_backend(delay: int) -> None:
     """Reset delay requires the exact sequence backend."""
     rng = np.random.default_rng(0)
     op = MPO.ising(length=1, J=0.0, g=0.0)
@@ -384,12 +391,12 @@ def test_run_memory_characterization_delay_rejects_process_tensor_backend() -> N
         return_type="dense",
     )
     probe_set = sample_probes(cut=1, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
-    with pytest.raises(ValueError, match="delay > 0 requires an exact Hamiltonian"):
-        run_memory_characterization(process=pt, cut=1, num_interventions=2, probe_set=probe_set, delay=1)
+    with pytest.raises(ValueError, match="delay requires an exact Hamiltonian"):
+        run_memory_characterization(process=pt, cut=1, num_interventions=2, probe_set=probe_set, delay=delay)
 
 
-def test_run_memory_characterization_delay_zero_matches_default() -> None:
-    """Explicit delay=0 matches the default split-cut path."""
+def test_run_memory_characterization_delay_zero_uses_custom_sequence_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Explicit delay zero adds the paper protocol's second boundary intervention."""
     rng = np.random.default_rng(6)
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
@@ -397,13 +404,36 @@ def test_run_memory_characterization_delay_zero_matches_default() -> None:
     psi0[0] = 1.0 + 0.0j
     probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
-    out_default = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
-    out_zero = run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set, delay=0)
-    assert out_zero["entropy"] == pytest.approx(out_default["entropy"], rel=1e-10, abs=1e-10)
+    calls: list[tuple[int, list[list[object]] | None]] = []
+
+    def _capture(
+        self: ExactBackend,
+        evaluated_probes: ProbeSet,
+        *,
+        intervention_steps_list: list[list[object]] | None = None,
+        _execution: object | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        del self, _execution
+        calls.append((evaluated_probes.num_interventions, intervention_steps_list))
+        n_pasts = len(evaluated_probes.past_pairs)
+        n_futures = len(evaluated_probes.future_pairs)
+        pauli = np.zeros((n_pasts, n_futures, 4), dtype=np.float64)
+        pauli[..., 0] = 1.0
+        return pauli, np.ones((n_pasts, n_futures), dtype=np.float64)
+
+    monkeypatch.setattr(ExactBackend, "evaluate_probes_with_weights", _capture)
+    run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set)
+    run_memory_characterization(process=backend, cut=2, num_interventions=4, probe_set=probe_set, delay=0)
+
+    assert calls[0] == (4, None)
+    assert calls[1][0] == 5
+    conditioned_grid = calls[1][1]
+    assert conditioned_grid is not None
+    assert all(len(sequence) == 5 for sequence in conditioned_grid)
 
 
 def test_run_memory_characterization_delay_exact_returns_finite_entropy() -> None:
-    """Exact backend accepts delay>0 and returns finite memory diagnostics."""
+    """Exact backend accepts a conditioned reset and returns finite memory diagnostics."""
     rng = np.random.default_rng(7)
     op = MPO.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
@@ -413,4 +443,4 @@ def test_run_memory_characterization_delay_exact_returns_finite_entropy() -> Non
     backend = ExactBackend(operator=op, sim_params=params, initial_psi=psi0, parallel=False)
     out = run_memory_characterization(process=backend, cut=3, num_interventions=5, probe_set=probe_set, delay=2)
     assert np.isfinite(out["entropy"])
-    assert out["pauli_xyz_ij"].shape == (3, 2, 4)
+    assert out["pauli_ixyz_ij"].shape == (3, 2, 4)

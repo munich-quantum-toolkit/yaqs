@@ -514,7 +514,7 @@ class MemoryCharacterizer:
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
-        delay: int = 0,
+        delay: int | None = None,
     ) -> CharacterizationResult: ...
 
     @overload
@@ -532,8 +532,9 @@ class MemoryCharacterizer:
         intervention_style: str = DEFAULT_INTERVENTION_STYLE,
         rng: Generator | None = None,
         probe_set: Any | None = None,
+        initial_rho: np.ndarray | None = None,
         parallel: bool | None = None,
-        delay: int = 0,
+        delay: int | None = None,
     ) -> CharacterizationResult: ...
 
     def characterize(
@@ -552,8 +553,9 @@ class MemoryCharacterizer:
         rng: Generator | None = None,
         probe_set: Any | None = None,
         initial_psi: np.ndarray | None = None,
+        initial_rho: np.ndarray | None = None,
         parallel: bool | None = None,
-        delay: int = 0,
+        delay: int | None = None,
         **probe_kwargs: Any,
     ) -> CharacterizationResult:
         """Return operational memory diagnostics for a Hamiltonian, surrogate, or process tensor.
@@ -565,7 +567,8 @@ class MemoryCharacterizer:
         Args:
             target: Hamiltonian, trained surrogate, or reference process tensor.
             sim_params: Required for Hamiltonian targets only.
-            num_interventions: Intervention sequence length (required for Hamiltonian targets).
+            num_interventions: Base split-cut sequence length (required for Hamiltonian targets).
+                An explicit ``delay`` adds ``delay + 1`` physical interventions.
             cut: Single causal cut; mutually exclusive with ``cuts``.
             cuts: ``"all"`` or explicit list for multi-cut Hamiltonian sweeps.
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
@@ -575,8 +578,12 @@ class MemoryCharacterizer:
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
             initial_psi: Optional initial state for Hamiltonian exact simulation.
+            initial_rho: Site-0 state after the initial evolution segment and before the first
+                intervention. Required for surrogate targets and unsupported for Hamiltonian or
+                process-tensor targets.
             parallel: Override parallelism for process-tensor/surrogate probing.
-            delay: Soft-reset slots ``(|0>, |0>)`` inserted at the causal break (Hamiltonian only).
+            delay: Conditioned-reset bridge length (Hamiltonian only). ``None`` uses the standard
+                causal break. Every nonnegative value uses the paper's separate boundary interventions.
             **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
 
         Returns:
@@ -586,8 +593,8 @@ class MemoryCharacterizer:
             TypeError: If a Hamiltonian is given without ``sim_params``.
             ValueError: If ``num_interventions`` is missing for a Hamiltonian target, both
                 ``cut`` and ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is
-                reused across multiple cuts, ``delay > 0`` on a process-tensor/surrogate
-                target, or ``delay > 0`` on a non-exact backend.
+                reused across multiple cuts, a conditioned-reset delay on a process-tensor/surrogate
+                target, or a conditioned-reset delay on a non-exact backend.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         if "intervention_mode" in probe_kwargs or "unitary_ensemble" in probe_kwargs:
@@ -600,8 +607,16 @@ class MemoryCharacterizer:
         resolved_style = normalize_style(intervention_style)
         resolved_probe_set = _coerce_probe_set(probe_set)
 
-        if delay > 0 and not _matches_hamiltonian(target):
-            msg = "delay > 0 is supported for Hamiltonian characterize() only."
+        if delay is not None and delay < 0:
+            msg = f"delay must be >= 0, got {delay}"
+            raise ValueError(msg)
+
+        if initial_rho is not None and (_matches_hamiltonian(target) or _matches_process_tensor(target)):
+            msg = "initial_rho is supported only for surrogate characterization."
+            raise ValueError(msg)
+
+        if delay is not None and not _matches_hamiltonian(target):
+            msg = "delay is supported for Hamiltonian characterize() only."
             raise ValueError(msg)
 
         if _matches_hamiltonian(target):
@@ -640,6 +655,7 @@ class MemoryCharacterizer:
                 n_futures=n_f,
                 rng=rng,
                 probe_set=resolved_probe_set,
+                initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
                 delay=delay,
@@ -654,6 +670,7 @@ class MemoryCharacterizer:
                 n_futures=n_f,
                 rng=rng,
                 probe_set=None,
+                initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
                 delay=delay,
@@ -770,13 +787,14 @@ class MemoryCharacterizer:
         n_futures: int,
         rng: Generator | None,
         probe_set: ProbeSet | None,
+        initial_rho: np.ndarray | None,
         parallel: bool | None,
         intervention_style: str,
-        delay: int = 0,
+        delay: int | None = None,
     ) -> CharacterizationResult:
         """Characterize a process tensor or surrogate via internal split-cut probing.
 
-        ``delay > 0`` is rejected in :meth:`characterize` before this path is reached.
+        A conditioned-reset ``delay`` is rejected in :meth:`characterize` before this path is reached.
 
         Returns:
             Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
@@ -790,7 +808,7 @@ class MemoryCharacterizer:
             n_futures=n_futures,
             rng=rng,
             probe_set=probe_set,
-            return_raw=True,
+            initial_rho=initial_rho,
             parallel=parallel if parallel is not None else self._execution.parallel,
             delay=delay,
             intervention_style=intervention_style,
@@ -811,7 +829,7 @@ class MemoryCharacterizer:
         probe_set: ProbeSet | None,
         initial_psi: np.ndarray | None,
         intervention_style: str,
-        delay: int = 0,
+        delay: int | None = None,
     ) -> CharacterizationResult:
         """Characterize a Hamiltonian via exact stochastic sequences and branch weights.
 
@@ -862,7 +880,6 @@ class MemoryCharacterizer:
                 cut=resolved_cut,
                 num_interventions=int(num_interventions),
                 probe_set=local_probe_set,
-                return_raw=True,
                 delay=delay,
             )
             parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)

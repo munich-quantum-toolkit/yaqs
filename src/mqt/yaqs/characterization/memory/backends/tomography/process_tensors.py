@@ -18,6 +18,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import DEFAULT_INITIAL_RHO0, encode_rho_pauli
 from ...shared.intervention_steps import AnyInterventionStep, build_intervention_operator
+from ...shared.probabilities import PROBABILITY_ATOL
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,6 +37,33 @@ class SupportsPredict(Protocol):
     ) -> NDArray[np.complex128]:
         """Predict the final reduced state for a sequence of interventions."""
         ...
+
+
+def _physicalize_prediction(rho_branch: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Match the established process-tensor prediction normalization policy.
+
+    Nonzero branches are Hermitized, projected onto the positive semidefinite cone, and
+    trace-normalized. A zero-probability branch remains the zero matrix because its
+    normalized conditional state is undefined.
+
+    Args:
+        rho_branch: Subnormalized final-system outcome branch.
+
+    Returns:
+        Physicalized final matrix, normalized when its projected trace is nonzero.
+    """
+    rho = np.asarray(rho_branch, dtype=np.complex128)
+    rho = 0.5 * (rho + rho.conj().T)
+    trace = np.trace(rho)
+    if abs(trace) > 1e-12:
+        rho /= trace
+    eigenvalues, eigenvectors = np.linalg.eigh(rho)
+    eigenvalues = np.clip(eigenvalues, 0.0, None)
+    rho = (eigenvectors * eigenvalues) @ eigenvectors.conj().T
+    projected_trace = np.trace(rho)
+    if abs(projected_trace) > 1e-15:
+        rho /= projected_trace
+    return rho
 
 
 def validate_initial_rho(
@@ -64,7 +92,7 @@ def validate_initial_rho(
 def convert_probe_callable(
     step: AnyInterventionStep,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
-    """Convert a probe-grid step to a CPTP map callable for :meth:`~SupportsPredict.predict`.
+    """Convert a probe-grid step to a CP map callable for :meth:`~SupportsPredict.predict`.
 
     Args:
         step: Structured dict step or measure/prepare ket pair.
@@ -107,8 +135,64 @@ def evaluate_probes(process_tensor: SupportsPredict, probe_set: ProbeSet) -> np.
     return pauli
 
 
-def encode_cptp_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
-    """Convert a CPTP map callable into its Choi matrix.
+def _evaluate_probes_with_weights(
+    contract_subnormalized_branch: Callable[
+        [list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]]], NDArray[np.complex128]
+    ],
+    probe_set: ProbeSet,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluate normalized final system responses and joint retained-outcome probabilities.
+
+    The subnormalized outcome branch is Hermitized and divided only by its trace; no nonlinear
+    PSD projection is applied. Consequently, multiplying the returned Pauli vector by its weight
+    exactly reconstructs the Pauli coefficients of that branch.
+
+    Args:
+        contract_subnormalized_branch: Bound method that contracts a subnormalized outcome branch.
+        probe_set: Sampled split-cut probes.
+
+    Returns:
+        Tuple ``(pauli_ixyz_ij, weights_ij)``. The Pauli array has shape
+        ``(n_pasts, n_futures, 4)`` and contains normalized final system responses.
+        The weights are joint retained-outcome probabilities from the corresponding
+        subnormalized outcome branches.
+
+    Raises:
+        ValueError: If a branch trace is not a valid probability or a near-zero-trace
+            branch has a nonzero subnormalized output.
+    """
+    n_p = len(probe_set.past_pairs)
+    n_f = len(probe_set.future_pairs)
+    pauli = np.empty((n_p, n_f, 4), dtype=np.float64)
+    weights = np.empty((n_p, n_f), dtype=np.float64)
+    for i in range(n_p):
+        for j in range(n_f):
+            steps = assemble_probe_sequence(probe_set, i, j)
+            interventions = [convert_probe_callable(step) for step in steps]
+            rho_subnormalized = contract_subnormalized_branch(interventions)
+            rho_hermitian = 0.5 * (rho_subnormalized + rho_subnormalized.conj().T)
+            trace = np.trace(rho_hermitian)
+            weight = float(trace.real)
+            if not np.isfinite(weight) or weight < -PROBABILITY_ATOL or weight > 1.0 + PROBABILITY_ATOL:
+                msg = (
+                    f"Process-tensor branch trace must be a probability in [0, 1], got {weight}. "
+                    "Direct-MPO compression or tomography error can make a reconstructed process tensor "
+                    "nonphysical. For a noiseless process, increase max_bond_dim, set max_bond_dim=None, or "
+                    "use return_type='dense'; for sampled tomography, improve the reconstruction."
+                )
+                raise ValueError(msg)
+            weight = float(np.clip(weight, 0.0, 1.0))
+            if weight <= 1e-12 and np.linalg.norm(rho_hermitian) > 1e-10:
+                msg = "Process-tensor branch has near-zero trace but a nonzero subnormalized output."
+                raise ValueError(msg)
+            normalized = np.eye(2, dtype=np.complex128) / 2.0 if weight <= 0.0 else rho_hermitian / weight
+            weights[i, j] = weight
+            pauli[i, j] = encode_rho_pauli(normalized)
+    return pauli, weights
+
+
+def encode_map_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Convert a single-qubit map callable into its Choi matrix.
 
     Args:
         emap: Callable implementing a single-qubit map ``rho -> emap(rho)``.
@@ -193,7 +277,7 @@ def _validate_cut(cut: int, num_interventions: int) -> None:
 def _unfuse_slot_index(fused: int, *, out_first: bool = True) -> tuple[int, int]:
     """Split a fused 4-index Choi leg into ``(output, input)`` qubit indices.
 
-    ``encode_cptp_choi`` uses ``kron(output, input)`` so ``f = 2 * out + in`` by default.
+    ``encode_map_choi`` uses ``kron(output, input)`` so ``f = 2 * out + in`` by default.
 
     Returns:
         Tuple ``(output_index, input_index)`` each in ``{0, 1}``.
@@ -412,22 +496,32 @@ class DenseProcessTensor:
             weight_tol=weight_tol,
         )
 
-    def _predict_raw(
+    def _contract_subnormalized_branch(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Contract the process tensor with interventions without physicalization.
+        """Contract a subnormalized outcome branch without physicalization.
 
         Args:
-            interventions: List of CPTP maps, one per step.
+            interventions: List of CP intervention maps, one per step.
 
         Returns:
-            Raw 2x2 complex matrix from the process-tensor contraction (not guaranteed physical).
+            Subnormalized final-system ``2 x 2`` matrix from the process-tensor contraction.
+
+        Raises:
+            ValueError: If the number of interventions does not match the process-tensor length.
         """
         k_steps = len(interventions)
+        num_steps = self._num_interventions()
+        if k_steps != num_steps:
+            msg = (
+                f"DenseProcessTensor expects {num_steps} interventions for "
+                f"num_interventions={num_steps}, got {k_steps}."
+            )
+            raise ValueError(msg)
         if k_steps == 0:
             return np.asarray(self.upsilon, dtype=np.complex128).reshape(2, 2).copy()
-        past_list = [encode_cptp_choi(emap) for emap in interventions]
+        past_list = [encode_map_choi(emap) for emap in interventions]
         past_total = past_list[0]
         for p in past_list[1:]:
             past_total = np.kron(past_total, p)
@@ -443,39 +537,13 @@ class DenseProcessTensor:
         """Predict the final reduced state for a sequence of interventions.
 
         Args:
-            interventions: List of CPTP maps, one per step.
+            interventions: List of CP intervention maps, one per step.
 
         Returns:
-            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+            Physicalized 2x2 matrix, trace-normalized for a nonzero branch.
 
-        Raises:
-            ValueError: If the number of interventions does not match the process-tensor length.
         """
-        num_steps = self._num_interventions()
-        if len(interventions) != num_steps:
-            msg = (
-                f"DenseProcessTensor expects {num_steps} interventions for "
-                f"num_interventions={num_steps}, got {len(interventions)}."
-            )
-            raise ValueError(msg)
-        rho = self._predict_raw(interventions)
-
-        # Hermitize
-        rho = 0.5 * (rho + rho.conj().T)
-
-        # Normalize trace (if non-negligible)
-        tr = np.trace(rho)
-        if abs(tr) > 1e-12:
-            rho /= tr
-
-        # PSD projection
-        w, eig_vecs = np.linalg.eigh(rho)
-        w = np.clip(w, 0.0, None)
-        rho = (eig_vecs * w) @ eig_vecs.conj().T
-        tr2 = np.trace(rho)
-        if abs(tr2) > 1e-15:
-            rho /= tr2
-        return rho
+        return _physicalize_prediction(self._contract_subnormalized_branch(interventions))
 
     def _num_interventions_for_probe(self) -> int:
         return self._num_interventions()
@@ -490,6 +558,17 @@ class DenseProcessTensor:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
         return evaluate_probes(self, probe_set)
+
+    def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate normalized final system responses with joint retained-outcome probabilities.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` derived from subnormalized outcome branches.
+        """
+        return _evaluate_probes_with_weights(self._contract_subnormalized_branch, probe_set)
 
     def qmi(
         self,
@@ -694,39 +773,37 @@ class MPOProcessTensor(MPO):
         """
         return evaluate_probes(self, probe_set)
 
-    def predict(
+    def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate normalized final system responses with joint retained-outcome probabilities.
+
+        Uses native MPO contractions and does not densify the process tensor.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` derived from subnormalized outcome branches.
+        """
+        return _evaluate_probes_with_weights(self._contract_subnormalized_branch, probe_set)
+
+    def _contract_subnormalized_branch(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Predict the final reduced state for a sequence of interventions.
+        """Contract a subnormalized outcome branch without physicalization.
 
         Args:
-            interventions: List of CPTP maps, one per past leg.
+            interventions: List of intervention maps, one per process-tensor leg.
 
         Returns:
-            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+            Subnormalized final ``2 x 2`` matrix.
 
         Raises:
-            ValueError: If the interventions list is empty or length mismatches the process tensor.
+            ValueError: If the interventions list is empty or its length mismatches the process tensor.
         """
         if not interventions:
             if self.length == 1:
-                reduced = self.partial_trace_sites([0])
-                rho = reduced.to_matrix()
-                rho = 0.5 * (rho + rho.conj().T)
-                tr = np.trace(rho)
-                if abs(tr) > 1e-12:
-                    rho /= tr
-                else:
-                    rho = np.eye(2, dtype=np.complex128) / 2.0
-                w, eig_vecs = np.linalg.eigh(rho)
-                w = np.clip(w, 0.0, None)
-                rho = (eig_vecs * w) @ eig_vecs.conj().T
-                tr = np.trace(rho)
-                if abs(tr) > 1e-12:
-                    rho /= tr
-                return rho.astype(np.complex128, copy=False)
-
+                return self.partial_trace_sites([0]).to_matrix()
             msg = "interventions list must be non-empty."
             raise ValueError(msg)
 
@@ -738,35 +815,29 @@ class MPOProcessTensor(MPO):
             )
             raise ValueError(msg)
 
-        # Work on a copy so the original MPOProcessTensor remains unchanged.
         work = MPO()
         work.length = self.length
         work.physical_dimension = self.physical_dimension
-        work.tensors = [t.copy() for t in self.tensors]
-
-        # Apply local Choi operators (with transpose as in DenseProcessTensor.predict) on past sites.
+        work.tensors = [tensor.copy() for tensor in self.tensors]
         for t, emap in enumerate(interventions):
-            j_choi = encode_cptp_choi(emap)  # 4x4
+            j_choi = encode_map_choi(emap)
             work.apply_local_operator(site=t + 1, op=j_choi.T, left_action=True)
+        return work.partial_trace_sites([0]).to_matrix()
 
-        # Trace out all past sites, keep only the final site (index 0).
-        reduced = work.partial_trace_sites([0])
+    def predict(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Predict the final reduced state for a sequence of interventions.
 
-        # The remaining MPO encodes a single 2x2 matrix on the final leg.
-        rho = reduced.to_matrix()
+        Args:
+            interventions: List of CP intervention maps, one per past leg.
 
-        # Match DenseProcessTensor.predict: Hermitian, PSD, trace-1.
-        rho = 0.5 * (rho + rho.conj().T)
-        tr = np.trace(rho)
-        if abs(tr) > 1e-12:
-            rho /= tr
-        w, eig_vecs = np.linalg.eigh(rho)
-        w = np.clip(w, 0.0, None)
-        rho = (eig_vecs * w) @ eig_vecs.conj().T
-        tr2 = np.trace(rho)
-        if abs(tr2) > 1e-15:
-            rho /= tr2
-        return rho
+        Returns:
+            Physicalized 2x2 matrix, trace-normalized for a nonzero branch.
+
+        """
+        return _physicalize_prediction(self._contract_subnormalized_branch(interventions))
 
     def qmi(
         self,

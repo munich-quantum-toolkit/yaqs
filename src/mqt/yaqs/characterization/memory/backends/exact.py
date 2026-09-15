@@ -59,15 +59,14 @@ def _branch_weights_from_simulation(
     *,
     n_pasts: int,
     n_futures: int,
-    cut: int,
 ) -> np.ndarray:
-    """Compute branch weights from simulated step probabilities through ``cut``.
+    """Read joint probabilities of retained outcomes from simulation diagnostics.
 
     Args:
-        simulation_diagnostics: Per-sequence diagnostic dicts with ``step_probs`` (flat grid order).
+        simulation_diagnostics: Per-sequence diagnostic dicts with ``cumulative_weight_final``
+            (flat grid order).
         n_pasts: Number of past probe branches.
         n_futures: Number of future probe branches.
-        cut: Causal cut index.
 
     Returns:
         Branch-weight array of shape ``(n_pasts, n_futures)``.
@@ -75,14 +74,13 @@ def _branch_weights_from_simulation(
     w = np.zeros((n_pasts, n_futures), dtype=np.float64)
     for past_idx in range(n_pasts):
         for future_idx in range(n_futures):
-            probs = simulation_diagnostics[past_idx * n_futures + future_idx]["step_probs"]
-            n = min(cut, len(probs))
-            w[past_idx, future_idx] = float(np.prod(probs[:n])) if n else 1.0
+            diagnostic = simulation_diagnostics[past_idx * n_futures + future_idx]
+            w[past_idx, future_idx] = float(diagnostic["cumulative_weight_final"])
     return w
 
 
 class ExactBackend:
-    """Exact MCWF/TJM backend for weighted split-cut probe evaluation.
+    """Exact MCWF/TJM backend for split-cut responses and retained-outcome probabilities.
 
     Builds a reusable static MCWF context internally and dispatches sequence
     simulation via :func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
@@ -137,14 +135,14 @@ class ExactBackend:
             return self._execution
         return merge_execution_config(self._execution, parallel=parallel)
 
-    def evaluate_probes_weighted(
+    def evaluate_probes_with_weights(
         self,
         probe_set: ProbeSet,
         *,
         intervention_steps_list: list[list[Any]] | None = None,
         _execution: ExecutionConfig | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate weighted probe responses via exact simulation.
+        """Evaluate normalized final-system responses and retained-outcome probabilities.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -152,9 +150,10 @@ class ExactBackend:
             _execution: Optional one-shot execution override for this evaluation.
 
         Returns:
-            Tuple ``(pauli_xyz_ij, weights_ij)``.
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` containing normalized Pauli responses and
+            joint probabilities of the retained outcomes.
         """
-        pauli_xyz, weights_ij, _simulation_diagnostics = simulate_exact(
+        pauli_ixyz, weights_ij, _simulation_diagnostics = simulate_exact(
             probe_set=probe_set,
             operator=self.operator,
             sim_params=self.sim_params,
@@ -166,10 +165,10 @@ class ExactBackend:
             intervention_steps_list=intervention_steps_list,
             static_ctx=self._static_ctx,
         )
-        return pauli_xyz, weights_ij
+        return pauli_ixyz, weights_ij
 
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate unweighted Pauli probe responses.
+        """Evaluate normalized final-system Pauli responses.
 
         Args:
             probe_set: Sampled split-cut probes.
@@ -177,8 +176,8 @@ class ExactBackend:
         Returns:
             Array of shape ``(n_pasts, n_futures, 4)``.
         """
-        pauli_xyz_ij, _weights_ij = self.evaluate_probes_weighted(probe_set)
-        return pauli_xyz_ij
+        pauli_ixyz_ij, _weights_ij = self.evaluate_probes_with_weights(probe_set)
+        return pauli_ixyz_ij
 
 
 def simulate_exact(
@@ -210,8 +209,8 @@ def simulate_exact(
 
     Returns:
         ``(pauli_ij, weights_ij, simulation_diagnostics)`` where ``pauli_ij`` has shape
-        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds break weights through cut ``c``,
-        and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
+        ``(n_pasts, n_futures, 4)``, ``weights_ij`` holds joint probabilities of the retained
+        outcomes, and ``simulation_diagnostics[i * n_f + j]`` matches the sequence order of the grid.
 
     Raises:
         TypeError: If the backend output is not an ndarray.
@@ -244,6 +243,6 @@ def simulate_exact(
     if not isinstance(final_packed, np.ndarray):
         msg = "Expected ndarray output from exact simulation."
         raise TypeError(msg)
-    pauli_xyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
-    w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f, cut=int(probe_set.cut))
-    return pauli_xyz, w, simulation_diagnostics
+    pauli_ixyz = decode_packed_pauli_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 4)
+    w = _branch_weights_from_simulation(simulation_diagnostics, n_pasts=n_p, n_futures=n_f)
+    return pauli_ixyz, w, simulation_diagnostics

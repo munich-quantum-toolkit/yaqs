@@ -13,6 +13,7 @@ Submodules (import explicitly; symbols are not re-exported here):
 - :mod:`.interventions` — ``InterventionMap``, ``encode_interventions``, sampling helpers
 - :mod:`.intervention_steps` — probe-step parsing and backend application
 - :mod:`.metrics` — ``compute_trace_distance``, ``mean_frobenius_mse_rho8``, …
+- :mod:`.probabilities` — shared numerical tolerance for branch probabilities
 - :mod:`.utils` — site-0 MCWF/TJM evolution, ``make_mcwf_static_context``, …
 
 Named ``shared`` (not ``core``) to avoid clashing with :mod:`mqt.yaqs.core`.

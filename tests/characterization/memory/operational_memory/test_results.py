@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pytest
@@ -21,6 +22,25 @@ from mqt.yaqs.characterization.memory.operational_memory.results import (
     pack_result,
     parse_cut_result,
 )
+
+
+def _result_output(*, entropy: float, modes: float, singular_values: np.ndarray) -> dict[str, Any]:
+    """Build a complete identity-matrix result payload for result-container tests.
+
+    Returns:
+        Result payload with compact-SVD fields.
+    """
+    response_matrix = np.diag(singular_values)
+    spectrum = compute_spectrum(response_matrix, discarded_weight_threshold=None)
+    return {
+        "entropy": entropy,
+        "modes": modes,
+        "singular_values": singular_values,
+        "singular_values_full": spectrum["singular_values_full"],
+        "left_singular_vectors": spectrum["left_singular_vectors"],
+        "right_singular_vectors": spectrum["right_singular_vectors"],
+        "response_matrix": response_matrix,
+    }
 
 
 def test_modes_equals_exp_entropy() -> None:
@@ -70,10 +90,12 @@ def test_merge_cut_results_multi_cut_summary() -> None:
     """merge_cut_results builds a multi-cut CharacterizationResult."""
     parts = {
         1: pack_result(
-            {"entropy": 0.5, "modes": 1.6, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)}, cut=1
+            _result_output(entropy=0.5, modes=1.6, singular_values=np.array([1.0])),
+            cut=1,
         ),
         2: pack_result(
-            {"entropy": 0.8, "modes": 2.2, "singular_values": np.array([1.0, 0.5]), "response_matrix": np.eye(2)}, cut=2
+            _result_output(entropy=0.8, modes=2.2, singular_values=np.array([1.0, 0.5])),
+            cut=2,
         ),
     }
     merged = merge_cut_results(parts)
@@ -89,11 +111,11 @@ def test_entropy_requires_cut_when_multiple_stored() -> None:
     """Accessors require an explicit cut for multi-cut results."""
     merged = merge_cut_results({
         1: pack_result(
-            {"entropy": 0.1, "modes": 1.1, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+            _result_output(entropy=0.1, modes=1.1, singular_values=np.array([1.0])),
             cut=1,
         ),
         2: pack_result(
-            {"entropy": 0.2, "modes": 1.2, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+            _result_output(entropy=0.2, modes=1.2, singular_values=np.array([1.0])),
             cut=2,
         ),
     })
@@ -105,7 +127,7 @@ def test_resolve_cut_missing_raises() -> None:
     """Explicit cut values missing from by_cut raise ValueError."""
     merged = merge_cut_results({
         1: pack_result(
-            {"entropy": 0.1, "modes": 1.1, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+            _result_output(entropy=0.1, modes=1.1, singular_values=np.array([1.0])),
             cut=1,
         ),
     })
@@ -124,6 +146,8 @@ def test_parse_cut_result_stores_truncated_singular_values() -> None:
             "modes": out["modes"],
             "singular_values": out["singular_values"],
             "singular_values_full": out["singular_values_full"],
+            "left_singular_vectors": out["left_singular_vectors"],
+            "right_singular_vectors": out["right_singular_vectors"],
             "response_matrix": m,
         },
         cut=1,
@@ -131,6 +155,22 @@ def test_parse_cut_result_stores_truncated_singular_values() -> None:
     assert packed.singular_values.size == out["singular_values"].size
     assert packed.singular_values.size < full.size
     np.testing.assert_allclose(packed.singular_values, out["singular_values"])
+
+
+def test_characterization_result_exposes_full_compact_svd() -> None:
+    """Public SVD accessors preserve the paper's future-row and history-column orientation."""
+    response_matrix = np.vstack((np.diag([10.0, 5.0, 1e-6]), np.zeros((1, 3))))
+    out = compute_spectrum(response_matrix, discarded_weight_threshold=1e-4)
+    out["response_matrix"] = response_matrix
+    result = pack_result(out, cut=2)
+
+    left = result.left_singular_vectors()
+    singular_values = result.singular_values_full()
+    right = result.right_singular_vectors()
+    assert result.singular_values().size < singular_values.size
+    assert left.shape == (response_matrix.shape[0], singular_values.size)
+    assert right.shape == (response_matrix.shape[1], singular_values.size)
+    np.testing.assert_allclose((left * singular_values) @ right.conj().T, response_matrix)
 
 
 def test_characterize_multiple_cuts_smoke() -> None:
@@ -154,7 +194,7 @@ def test_characterize_multiple_cuts_smoke() -> None:
 def test_probes_raises_when_not_recorded() -> None:
     """probes() requires probe_set data on the stored cut."""
     packed = pack_result(
-        {"entropy": 0.0, "modes": 1.0, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+        _result_output(entropy=0.0, modes=1.0, singular_values=np.array([1.0])),
         cut=1,
     )
     with pytest.raises(ValueError, match="No probe data recorded for cut=1"):
@@ -164,7 +204,7 @@ def test_probes_raises_when_not_recorded() -> None:
 def test_summary_single_cut_format() -> None:
     """Single-cut results use the compact one-line summary."""
     packed = pack_result(
-        {"entropy": 0.5, "modes": 1.6, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+        _result_output(entropy=0.5, modes=1.6, singular_values=np.array([1.0])),
         cut=2,
     )
     assert packed.summary() == "cut=2: S_V=0.5000, modes=1.600"
@@ -174,11 +214,11 @@ def test_merge_cut_results_rejects_multi_cut_parts() -> None:
     """merge_cut_results expects each partial result to hold one cut."""
     multi = merge_cut_results({
         1: pack_result(
-            {"entropy": 0.1, "modes": 1.1, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+            _result_output(entropy=0.1, modes=1.1, singular_values=np.array([1.0])),
             cut=1,
         ),
         2: pack_result(
-            {"entropy": 0.2, "modes": 1.2, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+            _result_output(entropy=0.2, modes=1.2, singular_values=np.array([1.0])),
             cut=2,
         ),
     })
@@ -191,7 +231,7 @@ def test_merge_cut_results_rejects_cut_key_mismatch() -> None:
     with pytest.raises(ValueError, match="does not match partial result cut"):
         merge_cut_results({
             2: pack_result(
-                {"entropy": 0.1, "modes": 1.1, "singular_values": np.array([1.0]), "response_matrix": np.eye(2)},
+                _result_output(entropy=0.1, modes=1.1, singular_values=np.array([1.0])),
                 cut=1,
             ),
         })

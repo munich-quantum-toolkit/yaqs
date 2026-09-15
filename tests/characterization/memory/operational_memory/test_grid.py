@@ -117,7 +117,7 @@ def test_assemble_probe_grid_internal_length_mismatch(monkeypatch: pytest.Monkey
     rng = np.random.default_rng(11)
     probe_set = sample_probes(cut=2, num_interventions=3, n_pasts=2, n_futures=2, rng=rng)
 
-    def _short_sequence(probe: ProbeSet, i: int, j: int, *, delay: int = 0) -> list:
+    def _short_sequence(probe: ProbeSet, i: int, j: int, *, delay: int | None = None) -> list:
         del probe, i, j, delay
         return []
 
@@ -135,17 +135,29 @@ def test_compute_delayed_length_rejects_negative() -> None:
         compute_delayed_length(num_interventions=5, delay=-1)
 
 
-def test_assemble_probe_sequence_delay_zero_explicit() -> None:
-    """delay=0 is the default split-cut assembler."""
+def test_assemble_probe_sequence_delay_zero_uses_separate_boundaries() -> None:
+    """Explicit delay zero keeps the paper protocol's two boundary interventions."""
     rng = np.random.default_rng(1)
-    probe_set = sample_probes(cut=2, num_interventions=4, n_pasts=3, n_futures=2, rng=rng)
-    assert assemble_probe_sequence(probe_set, 0, 1, delay=0) == assemble_probe_sequence(probe_set, 0, 1)
+    cut, k = 2, 4
+    probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=3, n_futures=2, rng=rng)
+    standard = assemble_probe_sequence(probe_set, 0, 1)
+    conditioned = assemble_probe_sequence(probe_set, 0, 1, delay=0)
+    left_boundary = conditioned[cut - 1]
+    right_boundary = conditioned[cut]
+
+    assert len(standard) == k
+    assert len(conditioned) == k + 1
+    np.testing.assert_allclose(left_boundary[0], probe_set.past_cut_meas[0])
+    np.testing.assert_allclose(left_boundary[1], np.array([1.0, 0.0]))
+    np.testing.assert_allclose(right_boundary[0], np.array([1.0, 0.0]))
+    np.testing.assert_allclose(right_boundary[1], probe_set.future_prep_cut[1])
 
 
-def test_assemble_probe_grid_inserts_reset_slots() -> None:
-    """delay>0 lengthens sequences by delay+1 and adds (|0>,|0>) bridge slots."""
+@pytest.mark.parametrize("delay", [0, 2])
+def test_assemble_probe_grid_inserts_conditioned_reset_bridge(delay: int) -> None:
+    """Every explicit delay uses separate boundaries around its reset slots."""
     rng = np.random.default_rng(9)
-    cut, k, delay = 3, 5, 2
+    cut, k = 3, 5
     probe_set = sample_probes(cut=cut, num_interventions=k, n_pasts=2, n_futures=2, rng=rng)
     delayed_pairs, _, _ = assemble_probe_grid(probe_set, delay=delay)
     expected_len = compute_delayed_length(num_interventions=k, delay=delay)
@@ -153,10 +165,12 @@ def test_assemble_probe_grid_inserts_reset_slots() -> None:
     assert all(len(seq) == expected_len for seq in delayed_pairs)
     z0 = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for seq in delayed_pairs:
-        reset_pairs = sum(
-            1 for step in seq if isinstance(step, tuple) and np.allclose(step[0], z0) and np.allclose(step[1], z0)
-        )
-        assert reset_pairs == delay
+        left_boundary = seq[cut - 1]
+        bridge = seq[cut : cut + delay]
+        right_boundary = seq[cut + delay]
+        np.testing.assert_allclose(left_boundary[1], z0)
+        assert all(np.allclose(step[0], z0) and np.allclose(step[1], z0) for step in bridge)
+        np.testing.assert_allclose(right_boundary[0], z0)
 
 
 def test_assemble_probe_sequence_rejects_mismatched_cut_arrays_with_delay() -> None:

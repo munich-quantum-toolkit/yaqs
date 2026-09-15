@@ -177,6 +177,7 @@ result = mc.characterize(
 )
 sv = result.singular_values(cut)
 v = result.response_matrix(cut)
+# v.shape == (4 * n_futures, n_pasts), with I, X, Y, Z rows per future probe
 
 fig, axes = plt.subplots(1, 2, figsize=(8, 3))
 axes[0].semilogy(sv, "o-")
@@ -185,9 +186,9 @@ axes[0].set_ylabel("singular value")
 axes[0].set_title(rf"Memory spectrum: $S_V(c={cut})={result.entropy(cut):.2f}$")
 
 im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
-axes[1].set_title(rf"$|\widetilde{{V}}(c)|$, $R(c)={result.modes(cut):.1f}$")
-axes[1].set_xlabel("future probe")
-axes[1].set_ylabel("past probe")
+axes[1].set_title(rf"$|V(c)|$, $R(c)={result.modes(cut):.1f}$")
+axes[1].set_xlabel("history")
+axes[1].set_ylabel("future probe and response channel")
 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 fig.tight_layout()
 ```

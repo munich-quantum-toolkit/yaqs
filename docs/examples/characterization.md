@@ -21,9 +21,8 @@ relevant for future probe responses, evaluated at a temporal cut $c$ in a
 sequence of interventions.
 
 Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
-probe **operational memory**: assemble the weighted **response matrix**
-$\widetilde{V}(c)$, then read $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode
-spectrum.
+probe **operational memory**: assemble the **response matrix** $V(c)$, then read
+$S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
 
 Alternatively, build a process tensor (default: direct MPO) and call
 `compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the
@@ -49,7 +48,7 @@ psi0 = make_zero_psi(length)
 Throughout, `num_interventions` is the probe-sequence length $k$ and `cut` is
 the causal-break index $c$ (the break sits at step $c-1$; future legs use steps
 $c+1,\ldots,k$). Use $k>1$ and an interior cut so both past and future probe
-legs contribute to $\widetilde{V}(c)$.
+legs contribute to $V(c)$.
 
 ## Characterize with the Hamiltonian backend
 
@@ -78,9 +77,9 @@ axes[0].set_title(r"Memory spectrum at cut $c=4$")
 
 v = ham_result.response_matrix(cut)
 im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
-axes[1].set_title(r"$|\widetilde{V}(c)|$")
-axes[1].set_xlabel("future probe index")
-axes[1].set_ylabel("past probe index")
+axes[1].set_title(r"$|V(c)|$")
+axes[1].set_xlabel("history index")
+axes[1].set_ylabel("future probe and response channel")
 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 fig.suptitle(
     rf"$S_V(c={cut})={ham_result.entropy(cut):.3f}$, "
@@ -95,14 +94,17 @@ sizes, or set `n_pasts` / `n_futures` explicitly.
 
 ### Reading `CharacterizationResult`
 
-| Access                      | Meaning                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `result.entropy(c)`         | Environmental memory entropy $S_V(c)$                                        |
-| `result.modes(c)`           | Effective memory modes $R(c)=\exp(S_V(c))$                                   |
-| `result.singular_values(c)` | Mode spectrum at cut $c$ (how many independent past branches remain visible) |
-| `result.response_matrix(c)` | Cross-cut memory matrix $\widetilde{V}(c)$ (see theory below)                |
-| `result.probes(c)`          | Probe arrays used at cut $c$ (for reuse or inspection)                       |
-| `result.summary()`          | Human-readable table of entropies and modes                                  |
+| Access                             | Meaning                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `result.entropy(c)`                | Environmental memory entropy $S_V(c)$                                      |
+| `result.modes(c)`                  | Effective memory modes $R(c)=\exp(S_V(c))$                                 |
+| `result.singular_values(c)`        | Resolution-retained spectrum used to compute $S_V(c)$                      |
+| `result.singular_values_full(c)`   | Every compact-SVD value, including zero and unresolved tail values         |
+| `result.left_singular_vectors(c)`  | All compact-SVD future-response directions as columns                      |
+| `result.right_singular_vectors(c)` | All compact-SVD history-combination directions as columns                  |
+| `result.response_matrix(c)`        | $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns     |
+| `result.probes(c)`                 | Probe arrays used at cut $c$ (for reuse or inspection)                     |
+| `result.summary()`                 | Human-readable table of entropies and modes                                |
 
 (memory-theory)=
 
@@ -118,16 +120,30 @@ The split-cut protocol:
    $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
 2. Insert a **causal break** at step $c$: measure on the past side and prepare
    on the future side while the environment continues to evolve.
-3. For each grid entry, simulate the open system, record probe weights and the
-   output Pauli vector
-   $\mathbf{r}=(\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the weighted probe responses into $\widetilde{V}(c)$ and compute
-   $S_V(c)$ from the normalized mode spectrum.
+3. For each grid entry, simulate the open system, record the joint probability
+   of the retained outcomes and the normalized final-system Pauli response
+   $\mathbf{r}=(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
+4. Assemble the sampled response coefficients into $V(c)$. Its rows contain one
+   $(I,X,Y,Z)$ block per future probe, its columns label conditioned histories,
+   and $V_{(j,I),i}=w_{ij}$ for normalized output states. Compute $S_V(c)$ from
+   the normalized mode spectrum.
 
-Hamiltonian `characterize` obtains weights from simulated intervention
-probabilities through cut $c$ (MCWF or TJM/MPS, per `representation`). Surrogate
-and exact-reference backends use the same probing protocol with analytic weights
-on the reference probe path.
+For an SVD $V=U\Sigma W^\dagger$, each column pair associated with a retained,
+nonzero singular value defines a response mode: the column of $U$ gives the
+future-response direction, while the column of $W$ gives a combination of
+conditioned histories. With `U = result.left_singular_vectors(c)`,
+`s = result.singular_values_full(c)`, and
+`W = result.right_singular_vectors(c)`, the full factors satisfy
+`V = U @ np.diag(s) @ W.conj().T`. The full factors also contain directions
+paired with exact zeros or an unresolved numerical tail. Do not interpret those
+directions as resolved memory modes. Singular vectors are also not unique inside
+a degenerate singular subspace.
+
+Hamiltonian `characterize` obtains joint probabilities of the retained outcomes
+from the simulated intervention sequence (MCWF or TJM/MPS, per
+`representation`). Process-tensor backends obtain the same probabilities from
+the trace of each subnormalized contraction, while surrogates estimate them from
+their predicted pre-intervention reduced states.
 
 ### Coupling strength and memory
 
@@ -176,20 +192,37 @@ fig.tight_layout()
 
 Pass `probe_set=` from a Hamiltonian run so surrogate or exact-reference
 backends evaluate the **same** probe ensemble ({doc}`memory_surrogate`).
+Surrogate characterization also requires `initial_rho=`: the site-0 density
+matrix after the schedule's initial evolution segment and before its first
+intervention. For a surrogate trained against a reference process tensor, use
+that tensor's `initial_rho`.
 
 (reset-delay)=
 
-## Memory persistence: reset delay at the causal break
+## Memory persistence: conditioned reset delay
 
-Pass `delay=N` to insert $N$ soft-reset slots
-$(\lvert 0\rangle, \lvert 0\rangle)$ at the causal cut while the **environment**
-keeps evolving. Extra reset time lets the environment decouple from the past
-before future controls act, so $S_V(c)$ often **decreases** at strong
-probe-environment coupling (weaker coupling can show the opposite trend).
+Pass `delay=N`, for any $N\geq0$, to use the conditioned-reset protocol from
+Figure 5 of the response-matrix paper. The intervention at the history boundary
+applies the selected measurement and prepares $\lvert0\rangle$. YAQS then
+inserts $N$ selected-zero reset slots $(\lvert0\rangle,\lvert0\rangle)$ and
+applies a second selected-zero measurement before the sampled future
+preparation. The environment keeps evolving between these interventions. The
+selected history outcome and every selected-zero outcome contribute to the
+complete branch probability.
 
-The logical `num_interventions` and `cut` are unchanged; the physical sequence
-length becomes `num_interventions + delay + 1`. Reuse the same `probe_set` when
-sweeping `delay`. `delay > 0` is supported for Hamiltonian characterize only.
+The two boundary interventions remain separate at `delay=0`. The physical
+sequence length is therefore `num_interventions + delay + 1` for every explicit
+delay. Omitting `delay` uses the standard one-step causal break
+`(selected_history_measurement, sampled_future_preparation)` instead. This keeps
+ordinary characterization aligned across Hamiltonian, process-tensor, and
+surrogate backends.
+
+Extra reset time lets the environment decouple from the past before future
+controls act, so $S_V(c)$ often decreases at strong probe-environment coupling.
+Weaker coupling can show a nonmonotonic profile. The example below uses a
+smaller probe grid and shorter sequences than the paper campaign, but it uses
+the same conditioned-reset geometry. Reuse the same `probe_set` across the delay
+sweep. An explicit `delay` is supported for Hamiltonian characterization only.
 
 ```{code-cell} ipython3
 delay_length = 6
@@ -250,7 +283,12 @@ k = 3
 cut_pt = 2
 timesteps = [0.1] * (k + 1)
 
-pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
+pt_mpo = mc.build_process_tensor(
+    ham,
+    params,
+    timesteps=timesteps,
+    max_bond_dim=None,
+)
 pt_dense = mc.build_process_tensor(
     ham,
     params,
@@ -265,7 +303,7 @@ print(
     f"dense={s_dense['entropy']:.4f}, schmidt_rank={s_mpo['schmidt_rank']}"
 )
 
-# Same process tensor also supports operational memory via characterize:
+# The same exact process tensor also supports operational memory via characterize:
 pt_result = mc.characterize(
     pt_mpo,
     cut=cut_pt,
@@ -279,10 +317,14 @@ print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.
 
 Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for
 small $k$. Use `return_type="dense"` when you need noise. The default
-`max_bond_dim=64` keeps direct construction scalable; pass `max_bond_dim=None`
-for an exact noiseless MPO. `characterize(pt, ...)` still builds $S_V$ from
-probe responses (native MPO `evaluate_probes`, without densifying for the
-V-matrix path).
+`max_bond_dim=64` keeps direct construction scalable, but direct-MPO compression
+is not guaranteed to preserve positivity or causal normalization. Operational
+characterization requires every contracted branch trace to be a probability in
+$[0,1]$ and rejects a process tensor that violates this condition. Increase
+`max_bond_dim`, set `max_bond_dim=None` for an exact noiseless MPO, or use a
+sufficiently accurate dense reconstruction when you need $S_V$ from a process
+tensor. `characterize(pt, ...)` uses native MPO `evaluate_probes_with_weights`
+without densifying the V-matrix path.
 
 ## Related topics
 

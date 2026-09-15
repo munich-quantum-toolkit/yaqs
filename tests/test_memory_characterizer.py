@@ -189,7 +189,14 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
         train_kwargs={"epochs": 1, "batch_size": 4},
         model_kwargs={"d_model": 32, "nhead": 2, "num_layers": 1, "dim_ff": 64},
     )
-    out = mc.characterize(model, cut=1, num_interventions=1, n_pasts=4, n_futures=4)
+    out = mc.characterize(
+        model,
+        cut=1,
+        num_interventions=1,
+        n_pasts=4,
+        n_futures=4,
+        initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
+    )
     assert out.entropy(1) >= 0.0
 
 
@@ -219,6 +226,15 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
     assert out.entropy(1) >= 0.0
+    with pytest.raises(ValueError, match="initial_rho is supported only for surrogate characterization"):
+        mc.characterize(
+            pt,
+            cut=1,
+            num_interventions=1,
+            n_pasts=1,
+            n_futures=1,
+            initial_rho=pt.initial_rho,
+        )
 
 
 def test_characterize_process_tensor_default_cut(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -272,9 +288,28 @@ def test_process_tensor_surrogate_characterize_singular_values_shape() -> None:
         n_pasts=4,
         n_futures=3,
         rng=np.random.default_rng(0),
+        initial_rho=np.eye(2, dtype=np.complex128) / 2.0,
     ).singular_values(2)
     assert sv.ndim == 1
     assert 1 <= sv.size <= min(4, 3 * 3)
+
+
+@requires_torch
+def test_process_tensor_surrogate_characterize_requires_initial_rho() -> None:
+    """Characterization does not guess the surrogate's post-evolution boundary state."""
+    model = ProcessTensorSurrogate(
+        d_e=32,
+        d_rho=8,
+        d_model=32,
+        nhead=4,
+        num_layers=1,
+        dim_ff=64,
+        dropout=0.0,
+        num_interventions=1,
+    )
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(ValueError, match="initial_rho is required for surrogate characterization"):
+        mc.characterize(model, cut=1, n_pasts=1, n_futures=1)
 
 
 def test_predict_process_tensor_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
@@ -446,7 +481,7 @@ def test_characterize_entropy_monotone_in_coupling(paper_params: AnalogSimParams
         )
         entropies.append(result.entropy(4))
     assert entropies[0] < 0.05
-    assert entropies[-1] > entropies[0] + 0.1
+    assert entropies[-1] > entropies[0] + 0.02
     assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
 
 
@@ -460,7 +495,7 @@ def test_paper_cut_vs_j_entropy_rises_with_coupling() -> None:
     s_j05 = _entropy_at_j(mc, cut=cut, j=0.5, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
     s_j2 = _entropy_at_j(mc, cut=cut, j=2.0, n_pasts=n_pasts, n_futures=n_futures, probe_set=probe_set)
     assert s_j0 < 0.01
-    assert s_j2 > s_j05 + 0.005
+    assert s_j2 > 10.0 * s_j05
 
 
 def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
@@ -488,17 +523,18 @@ def test_paper_finite_size_integrated_entropy_falls_with_bath() -> None:
         }
         return float(sum(ent.values()))
 
-    assert integrated_entropy(2) > integrated_entropy(3) + 0.0002
+    small_bath = integrated_entropy(2)
+    large_bath = integrated_entropy(3)
+    assert small_bath > 1.01 * large_bath
 
 
-def test_paper_modes_rank_rises_with_coupling() -> None:
-    """Smoke modes benchmark: effective rank grows with coupling at a fixed cut."""
+def test_paper_modes_and_spectrum_plot_data_shift_with_coupling() -> None:
+    """The public result provides the mode and spectrum data plotted in the paper."""
     mc = _paper_mc()
     cut = 2
     m_spectrum = 8
-    rank_tol = 1e-16
 
-    def effective_rank(j: float) -> int:
+    def plot_data(j: float) -> tuple[float, float]:
         probe_seed = _PAPER_SEED + 900_000 + 100_000 * cut + 100 * round(100 * j)
         probe_set = sample_probes(
             cut=cut,
@@ -518,19 +554,36 @@ def test_paper_modes_rank_rises_with_coupling() -> None:
             probe_set=probe_set,
             initial_psi=make_zero_psi(_PAPER_L),
         )
-        s = result.singular_values(cut)
-        return int(np.sum(s > rank_tol))
+        response_matrix = result.response_matrix(cut)
+        singular_values = result.singular_values_full(cut)
+        mode_weights = singular_values**2 / np.sum(singular_values**2)
+        retained_values = result.singular_values(cut)
+        retained_weights = retained_values**2 / np.sum(retained_values**2)
+        positive = retained_weights > 0.0
+        expected_entropy = float(-np.sum(retained_weights[positive] * np.log(retained_weights[positive])))
 
-    assert effective_rank(0.5) < effective_rank(2.0)
-    assert effective_rank(2.0) >= 4
+        assert response_matrix.shape == (4 * m_spectrum, m_spectrum)
+        assert np.all(np.isfinite(response_matrix))
+        assert np.all(np.isfinite(singular_values))
+        assert np.all(singular_values >= 0.0)
+        assert np.all(np.diff(singular_values) <= 0.0)
+        assert np.sum(mode_weights) == pytest.approx(1.0, abs=1e-12)
+        assert result.entropy(cut) == pytest.approx(expected_entropy, abs=1e-12)
+        assert result.modes(cut) == pytest.approx(math.exp(expected_entropy), abs=1e-12)
+        return result.modes(cut), float(np.sum(mode_weights[1:]))
+
+    weak_modes, weak_tail_weight = plot_data(0.5)
+    strong_modes, strong_tail_weight = plot_data(2.0)
+    assert strong_modes > weak_modes
+    assert strong_tail_weight > weak_tail_weight
 
 
-def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
-    """Smoke reset-delay benchmark: memory grows with delay at moderate coupling."""
+def test_paper_reset_delay_entropy_decreases_at_strong_coupling() -> None:
+    """A reduced Figure 5 sweep loses memory under a longer reset at strong coupling."""
     mc = _paper_mc()
-    cut = 4
-    k = 6
-    n_pasts = n_futures = 6
+    cut = 16
+    k = 21
+    n_pasts = n_futures = 8
     probe_set = sample_probes(
         cut=cut,
         num_interventions=k,
@@ -539,7 +592,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
         rng=np.random.default_rng(999_991),
         intervention_style="haar",
     )
-    ham = Hamiltonian.ising(length=_PAPER_L, J=1.0, g=_PAPER_G)
+    ham = Hamiltonian.ising(length=_PAPER_L, J=2.0, g=_PAPER_G)
     entropies: list[float] = []
     for delay in (0, 1, 2):
         result = mc.characterize(
@@ -554,8 +607,7 @@ def test_paper_reset_delay_entropy_nondecreasing_at_unit_coupling() -> None:
             initial_psi=make_zero_psi(_PAPER_L),
         )
         entropies.append(float(result.entropy(cut)))
-    assert entropies[-1] > entropies[0] + 0.001
-    assert all(entropies[i + 1] >= entropies[i] - 1e-4 for i in range(len(entropies) - 1))
+    assert all(entropies[i + 1] < entropies[i] for i in range(len(entropies) - 1))
 
 
 def test_characterize_delay_rejects_negative() -> None:
@@ -566,13 +618,17 @@ def test_characterize_delay_rejects_negative() -> None:
         mc.characterize(ham, _paper_params(), num_interventions=6, cut=4, delay=-1)
 
 
-def test_characterize_delay_rejects_process_tensor(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
+@pytest.mark.parametrize("delay", [0, 1])
+def test_characterize_delay_rejects_process_tensor(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    delay: int,
+) -> None:
     """Reset delay is supported for Hamiltonian characterize() only."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1, 0.1], return_type="dense")
-    with pytest.raises(ValueError, match="delay > 0 is supported for Hamiltonian"):
-        mc.characterize(pt, cut=1, num_interventions=2, delay=1)
+    with pytest.raises(ValueError, match="delay is supported for Hamiltonian"):
+        mc.characterize(pt, cut=1, num_interventions=2, delay=delay)
 
 
 def test_characterize_delay_reuses_prior_result_probes() -> None:

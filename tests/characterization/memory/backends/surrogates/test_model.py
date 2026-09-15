@@ -33,7 +33,6 @@ with contextlib.suppress(ImportError):
         ProcessTensorSurrogate,
     )
     from mqt.yaqs.characterization.memory.shared.encoding import (
-        normalize_backend_rho,
         pack_rho8,
     )
 
@@ -66,15 +65,16 @@ def _make_probe_set(*, cut: int = 1, num_interventions: int = 1, n_p: int = 2, n
         A probe set with zero feature rows and |0> cut kets.
     """
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    identity_step = {"type": "unitary", "U": np.eye(2, dtype=np.complex128)}
     return ProbeSet(
         cut=cut,
         num_interventions=num_interventions,
         past_features=np.zeros((n_p, cut, 32), dtype=np.float32),
         future_features=np.zeros((n_f, num_interventions - cut + 1, 32), dtype=np.float32),
-        past_pairs=[[] for _ in range(n_p)],
+        past_pairs=[[identity_step.copy() for _ in range(cut - 1)] for _ in range(n_p)],
         past_cut_meas=[z.copy() for _ in range(n_p)],
         future_prep_cut=[z.copy() for _ in range(n_f)],
-        future_pairs=[[] for _ in range(n_f)],
+        future_pairs=[[identity_step.copy() for _ in range(num_interventions - cut)] for _ in range(n_f)],
     )
 
 
@@ -170,17 +170,6 @@ def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
     tgt_t = torch.zeros((2, k, 8), dtype=torch.float32)
     model.fit(TensorDataset(E_t, rho0_t, tgt_t), epochs=1, batch_size=2, device=torch.device("cpu"))
     assert model.num_interventions == k
-
-
-def test_process_tensor_surrogate_default_rho0_is_ground_state_rho8() -> None:
-    """Default initial state matches the normalized |0> density matrix."""
-    torch = import_torch()
-
-    model = ProcessTensorSurrogate(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
-    rho0 = model._default_rho0(device=torch.device("cpu"), dtype=torch.float32)
-    rho_ground = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
-    expected = pack_rho8(normalize_backend_rho(rho_ground)).astype(np.float32)
-    np.testing.assert_array_almost_equal(rho0.cpu().numpy(), expected)
 
 
 def test_intervention_parts_reassemble_to_same_choi_features() -> None:
@@ -310,10 +299,79 @@ def test_process_tensor_surrogate_evaluate_probes_shape_and_restores_mode() -> N
     model = _tiny_model(num_interventions=1)
     model.train()
     probe_set = _make_probe_set(cut=1, num_interventions=1, n_p=2, n_f=3)
-    out = model.evaluate_probes(probe_set)
+    out = model.evaluate_probes(probe_set, initial_rho=np.eye(2, dtype=np.complex128) / 2.0)
     assert out.shape == (2, 3, 4)
     assert out.dtype == np.float32
     assert model.training is True
+
+
+def test_process_tensor_surrogate_evaluate_probes_requires_boundary_state() -> None:
+    """Surrogate probing cannot infer the state after the initial evolution segment."""
+    import_torch()
+
+    model = _tiny_model(num_interventions=1)
+    probe_set = _make_probe_set(cut=1, num_interventions=1, n_p=1, n_f=1)
+    with pytest.raises(ValueError, match="initial_rho is required for surrogate characterization"):
+        model.evaluate_probes(probe_set)
+
+
+def test_process_tensor_surrogate_evaluate_probes_requires_rho8_output() -> None:
+    """Probe evaluation rejects a model whose output is not a rho8 encoding."""
+    import_torch()
+
+    model = ProcessTensorSurrogate(
+        d_e=32,
+        d_rho=7,
+        d_model=28,
+        nhead=4,
+        num_layers=1,
+        dim_ff=28,
+        num_interventions=1,
+    )
+    probe_set = _make_probe_set(cut=1, num_interventions=1, n_p=1, n_f=1)
+
+    with pytest.raises(ValueError, match="rho8 packing length 8 does not match d_rho=7"):
+        model.evaluate_probes(probe_set, initial_rho=np.eye(2, dtype=np.complex128) / 2.0)
+
+
+def test_process_tensor_surrogate_estimates_selected_future_probability(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Surrogate complete weights use its predicted state before each retained outcome."""
+    torch = import_torch()
+    model = _tiny_model(num_interventions=2)
+    z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2.0)
+    rho_z = np.outer(z, z.conj())
+    rho_plus = np.outer(plus, plus.conj())
+    received_rho0: list[np.ndarray] = []
+
+    def _fake_forward(e_features: object, rho0: object) -> object:
+        _ = e_features
+        received_rho0.append(np.asarray(rho0, dtype=np.float32))
+        packed_z = pack_rho8(rho_z)
+        packed_plus = pack_rho8(rho_plus)
+        return torch.as_tensor(
+            np.array([[packed_z, packed_z], [packed_plus, packed_z]], dtype=np.float32),
+            dtype=torch.float32,
+        )
+
+    monkeypatch.setattr(model, "forward", _fake_forward)
+    future_features = np.empty((2, 2, 32), dtype=np.float32)
+    future_features[0, 0] = encode_choi_features(rho_z, np.eye(2, dtype=np.complex128))
+    future_features[1, 0] = encode_choi_features(rho_plus, np.eye(2, dtype=np.complex128))
+    future_features[:, 1] = encode_choi_features(rho_z, rho_z)
+    probe_set = ProbeSet(
+        cut=1,
+        num_interventions=2,
+        past_features=np.zeros((1, 1, 32), dtype=np.float32),
+        future_features=future_features,
+        past_pairs=[[]],
+        past_cut_meas=[z.copy()],
+        future_prep_cut=[z.copy(), plus.copy()],
+        future_pairs=[[(z, z)], [(z, z)]],
+    )
+    _pauli, weights = model.evaluate_probes_with_weights(probe_set, initial_rho=rho_plus)
+    np.testing.assert_allclose(weights, np.array([[0.5, 0.25]], dtype=np.float64), atol=1e-7)
+    np.testing.assert_allclose(received_rho0[0], np.broadcast_to(pack_rho8(rho_plus), (2, 8)))
 
 
 def test_process_tensor_surrogate_evaluate_probes_with_past_and_future_segments() -> None:
@@ -322,7 +380,7 @@ def test_process_tensor_surrogate_evaluate_probes_with_past_and_future_segments(
 
     model = _tiny_model(num_interventions=3)
     probe_set = _make_probe_set(cut=2, num_interventions=3, n_p=1, n_f=2)
-    out = model.evaluate_probes(probe_set)
+    out = model.evaluate_probes(probe_set, initial_rho=np.eye(2, dtype=np.complex128) / 2.0)
     assert out.shape == (1, 2, 4)
 
 
