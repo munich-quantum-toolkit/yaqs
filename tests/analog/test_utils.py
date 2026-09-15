@@ -23,11 +23,12 @@ from mqt.yaqs.analog.utils import (
     _kron_all_dense,
     _kron_all_sparse,
 )
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.state_utils import (
     embed_one_site_operator,
 )
-from tests.site_order_reference import embed_local_operator
+from tests.site_order_reference import embed_local_factors, embed_local_operator
 
 
 def test_kron_all_dense() -> None:
@@ -116,6 +117,30 @@ def test_embed_operator_sparse_2site() -> None:
 
     assert scipy.sparse.issparse(op)
     assert cast("Any", (op != expected)).nnz == 0
+
+
+def test_embed_descending_longrange_factors_agrees_for_dense_and_sparse() -> None:
+    """Long-range factors retain their original site assignment after sorting."""
+    factor_on_site_3 = np.array([[0, 1 + 1j], [2, 0]], dtype=np.complex128)
+    factor_on_site_1 = np.array([[1, 2j], [0, -1]], dtype=np.complex128)
+    original_sites = (3, 1)
+    original_factors = (factor_on_site_3, factor_on_site_1)
+    noise_model = NoiseModel([
+        {
+            "name": "custom_longrange",
+            "sites": list(original_sites),
+            "strength": 0.2,
+            "factors": original_factors,
+        }
+    ])
+    process = noise_model.processes[0]
+    expected = embed_local_factors(original_factors, original_sites, (2, 2, 2, 2))
+
+    dense = _embed_operator_dense(process, 4)
+    sparse = _embed_operator_sparse(process, 4)
+
+    np.testing.assert_allclose(dense, expected, atol=1e-12)
+    np.testing.assert_allclose(cast("Any", sparse).toarray(), expected, atol=1e-12)
 
 
 def test_embed_operator_errors() -> None:

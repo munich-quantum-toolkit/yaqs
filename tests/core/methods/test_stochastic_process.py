@@ -645,17 +645,19 @@ def test_create_probability_distribution_non_pauli_longrange_raises() -> None:
         create_probability_distribution(state, noise_model, 0.1, sim_params)
 
 
-def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
-    """A forced long-range XY jump keeps X on site 0 and Y on site 2."""
-    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+@pytest.mark.parametrize("sites", [(0, 2), (2, 0)])
+def test_stochastic_process_longrange_crosstalk_xy_jump(sites: tuple[int, int]) -> None:
+    """A forced long-range XY jump follows the caller's site order."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)], seed=42)
     state.tensors[0] *= 0.99
     noise_model = NoiseModel([
-        {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 1000.0},
+        {"name": "longrange_crosstalk_xy", "sites": list(sites), "strength": 1000.0},
     ])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
-    factors = tuple(noise_model.processes[0]["factors"])
-    dense_jump = embed_local_factors(factors, (0, 2), (2, 2, 2))
+    pauli_x = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    pauli_y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+    dense_jump = embed_local_factors((pauli_x, pauli_y), sites, (2, 2, 2))
     expected = dense_jump @ state.to_vec()
     expected /= np.linalg.norm(expected)
 

@@ -18,7 +18,7 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simul
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
-from tests.site_order_reference import embed_local_operator, mixed_radix_index
+from tests.site_order_reference import embed_local_operator
 
 
 @pytest.fixture
@@ -59,28 +59,34 @@ def test_entangled_embedded_observables_match_mps(
 
 
 @pytest.mark.parametrize(
-    ("length", "sites", "basis_digits"),
+    "sites",
     [
-        (2, [0, 1], (1, 0)),
-        (2, [1, 0], (0, 1)),
-        (3, [2, 0], (0, 0, 1)),
-        (3, [0, 2], (1, 0, 0)),
+        [0, 1],
+        [1, 0],
+        [2, 0],
+        [0, 2],
     ],
 )
 def test_asymmetric_two_site_observable_agrees_across_representations(
-    length: int,
     sites: list[int],
-    basis_digits: tuple[int, ...],
+    deterministic_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
 ) -> None:
     """Adjacent and periodic observables follow their listed sites on all backends."""
-    pauli_z = np.diag([1, -1]).astype(np.complex128)
-    local_matrix = np.kron(pauli_z, np.eye(2, dtype=np.complex128))
+    _mps, psi, rho, tensors = deterministic_state
+    length = len(tensors)
+    local_matrix = np.array(
+        [
+            [0.7, 0.2 + 0.3j, -0.4 + 0.1j, 0.15 - 0.2j],
+            [0.2 - 0.3j, -0.6, 0.35 + 0.45j, -0.1 + 0.25j],
+            [-0.4 - 0.1j, 0.35 - 0.45j, 1.1, -0.3 + 0.05j],
+            [0.15 + 0.2j, -0.1 - 0.25j, -0.3 - 0.05j, -0.2],
+        ],
+        dtype=np.complex128,
+    )
     observable = Observable(local_matrix, sites)
     dimensions = (2,) * length
     dense_observable = embed_local_operator(local_matrix, tuple(sites), dimensions)
-    initial_vector = np.zeros(2**length, dtype=np.complex128)
-    initial_vector[mixed_radix_index(basis_digits, dimensions)] = 1.0
-    expected = float(np.real(np.vdot(initial_vector, dense_observable @ initial_vector)))
+    expected = float(np.real(np.vdot(psi, dense_observable @ psi)))
     hamiltonian = Hamiltonian(matrix=np.zeros((2**length, 2**length), dtype=np.complex128))
     parameters = AnalogSimParams(
         observables=[observable],
@@ -92,14 +98,13 @@ def test_asymmetric_two_site_observable_agrees_across_representations(
         sample_timesteps=False,
     )
 
+    states = (
+        State(length, tensors=[tensor.copy() for tensor in tensors]),
+        State(vector=psi.copy()),
+        State(density_matrix=rho.copy()),
+    )
     results = []
-    for representation in ("mps", "vector", "density_matrix"):
-        state = State(
-            length,
-            initial="basis",
-            basis_string="".join(str(digit) for digit in basis_digits),
-            representation=representation,
-        )
+    for state in states:
         result = Simulator(show_progress=False).run(state, hamiltonian, parameters, None)
         results.append(float(np.real(result.expectation_values[0][-1])))
 
