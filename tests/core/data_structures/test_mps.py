@@ -858,7 +858,6 @@ def test_expect_mpo_contracts_directly_without_mutation(monkeypatch: pytest.Monk
         "compress",
         "multiply",
         "to_matrix",
-        "to_matrix_mps_order",
         "to_mps",
         "to_sparse_matrix",
     ):

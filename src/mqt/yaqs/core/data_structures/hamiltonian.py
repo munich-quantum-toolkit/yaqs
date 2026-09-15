@@ -44,6 +44,11 @@ class Hamiltonian:
     ``representation`` alone selects the backend (``"mps"`` → TJM / MPO, ``"vector"`` →
     MCWF / sparse, ``"density_matrix"`` → Lindblad / sparse).
     :meth:`~mqt.yaqs.Simulator.run` converts and caches the required MPO or sparse form.
+
+    Dense and sparse matrices use the same basis order as
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`: site ``0`` is the
+    least-significant, fastest-varying subsystem. For qubits, this matches
+    Qiskit's statevector and operator order.
     """
 
     def __init__(
@@ -62,8 +67,8 @@ class Hamiltonian:
         Args:
             length: Number of sites. Inferred from ``len(tensors)`` or matrix dimension when omitted.
             tensors: MPO tensor cores.
-            matrix: Dense operator matrix.
-            sparse_matrix: Sparse operator.
+            matrix: Dense operator matrix in site-0-LSB order.
+            sparse_matrix: Sparse operator in site-0-LSB order.
             physical_dimension: Local Hilbert-space dimension (uniform sites).
 
         Raises:
@@ -420,8 +425,9 @@ class Hamiltonian:
     def ensure_mpo(self) -> Hamiltonian:
         """Materialize and cache an MPO form (used by TJM / ``State.representation='mps'``).
 
-        Dense and sparse sources are converted via :meth:`MPO.from_matrix` (sparse is densified
-        only when this path is requested). Large Hilbert-space conversions emit a
+        Dense and sparse sources are converted via :meth:`MPO.from_matrix`
+        without changing the public site order. Sparse input is densified only
+        when this path is requested. Large Hilbert-space conversions emit a
         ``RuntimeWarning`` matching the ``preprocess_mcwf`` threshold.
 
         Returns:
@@ -502,7 +508,7 @@ class Hamiltonian:
 
     @property
     def sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """Cached sparse matrix, if one has been materialized.
+        """Cached sparse matrix in site-0-LSB order, if materialized.
 
         Raises:
             RuntimeError: If no sparse matrix has been materialized yet; call :meth:`ensure_sparse`.
@@ -514,7 +520,7 @@ class Hamiltonian:
 
     @property
     def matrix(self) -> NDArray[np.complex128]:
-        """Cached dense matrix, if one has been materialized.
+        """Cached dense matrix in site-0-LSB order, if materialized.
 
         Raises:
             RuntimeError: If no dense matrix has been materialized yet.
@@ -525,7 +531,9 @@ class Hamiltonian:
         return self._matrix
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Dense matrix (converts from cached MPO/sparse without requiring prior encode).
+        """Return a dense matrix in site-0-LSB order.
+
+        Converts from a cached MPO or sparse matrix without mutating the caches.
 
         Returns:
             Dense Hamiltonian matrix on the full Hilbert space.
@@ -543,7 +551,7 @@ class Hamiltonian:
         raise RuntimeError(msg)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """Sparse matrix (converts from cached forms; does not mutate caches).
+        """Return a sparse matrix in site-0-LSB order without mutating caches.
 
         Prefer :meth:`ensure_sparse` when the sparse form should be cached for reuse.
 

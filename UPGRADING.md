@@ -6,6 +6,34 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: dense states and operators use site-0-LSB ordering
+
+YAQS now uses one public spatial dense-basis order. Site 0 is the
+least-significant, fastest-varying subsystem. For qubits, this matches Qiskit's
+statevector and operator order. The convention applies to:
+
+- `State(vector=...)` and `State(density_matrix=...)`;
+- `Hamiltonian(matrix=...)` and `Hamiltonian(sparse_matrix=...)`;
+- `Hamiltonian.to_matrix()` and `Hamiltonian.to_sparse_matrix()`;
+- `MPO.from_matrix()`, `MPO.to_matrix()`, and `MPO.to_sparse_matrix()`; and
+- dense operators returned by `EquivalenceChecker`.
+
+For example, `np.kron(I, X)` applies `X` to site 0 of a two-site system.
+Previously, `MPO.to_matrix()` put site 0 in the leftmost Kronecker factor, and
+`MPO.from_matrix()` expected that order. This also caused dense and sparse
+Hamiltonians to change their physical site assignment when TJM converted them to
+an MPO. One-site and site-reflection-symmetric operators are unchanged.
+Asymmetric operators can produce different, now consistent, results.
+
+Code written against the unreleased development branch must replace
+`MPO.to_matrix_mps_order()` with `MPO.to_matrix()`. To migrate a manual matrix
+that put site 0 in the leftmost Kronecker factor, rebuild its Kronecker products
+in descending site order or permute its output and input site axes.
+
+Process tensors use a separate convention. `MPOProcessTensor.to_matrix()` keeps
+its final-output-first causal-leg order. `MPOProcessTensor.to_sparse_matrix()`
+now uses that causal order too; it previously inherited the spatial MPO order.
+
 ### Breaking: observables are independent of gates
 
 `Observable` now accepts a named Hermitian observable, a Hermitian matrix, or a

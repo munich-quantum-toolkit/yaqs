@@ -288,11 +288,11 @@ def test_preset_ensure_encoded_vector_matches_mps(initial: str) -> None:
 
 
 def test_preset_encode_basis_string() -> None:
-    """Basis preset uses basis_string for the dense product vector."""
-    spec = State(3, initial="basis", basis_string="010", representation="vector")
-    ref = MPS(3, state="basis", basis_string="010").to_vec()
-    ref /= np.linalg.norm(ref)
-    np.testing.assert_allclose(spec.vector, ref)
+    """Character zero in a basis string selects the least-significant site."""
+    spec = State(3, initial="basis", basis_string="100", representation="vector")
+    expected = np.zeros(8, dtype=np.complex128)
+    expected[1] = 1.0
+    np.testing.assert_allclose(spec.vector, expected)
 
 
 def test_preset_random_with_seed() -> None:

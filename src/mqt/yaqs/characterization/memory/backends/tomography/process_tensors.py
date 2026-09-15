@@ -23,6 +23,7 @@ from ...shared.probabilities import PROBABILITY_ATOL
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import scipy.sparse
     from numpy.typing import NDArray
 
     from ...operational_memory.samples import ProbeSet
@@ -721,12 +722,28 @@ class MPOProcessTensor(MPO):
         validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Return the dense matrix representation.
+        """Return the dense matrix in process-tensor causal-leg order.
+
+        Process tensors store the final output leg first, followed by past
+        intervention slots. This causal order is distinct from the spatial
+        site-0-LSB order used by :class:`~mqt.yaqs.MPO`.
 
         Returns:
             Dense process-tensor matrix.
         """
-        return super().to_matrix()
+        return self._to_matrix_site0_msb()
+
+    def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
+        """Return the sparse matrix in process-tensor causal-leg order.
+
+        Process tensors store the final output leg first, followed by past
+        intervention slots. This method matches :meth:`to_matrix`, rather than
+        the spatial site-0-LSB order used by :class:`~mqt.yaqs.MPO`.
+
+        Returns:
+            Sparse process-tensor matrix in CSR format.
+        """
+        return self.reflected().to_sparse_matrix()
 
     def to_dense(self) -> DenseProcessTensor:
         """Convert this MPO process tensor to a dense process tensor.

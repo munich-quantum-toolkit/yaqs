@@ -45,6 +45,11 @@ class State:
       representation is inferred (do not pass ``representation=``).
 
     Circuit simulation requires ``representation="mps"`` (checked in ``run``).
+
+    Dense vectors and density matrices use the computational-basis order of
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`: site ``0`` is the
+    least-significant, fastest-varying subsystem. For qubits, this matches
+    Qiskit's statevector and operator order.
     """
 
     def __init__(
@@ -74,10 +79,15 @@ class State:
                 ``density_matrix`` is passed (inferred automatically).
             physical_dimensions: Per-site physical dimension(s); default is qubits (2).
             tensors: MPS tensor cores (rank-3 arrays per site); ``representation`` inferred as ``"mps"``.
-            vector: 1-D state vector; ``representation`` inferred as ``"vector"``.
-            density_matrix: 2-D square array; ``representation`` inferred as ``"density_matrix"``.
+            vector: 1-D state vector in site-0-LSB order; ``representation``
+                inferred as ``"vector"``.
+            density_matrix: 2-D square array whose row and column indices use
+                site-0-LSB order; ``representation`` inferred as
+                ``"density_matrix"``.
             pad: Bond-dimension padding passed through to :class:`MPS` (preset/tensor paths only).
             basis_string: Computational-basis string when ``initial="basis"``.
+                Character ``i`` selects site ``i``; this site-order string is not
+                a most-significant-bit-first display string.
             seed: RNG seed for ``initial="random"`` when building dense product vectors.
 
         Raises:
@@ -253,7 +263,7 @@ class State:
 
     @property
     def vector(self) -> NDArray[np.complex128]:
-        """Dense state vector when :attr:`representation` is ``"vector"``.
+        """Dense site-0-LSB state vector for ``representation="vector"``.
 
         Raises:
             RuntimeError: If the state is not encoded as ``"vector"``.
@@ -265,7 +275,7 @@ class State:
 
     @property
     def density_matrix(self) -> NDArray[np.complex128]:
-        """Density matrix when :attr:`representation` is ``"density_matrix"``.
+        """Site-0-LSB density matrix for ``representation="density_matrix"``.
 
         Raises:
             RuntimeError: If the state is not encoded as ``"density_matrix"``.

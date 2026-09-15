@@ -12,8 +12,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import scipy.sparse
+from scipy.linalg import expm
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 
@@ -108,44 +110,71 @@ def _final_obs(
     return float(sim.run(state, hamiltonian, params, None).expectation_values[0][-1])
 
 
-@pytest.mark.parametrize("source", ["preset", "dense", "sparse"])
-def test_hamiltonian_source_runs_on_all_state_representations(source: str) -> None:
-    """Preset, dense, and sparse Hamiltonians work with mps, vector, and density_matrix."""
+@pytest.mark.parametrize("source", ["mpo", "dense", "sparse"])
+def test_asymmetric_hamiltonian_preserves_sites_across_representations(source: str) -> None:
+    """Every Hamiltonian source evolves site 0 on all analog backends."""
     length = 2
-    ref = Hamiltonian.ising(length, J=1.0, g=0.5)
-    dense = np.asarray(ref.to_matrix(), dtype=np.complex128)
-    if source == "preset":
-        hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    identity = np.eye(2, dtype=np.complex128)
+    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    dense = np.asarray(np.kron(identity, pauli_x), dtype=np.complex128)
+    if source == "mpo":
+        hamiltonian = Hamiltonian.from_mpo(MPO.from_local_ops([pauli_x, identity]))
     elif source == "dense":
         hamiltonian = Hamiltonian(matrix=dense.copy())
     else:
         hamiltonian = Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(dense))
 
     sim = Simulator(show_progress=False)
-    obs = Observable("z", sites=[0])
-    params_mps = AnalogSimParams(observables=[obs], elapsed_time=0.3, dt=0.05, max_bond_dim=16, svd_threshold=1e-10)
-    params_dense = AnalogSimParams(observables=[obs], elapsed_time=0.3, dt=0.05, num_traj=1)
+    observables = [Observable("z", 0), Observable("z", 1)]
+    evolution_time = 0.2
+    params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=evolution_time,
+        dt=evolution_time,
+        num_traj=1,
+        max_bond_dim=None,
+        svd_threshold=1e-12,
+        get_state=True,
+        sample_timesteps=False,
+    )
+    initial = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
+    expected_vector = expm(-1j * evolution_time * dense) @ initial
+    expected_density = np.outer(expected_vector, expected_vector.conj())
+    expected_observables = [np.cos(2 * evolution_time), 1.0]
 
-    init = State(length, initial="zeros")
-    psi = np.asarray(init.mps.to_vec(), dtype=np.complex128)
-    rho = np.outer(psi, psi.conj())
-    tensors = [np.asarray(t, dtype=np.complex128).copy() for t in init.mps.tensors]
+    for representation in ("mps", "vector", "density_matrix"):
+        result = sim.run(
+            State(length, initial="zeros", representation=representation),
+            hamiltonian,
+            params,
+            None,
+        )
+        assert result.output_state is not None
+        if representation == "mps":
+            output = result.output_state.mps.to_vec()
+            expected_state = expected_vector
+        elif representation == "vector":
+            output = result.output_state.vector
+            expected_state = expected_vector
+        else:
+            output = result.output_state.density_matrix
+            expected_state = expected_density
+        np.testing.assert_allclose(output, expected_state, atol=1e-10)
+        np.testing.assert_allclose(
+            [values[-1] for values in result.expectation_values],
+            expected_observables,
+            atol=1e-10,
+        )
 
-    mps_val = _final_obs(sim, State(length, tensors=[t.copy() for t in tensors]), hamiltonian, params_mps)
-    vec_val = _final_obs(sim, State(vector=psi.copy()), hamiltonian, params_dense)
-    rho_val = _final_obs(sim, State(density_matrix=rho.copy()), hamiltonian, params_dense)
-
-    assert vec_val == pytest.approx(rho_val, abs=1e-8)
-    assert mps_val == pytest.approx(vec_val, abs=1e-5)
-
-    # Cache reuse: both forms remain available and agree numerically.
     hamiltonian.ensure_mpo()
     hamiltonian.ensure_sparse()
-    np.testing.assert_allclose(
+    for converted in (
+        hamiltonian.to_matrix(),
+        hamiltonian.to_sparse_matrix().toarray(),
         hamiltonian.mpo.to_matrix(),
-        hamiltonian.sparse_matrix.toarray(),
-        atol=1e-10,
-    )
+        hamiltonian.mpo.to_sparse_matrix().toarray(),
+    ):
+        np.testing.assert_allclose(converted, dense, atol=1e-12)
 
 
 def test_heisenberg_noiseless_agrees_across_backends() -> None:

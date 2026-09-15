@@ -262,15 +262,19 @@ def test_ensure_sparse_from_dense_hamiltonian() -> None:
 
 
 def test_ensure_mpo_from_dense_and_sparse() -> None:
-    """Dense and sparse sources convert to MPO via MPO.from_matrix."""
-    dense = Hamiltonian.ising(2, J=1.0, g=0.5).to_matrix()
+    """Dense and sparse sources retain site-0-LSB order in MPO form."""
+    identity = np.eye(2, dtype=np.complex128)
+    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    dense = np.asarray(np.kron(identity, pauli_x), dtype=np.complex128)
     h_dense = Hamiltonian(matrix=dense.copy())
     h_dense.ensure_mpo()
     np.testing.assert_allclose(h_dense.mpo.to_matrix(), dense, atol=1e-10)
+    np.testing.assert_allclose(h_dense.mpo.to_sparse_matrix().toarray(), dense, atol=1e-10)
 
     h_sparse = Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(dense))
     h_sparse.ensure_mpo()
     np.testing.assert_allclose(h_sparse.mpo.to_matrix(), dense, atol=1e-10)
+    np.testing.assert_allclose(h_sparse.mpo.to_sparse_matrix().toarray(), dense, atol=1e-10)
     # Sparse→MPO densifies and caches the dense form.
     np.testing.assert_allclose(h_sparse.matrix, dense, atol=1e-10)
 
@@ -304,13 +308,16 @@ def test_hamiltonian_sparse_property_unavailable_for_mpo_init() -> None:
 
 
 def test_to_matrix_from_mpo_and_sparse() -> None:
-    """to_matrix converts from MPO or sparse."""
-    h_mpo = Hamiltonian.ising(2, J=1.0, g=0.5)
-    ref = h_mpo.mpo.to_matrix()
-    np.testing.assert_allclose(h_mpo.to_matrix(), ref, atol=1e-10)
+    """to_matrix preserves site order when converting from MPO or sparse."""
+    identity = np.eye(2, dtype=np.complex128)
+    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    expected = np.kron(identity, pauli_x)
 
-    h_sparse = Hamiltonian(sparse_matrix=scipy.sparse.eye(4, dtype=np.complex128))
-    np.testing.assert_allclose(h_sparse.to_matrix(), np.eye(4))
+    h_mpo = Hamiltonian.from_mpo(MPO.from_local_ops([pauli_x, identity]))
+    np.testing.assert_allclose(h_mpo.to_matrix(), expected, atol=1e-12)
+
+    h_sparse = Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(expected))
+    np.testing.assert_allclose(h_sparse.to_matrix(), expected, atol=1e-12)
 
 
 def test_to_matrix_returns_cached_dense_array() -> None:
@@ -381,8 +388,8 @@ def test_ensure_sparse_prefers_dense_source_after_ensure_mpo() -> None:
     dense = Hamiltonian.ising(2, J=1.0, g=0.5).to_matrix()
     # Perturb off-diagonals so an approximate MPO conversion can differ.
     dense = dense.copy()
-    dense[0, 3] += 0.37
-    dense[3, 0] += 0.37
+    dense[0, 1] += 0.37
+    dense[1, 0] += 0.37
     h = Hamiltonian(matrix=dense.copy())
     h.ensure_mpo()
     mpo = h.mpo
@@ -397,8 +404,8 @@ def test_dense_hamiltonian_run_order_preserves_source_fidelity(order: str) -> No
     """Dense-source fidelity is independent of MPS vs vector run order."""
     length = 2
     dense = Hamiltonian.ising(length, J=1.0, g=0.5).to_matrix().copy()
-    dense[0, 3] += 0.21
-    dense[3, 0] += 0.21
+    dense[0, 1] += 0.21
+    dense[1, 0] += 0.21
     hamiltonian = Hamiltonian(matrix=dense.copy())
     sim = Simulator(show_progress=False)
     obs = Observable("z", sites=[0])

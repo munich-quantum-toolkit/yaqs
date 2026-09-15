@@ -71,7 +71,9 @@ class MPO:
 
     **Conversion / checks**
 
-    - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix.
+    - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix. Dense
+      matrices use site ``0`` as the least-significant subsystem, matching
+      :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
     - ``compute_schmidt_spectrum()`` / ``compute_entanglement_entropy()``: operator bond diagnostics.
     - ``compute_identity_fidelity()``: normalized overlap with the identity.
     - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
@@ -1149,8 +1151,14 @@ class MPO:
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
 
         Args:
-            tensors: A list of tensors to initialize the MPO.
-            transpose: If True, transpose each tensor to the order (2, 3, 0, 1). Default is True.
+            tensors: One tensor per site in ascending site order. With
+                ``transpose=True``, each tensor uses
+                ``(left, right, physical_out, physical_in)`` axes. Otherwise,
+                each tensor already uses
+                ``(physical_out, physical_in, left, right)`` axes.
+            transpose: Convert tensors from
+                ``(left, right, physical_out, physical_in)`` to the internal
+                ``(physical_out, physical_in, left, right)`` layout.
 
         Notes:
             This method sets the tensors, optionally transposes them, checks if the MPO is valid,
@@ -1163,10 +1171,7 @@ class MPO:
                 self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
-        if transpose:
-            self.physical_dimension = self.tensors[0].shape[0]
-        else:
-            self.physical_dimension = self.tensors[0].shape[2]
+        self.physical_dimension = self.tensors[0].shape[0]
 
     def from_pauli_sum(
         self,
@@ -1754,17 +1759,15 @@ class MPO:
         hilbert_dim = int(np.prod(local_dims, dtype=np.int64))
         return float(np.abs(trace) / hilbert_dim)
 
-    def to_matrix(self) -> NDArray[np.complex128]:
-        """MPO to matrix conversion (site 0 = MSB Kronecker layout).
+    def _to_matrix_site0_msb(self) -> NDArray[np.complex128]:
+        """Contract to the internal tensor-chain matrix order.
 
-        Contracts MPO tensors left-to-right with Einstein summation. The resulting
-        dense layout treats site ``0`` as the most-significant bit. For operators
-        that must act on :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`
-        (site 0 = LSB), use :meth:`to_matrix_mps_order` or
-        :meth:`to_sparse_matrix` instead.
+        This private conversion keeps site ``0`` as the most-significant
+        subsystem. Process-tensor code uses this order for its distinct causal-leg
+        layout. Spatial operators must use :meth:`to_matrix`.
 
         Returns:
-            The resulting matrix after tensor contractions and reshaping.
+            Dense matrix in internal tensor-chain order.
         """
         mat = self.tensors[0]
         for tensor in self.tensors[1:]:
@@ -1782,31 +1785,45 @@ class MPO:
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
 
-    def to_matrix_mps_order(self) -> NDArray[np.complex128]:
-        """Dense matrix in MPS ``to_vec`` order (site 0 = LSB).
+    def to_matrix(self) -> NDArray[np.complex128]:
+        """Convert the MPO to a dense matrix in the public site order.
 
-        Matches :meth:`to_sparse_matrix` and
-        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`. Prefer this (or the
-        sparse converter) for dense state-vector references under asymmetric
-        Hamiltonians; :meth:`to_matrix` keeps the historical site-0-MSB layout.
+        The matrix acts on vectors from
+        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`. Site ``0`` is the
+        least-significant, fastest-varying subsystem. For qubits, this matches
+        Qiskit's statevector and operator order. This method and
+        :meth:`to_sparse_matrix` use the same order.
 
         Returns:
             Dense operator matrix acting on vectors from :meth:`MPS.to_vec`.
         """
-        return np.asarray(self.to_sparse_matrix().toarray(), dtype=np.complex128)
+        mat = self.tensors[-1]
+        for tensor in reversed(self.tensors[:-1]):
+            mat = oe.contract("abcd,efdg->eafbcg", tensor, mat)
+            mat = np.reshape(
+                mat,
+                (
+                    mat.shape[0] * mat.shape[1],
+                    mat.shape[2] * mat.shape[3],
+                    mat.shape[4],
+                    mat.shape[5],
+                ),
+            )
+
+        return np.squeeze(mat, axis=(2, 3))
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """MPO to sparse matrix conversion.
+        """Convert the MPO to a sparse matrix in the public site order.
 
         Efficiently constructs a sparse matrix from the MPO tensors by iterating
         over the terms in the MPO sum. This avoids creating the full dense matrix
-        intermediate.
+        intermediate. Site ``0`` is the least-significant, fastest-varying
+        subsystem, matching :meth:`to_matrix` and
+        :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
 
         Returns:
             The sparse matrix representation of the MPO in CSR format.
         """
-        d = self.physical_dimension
-
         current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
 
         for tensor in self.tensors:
@@ -1845,7 +1862,7 @@ class MPO:
         # Final result should be in current_operators[0] because the last bond dim is 1
         if 0 not in current_operators:
             # Should practically not happen for valid MPOs unless it's a zero operator
-            dim = d**self.length
+            dim = math.prod(int(tensor.shape[0]) for tensor in self.tensors)
             return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
 
         return current_operators[0]
@@ -1865,9 +1882,13 @@ class MPO:
 
             mat.shape = (d**n, d**n)
 
+        The input uses the public dense order: site ``0`` is the
+        least-significant, fastest-varying subsystem. This method is the inverse
+        of :meth:`to_matrix` when no singular values are truncated.
+
         Args:
             mat (np.ndarray):
-                Square matrix of shape ``(d**n, d**n)``.
+                Square matrix of shape ``(d**n, d**n)`` in site-0-LSB order.
             d (int):
                 Physical dimension per site. Must satisfy ``d > 0``.
             max_bond (int | None):
@@ -1973,7 +1994,7 @@ class MPO:
 
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
 
-        return mpo
+        return mpo.reflected()
 
     def __add__(self, other: MPO) -> MPO:
         """Add two MPOs via direct bond stacking.

@@ -132,7 +132,7 @@ def test_bug_dense_reference(shapes: list[tuple[int, int, int]], length: int) ->
     mpo = MPO.ising(length, 1.0, 0.5)
     sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1, dt=0.05)
     bug(mps, mpo, sim_params)
-    exact = expm(-1j * sim_params.dt * mpo.to_matrix_mps_order()) @ ref
+    exact = expm(-1j * sim_params.dt * mpo.to_matrix()) @ ref
     assert abs(np.vdot(exact, mps.to_vec())) == pytest.approx(1.0, abs=1e-8)
     assert mps.orthogonality_center == 0
 
@@ -375,11 +375,8 @@ def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:
             krylov_tol=1e-12,
         ),
     )
-    exact = expm(-1j * dt * mpo.to_matrix_mps_order()) @ ref
-    exact_msb = expm(-1j * dt * mpo.to_matrix()) @ ref
+    exact = expm(-1j * dt * mpo.to_matrix()) @ ref
     assert abs(np.vdot(exact, mps.to_vec())) == pytest.approx(1.0, abs=1e-8)
-    # Historical MSB dense layout must not be used as an MPS reference here.
-    assert abs(np.vdot(exact_msb, mps.to_vec())) < 1.0 - 1e-3
 
 
 def test_alternating_asymmetric_matches_dense_without_mock() -> None:
@@ -395,7 +392,7 @@ def test_alternating_asymmetric_matches_dense_without_mock() -> None:
     mps = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     total_time = 0.2
     dt = 0.05
-    reference = expm(-1j * total_time * mpo.to_matrix_mps_order()) @ mps.to_vec()
+    reference = expm(-1j * total_time * mpo.to_matrix()) @ mps.to_vec()
     state = deepcopy(mps)
     params = AnalogSimParams(
         preset="exact",

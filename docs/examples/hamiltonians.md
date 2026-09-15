@@ -462,6 +462,28 @@ H = Hamiltonian(matrix=dense_h, physical_dimension=2)
 H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ```
 
+### Dense qubit ordering
+
+YAQS uses Qiskit's little-endian order for spatial qubit states and operators:
+site 0 is the least-significant subsystem. This convention applies to dense
+`State` arrays, `MPS.to_vec()`, dense and sparse `Hamiltonian` inputs, MPO
+matrix conversions, and `EquivalenceChecker` matrices. A local operator on site
+0 is therefore the rightmost Kronecker factor. For example, `np.kron(I, X)`
+applies `X` to site 0 of a two-site system:
+
+```{code-cell} ipython3
+identity = np.eye(2, dtype=np.complex128)
+pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+x_on_site_0 = np.kron(identity, pauli_x)
+
+manual = Hamiltonian(matrix=x_on_site_0)
+np.testing.assert_allclose(manual.to_matrix(), x_on_site_0)
+np.testing.assert_allclose(manual.to_sparse_matrix().toarray(), x_on_site_0)
+manual.ensure_mpo()
+np.testing.assert_allclose(manual.mpo.to_matrix(), x_on_site_0)
+np.testing.assert_allclose(manual.mpo.to_sparse_matrix().toarray(), x_on_site_0)
+```
+
 ## Related topics
 
 - {doc}`analog_simulation` — TJM evolution, noise, and observables

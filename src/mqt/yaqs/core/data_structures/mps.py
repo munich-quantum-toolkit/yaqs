@@ -107,6 +107,7 @@ class MPS:
             basis_string: String used to initialize the state in a specific computational basis.
                 This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
+                Character ``i`` selects site ``i``.
 
         Raises:
             ValueError: If ``length`` is not positive or the provided ``state`` does not match a valid
@@ -459,7 +460,7 @@ class MPS:
         already-populated MPS.
 
         Args:
-            basis_string: A string like "0101" indicating the computational basis state.
+            basis_string: A string like "0101" where character ``i`` selects site ``i``.
             physical_dimensions: The physical dimension of each site (e.g. 2 for qubits, 3+ for qudits).
 
         Raises:
@@ -1659,7 +1660,8 @@ class MPS:
             rng: Optional random number generator for outcome sampling.
 
         Returns:
-            The measurement outcome encoded as an integer bitstring.
+            The measurement outcome encoded as an integer. Bit ``i`` stores the
+            outcome at site ``i``, so site ``0`` is the least-significant bit.
 
         Raises:
             ValueError: If an invalid basis is provided.
@@ -1727,7 +1729,8 @@ class MPS:
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
 
         Returns:
-            A dictionary where keys are measured basis states (as integers) and values are the corresponding counts.
+            A dictionary from measured basis-state integers to counts. Bit ``i``
+            of each key stores the outcome at site ``i``.
 
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
@@ -1868,7 +1871,7 @@ class MPS:
         This is equivalent to computing ⟨bitstring|ψ⟩⟨ψ|bitstring⟩.
 
         Args:
-            bitstring (str): Bitstring to project onto (little-endian: site 0 is first char).
+            bitstring: Site-order string where character ``i`` selects site ``i``.
 
         Returns:
             float: Probability of obtaining the given bitstring under projective measurement.
@@ -2006,6 +2009,9 @@ class MPS:
 
     def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.
+
+        Site ``0`` is the least-significant, fastest-varying subsystem in the
+        returned vector. For qubits, this matches Qiskit's statevector order.
 
         Returns:
             A one-dimensional NumPy array of length :math:`\prod_{\ell=1}^L d_\ell`

@@ -40,10 +40,9 @@ Practical guidance:
   {cite:p}`sander2026_computationalregimes` ({doc}`references`).
 
 The sections below run the **same** noisy benchmark on all three paths so you
-can validate agreement on small systems. We use a product
-$|{+}\rangle^{\otimes L}$ initial state so the MPS and dense backends encode the
-same physical state (Haar-random MPS states can disagree with unfolded vectors
-on non-local observables).
+can validate agreement on small systems. We use the product state
+$|{+}\rangle^{\otimes L}$ to keep the initial condition transparent. An MPS and
+its exact `MPS.to_vec()` result always encode the same physical state.
 
 ## 1. Noisy open-system benchmark
 
