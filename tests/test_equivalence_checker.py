@@ -373,8 +373,8 @@ def test_matrix_and_mpo_return_same_relative_operator_orientation() -> None:
     circuit2.rx(-0.41, 1)
     circuit2.cx(0, 1)
 
-    unitary1 = np.asarray(Operator(circuit1.reverse_bits()).data, dtype=np.complex128)
-    unitary2 = np.asarray(Operator(circuit2.reverse_bits()).data, dtype=np.complex128)
+    unitary1 = np.asarray(Operator(circuit1).data, dtype=np.complex128)
+    unitary2 = np.asarray(Operator(circuit2).data, dtype=np.complex128)
     expected = unitary1 @ unitary2.conj().T
     reverse_order = unitary2.conj().T @ unitary1
     assert not np.allclose(expected, reverse_order, atol=1e-10)

@@ -10,11 +10,15 @@
 from __future__ import annotations
 
 import contextlib
+from typing import Literal
 
 import numpy as np
 import pytest
 from torch_support import import_torch
 
+import mqt.yaqs.characterization.memory.backends.surrogates.workflow as workflow_module
+from mqt.yaqs import MPS
+from mqt.yaqs.characterization.memory.backends.surrogates.data import SequenceRecord
 from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
     build_training_dataset,
     pack_dataset,
@@ -26,6 +30,7 @@ from mqt.yaqs.characterization.memory.shared.metrics import (
     mean_frobenius_mse_rho8,
     mean_trace_distance_rho8,
 )
+from mqt.yaqs.characterization.memory.shared.utils import extract_site0_rho
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -59,7 +64,7 @@ def test_pack_dataset_shapes() -> None:
 
 
 def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
-    """End-to-end build_training_dataset and train_surrogate_model run on a tiny Ising chain."""
+    """TJM data generation and surrogate training run end to end on a tiny Ising chain."""
     torch = import_torch()
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
@@ -74,6 +79,7 @@ def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
         parallel=False,
         show_progress=False,
         timesteps=[0.0, 0.0],
+        solver="TJM",
     )
     assert len(ds.tensors) == 3
 
@@ -86,6 +92,7 @@ def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
         parallel=False,
         show_progress=False,
         timesteps=[0.0, 0.0],
+        solver="TJM",
         model_kwargs={"d_model": 32, "nhead": 4, "num_layers": 1, "dim_ff": 64, "dropout": 0.0},
         train_kwargs={"epochs": 1, "batch_size": 2, "lr": 1e-3, "device": "cpu"},
     )
@@ -93,6 +100,89 @@ def test_build_training_dataset_and_train_surrogate_model_tiny_smoke() -> None:
     dev = next(model.parameters()).device
     out = model(e_features.to(device=dev, dtype=torch.float32), rho0.to(device=dev, dtype=torch.float32))
     assert tuple(out.shape) == tuple(tgt.shape)
+
+
+def test_sample_initial_tjm_state_uses_only_local_dense_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Long-chain TJM initialization never asks for a full dense state vector."""
+    rho = np.array([[0.6, 0.1 + 0.2j], [0.1 - 0.2j, 0.4]], dtype=np.complex128)
+    sampled_lengths: list[int] = []
+    captured_states: list[MPS] = []
+    original = workflow_module.sample_initial_psi
+
+    def record_length(
+        rho_in: np.ndarray,
+        *,
+        length: int,
+        rng: np.random.Generator,
+        init_mode: str,
+        return_eig_sample: bool = False,
+    ) -> np.ndarray | tuple[np.ndarray, int, float]:
+        sampled_lengths.append(length)
+        return original(
+            rho_in,
+            length=length,
+            rng=rng,
+            init_mode=init_mode,
+            return_eig_sample=return_eig_sample,
+        )
+
+    monkeypatch.setattr(workflow_module, "sample_initial_psi", record_length)
+    monkeypatch.setattr(workflow_module, "sample_density_matrix", lambda _rng: rho)
+
+    def capture_sequences(**kwargs: object) -> list[SequenceRecord]:
+        initial_psis = kwargs["initial_psis"]
+        assert isinstance(initial_psis, list)
+        state = initial_psis[0]
+        assert isinstance(state, MPS)
+        captured_states.append(state)
+        return [
+            SequenceRecord(
+                rho_0=np.zeros(8, dtype=np.float32),
+                E_features=np.zeros((1, 32), dtype=np.float32),
+                rho_seq=np.zeros((1, 8), dtype=np.float32),
+                context=None,
+                weight=1.0,
+            )
+        ]
+
+    monkeypatch.setattr(workflow_module, "simulate_sequences", capture_sequences)
+    build_training_dataset(
+        MPO.ising(length=20, J=0.0, g=0.0),
+        AnalogSimParams(dt=0.1),
+        num_interventions=1,
+        n=1,
+        rng=np.random.default_rng(5),
+        init_mode="purified",
+        solver="TJM",
+        parallel=False,
+        show_progress=False,
+        timesteps=[0.0, 0.0],
+    )
+
+    assert sampled_lengths == [2]
+    assert len(captured_states) == 1
+    state = captured_states[0]
+    assert state.length == 20
+    assert state.bond_dimensions() == [2] + [1] * 18
+    np.testing.assert_allclose(extract_site0_rho(state), rho, atol=1e-12)
+
+
+@pytest.mark.parametrize("solver", ["MCWF", "TJM"])
+def test_build_training_dataset_rejects_nonqubit_operator(solver: Literal["MCWF", "TJM"]) -> None:
+    """The direct surrogate entry point enforces the qubit-only memory contract."""
+    operator = MPO.from_local_ops([np.eye(3, dtype=np.complex128)])
+
+    with pytest.raises(ValueError, match=r"supports qubit Hamiltonians only.*\[3\]"):
+        build_training_dataset(
+            operator,
+            AnalogSimParams(dt=0.1),
+            num_interventions=1,
+            n=1,
+            timesteps=[0.0, 0.0],
+            solver=solver,
+            parallel=False,
+            show_progress=False,
+        )
 
 
 def test_build_training_dataset_timesteps_length_mismatch_raises() -> None:

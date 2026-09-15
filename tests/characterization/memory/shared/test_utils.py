@@ -18,6 +18,7 @@ import mqt.yaqs.characterization.memory.shared.utils as utils_module
 from mqt.yaqs.characterization.memory.shared.utils import (
     _apply_backend_unitary_site_zero,
     _apply_cut_preparation_step,
+    _dense_state_to_mps,
     _evolve_backend_state,
     _initialize_backend_state,
     _reprepare_backend_state_forced,
@@ -59,27 +60,69 @@ def test_initialize_backend_state_mcwf_and_tjm() -> None:
     assert state_tjm.length == op.length
 
 
-def test_extract_site0_rho_from_mps_and_vector() -> None:
-    """Single-qubit density extraction should give a 2x2 PSD matrix with non-negative trace."""
-    mps = MPS(length=1, state="zeros")
-    rho_mps = extract_site0_rho(mps)
-    assert rho_mps.shape == (2, 2)
-    assert np.real(np.trace(rho_mps)) >= 0.0
+def test_dense_state_to_mps_preserves_lsb_vector() -> None:
+    """Exact dense-to-MPS conversion preserves an asymmetric site-0-LSB vector."""
+    vector = np.array(
+        [
+            1.0 + 0.5j,
+            -2.0 + 0.25j,
+            0.75 - 1.5j,
+            0.125 + 0.625j,
+            -0.5 - 0.25j,
+            1.25 + 0.75j,
+            -0.375 + 0.875j,
+            0.25 - 1.0j,
+        ],
+        dtype=np.complex128,
+    )
 
-    vec = np.zeros(2, dtype=np.complex128)
-    vec[0] = 1.0
+    mps = _dense_state_to_mps(vector, length=3)
+
+    np.testing.assert_allclose(mps.to_vec(), vector, atol=1e-12)
+
+
+def test_dense_state_to_mps_discards_zero_singular_values() -> None:
+    """A product vector remains a bond-one MPS after exact conversion."""
+    vector = np.zeros(2**10, dtype=np.complex128)
+    vector[1] = 1.0
+
+    mps = _dense_state_to_mps(vector, length=10)
+
+    assert mps.bond_dimensions() == [1] * 9
+    np.testing.assert_allclose(mps.to_vec(), vector, atol=1e-12)
+
+
+def test_dense_state_to_mps_rejects_invalid_shape() -> None:
+    """Dense-to-MPS conversion validates the qubit count and vector size."""
+    with pytest.raises(ValueError, match="length must be positive"):
+        _dense_state_to_mps(np.ones(2, dtype=np.complex128), length=0)
+    with pytest.raises(ValueError, match="psi has size 3, expected 4"):
+        _dense_state_to_mps(np.ones(3, dtype=np.complex128), length=2)
+
+
+def test_extract_site0_rho_from_mps_and_vector() -> None:
+    """MPS and dense extraction agree with an explicit site-0-LSB partial trace."""
+    vec = np.array([1.0, 2.0j, -0.5j, 0.75], dtype=np.complex128)
+    vec /= np.linalg.norm(vec)
+    mps = _dense_state_to_mps(vec, length=2)
+    rho_mps = extract_site0_rho(mps)
     rho_vec = extract_site0_rho(vec)
-    np.testing.assert_allclose(rho_vec, np.array([[1.0, 0.0], [0.0, 0.0]]))
+    expected = sum(
+        (np.outer(vec[2 * env : 2 * env + 2], vec[2 * env : 2 * env + 2].conj()) for env in range(2)),
+        start=np.zeros((2, 2), dtype=np.complex128),
+    )
+    np.testing.assert_allclose(rho_mps, expected)
+    np.testing.assert_allclose(rho_vec, expected)
 
 
 def test_extract_site0_rho_unnormalized_matches_dense_backend() -> None:
     """MPS and dense branches agree on an unnormalized state, where ``trace = <psi|psi>``."""
-    mps = MPS(length=1, state="zeros")
+    mps = MPS(length=2, state="basis", basis_string="10")
     mps.tensors[0] *= 2.0
     assert float(mps.norm()) == pytest.approx(2.0)
     rho_mps = extract_site0_rho(mps)
 
-    rho_vec = extract_site0_rho(np.array([2.0, 0.0], dtype=np.complex128))
+    rho_vec = extract_site0_rho(np.array([0.0, 2.0, 0.0, 0.0], dtype=np.complex128))
 
     np.testing.assert_allclose(rho_mps, rho_vec)
     assert np.real(np.trace(rho_mps)) == pytest.approx(4.0)
@@ -178,26 +221,32 @@ def test_representation_to_solver_and_resolve_stochastic_solver() -> None:
 
 
 def test_reprepare_site_zero_helpers_mcwf_and_mps() -> None:
-    """Project+reprepare helpers update MCWF vectors and MPS tensors."""
+    """Project and reprepare act on the least-significant qubit for both backends."""
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    x = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
-    vec = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    one = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
+    vec = np.zeros(4, dtype=np.complex128)
+    vec[3] = 1.0
+    expected = np.zeros(4, dtype=np.complex128)
+    expected[2] = 1.0
 
-    new_vec, prob = _reprepare_site_zero_vector_forced(vec, x, z)
-    assert new_vec.shape == (2,)
-    assert 0.0 <= prob <= 1.0
+    new_vec, prob = _reprepare_site_zero_vector_forced(vec, one, z)
+    np.testing.assert_allclose(new_vec, expected)
+    assert prob == pytest.approx(1.0)
 
-    mps = MPS(length=1, state="zeros")
-    prob_mps = _reprepare_site_zero_forced(mps, x, z)
-    assert 0.0 <= prob_mps <= 1.0
+    mps = MPS(length=2, state="ones")
+    prob_mps = _reprepare_site_zero_forced(mps, one, z)
+    np.testing.assert_allclose(mps.to_vec(), expected)
+    assert prob_mps == pytest.approx(1.0)
 
-    out_vec, _ = _reprepare_backend_state_forced(vec, x, z, "MCWF")
+    out_vec, _ = _reprepare_backend_state_forced(vec, one, z, "MCWF")
     assert isinstance(out_vec, np.ndarray)
-    out_mps, _ = _reprepare_backend_state_forced(mps, x, z, "TJM")
+    out_mps, _ = _reprepare_backend_state_forced(MPS(length=2, state="ones"), one, z, "TJM")
     assert isinstance(out_mps, MPS)
+    np.testing.assert_allclose(out_vec, expected)
+    np.testing.assert_allclose(out_mps.to_vec(), expected)
 
     with pytest.raises(TypeError, match="MCWF solver requires"):
-        _reprepare_backend_state_forced(mps, x, z, "MCWF")
+        _reprepare_backend_state_forced(mps, one, z, "MCWF")
 
 
 def test_reset_and_unitary_backend_helpers() -> None:
@@ -212,9 +261,12 @@ def test_reset_and_unitary_backend_helpers() -> None:
 
     u_vec = _apply_backend_unitary_site_zero(vec, u, "MCWF")
     assert isinstance(u_vec, np.ndarray)
-    assert u_vec.shape == (4,)
+    expected = np.zeros(4, dtype=np.complex128)
+    expected[1] = 1.0
+    np.testing.assert_allclose(u_vec, expected)
     u_mps = _apply_backend_unitary_site_zero(mps, u, "TJM")
     assert isinstance(u_mps, MPS)
+    np.testing.assert_allclose(u_mps.to_vec(), expected)
 
     u_mat = _single_qubit_unitary_mapping_basis0_to_ket(x)
     np.testing.assert_allclose(u_mat[:, 0], x, atol=1e-12)
@@ -227,7 +279,7 @@ def test_cut_preparation_multi_qubit_reports_zero_projection_without_site0_suppo
     """Multi-qubit cut_preparation propagates vanishing |0> projection probability."""
     plus = np.array([1.0, 1.0], dtype=np.complex128) / np.sqrt(2)
     vec = np.zeros(4, dtype=np.complex128)
-    vec[3] = 1.0
+    vec[1] = 1.0
 
     state_out, prob = _apply_cut_preparation_step(vec, plus, "MCWF", chain_length=2)
 

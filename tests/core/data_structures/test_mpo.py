@@ -24,6 +24,7 @@ from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id
+from tests.site_order_reference import embed_local_factors
 
 if TYPE_CHECKING:
     from typing import Any
@@ -70,6 +71,21 @@ def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np
         i,
         i + 1,
     )
+
+
+def _kron_site_ops(ops: list[np.ndarray]) -> np.ndarray:
+    """Build a tensor product in site-0-LSB order.
+
+    Args:
+        ops: One local operator per site in ascending site order.
+
+    Returns:
+        Dense full-chain operator.
+    """
+    out = np.array([[1.0]], dtype=complex)
+    for op in ops:
+        out = np.kron(op, out)
+    return out
 
 
 def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
@@ -148,18 +164,11 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     dim = local_dim**length
     H = np.zeros((dim, dim), dtype=complex)
 
-    # Build H term-by-term using Kronecker products
-    def embed(op_list: list[np.ndarray]) -> np.ndarray:
-        out = np.array([[1.0]], dtype=complex)
-        for op in op_list:
-            out = np.kron(out, op)
-        return out
-
     # Onsite terms
     for i in range(length):
         op_list = [id_op] * length
         op_list[i] = omega * n + 0.5 * hubbard_u * (n @ (n - id_op))
-        H += embed(op_list)
+        H += _kron_site_ops(op_list)
 
     # Hopping terms
     for i in range(length - 1):
@@ -167,13 +176,13 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
         op_list1 = [id_op] * length
         op_list1[i] = adag
         op_list1[i + 1] = a
-        H += -hopping_j * embed(op_list1)
+        H += -hopping_j * _kron_site_ops(op_list1)
 
         # a_i * adag_{i+1}
         op_list2 = [id_op] * length
         op_list2[i] = a
         op_list2[i + 1] = adag
-        H += -hopping_j * embed(op_list2)
+        H += -hopping_j * _kron_site_ops(op_list2)
 
     return H
 
@@ -220,10 +229,7 @@ def _embed_local_ops(length: int, local_dim: int, site_ops: list[np.ndarray]) ->
     op_list = [identity] * length
     for site, op in enumerate(site_ops):
         op_list[site] = op
-    out = np.array([[1.0]], dtype=complex)
-    for op in op_list:
-        out = np.kron(out, op)
-    return out
+    return _kron_site_ops(op_list)
 
 
 def _fermi_hubbard_1d_fermionic_dense(length: int, t: float, u: float) -> np.ndarray:
@@ -475,7 +481,7 @@ def test_trapped_ion_two_ions() -> None:
     identity = np.eye(positions.size)
     distance = positions[:, None] - positions[None, :]
     coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
-    expected = np.kron(h1, identity) + np.kron(identity, h2) + np.diag(coulomb.ravel())
+    expected = np.kron(identity, h1) + np.kron(h2, identity) + np.diag(coulomb.ravel())
 
     assert mpo.length == 2
     assert mpo.physical_dimension == positions.size
@@ -699,11 +705,11 @@ def test_finite_state_machine() -> None:
 
 
 def test_custom_without_transpose_sets_physical_dimension() -> None:
-    """custom(transpose=False) reads the physical index from axis 2."""
+    """custom(transpose=False) reads the physical index from axis 0."""
     pdim = 3
     tensors = [
-        rng.random(size=(1, 2, pdim, pdim)).astype(np.complex128),
-        rng.random(size=(2, 1, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(pdim, pdim, 1, 2)).astype(np.complex128),
+        rng.random(size=(pdim, pdim, 2, 1)).astype(np.complex128),
     ]
     mpo = MPO()
     mpo.custom(tensors, transpose=False)
@@ -806,6 +812,20 @@ def test_compute_identity_fidelity_heterogeneous_physical_dimensions() -> None:
     measured = mpo.compute_identity_fidelity()
 
     assert measured == pytest.approx(1.0, abs=1e-12)
+
+
+def test_zero_mpo_dense_and_sparse_shapes_match_for_heterogeneous_sites() -> None:
+    """A heterogeneous zero MPO keeps its full Hilbert-space shape."""
+    local_dims = [2, 3]
+    mpo = MPO()
+    mpo.custom(
+        [np.zeros((dimension, dimension, 1, 1), dtype=np.complex128) for dimension in local_dims],
+        transpose=False,
+    )
+
+    assert mpo.to_matrix().shape == (6, 6)
+    assert mpo.to_sparse_matrix().shape == (6, 6)
+    np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), mpo.to_matrix())
 
 
 def test_compute_entanglement_entropy_identity_is_zero() -> None:
@@ -1052,7 +1072,8 @@ def test_from_gate_support_only_accepts_nonzero_site_labels() -> None:
     gate_mpo = MPO.from_gate(gate, 2, physical_dimensions=[2, 2])
 
     assert gate_mpo.length == 2
-    np.testing.assert_allclose(gate_mpo.to_matrix(), gate.matrix, atol=1e-12)
+    expected = _embed_gate_matrix(gate.matrix, [0, 1], 2)
+    np.testing.assert_allclose(gate_mpo.to_matrix(), expected, atol=1e-12)
 
 
 def test_multiply_mps_invalidates_then_restores_center() -> None:
@@ -1165,15 +1186,15 @@ def test_multiply_mps_length_mismatch_raises() -> None:
 
 
 def _embed_gate_matrix(gate_matrix: np.ndarray, gate_sites: list[int], chain_length: int) -> np.ndarray:
-    """Embed a gate matrix in declared-site order into a dense chain operator.
+    """Embed a gate matrix into a site-0-LSB dense chain operator.
 
     Args:
-        gate_matrix: Gate matrix whose qubit axes follow ``gate_sites`` order (site-0-MSB layout).
+        gate_matrix: Gate matrix whose qubit axes follow ``gate_sites`` order.
         gate_sites: Chain sites the gate acts on, in the gate's declared order.
         chain_length: Total number of chain sites.
 
     Returns:
-        Dense operator on the full chain with site 0 as the most significant bit.
+        Dense operator on the full chain with site 0 as the least-significant bit.
     """
     num_gate_sites = len(gate_sites)
     order = sorted(range(num_gate_sites), key=lambda idx: gate_sites[idx])
@@ -1185,9 +1206,9 @@ def _embed_gate_matrix(gate_matrix: np.ndarray, gate_sites: list[int], chain_len
     dim = 2**chain_length
     embedded = np.zeros((dim, dim), dtype=complex)
     for row in range(dim):
-        row_bits = [(row >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+        row_bits = [(row >> k) & 1 for k in range(chain_length)]
         for col in range(dim):
-            col_bits = [(col >> (chain_length - 1 - k)) & 1 for k in range(chain_length)]
+            col_bits = [(col >> k) & 1 for k in range(chain_length)]
             if any(row_bits[k] != col_bits[k] for k in range(chain_length) if k not in ascending_sites):
                 continue
             gate_row = 0
@@ -1539,19 +1560,50 @@ def test_partial_trace_sites_two_site_operator() -> None:
     traced = mpo.partial_trace_sites([0])
     dense_traced = traced.to_matrix()
 
-    np.testing.assert_allclose(dense_full, np.kron(A, B), atol=1e-12)
+    np.testing.assert_allclose(dense_full, np.kron(B, A), atol=1e-12)
     np.testing.assert_allclose(dense_traced, np.trace(B) * A, atol=1e-12)
 
 
 def test_from_local_ops_tensor_product() -> None:
-    """from_local_ops builds an MPO whose matrix is the tensor product of the locals."""
+    """from_local_ops puts site 0 in the rightmost Kronecker factor."""
     A = _crandn((4, 4))
     B = _crandn((4, 4))
 
     mpo = MPO.from_local_ops([A, B])
     dense = mpo.to_matrix()
 
-    np.testing.assert_allclose(dense, np.kron(A, B), atol=1e-12)
+    np.testing.assert_allclose(dense, np.kron(B, A), atol=1e-12)
+
+
+@pytest.mark.parametrize("transpose", [False, True])
+def test_custom_mixed_dimension_product_uses_site_zero_lsb(*, transpose: bool) -> None:
+    """Custom MPO cores preserve site identities for mixed local dimensions."""
+    factors = (
+        np.array([[0.0, 1.0], [2.0, 0.0]], dtype=np.complex128),
+        np.diag([1.0, 2.0, 4.0]).astype(np.complex128),
+        np.diag([1.0, 3.0, 5.0, 7.0]).astype(np.complex128),
+    )
+    dimensions = tuple(factor.shape[0] for factor in factors)
+    internal_tensors = [factor.reshape(factor.shape[0], factor.shape[1], 1, 1) for factor in factors]
+    tensors = (
+        [tensor.transpose(2, 3, 0, 1) for tensor in internal_tensors]
+        if transpose
+        else [tensor.copy() for tensor in internal_tensors]
+    )
+    mpo = MPO()
+    mpo.custom(tensors, transpose=transpose)
+
+    expected = embed_local_factors(factors, (0, 1, 2), dimensions)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+    np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), expected, atol=1e-12)
+
+    reflected = mpo.reflected()
+    reflected_factors = tuple(reversed(factors))
+    reflected_dimensions = tuple(reversed(dimensions))
+    reflected_expected = embed_local_factors(reflected_factors, (0, 1, 2), reflected_dimensions)
+    assert reflected.physical_dimension == reflected_dimensions[0]
+    np.testing.assert_allclose(reflected.to_matrix(), reflected_expected, atol=1e-12)
+    np.testing.assert_allclose(reflected.to_sparse_matrix().toarray(), reflected_expected, atol=1e-12)
 
 
 def test_mpo_add_two_site_matches_dense_sum() -> None:
@@ -1615,7 +1667,7 @@ def test_mpo_sum_matches_iterated_addition() -> None:
 
 def test_mpo_reflected_involution_and_dense_equivalence() -> None:
     """Reflecting an MPO twice restores tensors; dense matches site-reversed conjugation."""
-    mpo = MPO.ising(3, 1.0, 0.5)
+    mpo = MPO.from_local_ops([_X2, _Z2, _I2])
     original = [t.copy() for t in mpo.tensors]
     reflected = mpo.reflected()
     assert reflected is not mpo
@@ -1650,8 +1702,8 @@ def test_mpo_reflected_involution_and_dense_equivalence() -> None:
     np.testing.assert_allclose(dense_reflected, p @ dense @ p.T, atol=1e-12)
 
 
-def test_to_matrix_mps_order_matches_sparse_asymmetric() -> None:
-    """MPS-ordered dense conversion matches sparse and site-0-LSB embeddings."""
+def test_dense_and_sparse_conversions_match_site_zero_lsb() -> None:
+    """Dense and sparse MPO conversions use site-0-LSB ordering."""
     mpo = MPO()
     mpo.from_pauli_sum(
         terms=[(1.0, "Z0"), (0.3, "X1"), (0.7, "Y2")],
@@ -1659,13 +1711,21 @@ def test_to_matrix_mps_order_matches_sparse_asymmetric() -> None:
         tol=0.0,
         n_sweeps=0,
     )
-    dense_mps = mpo.to_matrix_mps_order()
+    dense = mpo.to_matrix()
     sparse = mpo.to_sparse_matrix().toarray()
-    np.testing.assert_allclose(dense_mps, sparse, atol=1e-12)
+    np.testing.assert_allclose(dense, sparse, atol=1e-12)
     z0 = _embed_one_body(_Z2, 3, 0)
     x1 = _embed_one_body(_X2, 3, 1)
     y2 = _embed_one_body(_Y2, 3, 2)
     expected = z0 + 0.3 * x1 + 0.7 * y2
-    np.testing.assert_allclose(dense_mps, expected, atol=1e-12)
-    # Historical to_matrix keeps site-0 MSB and disagrees for asymmetric H.
-    assert not np.allclose(mpo.to_matrix(), expected, atol=1e-6)
+    np.testing.assert_allclose(dense, expected, atol=1e-12)
+
+
+def test_from_matrix_round_trip_preserves_site_zero_lsb() -> None:
+    """Dense factorization preserves the physical site assigned by the input."""
+    expected = np.kron(_I2, _X2)
+
+    mpo = MPO.from_matrix(expected, d=2, cutoff=0.0)
+
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+    np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), expected, atol=1e-12)

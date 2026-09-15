@@ -20,6 +20,7 @@ from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
+from tests.site_order_reference import embed_local_operator, mixed_radix_index
 
 
 def test_unitary_ensemble_observable_average() -> None:
@@ -333,15 +334,11 @@ def test_list_initial_states_with_noise_raises() -> None:
 
 
 def _embed_one_site_operator(length: int, site: int, op2: np.ndarray) -> np.ndarray:
-    left_dim = 2**site
-    right_dim = 2 ** (length - site - 1)
-    return np.kron(np.kron(np.eye(left_dim, dtype=np.complex128), op2), np.eye(right_dim, dtype=np.complex128))
+    return embed_local_operator(op2, (site,), (2,) * length)
 
 
 def _embed_two_site_operator(length: int, site_left: int, op4: np.ndarray) -> np.ndarray:
-    left_dim = 2**site_left
-    right_dim = 2 ** (length - site_left - 2)
-    return np.kron(np.kron(np.eye(left_dim, dtype=np.complex128), op4), np.eye(right_dim, dtype=np.complex128))
+    return embed_local_operator(op4, (site_left, site_left + 1), (2,) * length)
 
 
 def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -389,6 +386,10 @@ def _ed_first_k_basis_two_time_means(
 ) -> list[np.ndarray]:
     dim = 2**length
     k_eff = min(k, dim)
+    dimensions = (2,) * length
+    initial_indices = [
+        mixed_radix_index(tuple(int(bit) for bit in format(index, f"0{length}b")), dimensions) for index in range(k_eff)
+    ]
     h_dense = _build_xxz_tf_open_chain_dense(length, j_xy, delta, h_x)
     evals, evecs = np.linalg.eigh(h_dense)
     evecs_h = evecs.conj().T
@@ -402,7 +403,7 @@ def _ed_first_k_basis_two_time_means(
         u_t = (evecs * phases[np.newaxis, :]) @ evecs_h
         for p_idx, (a_op, b_op) in enumerate(zip(embedded_a, embedded_b, strict=True)):
             m = u_t.conj().T @ a_op @ u_t @ b_op
-            out[p_idx, t_idx] = np.sum(np.diag(m)[:k_eff]) / float(k_eff)
+            out[p_idx, t_idx] = np.sum(np.diag(m)[initial_indices]) / float(k_eff)
 
     return [out[p_idx] for p_idx in range(len(probes))]
 

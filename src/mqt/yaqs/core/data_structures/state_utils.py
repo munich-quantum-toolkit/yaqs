@@ -357,6 +357,27 @@ def embed_one_site_operator(
     return np.asarray(res, dtype=np.complex128)
 
 
+def _swap_two_site_factor_order(
+    operator: NDArray[np.complex128],
+    dim_first: int,
+    dim_second: int,
+) -> NDArray[np.complex128]:
+    """Swap both tensor-factor pairs of a two-site operator.
+
+    Args:
+        operator: Matrix whose first factor has dimension ``dim_first`` and
+            second factor has dimension ``dim_second``.
+        dim_first: Dimension of the first tensor factor.
+        dim_second: Dimension of the second tensor factor.
+
+    Returns:
+        Matrix with the second tensor factor first.
+    """
+    pair_dimension = dim_first * dim_second
+    reshaped = np.asarray(operator, dtype=np.complex128).reshape(dim_first, dim_second, dim_first, dim_second)
+    return np.asarray(reshaped.transpose(1, 0, 3, 2).reshape(pair_dimension, pair_dimension), dtype=np.complex128)
+
+
 def embed_adjacent_two_site_operator(
     op4: NDArray[np.complex128],
     length: int,
@@ -367,7 +388,9 @@ def embed_adjacent_two_site_operator(
 ) -> NDArray[np.complex128]:
     """Embed a two-site operator on neighboring sites ``(site_left, site_left + 1)``.
 
-    Indexing matches :func:`embed_one_site_operator` (site ``0`` = LSB).
+    The first tensor factor of ``op4`` acts on ``site_left`` and the second
+    factor acts on ``site_left + 1``. The returned full matrix uses the same
+    indexing as :func:`embed_one_site_operator` (site ``0`` = LSB).
 
     Args:
         op4: Local ``(local_dim**2, local_dim**2)`` operator on the adjacent pair.
@@ -393,11 +416,12 @@ def embed_adjacent_two_site_operator(
     if op_arr.shape != (pair_dim, pair_dim):
         msg = f"op4 must have shape ({pair_dim}, {pair_dim}), got {op_arr.shape}."
         raise ValueError(msg)
+    pair_op = _swap_two_site_factor_order(op_arr, dims[site_left], dims[site_right])
     res = np.eye(1, dtype=np.complex128)
     site = 0
     while site < length:
         if site == site_left:
-            res = np.kron(op_arr, res)
+            res = np.kron(pair_op, res)
             site += 2
         else:
             res = np.kron(np.eye(dims[site], dtype=np.complex128), res)

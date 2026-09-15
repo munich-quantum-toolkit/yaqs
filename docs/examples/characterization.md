@@ -20,6 +20,8 @@ measures how long the environment keeps past control and measurement choices
 relevant for future probe responses, evaluated at a temporal cut $c$ in a
 sequence of interventions.
 
+Memory characterization currently supports qubit Hamiltonians only.
+
 Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
 probe **operational memory**: assemble the **response matrix** $V(c)$, then read
 $S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.

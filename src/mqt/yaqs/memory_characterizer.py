@@ -44,9 +44,9 @@ from mqt.yaqs.characterization.memory.shared.interventions import (
 from mqt.yaqs.characterization.memory.shared.utils import (
     DEFAULT_VECTOR_MAX_QUBITS,
     CharacterizerRepresentation,
-    make_zero_psi,
     representation_to_solver,
     resolve_characterizer_representation,
+    validate_qubit_memory_operator,
 )
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
@@ -144,7 +144,9 @@ def _require_hamiltonian(hamiltonian: Hamiltonian) -> MPO:
         msg = "Pass a Hamiltonian; use Hamiltonian.ising(...) or Hamiltonian(...)."
         raise TypeError(msg)
     hamiltonian.ensure_mpo()
-    return hamiltonian.mpo
+    operator = hamiltonian.mpo
+    validate_qubit_memory_operator(operator)
+    return operator
 
 
 def _resolve_num_interventions(target: Any, num_interventions: int | None) -> int:
@@ -221,6 +223,8 @@ class MemoryCharacterizer:
 
     **Use:** :meth:`predict` (surrogate or reference process-tensor dynamics), :meth:`characterize` (memory metrics),
     :meth:`compute_qmi`, :meth:`compute_cmi` (reference process-tensor information metrics)
+
+    Hamiltonian-based workflows currently support qubit Hamiltonians only.
 
     Attributes:
         parallel: Whether sequence simulations run in parallel via a process pool.
@@ -847,18 +851,14 @@ class MemoryCharacterizer:
         if probe_set is not None and len(cut_list) > 1:
             msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
             raise ValueError(msg)
-        psi0 = (
-            np.asarray(initial_psi, dtype=np.complex128)
-            if initial_psi is not None
-            else make_zero_psi(hamiltonian.length)
-        )
+        solver = self._solver_for(hamiltonian)
         backend = ExactBackend(
             operator=operator,
             sim_params=sim_params,
-            initial_psi=psi0,
+            initial_psi=initial_psi,
             parallel=self._execution.parallel,
             show_progress=self._execution.show_progress,
-            solver=self._solver_for(hamiltonian),
+            solver=solver,
             _execution=self._execution,
         )
         parts: dict[int, CharacterizationResult] = {}

@@ -26,6 +26,7 @@ from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.methods.decompositions import SvdDistribution, merge_two_site, split_two_site
+from tests.site_order_reference import embed_local_operator, mixed_radix_index
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -35,77 +36,6 @@ if TYPE_CHECKING:
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
-
-
-def _swap_gate_4() -> np.ndarray:
-    """Construct the two-qubit SWAP matrix in lexicographic basis.
-
-    Returns:
-        np.ndarray: The ``4 x 4`` SWAP matrix.
-    """
-    return np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
-
-
-def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
-    """Permute wrap-ordered two-site gates into merged nearest-neighbor ordering.
-
-    Args:
-        gate4: Two-site gate in ``|q_{L-1}, q_0>`` ordering.
-
-    Returns:
-        np.ndarray: Gate in merged ordering ``|q_0, q_{L-1}>``.
-    """
-    p_perm = np.zeros((4, 4), dtype=np.complex128)
-    for a in range(2):
-        for b in range(2):
-            idx_merged = 2 * a + b
-            idx_bond = 2 * b + a
-            p_perm[idx_bond, idx_merged] = 1.0
-    g = np.asarray(gate4, dtype=np.complex128)
-    return p_perm.conj().T @ g @ p_perm
-
-
-def _dense_embed_adjacent_two_site(length: int, site_left: int, gate4: np.ndarray) -> np.ndarray:
-    """Embed a two-site gate onto neighboring sites in a dense Hilbert space.
-
-    Args:
-        length: Number of qubits.
-        site_left: Left site index.
-        gate4: Two-site gate matrix.
-
-    Returns:
-        np.ndarray: Embedded dense operator.
-    """
-    left_dim = 2**site_left
-    right_dim = 2 ** (length - site_left - 2)
-    op4 = np.asarray(gate4, dtype=np.complex128)
-    return np.asarray(
-        np.kron(np.kron(np.eye(left_dim, dtype=np.complex128), op4), np.eye(right_dim, dtype=np.complex128)),
-        dtype=np.complex128,
-    )
-
-
-def _dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.ndarray:
-    """Embed a two-site gate on periodic bond ``(L-1, 0)``.
-
-    Args:
-        length: Number of qubits.
-        gate4: Two-site gate matrix in wrap ordering.
-
-    Returns:
-        np.ndarray: Embedded dense operator.
-    """
-    g = np.asarray(gate4, dtype=np.complex128)
-    if length <= 2:
-        return np.asarray(g, dtype=np.complex128)
-    dim = 2**length
-    sw = _swap_gate_4()
-    u_fwd = np.eye(dim, dtype=np.complex128)
-    for i in range(length - 2):
-        u_fwd = _dense_embed_adjacent_two_site(length, i, sw) @ u_fwd
-    g_merged = _permuted_periodic_wrap_gate(g)
-    g_nn = _dense_embed_adjacent_two_site(length, length - 2, g_merged)
-    return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
 
 
 def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -318,6 +248,7 @@ def test_flip_network() -> None:
         tensors=copy.deepcopy(original_tensors),
         physical_dimensions=[pdim] * length,
     )
+    original_vector = mps.to_vec()
 
     mps.flip_network()
     flipped_tensors = mps.tensors
@@ -327,6 +258,15 @@ def test_flip_network() -> None:
         original_tensors[2].shape[2],
         original_tensors[2].shape[1],
     )
+    flipped_vector = mps.to_vec()
+    expected_vector = np.empty_like(original_vector)
+    dimensions = (pdim,) * length
+    for digits in np.ndindex(*dimensions):
+        original_index = mixed_radix_index(digits, dimensions)
+        reflected_index = mixed_radix_index(tuple(reversed(digits)), dimensions)
+        expected_vector[reflected_index] = original_vector[original_index]
+    np.testing.assert_allclose(flipped_vector, expected_vector, atol=1e-12)
+
     mps.flip_network()
     for orig, now in zip(original_tensors, mps.tensors, strict=False):
         assert np.allclose(orig, now)
@@ -858,7 +798,6 @@ def test_expect_mpo_contracts_directly_without_mutation(monkeypatch: pytest.Monk
         "compress",
         "multiply",
         "to_matrix",
-        "to_matrix_mps_order",
         "to_mps",
         "to_sparse_matrix",
     ):
@@ -1130,6 +1069,25 @@ def test_two_site_local_expect_is_gauge_safe(center: int | None) -> None:
     assert state.orthogonality_center == center
 
 
+@pytest.mark.parametrize("sites", [[1, 2], [2, 1]])
+def test_two_site_local_expect_preserves_site_order(sites: list[int]) -> None:
+    """Two-site contraction follows ascending or descending listed sites."""
+    state = _entangled_mps(length=4, chi=8, seed=20260915)
+    state.set_canonical_form(1)
+    random_generator = np.random.default_rng(20260915)
+    raw = random_generator.standard_normal((4, 4)) + 1j * random_generator.standard_normal((4, 4))
+    matrix = np.asarray(raw + raw.conj().T, dtype=np.complex128)
+    observable = Observable(matrix, sites)
+    vector = state.to_vec()
+    dense = embed_local_operator(matrix, tuple(sites), (2,) * state.length)
+    expected = np.vdot(vector, dense @ vector)
+
+    actual = state.local_expect(observable, sites)
+
+    assert actual == pytest.approx(expected, abs=1e-10)
+    assert state.expect(observable) == pytest.approx(expected.real, abs=1e-10)
+
+
 def test_non_qubit_local_expectation_from_matrix_observable() -> None:
     """A matrix observable can be measured on a non-qubit local site."""
     amplitudes = np.sqrt(np.array([0.2, 0.3, 0.5], dtype=np.float64)).astype(np.complex128)
@@ -1221,42 +1179,40 @@ def test_apply_local_rejects_invalid_two_site_observable_shape() -> None:
         psi_mps.apply_local(observable)
 
 
-def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
-    """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
-    length = 2
+@pytest.mark.parametrize(
+    ("length", "sites"),
+    [(2, [0, 1]), (2, [1, 0]), (4, [1, 2]), (4, [2, 1])],
+)
+def test_mps_apply_local_adjacent_site_order_matches_dense(length: int, sites: list[int]) -> None:
+    """Adjacent local matrices follow their listed sites in both directions."""
     rng = np.random.default_rng(2026)
     g_random = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
     gate4 = (g_random + g_random.conj().T) / 2
-    g_merged = _permuted_periodic_wrap_gate(gate4)
+    mps = _entangled_mps(length=length, chi=8, seed=2026)
+    psi = mps.to_vec()
+    expected_operator = embed_local_operator(gate4, tuple(sites), (2,) * length)
 
-    mps_wrap = MPS(length, state="random", pad=8)
-    mps_wrap.normalize("B")
-    mps_nn = copy.deepcopy(mps_wrap)
+    mps.apply_local(Observable(gate4, sites=sites))
 
-    mps_wrap.apply_local(Observable(gate4, sites=[length - 1, 0]))
-    mps_nn.apply_local(Observable(g_merged, sites=[0, 1]))
-
-    np.testing.assert_allclose(np.asarray(mps_wrap.to_vec()), np.asarray(mps_nn.to_vec()), atol=1e-9)
+    np.testing.assert_allclose(mps.to_vec(), expected_operator @ psi, atol=1e-9)
 
 
-def test_mps_apply_local_periodic_wrap_matches_dense_expectation() -> None:
-    """Periodic-wrap application should reproduce dense expectation values."""
+@pytest.mark.parametrize("sites", [[4, 0], [0, 4]])
+def test_mps_apply_local_periodic_site_order_matches_dense(sites: list[int]) -> None:
+    """Both periodic site orders reproduce independent dense application."""
     length = 5
     j_xy = 1.1
-    mps = MPS(length, state="random", pad=16)
-    mps.normalize("B")
+    mps = _entangled_mps(length=length, chi=16, seed=2027)
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
 
     j_mat = _spin_current_bond_matrix(j_xy)
-    j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
-    obs = Observable(j_mat, sites=[length - 1, 0])
+    j_dense = embed_local_operator(j_mat, tuple(sites), (2,) * length)
+    obs = Observable(j_mat, sites=sites)
 
     mps_with_op = copy.deepcopy(mps)
     mps_with_op.apply_local(obs)
 
-    ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
-    ex_mps = float(np.real(mps.scalar_product(mps_with_op)))
-    assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
+    np.testing.assert_allclose(mps_with_op.to_vec(), j_dense @ psi, atol=1e-9)
 
 
 def test_mps_apply_local_non_adjacent_two_site_raises() -> None:
@@ -1280,38 +1236,21 @@ def test_mps_apply_local_unsupported_gate_dimension_raises() -> None:
         mps.apply_local(obs)
 
 
-def test_mps_mixed_expectation_l2_periodic_wrap_matches_permuted_nn() -> None:
-    """For ``L == 2``, wrap-ordered and permuted NN mixed expectations must agree."""
-    length = 2
-    rng = np.random.default_rng(2026)
-    g_random = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
-    gate4 = (g_random + g_random.conj().T) / 2
-    g_merged = _permuted_periodic_wrap_gate(gate4)
-
-    mps_wrap = MPS(length, state="random", pad=8)
-    mps_wrap.normalize("B")
-    mps_nn = copy.deepcopy(mps_wrap)
-
-    ex_wrap = mps_wrap.mixed_expectation(mps_nn, Observable(gate4, sites=[length - 1, 0]))
-    ex_nn_permuted = mps_nn.mixed_expectation(mps_wrap, Observable(g_merged, sites=[0, 1]))
-    assert ex_wrap == pytest.approx(ex_nn_permuted, rel=0, abs=1e-9)
-
-
-def test_mps_mixed_expectation_periodic_wrap_matches_dense_expectation() -> None:
-    """Periodic-wrap mixed expectation should reproduce dense expectation values."""
+@pytest.mark.parametrize("sites", [[4, 0], [0, 4]])
+def test_mps_periodic_expectation_site_order_matches_dense(sites: list[int]) -> None:
+    """Periodic expectations preserve matrix-factor order for either site list."""
     length = 5
     j_xy = 1.1
-    mps = MPS(length, state="random", pad=16)
-    mps.normalize("B")
+    mps = _entangled_mps(length=length, chi=16, seed=2028)
+    mps.set_canonical_form(2)
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
 
     j_mat = _spin_current_bond_matrix(j_xy)
-    j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
-    obs = Observable(j_mat, sites=[length - 1, 0])
+    j_dense = embed_local_operator(j_mat, tuple(sites), (2,) * length)
+    obs = Observable(j_mat, sites=sites)
 
     ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
-    ex_mps = float(np.real(mps.mixed_expectation(mps, obs)))
-    assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
+    assert mps.expect(obs) == pytest.approx(ex_dense, rel=0, abs=1e-9)
 
 
 def test_measure() -> None:

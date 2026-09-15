@@ -31,6 +31,7 @@ from mqt.yaqs.characterization.memory.operational_memory.samples import (
 from mqt.yaqs.characterization.memory.shared.encoding import SITE0_KET
 from mqt.yaqs.characterization.memory.shared.utils import validate_stochastic_solver
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -172,6 +173,45 @@ def test_exact_run_memory_characterization_builds_static_ctx_internally(monkeypa
     assert out.shape == (2, 3, 4)
     assert calls["ctx_args"] == (op, sim, None)
     assert calls["simulate_kwargs"]["static_ctx"] == "CTX"
+
+
+def test_exact_backend_builds_native_tjm_initial_state() -> None:
+    """TJM converts a dense site-0-LSB initial vector to an equivalent MPS."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+    sim = AnalogSimParams(dt=0.1)
+    psi0 = np.zeros(4, dtype=np.complex128)
+    psi0[1] = 1.0
+
+    process = ExactBackend(operator=op, sim_params=sim, initial_psi=psi0, solver="TJM", parallel=False)
+
+    assert isinstance(process.initial_psi, MPS)
+    np.testing.assert_allclose(process.initial_psi.to_vec(), psi0, atol=1e-12)
+
+
+def test_exact_backend_uses_native_zero_state_when_initial_state_is_omitted() -> None:
+    """TJM initializes its default all-zero state without a dense state vector."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+    sim = AnalogSimParams(dt=0.1)
+
+    process = ExactBackend(operator=op, sim_params=sim, initial_psi=None, solver="TJM", parallel=False)
+
+    assert isinstance(process.initial_psi, MPS)
+    np.testing.assert_allclose(process.initial_psi.to_vec(), np.array([1.0, 0.0, 0.0, 0.0]))
+
+
+def test_exact_backend_rejects_incompatible_mps_dimensions() -> None:
+    """ExactBackend reports an MPS-to-Hamiltonian dimension mismatch at construction."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+    initial = MPS(2, state="zeros", physical_dimensions=[3, 2])
+
+    with pytest.raises(ValueError, match=r"physical dimensions \[3, 2\].*Hamiltonian dimensions \[2, 2\]"):
+        ExactBackend(
+            operator=op,
+            sim_params=AnalogSimParams(dt=0.1),
+            initial_psi=initial,
+            solver="TJM",
+            parallel=False,
+        )
 
 
 def test_exact_diagnostics_use_complete_branch_weights(monkeypatch: pytest.MonkeyPatch) -> None:

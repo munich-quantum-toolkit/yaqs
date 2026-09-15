@@ -16,6 +16,7 @@ import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state import State
+from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.state import Representation
@@ -114,6 +115,56 @@ def test_initial_kwarg_builds_mps() -> None:
     psi.ensure_encoded("mps")
     vec = psi.mps.to_vec()
     assert np.isclose(abs(vec[-1]), 1.0)
+
+
+@pytest.mark.parametrize("representation", ["mps", "vector", "density_matrix"])
+def test_mixed_dimension_basis_state_uses_site_zero_lsb(representation: Representation) -> None:
+    """All state representations use the same mixed-radix physical-site index."""
+    dimensions = (2, 3, 2)
+    digits = (1, 2, 0)
+    expected_index = mixed_radix_index(digits, dimensions)
+    assert expected_index == 5
+    state = State(
+        3,
+        initial="basis",
+        basis_string="120",
+        physical_dimensions=list(dimensions),
+        representation=representation,
+    )
+
+    if representation == "mps":
+        vector = state.mps.to_vec()
+        np.testing.assert_allclose(vector, np.eye(12, dtype=np.complex128)[expected_index])
+    elif representation == "vector":
+        np.testing.assert_allclose(state.vector, np.eye(12, dtype=np.complex128)[expected_index])
+    else:
+        expected = np.zeros((12, 12), dtype=np.complex128)
+        expected[expected_index, expected_index] = 1.0
+        np.testing.assert_allclose(state.density_matrix, expected)
+
+
+def test_manual_mixed_dimension_tensors_follow_site_order_and_reflection() -> None:
+    """Manual MPS cores use list order as physical-site order, including after reflection."""
+    dimensions = (2, 3, 2)
+    digits = (1, 2, 0)
+    tensors = []
+    for digit, dimension in zip(digits, dimensions, strict=True):
+        tensor = np.zeros((dimension, 1, 1), dtype=np.complex128)
+        tensor[digit, 0, 0] = 1.0
+        tensors.append(tensor)
+
+    state = State(tensors=tensors, physical_dimensions=list(dimensions))
+    expected = np.zeros(int(np.prod(dimensions)), dtype=np.complex128)
+    expected[mixed_radix_index(digits, dimensions)] = 1.0
+    np.testing.assert_array_equal(state.mps.to_vec(), expected)
+
+    state.mps.flip_network()
+    reflected_dimensions = tuple(reversed(dimensions))
+    reflected_digits = tuple(reversed(digits))
+    reflected_expected = np.zeros(int(np.prod(reflected_dimensions)), dtype=np.complex128)
+    reflected_expected[mixed_radix_index(reflected_digits, reflected_dimensions)] = 1.0
+    assert state.mps.physical_dimensions == list(reflected_dimensions)
+    np.testing.assert_array_equal(state.mps.to_vec(), reflected_expected)
 
 
 def test_from_mps_wraps_existing() -> None:
@@ -288,11 +339,11 @@ def test_preset_ensure_encoded_vector_matches_mps(initial: str) -> None:
 
 
 def test_preset_encode_basis_string() -> None:
-    """Basis preset uses basis_string for the dense product vector."""
-    spec = State(3, initial="basis", basis_string="010", representation="vector")
-    ref = MPS(3, state="basis", basis_string="010").to_vec()
-    ref /= np.linalg.norm(ref)
-    np.testing.assert_allclose(spec.vector, ref)
+    """Character zero in a basis string selects the least-significant site."""
+    spec = State(3, initial="basis", basis_string="100", representation="vector")
+    expected = np.zeros(8, dtype=np.complex128)
+    expected[1] = 1.0
+    np.testing.assert_allclose(spec.vector, expected)
 
 
 def test_preset_random_with_seed() -> None:

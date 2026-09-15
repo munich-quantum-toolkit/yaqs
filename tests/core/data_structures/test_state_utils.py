@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from qiskit.circuit.library import CXGate
 from qiskit.quantum_info import Pauli
 
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -33,6 +32,7 @@ from mqt.yaqs.core.data_structures.state_utils import (
     validate_representation,
 )
 from mqt.yaqs.digital.utils.matrix_utils import embed_unitary
+from tests.site_order_reference import embed_local_operator
 
 
 def test_validate_representation_accepts_known() -> None:
@@ -288,25 +288,36 @@ def test_embed_one_site_matches_qiskit(length: int, site: int, local: str) -> No
     np.testing.assert_allclose(yaqs, qiskit, atol=1e-12)
 
 
-@pytest.mark.parametrize("length", [3, 4])
-@pytest.mark.parametrize("site_left", [0, 1, 2])
-def test_embed_adjacent_two_site_matches_qiskit(length: int, site_left: int) -> None:
-    """Adjacent two-site embedding agrees with Qiskit ``Operator`` layout.
+@pytest.mark.parametrize(("length", "site_left"), [(3, 0), (3, 1), (4, 0), (4, 1), (4, 2)])
+def test_embed_adjacent_two_site_matches_independent_site_order(length: int, site_left: int) -> None:
+    """Adjacent embedding preserves the listed tensor-factor site order.
 
-    Compares :func:`embed_adjacent_two_site_operator` against Qiskit's ``embed_unitary``
-    for a CX gate on neighboring sites.
+    The asymmetric product distinguishes the two physical sites. The expected
+    matrix comes from explicit mixed-radix basis enumeration.
 
     Args:
         length: Number of qubits in the chain.
         site_left: Left site index of the adjacent pair.
     """
-    if site_left + 1 >= length:
-        pytest.skip("pair out of range for chain length")
-
-    local_mat = np.asarray(CXGate().to_matrix(), dtype=np.complex128)
+    pauli_x = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    pauli_z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+    local_mat = np.asarray(np.kron(pauli_x, pauli_z), dtype=np.complex128)
     yaqs = embed_adjacent_two_site_operator(local_mat, length, site_left)
-    qiskit = embed_unitary(local_mat, [site_left, site_left + 1], length)
-    np.testing.assert_allclose(yaqs, qiskit, atol=1e-12)
+    expected = embed_local_operator(local_mat, (site_left, site_left + 1), (2,) * length)
+    np.testing.assert_allclose(yaqs, expected, atol=1e-12)
+
+
+def test_embed_adjacent_two_site_heterogeneous_dimensions() -> None:
+    """Adjacent embedding preserves site order when local dimensions differ."""
+    dimensions = (2, 3, 2)
+    first = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    second = np.diag([2, 3, 5]).astype(np.complex128)
+    local = np.asarray(np.kron(first, second), dtype=np.complex128)
+
+    actual = embed_adjacent_two_site_operator(local, 3, 0, physical_dimensions=list(dimensions))
+    expected = embed_local_operator(local, (0, 1), dimensions)
+
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
 def test_embed_matches_mps_expect_on_haar() -> None:

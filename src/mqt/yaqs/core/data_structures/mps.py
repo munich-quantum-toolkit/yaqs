@@ -22,6 +22,7 @@ from tqdm import tqdm
 from .. import linalg
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
+from .state_utils import _swap_two_site_factor_order
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -107,6 +108,7 @@ class MPS:
             basis_string: String used to initialize the state in a specific computational basis.
                 This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
+                Character ``i`` selects site ``i``.
 
         Raises:
             ValueError: If ``length`` is not positive or the provided ``state`` does not match a valid
@@ -426,7 +428,7 @@ class MPS:
             return self._orthogonality_center == sites_list[0]
         if len(sites_list) == 2:
             i, j = sites_list
-            return j == i + 1 and self._orthogonality_center in {i, j}
+            return abs(j - i) == 1 and self._orthogonality_center in {i, j}
         return False
 
     def shift_center_to(self, target: int, decomposition: str = "QR") -> None:
@@ -459,7 +461,7 @@ class MPS:
         already-populated MPS.
 
         Args:
-            basis_string: A string like "0101" indicating the computational basis state.
+            basis_string: A string like "0101" where character ``i`` selects site ``i``.
             physical_dimensions: The physical dimension of each site (e.g. 2 for qubits, 3+ for qudits).
 
         Raises:
@@ -1317,6 +1319,8 @@ class MPS:
 
         The function contracts the operator directly with the one-site tensor or
         merged two-site tensor in a gauge centered on the requested site or pair.
+        Matrix tensor factors follow the order of ``sites``. Periodic-wrap
+        observables use the full-contraction path.
 
         Args:
             operator: The local operator to be applied.
@@ -1339,33 +1343,48 @@ class MPS:
         operator_sites = [operator.sites] if isinstance(operator.sites, int) else list(operator.sites)
 
         if operator.interaction == 1:
-            assert len(sites_list) == 1, f"One-site observable requires one site, got {sites_list}."
-            assert operator_sites == sites_list, f"Operator sites mismatch {operator_sites}, {sites_list}"
+            if len(sites_list) != 1:
+                msg = f"One-site observable requires one site, got {sites_list}."
+                raise ValueError(msg)
+            if operator_sites != sites_list:
+                msg = f"Operator sites {operator_sites} do not match requested sites {sites_list}."
+                raise ValueError(msg)
         elif operator.interaction == 2:
-            assert isinstance(sites, list)
-            assert isinstance(operator.sites, list)
+            if len(sites_list) != 2:
+                msg = f"Two-site observable requires two sites, got {sites_list}."
+                raise ValueError(msg)
+            if operator_sites != sites_list:
+                msg = f"Operator sites {operator_sites} do not match requested sites {sites_list}."
+                raise ValueError(msg)
             i, j = sites_list
-            assert operator.sites[0] == i, "Observable sites mismatch"
-            assert operator.sites[1] == j, "Observable sites mismatch"
-            assert operator.sites[0] < operator.sites[1], "Observable sites must be in ascending order."
-            assert operator.sites[1] - operator.sites[0] == 1, (
-                "Only nearest-neighbor observables are currently implemented."
-            )
+            if i == j:
+                msg = f"Two-site observable sites must be distinct, got {sites_list}."
+                raise ValueError(msg)
+            is_neighbor = abs(i - j) == 1
+            is_periodic_wrap = self.length > 2 and {i, j} == {0, self.length - 1}
+            if not is_neighbor and not is_periodic_wrap:
+                msg = "Only nearest-neighbor and periodic-wrap two-site observables are currently implemented."
+                raise ValueError(msg)
         else:
             msg = "Local observable must be one-site or nearest-neighbor two-site."
             raise ValueError(msg)
 
         for site in sites_list:
             self._validate_center(site, name="observable site")
+
+        if operator.interaction == 2 and self.length > 2 and set(sites_list) == {0, self.length - 1}:
+            return self.mixed_expectation(self, operator)
+
+        contraction_sites = sorted(sites_list)
         base_state = self
-        if not self.check_covers_sites(sites_list):
+        if not self.check_covers_sites(contraction_sites):
             base_state = copy.deepcopy(self)
             if base_state.orthogonality_center is None:
-                target = sites_list[0]
+                target = contraction_sites[0]
                 base_state.set_canonical_form(target)
             else:
                 center = base_state.orthogonality_center
-                target = min(sites_list, key=lambda site: abs(center - site))
+                target = min(contraction_sites, key=lambda site: abs(center - site))
                 base_state.shift_center_to(target)
 
         if operator.interaction == 1:
@@ -1378,15 +1397,23 @@ class MPS:
                 raise ValueError(msg)
             return np.complex128(oe.contract("abc,ad,dbc->", np.conj(a), matrix, a))
 
-        i, j = sites_list
+        first_site, second_site = sites_list
+        i, j = contraction_sites
         a = base_state.tensors[i]
         b = base_state.tensors[j]
         d_i, left, _ = a.shape
         d_j, _, right = b.shape
         matrix = np.asarray(operator.matrix, dtype=np.complex128)
-        if matrix.shape != (d_i * d_j, d_i * d_j):
+        pair_dimension = d_i * d_j
+        if matrix.shape != (pair_dimension, pair_dimension):
             msg = f"Two-site observable matrix shape {matrix.shape} does not match site dimensions {d_i} and {d_j}."
             raise ValueError(msg)
+        if first_site > second_site:
+            matrix = _swap_two_site_factor_order(
+                matrix,
+                base_state.tensors[first_site].shape[0],
+                base_state.tensors[second_site].shape[0],
+            )
 
         theta = np.tensordot(a, b, axes=(2, 1)).transpose(1, 0, 2, 3)
         theta = theta.reshape(left, d_i * d_j, right)
@@ -1396,9 +1423,8 @@ class MPS:
         r"""Apply a one- or two-site local observable to this MPS in-place.
 
         Supports nearest-neighbor two-site gates and periodic-wrap gates on
-        ``(L-1, 0)``. For ``L == 2`` with wrap ordering ``[1, 0]``, the gate is
-        interpreted in ``|q_{L-1}, q_0>`` ordering and permuted to the merged
-        nearest-neighbor basis on ``(0, 1)``.
+        ``(L-1, 0)``. The first matrix tensor factor acts on the first listed
+        site. Both ascending and descending site lists are supported.
 
         Args:
             observable: One-site (``2 x 2``) or two-site (``4 x 4``) observable.
@@ -1412,18 +1438,6 @@ class MPS:
             the canonical form, so this method marks the orthogonality center as
             unknown after changing the tensors.
         """
-
-        def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
-            """Permute wrap gate from |q_{L-1}, q_0> to merged |q_0, q_{L-1}> ordering.
-
-            Returns:
-                Permuted 4x4 gate matrix.
-            """
-            p_perm = np.zeros((4, 4), dtype=np.complex128)
-            for a in range(2):
-                for b in range(2):
-                    p_perm[2 * b + a, 2 * a + b] = 1.0
-            return p_perm.conj().T @ gate4 @ p_perm
 
         def apply_two_site_nn_inplace(state: MPS, site_left: int, mat4: NDArray[np.complex128]) -> None:
             """Apply 4x4 gate to adjacent sites (site_left, site_left+1) in-place via SVD."""
@@ -1469,6 +1483,7 @@ class MPS:
                 msg = f"One-site local observable requires one site, got {sites}."
                 raise ValueError(msg)
             site = sites[0]
+            self._validate_center(site, name="observable site")
             local_dim = self.tensors[site].shape[0]
             matrix = np.asarray(observable.matrix, dtype=np.complex128)
             if matrix.shape != (local_dim, local_dim):
@@ -1483,6 +1498,11 @@ class MPS:
                 msg = f"Two-site local observable requires two sites, got {sites}."
                 raise ValueError(msg)
             i, j = int(sites[0]), int(sites[1])
+            if i == j:
+                msg = f"Two-site observable sites must be distinct, got {sites}."
+                raise ValueError(msg)
+            self._validate_center(i, name="observable site")
+            self._validate_center(j, name="observable site")
             length = self.length
             mat = np.asarray(observable.matrix, dtype=np.complex128)
             d_i = self.tensors[i].shape[0]
@@ -1490,25 +1510,27 @@ class MPS:
             if mat.shape != (d_i * d_j, d_i * d_j):
                 msg = f"Two-site observable matrix shape {mat.shape} does not match site dimensions {d_i} and {d_j}."
                 raise ValueError(msg)
+            if i > j:
+                mat = _swap_two_site_factor_order(mat, d_i, d_j)
+            site_left, site_right = sorted((i, j))
 
             if length == 2:
-                if i == length - 1 and j == 0:
-                    g_merged = permuted_periodic_wrap(mat)
-                    apply_two_site_nn_inplace(self, 0, g_merged)
-                    return
-                i, j = min(i, j), max(i, j)
-            elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
+                apply_two_site_nn_inplace(self, 0, mat)
+                return
+            if {i, j} == {0, length - 1}:
+                if any(dimension != 2 for dimension in self.physical_dimensions):
+                    msg = "Periodic-wrap two-site matrices currently require qubit sites throughout the system."
+                    raise ValueError(msg)
                 bubble_swaps_forward(self)
-                g_merged = permuted_periodic_wrap(mat)
-                apply_two_site_nn_inplace(self, length - 2, g_merged)
+                apply_two_site_nn_inplace(self, length - 2, mat)
                 bubble_swaps_backward(self)
                 return
 
-            if j != i + 1:
+            if site_right != site_left + 1:
                 msg = "Only nearest-neighbor two-site observables are currently implemented."
                 raise ValueError(msg)
 
-            apply_two_site_nn_inplace(self, i, mat)
+            apply_two_site_nn_inplace(self, site_left, mat)
             return
 
         msg = "Local observable must be one-site or nearest-neighbor two-site."
@@ -1659,7 +1681,8 @@ class MPS:
             rng: Optional random number generator for outcome sampling.
 
         Returns:
-            The measurement outcome encoded as an integer bitstring.
+            The measurement outcome encoded as an integer. Bit ``i`` stores the
+            outcome at site ``i``, so site ``0`` is the least-significant bit.
 
         Raises:
             ValueError: If an invalid basis is provided.
@@ -1727,7 +1750,8 @@ class MPS:
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
 
         Returns:
-            A dictionary where keys are measured basis states (as integers) and values are the corresponding counts.
+            A dictionary from measured basis-state integers to counts. Bit ``i``
+            of each key stores the outcome at site ``i``.
 
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
@@ -1868,7 +1892,7 @@ class MPS:
         This is equivalent to computing ⟨bitstring|ψ⟩⟨ψ|bitstring⟩.
 
         Args:
-            bitstring (str): Bitstring to project onto (little-endian: site 0 is first char).
+            bitstring: Site-order string where character ``i`` selects site ``i``.
 
         Returns:
             float: Probability of obtaining the given bitstring under projective measurement.
@@ -2006,6 +2030,9 @@ class MPS:
 
     def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.
+
+        Site ``0`` is the least-significant, fastest-varying subsystem in the
+        returned vector. For qubits, this matches Qiskit's statevector order.
 
         Returns:
             A one-dimensional NumPy array of length :math:`\prod_{\ell=1}^L d_\ell`
