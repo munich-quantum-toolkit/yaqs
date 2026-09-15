@@ -26,6 +26,7 @@ from mqt.yaqs.core.methods.stochastic_process import (
     create_probability_distribution,
     stochastic_process,
 )
+from tests.site_order_reference import embed_local_factors, embed_local_operator, mixed_radix_index
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -332,20 +333,29 @@ def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
 
 
 def test_adjacent_non_pauli_pdf_matches_exact_weights() -> None:
-    """Equal-rate X@0 and 2I@[0,1] yield PDF weights proportional to operator norms."""
-    # Product |0>: ||X|0>||^2 = 1, ||(2I)|00>||^2 = 4 → weights 1:4 → [0.2, 0.8]
-    state = MPS(2, state="zeros")
-    two_i = 2.0 * np.eye(4, dtype=np.complex128)
-    merged = oe.contract("ab, bcd->acd", two_i, merge_two_site(state.tensors[0], state.tensors[1]))
-    assert float(np.vdot(merged, merged).real) == pytest.approx(4.0)
+    """Adjacent jump selection weights match the independent dense oracle."""
+    dimensions = (2, 2)
+    basis_digits = (1, 0)
+    initial = np.zeros(4, dtype=np.complex128)
+    initial[mixed_radix_index(basis_digits, dimensions)] = 1.0
+    state = MPS(2, state="basis", basis_string="10")
+    np.testing.assert_array_equal(state.to_vec(), initial)
+
+    first_matrix = np.diag([1.0, 2.0, 3.0, 5.0]).astype(np.complex128)
+    second_matrix = np.diag([7.0, 11.0, 13.0, 17.0]).astype(np.complex128)
+    strengths = np.array([0.7, 1.3])
     noise_model = NoiseModel([
-        {"name": "pauli_x", "sites": [0], "strength": 1.0},
-        {"name": "scaled_i", "sites": [0, 1], "strength": 1.0, "matrix": two_i},
+        {"name": "first", "sites": [0, 1], "strength": strengths[0], "matrix": first_matrix},
+        {"name": "second", "sites": [0, 1], "strength": strengths[1], "matrix": second_matrix},
     ])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     _procs, probabilities = create_probability_distribution(state, noise_model, dt=1.0, sim_params=sim_params)
-    assert len(probabilities) == 2
-    np.testing.assert_allclose(probabilities, [0.2, 0.8], atol=1e-10)
+    matrices = (first_matrix, second_matrix)
+    exact_weights = np.array([
+        strength * np.linalg.norm(embed_local_operator(matrix, (0, 1), dimensions) @ initial) ** 2
+        for strength, matrix in zip(strengths, matrices, strict=True)
+    ])
+    np.testing.assert_allclose(probabilities, exact_weights / exact_weights.sum(), atol=1e-12)
 
 
 def test_adjacent_pdf_independent_of_max_bond_dim() -> None:
@@ -636,7 +646,7 @@ def test_create_probability_distribution_non_pauli_longrange_raises() -> None:
 
 
 def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
-    """Documented longrange_crosstalk_xy is treated as Pauli and can jump."""
+    """A forced long-range XY jump keeps X on site 0 and Y on site 2."""
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.99
     noise_model = NoiseModel([
@@ -644,6 +654,10 @@ def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
     ])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
+    factors = tuple(noise_model.processes[0]["factors"])
+    dense_jump = embed_local_factors(factors, (0, 2), (2, 2, 2))
+    expected = dense_jump @ state.to_vec()
+    expected /= np.linalg.norm(expected)
 
     new_state = stochastic_process(
         state_copy,
@@ -652,11 +666,13 @@ def test_stochastic_process_longrange_crosstalk_xy_jump() -> None:
         sim_params,
         rng=_always_jump_rng(),
     )
+
+    np.testing.assert_allclose(new_state.to_vec(), expected, atol=1e-12)
     assert new_state.orthogonality_center == 0
 
 
 def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
-    """Stochastic jumps support adjacent non-Pauli two-site processes."""
+    """An adjacent non-Pauli jump follows its listed site order."""
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.99
     lowering_left = np.kron(np.array([[0, 0], [1, 0]], dtype=np.complex128), np.eye(2))
@@ -665,6 +681,8 @@ def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
     ])
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
+    expected = embed_local_operator(lowering_left, (0, 1), (2, 2, 2)) @ state.to_vec()
+    expected /= np.linalg.norm(expected)
 
     new_state = stochastic_process(
         state_copy,
@@ -673,8 +691,9 @@ def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
         sim_params,
         rng=_always_jump_rng(),
     )
+
+    np.testing.assert_allclose(new_state.to_vec(), expected, atol=1e-12)
     assert new_state.orthogonality_center == 0
-    assert any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
 
 
 @pytest.mark.parametrize("max_bond_dim", [1, None], ids=["capped", "uncapped"])

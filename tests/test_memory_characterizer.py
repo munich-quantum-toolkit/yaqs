@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import contextlib
 import math
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import pytest
 from torch_support import requires_torch
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs import MPO, AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 
@@ -104,6 +104,111 @@ def test_characterize_hamiltonian_smoke(ham_and_params: tuple[Hamiltonian, Analo
     assert out.entropy(1) >= 0.0
     assert out.modes(1) >= 1
     assert out.response_matrix(1).ndim == 2
+
+
+def test_characterize_hamiltonian_mps_matches_vector_site_order() -> None:
+    """MPS and vector characterization agree for asymmetric site-0 dynamics."""
+    identity = np.eye(2, dtype=np.complex128)
+    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    hamiltonian = Hamiltonian(matrix=np.asarray(np.kron(identity, pauli_x), dtype=np.complex128))
+    params = AnalogSimParams(dt=0.05, max_bond_dim=None, svd_threshold=1e-12, order=1)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=2,
+        n_futures=2,
+        rng=np.random.default_rng(52),
+        intervention_style="haar",
+    )
+    initial_psi = np.zeros(4, dtype=np.complex128)
+    initial_psi[2] = 1.0
+
+    vector_result = MemoryCharacterizer(
+        representation="vector",
+        parallel=False,
+        show_progress=False,
+    ).characterize(
+        hamiltonian,
+        params,
+        num_interventions=1,
+        cut=1,
+        probe_set=probe_set,
+        initial_psi=initial_psi,
+    )
+    mps_result = MemoryCharacterizer(
+        representation="mps",
+        parallel=False,
+        show_progress=False,
+    ).characterize(
+        hamiltonian,
+        params,
+        num_interventions=1,
+        cut=1,
+        probe_set=probe_set,
+        initial_psi=initial_psi,
+    )
+
+    np.testing.assert_allclose(mps_result.response_matrix(1), vector_result.response_matrix(1), atol=1e-10)
+
+
+@requires_torch
+def test_sample_mps_matches_vector_representation() -> None:
+    """Public MPS sampling preserves the same site-0 states as vector sampling."""
+    hamiltonian = Hamiltonian.ising(length=2, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+
+    vector_dataset = MemoryCharacterizer(representation="vector", parallel=False, show_progress=False).sample(
+        hamiltonian,
+        params,
+        num_interventions=2,
+        n=2,
+        seed=17,
+        timesteps=[0.0, 0.0, 0.0],
+        intervention_style="measure_prepare",
+    )
+    mps_dataset = MemoryCharacterizer(representation="mps", parallel=False, show_progress=False).sample(
+        hamiltonian,
+        params,
+        num_interventions=2,
+        n=2,
+        seed=17,
+        timesteps=[0.0, 0.0, 0.0],
+        intervention_style="measure_prepare",
+    )
+
+    assert tuple(mps_dataset.tensors[0].shape) == (2, 2, 32)
+    assert tuple(mps_dataset.tensors[1].shape) == (2, 8)
+    assert tuple(mps_dataset.tensors[2].shape) == (2, 2, 8)
+    for vector_tensor, mps_tensor in zip(vector_dataset.tensors, mps_dataset.tensors, strict=True):
+        np.testing.assert_allclose(mps_tensor.numpy(), vector_tensor.numpy(), rtol=1e-6, atol=1e-7)
+
+
+@pytest.mark.parametrize("representation", ["vector", "mps"])
+def test_characterize_rejects_nonqubit_hamiltonian(representation: Literal["vector", "mps"]) -> None:
+    """Memory characterization rejects nonqubit dimensions before backend work."""
+    operator = MPO.from_local_ops([
+        np.eye(3, dtype=np.complex128),
+        np.eye(3, dtype=np.complex128),
+    ])
+    hamiltonian = Hamiltonian.from_mpo(operator)
+    characterizer = MemoryCharacterizer(
+        representation=representation,
+        parallel=False,
+        show_progress=False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"supports qubit Hamiltonians only; got local physical dimensions \[3, 3\]",
+    ):
+        characterizer.characterize(
+            hamiltonian,
+            AnalogSimParams(dt=0.1),
+            num_interventions=1,
+            cut=1,
+            n_pasts=1,
+            n_futures=1,
+        )
 
 
 def test_characterize_reuses_probe_set(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:

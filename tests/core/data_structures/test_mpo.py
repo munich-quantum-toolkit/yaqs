@@ -24,6 +24,7 @@ from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.simulation_parameters import DigitalSimParams
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id
+from tests.site_order_reference import embed_local_factors
 
 if TYPE_CHECKING:
     from typing import Any
@@ -1574,6 +1575,37 @@ def test_from_local_ops_tensor_product() -> None:
     np.testing.assert_allclose(dense, np.kron(B, A), atol=1e-12)
 
 
+@pytest.mark.parametrize("transpose", [False, True])
+def test_custom_mixed_dimension_product_uses_site_zero_lsb(*, transpose: bool) -> None:
+    """Custom MPO cores preserve site identities for mixed local dimensions."""
+    factors = (
+        np.array([[0.0, 1.0], [2.0, 0.0]], dtype=np.complex128),
+        np.diag([1.0, 2.0, 4.0]).astype(np.complex128),
+        np.diag([1.0, 3.0, 5.0, 7.0]).astype(np.complex128),
+    )
+    dimensions = tuple(factor.shape[0] for factor in factors)
+    internal_tensors = [factor.reshape(factor.shape[0], factor.shape[1], 1, 1) for factor in factors]
+    tensors = (
+        [tensor.transpose(2, 3, 0, 1) for tensor in internal_tensors]
+        if transpose
+        else [tensor.copy() for tensor in internal_tensors]
+    )
+    mpo = MPO()
+    mpo.custom(tensors, transpose=transpose)
+
+    expected = embed_local_factors(factors, (0, 1, 2), dimensions)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+    np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), expected, atol=1e-12)
+
+    reflected = mpo.reflected()
+    reflected_factors = tuple(reversed(factors))
+    reflected_dimensions = tuple(reversed(dimensions))
+    reflected_expected = embed_local_factors(reflected_factors, (0, 1, 2), reflected_dimensions)
+    assert reflected.physical_dimension == reflected_dimensions[0]
+    np.testing.assert_allclose(reflected.to_matrix(), reflected_expected, atol=1e-12)
+    np.testing.assert_allclose(reflected.to_sparse_matrix().toarray(), reflected_expected, atol=1e-12)
+
+
 def test_mpo_add_two_site_matches_dense_sum() -> None:
     """Two-site __add__ produces the expected dense operator sum."""
     mpo_a = MPO.identity(2)
@@ -1635,7 +1667,7 @@ def test_mpo_sum_matches_iterated_addition() -> None:
 
 def test_mpo_reflected_involution_and_dense_equivalence() -> None:
     """Reflecting an MPO twice restores tensors; dense matches site-reversed conjugation."""
-    mpo = MPO.ising(3, 1.0, 0.5)
+    mpo = MPO.from_local_ops([_X2, _Z2, _I2])
     original = [t.copy() for t in mpo.tensors]
     reflected = mpo.reflected()
     assert reflected is not mpo

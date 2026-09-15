@@ -96,6 +96,68 @@ def make_zero_psi(length: int) -> NDArray[np.complex128]:
     return psi
 
 
+def validate_qubit_memory_operator(operator: MPO) -> None:
+    """Reject Hamiltonians outside the qubit-only memory contract.
+
+    Args:
+        operator: Hamiltonian MPO used by a memory-characterization backend.
+
+    Raises:
+        ValueError: If any MPO core does not have qubit input and output legs.
+    """
+    dimensions = [int(tensor.shape[0]) for tensor in operator.tensors]
+    if any(tensor.shape[0] != 2 or tensor.shape[1] != 2 for tensor in operator.tensors):
+        msg = (
+            "Memory characterization currently supports qubit Hamiltonians only; "
+            f"got local physical dimensions {dimensions}."
+        )
+        raise ValueError(msg)
+
+
+def _dense_state_to_mps(psi: NDArray[np.complex128], *, length: int) -> MPS:
+    """Convert a dense site-0-LSB qubit state to an MPS to numerical precision.
+
+    Args:
+        psi: Dense state vector in the same order as :meth:`MPS.to_vec`.
+        length: Number of qubits in the state.
+
+    Returns:
+        An exact MPS whose first tensor represents site ``0``.
+
+    Raises:
+        ValueError: If ``length`` is not positive or the vector has the wrong size.
+    """
+    if length < 1:
+        msg = f"length must be positive, got {length}."
+        raise ValueError(msg)
+    vector = np.asarray(psi, dtype=np.complex128).reshape(-1)
+    expected_size = 2**length
+    if vector.size != expected_size:
+        msg = f"psi has size {vector.size}, expected {expected_size} for length={length}."
+        raise ValueError(msg)
+
+    # NumPy lists the most-significant subsystem first after a reshape. Reverse
+    # the physical axes so the sequential SVD follows sites 0, 1, ... instead.
+    site_order_tensor = vector.reshape([2] * length).transpose(tuple(range(length - 1, -1, -1)))
+    tensors: list[NDArray[np.complex128]] = []
+    left_bond = 1
+    remainder = site_order_tensor.reshape(2, -1)
+    for site in range(length):
+        if site == length - 1:
+            tensors.append(remainder.reshape(left_bond, 2, 1).transpose(1, 0, 2))
+            break
+        u_mat, singular_values, vh_mat = np.linalg.svd(remainder, full_matrices=False)
+        rank_tolerance = np.finfo(singular_values.dtype).eps * max(remainder.shape) * singular_values[0]
+        right_bond = max(1, int(np.count_nonzero(singular_values > rank_tolerance)))
+        tensors.append(u_mat[:, :right_bond].reshape(left_bond, 2, right_bond).transpose(1, 0, 2))
+        remainder = (singular_values[:right_bond, None] * vh_mat[:right_bond]).reshape(right_bond * 2, -1)
+        left_bond = right_bond
+
+    mps = MPS(length, tensors=tensors)
+    mps.set_center(length - 1)
+    return mps
+
+
 def validate_stochastic_solver(solver: StochasticSolver | str | None) -> StochasticSolver:
     """Validate and normalize a stochastic solver name.
 
@@ -205,12 +267,12 @@ def _reprepare_site_zero_vector_forced(
         Tuple ``(new_state_vec, prob)`` where ``new_state_vec`` is the updated full state vector and
         ``prob`` is the projection probability.
     """
-    psi_reshaped = state_vec.reshape(2, state_vec.shape[0] // 2)
-    env_vec = proj_state.conj() @ psi_reshaped
+    psi_reshaped = state_vec.reshape(state_vec.shape[0] // 2, 2)
+    env_vec = psi_reshaped @ proj_state.conj()
     prob = float(np.linalg.norm(env_vec) ** 2)
     if prob > 1e-15:
         env_vec /= np.sqrt(prob)
-    return np.asarray(np.outer(new_state, env_vec).flatten(), dtype=np.complex128), prob
+    return np.asarray(np.outer(env_vec, new_state).flatten(), dtype=np.complex128), prob
 
 
 def assemble_state_from_expectations(expectations: dict[str, float]) -> NDArray[np.complex128]:
@@ -236,8 +298,8 @@ def extract_site0_rho(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex
         2x2 complex reduced density matrix on site 0.
     """
     if isinstance(state, np.ndarray):
-        vec = np.asarray(state, dtype=np.complex128).reshape(2, -1)
-        return vec @ vec.conj().T
+        vec = np.asarray(state, dtype=np.complex128).reshape(-1, 2)
+        return vec.T @ vec.conj()
     assert isinstance(state, MPS)
     trace = float(state.norm() ** 2)
     if trace < 1e-15:
@@ -258,6 +320,7 @@ def _initialize_backend_state(operator: MPO, solver: str) -> MPS | NDArray[np.co
     Returns:
         Dense state vector for MCWF or an MPS for TJM.
     """
+    validate_qubit_memory_operator(operator)
     if solver == "MCWF":
         psi = np.zeros(2**operator.length, dtype=np.complex128)
         psi[0] = 1.0
@@ -379,8 +442,8 @@ def _apply_backend_unitary_site_zero(
     u = np.asarray(unitary, dtype=np.complex128).reshape(2, 2)
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
-        psi = np.asarray(state, dtype=np.complex128).reshape(2, -1)
-        return (u @ psi).reshape(-1)
+        psi = np.asarray(state, dtype=np.complex128).reshape(-1, 2)
+        return (psi @ u.T).reshape(-1)
     assert isinstance(state, MPS)
     new_mps = copy.deepcopy(state)
     t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)

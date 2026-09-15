@@ -66,7 +66,8 @@ class Hamiltonian:
 
         Args:
             length: Number of sites. Inferred from ``len(tensors)`` or matrix dimension when omitted.
-            tensors: MPO tensor cores.
+            tensors: MPO tensor cores in ascending physical-site order. Each core
+                uses ``(left, right, physical_out, physical_in)`` axes.
             matrix: Dense operator matrix in site-0-LSB order.
             sparse_matrix: Sparse operator in site-0-LSB order.
             physical_dimension: Local Hilbert-space dimension (uniform sites).

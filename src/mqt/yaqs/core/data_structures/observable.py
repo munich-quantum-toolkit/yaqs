@@ -88,7 +88,12 @@ class Observable:
 
     Named observables use :class:`~mqt.yaqs.core.libraries.observable_library.ObservableLibrary`.
     Numeric matrices define custom local operators. Binary strings request the
-    probability of a computational-basis state.
+    probability of a computational-basis state. For a multi-site local matrix,
+    tensor factors follow the order of ``sites``. For example,
+    ``np.kron(a, b)`` with ``sites=[i, j]`` applies ``a`` to site ``i`` and
+    ``b`` to site ``j``. Two-site matrices support nearest-neighbor sites and,
+    on all-qubit chains, the periodic wrap ``{0, length - 1}`` during
+    simulation.
 
     Attributes:
         name: Canonical observable or diagnostic name.
@@ -109,7 +114,8 @@ class Observable:
 
         Args:
             operator: Named observable, computational-basis bitstring, or local matrix.
-            sites: Site indices on which a named or custom local operator acts.
+            sites: Ordered site indices on which a named or custom local operator acts.
+                Matrix tensor factors follow this order.
             **operator_kwargs: Arguments for a configurable named observable.
 
         Raises:

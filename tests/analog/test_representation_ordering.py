@@ -18,26 +18,36 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simul
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
+from tests.site_order_reference import embed_local_operator, mixed_radix_index
 
 
 @pytest.fixture
-def haar_state() -> tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]:
-    """Haar-random 3-qubit MPS and dense snapshots.
+def deterministic_state() -> tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]:
+    """Deterministic entangled 3-qubit MPS and dense snapshots.
 
     Returns:
         Tuple of ``(mps, psi, rho, tensors)``.
     """
     length = 3
-    mps = MPS(length, state="haar-random", pad=4)
+    rng = np.random.default_rng(20260915)
+    shapes = ((2, 1, 2), (2, 2, 2), (2, 2, 1))
+    tensors = [
+        np.asarray(rng.standard_normal(shape) + 1j * rng.standard_normal(shape), dtype=np.complex128)
+        for shape in shapes
+    ]
+    mps = MPS(length, tensors=tensors)
+    mps.normalize("B")
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
     rho = np.outer(psi, psi.conj())
     tensors = [np.asarray(t, dtype=np.complex128).copy() for t in mps.tensors]
     return mps, psi, rho, tensors
 
 
-def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]) -> None:
+def test_entangled_embedded_observables_match_mps(
+    deterministic_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
+) -> None:
     """Dense MCWF/Lindblad embeddings agree with ``MPS.expect`` on entangled states."""
-    mps, psi, _rho, _tensors = haar_state
+    mps, psi, _rho, _tensors = deterministic_state
     length = mps.length
     for site in range(length):
         for name in ("x", "z"):
@@ -48,11 +58,59 @@ def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, 
             assert mps_val == pytest.approx(embed_val, abs=1e-9), f"{name} site {site}"
 
 
+@pytest.mark.parametrize(
+    ("length", "sites", "basis_digits"),
+    [
+        (2, [0, 1], (1, 0)),
+        (2, [1, 0], (0, 1)),
+        (3, [2, 0], (0, 0, 1)),
+        (3, [0, 2], (1, 0, 0)),
+    ],
+)
+def test_asymmetric_two_site_observable_agrees_across_representations(
+    length: int,
+    sites: list[int],
+    basis_digits: tuple[int, ...],
+) -> None:
+    """Adjacent and periodic observables follow their listed sites on all backends."""
+    pauli_z = np.diag([1, -1]).astype(np.complex128)
+    local_matrix = np.kron(pauli_z, np.eye(2, dtype=np.complex128))
+    observable = Observable(local_matrix, sites)
+    dimensions = (2,) * length
+    dense_observable = embed_local_operator(local_matrix, tuple(sites), dimensions)
+    initial_vector = np.zeros(2**length, dtype=np.complex128)
+    initial_vector[mixed_radix_index(basis_digits, dimensions)] = 1.0
+    expected = float(np.real(np.vdot(initial_vector, dense_observable @ initial_vector)))
+    hamiltonian = Hamiltonian(matrix=np.zeros((2**length, 2**length), dtype=np.complex128))
+    parameters = AnalogSimParams(
+        observables=[observable],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        max_bond_dim=None,
+        svd_threshold=0.0,
+        sample_timesteps=False,
+    )
+
+    results = []
+    for representation in ("mps", "vector", "density_matrix"):
+        state = State(
+            length,
+            initial="basis",
+            basis_string="".join(str(digit) for digit in basis_digits),
+            representation=representation,
+        )
+        result = Simulator(show_progress=False).run(state, hamiltonian, parameters, None)
+        results.append(float(np.real(result.expectation_values[0][-1])))
+
+    np.testing.assert_allclose(results, expected, atol=1e-12)
+
+
 def test_noiseless_evolution_agrees_across_backends(
-    haar_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
+    deterministic_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
 ) -> None:
     """MPS, MCWF, and Lindblad paths agree on noiseless Ising observables."""
-    _mps, psi, rho, tensors = haar_state
+    _mps, psi, rho, tensors = deterministic_state
     length = len(tensors)
     sim = Simulator(show_progress=False)
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
@@ -74,10 +132,10 @@ def test_noiseless_evolution_agrees_across_backends(
 
 
 def test_noisy_short_step_mps_vs_mcwf(
-    haar_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
+    deterministic_state: tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]],
 ) -> None:
     """Noisy one-step X expectation stays aligned between MPS and MCWF."""
-    _mps, psi, _rho, tensors = haar_state
+    _mps, psi, _rho, tensors = deterministic_state
     length = len(tensors)
     sim = Simulator(show_progress=False)
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
@@ -110,15 +168,19 @@ def _final_obs(
     return float(sim.run(state, hamiltonian, params, None).expectation_values[0][-1])
 
 
-@pytest.mark.parametrize("source", ["mpo", "dense", "sparse"])
+@pytest.mark.parametrize("source", ["mpo", "tensors", "dense", "sparse"])
 def test_asymmetric_hamiltonian_preserves_sites_across_representations(source: str) -> None:
     """Every Hamiltonian source evolves site 0 on all analog backends."""
     length = 2
     identity = np.eye(2, dtype=np.complex128)
     pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
     dense = np.asarray(np.kron(identity, pauli_x), dtype=np.complex128)
+    source_mpo = MPO.from_local_ops([pauli_x, identity])
     if source == "mpo":
-        hamiltonian = Hamiltonian.from_mpo(MPO.from_local_ops([pauli_x, identity]))
+        hamiltonian = Hamiltonian.from_mpo(source_mpo)
+    elif source == "tensors":
+        external_tensors = [tensor.transpose(2, 3, 0, 1) for tensor in source_mpo.tensors]
+        hamiltonian = Hamiltonian(tensors=external_tensors)
     elif source == "dense":
         hamiltonian = Hamiltonian(matrix=dense.copy())
     else:

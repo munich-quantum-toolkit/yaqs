@@ -19,6 +19,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
+from tests.site_order_reference import embed_local_operator, mixed_radix_index
 
 
 def _entangled_jump_state() -> MPS:
@@ -195,6 +196,23 @@ def test_apply_scheduled_jumps_two_site() -> None:
 
     assert np.isclose(exp0, -1.0)
     assert np.isclose(exp1, -1.0)
+
+
+def test_scheduled_crosstalk_xz_preserves_site_order() -> None:
+    """A forced asymmetric jump applies X to its first listed site."""
+    dimensions = (2, 2)
+    state = MPS(2, state="zeros")
+    noise_model = NoiseModel(scheduled_jumps=[{"time": 1.0, "sites": [0, 1], "name": "crosstalk_xz"}])
+    parameters = AnalogSimParams(dt=0.1, get_state=True, max_bond_dim=None, svd_threshold=0.0)
+    local_matrix = noise_model.scheduled_jumps[0]["matrix"]
+    initial = np.zeros(4, dtype=np.complex128)
+    initial[mixed_radix_index((0, 0), dimensions)] = 1.0
+    expected = embed_local_operator(local_matrix, (0, 1), dimensions) @ initial
+
+    output = apply_scheduled_jumps(state, noise_model, 1.0, parameters)
+
+    np.testing.assert_allclose(output.to_vec(), expected, atol=1e-12)
+    assert np.argmax(np.abs(output.to_vec())) == mixed_radix_index((1, 0), dimensions)
 
 
 @pytest.mark.parametrize("max_bond_dim", [1, None], ids=["capped", "uncapped"])

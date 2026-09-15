@@ -6,7 +6,7 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
-### Breaking: dense states and operators use site-0-LSB ordering
+### Breaking: physical sites use one spatial ordering
 
 YAQS now uses one public spatial dense-basis order. Site 0 is the
 least-significant, fastest-varying subsystem. For qubits, this matches Qiskit's
@@ -15,8 +15,10 @@ statevector and operator order. The convention applies to:
 - `State(vector=...)` and `State(density_matrix=...)`;
 - `Hamiltonian(matrix=...)` and `Hamiltonian(sparse_matrix=...)`;
 - `Hamiltonian.to_matrix()` and `Hamiltonian.to_sparse_matrix()`;
-- `MPO.from_matrix()`, `MPO.to_matrix()`, and `MPO.to_sparse_matrix()`; and
-- dense operators returned by `EquivalenceChecker`.
+- `MPO.from_matrix()`, `MPO.to_matrix()`, and `MPO.to_sparse_matrix()`;
+- dense operators returned by `EquivalenceChecker`;
+- dense MCWF and Lindblad observable and jump-operator embeddings; and
+- dense and MPS memory-characterization backends.
 
 For example, `np.kron(I, X)` applies `X` to site 0 of a two-site system.
 Previously, `MPO.to_matrix()` put site 0 in the leftmost Kronecker factor, and
@@ -25,10 +27,27 @@ Hamiltonians to change their physical site assignment when TJM converted them to
 an MPO. One-site and site-reflection-symmetric operators are unchanged.
 Asymmetric operators can produce different, now consistent, results.
 
+Local observable and analog-noise matrices have a related rule: matrix tensor
+factors follow the explicit `sites` list. YAQS permutes input and output matrix
+legs when it embeds an operator into the full site-0-LSB basis. Named two-site
+noise processes preserve the letter-to-site meaning when they normalize reversed
+sites. Circuit gate matrices retain Qiskit's qarg and matrix convention. See the
+{ref}`physical-site ordering guide <physical-site-ordering>` for the complete
+mapping.
+
 Code written against the unreleased development branch must replace
 `MPO.to_matrix_mps_order()` with `MPO.to_matrix()`. To migrate a manual matrix
 that put site 0 in the leftmost Kronecker factor, rebuild its Kronecker products
 in descending site order or permute its output and input site axes.
+
+Custom observable matrices already written in listed-site order need no change.
+Remove any manual matrix-leg swap that compensated for the former dense MCWF or
+Lindblad embedding. Custom adjacent noise matrices require ascending sites. To
+convert one written for descending sites, reverse the site list and swap both
+input and output matrix tensor-factor axes. Use per-site `factors` only for
+non-adjacent noise. Results from asymmetric local noise and from memory
+characterization can change because those paths previously acted on or extracted
+the opposite end of the chain.
 
 Process tensors use a separate convention. `MPOProcessTensor.to_matrix()` keeps
 its final-output-first causal-leg order. `MPOProcessTensor.to_sparse_matrix()`
@@ -294,41 +313,6 @@ For MPS-backed analog and digital-observable runs, `result.runtime_cost`,
 `result.max_bond`, and `result.total_bond` are filled automatically (aligned
 with `result.times` or the digital layer-sampling grid). MCWF, Lindblad, and
 shot-only digital runs leave these as `None`.
-
-### MCWF / Lindblad operator ordering (dense backends)
-
-MCWF (`State(..., representation="vector")`) and Lindblad
-(`representation="density_matrix"`) embed jump operators and observables on the
-full Hilbert space using the same **site-0 LSB** convention as MPS `to_vec`,
-Qiskit little-endian circuits, and the TJM (MPO) dissipation path. Before this
-release, those dense embeddings used a different Kronecker-product order, so
-jump probabilities, observables, and cross-solver comparisons could disagree
-with TJM even when the `NoiseModel` definition looked identical.
-
-**What changed:** `_embed_operator_sparse` / `_embed_observable_sparse` (and
-their dense counterparts) now delegate to `state_utils.embed_*` helpers instead
-of building `left ⊗ op ⊗ right` with reversed tensor-leg order.
-
-**Why it matters:** MCWF, Lindblad, and TJM now agree on how a local operator on
-`sites=[i]` or adjacent `sites=[i, i+1]` is placed in the full space. Regression
-tests compare TJM dissipative norm loss to MCWF jump probabilities under
-lowering noise.
-
-**What you need to do:**
-
-- If you only pass standard `NoiseModel` processes (`sites`, built-in names, or
-  matrices authored for the listed site order),
-  **no change is required**—results may shift slightly because the previous
-  ordering was incorrect.
-- If you hand-built full-space jump operators or compared MCWF/Lindblad outputs
-  to TJM using custom dense embeddings, rebuild those operators with
-  `mqt.yaqs.core.data_structures.state_utils.embed_one_site_operator`,
-  `embed_adjacent_two_site_operator`, or `embed_two_site_factors`, or pass the
-  same local matrices through `NoiseModel` and let the solvers embed them.
-- For adjacent two-site **matrix** processes, list sites in ascending order
-  `[i, i+1]` with the local matrix written for that pair order. If you pass
-  reversed sites `[i+1, i]`, the matrix is transposed automatically to match the
-  `(i, i+1)` leg order.
 
 ### Top-level public API
 

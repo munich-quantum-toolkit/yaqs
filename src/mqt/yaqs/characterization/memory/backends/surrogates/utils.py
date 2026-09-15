@@ -64,7 +64,7 @@ def _initial_mcwf_state_from_rho0(
             env_state = env0
             for _ in range(length - 2):
                 env_state = np.kron(env_state, env0)
-            psi = np.kron(v_idx, env_state)
+            psi = np.kron(env_state, v_idx)
         if return_eig_sample:
             return psi, idx, p
         return psi
@@ -92,7 +92,7 @@ def _initial_mcwf_state_from_rho0(
             continue
         aux_ket = np.zeros(2, dtype=np.complex128)
         aux_ket[i] = 1.0
-        psi_2 += np.sqrt(w[i]) * np.kron(v[:, i].astype(np.complex128), aux_ket)
+        psi_2 += np.sqrt(w[i]) * np.kron(aux_ket, v[:, i].astype(np.complex128))
     nrm = float(np.linalg.norm(psi_2))
     if nrm < 1e-15:
         psi_2 = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
@@ -100,7 +100,7 @@ def _initial_mcwf_state_from_rho0(
         psi_2 /= nrm
     psi = psi_2
     for _ in range(length - 2):
-        psi = np.kron(psi, np.array([1.0, 0.0], dtype=np.complex128))
+        psi = np.kron(np.array([1.0, 0.0], dtype=np.complex128), psi)
     if return_eig_sample:
         if rng is None:
             rng = np.random.default_rng()

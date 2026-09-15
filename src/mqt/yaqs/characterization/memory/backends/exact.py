@@ -9,15 +9,24 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config
 
 from ..operational_memory.grid import assemble_probe_grid
 from ..shared.encoding import decode_packed_pauli_batch
-from ..shared.utils import StochasticSolver, make_mcwf_static_context, validate_stochastic_solver
+from ..shared.utils import (
+    StochasticSolver,
+    _dense_state_to_mps,
+    _initialize_backend_state,
+    make_mcwf_static_context,
+    validate_qubit_memory_operator,
+    validate_stochastic_solver,
+)
 from .sequences.workflow import simulate_sequences
 
 if TYPE_CHECKING:
@@ -79,6 +88,53 @@ def _branch_weights_from_simulation(
     return w
 
 
+def _coerce_initial_backend_state(
+    initial_psi: np.ndarray | MPS | None,
+    *,
+    operator: MPO,
+    solver: StochasticSolver,
+) -> np.ndarray | MPS:
+    """Return an initial state in the representation required by ``solver``.
+
+    Args:
+        initial_psi: Dense site-0-LSB vector, MPS, or ``None`` for the all-zero state.
+        operator: Hamiltonian MPO for the simulated chain.
+        solver: Selected stochastic solver.
+
+    Returns:
+        A dense vector for MCWF or an MPS for TJM.
+
+    Raises:
+        ValueError: If the state size or MPS length does not match the operator.
+    """
+    validate_qubit_memory_operator(operator)
+    if initial_psi is None:
+        return _initialize_backend_state(operator, solver)
+    if isinstance(initial_psi, MPS):
+        if initial_psi.length != operator.length:
+            msg = f"initial MPS length {initial_psi.length} does not match Hamiltonian length {operator.length}."
+            raise ValueError(msg)
+        expected_dimensions = [int(tensor.shape[0]) for tensor in operator.tensors]
+        state_dimensions = [int(tensor.shape[0]) for tensor in initial_psi.tensors]
+        if state_dimensions != expected_dimensions:
+            msg = (
+                f"initial MPS physical dimensions {state_dimensions} do not match "
+                f"Hamiltonian dimensions {expected_dimensions}."
+            )
+            raise ValueError(msg)
+        if solver == "TJM":
+            return copy.deepcopy(initial_psi)
+        return np.asarray(initial_psi.to_vec(), dtype=np.complex128)
+    vector = np.asarray(initial_psi, dtype=np.complex128).reshape(-1)
+    expected_size = 2**operator.length
+    if vector.size != expected_size:
+        msg = f"initial_psi has size {vector.size}, expected {expected_size} for length={operator.length}."
+        raise ValueError(msg)
+    if solver == "TJM":
+        return _dense_state_to_mps(vector, length=operator.length)
+    return vector.copy()
+
+
 class ExactBackend:
     """Exact MCWF/TJM backend for split-cut responses and retained-outcome probabilities.
 
@@ -92,7 +148,7 @@ class ExactBackend:
         *,
         operator: MPO,
         sim_params: AnalogSimParams,
-        initial_psi: np.ndarray,
+        initial_psi: np.ndarray | MPS | None,
         parallel: bool = True,
         show_progress: bool = False,
         solver: StochasticSolver | None = None,
@@ -103,15 +159,20 @@ class ExactBackend:
         Args:
             operator: Hamiltonian MPO.
             sim_params: Analog simulation parameters.
-            initial_psi: Initial state vector for sequences.
+            initial_psi: Initial dense site-0-LSB state vector or MPS for sequences. ``None``
+                selects the all-zero state in the solver's native representation.
             parallel: Whether to parallelize sequence simulation.
             show_progress: Whether to show a progress bar during simulation.
             solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         """
+        self._solver = validate_stochastic_solver(solver)
         self.operator = operator
         self.sim_params = sim_params
-        self.initial_psi = np.asarray(initial_psi, dtype=np.complex128).copy()
-        self._solver = validate_stochastic_solver(solver)
+        self.initial_psi = _coerce_initial_backend_state(
+            initial_psi,
+            operator=operator,
+            solver=self._solver,
+        )
         self._execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
         self._static_ctx = (
             make_mcwf_static_context(operator, sim_params, noise_model=None) if self._solver == "MCWF" else None
@@ -185,7 +246,7 @@ def simulate_exact(
     probe_set: ProbeSet,
     operator: MPO,
     sim_params: AnalogSimParams,
-    initial_psi: np.ndarray,
+    initial_psi: np.ndarray | MPS | None,
     parallel: bool = True,
     show_progress: bool = False,
     solver: StochasticSolver | None = None,
@@ -199,7 +260,8 @@ def simulate_exact(
         probe_set: Sampled split-cut probes.
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        initial_psi: Initial state vector for sequences.
+        initial_psi: Initial dense site-0-LSB state vector or MPS for sequences. ``None``
+            selects the all-zero state in the solver's native representation.
         parallel: Whether to parallelize sequence simulation.
         show_progress: Whether to show a progress bar.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
@@ -215,11 +277,19 @@ def simulate_exact(
     Raises:
         TypeError: If the backend output is not an ndarray.
     """
+    resolved_solver = validate_stochastic_solver(solver)
+    initial_state = _coerce_initial_backend_state(
+        initial_psi,
+        operator=operator,
+        solver=resolved_solver,
+    )
     all_pairs, n_p, n_f = _resolve_sequence_grid(probe_set, intervention_steps_list)
     n_tot = n_p * n_f
-    initial_psis = [np.asarray(initial_psi, dtype=np.complex128).copy() for _ in range(n_tot)]
+    if isinstance(initial_state, MPS):
+        initial_psis = [copy.deepcopy(initial_state) for _ in range(n_tot)]
+    else:
+        initial_psis = [initial_state.copy() for _ in range(n_tot)]
     exec_cfg = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
-    resolved_solver = validate_stochastic_solver(solver)
     if static_ctx is None and resolved_solver == "MCWF":
         static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
     result = simulate_sequences(

@@ -1633,7 +1633,7 @@ class MPO:
         out = MPO()
         out.tensors = reflected_tensors
         out.length = self.length
-        out.physical_dimension = self.physical_dimension
+        out.physical_dimension = reflected_tensors[0].shape[0]
         return out
 
     def to_mps(self) -> MPS:

@@ -240,7 +240,8 @@ class NoiseModel:
             - ``sites``: indices of sites this process acts on.
             - ``strength``: noise strength (nonnegative Lindblad rate ``gamma``).
             - ``matrix``: matrix representing the operator on those sites (for
-              1-site and adjacent 2-site processes).
+              1-site and adjacent 2-site processes). For two sites, the first
+              matrix tensor factor acts on ``sites[0]``.
             - ``factors``: tuple of two 1-site operator matrices (for long-range
               2-site processes).
         scheduled_jumps: A list of scheduled jump dictionaries applied at specific
@@ -260,7 +261,8 @@ class NoiseModel:
                 - ``matrix``: local jump operator L as a ``d x d`` array for
                   1-site or adjacent 2-site processes. When provided, YAQS uses
                   this matrix and does not look up ``name`` in the library.
-                  Custom full two-site matrices must use ascending site order.
+                  The first matrix tensor factor acts on the first listed site.
+                  Custom adjacent two-site matrices must use ascending site order.
                 - ``factors``: pair of 1-site matrices for non-adjacent 2-site
                   processes (required unless ``name`` matches
                   ``crosstalk_[xyz]{2}`` or ``longrange_crosstalk_[xyz]{2}``).
@@ -326,7 +328,7 @@ class NoiseModel:
                 )
                 raise ValueError(msg)
             if swapped and user_matrix:
-                msg = f"Custom full scheduled-jump matrices require ascending site order; got sites {sites}."
+                msg = f"Custom adjacent scheduled-jump matrices require ascending site order; got sites {sites}."
                 raise ValueError(msg)
             jump_dict["sites"] = sorted_sites
         else:
@@ -425,8 +427,9 @@ class NoiseModel:
         swapped = sorted_sites != list(sites)
         if swapped and user_matrix:
             msg = (
-                "Custom full two-site matrices require ascending site order; "
-                f"got sites {list(sites)}. Use ascending sites or supply 'factors'."
+                "Custom adjacent two-site matrices require ascending site order; "
+                f"got sites {list(sites)}. Reverse the site list and swap both "
+                "input and output matrix tensor-factor axes."
             )
             raise ValueError(msg)
         proc["sites"] = sorted_sites
