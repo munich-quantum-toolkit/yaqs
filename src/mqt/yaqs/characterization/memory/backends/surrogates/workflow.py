@@ -113,14 +113,15 @@ def _sample_initial_tjm_state(
         MPS with the sampled state on site 0 and no full-chain dense allocation.
     """
     compact_length = min(length, 2)
-    compact_vector = sample_initial_psi(
-        rho_in,
-        length=compact_length,
-        rng=rng,
-        init_mode=init_mode,
+    compact_vector = cast(
+        "np.ndarray",
+        sample_initial_psi(
+            rho_in,
+            length=compact_length,
+            rng=rng,
+            init_mode=init_mode,
+        ),
     )
-    if isinstance(compact_vector, tuple):
-        compact_vector = compact_vector[0]
     compact_state = _dense_state_to_mps(compact_vector, length=compact_length)
     if compact_length == length:
         return compact_state
@@ -227,9 +228,10 @@ def build_training_dataset(
                 )
             )
         else:
-            initial_psi = sample_initial_psi(rho_in, length=chain_length, rng=rng, init_mode=init_mode)
-            if isinstance(initial_psi, tuple):
-                initial_psi = initial_psi[0]
+            initial_psi = cast(
+                "np.ndarray",
+                sample_initial_psi(rho_in, length=chain_length, rng=rng, init_mode=init_mode),
+            )
             initial_psis.append(initial_psi)
 
     samples = cast(
