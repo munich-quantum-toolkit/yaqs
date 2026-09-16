@@ -188,6 +188,23 @@ def test_exact_backend_builds_native_tjm_initial_state() -> None:
     np.testing.assert_allclose(process.initial_psi.to_vec(), psi0, atol=1e-12)
 
 
+def test_exact_backend_builds_native_mcwf_initial_state_from_mps() -> None:
+    """MCWF converts an MPS initial state to the equivalent site-0-LSB vector."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+    initial = MPS(length=2, state="basis", basis_string="10")
+
+    process = ExactBackend(
+        operator=op,
+        sim_params=AnalogSimParams(dt=0.1),
+        initial_psi=initial,
+        solver="MCWF",
+        parallel=False,
+    )
+
+    assert isinstance(process.initial_psi, np.ndarray)
+    np.testing.assert_array_equal(process.initial_psi, np.array([0.0, 1.0, 0.0, 0.0], dtype=np.complex128))
+
+
 def test_exact_backend_uses_native_zero_state_when_initial_state_is_omitted() -> None:
     """TJM initializes its default all-zero state without a dense state vector."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
@@ -197,6 +214,20 @@ def test_exact_backend_uses_native_zero_state_when_initial_state_is_omitted() ->
 
     assert isinstance(process.initial_psi, MPS)
     np.testing.assert_allclose(process.initial_psi.to_vec(), np.array([1.0, 0.0, 0.0, 0.0]))
+
+
+def test_exact_backend_rejects_incompatible_mps_length() -> None:
+    """ExactBackend reports an MPS-to-Hamiltonian length mismatch at construction."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+
+    with pytest.raises(ValueError, match=r"initial MPS length 1 does not match Hamiltonian length 2"):
+        ExactBackend(
+            operator=op,
+            sim_params=AnalogSimParams(dt=0.1),
+            initial_psi=MPS(length=1, state="zeros"),
+            solver="TJM",
+            parallel=False,
+        )
 
 
 def test_exact_backend_rejects_incompatible_mps_dimensions() -> None:
@@ -210,6 +241,20 @@ def test_exact_backend_rejects_incompatible_mps_dimensions() -> None:
             sim_params=AnalogSimParams(dt=0.1),
             initial_psi=initial,
             solver="TJM",
+            parallel=False,
+        )
+
+
+def test_exact_backend_rejects_incompatible_dense_state_size() -> None:
+    """ExactBackend reports a dense-state-to-Hamiltonian size mismatch at construction."""
+    op = MPO.ising(length=2, J=0.0, g=0.0)
+
+    with pytest.raises(ValueError, match=r"initial_psi has size 3, expected 4 for length=2"):
+        ExactBackend(
+            operator=op,
+            sim_params=AnalogSimParams(dt=0.1),
+            initial_psi=np.ones(3, dtype=np.complex128),
+            solver="MCWF",
             parallel=False,
         )
 

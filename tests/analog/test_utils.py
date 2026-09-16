@@ -228,6 +228,24 @@ def test_embed_operator_dense_rejects_non_adjacent_pair() -> None:
         _embed_operator_dense({"sites": [0, 2], "matrix": np.eye(4, dtype=complex)}, num_sites)
 
 
+@pytest.mark.parametrize("kind", ["dense", "sparse"])
+def test_embed_periodic_operator_rejects_invalid_matrix_shape(kind: str) -> None:
+    """Periodic-wrap matrices must act on two qubits."""
+    embed = _embed_operator_dense if kind == "dense" else _embed_operator_sparse
+
+    with pytest.raises(ValueError, match=r"Periodic-wrap matrix must have shape \(4, 4\)"):
+        embed({"sites": [0, 2], "matrix": np.eye(2, dtype=np.complex128)}, 3)
+
+
+@pytest.mark.parametrize("kind", ["dense", "sparse"])
+def test_embed_operator_rejects_duplicate_matrix_sites(kind: str) -> None:
+    """A two-site matrix requires two distinct sites."""
+    embed = _embed_operator_dense if kind == "dense" else _embed_operator_sparse
+
+    with pytest.raises(ValueError, match="Two-site matrix sites must be distinct"):
+        embed({"sites": [1, 1], "matrix": np.eye(4, dtype=np.complex128)}, 3)
+
+
 def test_embed_operator_sparse_rejects_out_of_range_matrix_sites() -> None:
     """Sparse matrix embedding rejects invalid adjacent site indices."""
     num_sites = 4

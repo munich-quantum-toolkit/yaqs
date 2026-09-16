@@ -1130,6 +1130,59 @@ def test_two_site_local_observable_dimension_mismatch_raises() -> None:
         psi_mps.local_expect(observable, [0, 1])
 
 
+@pytest.mark.parametrize(
+    ("observable", "requested_sites", "error_message"),
+    [
+        pytest.param(
+            Observable("x", 0),
+            [0, 1],
+            r"One-site observable requires one site, got \[0, 1\]",
+            id="one-site-count",
+        ),
+        pytest.param(
+            Observable("x", 0),
+            1,
+            r"Operator sites \[0\] do not match requested sites \[1\]",
+            id="one-site-mismatch",
+        ),
+        pytest.param(
+            Observable(np.eye(4), [0, 1]),
+            [0],
+            r"Two-site observable requires two sites, got \[0\]",
+            id="two-site-count",
+        ),
+        pytest.param(
+            Observable(np.eye(4), [0, 1]),
+            [1, 2],
+            r"Operator sites \[0, 1\] do not match requested sites \[1, 2\]",
+            id="two-site-mismatch",
+        ),
+        pytest.param(
+            Observable(np.eye(4), [1, 1]),
+            [1, 1],
+            r"Two-site observable sites must be distinct, got \[1, 1\]",
+            id="repeated-site",
+        ),
+        pytest.param(
+            Observable(np.eye(4), [0, 2]),
+            [0, 2],
+            "Only nearest-neighbor and periodic-wrap two-site observables are currently implemented",
+            id="non-neighbor",
+        ),
+    ],
+)
+def test_local_expect_validates_requested_sites(
+    observable: Observable,
+    requested_sites: int | list[int],
+    error_message: str,
+) -> None:
+    """Direct local contractions reject inconsistent or unsupported site requests."""
+    state = MPS(length=4, state="zeros")
+
+    with pytest.raises(ValueError, match=error_message):
+        state.local_expect(observable, requested_sites)
+
+
 def test_local_expect_rejects_observables_with_unsupported_interaction() -> None:
     """Local expectation values support at most two-site observables."""
     psi_mps = MPS(length=3, state="zeros")
@@ -1224,6 +1277,22 @@ def test_mps_apply_local_non_adjacent_two_site_raises() -> None:
     obs = Observable(gate4, sites=[0, 2])
     with pytest.raises(ValueError, match="Only nearest-neighbor two-site observables are currently implemented"):
         mps.apply_local(obs)
+
+
+def test_mps_apply_local_rejects_repeated_site() -> None:
+    """A two-site matrix must act on two distinct sites."""
+    mps = MPS(length=3, state="zeros")
+
+    with pytest.raises(ValueError, match=r"Two-site observable sites must be distinct, got \[1, 1\]"):
+        mps.apply_local(Observable(np.eye(4), sites=[1, 1]))
+
+
+def test_mps_apply_local_rejects_periodic_matrix_on_non_qubit_chain() -> None:
+    """Periodic local matrices require every site in the chain to be a qubit."""
+    mps = MPS(length=3, physical_dimensions=[2, 3, 2], state="zeros")
+
+    with pytest.raises(ValueError, match="Periodic-wrap two-site matrices currently require qubit sites"):
+        mps.apply_local(Observable(np.eye(4), sites=[0, 2]))
 
 
 def test_mps_apply_local_unsupported_gate_dimension_raises() -> None:
