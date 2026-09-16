@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.mps import MPS
+
 if TYPE_CHECKING:
     import types
 
@@ -34,7 +36,13 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 from ...shared.interventions import DEFAULT_INTERVENTION_STYLE, normalize_style, sample_train_interventions
-from ...shared.utils import StochasticSolver, make_mcwf_static_context, resolve_stochastic_solver
+from ...shared.utils import (
+    StochasticSolver,
+    _dense_state_to_mps,
+    make_mcwf_static_context,
+    resolve_stochastic_solver,
+    validate_qubit_memory_operator,
+)
 from ..sequences.workflow import simulate_sequences
 from .data import SequenceRecord, stack_sequence_records
 from .utils import sample_density_matrix, sample_initial_psi
@@ -82,6 +90,50 @@ def pack_dataset(
     )
 
 
+def _sample_initial_tjm_state(
+    rho_in: np.ndarray,
+    *,
+    length: int,
+    rng: np.random.Generator,
+    init_mode: str,
+) -> MPS:
+    """Build a TJM initial state without a full dense chain vector.
+
+    Eigenstate initialization needs only site 0. Purified initialization needs
+    site 0 and one auxiliary qubit. Remaining environment sites are appended as
+    product ``|0>`` tensors.
+
+    Args:
+        rho_in: Reduced density matrix on site 0.
+        length: Total number of qubits in the chain.
+        rng: Random number generator used for eigenstate sampling.
+        init_mode: ``"eigenstate"`` or ``"purified"``.
+
+    Returns:
+        MPS with the sampled state on site 0 and no full-chain dense allocation.
+    """
+    compact_length = min(length, 2)
+    compact_vector = cast(
+        "np.ndarray",
+        sample_initial_psi(
+            rho_in,
+            length=compact_length,
+            rng=rng,
+            init_mode=init_mode,
+        ),
+    )
+    compact_state = _dense_state_to_mps(compact_vector, length=compact_length)
+    if compact_length == length:
+        return compact_state
+
+    zero_tensor = np.array([1.0, 0.0], dtype=np.complex128).reshape(2, 1, 1)
+    tensors = [tensor.copy() for tensor in compact_state.tensors]
+    tensors.extend(zero_tensor.copy() for _ in range(length - compact_length))
+    state = MPS(length, tensors=tensors)
+    state.set_center(compact_length - 1)
+    return state
+
+
 def build_training_dataset(
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -121,7 +173,8 @@ def build_training_dataset(
 
     Raises:
         ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``),
-            ``n`` is not an integer, or ``n`` is not positive.
+            ``n`` is not an integer, ``n`` is not positive, or ``operator`` is
+            not a qubit Hamiltonian.
     """
     if int(n) != n:
         msg = f"n must be an integer, got {n!r}."
@@ -131,6 +184,7 @@ def build_training_dataset(
         msg = f"n must be positive, got {n_sequences}."
         raise ValueError(msg)
 
+    validate_qubit_memory_operator(operator)
     chain_length = int(operator.length)
     if timesteps is None:
         timesteps = [float(sim_params.dt)] * (int(num_interventions) + 1)
@@ -152,7 +206,7 @@ def build_training_dataset(
         rng = np.random.default_rng(0 if seed is None else int(seed))
 
     intervention_steps_list: list[list[Any]] = []
-    initial_psis: list[np.ndarray] = []
+    initial_psis: list[np.ndarray | MPS] = []
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
     for _ in range(n_sequences):
@@ -164,10 +218,21 @@ def build_training_dataset(
         )
         intervention_steps_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
-        initial_psi = sample_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
-        if isinstance(initial_psi, tuple):
-            initial_psi = initial_psi[0]
-        initial_psis.append(initial_psi)
+        if stochastic_solver == "TJM":
+            initial_psis.append(
+                _sample_initial_tjm_state(
+                    rho_in,
+                    length=chain_length,
+                    rng=rng,
+                    init_mode=init_mode,
+                )
+            )
+        else:
+            initial_psi = cast(
+                "np.ndarray",
+                sample_initial_psi(rho_in, length=chain_length, rng=rng, init_mode=init_mode),
+            )
+            initial_psis.append(initial_psi)
 
     samples = cast(
         "list[SequenceRecord]",

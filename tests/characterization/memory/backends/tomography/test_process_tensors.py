@@ -111,17 +111,24 @@ def test_compute_entropy_dense_rejects_invalid_base() -> None:
         compute_entropy_dense(rho, base=0)
 
 
-def test_mpo_process_tensor_matrix_matches_dense() -> None:
-    """MPOProcessTensor.to_matrix should match MPO.to_matrix()."""
-    mpo = MPO.ising(length=1, J=1.0, g=0.5)
-    timesteps: list[float] = [0.1]
-    pt = MPOProcessTensor(mpo, timesteps)
-
-    np.testing.assert_allclose(
-        pt.to_matrix(),
-        mpo.to_matrix(),
-        atol=1e-12,
+def test_mpo_process_tensor_dense_and_sparse_use_causal_leg_order() -> None:
+    """Process-tensor conversions keep the final output leg first."""
+    rho_final = np.diag([1.0, 2.0]).astype(np.complex128)
+    dual_operator = np.diag([3.0, 4.0, 5.0, 6.0]).astype(np.complex128)
+    mpo = MPO()
+    mpo.custom(
+        [
+            rho_final.reshape(2, 2, 1, 1),
+            dual_operator.reshape(4, 4, 1, 1),
+        ],
+        transpose=False,
     )
+    pt = MPOProcessTensor(mpo, [0.1])
+    expected = np.kron(rho_final, dual_operator)
+
+    np.testing.assert_allclose(pt.to_matrix(), expected, atol=1e-12)
+    np.testing.assert_allclose(pt.to_sparse_matrix().toarray(), expected, atol=1e-12)
+    np.testing.assert_allclose(mpo.to_matrix(), np.kron(dual_operator, rho_final), atol=1e-12)
 
 
 def test_mpo_process_tensor_qmi_fallback_to_dense() -> None:

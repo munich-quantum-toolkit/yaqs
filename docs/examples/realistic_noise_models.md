@@ -48,8 +48,10 @@ signed dissipator coefficients. Temporarily negative rates can appear in
 time-local non-Markovian master equations, but YAQS does not implement signed
 generators or reverse-jump unravelings. Custom `matrix` / `factors` entries may
 still contain negative elements. Site lists/tuples must contain exactly one or
-two distinct nonnegative integers; custom full two-site matrices require
-**ascending** site order (or use `factors` instead).
+two distinct nonnegative integers. Custom adjacent two-site matrices require
+**ascending** site order. To convert a matrix written for descending sites,
+reverse the site list and swap the matrix's input and output tensor-factor axes.
+Use `factors` only for non-adjacent pairs.
 
 This rate interpretation applies to `Simulator`. For sampled equivalence
 checking, `EquivalenceChecker` instead treats resolved strengths as direct

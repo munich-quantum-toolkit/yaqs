@@ -116,7 +116,7 @@ def test_1site_tdvp_tracks_a_genuine_center_at_each_site_update() -> None:
         sweep_1site(state, operator, sim_params)
 
     assert seen == expected_sites
-    exact = expm(-1j * sim_params.dt * operator.to_matrix_mps_order()) @ initial
+    exact = expm(-1j * sim_params.dt * operator.to_matrix()) @ initial
     assert _fidelity(exact, state.to_vec()) >= 1.0 - 1e-8
     assert state.orthogonality_center == 0
     assert 0 in state.check_canonical_form()
@@ -476,7 +476,7 @@ def test_repeated_capped_dynamic_ising_matches_dense_evolution() -> None:
     for _ in range(round(elapsed_time / dt)):
         tdvp(state, hamiltonian, sim_params)
 
-    exact = expm(-1j * elapsed_time * hamiltonian.to_matrix_mps_order()) @ initial
+    exact = expm(-1j * elapsed_time * hamiltonian.to_matrix()) @ initial
     exact /= np.linalg.norm(exact)
     actual = state.to_vec()
     actual /= np.linalg.norm(actual)

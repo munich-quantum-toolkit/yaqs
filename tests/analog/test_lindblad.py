@@ -11,9 +11,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
+import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -31,9 +30,6 @@ from mqt.yaqs.analog.lindblad import (
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -137,6 +133,33 @@ def test_lindblad_dephasing() -> None:
 
     assert np.allclose(x0_sim, x0_exact, atol=1e-4), f"Qubit 0 failed. Max diff: {np.max(np.abs(x0_sim - x0_exact))}"
     assert np.allclose(x1_sim, x1_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x1_exact))}"
+
+
+@pytest.mark.parametrize(("sites", "decaying_site"), [([0, 1], 0), ([1, 0], 1)])
+def test_lindblad_asymmetric_crosstalk_preserves_site_order(sites: list[int], decaying_site: int) -> None:
+    """Crosstalk XZ damps Z on its first listed site in either order."""
+    gamma = 0.7
+    timespan = 0.3
+    hamiltonian = Hamiltonian(matrix=np.zeros((4, 4), dtype=np.complex128))
+    noise_model = NoiseModel([{"name": "crosstalk_xz", "sites": sites, "strength": gamma}])
+    parameters = AnalogSimParams(
+        observables=[Observable("z", 0), Observable("z", 1)],
+        elapsed_time=timespan,
+        dt=0.05,
+        num_traj=1,
+    )
+
+    result = Simulator(show_progress=False).run(
+        State(2, initial="zeros", representation="density_matrix"),
+        hamiltonian,
+        parameters,
+        noise_model,
+    )
+
+    expected = [np.ones_like(parameters.times), np.ones_like(parameters.times)]
+    expected[decaying_site] = np.exp(-2 * gamma * parameters.times)
+    for actual, reference in zip(result.expectation_values, expected, strict=True):
+        np.testing.assert_allclose(actual, reference, atol=1e-10)
 
 
 def test_lindblad_dephasing_both_qubits() -> None:

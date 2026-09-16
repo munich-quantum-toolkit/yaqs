@@ -16,6 +16,7 @@ import scipy.sparse
 from scipy.sparse import issparse
 
 from ..core.data_structures.state_utils import (
+    _swap_two_site_factor_order,
     embed_adjacent_two_site_operator,
     embed_one_site_operator,
     embed_two_site_factors,
@@ -93,26 +94,6 @@ def _to_sparse_csr(op: NDArray[np.complex128] | scipy.sparse.spmatrix) -> scipy.
     return scipy.sparse.csr_matrix(op)
 
 
-def _transpose_adjacent_pair(
-    op: NDArray[np.complex128] | scipy.sparse.spmatrix,
-    dim_left: int,
-    dim_right: int,
-) -> NDArray[np.complex128]:
-    """Swap tensor legs from ``(right, left)`` to ``(left, right)`` for an adjacent pair.
-
-    Args:
-        op: Local ``(dim_left * dim_right, dim_left * dim_right)`` matrix.
-        dim_left: Hilbert-space dimension of the left site in ascending site order.
-        dim_right: Hilbert-space dimension of the right site in ascending site order.
-
-    Returns:
-        Dense matrix for the swapped leg order.
-    """
-    arr = _to_dense(op).reshape(dim_right, dim_left, dim_right, dim_left)
-    swapped = arr.transpose(1, 0, 3, 2)
-    return np.asarray(swapped.reshape(dim_left * dim_right, dim_left * dim_right), dtype=np.complex128)
-
-
 def _sparse_identity(dim: int) -> scipy.sparse.spmatrix:
     """Return a CSR identity matrix of the given local dimension.
 
@@ -163,7 +144,10 @@ def _embed_adjacent_two_site_sparse(
     site_left: int,
     dims: list[int],
 ) -> scipy.sparse.spmatrix:
-    """Embed an adjacent two-site operator into the full Hilbert space without densifying.
+    """Embed an adjacent two-site operator without densifying the full Hilbert space.
+
+    The first tensor factor of ``op`` acts on ``site_left`` and the second
+    factor acts on ``site_left + 1``. The full matrix uses site-0-LSB order.
 
     Args:
         op: Local operator on the pair ``(site_left, site_left + 1)``.
@@ -183,11 +167,12 @@ def _embed_adjacent_two_site_sparse(
     if op_csr.shape != (pair_dim, pair_dim):
         msg = f"op4 must have shape ({pair_dim}, {pair_dim}), got {op_csr.shape}."
         raise ValueError(msg)
+    pair_op = scipy.sparse.csr_matrix(_swap_two_site_factor_order(_to_dense(op_csr), dims[site_left], dims[site_right]))
     res = scipy.sparse.csr_matrix([[1.0]], dtype=np.complex128)
     site = 0
     while site < num_sites:
         if site == site_left:
-            res = scipy.sparse.kron(op_csr, res, format="csr")
+            res = scipy.sparse.kron(pair_op, res, format="csr")
             site += 2
         else:
             res = scipy.sparse.kron(_sparse_identity(dims[site]), res, format="csr")
@@ -239,6 +224,72 @@ def _embed_two_site_factors_sparse(
     return cast("scipy.sparse.spmatrix", res)
 
 
+def _embed_periodic_two_site_matrix(
+    op: NDArray[np.complex128] | scipy.sparse.spmatrix,
+    num_sites: int,
+    site1: int,
+    site2: int,
+    dims: list[int],
+    *,
+    sparse: bool,
+) -> NDArray[np.complex128] | scipy.sparse.spmatrix:
+    """Embed a periodic-wrap two-qubit matrix in its listed-site order.
+
+    The matrix-unit expansion keeps the first local tensor factor on ``site1``
+    and the second on ``site2``. It reuses the arbitrary-site factor embedding
+    without constructing a full-space permutation matrix.
+
+    Args:
+        op: Local two-qubit matrix in ``(site1, site2)`` tensor-factor order.
+        num_sites: Total number of sites in the chain.
+        site1: Site for the first matrix tensor factor.
+        site2: Site for the second matrix tensor factor.
+        dims: Per-site Hilbert-space dimensions.
+        sparse: Whether to return a sparse matrix.
+
+    Returns:
+        Embedded matrix in site-0-LSB order.
+
+    Raises:
+        ValueError: If ``op`` is not a two-qubit matrix.
+    """
+    op_array = _to_dense(op)
+    if op_array.shape != (4, 4):
+        msg = f"Periodic-wrap matrix must have shape (4, 4), got {op_array.shape}."
+        raise ValueError(msg)
+
+    hilbert_dimension = int(np.prod(dims))
+    if sparse:
+        result: NDArray[np.complex128] | scipy.sparse.spmatrix = scipy.sparse.csr_matrix(
+            (hilbert_dimension, hilbert_dimension), dtype=np.complex128
+        )
+    else:
+        result = np.zeros((hilbert_dimension, hilbert_dimension), dtype=np.complex128)
+
+    op_tensor = op_array.reshape(2, 2, 2, 2)
+    for output1, output2, input1, input2 in np.ndindex(2, 2, 2, 2):
+        coefficient = op_tensor[output1, output2, input1, input2]
+        if coefficient == 0:
+            continue
+        factor1 = np.zeros((2, 2), dtype=np.complex128)
+        factor2 = np.zeros((2, 2), dtype=np.complex128)
+        factor1[output1, input1] = 1.0
+        factor2[output2, input2] = 1.0
+        if sparse:
+            embedded = _embed_two_site_factors_sparse(factor1, factor2, num_sites, site1, site2, dims)
+        else:
+            embedded = embed_two_site_factors(
+                factor1,
+                factor2,
+                num_sites,
+                site1,
+                site2,
+                physical_dimensions=dims,
+            )
+        result += coefficient * embedded
+    return result
+
+
 def _embed_generic(
     sites: list[int],
     num_sites: int,
@@ -254,7 +305,8 @@ def _embed_generic(
     Args:
         sites: Site indices the operator acts on.
         num_sites: Total number of sites.
-        op_matrix: Optional matrix for 1-site or adjacent 2-site embedding.
+        op_matrix: Optional matrix for 1-site, adjacent 2-site, or periodic-wrap
+            two-qubit embedding.
         op_factors: Optional non-adjacent two-site product factors.
         sparse: If True, return a CSR sparse matrix.
         physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
@@ -263,7 +315,8 @@ def _embed_generic(
         Embedded operator on the full space.
 
     Raises:
-        ValueError: If 2-site matrix is not adjacent or factors are not 2-site.
+        ValueError: If a 2-site matrix is not nearest-neighbor or periodic-wrap,
+            or if factors are not 2-site.
         NotImplementedError: If neither matrix nor factors provided.
     """
     dims = resolve_physical_dimensions(num_sites, physical_dimensions)
@@ -283,17 +336,34 @@ def _embed_generic(
 
         if len(sites) == 2:
             s1, s2 = sites[0], sites[1]
-            if abs(s1 - s2) != 1:
-                msg = "Matrix-based 2-site op must be adjacent"
+            if s1 == s2:
+                msg = "Two-site matrix sites must be distinct."
                 raise ValueError(msg)
+            for site in (s1, s2):
+                if site < 0 or site >= num_sites:
+                    msg = f"site {site} out of range for length {num_sites}."
+                    raise ValueError(msg)
+            is_neighbor = abs(s1 - s2) == 1
+            is_periodic_wrap = num_sites > 2 and {s1, s2} == {0, num_sites - 1}
+            if not is_neighbor and not is_periodic_wrap:
+                msg = "Matrix-based 2-site op must act on nearest neighbors or the periodic wrap."
+                raise ValueError(msg)
+            if is_periodic_wrap:
+                if any(dimension != 2 for dimension in dims):
+                    msg = "Periodic-wrap two-site matrices currently require qubit sites throughout the system."
+                    raise ValueError(msg)
+                return _embed_periodic_two_site_matrix(
+                    op_matrix,
+                    num_sites,
+                    s1,
+                    s2,
+                    dims,
+                    sparse=sparse,
+                )
             site_left = min(s1, s2)
-            site_right = site_left + 1
-            if site_left < 0 or site_right >= num_sites:
-                msg = f"adjacent pair ({site_left}, {site_right}) invalid for length {num_sites}."
-                raise ValueError(msg)
             pair_op = op_matrix
             if s1 > s2:
-                pair_op = _transpose_adjacent_pair(op_matrix, dims[site_left], dims[site_left + 1])
+                pair_op = _swap_two_site_factor_order(_to_dense(op_matrix), dims[s1], dims[s2])
             if sparse:
                 return _embed_adjacent_two_site_sparse(pair_op, num_sites, site_left, dims)
             return embed_adjacent_two_site_operator(

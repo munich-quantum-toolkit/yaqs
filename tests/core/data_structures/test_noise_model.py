@@ -510,9 +510,12 @@ def test_duplicate_and_empty_sites_rejected() -> None:
 
 
 def test_reversed_custom_matrix_rejected() -> None:
-    """Reversed sites with a custom full matrix are rejected."""
+    """Reversed sites with a custom adjacent matrix give actionable guidance."""
     mat = np.kron(PauliX.matrix, PauliZ.matrix)
-    with pytest.raises(ValueError, match="ascending site order"):
+    with pytest.raises(
+        ValueError,
+        match="Reverse the site list and swap both input and output matrix tensor-factor axes",
+    ):
         _ = NoiseModel([{"name": "custom", "sites": [1, 0], "strength": 0.1, "matrix": mat}])
 
 

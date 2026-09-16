@@ -36,7 +36,7 @@ from .core.data_structures.noise_model import NoiseModel, is_pauli, validate_noi
 from .core.parallel_utils import WORKER_CTX, available_cpus, reassemble_indexed, run_backend_parallel
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
 from .digital.utils.contraction_utils import iterate
-from .digital.utils.dag_utils import is_digital_noise_opportunity
+from .digital.utils.dag_utils import convert_matrix_layout, is_digital_noise_opportunity
 from .digital.utils.matrix_utils import (
     compose_operator_tensor,
     compute_identity_fidelity,
@@ -73,7 +73,10 @@ _PAULI_ERROR = "The noise model contains a process that is not supported for cir
 
 
 class _CheckResultBase(TypedDict):
-    """Fields shared by single-pair and noisy-ensemble check results."""
+    """Fields shared by single-pair and noisy-ensemble check results.
+
+    Dense operators use Qiskit's site-0-LSB order.
+    """
 
     equivalent: bool
     fidelity: float
@@ -337,12 +340,13 @@ def _check_loaded_pair(
         composed = compose_operator_tensor(circuit1, circuit2)
         measured_fidelity = compute_identity_fidelity(composed)
         hilbert_dim = 2**circuit1.num_qubits
+        matrix = convert_matrix_layout(composed.reshape(hilbert_dim, hilbert_dim))
         return {
             "equivalent": measured_fidelity >= checker.fidelity,
             "fidelity": measured_fidelity,
             "elapsed_time": time.time() - start_time,
             "representation": backend,
-            "matrix": composed.reshape(hilbert_dim, hilbert_dim),
+            "matrix": matrix,
             "mpo": None,
             "schmidt_values": None,
             "center_cut_entanglement_entropy": None,
@@ -699,7 +703,9 @@ class EquivalenceChecker:
             :class:`EquivalenceCheckResult` for a noiseless pair, or
             :class:`EquivalenceEnsembleResult` when ``noise_model`` is set. Both include
             the same primary fields. A noisy result additionally includes
-            ``fidelity_error`` and ``num_traj``; ``trajectories`` is opt-in.
+            ``fidelity_error`` and ``num_traj``; ``trajectories`` is opt-in. Any
+            returned dense ``matrix``, and dense conversions of a returned
+            ``mpo``, use site ``0`` as the least-significant subsystem.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits, contain mid-circuit

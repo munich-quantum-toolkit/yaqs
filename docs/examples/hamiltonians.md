@@ -453,7 +453,8 @@ explicitly (see the factory docstring).
 For imported MPO cores or small-system dense/sparse operators:
 
 ```python
-# MPO tensor cores (rank-4 per site, already in MPO layout) — preferred for TJM
+# MPO cores in ascending site order with (left, right, output, input) axes
+# — preferred for TJM
 H = Hamiltonian(tensors=my_cores)
 
 # Dense or sparse matrix — YAQS converts to MPO or sparse as needed at run time.
@@ -461,6 +462,45 @@ H = Hamiltonian(tensors=my_cores)
 H = Hamiltonian(matrix=dense_h, physical_dimension=2)
 H = Hamiltonian(sparse_matrix=sparse_h, physical_dimension=2)
 ```
+
+(physical-site-ordering)=
+
+### Physical-site ordering
+
+YAQS uses one mixed-radix order for full spatial states and operators. Site 0 is
+the least-significant, fastest-varying subsystem. For local dimensions
+$d_0,d_1,\ldots$, the basis digits $(s_0,s_1,\ldots)$ have flat index
+$s_0+d_0s_1+d_0d_1s_2+\cdots$. For qubits, this is Qiskit's little-endian order.
+The convention applies to dense `State` arrays, `MPS.to_vec()`, dense and sparse
+`Hamiltonian` inputs, MPO matrix conversions, and `EquivalenceChecker` matrices.
+A full operator on site 0 is therefore the rightmost Kronecker factor. For
+example, `np.kron(I, X)` applies `X` to site 0 of a two-site system:
+
+```{code-cell} ipython3
+identity = np.eye(2, dtype=np.complex128)
+pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+x_on_site_0 = np.kron(identity, pauli_x)
+
+manual = Hamiltonian(matrix=x_on_site_0)
+np.testing.assert_allclose(manual.to_matrix(), x_on_site_0)
+np.testing.assert_allclose(manual.to_sparse_matrix().toarray(), x_on_site_0)
+manual.ensure_mpo()
+np.testing.assert_allclose(manual.mpo.to_matrix(), x_on_site_0)
+np.testing.assert_allclose(manual.mpo.to_sparse_matrix().toarray(), x_on_site_0)
+```
+
+Local observable and analog-noise matrices use their explicit site list instead.
+The first matrix tensor factor acts on the first listed site. Thus
+`Observable(np.kron(X, Z), sites=[0, 1])` means $X_0Z_1$; with `sites=[1, 0]`,
+it means $X_1Z_0$. YAQS permutes local matrix legs when it embeds such an
+operator into the full site-0-LSB space. Two-qubit observables support
+nearest-neighbor pairs and the periodic pair `{0, L - 1}` in either site order
+on all analog representations. Named two-site noise processes retain the letter
+order of the supplied sites when YAQS normalizes a reversed site list. Custom
+adjacent two-site noise matrices require ascending sites. Circuit gate matrices
+instead retain Qiskit's qarg and matrix convention. This distinction lets each
+local API keep its declared tensor-factor meaning while every full matrix uses
+one global basis order.
 
 ## Related topics
 
