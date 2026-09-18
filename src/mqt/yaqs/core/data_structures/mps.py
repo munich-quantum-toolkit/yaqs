@@ -20,7 +20,7 @@ import scipy.linalg
 from tqdm import tqdm
 
 from .. import linalg
-from .._validation import validate_integer
+from .._validation import validate_integer, validate_real
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 from .state_utils import _swap_two_site_factor_order
@@ -1621,10 +1621,9 @@ class MPS:
                     exp = temp_state.mixed_expectation(temp_state, observable)
                 else:
                     exp = temp_state.local_expect(observable, sites_list)
-                assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
-                results[obs_index, column_index] = exp.real
+                results[obs_index, column_index] = validate_real(exp, name="observable expectation value")
 
-    def expect(self, observable: Observable) -> np.float64:
+    def expect(self, observable: Observable) -> float:
         """Measure the expectation value of a given observable.
 
         Args:
@@ -1667,8 +1666,7 @@ class MPS:
             shifted.shift_center_to(target)
             exp = shifted.local_expect(observable, sites_list)
 
-        assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
-        return exp.real
+        return validate_real(exp, name="observable expectation value")
 
     def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).
