@@ -1126,6 +1126,11 @@ class MPOProcessTensor(MPO):
     ) -> float:
         """Compute quantum mutual information between final and past subsystems.
 
+        This method densifies the complete MPO. For ``k`` intervention legs,
+        the dense complex matrix uses ``64 * 16**k`` bytes before analysis
+        workspace. Restrict this method to about five intervention legs on a
+        typical workstation.
+
         Args:
             base: Log base for entropy.
             past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
@@ -1140,6 +1145,11 @@ class MPOProcessTensor(MPO):
         base: int = 2,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
+
+        This method densifies the complete MPO. For ``k`` intervention legs,
+        the dense complex matrix uses ``64 * 16**k`` bytes before analysis
+        workspace. Restrict this method to about five intervention legs on a
+        typical workstation.
 
         Args:
             base: Log base for entropy.

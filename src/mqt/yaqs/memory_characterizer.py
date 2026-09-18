@@ -338,7 +338,8 @@ class MemoryCharacterizer:
     ) -> DenseProcessTensor | MPOProcessTensor:
         """Build a process tensor via dense tomography or direct MPO construction.
 
-        - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
+        - ``return_type="mpo"`` (default): direct MPO construction (noiseless only; the uncapped
+          path grows as ``16**num_interventions``).
         - ``return_type="dense"``: exhaustive tomography (scales as ``16**num_interventions``;
           supports ``noise_model``).
 
@@ -692,6 +693,10 @@ class MemoryCharacterizer:
     ) -> float:
         """Compute quantum mutual information from a reference process tensor.
 
+        For an MPO input, this method densifies the complete process tensor. For
+        ``k`` intervention legs, the dense complex matrix uses ``64 * 16**k``
+        bytes before analysis workspace.
+
         Args:
             process_tensor: Dense or MPO reference process tensor.
             past: Past legs to include: ``"all"``, ``"first"``, or ``"last"``.
@@ -716,6 +721,10 @@ class MemoryCharacterizer:
         base: int = 2,
     ) -> float:
         r"""Compute conditional mutual information from a reference process tensor.
+
+        For an MPO input, this method densifies the complete process tensor. For
+        ``k`` intervention legs, the dense complex matrix uses ``64 * 16**k``
+        bytes before analysis workspace.
 
         Args:
             process_tensor: Dense or MPO reference process tensor.

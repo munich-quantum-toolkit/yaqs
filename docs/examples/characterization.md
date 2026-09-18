@@ -323,11 +323,11 @@ for short horizons. `compress_every` limits an accumulation batch; it does not
 limit the number of histories. Dense tomography has the same $16^k$ sequence
 count and is required when you use `noise_model`.
 
-`MPOProcessTensor.compute_temporal_entropy()` currently converts the complete
-MPO to a dense matrix. The matrix alone uses $64\,16^k$ bytes for $k$
-intervention legs, before decomposition workspace. On a typical workstation,
-restrict this calculation to about five legs. The matrix uses 64 MiB at five
-legs and 1 GiB at six legs.
+`MPOProcessTensor.compute_temporal_entropy()`, `MPOProcessTensor.qmi()`, and
+`MPOProcessTensor.cmi()` currently convert the complete MPO to a dense matrix.
+The matrix alone uses $64\,16^k$ bytes for $k$ intervention legs, before
+analysis workspace. On a typical workstation, restrict these calculations to
+about five legs. The matrix uses 64 MiB at five legs and 1 GiB at six legs.
 
 ```{warning}
 Passing a finite `max_bond_dim` enables experimental direct-MPO truncation and
@@ -339,11 +339,11 @@ capped result as a stable scientific reference.
 Operational characterization requires each contracted branch to be Hermitian and
 positive semidefinite, with trace in $[0,1]$. Response assembly also checks that
 each normalized qubit response lies in the Bloch ball. QMI and CMI always
-normalize the process tensor and validate positive semidefiniteness. Remove an
-experimental finite cap by setting `max_bond_dim=None`, or use a sufficiently
-accurate dense reconstruction when you need $S_V$ from a process tensor.
-`characterize(pt, ...)` uses native MPO `evaluate_probes_with_weights` without
-densifying the V-matrix path.
+normalize the process tensor and validate positive semidefiniteness and causal
+normalization. Remove an experimental finite cap by setting `max_bond_dim=None`,
+or use a sufficiently accurate dense reconstruction when you need $S_V$ from a
+process tensor. `characterize(pt, ...)` uses native MPO
+`evaluate_probes_with_weights` without densifying the V-matrix path.
 
 ## Related topics
 

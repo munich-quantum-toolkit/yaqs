@@ -13,7 +13,8 @@
 
 :func:`build_process_tensor` dispatches on ``return_type``:
 
-- ``"mpo"`` (default) — direct MPO construction (noiseless); returns
+- ``"mpo"`` (default) — direct MPO construction (noiseless; the uncapped path
+  grows as ``16**num_interventions``); returns
   :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 - ``"dense"`` — exhaustive discrete-basis tomography (``16**num_interventions`` sequences),
   optionally with noise; returns
@@ -403,7 +404,8 @@ def build_process_tensor(
 ) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor as dense tomography or a direct MPO.
 
-    - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
+    - ``return_type="mpo"`` (default): direct MPO construction (noiseless only; the uncapped path
+      grows as ``16**num_interventions``).
     - ``return_type="dense"``: exhaustive discrete-basis tomography
       (``16**num_interventions`` sequences; supports ``noise_model``).
 

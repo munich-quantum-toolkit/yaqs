@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Leg-by-leg process-tensor MPO construction without exhaustive ``16**k`` tomography."""
+"""Leg-by-leg process-tensor MPO construction; the uncapped path retains ``16**k`` histories."""
 
 from __future__ import annotations
 
