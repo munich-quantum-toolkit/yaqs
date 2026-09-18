@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self, cast
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -1438,6 +1438,33 @@ def test_measure_shots_single_shot() -> None:
         results = psi.measure_shots(shots=1)
     mock_executor.assert_not_called()
     assert results == {0: 1}
+
+
+@pytest.mark.parametrize(
+    ("shots", "error"),
+    [
+        (True, TypeError),
+        (0, ValueError),
+        (-1, ValueError),
+        (1.0, TypeError),
+        ("1", TypeError),
+        (np.nan, TypeError),
+        (np.inf, TypeError),
+    ],
+)
+def test_measure_shots_rejects_invalid_counts_before_measurement(shots: object, error: type[Exception]) -> None:
+    """Invalid shot counts fail before sampling or creating workers."""
+    psi = MPS(length=1, state="zeros")
+    with patch.object(psi, "measure_single_shot") as mock_measure, pytest.raises(error, match="shots"):
+        psi.measure_shots(shots=cast("Any", shots))
+    mock_measure.assert_not_called()
+
+
+def test_measure_shots_accepts_numpy_integer() -> None:
+    """A NumPy integer uses the single-shot fast path."""
+    psi = MPS(length=1, state="zeros")
+
+    assert psi.measure_shots(shots=cast("Any", np.int64(1))) == {0: 1}
 
 
 def test_measure_shots_serial_when_one_worker(monkeypatch: pytest.MonkeyPatch) -> None:

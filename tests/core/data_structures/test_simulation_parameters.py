@@ -36,6 +36,8 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -265,6 +267,134 @@ def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
     """tdvp_sweeps must be a true int, not bool or float."""
     with pytest.raises(TypeError, match="tdvp_sweeps"):
         _validate_tdvp_sweeps(cast("Any", invalid))
+
+
+_INTEGER_CONTROL_CASES = [
+    pytest.param(
+        lambda value: AnalogSimParams(num_traj=cast("Any", value)),
+        "num_traj",
+        1,
+        id="analog-num-traj",
+    ),
+    pytest.param(
+        lambda value: DigitalSimParams(num_traj=cast("Any", value)),
+        "num_traj",
+        1,
+        id="digital-num-traj",
+    ),
+    pytest.param(
+        lambda value: AnalogSimParams(max_bond_dim=cast("Any", value)),
+        "max_bond_dim",
+        1,
+        id="analog-max-bond-dim",
+    ),
+    pytest.param(
+        lambda value: DigitalSimParams(max_bond_dim=cast("Any", value)),
+        "max_bond_dim",
+        1,
+        id="digital-max-bond-dim",
+    ),
+    pytest.param(
+        lambda value: DigitalSimParams(num_mid_measurements=cast("Any", value)),
+        "num_mid_measurements",
+        0,
+        id="digital-num-mid-measurements",
+    ),
+    pytest.param(
+        lambda value: DigitalSimParams(shots=cast("Any", value)),
+        "shots",
+        1,
+        id="digital-shots",
+    ),
+    pytest.param(
+        lambda value: AnalogSimParams(tdvp_sweeps=cast("Any", value)),
+        "tdvp_sweeps",
+        1,
+        id="analog-tdvp-sweeps",
+    ),
+    pytest.param(
+        lambda value: DigitalSimParams(tdvp_sweeps=cast("Any", value)),
+        "tdvp_sweeps",
+        1,
+        id="digital-tdvp-sweeps",
+    ),
+]
+
+
+@pytest.mark.parametrize(("factory", "field", "minimum"), _INTEGER_CONTROL_CASES)
+@pytest.mark.parametrize("invalid", [True, 1.0, 1.5, "1", np.nan, np.inf])
+def test_simulation_integer_controls_reject_wrong_types(
+    factory: Callable[[object], AnalogSimParams | DigitalSimParams],
+    field: str,
+    minimum: int,
+    invalid: object,
+) -> None:
+    """Allocation and execution controls require true integer values."""
+    del minimum
+    with pytest.raises(TypeError, match=field):
+        factory(invalid)
+
+
+@pytest.mark.parametrize(("factory", "field", "minimum"), _INTEGER_CONTROL_CASES)
+@pytest.mark.parametrize("distance_below_minimum", [1, 2])
+def test_simulation_integer_controls_reject_values_below_minimum(
+    factory: Callable[[object], AnalogSimParams | DigitalSimParams],
+    field: str,
+    minimum: int,
+    distance_below_minimum: int,
+) -> None:
+    """Allocation and execution controls enforce their documented lower bounds."""
+    with pytest.raises(ValueError, match=field):
+        factory(minimum - distance_below_minimum)
+
+
+def test_simulation_integer_controls_accept_and_normalize_numpy_integers() -> None:
+    """Python and NumPy integers share one stored control representation."""
+    analog = AnalogSimParams(
+        num_traj=cast("Any", np.int64(2)),
+        max_bond_dim=np.int64(3),
+        tdvp_sweeps=cast("Any", np.int64(2)),
+        order=cast("Any", np.int64(2)),
+    )
+    digital = DigitalSimParams(
+        shots=cast("Any", np.int64(4)),
+        num_traj=cast("Any", np.int64(2)),
+        max_bond_dim=np.int64(3),
+        num_mid_measurements=cast("Any", np.int64(0)),
+        tdvp_sweeps=cast("Any", np.int64(2)),
+    )
+
+    assert (analog.num_traj, analog.max_bond_dim, analog.tdvp_sweeps, analog.order) == (2, 3, 2, 2)
+    assert (digital.shots, digital.num_traj, digital.max_bond_dim, digital.num_mid_measurements) == (4, 2, 3, 0)
+    assert digital.tdvp_sweeps == 2
+    assert all(
+        type(value) is int
+        for value in (
+            analog.num_traj,
+            analog.max_bond_dim,
+            analog.tdvp_sweeps,
+            analog.order,
+            digital.shots,
+            digital.num_traj,
+            digital.max_bond_dim,
+            digital.num_mid_measurements,
+            digital.tdvp_sweeps,
+        )
+    )
+
+
+@pytest.mark.parametrize("invalid", [True, 1.0, 1.5, "1", np.nan, np.inf])
+def test_analog_order_rejects_wrong_types(invalid: object) -> None:
+    """Analog order accepts only true integers."""
+    with pytest.raises(TypeError, match="order"):
+        AnalogSimParams(order=cast("Any", invalid))
+
+
+@pytest.mark.parametrize("invalid", [-1, 0, 3])
+def test_analog_order_rejects_unsupported_values(invalid: int) -> None:
+    """Analog order accepts only the two implemented algorithms."""
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
+        AnalogSimParams(order=invalid)
 
 
 @pytest.mark.parametrize(
@@ -728,14 +858,6 @@ def test_digital_simparams_allows_sample_layers_without_observables() -> None:
 
     assert params.sample_layers
     assert params.observables == []
-
-
-def test_digital_simparams_rejects_invalid_shots() -> None:
-    """Shots must be a positive int when provided."""
-    with pytest.raises(ValueError, match="shots must be a positive int"):
-        DigitalSimParams(shots=0)
-    with pytest.raises(ValueError, match="shots must be a positive int"):
-        DigitalSimParams(shots=-1)
 
 
 def test_digital_simparams_rejects_positional_arguments() -> None:

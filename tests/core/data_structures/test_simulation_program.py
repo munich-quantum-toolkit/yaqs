@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 from dataclasses import FrozenInstanceError
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
+import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 
@@ -215,10 +216,10 @@ def test_program_rejects_non_boolean_get_state() -> None:
         )
 
 
-@pytest.mark.parametrize("num_traj", [True, 1.5, "2"])
+@pytest.mark.parametrize("num_traj", [True, 1.5, "2", np.nan, np.inf])
 def test_program_rejects_non_integer_num_traj(num_traj: object) -> None:
     """The program-wide trajectory count does not accept integer-like values."""
-    with pytest.raises(TypeError, match="num_traj must be int or None"):
+    with pytest.raises(TypeError, match="num_traj must be an integer"):
         SimulationProgram(
             [(QuantumCircuit(2), DigitalSimParams())],
             num_traj=num_traj,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
@@ -227,8 +228,19 @@ def test_program_rejects_non_integer_num_traj(num_traj: object) -> None:
 
 def test_program_rejects_non_positive_num_traj() -> None:
     """A stochastic ensemble must contain at least one trajectory."""
-    with pytest.raises(ValueError, match="num_traj must be at least 1"):
+    with pytest.raises(ValueError, match="num_traj must be >= 1"):
         SimulationProgram([(QuantumCircuit(2), DigitalSimParams())], num_traj=0)
+
+
+def test_program_accepts_and_normalizes_numpy_num_traj() -> None:
+    """A NumPy integer trajectory count is stored as a Python integer."""
+    program = SimulationProgram(
+        [(QuantumCircuit(2), DigitalSimParams())],
+        num_traj=cast("Any", np.int64(2)),
+    )
+
+    assert program.num_traj == 2
+    assert type(program.num_traj) is int
 
 
 @pytest.mark.parametrize("random_seed", [True, 1.5, "2"])
