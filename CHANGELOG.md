@@ -65,6 +65,7 @@ releases may include breaking changes.
 
 ### Fixed
 
+- stabilized direct process tensor characterization ([#601]) ([**@aaronleesander**])
 - fixed inconsistent physical-site ordering across state and Hamiltonian
   representations, analog local observables and jump operators, and
   memory-characterization backends ([#600]) ([**@aaronleesander**])
@@ -278,6 +279,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#601]: https://github.com/munich-quantum-toolkit/yaqs/pull/601
 [#600]: https://github.com/munich-quantum-toolkit/yaqs/pull/600
 [#598]: https://github.com/munich-quantum-toolkit/yaqs/pull/598
 [#597]: https://github.com/munich-quantum-toolkit/yaqs/pull/597
