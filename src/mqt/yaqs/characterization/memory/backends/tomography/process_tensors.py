@@ -178,7 +178,8 @@ def _evaluate_probes_with_weights(
                 msg = (
                     f"Process-tensor branch trace must be a probability in [0, 1], got {weight}. "
                     "Direct-MPO compression or tomography error can make a reconstructed process tensor "
-                    "nonphysical. For a noiseless process, increase max_bond_dim, set max_bond_dim=None, or "
+                    "nonphysical. For a noiseless process, remove the experimental finite cap by setting "
+                    "max_bond_dim=None, or "
                     "use return_type='dense'; for sampled tomography, improve the reconstruction."
                 )
                 raise ValueError(msg)

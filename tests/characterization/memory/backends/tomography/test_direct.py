@@ -40,7 +40,7 @@ def test_default_mpo_recreates_dense_process_tensor() -> None:
     timesteps = [0.1, 0.1, 0.1]
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
 
-    pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps, max_bond_dim=None, compress_every=1)
+    pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1)
     pt_dense = mc.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense")
 
     assert isinstance(pt_mpo, MPOProcessTensor)
@@ -69,7 +69,7 @@ def test_direct_mpo_matches_dense_temporal_entropy(j_val: float, num_interventio
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(ham.mpo, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
     )
 
     for cut in range(1, num_interventions + 1):
@@ -94,7 +94,7 @@ def test_direct_j_zero_matches_dense_temporal_entropy() -> None:
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        build_process_tensor(ham.mpo, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
+        build_process_tensor(ham.mpo, params, timesteps=timesteps, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
@@ -152,7 +152,7 @@ def test_direct_parallel_temporal_entropy_matches_dense() -> None:
     )
     pt_mpo = cast(
         "MPOProcessTensor",
-        mc.build_process_tensor(ham, params, timesteps=timesteps, max_bond_dim=None, compress_every=1),
+        mc.build_process_tensor(ham, params, timesteps=timesteps, compress_every=1),
     )
     for cut in (1, 2):
         dense = pt_dense.compute_temporal_entropy(cut)
@@ -163,20 +163,26 @@ def test_direct_parallel_temporal_entropy_matches_dense() -> None:
         )
 
 
-def test_direct_tjm_matches_mcwf() -> None:
-    """TJM and MCWF process tensors agree for site-0-only dynamics."""
-    identity = np.eye(2, dtype=np.complex128)
-    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
-    ham = Hamiltonian(matrix=np.asarray(np.kron(identity, pauli_x), dtype=np.complex128))
-    params = AnalogSimParams(dt=0.05, max_bond_dim=8, order=1)
-    timesteps = [0.05, 0.05]
+def test_default_direct_tjm_and_mcwf_match_dense_and_analytic_references() -> None:
+    """Supported direct backends match dense tomography and zero-dynamics evolution."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+    timesteps = [0.0, 0.0, 0.0]
+    dense = cast(
+        "DenseProcessTensor",
+        MemoryCharacterizer(representation="vector", parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=timesteps,
+            return_type="dense",
+        ),
+    )
     mcwf = cast(
         "MPOProcessTensor",
         MemoryCharacterizer(representation="vector", parallel=False, show_progress=False).build_process_tensor(
             ham,
             params,
             timesteps=timesteps,
-            max_bond_dim=4,
             compress_every=1,
         ),
     )
@@ -186,9 +192,37 @@ def test_direct_tjm_matches_mcwf() -> None:
             ham,
             params,
             timesteps=timesteps,
-            max_bond_dim=4,
             compress_every=1,
         ),
     )
+    pauli_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    hadamard = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128) / np.sqrt(2.0)
+
+    def x_map(rho: np.ndarray) -> np.ndarray:
+        return pauli_x @ rho @ pauli_x
+
+    def hadamard_map(rho: np.ndarray) -> np.ndarray:
+        return hadamard @ rho @ hadamard
+
+    expected = np.array([[0.5, -0.5], [-0.5, 0.5]], dtype=np.complex128)
+
+    np.testing.assert_allclose(mcwf.to_matrix(), dense.to_matrix(), atol=1e-8)
+    np.testing.assert_allclose(tjm.to_matrix(), dense.to_matrix(), atol=1e-6)
     np.testing.assert_allclose(tjm.initial_rho, mcwf.initial_rho, atol=1e-10)
-    np.testing.assert_allclose(tjm.to_matrix(), mcwf.to_matrix(), atol=1e-6)
+    np.testing.assert_allclose(mcwf.predict([x_map, hadamard_map]), expected, atol=1e-8)
+    np.testing.assert_allclose(tjm.predict([x_map, hadamard_map]), expected, atol=1e-6)
+
+
+def test_finite_direct_cap_warns_that_the_path_is_experimental() -> None:
+    """A finite direct cap cannot be mistaken for the supported construction path."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
+
+    with pytest.warns(RuntimeWarning, match="experimental direct process-tensor truncation"):
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            ham,
+            params,
+            timesteps=[0.0, 0.0],
+            max_bond_dim=4,
+            compress_every=1,
+        )

@@ -55,7 +55,6 @@ def _tiny_mpo_process_tensor(*, num_interventions: int = 1) -> MPOProcessTensor:
             params,
             timesteps=timesteps,
             return_type="mpo",
-            max_bond_dim=None,
             compress_every=1,
         ),
     )
@@ -446,8 +445,8 @@ def test_dense_process_tensor_selected_future_with_weights_matches_exact() -> No
     )
 
 
-def test_uncapped_mpo_selected_future_with_weights_matches_exact() -> None:
-    """An uncapped direct MPO reproduces exact responses and joint probabilities."""
+def test_default_mpo_selected_future_with_weights_matches_exact() -> None:
+    """The supported direct MPO reproduces exact responses and joint probabilities."""
     ham = Hamiltonian.ising(length=2, J=1.0, g=1.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=8, order=1)
     timesteps = [0.1, 0.1, 0.1]
@@ -456,7 +455,6 @@ def test_uncapped_mpo_selected_future_with_weights_matches_exact() -> None:
         params,
         timesteps=timesteps,
         parallel=False,
-        max_bond_dim=None,
         compress_every=1,
     )
     assert isinstance(pt, MPOProcessTensor)
@@ -490,8 +488,21 @@ def test_uncapped_mpo_selected_future_with_weights_matches_exact() -> None:
 
 
 def test_mpo_probes_with_weights_reject_nonphysical_reconstruction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An invalid reconstructed MPO is rejected with actionable remedies."""
-    pt = _tiny_mpo_process_tensor(num_interventions=1)
+    """An experimental capped MPO warns and rejects an invalid branch."""
+    ham = Hamiltonian.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=8)
+    with pytest.warns(RuntimeWarning, match="experimental direct process-tensor truncation"):
+        pt = cast(
+            "MPOProcessTensor",
+            build_process_tensor(
+                ham.mpo,
+                params,
+                timesteps=[0.0, 0.0],
+                max_bond_dim=1,
+                compress_every=1,
+                parallel=False,
+            ),
+        )
 
     def _contract_invalid_branch(self: MPOProcessTensor, interventions: object) -> np.ndarray:
         _ = (self, interventions)

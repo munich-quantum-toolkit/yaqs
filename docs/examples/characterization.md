@@ -281,15 +281,14 @@ By default, `build_process_tensor` uses direct MPO construction
 (required for `noise_model`):
 
 ```{code-cell} ipython3
-k = 3
-cut_pt = 2
+k = 2
+cut_pt = 1
 timesteps = [0.1] * (k + 1)
 
 pt_mpo = mc.build_process_tensor(
     ham,
     params,
     timesteps=timesteps,
-    max_bond_dim=None,
 )
 pt_dense = mc.build_process_tensor(
     ham,
@@ -317,16 +316,26 @@ pt_result = mc.characterize(
 print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
 ```
 
-Dense and uncapped MPO construction (`max_bond_dim=None`) agree on $S_{PT}$ for
-small $k$. Use `return_type="dense"` when you need noise. The default
-`max_bond_dim=64` keeps direct construction scalable, but direct-MPO compression
-is not guaranteed to preserve positivity or causal normalization. Operational
-characterization requires every contracted branch trace to be a probability in
-$[0,1]$ and rejects a process tensor that violates this condition. Increase
-`max_bond_dim`, set `max_bond_dim=None` for an exact noiseless MPO, or use a
-sufficiently accurate dense reconstruction when you need $S_V$ from a process
-tensor. `characterize(pt, ...)` uses native MPO `evaluate_probes_with_weights`
-without densifying the V-matrix path.
+Dense and default direct MPO construction agree on $S_{PT}$ for small $k$. The
+supported direct path is uncapped: at intervention leg $k$, it can retain up to
+$16^k$ histories and construct the same number of rank-one terms. Use it only
+for short horizons. `compress_every` limits an accumulation batch; it does not
+limit the number of histories. Dense tomography has the same $16^k$ sequence
+count and is required when you use `noise_model`.
+
+```{warning}
+Passing a finite `max_bond_dim` enables experimental direct-MPO truncation and
+emits a `RuntimeWarning`. This uncontrolled approximation can change the process
+tensor and does not preserve positivity or causal normalization. Do not use a
+capped result as a stable scientific reference.
+```
+
+Operational characterization requires every contracted branch trace to be a
+probability in $[0,1]$ and rejects a process tensor that violates this
+condition. Remove an experimental finite cap by setting `max_bond_dim=None`, or
+use a sufficiently accurate dense reconstruction when you need $S_V$ from a
+process tensor. `characterize(pt, ...)` uses native MPO
+`evaluate_probes_with_weights` without densifying the V-matrix path.
 
 ## Related topics
 

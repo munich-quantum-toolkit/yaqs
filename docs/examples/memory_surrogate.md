@@ -212,10 +212,12 @@ sequences (for example `[H, X]`).
 ## Validate against exact references
 
 Build process tensors for the same schedule. By default, `build_process_tensor`
-returns an MPO from direct construction (noiseless). Pass `return_type="dense"`
-for exhaustive tomography. For process tensors, `rho0` in `predict` must match
-`pt.initial_rho` (the site-0 state after the initial leg of the reference
-schedule).
+returns an uncapped MPO from direct construction (noiseless). Its branch count
+grows as `16**num_interventions`, so use it only for short horizons. A finite
+`max_bond_dim` selects an experimental uncontrolled approximation and emits a
+`RuntimeWarning`. Pass `return_type="dense"` for exhaustive tomography. For
+process tensors, `rho0` in `predict` must match `pt.initial_rho` (the site-0
+state after the initial leg of the reference schedule).
 
 **Dense** and **MPO** implementations should agree on identical interventions.
 Compare all three backends on a

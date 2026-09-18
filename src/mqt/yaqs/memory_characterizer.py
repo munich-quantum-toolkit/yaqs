@@ -330,7 +330,7 @@ class MemoryCharacterizer:
         atol: float = 1e-8,
         compress_every: int = 16,
         tol: float = 1e-12,
-        max_bond_dim: int | None = 64,
+        max_bond_dim: int | None = None,
         n_sweeps: int = 2,
         parallel: bool | None = None,
         initial_rho: np.ndarray | None = None,
@@ -356,8 +356,9 @@ class MemoryCharacterizer:
             atol: CPTP check tolerance.
             compress_every: How often to compress while accumulating direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Cap on the branch ensemble / MPO bond dimension for direct construction.
-                Defaults to ``64`` for scalability; pass ``None`` for exact uncapped construction.
+            max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
+                construction. The supported default, ``None``, retains all branches. A finite cap can
+                violate process-tensor semantics, positivity, and causal normalization.
             n_sweeps: MPO compression sweeps.
             parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
