@@ -338,11 +338,12 @@ capped result as a stable scientific reference.
 
 Operational characterization requires each contracted branch to be Hermitian and
 positive semidefinite, with trace in $[0,1]$. Response assembly also checks that
-each normalized qubit response lies in the Bloch ball. QMI and CMI validate
-positive semidefiniteness by default. Remove an experimental finite cap by
-setting `max_bond_dim=None`, or use a sufficiently accurate dense reconstruction
-when you need $S_V$ from a process tensor. `characterize(pt, ...)` uses native
-MPO `evaluate_probes_with_weights` without densifying the V-matrix path.
+each normalized qubit response lies in the Bloch ball. QMI and CMI always
+normalize the process tensor and validate positive semidefiniteness. Remove an
+experimental finite cap by setting `max_bond_dim=None`, or use a sufficiently
+accurate dense reconstruction when you need $S_V$ from a process tensor.
+`characterize(pt, ...)` uses native MPO `evaluate_probes_with_weights` without
+densifying the V-matrix path.
 
 ## Related topics
 
