@@ -752,7 +752,12 @@ class DenseProcessTensor:
 
         rho_final_sub = trace_partial_dense(rho, dims, keep=[0])
         rho_past_sub = trace_partial_dense(rho, dims, keep=keep_past)
-        return compute_entropy_dense(rho_past_sub, base) + compute_entropy_dense(rho_final_sub, base) - entropy_total
+        entropy_joint = (
+            entropy_total
+            if len(keep_past) == k_steps
+            else compute_entropy_dense(trace_partial_dense(rho, dims, keep=[0, *keep_past]), base)
+        )
+        return compute_entropy_dense(rho_past_sub, base) + compute_entropy_dense(rho_final_sub, base) - entropy_joint
 
     def cmi(
         self,

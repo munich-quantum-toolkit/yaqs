@@ -227,11 +227,11 @@ def test_mpo_process_tensor_rejects_malformed_structure(
 
 def test_mpo_process_tensor_qmi_fallback_to_dense() -> None:
     """MPOProcessTensor.qmi should agree with DenseProcessTensor.qmi via dense fallback."""
-    pt = _tiny_mpo_process_tensor(num_interventions=1)
+    pt = _tiny_mpo_process_tensor(num_interventions=2)
+    dense = pt.to_dense()
 
-    q1 = pt.qmi()
-    q2 = pt.to_dense().qmi()
-    assert abs(q1 - q2) < 1e-12
+    for past in ("all", "first", "last"):
+        assert pt.qmi(past=past) == pytest.approx(dense.qmi(past=past), abs=1e-12)
 
 
 def test_mpo_process_tensor_predict_smoke_identity_map() -> None:
@@ -462,21 +462,15 @@ def test_information_metrics_match_classically_correlated_references() -> None:
 
 
 def test_dense_process_tensor_qmi_and_cmi() -> None:
-    """Information metrics run on small process tensors including past-leg variants."""
+    """Information metrics match the exact values for a memoryless two-leg process."""
     pt_k1 = _tiny_process_tensor(num_interventions=1)
     pt_k2 = _tiny_process_tensor(num_interventions=2)
 
     assert pt_k1.cmi() == pytest.approx(0.0)
-
-    q_all = pt_k2.qmi(past="all")
-    q_last = pt_k2.qmi(past="last")
-    q_first = pt_k2.qmi(past="first")
-    assert isinstance(q_all, float)
-    assert isinstance(q_last, float)
-    assert isinstance(q_first, float)
-
-    cmi = pt_k2.cmi()
-    assert isinstance(cmi, float)
+    assert pt_k2.qmi(past="all") == pytest.approx(2.0)
+    assert pt_k2.qmi(past="first") == pytest.approx(0.0, abs=1e-12)
+    assert pt_k2.qmi(past="last") == pytest.approx(2.0)
+    assert pt_k2.cmi() == pytest.approx(0.0, abs=1e-12)
 
     with pytest.raises(ValueError, match="Unknown past"):
         pt_k2.qmi(past="middle")
