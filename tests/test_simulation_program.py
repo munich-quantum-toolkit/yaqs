@@ -385,24 +385,29 @@ def test_program_compilation_rejects_unsupported_inputs(
         Simulator(parallel=False, show_progress=False).run(state, program)
 
 
-@pytest.mark.parametrize(
-    ("params", "message"),
-    [
-        (AnalogSimParams(order=3), "order must be 1 or 2"),
-        (
-            AnalogSimParams(multi_time_observables=[(Observable("z", 0), Observable("z", 0))]),
-            "multi_time_observables are not supported",
-        ),
-    ],
-)
-def test_program_compilation_rejects_unsupported_analog_parameters(
-    params: AnalogSimParams,
-    message: str,
-) -> None:
+def test_program_compilation_rejects_unsupported_analog_parameters() -> None:
     """Program compilation rejects standalone-only analog configuration."""
+    params = AnalogSimParams(multi_time_observables=[(Observable("z", 0), Observable("z", 0))])
     program = SimulationProgram([(_zero_hamiltonian(2), params)], get_state=True)
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="multi_time_observables are not supported"):
+        Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
+
+
+def test_program_compilation_revalidates_mutated_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An invalid mutated order fails before materializing the Hamiltonian."""
+    params = AnalogSimParams()
+    program = SimulationProgram([(_zero_hamiltonian(2), params)], get_state=True)
+    params.order = 3
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Hamiltonian expansion was called for an invalid integration order.")
+
+    monkeypatch.setattr(
+        "mqt.yaqs.core.data_structures.simulation_program._expand_analog_operator",
+        fail_if_called,
+    )
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
 
 
