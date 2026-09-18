@@ -689,8 +689,6 @@ class MemoryCharacterizer:
         *,
         past: str = "all",
         base: int = 2,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute quantum mutual information from a reference process tensor.
 
@@ -698,8 +696,6 @@ class MemoryCharacterizer:
             process_tensor: Dense or MPO reference process tensor.
             past: Past legs to include: ``"all"``, ``"first"``, or ``"last"``.
             base: Log base for entropy.
-            check_psd: Validate positive semidefiniteness before computing the metric.
-            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
             Quantum mutual information between the final site and the selected past legs.
@@ -710,12 +706,7 @@ class MemoryCharacterizer:
         if not _matches_process_tensor(process_tensor):
             msg = f"compute_qmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
-        return process_tensor.qmi(
-            base=base,
-            past=past,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return process_tensor.qmi(base=base, past=past)
 
     @staticmethod
     def compute_cmi(
@@ -723,16 +714,12 @@ class MemoryCharacterizer:
         /,
         *,
         base: int = 2,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         r"""Compute conditional mutual information from a reference process tensor.
 
         Args:
             process_tensor: Dense or MPO reference process tensor.
             base: Log base for entropy.
-            check_psd: Validate positive semidefiniteness before computing the metric.
-            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
             Conditional mutual information :math:`I(F : P_{<k} \\mid P_k)`.
@@ -743,11 +730,7 @@ class MemoryCharacterizer:
         if not _matches_process_tensor(process_tensor):
             msg = f"compute_cmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
-        return process_tensor.cmi(
-            base=base,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return process_tensor.cmi(base=base)
 
     @staticmethod
     def _resolve_cut_list(

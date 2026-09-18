@@ -23,7 +23,7 @@ from ...shared.probabilities import PROBABILITY_ATOL
 _HERMITICITY_ATOL = 1e-10
 _PSD_ATOL = 1e-10
 _TRACE_ATOL = 1e-12
-_ZERO_BRANCH_NORM_ATOL = 1e-10
+_ZERO_BRANCH_NORM_ATOL = 64.0 * np.finfo(np.float64).eps
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,7 +69,7 @@ def _validate_hermitian_matrix(
     if not np.all(np.isfinite(value)):
         msg = f"{name} must contain only finite values."
         raise ValueError(msg)
-    scale = max(float(np.linalg.norm(value)), 1.0)
+    scale = float(np.linalg.norm(value))
     residual = float(np.linalg.norm(value - value.conj().T))
     if residual > _HERMITICITY_ATOL * scale:
         msg = f"{name} must be Hermitian; residual norm is {residual:.3e}."
@@ -81,7 +81,7 @@ def _validate_psd(
     matrix: NDArray[np.complex128],
     *,
     name: str,
-) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
+) -> NDArray[np.float64]:
     """Validate positive semidefiniteness up to roundoff.
 
     Args:
@@ -89,18 +89,18 @@ def _validate_psd(
         name: Name used in error messages.
 
     Returns:
-        Eigenvalues and eigenvectors of ``matrix``.
+        Eigenvalues of ``matrix``.
 
     Raises:
         ValueError: If an eigenvalue is negative beyond numerical tolerance.
     """
-    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
+    eigenvalues = np.linalg.eigvalsh(matrix)
     scale = max(float(np.max(np.abs(eigenvalues))), 1.0)
     minimum = float(eigenvalues[0])
     if minimum < -_PSD_ATOL * scale:
         msg = f"{name} must be positive semidefinite; minimum eigenvalue is {minimum:.3e}."
         raise ValueError(msg)
-    return eigenvalues.real, eigenvectors
+    return eigenvalues.real
 
 
 def _normalize_conditional_branch(
@@ -124,9 +124,15 @@ def _normalize_conditional_branch(
     if rho.shape != (2, 2):
         msg = f"Process-tensor branch must have shape (2, 2), got {rho.shape}."
         raise ValueError(msg)
+    if not np.all(np.isfinite(rho)):
+        msg = "Process-tensor branch must contain only finite values."
+        raise ValueError(msg)
+    if np.linalg.norm(rho) <= _ZERO_BRANCH_NORM_ATOL:
+        return np.zeros((2, 2), dtype=np.complex128), 0.0
+
     rho = _validate_hermitian_matrix(rho, name="Process-tensor branch")
     weight = float(np.trace(rho).real)
-    if not np.isfinite(weight) or weight < -PROBABILITY_ATOL or weight > 1.0 + PROBABILITY_ATOL:
+    if weight < 0.0 or weight > 1.0 + PROBABILITY_ATOL:
         msg = (
             f"Process-tensor branch trace must be a probability in [0, 1], got {weight}. "
             "Direct-MPO compression or tomography error can make a reconstructed process tensor "
@@ -134,21 +140,15 @@ def _normalize_conditional_branch(
             "max_bond_dim=None, or use return_type='dense'; for sampled tomography, improve the reconstruction."
         )
         raise ValueError(msg)
-    if abs(weight) <= _TRACE_ATOL and np.linalg.norm(rho) > _ZERO_BRANCH_NORM_ATOL:
+    if weight <= 0.0:
         msg = "Process-tensor branch has near-zero trace but a nonzero subnormalized output."
         raise ValueError(msg)
-    weight = float(np.clip(weight, 0.0, 1.0))
-    if weight <= 0.0:
-        return np.zeros((2, 2), dtype=np.complex128), 0.0
 
     normalized = rho / weight
-    try:
-        eigenvalues, eigenvectors = _validate_psd(normalized, name="Process-tensor conditional state")
-    except ValueError:
-        if weight <= _TRACE_ATOL and np.linalg.norm(rho) <= _ZERO_BRANCH_NORM_ATOL:
-            return np.zeros((2, 2), dtype=np.complex128), 0.0
-        raise
+    weight = float(np.clip(weight, 0.0, 1.0))
+    eigenvalues = _validate_psd(normalized, name="Process-tensor conditional state")
     if np.any(eigenvalues < 0.0):
+        eigenvalues, eigenvectors = np.linalg.eigh(normalized)
         eigenvalues = np.clip(eigenvalues, 0.0, None)
         normalized = (eigenvectors * eigenvalues) @ eigenvectors.conj().T
         normalized /= np.trace(normalized)
@@ -326,6 +326,44 @@ def trace_partial_dense(r: NDArray[np.complex128], dims: list[int], keep: list[i
     return np.einsum("a b c b -> a c", reshaped)
 
 
+def _normalize_entropy_state(
+    matrix: NDArray[np.complex128],
+    base: int,
+    *,
+    name: str,
+) -> tuple[NDArray[np.complex128], float]:
+    """Normalize a positive matrix and compute its von Neumann entropy.
+
+    Args:
+        matrix: Positive semidefinite matrix.
+        base: Logarithm base.
+        name: Name used in error messages.
+
+    Returns:
+        Trace-normalized matrix and its entropy.
+
+    Raises:
+        ValueError: If ``base`` is not finite and greater than 1, or if ``matrix``
+            does not define a nonzero positive semidefinite matrix.
+    """
+    if not np.isfinite(base) or base <= 1:
+        msg = f"entropy base must be > 1, got {base!r}."
+        raise ValueError(msg)
+    rho_herm = _validate_hermitian_matrix(matrix, name=name)
+    trace = float(np.trace(rho_herm).real)
+    if not np.isfinite(trace) or trace <= _TRACE_ATOL:
+        msg = f"{name} must have trace greater than {_TRACE_ATOL:.0e}, got {trace:.3e}."
+        raise ValueError(msg)
+    rho_herm /= trace
+    evals = _validate_psd(rho_herm, name=name)
+    evals = np.clip(evals, 0.0, None)
+    evals /= float(evals.sum())
+    nz = evals[evals > 0.0]
+    entropy = float(-(nz * (np.log(nz) / np.log(base))).sum())
+    upper_bound = float(np.log(rho_herm.shape[0]) / np.log(base))
+    return rho_herm, float(np.clip(entropy, 0.0, upper_bound))
+
+
 def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     """Compute von Neumann entropy of a (possibly unnormalized) density matrix.
 
@@ -335,63 +373,9 @@ def compute_entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
 
     Returns:
         Von Neumann entropy in the given base.
-
-    Raises:
-        ValueError: If ``base`` is not greater than 1 or ``r`` does not define a
-            nonzero positive semidefinite matrix.
     """
-    if base <= 1:
-        msg = f"entropy base must be > 1, got {base!r}."
-        raise ValueError(msg)
-    rho_herm = _validate_hermitian_matrix(r, name="Entropy input")
-    trace = float(np.trace(rho_herm).real)
-    if not np.isfinite(trace) or trace <= _TRACE_ATOL:
-        msg = f"Entropy input must have trace greater than {_TRACE_ATOL:.0e}, got {trace:.3e}."
-        raise ValueError(msg)
-    rho_herm /= trace
-    evals, _ = _validate_psd(rho_herm, name="Entropy input")
-    evals = np.clip(evals, 0.0, None)
-    eval_sum = float(evals.sum())
-    if eval_sum <= _TRACE_ATOL:
-        msg = "Entropy input has no positive spectral weight."
-        raise ValueError(msg)
-    evals /= eval_sum
-    nz = evals[evals > 1e-15]
-    if nz.size == 0:
-        return 0.0
-    entropy = float(-(nz * (np.log(nz) / np.log(base))).sum())
-    upper_bound = float(np.log(rho_herm.shape[0]) / np.log(base))
-    return float(np.clip(entropy, 0.0, upper_bound))
-
-
-def _prepare_information_state(
-    upsilon: NDArray[np.complex128],
-    *,
-    check_psd: bool,
-    assume_canonical: bool,
-) -> NDArray[np.complex128]:
-    """Validate and normalize a process tensor for information metrics.
-
-    Args:
-        upsilon: Process-tensor Choi matrix.
-        check_psd: Whether to validate positive semidefiniteness.
-        assume_canonical: Whether to keep the stored trace normalization.
-
-    Returns:
-        Validated process-tensor matrix, trace-normalized unless
-        ``assume_canonical`` is true.
-
-    Raises:
-        ValueError: If the process tensor has zero or negative trace.
-    """
-    rho = _validate_hermitian_matrix(upsilon, name="Upsilon")
-    if check_psd:
-        _validate_psd(rho, name="Upsilon")
-    trace = float(np.trace(rho).real)
-    if not np.isfinite(trace) or trace <= _TRACE_ATOL:
-        msg = f"Upsilon must have trace greater than {_TRACE_ATOL:.0e}, got {trace:.3e}."
-        raise ValueError(msg)
-    return rho if assume_canonical else rho / trace
+    _, entropy = _normalize_entropy_state(r, base, name="Entropy input")
+    return entropy
 
 
 def _validate_cut(cut: int, num_interventions: int) -> None:
@@ -736,35 +720,26 @@ class DenseProcessTensor:
         self,
         base: int = 2,
         past: str = "all",
-        *,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute quantum mutual information between final and past subsystems.
 
         Args:
             base: Log base for entropy.
             past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
-            check_psd: Validate positive semidefiniteness before computing the metric.
-            assume_canonical: If ``True``, keep the stored normalization after validation.
 
         Returns:
             Quantum mutual information.
 
         Raises:
-            ValueError: If ``past`` is invalid or PSD check fails.
+            ValueError: If ``past`` is invalid or the process tensor is nonphysical.
         """
-        rho = _prepare_information_state(
-            self.upsilon,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        if past not in {"all", "first", "last"}:
+            msg = f"Unknown past='{past}'."
+            raise ValueError(msg)
+        rho, entropy_total = _normalize_entropy_state(self.upsilon, base, name="Upsilon")
 
         k_steps = self._num_interventions()
         if k_steps == 0:
-            if past not in {"all", "first", "last"}:
-                msg = f"Unknown past='{past}'."
-                raise ValueError(msg)
             return 0.0
 
         dims = [2] + [4] * k_steps
@@ -772,43 +747,27 @@ class DenseProcessTensor:
             keep_past = list(range(1, k_steps + 1))
         elif past == "last":
             keep_past = [k_steps]
-        elif past == "first":
-            keep_past = [1]
         else:
-            msg = f"Unknown past='{past}'."
-            raise ValueError(msg)
+            keep_past = [1]
 
         rho_final_sub = trace_partial_dense(rho, dims, keep=[0])
         rho_past_sub = trace_partial_dense(rho, dims, keep=keep_past)
-        return (
-            compute_entropy_dense(rho_past_sub, base)
-            + compute_entropy_dense(rho_final_sub, base)
-            - compute_entropy_dense(rho, base)
-        )
+        return compute_entropy_dense(rho_past_sub, base) + compute_entropy_dense(rho_final_sub, base) - entropy_total
 
     def cmi(
         self,
         base: int = 2,
-        *,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
 
         Args:
             base: Log base for entropy.
-            check_psd: Validate positive semidefiniteness before computing the metric.
-            assume_canonical: If ``True``, keep the stored normalization after validation.
 
         Returns:
             Conditional mutual information. Returns 0.0 for ``k<2``.
 
         """
-        rho = _prepare_information_state(
-            self.upsilon,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        rho, entropy_total = _normalize_entropy_state(self.upsilon, base, name="Upsilon")
 
         k_steps = self._num_interventions()
         if k_steps < 2:
@@ -821,7 +780,7 @@ class DenseProcessTensor:
             compute_entropy_dense(rho_final_past_k, base)
             + compute_entropy_dense(rho_past_sub, base)
             - compute_entropy_dense(rho_past_k, base)
-            - compute_entropy_dense(rho, base)
+            - entropy_total
         )
 
 
@@ -839,15 +798,68 @@ class MPOProcessTensor(MPO):
 
         Args:
             upsilon_mpo: MPO representation of the process-tensor matrix.
-            timesteps: Per-step evolution durations.
+            timesteps: Evolution schedule. A tensor with ``k > 0`` intervention
+                legs requires ``k + 1`` durations. A zero-leg tensor requires an
+                empty schedule.
             initial_rho: Site-0 reference state after ``U_0`` (defaults to ``|0\\rangle\\langle 0|``).
+
+        Raises:
+            ValueError: If the MPO tensors do not have the process-tensor site
+                dimensions and consistent bonds, contain non-finite values, or
+                disagree with the stored length or schedule.
         """
-        # Copy underlying MPO tensors/state into this subclass
+        tensors = list(upsilon_mpo.tensors)
+        if not tensors:
+            msg = "MPOProcessTensor requires at least one tensor."
+            raise ValueError(msg)
+        if upsilon_mpo.length != len(tensors):
+            msg = f"MPO length metadata is {upsilon_mpo.length}, but the MPO contains {len(tensors)} tensors."
+            raise ValueError(msg)
+
+        previous_right_bond: int | None = None
+        for site, tensor in enumerate(tensors):
+            if tensor.ndim != 4:
+                msg = f"MPO process-tensor site {site} must be rank 4, got shape {tensor.shape}."
+                raise ValueError(msg)
+            expected_physical_dimension = 2 if site == 0 else 4
+            if tensor.shape[:2] != (expected_physical_dimension, expected_physical_dimension):
+                msg = (
+                    f"MPO process-tensor site {site} must have physical dimensions "
+                    f"({expected_physical_dimension}, {expected_physical_dimension}), got {tensor.shape[:2]}."
+                )
+                raise ValueError(msg)
+            left_bond, right_bond = tensor.shape[2:]
+            if left_bond <= 0 or right_bond <= 0:
+                msg = f"MPO process-tensor site {site} must have positive bond dimensions, got {tensor.shape[2:]}."
+                raise ValueError(msg)
+            if not np.all(np.isfinite(tensor)):
+                msg = f"MPO process-tensor site {site} must contain only finite values."
+                raise ValueError(msg)
+            if previous_right_bond is not None and left_bond != previous_right_bond:
+                msg = (
+                    f"MPO process-tensor bond mismatch before site {site}: "
+                    f"expected left bond {previous_right_bond}, got {left_bond}."
+                )
+                raise ValueError(msg)
+            previous_right_bond = right_bond
+        if tensors[0].shape[2] != 1 or tensors[-1].shape[3] != 1:
+            msg = "MPO process tensor must have unit left and right boundary bonds."
+            raise ValueError(msg)
+
+        num_interventions = len(tensors) - 1
+        expected_timesteps = 0 if num_interventions == 0 else num_interventions + 1
+        if len(timesteps) != expected_timesteps:
+            msg = (
+                f"An MPOProcessTensor with {num_interventions} intervention legs requires "
+                f"{expected_timesteps} timesteps, got {len(timesteps)}."
+            )
+            raise ValueError(msg)
+
         super().__init__()
-        self.tensors = [t.copy() for t in upsilon_mpo.tensors]
-        self.length = upsilon_mpo.length
-        self.physical_dimension = upsilon_mpo.physical_dimension
-        self.timesteps = timesteps
+        self.tensors = [tensor.copy() for tensor in tensors]
+        self.length = len(tensors)
+        self.physical_dimension = 2
+        self.timesteps = list(timesteps)
         self.initial_rho = (
             DEFAULT_INITIAL_RHO0.copy()
             if initial_rho is None
@@ -1011,47 +1023,28 @@ class MPOProcessTensor(MPO):
         self,
         base: int = 2,
         past: str = "all",
-        *,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute quantum mutual information between final and past subsystems.
 
         Args:
             base: Log base for entropy.
             past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
-            check_psd: Validate positive semidefiniteness in the dense implementation.
-            assume_canonical: Passed through to the dense implementation.
 
         Returns:
             Quantum mutual information.
         """
-        return self.to_dense().qmi(
-            base=base,
-            past=past,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return self.to_dense().qmi(base=base, past=past)
 
     def cmi(
         self,
         base: int = 2,
-        *,
-        check_psd: bool = True,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
 
         Args:
             base: Log base for entropy.
-            check_psd: Validate positive semidefiniteness in the dense implementation.
-            assume_canonical: Passed through to the dense implementation.
 
         Returns:
             Conditional mutual information.
         """
-        return self.to_dense().cmi(
-            base=base,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return self.to_dense().cmi(base=base)

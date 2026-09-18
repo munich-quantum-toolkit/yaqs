@@ -72,6 +72,19 @@ def _single_site_mpo_pt(rho: np.ndarray) -> MPOProcessTensor:
     return MPOProcessTensor(mpo, [], initial_rho=_REF_RHO0.copy())
 
 
+def _unchecked_mpo(tensors: list[np.ndarray], *, length: int | None = None) -> MPO:
+    """Build an MPO without invoking the generic constructor assertions.
+
+    Returns:
+        MPO with the supplied raw tensor metadata.
+    """
+    mpo = MPO()
+    mpo.tensors = tensors
+    mpo.length = len(tensors) if length is None else length
+    mpo.physical_dimension = int(tensors[0].shape[0]) if tensors else 0
+    return mpo
+
+
 def test_dense_process_tensor_predict_matches_branch_contraction() -> None:
     """The dense branch contraction matches the Choi contraction; predict normalizes."""
     ups = 0.25 * np.eye(2 * 4, dtype=np.complex128)
@@ -147,12 +160,69 @@ def test_mpo_process_tensor_dense_and_sparse_use_causal_leg_order() -> None:
         ],
         transpose=False,
     )
-    pt = MPOProcessTensor(mpo, [0.1])
+    pt = MPOProcessTensor(mpo, [0.1, 0.1])
     expected = np.kron(rho_final, dual_operator)
 
     np.testing.assert_allclose(pt.to_matrix(), expected, atol=1e-12)
     np.testing.assert_allclose(pt.to_sparse_matrix().toarray(), expected, atol=1e-12)
     np.testing.assert_allclose(mpo.to_matrix(), np.kron(dual_operator, rho_final), atol=1e-12)
+
+
+def test_mpo_process_tensor_requires_schedule_matching_intervention_legs() -> None:
+    """The MPO site count and schedule must encode the same intervention count."""
+    mpo = _unchecked_mpo([
+        np.zeros((2, 2, 1, 1), dtype=np.complex128),
+        np.zeros((4, 4, 1, 1), dtype=np.complex128),
+    ])
+
+    with pytest.raises(ValueError, match="1 intervention legs requires 2 timesteps, got 1"):
+        MPOProcessTensor(mpo, [0.1])
+
+    pt = MPOProcessTensor(mpo, [0.1, 0.2])
+    assert pt.length == 2
+    assert pt.timesteps == [0.1, 0.2]
+
+
+@pytest.mark.parametrize(
+    ("tensors", "length", "timesteps", "message"),
+    [
+        ([], 0, [], "at least one tensor"),
+        ([np.zeros((2, 2, 1, 1), dtype=np.complex128)], 2, [], "length metadata"),
+        ([np.zeros((2, 2, 1), dtype=np.complex128)], 1, [], "must be rank 4"),
+        ([np.zeros((3, 3, 1, 1), dtype=np.complex128)], 1, [], "site 0 must have physical dimensions"),
+        (
+            [
+                np.zeros((2, 2, 1, 1), dtype=np.complex128),
+                np.zeros((2, 2, 1, 1), dtype=np.complex128),
+            ],
+            2,
+            [0.1, 0.1],
+            "site 1 must have physical dimensions",
+        ),
+        ([np.zeros((2, 2, 0, 1), dtype=np.complex128)], 1, [], "positive bond dimensions"),
+        ([np.zeros((2, 2, 2, 1), dtype=np.complex128)], 1, [], "unit left and right boundary bonds"),
+        ([np.zeros((2, 2, 1, 2), dtype=np.complex128)], 1, [], "unit left and right boundary bonds"),
+        (
+            [
+                np.zeros((2, 2, 1, 2), dtype=np.complex128),
+                np.zeros((4, 4, 3, 1), dtype=np.complex128),
+            ],
+            2,
+            [0.1, 0.1],
+            "bond mismatch",
+        ),
+        ([np.full((2, 2, 1, 1), np.nan, dtype=np.complex128)], 1, [], "only finite values"),
+    ],
+)
+def test_mpo_process_tensor_rejects_malformed_structure(
+    tensors: list[np.ndarray],
+    length: int,
+    timesteps: list[float],
+    message: str,
+) -> None:
+    """MPO process tensors require finite causal sites with valid open bonds."""
+    with pytest.raises(ValueError, match=message):
+        MPOProcessTensor(_unchecked_mpo(tensors, length=length), timesteps)
 
 
 def test_mpo_process_tensor_qmi_fallback_to_dense() -> None:
@@ -327,6 +397,20 @@ def test_compute_entropy_dense_rejects_nonphysical_inputs() -> None:
         compute_entropy_dense(np.diag([1e-14, 0.0]).astype(np.complex128))
 
 
+@pytest.mark.parametrize(
+    ("matrix", "message"),
+    [
+        (np.ones(2, dtype=np.complex128), "nonempty square rank-2 matrix"),
+        (np.array([[1.0, np.nan], [0.0, 0.0]], dtype=np.complex128), "only finite values"),
+        (np.array([[0.5, 0.2], [0.0, 0.5]], dtype=np.complex128), "must be Hermitian"),
+    ],
+)
+def test_compute_entropy_dense_rejects_malformed_inputs(matrix: np.ndarray, message: str) -> None:
+    """Entropy rejects malformed matrices before diagonalization."""
+    with pytest.raises(ValueError, match=message):
+        compute_entropy_dense(matrix)
+
+
 def test_compute_entropy_dense_clips_roundoff_and_respects_dimension_bound() -> None:
     """Roundoff-scale negative eigenvalues are clipped and accepted entropy stays bounded."""
     almost_pure = np.diag([1.0 + 1e-12, -1e-12]).astype(np.complex128)
@@ -338,13 +422,43 @@ def test_compute_entropy_dense_clips_roundoff_and_respects_dimension_bound() -> 
     assert entropy == pytest.approx(np.log2(dimension))
 
 
-def test_information_metrics_reject_non_psd_process_tensor_by_default() -> None:
+def test_information_metrics_reject_non_psd_process_tensor() -> None:
     """QMI and CMI validate the process tensor before returning trivial small-horizon values."""
     pt = DenseProcessTensor(np.diag([1.2, -0.2]).astype(np.complex128), timesteps=[])
     with pytest.raises(ValueError, match="Upsilon must be positive semidefinite"):
         pt.qmi()
     with pytest.raises(ValueError, match="Upsilon must be positive semidefinite"):
         pt.cmi()
+
+
+def test_information_metrics_reject_zero_trace_and_invalid_base_before_early_return() -> None:
+    """Trivial horizons do not bypass process-tensor or entropy-base validation."""
+    zero = DenseProcessTensor(np.zeros((2, 2), dtype=np.complex128), timesteps=[])
+    with pytest.raises(ValueError, match="Upsilon must have trace greater than"):
+        zero.qmi()
+    with pytest.raises(ValueError, match="Upsilon must have trace greater than"):
+        zero.cmi()
+
+    valid = DenseProcessTensor(_REF_RHO0, timesteps=[])
+    with pytest.raises(ValueError, match="entropy base"):
+        valid.qmi(base=1)
+    with pytest.raises(ValueError, match="entropy base"):
+        valid.cmi(base=1)
+
+
+def test_information_metrics_match_classically_correlated_references() -> None:
+    """QMI and CMI match exact classical one-bit correlations."""
+    one_leg = np.zeros((8, 8), dtype=np.complex128)
+    one_leg[0, 0] = 0.5
+    one_leg[5, 5] = 0.5
+    pt_k1 = DenseProcessTensor(one_leg, [0.0, 0.0])
+    assert pt_k1.qmi() == pytest.approx(1.0)
+
+    two_leg = np.zeros((32, 32), dtype=np.complex128)
+    two_leg[0, 0] = 0.5
+    two_leg[20, 20] = 0.5
+    pt_k2 = DenseProcessTensor(two_leg, [0.0, 0.0, 0.0])
+    assert pt_k2.cmi() == pytest.approx(1.0)
 
 
 def test_dense_process_tensor_qmi_and_cmi() -> None:
@@ -355,13 +469,13 @@ def test_dense_process_tensor_qmi_and_cmi() -> None:
     assert pt_k1.cmi() == pytest.approx(0.0)
 
     q_all = pt_k2.qmi(past="all")
-    q_last = pt_k2.qmi(past="last", assume_canonical=True)
+    q_last = pt_k2.qmi(past="last")
     q_first = pt_k2.qmi(past="first")
     assert isinstance(q_all, float)
     assert isinstance(q_last, float)
     assert isinstance(q_first, float)
 
-    cmi = pt_k2.cmi(assume_canonical=True)
+    cmi = pt_k2.cmi()
     assert isinstance(cmi, float)
 
     with pytest.raises(ValueError, match="Unknown past"):
@@ -431,6 +545,71 @@ def test_dense_process_tensor_responses_with_weights_preserve_small_positive_bra
         rtol=1e-12,
         atol=0.0,
     )
+
+
+@pytest.mark.parametrize(
+    ("rho_branch", "message"),
+    [
+        (1e-13 * np.diag([1.2, -0.2]).astype(np.complex128), "conditional state must be positive semidefinite"),
+        (
+            1e-13 * np.array([[0.5, 0.2], [0.0, 0.5]], dtype=np.complex128),
+            "Process-tensor branch must be Hermitian",
+        ),
+        (np.ones(2, dtype=np.complex128), r"branch must have shape \(2, 2\)"),
+        (
+            np.array([[np.nan, 0.0], [0.0, 1.0]], dtype=np.complex128),
+            "branch must contain only finite values",
+        ),
+    ],
+)
+def test_dense_process_tensor_responses_with_weights_reject_invalid_branches(
+    monkeypatch: pytest.MonkeyPatch,
+    rho_branch: np.ndarray,
+    message: str,
+) -> None:
+    """Weighted responses reject tiny nonphysical and malformed branches."""
+    pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0, 0.0])
+
+    def _contract_invalid_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+        _ = (self, interventions)
+        return rho_branch
+
+    monkeypatch.setattr(DenseProcessTensor, "_contract_subnormalized_branch", _contract_invalid_branch)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(0),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        pt.evaluate_probes_with_weights(probe_set)
+
+
+def test_dense_process_tensor_responses_with_weights_represent_zero_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An impossible branch has zero weight and a neutral response placeholder."""
+    pt = DenseProcessTensor(np.eye(8, dtype=np.complex128), [0.0, 0.0])
+
+    def _contract_zero_branch(self: DenseProcessTensor, interventions: object) -> np.ndarray:
+        _ = (self, interventions)
+        return np.zeros((2, 2), dtype=np.complex128)
+
+    monkeypatch.setattr(DenseProcessTensor, "_contract_subnormalized_branch", _contract_zero_branch)
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=1,
+        n_pasts=1,
+        n_futures=1,
+        rng=np.random.default_rng(0),
+    )
+
+    pauli, weights = pt.evaluate_probes_with_weights(probe_set)
+
+    np.testing.assert_array_equal(weights, np.zeros((1, 1), dtype=np.float64))
+    np.testing.assert_allclose(pauli[0, 0], np.array([1.0, 0.0, 0.0, 0.0]))
 
 
 def test_dense_process_tensor_responses_with_weights_reject_nonzero_traceless_branch(

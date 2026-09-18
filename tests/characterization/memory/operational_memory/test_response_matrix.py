@@ -136,6 +136,15 @@ def test_assemble_response_matrix_rejects_bloch_vector_outside_qubit_ball() -> N
         assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
 
 
+def test_assemble_response_matrix_tolerates_bloch_vector_roundoff() -> None:
+    """Roundoff just outside the Bloch ball does not reject a normalized response."""
+    pauli = np.array([[[1.0, 1.0 + 5e-7, 0.0, 0.0]]], dtype=np.float64)
+
+    response = assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
+
+    np.testing.assert_array_equal(response[:, 0], pauli[0, 0])
+
+
 def test_identity_rows_equal_branch_weights() -> None:
     """Normalized identity expectations expose branch weights in every future block."""
     pauli = np.zeros((2, 3, 4), dtype=np.float64)
