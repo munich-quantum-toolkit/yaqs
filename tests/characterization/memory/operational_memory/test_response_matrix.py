@@ -55,6 +55,7 @@ def test_assemble_response_matrix_uses_future_rows_and_history_columns() -> None
     """A non-square sentinel fixes every response-matrix index and flattening convention."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
     pauli[..., 0] = 1.0
+    pauli[..., 1:] /= 50.0
     weights = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float64)
     response_matrix = assemble_response_matrix(pauli, weights)
     expected = np.empty((12, 2), dtype=np.float64)
@@ -71,6 +72,7 @@ def test_transpose_preserves_xyz_block_singular_values() -> None:
     """The transposed XYZ block retains its pre-identity scalar diagnostics."""
     pauli = np.arange(1.0, 25.0, dtype=np.float64).reshape(2, 3, 4)
     pauli[..., 0] = 1.0
+    pauli[..., 1:] /= 50.0
     weights = np.array([[1.0, 0.5, 0.25], [0.75, 0.4, 0.2]], dtype=np.float64)
     old_orientation = (pauli[..., 1:] * weights[..., np.newaxis]).reshape(2, 9)
     full_orientation = assemble_response_matrix(pauli, weights)
@@ -90,6 +92,7 @@ def test_transpose_preserves_xyz_block_singular_values() -> None:
 def test_assemble_response_matrix_is_linear_in_probabilities() -> None:
     """The canonical response matrix uses probabilities linearly."""
     pauli = np.ones((2, 2, 4), dtype=np.float32)
+    pauli[..., 1:] /= np.sqrt(3.0)
     weights = np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64)
     response_matrix = assemble_response_matrix(pauli, weights)
     np.testing.assert_allclose(assemble_response_matrix(pauli, 2.0 * weights), 2.0 * response_matrix)
@@ -123,6 +126,23 @@ def test_assemble_response_matrix_requires_normalized_identity_channel() -> None
     pauli[..., 0] = 0.75
     with pytest.raises(ValueError, match="identity expectations must equal 1"):
         assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
+
+
+def test_assemble_response_matrix_rejects_bloch_vector_outside_qubit_ball() -> None:
+    """Normalized Pauli responses must describe a positive semidefinite qubit state."""
+    pauli = np.array([[[1.0, 1.0, 0.0, 0.1]]], dtype=np.float64)
+
+    with pytest.raises(ValueError, match="Bloch-vector norms must not exceed 1"):
+        assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
+
+
+def test_assemble_response_matrix_tolerates_bloch_vector_roundoff() -> None:
+    """Roundoff just outside the Bloch ball does not reject a normalized response."""
+    pauli = np.array([[[1.0, 1.0 + 5e-7, 0.0, 0.0]]], dtype=np.float64)
+
+    response = assemble_response_matrix(pauli, np.ones((1, 1), dtype=np.float64))
+
+    np.testing.assert_array_equal(response[:, 0], pauli[0, 0])
 
 
 def test_identity_rows_equal_branch_weights() -> None:

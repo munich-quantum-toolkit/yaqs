@@ -15,6 +15,8 @@ import numpy as np
 
 from ..shared.probabilities import PROBABILITY_ATOL
 
+_BLOCH_VECTOR_ATOL = 1e-6
+
 
 def assemble_response_matrix(
     pauli_ij: np.ndarray,
@@ -39,9 +41,10 @@ def assemble_response_matrix(
         channels vary fastest in ``(I, X, Y, Z)`` order.
 
     Raises:
-        ValueError: If the tomography shape or identity channel is invalid, or if
-            ``weights_ij`` has the wrong shape, contains negative or non-finite values,
-            or exceeds one beyond numerical tolerance.
+        ValueError: If the tomography shape, identity channel, or Bloch-vector
+            norm is invalid, or if ``weights_ij`` has the wrong shape, contains
+            negative or non-finite values, or exceeds one beyond numerical
+            tolerance.
     """
     features = np.asarray(pauli_ij, dtype=np.float64)
     if features.ndim != 3 or features.shape[-1] != 4:
@@ -57,6 +60,11 @@ def assemble_response_matrix(
         raise ValueError(msg)
     if not np.allclose(features[..., 0], 1.0, rtol=0.0, atol=1e-8):
         msg = "pauli_ij identity expectations must equal 1 for normalized conditional states."
+        raise ValueError(msg)
+    bloch_norms = np.linalg.norm(features[..., 1:], axis=-1)
+    if np.any(bloch_norms > 1.0 + _BLOCH_VECTOR_ATOL):
+        max_norm = float(np.max(bloch_norms))
+        msg = f"pauli_ij Bloch-vector norms must not exceed 1, got maximum {max_norm:.6g}."
         raise ValueError(msg)
     if not np.all(np.isfinite(weights)) or np.any((weights < 0.0) | (weights > 1.0 + PROBABILITY_ATOL)):
         msg = (

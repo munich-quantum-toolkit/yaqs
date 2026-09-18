@@ -13,7 +13,8 @@
 
 :func:`build_process_tensor` dispatches on ``return_type``:
 
-- ``"mpo"`` (default) — direct MPO construction (noiseless); returns
+- ``"mpo"`` (default) — direct MPO construction (noiseless; the uncapped path
+  grows as ``16**num_interventions``); returns
   :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
 - ``"dense"`` — exhaustive discrete-basis tomography (``16**num_interventions`` sequences),
   optionally with noise; returns
@@ -394,7 +395,7 @@ def build_process_tensor(
     # Direct MPO construction
     compress_every: int = 16,
     tol: float = 1e-12,
-    max_bond_dim: int | None = 64,
+    max_bond_dim: int | None = None,
     n_sweeps: int = 2,
     solver: StochasticSolver | None = None,
     initial_rho: np.ndarray | None = None,
@@ -403,7 +404,8 @@ def build_process_tensor(
 ) -> DenseProcessTensor | MPOProcessTensor:
     """Construct a process tensor as dense tomography or a direct MPO.
 
-    - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
+    - ``return_type="mpo"`` (default): direct MPO construction (noiseless only; the uncapped path
+      grows as ``16**num_interventions``).
     - ``return_type="dense"``: exhaustive discrete-basis tomography
       (``16**num_interventions`` sequences; supports ``noise_model``).
 
@@ -422,8 +424,9 @@ def build_process_tensor(
         atol: Absolute tolerance for the dense self-check.
         compress_every: Direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
-        max_bond_dim: Cap on the branch ensemble / MPO bond dimension for direct construction.
-            Defaults to ``64`` for scalability; pass ``None`` for exact uncapped construction.
+        max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
+            construction. The supported default, ``None``, retains all branches. A finite cap can
+            violate process-tensor semantics, positivity, and causal normalization.
         n_sweeps: MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.

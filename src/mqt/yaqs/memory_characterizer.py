@@ -330,7 +330,7 @@ class MemoryCharacterizer:
         atol: float = 1e-8,
         compress_every: int = 16,
         tol: float = 1e-12,
-        max_bond_dim: int | None = 64,
+        max_bond_dim: int | None = None,
         n_sweeps: int = 2,
         parallel: bool | None = None,
         initial_rho: np.ndarray | None = None,
@@ -338,7 +338,8 @@ class MemoryCharacterizer:
     ) -> DenseProcessTensor | MPOProcessTensor:
         """Build a process tensor via dense tomography or direct MPO construction.
 
-        - ``return_type="mpo"`` (default): direct MPO construction (noiseless only).
+        - ``return_type="mpo"`` (default): direct MPO construction (noiseless only; the uncapped
+          path grows as ``16**num_interventions``).
         - ``return_type="dense"``: exhaustive tomography (scales as ``16**num_interventions``;
           supports ``noise_model``).
 
@@ -356,8 +357,9 @@ class MemoryCharacterizer:
             atol: CPTP check tolerance.
             compress_every: How often to compress while accumulating direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Cap on the branch ensemble / MPO bond dimension for direct construction.
-                Defaults to ``64`` for scalability; pass ``None`` for exact uncapped construction.
+            max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
+                construction. The supported default, ``None``, retains all branches. A finite cap can
+                violate process-tensor semantics, positivity, and causal normalization.
             n_sweeps: MPO compression sweeps.
             parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
@@ -688,17 +690,17 @@ class MemoryCharacterizer:
         *,
         past: str = "all",
         base: int = 2,
-        check_psd: bool = False,
-        assume_canonical: bool = False,
     ) -> float:
         """Compute quantum mutual information from a reference process tensor.
+
+        For an MPO input, this method densifies the complete process tensor. For
+        ``k`` intervention legs, the dense complex matrix uses ``64 * 16**k``
+        bytes before analysis workspace.
 
         Args:
             process_tensor: Dense or MPO reference process tensor.
             past: Past legs to include: ``"all"``, ``"first"``, or ``"last"``.
             base: Log base for entropy.
-            check_psd: If ``True``, validate PSD before normalizing.
-            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
             Quantum mutual information between the final site and the selected past legs.
@@ -709,12 +711,7 @@ class MemoryCharacterizer:
         if not _matches_process_tensor(process_tensor):
             msg = f"compute_qmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
-        return process_tensor.qmi(
-            base=base,
-            past=past,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return process_tensor.qmi(base=base, past=past)
 
     @staticmethod
     def compute_cmi(
@@ -722,16 +719,16 @@ class MemoryCharacterizer:
         /,
         *,
         base: int = 2,
-        check_psd: bool = False,
-        assume_canonical: bool = False,
     ) -> float:
         r"""Compute conditional mutual information from a reference process tensor.
+
+        For an MPO input, this method densifies the complete process tensor. For
+        ``k`` intervention legs, the dense complex matrix uses ``64 * 16**k``
+        bytes before analysis workspace.
 
         Args:
             process_tensor: Dense or MPO reference process tensor.
             base: Log base for entropy.
-            check_psd: Passed through to the process-tensor implementation.
-            assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
             Conditional mutual information :math:`I(F : P_{<k} \\mid P_k)`.
@@ -742,11 +739,7 @@ class MemoryCharacterizer:
         if not _matches_process_tensor(process_tensor):
             msg = f"compute_cmi requires a reference process tensor, got {type(process_tensor).__name__}."
             raise TypeError(msg)
-        return process_tensor.cmi(
-            base=base,
-            check_psd=check_psd,
-            assume_canonical=assume_canonical,
-        )
+        return process_tensor.cmi(base=base)
 
     @staticmethod
     def _resolve_cut_list(

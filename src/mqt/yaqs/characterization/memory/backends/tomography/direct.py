@@ -5,11 +5,12 @@
 #
 # Licensed under the MIT License
 
-"""Leg-by-leg process-tensor MPO construction without exhaustive ``16**k`` tomography."""
+"""Leg-by-leg process-tensor MPO construction; the uncapped path retains ``16**k`` histories."""
 
 from __future__ import annotations
 
 import copy
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -302,7 +303,7 @@ def build_process_tensor_direct(
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
     tol: float = 1e-12,
-    max_bond_dim: int | None = 64,
+    max_bond_dim: int | None = None,
     n_sweeps: int = 2,
     compress_every: int = 16,
     solver: StochasticSolver | None = None,
@@ -313,8 +314,8 @@ def build_process_tensor_direct(
 ) -> MPOProcessTensor:
     """Build a process-tensor MPO by leg-by-leg contraction.
 
-    At each timestep only ``16 * chi`` local basis updates are simulated, where ``chi`` is the
-    compressed branch count from the previous step. This avoids enumerating all ``16**k`` sequences.
+    At each timestep, the supported uncapped path extends every retained history with all 16 local
+    basis updates. The branch count therefore grows as ``16**k`` for ``k`` intervention legs.
     Construction is noiseless (site-0 interventions only). Within each intervention step, branch
     extensions are dispatched with :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`.
 
@@ -325,8 +326,9 @@ def build_process_tensor_direct(
         basis: Discrete Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
         tol: MPO compression tolerance.
-        max_bond_dim: Cap on the branch ensemble / MPO bond dimension. Defaults to ``64`` so
-            branch compression runs for scalability; pass ``None`` for exact uncapped construction.
+        max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension. The supported
+            default, ``None``, retains all branches. A finite cap is an uncontrolled approximation
+            that can violate process-tensor semantics, positivity, and causal normalization.
         n_sweeps: MPO compression sweeps after each step.
         compress_every: Rank-1 accumulation batch size before intermediate compression.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
@@ -344,6 +346,15 @@ def build_process_tensor_direct(
     if timesteps is None:
         dt = float(sim_params.dt)
         timesteps = [dt, dt]
+
+    if max_bond_dim is not None:
+        msg = (
+            "A finite max_bond_dim enables experimental direct process-tensor truncation. "
+            "This uncontrolled approximation can change process-tensor semantics and does not "
+            "preserve positivity or causal normalization. Use the uncapped default for supported "
+            "short-horizon construction."
+        )
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
     stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
     if stochastic_solver not in {"MCWF", "TJM"}:
