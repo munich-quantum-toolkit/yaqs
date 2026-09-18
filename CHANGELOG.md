@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- strengthened validation of simulation inputs ([#602])
+  ([**@aaronleesander**])
 - added functionality for full-chain MPO expectation values ([#587])
   ([**@aaronleesander**])
 - added stronger tracking and validation of orthogonality center ([#575])
@@ -280,6 +282,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#602]: https://github.com/munich-quantum-toolkit/yaqs/pull/602
 [#601]: https://github.com/munich-quantum-toolkit/yaqs/pull/601
 [#600]: https://github.com/munich-quantum-toolkit/yaqs/pull/600
 [#598]: https://github.com/munich-quantum-toolkit/yaqs/pull/598
