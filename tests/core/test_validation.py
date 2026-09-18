@@ -7,6 +7,8 @@
 
 """Tests for shared validation helpers."""
 
+# ruff:file-ignore[import-private-name] -- white-box tests cover private shared validation helpers
+
 from __future__ import annotations
 
 import numpy as np
@@ -49,7 +51,7 @@ def test_validate_real_rejects_imaginary_residual_outside_tolerance(imaginary: f
         complex(1.0, float("inf")),
     ],
 )
-def test_validate_real_rejects_non_finite_components(value: complex | float) -> None:
+def test_validate_real_rejects_non_finite_components(value: complex) -> None:
     """Non-finite real and imaginary components fail explicitly."""
     with pytest.raises(ValueError, match="quantity must be finite"):
         validate_real(value, name="quantity")
