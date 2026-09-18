@@ -20,6 +20,7 @@ import scipy.linalg
 from tqdm import tqdm
 
 from .. import linalg
+from .._validation import validate_integer
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 from .state_utils import _swap_two_site_factor_order
@@ -1746,7 +1747,7 @@ class MPS:
         mapping basis states (represented as integers) to the number of times they were observed.
 
         Args:
-            shots: The number of measurement shots to perform.
+            shots: The positive number of measurement shots to perform.
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
 
         Returns:
@@ -1756,9 +1757,11 @@ class MPS:
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
             - A progress bar (via tqdm) displays the progress of the measurement process.
+
         """
+        shots = validate_integer(shots, name="shots", minimum=1)
         results: dict[int, int] = {}
-        if shots <= 1:
+        if shots == 1:
             basis_state = self.measure_single_shot(basis)
             results[basis_state] = results.get(basis_state, 0) + 1
             return results
