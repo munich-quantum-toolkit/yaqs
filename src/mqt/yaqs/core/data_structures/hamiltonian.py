@@ -31,6 +31,55 @@ __all__ = ["Hamiltonian"]
 
 # Match preprocess_mcwf: warn when full Hilbert-space matrices become expensive.
 _LARGE_HILBERT_DIM = 2**14
+_HERMITIAN_RTOL = 1e-10
+_HERMITIAN_ATOL = 1e-12
+
+
+def _validate_dense_hermitian(matrix: NDArray[np.complex128], *, name: str) -> None:
+    """Validate a finite dense Hermitian matrix with the module tolerance.
+
+    Args:
+        matrix: Dense matrix to validate.
+        name: Input name used in error messages.
+
+    Raises:
+        ValueError: If an entry is non-finite or the matrix is not Hermitian.
+    """
+    if not np.all(np.isfinite(matrix)):
+        msg = f"{name} must contain only finite values."
+        raise ValueError(msg)
+    adjoint = matrix.conj().T
+    tolerance = _HERMITIAN_ATOL + _HERMITIAN_RTOL * np.maximum(np.abs(matrix), np.abs(adjoint))
+    if np.any(np.abs(matrix - adjoint) > tolerance):
+        msg = f"{name} must be Hermitian within atol={_HERMITIAN_ATOL} and rtol={_HERMITIAN_RTOL}."
+        raise ValueError(msg)
+
+
+def _validate_sparse_hermitian(matrix: scipy.sparse.csr_matrix, *, name: str) -> None:
+    """Validate a finite sparse Hermitian matrix without densifying it.
+
+    Args:
+        matrix: Sparse matrix to validate.
+        name: Input name used in error messages.
+
+    Raises:
+        ValueError: If a stored entry is non-finite or the matrix is not Hermitian.
+    """
+    if not np.all(np.isfinite(matrix.data)):
+        msg = f"{name} must contain only finite values."
+        raise ValueError(msg)
+    adjoint = matrix.getH().tocsr()
+    residual = (matrix - adjoint).tocoo()
+    residual.eliminate_zeros()
+    if residual.nnz == 0:
+        return
+    matrix_entries = np.asarray(matrix[residual.row, residual.col]).reshape(-1)
+    adjoint_entries = np.asarray(adjoint[residual.row, residual.col]).reshape(-1)
+    scale = np.maximum(np.abs(matrix_entries), np.abs(adjoint_entries))
+    tolerance = _HERMITIAN_ATOL + _HERMITIAN_RTOL * scale
+    if np.any(np.abs(residual.data) > tolerance):
+        msg = f"{name} must be Hermitian within atol={_HERMITIAN_ATOL} and rtol={_HERMITIAN_RTOL}."
+        raise ValueError(msg)
 
 
 class Hamiltonian:
@@ -48,7 +97,9 @@ class Hamiltonian:
     Dense and sparse matrices use the same basis order as
     :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`: site ``0`` is the
     least-significant, fastest-varying subsystem. For qubits, this matches
-    Qiskit's statevector and operator order.
+    Qiskit's statevector and operator order. Manual dense and sparse matrices
+    must be finite and Hermitian. Manual tensor cores and wrapped MPOs are
+    trusted to represent a globally Hermitian operator.
     """
 
     def __init__(
@@ -66,10 +117,11 @@ class Hamiltonian:
 
         Args:
             length: Number of sites. Inferred from ``len(tensors)`` or matrix dimension when omitted.
-            tensors: MPO tensor cores in ascending physical-site order. Each core
-                uses ``(left, right, physical_out, physical_in)`` axes.
-            matrix: Dense operator matrix in site-0-LSB order.
-            sparse_matrix: Sparse operator in site-0-LSB order.
+            tensors: Trusted MPO tensor cores in ascending physical-site order.
+                Each core uses ``(left, right, physical_out, physical_in)`` axes.
+                YAQS does not check the represented global operator for Hermiticity.
+            matrix: Finite Hermitian dense operator matrix in site-0-LSB order.
+            sparse_matrix: Finite Hermitian sparse operator in site-0-LSB order.
             physical_dimension: Local Hilbert-space dimension (uniform sites).
 
         Raises:
@@ -135,6 +187,7 @@ class Hamiltonian:
         if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
             msg = "matrix must be a square 2-D array."
             raise ValueError(msg)
+        _validate_dense_hermitian(mat, name="matrix")
         hilbert_dim = mat.shape[0]
         if length is None:
             self.length = infer_chain_length(hilbert_dim, physical_dimension=self.physical_dimension)
@@ -161,6 +214,7 @@ class Hamiltonian:
         if sparse.shape[0] != sparse.shape[1]:
             msg = "sparse_matrix must be square."
             raise ValueError(msg)
+        _validate_sparse_hermitian(sparse, name="sparse_matrix")
         if length is None:
             self.length = infer_chain_length(hilbert_dim, physical_dimension=self.physical_dimension)
         else:
@@ -173,7 +227,11 @@ class Hamiltonian:
 
     @classmethod
     def from_mpo(cls, mpo: MPO) -> Hamiltonian:
-        """Wrap an existing :class:`MPO`.
+        """Wrap an existing trusted :class:`MPO`.
+
+        YAQS assumes that ``mpo`` represents a Hermitian global operator. It
+        does not test individual cores, which need not be Hermitian in a valid
+        MPO gauge, or densify the full operator for a global check.
 
         Returns:
             A :class:`Hamiltonian` referencing ``mpo``.
@@ -283,7 +341,7 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Transverse-field Ising Hamiltonian (delegates to :meth:`MPO.ising`).
+        """Transverse-field Ising Hamiltonian with finite-real coefficients.
 
         Returns:
             A :class:`Hamiltonian` wrapping the constructed MPO.
@@ -316,7 +374,7 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Heisenberg Hamiltonian (delegates to :meth:`MPO.heisenberg`).
+        """Heisenberg Hamiltonian with finite-real coefficients.
 
         Returns:
             A :class:`Hamiltonian` wrapping the constructed MPO.
@@ -349,7 +407,7 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Pauli-string Hamiltonian from one- and two-body terms (delegates to :meth:`MPO.pauli`).
+        """Pauli-string Hamiltonian with finite-real term coefficients.
 
         Returns:
             A :class:`Hamiltonian` wrapping the constructed MPO.
@@ -376,7 +434,7 @@ class Hamiltonian:
         *,
         jordan_wigner: bool = False,
     ) -> Hamiltonian:
-        """1D Fermi-Hubbard Hamiltonian (delegates to :meth:`MPO.fermi_hubbard_1d`).
+        """1D Fermi-Hubbard Hamiltonian with finite-real physical parameters.
 
         Returns:
             A :class:`Hamiltonian` wrapping the constructed MPO.
@@ -394,7 +452,7 @@ class Hamiltonian:
         anharmonicity: float,
         coupling: float,
     ) -> Hamiltonian:
-        """Coupled transmon-resonator chain (delegates to :meth:`MPO.coupled_transmon`).
+        """Coupled transmon-resonator chain with finite-real physical parameters.
 
         Returns:
             A :class:`Hamiltonian` wrapping the constructed MPO.

@@ -20,6 +20,7 @@ import scipy.sparse
 from numpy.typing import NDArray
 
 from .. import linalg
+from .._validation import validate_real
 from ..libraries.gate_library import Destroy
 from .mpo_utils import (
     contract_mpo_site_with_mpo_site,
@@ -268,9 +269,10 @@ class MPO:
 
         Args:
             length: Number of sites (L).
-            two_body: List of ``(coeff, op_i, op_j)`` nearest-neighbor interactions,
-                where operators are given as Pauli labels (e.g. ``"X"``, ``"Z"``).
-            one_body: List of ``(coeff, op)`` on-site terms.
+            two_body: List of ``(coeff, op_i, op_j)`` nearest-neighbor interactions.
+                Coefficients must be finite and numerically real. Operators are
+                Pauli labels such as ``"X"`` and ``"Z"``.
+            one_body: List of ``(coeff, op)`` on-site terms with finite-real coefficients.
             bc: Boundary condition, either ``"open"`` or ``"periodic"``.
             physical_dimension: Local Hilbert-space dimension (only ``2`` supported).
             tol: SVD truncation threshold used during compression.
@@ -304,15 +306,17 @@ class MPO:
         terms: list[tuple[complex | float, str]] = []
 
         bonds = range(length) if bc == "periodic" else range(length - 1)
-        for c, a, b in two_body:
+        for index, (c, a, b) in enumerate(two_body):
+            coefficient = validate_real(c, name=f"two_body[{index}] coefficient")
             a_op, b_op = op(a), op(b)
             for i in bonds:
                 j = (i + 1) % length
-                terms.append((c, f"{a_op}{i} {b_op}{j}"))
+                terms.append((coefficient, f"{a_op}{i} {b_op}{j}"))
 
-        for c, a in one_body:
+        for index, (c, a) in enumerate(one_body):
+            coefficient = validate_real(c, name=f"one_body[{index}] coefficient")
             a_op = op(a)
-            terms.extend((c, f"{a_op}{i}") for i in range(length))
+            terms.extend((coefficient, f"{a_op}{i}") for i in range(length))
 
         mpo = cls()
         mpo.from_pauli_sum(
@@ -342,8 +346,8 @@ class MPO:
 
         Args:
             length: Number of sites.
-            J: ZZ coupling strength (Hamiltonian includes -J Σ Z_i Z_{i+1}).
-            g: X field strength (Hamiltonian includes -g Σ X_i).
+            J: Finite-real ZZ coupling strength (Hamiltonian includes -J Σ Z_i Z_{i+1}).
+            g: Finite-real X field strength (Hamiltonian includes -g Σ X_i).
             bc: "open" or "periodic".
             physical_dimension: Local dimension (Ising Pauli builder requires 2).
             tol: SVD truncation threshold used during compression.
@@ -353,9 +357,11 @@ class MPO:
         Returns:
             An MPO representing the Ising Hamiltonian.
         """
+        coupling = validate_real(J, name="J")
+        g = validate_real(g, name="g")
         return cls.pauli(
             length=length,
-            two_body=[(-J, "Z", "Z")],
+            two_body=[(-coupling, "Z", "Z")],
             one_body=[(-g, "X")],
             bc=bc,
             physical_dimension=physical_dimension,
@@ -383,10 +389,10 @@ class MPO:
 
         Args:
             length: Number of sites.
-            Jx: XX coupling strength (Hamiltonian includes -Jx Σ X_i X_{i+1}).
-            Jy: YY coupling strength (Hamiltonian includes -Jy Σ Y_i Y_{i+1}).
-            Jz: ZZ coupling strength (Hamiltonian includes -Jz Σ Z_i Z_{i+1}).
-            h: Z field strength (Hamiltonian includes -h Σ Z_i).
+            Jx: Finite-real XX coupling strength (Hamiltonian includes -Jx Σ X_i X_{i+1}).
+            Jy: Finite-real YY coupling strength (Hamiltonian includes -Jy Σ Y_i Y_{i+1}).
+            Jz: Finite-real ZZ coupling strength (Hamiltonian includes -Jz Σ Z_i Z_{i+1}).
+            h: Finite-real Z field strength (Hamiltonian includes -h Σ Z_i).
             bc: "open" or "periodic".
             physical_dimension: Local dimension (Pauli builder requires 2).
             tol: SVD truncation threshold used during compression.
@@ -396,9 +402,13 @@ class MPO:
         Returns:
             An MPO representing the Heisenberg Hamiltonian.
         """
+        coupling_x = validate_real(Jx, name="Jx")
+        coupling_y = validate_real(Jy, name="Jy")
+        coupling_z = validate_real(Jz, name="Jz")
+        h = validate_real(h, name="h")
         return cls.pauli(
             length=length,
-            two_body=[(-Jx, "X", "X"), (-Jy, "Y", "Y"), (-Jz, "Z", "Z")],
+            two_body=[(-coupling_x, "X", "X"), (-coupling_y, "Y", "Y"), (-coupling_z, "Z", "Z")],
             one_body=[(-h, "Z")] if h != 0 else [],
             bc=bc,
             physical_dimension=physical_dimension,
@@ -453,8 +463,8 @@ class MPO:
         Args:
             length: Chain length. Number of fermionic sites if ``jordan_wigner`` is
                 False; number of spin orbitals (even) if True.
-            t: Hopping strength.
-            u: On-site interaction strength.
+            t: Finite-real hopping strength.
+            u: Finite-real on-site interaction strength.
             jordan_wigner: If True, use the JW-transformed Pauli MPO; otherwise use
                 the fermionic operator MPO.
 
@@ -464,6 +474,8 @@ class MPO:
         Raises:
             ValueError: If ``length`` is invalid for the chosen representation.
         """
+        t = validate_real(t, name="t")
+        u = validate_real(u, name="u")
         if jordan_wigner:
             if length % 2 != 0 or length < 2:
                 msg = "length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...)."
@@ -572,11 +584,11 @@ class MPO:
                         Qubit sites are placed at even indices, resonators at odd.
             qubit_dim: Local Hilbert space dimension of each transmon qubit.
             resonator_dim: Local Hilbert space dimension of each resonator.
-            qubit_freq: Bare frequency of the transmon qubits.
-            resonator_freq: Bare frequency of the resonators.
-            anharmonicity: Strength of the anharmonic (nonlinear) term
+            qubit_freq: Finite-real bare frequency of the transmon qubits.
+            resonator_freq: Finite-real bare frequency of the resonators.
+            anharmonicity: Finite-real strength of the anharmonic (nonlinear) term
                                 for each transmon, typically negative.
-            coupling : Strength of the qubit-resonator coupling term.
+            coupling: Finite-real strength of the qubit-resonator coupling term.
 
         Returns:
             An MPO instance representing the coupled transmon-resonator chain.
@@ -590,6 +602,11 @@ class MPO:
                 H_int = g * (b + b†)(a + a†)
             - The MPO bond dimension is 4.
         """
+        qubit_freq = validate_real(qubit_freq, name="qubit_freq")
+        resonator_freq = validate_real(resonator_freq, name="resonator_freq")
+        anharmonicity = validate_real(anharmonicity, name="anharmonicity")
+        coupling = validate_real(coupling, name="coupling")
+
         b = Destroy(qubit_dim)
         b_dag = b.dag()
         a = Destroy(resonator_dim)
