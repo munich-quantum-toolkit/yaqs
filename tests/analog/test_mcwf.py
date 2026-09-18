@@ -229,6 +229,28 @@ def test_preprocess_mcwf_sets_propagator_small_system() -> None:
     assert ctx.is_unitary
 
 
+def test_mcwf_rejects_non_real_observable_result() -> None:
+    """MCWF does not silently discard an observable's imaginary component."""
+    sim_params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.0,
+        dt=0.1,
+        sample_timesteps=True,
+    )
+    context = mcwf_mod.MCWFContext(
+        psi_initial=np.array([1.0, 0.0], dtype=np.complex128),
+        heff=scipy.sparse.csr_matrix((2, 2), dtype=np.complex128),
+        jump_ops=[],
+        embedded_observables=[1j * np.eye(2, dtype=np.complex128)],
+        sim_params=sim_params,
+        is_unitary=True,
+        step_propagator=np.eye(2, dtype=np.complex128),
+    )
+
+    with pytest.raises(ValueError, match="observable expectation value"):
+        mcwf_mod.mcwf((0, context))
+
+
 def test_mcwf_noisy_system_has_propagator() -> None:
     """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
     n_sites = 2

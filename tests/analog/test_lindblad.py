@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import scipy.sparse
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -283,6 +284,24 @@ def test_preprocess_lindblad_sets_propagator_small_system() -> None:
     assert ctx.step_propagator is not None
     assert ctx.step_propagator.shape == (vec_dim, vec_dim)
     assert ctx.is_unitary
+
+
+def test_lindblad_rejects_non_real_observable_result() -> None:
+    """Lindblad measurement does not silently discard an imaginary component."""
+    sim_params = AnalogSimParams(observables=[Observable("z", 0)])
+    context = lindblad_mod.LindbladContext(
+        rho_initial=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128),
+        dim=2,
+        h_mat=scipy.sparse.csr_matrix((2, 2), dtype=np.complex128),
+        jump_ops=[],
+        l_dag_l_sum=scipy.sparse.csr_matrix((2, 2), dtype=np.complex128),
+        embedded_observables=[1j * np.eye(2, dtype=np.complex128)],
+        sim_params=sim_params,
+    )
+    results = np.empty((1, 1), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="observable expectation value"):
+        lindblad_mod._measure_rho(context.rho_initial, context.dim, context, results, 0)
 
 
 def test_lindblad_noisy_small_system_has_propagator() -> None:

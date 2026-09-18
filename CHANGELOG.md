@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- added validation checks for Hamiltonian inputs and expectation values ([#603])
+  ([**@aaronleesander**])
 - strengthened validation of simulation inputs ([#602])
   ([**@aaronleesander**])
 - added functionality for full-chain MPO expectation values ([#587])
@@ -282,6 +284,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#603]: https://github.com/munich-quantum-toolkit/yaqs/pull/603
 [#602]: https://github.com/munich-quantum-toolkit/yaqs/pull/602
 [#601]: https://github.com/munich-quantum-toolkit/yaqs/pull/601
 [#600]: https://github.com/munich-quantum-toolkit/yaqs/pull/600

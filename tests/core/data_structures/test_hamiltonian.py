@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -21,6 +21,9 @@ from mqt.yaqs import AnalogSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import hamiltonian as hamiltonian_mod
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _blank_hamiltonian(**attrs: object) -> Hamiltonian:
@@ -188,6 +191,67 @@ def test_hamiltonian_sparse_coo_converted_to_csr() -> None:
     assert isinstance(h.sparse_matrix, scipy.sparse.csr_matrix)
 
 
+def _manual_matrix_hamiltonian(matrix: np.ndarray, *, sparse: bool) -> Hamiltonian:
+    """Construct a manual Hamiltonian through the selected matrix representation.
+
+    Args:
+        matrix: Dense matrix data supplied to the constructor.
+        sparse: Whether to convert the data to CSR first.
+
+    Returns:
+        The validated manual Hamiltonian.
+    """
+    if sparse:
+        return Hamiltonian(sparse_matrix=scipy.sparse.csr_matrix(matrix))
+    return Hamiltonian(matrix=matrix)
+
+
+@pytest.mark.parametrize("sparse", [False, True], ids=["dense", "sparse"])
+def test_manual_matrix_hamiltonian_accepts_complex_hermitian_input(*, sparse: bool) -> None:
+    """Complex conjugate off-diagonal entries define a valid Hamiltonian."""
+    matrix = np.array([[1.0, 2.0 + 3.0j], [2.0 - 3.0j, -4.0]], dtype=np.complex128)
+    hamiltonian = _manual_matrix_hamiltonian(matrix, sparse=sparse)
+
+    np.testing.assert_allclose(hamiltonian.to_matrix(), matrix)
+
+
+@pytest.mark.parametrize("sparse", [False, True], ids=["dense", "sparse"])
+def test_manual_matrix_hamiltonian_accepts_scale_dependent_roundoff(*, sparse: bool) -> None:
+    """Hermiticity validation accepts residuals small relative to the compared entries."""
+    matrix = np.array([[0.0, 1e6 + 5e-5j], [1e6, 0.0]], dtype=np.complex128)
+
+    _manual_matrix_hamiltonian(matrix, sparse=sparse)
+
+
+@pytest.mark.parametrize("sparse", [False, True], ids=["dense", "sparse"])
+def test_manual_matrix_hamiltonian_rejects_non_hermitian_input(*, sparse: bool) -> None:
+    """A residual outside the shared scale-aware tolerance is rejected."""
+    matrix = np.array([[0.0, 1e6 + 2e-4j], [1e6, 0.0]], dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="must be Hermitian"):
+        _manual_matrix_hamiltonian(matrix, sparse=sparse)
+
+
+@pytest.mark.parametrize("sparse", [False, True], ids=["dense", "sparse"])
+@pytest.mark.parametrize("invalid", [np.nan, np.inf, -np.inf, complex(0.0, np.inf)])
+def test_manual_matrix_hamiltonian_rejects_non_finite_input(invalid: complex, *, sparse: bool) -> None:
+    """Every explicitly stored dense or sparse value must be finite."""
+    matrix = np.eye(2, dtype=np.complex128)
+    matrix[0, 0] = invalid
+
+    with pytest.raises(ValueError, match="must contain only finite values"):
+        _manual_matrix_hamiltonian(matrix, sparse=sparse)
+
+
+def test_sparse_hamiltonian_validation_does_not_densify() -> None:
+    """Sparse finite-Hermiticity validation never requests a dense matrix."""
+    matrix = scipy.sparse.csr_matrix(np.array([[1.0, 2.0j], [-2.0j, 3.0]], dtype=np.complex128))
+    with patch.object(scipy.sparse.csr_matrix, "toarray", side_effect=AssertionError("unexpected densification")):
+        hamiltonian = Hamiltonian(sparse_matrix=matrix)
+
+    assert hamiltonian.sparse_matrix.shape == (2, 2)
+
+
 def test_hamiltonian_dense_matrix_init() -> None:
     """matrix= stores dense data and infers length from Hilbert dimension."""
     mat = np.eye(4, dtype=np.complex128)
@@ -223,6 +287,48 @@ def test_hamiltonian_fermi_hubbard_factory() -> None:
     h = Hamiltonian.fermi_hubbard_1d(2, t=1.0, u=0.5)
     assert h.length == 2
     assert h.mpo.length == 2
+
+
+@pytest.mark.parametrize(
+    ("factory", "parameter"),
+    [
+        pytest.param(lambda value: Hamiltonian.ising(2, J=cast("Any", value), g=0.5), "J", id="ising"),
+        pytest.param(
+            lambda value: Hamiltonian.heisenberg(2, Jx=1.0, Jy=0.5, Jz=0.3, h=cast("Any", value)),
+            "h",
+            id="heisenberg",
+        ),
+        pytest.param(
+            lambda value: Hamiltonian.pauli(length=2, one_body=[(cast("Any", value), "X")]),
+            "coefficient",
+            id="pauli",
+        ),
+        pytest.param(
+            lambda value: Hamiltonian.fermi_hubbard_1d(2, t=1.0, u=cast("Any", value)),
+            "u",
+            id="fermi-hubbard",
+        ),
+        pytest.param(
+            lambda value: Hamiltonian.coupled_transmon(
+                2,
+                qubit_dim=2,
+                resonator_dim=2,
+                qubit_freq=5.0,
+                resonator_freq=6.0,
+                anharmonicity=0.2,
+                coupling=cast("Any", value),
+            ),
+            "coupling",
+            id="coupled-transmon",
+        ),
+    ],
+)
+def test_hamiltonian_factories_reject_non_real_parameters(
+    factory: Callable[[object], Hamiltonian], parameter: str
+) -> None:
+    """Every Hamiltonian factory inherits the finite-real MPO contract."""
+    with pytest.raises(ValueError, match=parameter):
+        factory(1.0j)
 
 
 def test_hamiltonian_from_mpo() -> None:

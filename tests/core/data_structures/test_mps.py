@@ -2692,6 +2692,29 @@ def test_expect_matches_dense_without_manual_canonicalization() -> None:
         assert mps.expect(obs) == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
 
 
+@pytest.mark.parametrize("value", [1.0 + 1e-6j, 1.0 - 1e-6j, complex(np.nan, 0.0)])
+def test_expect_rejects_non_real_or_non_finite_results(value: complex) -> None:
+    """A real-valued public expectation does not discard invalid components."""
+    state = MPS(1, state="zeros")
+    with (
+        patch.object(state, "local_expect", return_value=np.complex128(value)),
+        pytest.raises(ValueError, match="observable expectation value"),
+    ):
+        state.expect(Observable("z", 0))
+
+
+def test_evaluate_observables_rejects_non_real_result() -> None:
+    """Trajectory observable storage validates the complex contraction result."""
+    state = MPS(1, state="zeros")
+    sim_params = AnalogSimParams(observables=[Observable("z", 0)])
+    results = np.empty((1, 1), dtype=np.float64)
+    with (
+        patch.object(state, "local_expect", return_value=np.complex128(1.0 - 1e-6j)),
+        pytest.raises(ValueError, match="observable expectation value"),
+    ):
+        state.evaluate_observables(sim_params, results)
+
+
 def test_evaluate_observables_with_nonzero_initial_center() -> None:
     """``evaluate_observables`` works when the copy starts away from site 0."""
     mps = MPS(4, state="haar-random", pad=4)

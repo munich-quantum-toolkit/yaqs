@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -27,7 +27,7 @@ from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id
 from tests.site_order_reference import embed_local_factors
 
 if TYPE_CHECKING:
-    from typing import Any
+    from collections.abc import Callable
 
     from numpy.typing import NDArray
 
@@ -36,6 +36,102 @@ _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
+
+
+_FINITE_REAL_FACTORY_CASES = [
+    pytest.param(lambda value: MPO.ising(2, J=cast("Any", value), g=0.5), "J", id="ising-J"),
+    pytest.param(lambda value: MPO.ising(2, J=1.0, g=cast("Any", value)), "g", id="ising-g"),
+    pytest.param(
+        lambda value: MPO.heisenberg(2, Jx=cast("Any", value), Jy=0.5, Jz=0.3),
+        "Jx",
+        id="heisenberg-Jx",
+    ),
+    pytest.param(
+        lambda value: MPO.heisenberg(2, Jx=1.0, Jy=cast("Any", value), Jz=0.3),
+        "Jy",
+        id="heisenberg-Jy",
+    ),
+    pytest.param(
+        lambda value: MPO.heisenberg(2, Jx=1.0, Jy=0.5, Jz=cast("Any", value)),
+        "Jz",
+        id="heisenberg-Jz",
+    ),
+    pytest.param(
+        lambda value: MPO.heisenberg(2, Jx=1.0, Jy=0.5, Jz=0.3, h=cast("Any", value)),
+        "h",
+        id="heisenberg-h",
+    ),
+    pytest.param(
+        lambda value: MPO.pauli(length=2, one_body=[(cast("Any", value), "X")]),
+        "one_body[0] coefficient",
+        id="pauli-one-body",
+    ),
+    pytest.param(
+        lambda value: MPO.pauli(length=2, two_body=[(cast("Any", value), "X", "X")]),
+        "two_body[0] coefficient",
+        id="pauli-two-body",
+    ),
+    pytest.param(
+        lambda value: MPO.fermi_hubbard_1d(2, t=cast("Any", value), u=0.5),
+        "t",
+        id="fermi-hubbard-t",
+    ),
+    pytest.param(
+        lambda value: MPO.fermi_hubbard_1d(2, t=1.0, u=cast("Any", value)),
+        "u",
+        id="fermi-hubbard-u",
+    ),
+    pytest.param(
+        lambda value: MPO.coupled_transmon(2, 2, 2, cast("Any", value), 6.0, 0.2, 0.1),
+        "qubit_freq",
+        id="coupled-transmon-qubit-freq",
+    ),
+    pytest.param(
+        lambda value: MPO.coupled_transmon(2, 2, 2, 5.0, cast("Any", value), 0.2, 0.1),
+        "resonator_freq",
+        id="coupled-transmon-resonator-freq",
+    ),
+    pytest.param(
+        lambda value: MPO.coupled_transmon(2, 2, 2, 5.0, 6.0, cast("Any", value), 0.1),
+        "anharmonicity",
+        id="coupled-transmon-anharmonicity",
+    ),
+    pytest.param(
+        lambda value: MPO.coupled_transmon(2, 2, 2, 5.0, 6.0, 0.2, cast("Any", value)),
+        "coupling",
+        id="coupled-transmon-coupling",
+    ),
+]
+
+
+@pytest.mark.parametrize(("factory", "parameter"), _FINITE_REAL_FACTORY_CASES)
+@pytest.mark.parametrize(
+    ("invalid", "error"),
+    [
+        (1.0j, ValueError),
+        (np.nan, ValueError),
+        (np.inf, ValueError),
+        (-np.inf, ValueError),
+        (True, TypeError),
+        ("1", TypeError),
+    ],
+)
+def test_hamiltonian_mpo_factories_reject_invalid_physical_parameters(
+    factory: Callable[[object], MPO],
+    parameter: str,
+    invalid: object,
+    error: type[Exception],
+) -> None:
+    """Named Hamiltonian factories accept only finite-real physical values."""
+    with pytest.raises(error, match=re.escape(parameter)):
+        factory(invalid)
+
+
+def test_hamiltonian_mpo_factory_accepts_numerically_real_coefficient() -> None:
+    """A complex coefficient within the shared roundoff tolerance is normalized."""
+    mpo = MPO.ising(2, J=cast("Any", 1.0 + 5e-11j), g=0.5)
+
+    np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
 
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:

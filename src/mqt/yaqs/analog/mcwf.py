@@ -34,6 +34,7 @@ import numpy as np
 import scipy.sparse
 
 from ..core import linalg
+from ..core._validation import validate_real
 from ..core.data_structures.state_utils import resolve_physical_dimensions
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
@@ -247,7 +248,7 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
                 else:
                     op_mat_dense = cast("NDArray[np.complex128]", op_mat)
                     val = np.vdot(current_psi, op_mat_dense @ current_psi)
-                results[i, col] = val.real
+                results[i, col] = validate_real(val, name="observable expectation value")
             else:
                 results[i, col] = 0.0
 
