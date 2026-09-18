@@ -39,6 +39,56 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 _REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
 
+def _two_swap_process_matrix() -> np.ndarray:
+    """Return the exact two-leg process that stores and returns the first output."""
+    identity_ket = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.complex128)
+    identity_choi = np.outer(identity_ket, identity_ket.conj())
+    return np.kron(np.kron(np.kron(identity_choi, _REF_RHO0), np.eye(2)), _REF_RHO0)
+
+
+def _classical_memory_process_matrix() -> np.ndarray:
+    """Return a causal two-leg process with one bit of past-final correlation."""
+    diagonal = np.zeros((2, 2, 2, 2, 2), dtype=np.complex128)
+    for first_input, first_output, last_output, last_input in np.ndindex(2, 2, 2, 2):
+        diagonal[first_input, first_output, first_input, last_output, last_input] = 0.25
+    return np.diag(diagonal.reshape(-1))
+
+
+def _assert_causally_normalized(upsilon: np.ndarray, num_interventions: int) -> None:
+    """Check deterministic-comb trace constraints without production helpers."""
+    current = np.asarray(upsilon, dtype=np.complex128)
+    np.testing.assert_allclose(np.trace(current), 2**num_interventions, atol=1e-10)
+
+    for leg in range(num_interventions, 0, -1):
+        earlier_dimension = 4 ** (leg - 1)
+        past_dimension = 4**leg
+        matrix = current.reshape(2, past_dimension, 2, past_dimension)
+        traced_final = matrix[0, :, 0, :] + matrix[1, :, 1, :]
+        unfused = traced_final.reshape(earlier_dimension, 2, 2, earlier_dimension, 2, 2)
+
+        previous_tail = np.zeros(
+            (earlier_dimension, 2, earlier_dimension, 2),
+            dtype=np.complex128,
+        )
+        for output in range(2):
+            previous_tail += 0.5 * unfused[:, output, :, :, output, :]
+        for output in range(2):
+            for output_bra in range(2):
+                expected = previous_tail if output == output_bra else np.zeros_like(previous_tail)
+                np.testing.assert_allclose(
+                    unfused[:, output, :, :, output_bra, :],
+                    expected,
+                    atol=1e-10,
+                )
+
+        current = previous_tail.transpose(1, 0, 3, 2).reshape(
+            2 * earlier_dimension,
+            2 * earlier_dimension,
+        )
+
+    np.testing.assert_allclose(np.trace(current), 1.0, atol=1e-10)
+
+
 def _tiny_mpo_process_tensor(*, num_interventions: int = 1) -> MPOProcessTensor:
     """Build a noiseless direct MPO process tensor for wrapper unit tests.
 
@@ -360,15 +410,21 @@ def test_convert_probe_callable_unitary_and_map() -> None:
     assert out.shape == (2, 2)
 
 
-def test_encode_map_choi_identity() -> None:
-    """Choi encoding round-trips the identity channel."""
+def test_encode_map_choi_uses_output_then_input_order() -> None:
+    """Choi encoding uses the output-input order required by prediction."""
 
     def id_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
-    choi = encode_map_choi(id_map)
-    assert choi.shape == (4, 4)
-    assert np.linalg.norm(choi - choi.conj().T) < 1e-10
+    identity_ket = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.complex128)
+    np.testing.assert_allclose(encode_map_choi(id_map), np.outer(identity_ket, identity_ket.conj()), atol=1e-12)
+
+    rho_one = np.diag([0.0, 1.0]).astype(np.complex128)
+
+    def reset_one(rho: np.ndarray) -> np.ndarray:
+        return np.trace(rho) * rho_one
+
+    np.testing.assert_allclose(encode_map_choi(reset_one), np.kron(rho_one, np.eye(2)), atol=1e-12)
 
 
 def test_trace_partial_dense_and_entropy_edge_cases() -> None:
@@ -431,6 +487,27 @@ def test_information_metrics_reject_non_psd_process_tensor() -> None:
         pt.cmi()
 
 
+def test_information_metrics_reject_psd_but_noncausal_process_tensor() -> None:
+    """A positive matrix must also satisfy the recursive process-tensor trace constraints."""
+    noncausal = np.zeros((8, 8), dtype=np.complex128)
+    noncausal[0, 0] = 2.0
+    pt = DenseProcessTensor(noncausal, timesteps=[0.0, 0.0])
+
+    with pytest.raises(ValueError, match="causal normalization"):
+        pt.qmi()
+    with pytest.raises(ValueError, match="causal normalization"):
+        pt.cmi()
+
+    # This two-leg operator satisfies the outer constraint but reduces to the
+    # invalid one-leg operator above, so recursion must catch the inner leg.
+    recursive_diagonal = np.zeros((2, 2, 2, 2, 2), dtype=np.complex128)
+    for last_output in range(2):
+        recursive_diagonal[0, 0, 0, last_output, 0] = 2.0
+    recursive_pt = DenseProcessTensor(np.diag(recursive_diagonal.reshape(-1)), [0.0, 0.0, 0.0])
+    with pytest.raises(ValueError, match=r"intervention leg 1\b"):
+        recursive_pt.qmi()
+
+
 def test_information_metrics_reject_zero_trace_and_invalid_base_before_early_return() -> None:
     """Trivial horizons do not bypass process-tensor or entropy-base validation."""
     zero = DenseProcessTensor(np.zeros((2, 2), dtype=np.complex128), timesteps=[])
@@ -447,18 +524,43 @@ def test_information_metrics_reject_zero_trace_and_invalid_base_before_early_ret
 
 
 def test_information_metrics_match_classically_correlated_references() -> None:
-    """QMI and CMI match exact classical one-bit correlations."""
-    one_leg = np.zeros((8, 8), dtype=np.complex128)
-    one_leg[0, 0] = 0.5
-    one_leg[5, 5] = 0.5
+    """QMI and CMI match exact classical correlations in valid process tensors."""
+    one_leg_diagonal = np.zeros((2, 2, 2), dtype=np.complex128)
+    for input_index, output_index in np.ndindex(2, 2):
+        one_leg_diagonal[input_index, output_index, input_index] = 0.5
+    one_leg = np.diag(one_leg_diagonal.reshape(-1))
+    _assert_causally_normalized(one_leg, 1)
     pt_k1 = DenseProcessTensor(one_leg, [0.0, 0.0])
     assert pt_k1.qmi() == pytest.approx(1.0)
 
-    two_leg = np.zeros((32, 32), dtype=np.complex128)
-    two_leg[0, 0] = 0.5
-    two_leg[20, 20] = 0.5
+    two_leg = _classical_memory_process_matrix()
+    _assert_causally_normalized(two_leg, 2)
     pt_k2 = DenseProcessTensor(two_leg, [0.0, 0.0, 0.0])
+    assert pt_k2.qmi(past="all") == pytest.approx(1.0)
+    assert pt_k2.qmi(past="first") == pytest.approx(1.0)
+    qmi_last = pt_k2.qmi(past="last")
+    assert qmi_last >= 0.0
+    assert qmi_last == pytest.approx(0.0, abs=1e-12)
     assert pt_k2.cmi() == pytest.approx(1.0)
+
+    scaled_pt = DenseProcessTensor(0.125 * two_leg, [0.0, 0.0, 0.0])
+    assert scaled_pt.qmi(past="first") == pytest.approx(1.0)
+    assert scaled_pt.cmi() == pytest.approx(1.0)
+
+
+def test_information_metrics_repair_tolerated_spectral_roundoff_before_reduction() -> None:
+    """Accepted negative roundoff is projected out before a partial trace can amplify it."""
+    two_leg = _classical_memory_process_matrix()
+    diagonal = np.diag(two_leg).real
+    support = np.flatnonzero(diagonal > 0.0)
+    null_space = np.flatnonzero(np.isclose(diagonal, 0.0))
+    perturbation = 3.6e-10
+    two_leg[null_space, null_space] -= perturbation
+    two_leg[support, support] += perturbation
+    pt = DenseProcessTensor(two_leg, [0.0, 0.0, 0.0])
+
+    assert pt.qmi(past="first") == pytest.approx(1.0, abs=1e-10)
+    assert pt.cmi() == pytest.approx(1.0, abs=1e-10)
 
 
 def test_dense_process_tensor_qmi_and_cmi() -> None:
@@ -474,6 +576,53 @@ def test_dense_process_tensor_qmi_and_cmi() -> None:
 
     with pytest.raises(ValueError, match="Unknown past"):
         pt_k2.qmi(past="middle")
+
+
+def test_dense_and_mpo_process_tensors_match_exact_two_swap_memory_process() -> None:
+    """Both constructors reproduce a two-SWAP process that returns the first operation output."""
+    duration = np.pi / 4
+    ham = Hamiltonian.heisenberg(length=2, Jx=1.0, Jy=1.0, Jz=1.0, h=0.0)
+    params = AnalogSimParams(elapsed_time=duration, dt=duration, max_bond_dim=16)
+    characterizer = MemoryCharacterizer(parallel=False, show_progress=False)
+    timesteps = [0.0, duration, duration]
+    dense = cast(
+        "DenseProcessTensor",
+        characterizer.build_process_tensor(ham, params, timesteps=timesteps, return_type="dense"),
+    )
+    mpo = cast(
+        "MPOProcessTensor",
+        characterizer.build_process_tensor(ham, params, timesteps=timesteps, return_type="mpo"),
+    )
+    expected = _two_swap_process_matrix()
+
+    rotation = (np.eye(2, dtype=np.complex128) - 1j * np.array([[0.0, 1.0], [1.0, 0.0]])) / np.sqrt(2)
+    flip = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+
+    def rotate(rho: np.ndarray) -> np.ndarray:
+        return rotation @ rho @ rotation.conj().T
+
+    def flip_state(rho: np.ndarray) -> np.ndarray:
+        return flip @ rho @ flip
+
+    expected_output = rotate(_REF_RHO0)
+    for process_tensor in (dense, mpo):
+        matrix = process_tensor.to_matrix()
+        np.testing.assert_allclose(matrix, expected, atol=1e-11)
+        _assert_causally_normalized(matrix, 2)
+        np.testing.assert_allclose(process_tensor.predict([rotate, flip_state]), expected_output, atol=1e-11)
+        assert process_tensor.qmi(past="all") == pytest.approx(2.0, abs=1e-10)
+        assert process_tensor.qmi(past="first") == pytest.approx(2.0, abs=1e-10)
+        qmi_last = process_tensor.qmi(past="last")
+        assert qmi_last >= 0.0
+        assert qmi_last == pytest.approx(0.0, abs=1e-12)
+        assert process_tensor.cmi() == pytest.approx(2.0, abs=1e-10)
+
+    first_cut = compute_temporal_entropy(expected, 2, 1)
+    second_cut = compute_temporal_entropy(expected, 2, 2)
+    assert cast("int", first_cut["schmidt_rank"]) == 1
+    assert float(cast("float", first_cut["entropy"])) == pytest.approx(0.0, abs=1e-12)
+    assert cast("int", second_cut["schmidt_rank"]) == 4
+    assert float(cast("float", second_cut["entropy"])) == pytest.approx(np.log(4.0), abs=1e-12)
 
 
 def test_dense_process_tensor_evaluate_probes_smoke() -> None:

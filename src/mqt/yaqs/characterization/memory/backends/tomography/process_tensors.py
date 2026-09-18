@@ -23,6 +23,8 @@ from ...shared.probabilities import PROBABILITY_ATOL
 _HERMITICITY_ATOL = 1e-10
 _PSD_ATOL = 1e-10
 _TRACE_ATOL = 1e-12
+_CAUSALITY_ATOL = 1e-8
+_INFORMATION_ATOL = 1e-9
 _ZERO_BRANCH_NORM_ATOL = 64.0 * np.finfo(np.float64).eps
 
 if TYPE_CHECKING:
@@ -326,6 +328,76 @@ def trace_partial_dense(r: NDArray[np.complex128], dims: list[int], keep: list[i
     return np.einsum("a b c b -> a c", reshaped)
 
 
+def _validate_process_tensor_causality(
+    rho: NDArray[np.complex128],
+    num_interventions: int,
+    *,
+    name: str,
+) -> None:
+    """Validate the recursive trace conditions of a normalized process Choi operator.
+
+    The information metrics do not depend on the overall scale. This function
+    therefore rescales ``rho`` to the deterministic-process trace ``2**k``
+    before checking each intervention leg. The stored subsystem order is
+    ``[final, (output_1, input_1), ..., (output_k, input_k)]``.
+
+    Args:
+        rho: Trace-one process Choi operator.
+        num_interventions: Number of intervention legs ``k``.
+        name: Name used in error messages.
+
+    Raises:
+        ValueError: If the operator is not proportional to a causally normalized
+            process tensor.
+    """
+    current = np.asarray(rho, dtype=np.complex128) * float(2**num_interventions)
+    identity = np.eye(2, dtype=np.complex128)
+
+    for leg in range(num_interventions, 0, -1):
+        earlier_dimension = 4 ** (leg - 1)
+        past_dimension = 4**leg
+        traced_final = np.trace(
+            current.reshape(2, past_dimension, 2, past_dimension),
+            axis1=0,
+            axis2=2,
+        )
+        # Axes are earlier slots, then the last slot's output and input.
+        unfused = traced_final.reshape(earlier_dimension, 2, 2, earlier_dimension, 2, 2)
+        previous_tail = 0.5 * np.einsum("aoiboj->aibj", unfused, optimize=True)
+        expected = np.einsum("op,aibj->aoibpj", identity, previous_tail, optimize=True)
+
+        residual = float(np.linalg.norm(unfused - expected))
+        scale = max(float(np.linalg.norm(unfused)), float(np.linalg.norm(expected)), 1.0)
+        if residual > _CAUSALITY_ATOL * scale:
+            msg = f"{name} must satisfy causal normalization; intervention leg {leg} has residual norm {residual:.3e}."
+            raise ValueError(msg)
+
+        # The last input becomes the final leg of the shorter process tensor.
+        current = previous_tail.transpose(1, 0, 3, 2).reshape(
+            2 * earlier_dimension,
+            2 * earlier_dimension,
+        )
+
+
+def _nonnegative_information(value: float, *, name: str) -> float:
+    """Remove roundoff-scale negativity from a nonnegative information quantity.
+
+    Args:
+        value: Computed information quantity.
+        name: Name used in error messages.
+
+    Returns:
+        ``value`` with a roundoff-scale negative result replaced by zero.
+
+    Raises:
+        ValueError: If ``value`` is negative beyond numerical tolerance.
+    """
+    if value < -_INFORMATION_ATOL:
+        msg = f"{name} is negative beyond numerical tolerance: {value:.3e}."
+        raise ValueError(msg)
+    return float(max(value, 0.0))
+
+
 def _normalize_entropy_state(
     matrix: NDArray[np.complex128],
     base: int,
@@ -356,8 +428,16 @@ def _normalize_entropy_state(
         raise ValueError(msg)
     rho_herm /= trace
     evals = _validate_psd(rho_herm, name=name)
+    # A partial trace can amplify a negative roundoff eigenvalue by at most the
+    # traced dimension. Build eigenvectors only when that amplification could
+    # cross the PSD tolerance used for a later marginal.
+    repair_state = bool(evals[0] < 0.0 and -evals[0] * rho_herm.shape[0] > _PSD_ATOL)
+    if repair_state:
+        evals, eigenvectors = np.linalg.eigh(rho_herm)
     evals = np.clip(evals, 0.0, None)
     evals /= float(evals.sum())
+    if repair_state:
+        rho_herm = (eigenvectors * evals) @ eigenvectors.conj().T
     nz = evals[evals > 0.0]
     entropy = float(-(nz * (np.log(nz) / np.log(base))).sum())
     upper_bound = float(np.log(rho_herm.shape[0]) / np.log(base))
@@ -721,14 +801,19 @@ class DenseProcessTensor:
         base: int = 2,
         past: str = "all",
     ) -> float:
-        """Compute quantum mutual information between final and past subsystems.
+        """Compute quantum mutual information in the normalized process Choi operator.
+
+        This quantity measures total correlation between the final output and
+        the selected intervention slots. It includes direct system transmission
+        and is not, by itself, a measure of non-Markovian memory.
 
         Args:
             base: Log base for entropy.
             past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
 
         Returns:
-            Quantum mutual information.
+            Quantum mutual information between the final output and selected
+            intervention slots.
 
         Raises:
             ValueError: If ``past`` is invalid or the process tensor is nonphysical.
@@ -739,6 +824,7 @@ class DenseProcessTensor:
         rho, entropy_total = _normalize_entropy_state(self.upsilon, base, name="Upsilon")
 
         k_steps = self._num_interventions()
+        _validate_process_tensor_causality(rho, k_steps, name="Upsilon")
         if k_steps == 0:
             return 0.0
 
@@ -757,13 +843,20 @@ class DenseProcessTensor:
             if len(keep_past) == k_steps
             else compute_entropy_dense(trace_partial_dense(rho, dims, keep=[0, *keep_past]), base)
         )
-        return compute_entropy_dense(rho_past_sub, base) + compute_entropy_dense(rho_final_sub, base) - entropy_joint
+        information = (
+            compute_entropy_dense(rho_past_sub, base) + compute_entropy_dense(rho_final_sub, base) - entropy_joint
+        )
+        return _nonnegative_information(information, name="Quantum mutual information")
 
     def cmi(
         self,
         base: int = 2,
     ) -> float:
         """Compute conditional mutual information I(F:P_{<k} | P_k).
+
+        The entropies refer to the trace-normalized process Choi operator. This
+        is a quantum-Markov-chain diagnostic for the stated partition, not a
+        complete operational test of process Markovianity.
 
         Args:
             base: Log base for entropy.
@@ -775,18 +868,20 @@ class DenseProcessTensor:
         rho, entropy_total = _normalize_entropy_state(self.upsilon, base, name="Upsilon")
 
         k_steps = self._num_interventions()
+        _validate_process_tensor_causality(rho, k_steps, name="Upsilon")
         if k_steps < 2:
             return 0.0
         dims = [2] + [4] * k_steps
         rho_final_past_k = trace_partial_dense(rho, dims, keep=[0, k_steps])
         rho_past_sub = trace_partial_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
         rho_past_k = trace_partial_dense(rho, dims, keep=[k_steps])
-        return (
+        information = (
             compute_entropy_dense(rho_final_past_k, base)
             + compute_entropy_dense(rho_past_sub, base)
             - compute_entropy_dense(rho_past_k, base)
             - entropy_total
         )
+        return _nonnegative_information(information, name="Conditional mutual information")
 
 
 class MPOProcessTensor(MPO):
