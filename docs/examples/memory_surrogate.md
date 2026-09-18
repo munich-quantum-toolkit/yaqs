@@ -273,9 +273,12 @@ reference `rho0`. Held-out Hamiltonian rollouts above use random probe `rho0`
 values from data generation — a different setup than the fixed reference state
 stored on process tensors.
 
-The same information functionals are available on either backend. For this short
-horizon, conditional mutual information is near zero while QMI grows when more
-past legs are included:
+The same process-Choi information functionals are available on either backend.
+QMI measures total correlation between the final output and the selected
+intervention slots, including direct system transmission. It is not by itself a
+measure of non-Markovian memory. CMI tests conditional independence for the
+stated partition. For this short horizon, CMI is near zero while QMI grows when
+more past legs are included:
 
 ```{code-cell} ipython3
 past_choices = ("all", "first", "last")
@@ -296,8 +299,9 @@ ax.legend(frameon=False, fontsize=8, loc="upper left")
 fig.tight_layout()
 ```
 
-Split-cut response matrices and $S_V(c)$ from {doc}`characterization` probe the
-same memory content in an operational setting.
+These information metrics and the split-cut response metric $S_V(c)$ from
+{doc}`characterization` are complementary. The response construction tests which
+differences between past probes remain visible in future responses.
 
 ## Related topics
 
