@@ -323,6 +323,12 @@ for short horizons. `compress_every` limits an accumulation batch; it does not
 limit the number of histories. Dense tomography has the same $16^k$ sequence
 count and is required when you use `noise_model`.
 
+`MPOProcessTensor.compute_temporal_entropy()` currently converts the complete
+MPO to a dense matrix. The matrix alone uses $64\,16^k$ bytes for $k$
+intervention legs, before decomposition workspace. On a typical workstation,
+restrict this calculation to about five legs. The matrix uses 64 MiB at five
+legs and 1 GiB at six legs.
+
 ```{warning}
 Passing a finite `max_bond_dim` enables experimental direct-MPO truncation and
 emits a `RuntimeWarning`. This uncontrolled approximation can change the process
@@ -330,12 +336,13 @@ tensor and does not preserve positivity or causal normalization. Do not use a
 capped result as a stable scientific reference.
 ```
 
-Operational characterization requires every contracted branch trace to be a
-probability in $[0,1]$ and rejects a process tensor that violates this
-condition. Remove an experimental finite cap by setting `max_bond_dim=None`, or
-use a sufficiently accurate dense reconstruction when you need $S_V$ from a
-process tensor. `characterize(pt, ...)` uses native MPO
-`evaluate_probes_with_weights` without densifying the V-matrix path.
+Operational characterization requires each contracted branch to be Hermitian and
+positive semidefinite, with trace in $[0,1]$. Response assembly also checks that
+each normalized qubit response lies in the Bloch ball. QMI and CMI validate
+positive semidefiniteness by default. Remove an experimental finite cap by
+setting `max_bond_dim=None`, or use a sufficiently accurate dense reconstruction
+when you need $S_V$ from a process tensor. `characterize(pt, ...)` uses native
+MPO `evaluate_probes_with_weights` without densifying the V-matrix path.
 
 ## Related topics
 

@@ -689,7 +689,7 @@ class MemoryCharacterizer:
         *,
         past: str = "all",
         base: int = 2,
-        check_psd: bool = False,
+        check_psd: bool = True,
         assume_canonical: bool = False,
     ) -> float:
         """Compute quantum mutual information from a reference process tensor.
@@ -698,7 +698,7 @@ class MemoryCharacterizer:
             process_tensor: Dense or MPO reference process tensor.
             past: Past legs to include: ``"all"``, ``"first"``, or ``"last"``.
             base: Log base for entropy.
-            check_psd: If ``True``, validate PSD before normalizing.
+            check_psd: Validate positive semidefiniteness before computing the metric.
             assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
@@ -723,7 +723,7 @@ class MemoryCharacterizer:
         /,
         *,
         base: int = 2,
-        check_psd: bool = False,
+        check_psd: bool = True,
         assume_canonical: bool = False,
     ) -> float:
         r"""Compute conditional mutual information from a reference process tensor.
@@ -731,7 +731,7 @@ class MemoryCharacterizer:
         Args:
             process_tensor: Dense or MPO reference process tensor.
             base: Log base for entropy.
-            check_psd: Passed through to the process-tensor implementation.
+            check_psd: Validate positive semidefiniteness before computing the metric.
             assume_canonical: If ``True``, treat the stored matrix as already canonicalized.
 
         Returns:
