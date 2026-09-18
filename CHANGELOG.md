@@ -65,7 +65,8 @@ releases may include breaking changes.
 
 ### Fixed
 
-- stabilized direct process tensor characterization ([#601]) ([**@aaronleesander**])
+- stabilized direct process tensor characterization ([#601])
+  ([**@aaronleesander**])
 - fixed inconsistent physical-site ordering across state and Hamiltonian
   representations, analog local observables and jump operators, and
   memory-characterization backends ([#600]) ([**@aaronleesander**])
