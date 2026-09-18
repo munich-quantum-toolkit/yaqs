@@ -83,6 +83,42 @@ def test_simulator_retry_exceptions_setter() -> None:
     assert sim.retry_exceptions == (ValueError,)
 
 
+@pytest.mark.parametrize(
+    ("kind", "field", "invalid", "error"),
+    [
+        ("analog", "num_traj", 0, ValueError),
+        ("analog", "max_bond_dim", True, TypeError),
+        ("analog", "tdvp_sweeps", 0, ValueError),
+        ("analog", "order", 3, ValueError),
+        ("digital", "num_traj", -1, ValueError),
+        ("digital", "max_bond_dim", 0, ValueError),
+        ("digital", "num_mid_measurements", -1, ValueError),
+        ("digital", "shots", 0, ValueError),
+        ("digital", "tdvp_sweeps", 1.0, TypeError),
+    ],
+)
+def test_run_revalidates_mutated_controls_before_result_allocation(
+    kind: str,
+    field: str,
+    invalid: object,
+    error: type[Exception],
+) -> None:
+    """Mutable simulation controls are checked before constructing a result."""
+    state = State(1, initial="zeros")
+    runner = Simulator(parallel=False, show_progress=False)
+    if kind == "analog":
+        params = AnalogSimParams(get_state=True)
+        setattr(params, field, invalid)
+        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
+            runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
+    else:
+        params = DigitalSimParams(get_state=True)
+        setattr(params, field, invalid)
+        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
+            runner.run(state, QuantumCircuit(1), params)
+    mock_result.assert_not_called()
+
+
 def test_simulator_parallel_serial_equivalence() -> None:
     """Parallel and serial execution yield identical results for deterministic runs."""
     length = 2

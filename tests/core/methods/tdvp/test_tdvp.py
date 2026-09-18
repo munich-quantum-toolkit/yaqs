@@ -347,14 +347,36 @@ def test_tdvp_2site_falls_back_on_single_site() -> None:
         mock_one.assert_called_once()
 
 
-def test_run_sweeps_rejects_invalid_tdvp_sweeps() -> None:
-    """_run_sweeps validates tdvp_sweeps before invoking the integrator."""
+@pytest.mark.parametrize(
+    ("field", "invalid", "error"),
+    [
+        ("tdvp_sweeps", 0, ValueError),
+        ("tdvp_sweeps", -1, ValueError),
+        ("tdvp_sweeps", True, TypeError),
+        ("tdvp_sweeps", 1.0, TypeError),
+        ("tdvp_sweeps", np.nan, TypeError),
+        ("max_bond_dim", 0, ValueError),
+        ("max_bond_dim", -1, ValueError),
+        ("max_bond_dim", True, TypeError),
+        ("max_bond_dim", 1.0, TypeError),
+    ],
+)
+def test_run_sweeps_rejects_invalid_mutated_controls(
+    field: str,
+    invalid: object,
+    error: type[Exception],
+) -> None:
+    """The sweep runner rejects invalid mutable controls before integration."""
     state = MPS(3, state="zeros")
     hamiltonian = MPO.ising(3, 1.0, 0.5)
     sim_params = DigitalSimParams(observables=[Observable("z", 0)], preset="exact")
-    sim_params.tdvp_sweeps = 0
-    with pytest.raises(ValueError, match="tdvp_sweeps"):
-        _run_sweeps(lambda *_a, **_k: None, state, hamiltonian, sim_params)
+    setattr(sim_params, field, invalid)
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Integrator was called for invalid simulation controls.")
+
+    with pytest.raises(error, match=field):
+        _run_sweeps(fail_if_called, state, hamiltonian, sim_params)
 
 
 def test_single_site_fallback_uses_1site() -> None:

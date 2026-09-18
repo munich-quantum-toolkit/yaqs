@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...data_structures.simulation_parameters import _validate_max_bond_dim, _validate_tdvp_sweeps
 from . import integrators
 
 if TYPE_CHECKING:
@@ -60,15 +61,11 @@ def _run_sweeps(
         *args: Extra positional arguments forwarded to ``evolve_once``.
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
-    Raises:
-        ValueError: If ``sim_params.tdvp_sweeps`` is less than 1.
-
     """
-    if sim_params.tdvp_sweeps < 1:
-        msg = f"tdvp_sweeps must be >= 1, got {sim_params.tdvp_sweeps}."
-        raise ValueError(msg)
-    step_scale = 1.0 / sim_params.tdvp_sweeps
-    sweep_plan = [step_scale] * sim_params.tdvp_sweeps
+    tdvp_sweeps = _validate_tdvp_sweeps(sim_params.tdvp_sweeps)
+    _validate_max_bond_dim(sim_params.max_bond_dim)
+    step_scale = 1.0 / tdvp_sweeps
+    sweep_plan = [step_scale] * tdvp_sweeps
     evolve_once(
         state,
         operator,

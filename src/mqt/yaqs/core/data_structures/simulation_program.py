@@ -20,10 +20,17 @@ from qiskit.circuit import QuantumCircuit
 
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
+from .._validation import validate_integer
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
 from .observable import Observable
-from .simulation_parameters import AnalogSimParams, DigitalSimParams, EvolutionMode
+from .simulation_parameters import (
+    AnalogSimParams,
+    DigitalSimParams,
+    EvolutionMode,
+    _validate_order,
+    _validate_simulation_controls,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -104,12 +111,8 @@ def _normalize_program_settings(
                 raise TypeError(msg)
         obs_tuple = tuple(obs_list)
 
-    if num_traj is not None and (isinstance(num_traj, bool) or not isinstance(num_traj, int)):
-        msg = f"num_traj must be int or None, got {type(num_traj).__name__}."
-        raise TypeError(msg)
-    if num_traj is not None and num_traj < 1:
-        msg = f"num_traj must be at least 1, got {num_traj}."
-        raise ValueError(msg)
+    if num_traj is not None:
+        num_traj = validate_integer(num_traj, name="num_traj", minimum=1)
     if random_seed is not None and (isinstance(random_seed, bool) or not isinstance(random_seed, int)):
         msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
         raise TypeError(msg)
@@ -404,8 +407,10 @@ def _resolve_program_num_traj(program: SimulationProgram) -> int:
         ValueError: If ``program.num_traj`` is omitted and segment values disagree.
     """
     if program.num_traj is not None:
-        return program.num_traj
-    segment_counts = {segment.sim_params.num_traj for segment in program.segments}
+        return validate_integer(program.num_traj, name="num_traj", minimum=1)
+    segment_counts = {
+        validate_integer(segment.sim_params.num_traj, name="num_traj", minimum=1) for segment in program.segments
+    }
     if len(segment_counts) == 1:
         return next(iter(segment_counts))
     msg = (
@@ -584,9 +589,7 @@ def _compile_analog_segment(
         )
         raise ValueError(msg)
     sim_params = segment.sim_params
-    if sim_params.order not in {1, 2}:
-        msg = f"segments[{index}] AnalogSimParams.order must be 1 or 2, got {sim_params.order}."
-        raise ValueError(msg)
+    _validate_order(sim_params.order)
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
@@ -708,6 +711,7 @@ def _compile_program(
         if not isinstance(segment, (_AnalogSegment, _DigitalSegment)):
             msg = f"segments[{index}] has unsupported private segment type {type(segment).__name__}."
             raise TypeError(msg)
+        _validate_simulation_controls(segment.sim_params)
 
     num_traj = _resolve_program_num_traj(program)
     random_seed = program.random_seed

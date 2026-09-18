@@ -22,6 +22,8 @@ import numpy as np
 
 from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
+from .._validation import validate_integer
+
 if TYPE_CHECKING:
     from .observable import Observable
 
@@ -196,17 +198,64 @@ def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
     Returns:
         The validated sweep count.
 
-    Raises:
-        TypeError: If ``tdvp_sweeps`` is not an ``int``.
-        ValueError: If ``tdvp_sweeps`` is less than 1.
     """
-    if isinstance(tdvp_sweeps, bool) or not isinstance(tdvp_sweeps, int):
-        msg = f"tdvp_sweeps must be int, got {type(tdvp_sweeps).__name__}."
-        raise TypeError(msg)
-    if tdvp_sweeps < 1:
-        msg = f"tdvp_sweeps must be >= 1, got {tdvp_sweeps}."
+    return validate_integer(tdvp_sweeps, name="tdvp_sweeps", minimum=1)
+
+
+def _validate_num_traj(num_traj: int) -> int:
+    """Validate and normalize a trajectory count.
+
+    Returns:
+        Positive Python integer trajectory count.
+    """
+    return validate_integer(num_traj, name="num_traj", minimum=1)
+
+
+def _validate_num_mid_measurements(num_mid_measurements: int) -> int:
+    """Validate and normalize a mid-circuit measurement count.
+
+    Returns:
+        Non-negative Python integer measurement count.
+    """
+    return validate_integer(num_mid_measurements, name="num_mid_measurements", minimum=0)
+
+
+def _validate_shots(shots: int | None) -> int | None:
+    """Validate and normalize an optional measurement-shot count.
+
+    Returns:
+        Positive Python integer shot count, or ``None``.
+    """
+    if shots is None:
+        return None
+    return validate_integer(shots, name="shots", minimum=1)
+
+
+def _validate_order(order: int) -> int:
+    """Validate and normalize the analog integration order.
+
+    Returns:
+        Implemented integration order, one or two.
+
+    Raises:
+        ValueError: If the integer is not one or two.
+    """
+    normalized = validate_integer(order, name="order")
+    if normalized not in {1, 2}:
+        msg = f"order must be 1 or 2, got {normalized}."
         raise ValueError(msg)
-    return tdvp_sweeps
+    return normalized
+
+
+def _validate_max_bond_dim(max_bond_dim: int | None) -> int | None:
+    """Validate and normalize an optional maximum bond dimension.
+
+    Returns:
+        Positive Python integer bond cap, or ``None``.
+    """
+    if max_bond_dim is None:
+        return None
+    return validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
 
 
 def _validate_tdvp_mode(tdvp_mode: TDVPMode) -> TDVPMode:
@@ -281,17 +330,12 @@ def _resolve_max_bond_dim(max_bond_dim: int | object | None, preset_value: int |
     Returns:
         The resolved maximum bond dimension.
 
-    Raises:
-        TypeError: If ``max_bond_dim`` is not an ``int``, ``None``, or ``_USE_PRESET``.
     """
     if max_bond_dim is _USE_PRESET:
-        return preset_value
-    if isinstance(max_bond_dim, int):
-        return max_bond_dim
+        return _validate_max_bond_dim(preset_value)
     if max_bond_dim is None:
         return None
-    msg = f"max_bond_dim must be int, None, or omitted, got {type(max_bond_dim).__name__}."
-    raise TypeError(msg)
+    return validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
 
 
 class EvolutionMode(Enum):
@@ -426,9 +470,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
         dt: Fixed simulation time step (finite, ``> 0``).
         times: Array of sampled times ``dt * arange(n + 1)`` from ``0`` to ``elapsed_time`` inclusive.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
-        num_traj: Number of trajectories (for stochastic open-system evolution).
+        num_traj: Positive number of trajectories for stochastic open-system evolution.
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
-        max_bond_dim: Maximum allowed bond dimension, or ``None`` for no cap. Omit the
+        max_bond_dim: Positive maximum allowed bond dimension, or ``None`` for no cap. Omit the
             constructor argument to use the preset value; pass ``None`` explicitly for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
@@ -442,7 +486,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
         svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
             tolerance-based truncation for discarded-weight modes.
-        order: Integration order.
+        order: Integration order, either one or two.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
             two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
@@ -484,9 +528,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
             elapsed_time: Total simulation time (finite, ``>= 0``). Must be an integer
                 multiple of ``dt`` because backends evolve with fixed ``dt``.
             dt: Fixed time step interval (finite, ``> 0``).
-            num_traj: Number of simulation samples.
+            num_traj: Positive number of simulation samples.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
+            max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap. Omit to use
                 the preset value; pass ``None`` explicitly for no cap.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
@@ -499,7 +543,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
                 ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
             svd_threshold: SVD truncation threshold for bond dimension control.
-            order: Order of approximation or numerical scheme.
+            order: Integration order, either one or two.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
                 ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
@@ -532,14 +576,14 @@ class AnalogSimParams(_ObservableOrderingMixin):
         if n_steps > 0:
             self.times[-1] = self.elapsed_time
         self.sample_timesteps = sample_timesteps
-        self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
+        self.num_traj = _validate_num_traj(num_traj if num_traj is not None else preset_values["num_traj"])
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
-        self.order = order
+        self.order = _validate_order(order)
         self.evolution_mode = _validate_evolution_mode(evolution_mode)
         self.get_state = get_state
         self.random_seed = random_seed
@@ -579,10 +623,10 @@ class DigitalSimParams(_ObservableOrderingMixin):
         observables: Observables tracked during the simulation (may be empty).
         sorted_observables: Observables sorted by site for efficient MPS evaluation.
         observable_sorted_indices: Maps each user-list index to the sorted worker-buffer row.
-        shots: Total computational-basis bitstring-sample budget, or ``None`` if unused.
-        num_traj: Number of noisy stochastic trajectories for observables/diagnostics.
+        shots: Positive computational-basis bitstring-sample budget, or ``None`` if unused.
+        num_traj: Positive number of noisy stochastic trajectories for observables/diagnostics.
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling.
-        max_bond_dim: Maximum bond dimension, or ``None`` for no cap.
+        max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
             ``krylov_tol``. Explicit values override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
@@ -591,7 +635,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
         svd_threshold: SVD truncation threshold for bond dimension control.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
-        num_mid_measurements: Mid-circuit barrier count when sampling layers.
+        num_mid_measurements: Non-negative mid-circuit barrier count when sampling layers.
         gate_mode: Gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
             ``"mpo"``). Default is ``"mpo"``. Gates on three or more qubits use the
             generator MPO and TDVP window in the TDVP modes when a generator is
@@ -630,13 +674,13 @@ class DigitalSimParams(_ObservableOrderingMixin):
         Args:
             observables: List of observables to measure during simulation.
             shots: Total bitstring-sample budget for computational-basis readout, or
-                ``None`` to skip. Independent of ``num_traj``; when both are used with
-                noise, this budget is distributed across the ``num_traj`` trajectories.
-            num_traj: Number of noisy stochastic trajectories used to estimate
+                ``None`` to skip. The budget must be positive when set. It is independent
+                of ``num_traj``; with noise, the budget is distributed across trajectories.
+            num_traj: Positive number of noisy stochastic trajectories used to estimate
                 observables and trajectory diagnostics. Ignored for noiseless runs
                 (one trajectory is enough). When ``shots < num_traj`` in a noisy
                 combined run, some trajectories receive zero samples by design.
-            max_bond_dim: Maximum bond dimension, or ``None`` for no cap. Omit to use the
+            max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap. Omit to use the
                 preset; pass ``None`` explicitly for no cap.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
                 ``krylov_tol``. Default is ``"balanced"``.
@@ -646,14 +690,12 @@ class DigitalSimParams(_ObservableOrderingMixin):
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
-            num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
+            num_mid_measurements: Non-negative number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Gate update mode (default ``"mpo"``).
             tdvp_sweeps: Number of symmetric TDVP substeps per gate (default ``1``).
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
-        Raises:
-            ValueError: If ``shots`` is not a positive integer when provided.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -664,14 +706,11 @@ class DigitalSimParams(_ObservableOrderingMixin):
         )
         self.observables = obs_list
 
-        if shots is not None and (isinstance(shots, bool) or not isinstance(shots, int) or shots < 1):
-            msg = f"shots must be a positive int or None, got {shots!r}."
-            raise ValueError(msg)
-        self.shots = shots
+        self.shots = _validate_shots(shots)
 
         # ``sample_layers`` may be set without observables here so a
         # :class:`~mqt.yaqs.SimulationProgram` can inject program-wide observables later.
-        self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
+        self.num_traj = _validate_num_traj(num_traj if num_traj is not None else preset_values["num_traj"])
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = _validate_trunc_mode(trunc_mode)
         self.svd_threshold = _validate_svd_threshold(
@@ -680,8 +719,25 @@ class DigitalSimParams(_ObservableOrderingMixin):
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.get_state = get_state
         self.sample_layers = sample_layers
-        self.num_mid_measurements = num_mid_measurements
+        self.num_mid_measurements = _validate_num_mid_measurements(num_mid_measurements)
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
         self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
+
+
+def _validate_simulation_controls(sim_params: AnalogSimParams | DigitalSimParams) -> None:
+    """Validate mutable allocation and execution controls before a simulation run.
+
+    Args:
+        sim_params: Analog or digital parameters supplied to an execution boundary.
+
+    """
+    _validate_num_traj(sim_params.num_traj)
+    _validate_max_bond_dim(sim_params.max_bond_dim)
+    _validate_tdvp_sweeps(sim_params.tdvp_sweeps)
+    if isinstance(sim_params, AnalogSimParams):
+        _validate_order(sim_params.order)
+        return
+    _validate_shots(sim_params.shots)
+    _validate_num_mid_measurements(sim_params.num_mid_measurements)
