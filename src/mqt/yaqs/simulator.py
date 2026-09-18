@@ -114,6 +114,8 @@ from .core.data_structures.simulation_parameters import (
     DigitalSimParams,
     EvolutionMode,
     _prepare_observable_ordering,
+    _validate_order,
+    _validate_simulation_controls,
 )
 from .core.data_structures.simulation_program import (
     SegmentInput,
@@ -142,6 +144,21 @@ from .digital.digital_tjm import digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 
 __all__ = ["Simulator", "available_cpus"]
+
+
+def _select_analog_tjm_backend(order: int) -> Callable[..., Any]:
+    """Return the implemented analog TJM backend for ``order``.
+
+    Args:
+        order: Analog integration order.
+
+    Returns:
+        First- or second-order TJM backend.
+
+    """
+    validated_order = _validate_order(order)
+    backends: dict[int, Callable[..., Any]] = {1: analog_tjm_1, 2: analog_tjm_2}
+    return backends[validated_order]
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +375,7 @@ def _execute_analog_instruction(
         Observable data, diagnostics, next MPS, and the updated
         ``(sample_timestep_offset, continue_order2_trajectory)`` pair.
     """
-    backend = analog_tjm_1 if instruction.execution_params.order == 1 else analog_tjm_2
+    backend = _select_analog_tjm_backend(instruction.execution_params.order)
     if backend is analog_tjm_2:
         hand_off_trajectory = _order2_hand_off(instructions, instruction)
         traj_data, traj_diag, next_state = backend(
@@ -529,7 +546,7 @@ def _execute_merged_analog_run(
     operator = _merged_analog_operator(run)
     user_sample = run[0].execution_params.sample_timesteps
     sample_at = None if user_sample else _merged_segment_boundary_indices(run)
-    backend = analog_tjm_1 if merged_params.order == 1 else analog_tjm_2
+    backend = _select_analog_tjm_backend(merged_params.order)
     args = (
         traj_idx,
         current_state,
@@ -1258,6 +1275,7 @@ class Simulator:
         if not isinstance(sim_params, (AnalogSimParams, DigitalSimParams)):
             msg = f"sim_params must be AnalogSimParams or DigitalSimParams, got {type(sim_params).__name__}."
             raise TypeError(msg)
+        _validate_simulation_controls(sim_params)
 
         if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
             operator = load_circuit(operator)
@@ -1545,10 +1563,8 @@ class Simulator:
             backend = lindblad_evolve
         elif state_rep == "vector":
             backend = mcwf
-        elif sim_params.order == 1:
-            backend = analog_tjm_1
         else:
-            backend = analog_tjm_2
+            backend = _select_analog_tjm_backend(sim_params.order)
 
         if (
             noise_model is None
