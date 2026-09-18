@@ -65,9 +65,16 @@ def validate_real(
 
     Raises:
         TypeError: If ``value`` is a boolean or not a numeric scalar.
-        ValueError: If either component is non-finite or the imaginary residual
-            exceeds the tolerance.
+        ValueError: If either tolerance is negative or non-finite, either value
+            component is non-finite, or the imaginary residual exceeds the
+            tolerance.
     """
+    if not math.isfinite(rtol) or rtol < 0:
+        msg = f"rtol must be finite and non-negative, got {rtol!r}."
+        raise ValueError(msg)
+    if not math.isfinite(atol) or atol < 0:
+        msg = f"atol must be finite and non-negative, got {atol!r}."
+        raise ValueError(msg)
     if isinstance(value, bool) or not isinstance(value, Complex):
         msg = f"{name} must be a real numeric scalar, got {type(value).__name__}."
         raise TypeError(msg)

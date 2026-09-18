@@ -62,3 +62,20 @@ def test_validate_real_rejects_non_numeric_scalars(value: object) -> None:
     """Boolean and non-numeric inputs are not interpreted as real values."""
     with pytest.raises(TypeError, match="quantity must be a real numeric scalar"):
         validate_real(value, name="quantity")
+
+
+@pytest.mark.parametrize(
+    ("rtol", "atol", "parameter"),
+    [
+        (float("nan"), 1e-12, "rtol"),
+        (float("inf"), 1e-12, "rtol"),
+        (-1.0, 1e-12, "rtol"),
+        (1e-10, float("nan"), "atol"),
+        (1e-10, float("inf"), "atol"),
+        (1e-10, -1.0, "atol"),
+    ],
+)
+def test_validate_real_rejects_invalid_tolerances(rtol: float, atol: float, parameter: str) -> None:
+    """Relative and absolute tolerances must be finite and non-negative."""
+    with pytest.raises(ValueError, match=rf"{parameter} must be finite and non-negative"):
+        validate_real(1.0 + 1.0j, name="quantity", rtol=rtol, atol=atol)
