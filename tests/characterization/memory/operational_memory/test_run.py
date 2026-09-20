@@ -16,6 +16,7 @@ from typing import cast
 import numpy as np
 import pytest
 
+import mqt.yaqs.characterization.memory.operational_memory.run as run_module
 from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
@@ -77,6 +78,38 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     assert out["pauli_ixyz_ij"].shape == (2, 3, 4)
     assert out["response_matrix"].shape == (12, 2)
     assert "entropy" in out
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"num_interventions": 0}, ValueError, r"num_interventions must be >= 1"),
+        ({"num_interventions": 1.5}, TypeError, r"num_interventions must be an integer"),
+        ({"cut": False}, TypeError, r"cut must be an integer"),
+        ({"cut": 3}, ValueError, r"cut must satisfy"),
+        ({"n_pasts": 0}, ValueError, r"n_pasts must be >= 1"),
+        ({"n_pasts": 1.5}, TypeError, r"n_pasts must be an integer"),
+        ({"n_futures": 0}, ValueError, r"n_futures must be >= 1"),
+        ({"n_futures": False}, TypeError, r"n_futures must be an integer"),
+        ({"delay": -1}, ValueError, r"delay must be >= 0"),
+        ({"delay": 1.5}, TypeError, r"delay must be an integer"),
+    ],
+)
+def test_run_memory_characterization_validates_sizes_before_backend_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Operational characterization rejects invalid sizes before backend setup."""
+    monkeypatch.setattr(run_module, "_resolve_exact_backend_cls", pytest.fail)
+    options: dict[str, object] = {"cut": 1, "num_interventions": 2, **kwargs}
+
+    with pytest.raises(error, match=match):
+        run_memory_characterization(
+            process=cast("OperationalMemoryBackend", object()),
+            **options,  # ty: ignore[invalid-argument-type]
+        )
 
 
 def test_run_memory_characterization_forwards_initial_rho() -> None:
@@ -349,6 +382,26 @@ def test_run_memory_characterization_rejects_mismatched_probe_set() -> None:
 
     with pytest.raises(ValueError, match="probe_set was built for"):
         run_memory_characterization(process=DummyProcess(), cut=2, num_interventions=2, probe_set=probe_set)
+
+
+def test_run_memory_characterization_rejects_invalid_probe_set_geometry_type() -> None:
+    """Probe-set geometry cannot use boolean or coerced count metadata."""
+    probe_set = sample_probes(
+        cut=1,
+        num_interventions=2,
+        n_pasts=2,
+        n_futures=2,
+        rng=np.random.default_rng(0),
+    )
+    probe_set.cut = True
+
+    with pytest.raises(TypeError, match=r"probe_set.cut must be an integer"):
+        run_memory_characterization(
+            process=cast("OperationalMemoryBackend", object()),
+            cut=1,
+            num_interventions=2,
+            probe_set=probe_set,
+        )
 
 
 def test_evaluate_probes_with_weights_preserves_float64() -> None:

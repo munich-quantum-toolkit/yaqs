@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import mqt.yaqs.characterization.memory.operational_memory.samples as samples_module
 from mqt.yaqs.characterization.memory.operational_memory.samples import sample_probes
 from mqt.yaqs.characterization.memory.shared.interventions import (
     enumerate_clifford_unitaries,
@@ -63,8 +64,34 @@ def test_sample_probes_measure_prepare_mode() -> None:
 def test_sample_probes_cut_validation() -> None:
     """Invalid cut indices are rejected."""
     rng = np.random.default_rng(2)
-    with pytest.raises(ValueError, match="cut must satisfy"):
+    with pytest.raises(ValueError, match="cut must be >= 1"):
         sample_probes(cut=0, num_interventions=2, n_pasts=2, n_futures=2, rng=rng)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"num_interventions": 0}, ValueError, r"num_interventions must be >= 1"),
+        ({"num_interventions": 1.5}, TypeError, r"num_interventions must be an integer"),
+        ({"cut": False}, TypeError, r"cut must be an integer"),
+        ({"cut": 3}, ValueError, r"cut must satisfy"),
+        ({"n_pasts": 0}, ValueError, r"n_pasts must be >= 1"),
+        ({"n_pasts": 1.5}, TypeError, r"n_pasts must be an integer"),
+        ({"n_futures": 0}, ValueError, r"n_futures must be >= 1"),
+        ({"n_futures": False}, TypeError, r"n_futures must be an integer"),
+    ],
+)
+def test_sample_probes_validates_all_sizes(
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Direct probe sampling rejects invalid sizes before allocating arrays."""
+    monkeypatch.setattr(samples_module.np, "empty", pytest.fail)
+    options: dict[str, object] = {"cut": 1, "num_interventions": 2, "n_pasts": 2, "n_futures": 2, **kwargs}
+    with pytest.raises(error, match=match):
+        sample_probes(rng=np.random.default_rng(2), **options)  # ty: ignore[invalid-argument-type]
 
 
 def test_sample_random_clifford_unitary_returns_copy() -> None:

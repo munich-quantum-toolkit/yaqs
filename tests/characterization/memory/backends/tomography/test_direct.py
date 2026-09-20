@@ -14,8 +14,10 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pytest
 
+import mqt.yaqs.characterization.memory.backends.tomography.direct as direct_module
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.direct import build_process_tensor_direct
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import MPOProcessTensor
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
@@ -225,4 +227,32 @@ def test_finite_direct_cap_warns_that_the_path_is_experimental() -> None:
             timesteps=[0.0, 0.0],
             max_bond_dim=4,
             compress_every=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"max_bond_dim": 0}, ValueError, r"max_bond_dim must be >= 1"),
+        ({"max_bond_dim": 1.5}, TypeError, r"max_bond_dim must be an integer"),
+        ({"compress_every": 0}, ValueError, r"compress_every must be >= 1"),
+        ({"compress_every": False}, TypeError, r"compress_every must be an integer"),
+        ({"n_sweeps": -1}, ValueError, r"n_sweeps must be >= 0"),
+        ({"n_sweeps": 1.5}, TypeError, r"n_sweeps must be an integer"),
+    ],
+)
+def test_direct_constructor_validates_compression_sizes(
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """The directly callable MPO constructor validates all compression sizes."""
+    monkeypatch.setattr(direct_module, "resolve_stochastic_solver", pytest.fail)
+    with pytest.raises(error, match=match):
+        build_process_tensor_direct(
+            Hamiltonian.ising(length=1, J=0.0, g=0.0).mpo,
+            AnalogSimParams(dt=0.1, max_bond_dim=8),
+            timesteps=[0.0, 0.0],
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )

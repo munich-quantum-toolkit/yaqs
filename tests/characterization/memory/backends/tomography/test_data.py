@@ -9,9 +9,21 @@
 
 from __future__ import annotations
 
-import numpy as np
+from typing import TYPE_CHECKING
 
-from mqt.yaqs.characterization.memory.backends.tomography.data import SequenceData, assemble_upsilon
+import numpy as np
+import pytest
+
+from mqt.yaqs.characterization.memory.backends.tomography.data import (
+    SequenceData,
+    accumulate_rank1_terms,
+    assemble_upsilon,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from mqt.yaqs.core.data_structures.mpo import MPO
 
 _REF_RHO0 = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
 
@@ -58,3 +70,38 @@ def test_to_dense_sequence_data_zero_step_weighted() -> None:
         atol=1e-8,
     )
     np.testing.assert_allclose(rho_w, 0.25 * rho, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"num_steps": 0}, ValueError, r"num_steps must be >= 1"),
+        ({"num_steps": False}, TypeError, r"num_steps must be an integer"),
+        ({"compress_every": 0}, ValueError, r"compress_every must be >= 1"),
+        ({"compress_every": 1.5}, TypeError, r"compress_every must be an integer"),
+        ({"max_bond_dim": 0}, ValueError, r"max_bond_dim must be >= 1"),
+        ({"max_bond_dim": False}, TypeError, r"max_bond_dim must be an integer"),
+        ({"n_sweeps": -1}, ValueError, r"n_sweeps must be >= 0"),
+        ({"n_sweeps": 1.5}, TypeError, r"n_sweeps must be an integer"),
+    ],
+)
+def test_accumulate_rank1_terms_validates_sizes(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Rank-1 accumulation rejects invalid sizes before consuming terms."""
+
+    def fail_if_consumed() -> Iterator[MPO]:
+        pytest.fail("terms were consumed before size validation")
+        yield from ()
+
+    options: dict[str, object] = {"num_steps": 1, **kwargs}
+    with pytest.raises(error, match=match):
+        accumulate_rank1_terms(fail_if_consumed(), **options)  # ty: ignore[invalid-argument-type]
+
+
+def test_accumulate_rank1_terms_accepts_zero_sweeps() -> None:
+    """Zero compression sweeps are a valid direct-MPO boundary value."""
+    result = accumulate_rank1_terms([], num_steps=1, n_sweeps=0)
+    assert result.length == 2

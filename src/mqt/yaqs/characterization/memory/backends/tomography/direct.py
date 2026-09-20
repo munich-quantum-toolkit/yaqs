@@ -20,6 +20,7 @@ from numpy.typing import NDArray
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, merge_execution_config, resolve_worker_ctx, run_indexed_jobs
 
+from .....core._validation import validate_integer
 from ...shared.encoding import normalize_backend_rho
 from ...shared.intervention_steps import apply_intervention_to_backend
 from ...shared.utils import (
@@ -94,7 +95,7 @@ def _compress_branches(
 
     if isinstance(branches[0].psi, MPS):
         ordered = sorted(branches, key=lambda br: br.weight, reverse=True)
-        return ordered[: int(max_bond_dim)]
+        return ordered[:max_bond_dim]
 
     dim = int(np.asarray(branches[0].psi, dtype=np.complex128).reshape(-1).size)
     n = len(branches)
@@ -105,7 +106,7 @@ def _compress_branches(
 
     _u, singular_values, vh = np.linalg.svd(mat, full_matrices=False)
     keep = int(np.sum(singular_values > tol))
-    keep = min(keep, int(max_bond_dim))
+    keep = min(keep, max_bond_dim)
     keep = max(1, keep)
 
     out: list[_Branch] = []
@@ -329,8 +330,8 @@ def build_process_tensor_direct(
         max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension. The supported
             default, ``None``, retains all branches. A finite cap is an uncontrolled approximation
             that can violate process-tensor semantics, positivity, and causal normalization.
-        n_sweeps: MPO compression sweeps after each step.
-        compress_every: Rank-1 accumulation batch size before intermediate compression.
+        n_sweeps: Non-negative number of MPO compression sweeps after each step.
+        compress_every: Positive rank-1 accumulation batch size before intermediate compression.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional reference site-0 state after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -343,11 +344,17 @@ def build_process_tensor_direct(
     Raises:
         ValueError: If ``num_interventions`` is zero or the solver is unsupported.
     """
+    resolved_max_bond_dim = (
+        None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
+    )
+    resolved_n_sweeps = validate_integer(n_sweeps, name="n_sweeps", minimum=0)
+    resolved_compress_every = validate_integer(compress_every, name="compress_every", minimum=1)
+
     if timesteps is None:
         dt = float(sim_params.dt)
         timesteps = [dt, dt]
 
-    if max_bond_dim is not None:
+    if resolved_max_bond_dim is not None:
         msg = (
             "A finite max_bond_dim enables experimental direct process-tensor truncation. "
             "This uncontrolled approximation can change process-tensor semantics and does not "
@@ -409,11 +416,11 @@ def build_process_tensor_direct(
             terms,
             num_steps=step_idx + 1,
             tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
-            compress_every=compress_every,
+            max_bond_dim=resolved_max_bond_dim,
+            n_sweeps=resolved_n_sweeps,
+            compress_every=resolved_compress_every,
         )
-        branches = _compress_branches(branches, max_bond_dim=max_bond_dim, tol=tol)
+        branches = _compress_branches(branches, max_bond_dim=resolved_max_bond_dim, tol=tol)
 
     if comb is None:
         comb = _rank1_mpo_term(ref_rho, [], weight=1.0)
