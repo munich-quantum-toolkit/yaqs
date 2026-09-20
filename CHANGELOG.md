@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- validated input throughout characterization module ([#606])
+  ([**@aaronleesander**])
 - added validation checks for Hamiltonian inputs and expectation values ([#603])
   ([**@aaronleesander**])
 - strengthened validation of simulation inputs ([#602])
