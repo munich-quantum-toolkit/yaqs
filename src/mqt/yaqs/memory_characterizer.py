@@ -51,6 +51,8 @@ from mqt.yaqs.characterization.memory.shared.utils import (
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
 
+from .core._validation import validate_integer
+
 if TYPE_CHECKING:
     from numpy.random import Generator
     from torch.utils.data import TensorDataset
@@ -79,22 +81,22 @@ def _resolve_probe_grid(
 
     Args:
         preset: ``"quick"``, ``"balanced"``, or ``"accurate"``.
-        n_pasts: Optional override for the number of past probes.
-        n_futures: Optional override for the number of future probes.
+        n_pasts: Optional positive integer override for the number of past probes.
+        n_futures: Optional positive integer override for the number of future probes.
 
     Returns:
         Tuple ``(n_pasts, n_futures)``.
 
     Raises:
-        ValueError: If ``preset`` is unknown.
+        ValueError: If ``preset`` is unknown or an explicit probe count is not positive.
     """
     if preset not in _CHARACTERIZATION_PRESETS:
         msg = f"preset must be one of {sorted(_CHARACTERIZATION_PRESETS)!r}, got {preset!r}."
         raise ValueError(msg)
     defaults = _CHARACTERIZATION_PRESETS[preset]
     return (
-        int(defaults[0] if n_pasts is None else n_pasts),
-        int(defaults[1] if n_futures is None else n_futures),
+        validate_integer(defaults[0] if n_pasts is None else n_pasts, name="n_pasts", minimum=1),
+        validate_integer(defaults[1] if n_futures is None else n_futures, name="n_futures", minimum=1),
     )
 
 
@@ -154,38 +156,38 @@ def _resolve_num_interventions(target: Any, num_interventions: int | None) -> in
 
     Args:
         target: Process tensor, surrogate, or other characterized object.
-        num_interventions: Optional explicit intervention count.
+        num_interventions: Optional explicit positive integer intervention count.
 
     Returns:
         Resolved ``num_interventions``.
 
     Raises:
-        ValueError: If ``num_interventions`` cannot be inferred from ``target``.
+        ValueError: If the value cannot be inferred or is not positive.
     """
-    if num_interventions is not None:
-        return int(num_interventions)
-    k_attr = getattr(target, "_num_interventions_for_probe", None)
-    if callable(k_attr):
-        return int(k_attr())
-    msg = "num_interventions must be provided when the target does not define _num_interventions_for_probe()."
-    raise ValueError(msg)
+    if num_interventions is None:
+        k_attr = getattr(target, "_num_interventions_for_probe", None)
+        if not callable(k_attr):
+            msg = "num_interventions must be provided when the target does not define _num_interventions_for_probe()."
+            raise ValueError(msg)
+        num_interventions = k_attr()
+    return validate_integer(num_interventions, name="num_interventions", minimum=1)
 
 
 def _default_cut(num_interventions: int, cut: int | None) -> int:
     """Resolve causal cut, defaulting to the interior cut ``(num_interventions + 1) // 2``.
 
     Args:
-        num_interventions: Intervention sequence length.
-        cut: Optional explicit cut.
+        num_interventions: Positive integer intervention sequence length.
+        cut: Optional integer cut in ``[1, num_interventions]``.
 
     Returns:
         Valid cut in ``[1, num_interventions]``.
 
     Raises:
-        ValueError: If the resolved cut is out of range.
+        ValueError: If ``num_interventions`` is not positive or the resolved cut is out of range.
     """
-    resolved_num_interventions = int(num_interventions)
-    c = (resolved_num_interventions + 1) // 2 if cut is None else int(cut)
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+    c = (resolved_num_interventions + 1) // 2 if cut is None else validate_integer(cut, name="cut", minimum=1)
     if not (1 <= c <= resolved_num_interventions):
         msg = f"cut must satisfy 1 <= cut <= num_interventions ({resolved_num_interventions}), got {c}."
         raise ValueError(msg)
@@ -349,18 +351,19 @@ class MemoryCharacterizer:
             timesteps: Optional process-tensor schedule evolution durations (length
                 ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
             noise_model: Optional noise model (dense tomography only).
-            num_trajectories: Monte Carlo trajectories per tomography sample (dense only).
+            num_trajectories: Positive integer Monte Carlo trajectories per tomography sample
+                (dense only).
             basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
             return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
             check: Whether to validate CPTP properties during dense construction.
             atol: CPTP check tolerance.
-            compress_every: How often to compress while accumulating direct-MPO terms.
+            compress_every: Positive integer interval for compressing accumulated direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
-                construction. The supported default, ``None``, retains all branches. A finite cap can
-                violate process-tensor semantics, positivity, and causal normalization.
-            n_sweeps: MPO compression sweeps.
+            max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
+                for direct construction. The supported default, ``None``, retains all branches. A
+                finite cap can violate process-tensor semantics, positivity, and causal normalization.
+            n_sweeps: Non-negative integer number of MPO compression sweeps.
             parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
             initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -368,6 +371,23 @@ class MemoryCharacterizer:
         Returns:
             Dense or MPO process tensor depending on ``return_type``.
         """
+        resolved_num_trajectories = num_trajectories
+        resolved_max_bond_dim = max_bond_dim
+        resolved_compress_every = compress_every
+        resolved_n_sweeps = n_sweeps
+        if return_type == "dense":
+            resolved_num_trajectories = validate_integer(
+                num_trajectories,
+                name="num_trajectories",
+                minimum=1,
+            )
+        elif return_type == "mpo":
+            resolved_max_bond_dim = (
+                None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
+            )
+            resolved_compress_every = validate_integer(compress_every, name="compress_every", minimum=1)
+            resolved_n_sweeps = validate_integer(n_sweeps, name="n_sweeps", minimum=0)
+
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
         return _build_process_tensor(
@@ -375,16 +395,16 @@ class MemoryCharacterizer:
             sim_params,
             timesteps,
             noise_model=noise_model,
-            num_trajectories=num_trajectories,
+            num_trajectories=resolved_num_trajectories,
             basis=basis,
             basis_seed=basis_seed,
             return_type=return_type,
             check=check,
             atol=atol,
-            compress_every=compress_every,
+            compress_every=resolved_compress_every,
             tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
+            max_bond_dim=resolved_max_bond_dim,
+            n_sweeps=resolved_n_sweeps,
             solver=self._solver_for(hamiltonian),
             parallel=execution.parallel,
             initial_rho=initial_rho,
@@ -412,8 +432,8 @@ class MemoryCharacterizer:
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            num_interventions: Number of intervention steps per sequence.
-            n: Number of training sequences.
+            num_interventions: Positive integer number of intervention steps per sequence.
+            n: Positive integer number of training sequences.
             rng: Optional RNG (overrides ``seed``).
             seed: Optional seed when ``rng`` is omitted.
             timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
@@ -424,7 +444,10 @@ class MemoryCharacterizer:
 
         Returns:
             PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
+
         """
+        resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+        resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
             build_training_dataset as _build_training_dataset,
@@ -433,8 +456,8 @@ class MemoryCharacterizer:
         return _build_training_dataset(
             operator,
             sim_params,
-            num_interventions=num_interventions,
-            n=n,
+            num_interventions=resolved_num_interventions,
+            n=resolved_n,
             rng=rng,
             seed=seed,
             timesteps=timesteps,
@@ -467,8 +490,8 @@ class MemoryCharacterizer:
         Args:
             hamiltonian: System Hamiltonian.
             sim_params: Analog simulation parameters.
-            num_interventions: Training sequence length (stored on the model).
-            n: Number of training sequences.
+            num_interventions: Positive integer training sequence length (stored on the model).
+            n: Positive integer number of training sequences.
             seed: Optional RNG seed for data sampling and weight init.
             timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
             init_mode: Initial-state sampling mode for training sequences.
@@ -480,7 +503,10 @@ class MemoryCharacterizer:
 
         Returns:
             Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`.
+
         """
+        resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+        resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)
         from mqt.yaqs.characterization.memory.backends.surrogates.workflow import (
             train_surrogate_model as _train_surrogate_model,
@@ -489,8 +515,8 @@ class MemoryCharacterizer:
         return _train_surrogate_model(
             operator,
             sim_params,
-            num_interventions=num_interventions,
-            n=n,
+            num_interventions=resolved_num_interventions,
+            n=resolved_n,
             seed=seed,
             timesteps=timesteps,
             init_mode=init_mode,
@@ -573,13 +599,15 @@ class MemoryCharacterizer:
         Args:
             target: Hamiltonian, trained surrogate, or reference process tensor.
             sim_params: Required for Hamiltonian targets only.
-            num_interventions: Base split-cut sequence length (required for Hamiltonian targets).
-                An explicit ``delay`` adds ``delay + 1`` physical interventions.
-            cut: Single causal cut; mutually exclusive with ``cuts``.
-            cuts: ``"all"`` or explicit list for multi-cut Hamiltonian sweeps.
+            num_interventions: Positive integer base split-cut sequence length (required for
+                Hamiltonian targets). An explicit ``delay`` adds ``delay + 1`` physical interventions.
+            cut: Single integer causal cut in ``[1, num_interventions]``; mutually exclusive with
+                ``cuts``.
+            cuts: ``"all"`` or a list of integer cuts in ``[1, num_interventions]`` for multi-cut
+                Hamiltonian sweeps.
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
-            n_pasts: Override number of past probes.
-            n_futures: Override number of future probes.
+            n_pasts: Optional positive integer number of past probes.
+            n_futures: Optional positive integer number of future probes.
             intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
@@ -588,21 +616,24 @@ class MemoryCharacterizer:
                 intervention. Required for surrogate targets and unsupported for Hamiltonian or
                 process-tensor targets.
             parallel: Override parallelism for process-tensor/surrogate probing.
-            delay: Conditioned-reset bridge length (Hamiltonian only). ``None`` uses the standard
-                causal break. Every nonnegative value uses the paper's separate boundary interventions.
+            delay: Optional non-negative integer conditioned-reset bridge length (Hamiltonian only).
+                ``None`` uses the standard causal break. Every integer value from zero uses the
+                paper's separate boundary interventions.
             **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
 
         Returns:
             Diagnostics with per-cut entropy, modes, spectrum, and stored probes.
 
         Raises:
-            TypeError: If a Hamiltonian is given without ``sim_params``.
-            ValueError: If ``num_interventions`` is missing for a Hamiltonian target, both
-                ``cut`` and ``cuts`` are given, ``cuts`` is an empty list, ``probe_set`` is
-                reused across multiple cuts, a conditioned-reset delay on a process-tensor/surrogate
-                target, or a conditioned-reset delay on a non-exact backend.
+            TypeError: If a Hamiltonian is given without ``sim_params``, or an explicit or
+                inferred size is not an integer.
+            ValueError: If ``num_interventions`` is missing or not positive, a probe count is
+                not positive, a cut is out of range, both ``cut`` and ``cuts`` are given,
+                ``cuts`` is an empty list, ``probe_set`` is reused across multiple cuts, or a
+                conditioned-reset delay is invalid or unsupported by the target.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
+        resolved_delay = None if delay is None else validate_integer(delay, name="delay", minimum=0)
         if "intervention_mode" in probe_kwargs or "unitary_ensemble" in probe_kwargs:
             msg = "Use intervention_style= instead of intervention_mode= / unitary_ensemble=."
             raise ValueError(msg)
@@ -613,15 +644,11 @@ class MemoryCharacterizer:
         resolved_style = normalize_style(intervention_style)
         resolved_probe_set = _coerce_probe_set(probe_set)
 
-        if delay is not None and delay < 0:
-            msg = f"delay must be >= 0, got {delay}"
-            raise ValueError(msg)
-
         if initial_rho is not None and (_matches_hamiltonian(target) or _matches_process_tensor(target)):
             msg = "initial_rho is supported only for surrogate characterization."
             raise ValueError(msg)
 
-        if delay is not None and not _matches_hamiltonian(target):
+        if resolved_delay is not None and not _matches_hamiltonian(target):
             msg = "delay is supported for Hamiltonian characterize() only."
             raise ValueError(msg)
 
@@ -632,10 +659,11 @@ class MemoryCharacterizer:
             if num_interventions is None:
                 msg = "characterize(hamiltonian, sim_params, ...) requires num_interventions=."
                 raise ValueError(msg)
+            resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
             return self._characterize_hamiltonian(
                 target,
                 sim_params,
-                num_interventions=int(num_interventions),
+                num_interventions=resolved_num_interventions,
                 cut=cut,
                 cuts=cuts,
                 n_pasts=n_p,
@@ -644,7 +672,7 @@ class MemoryCharacterizer:
                 probe_set=resolved_probe_set,
                 initial_psi=initial_psi,
                 intervention_style=resolved_style,
-                delay=delay,
+                delay=resolved_delay,
             )
 
         resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
@@ -664,13 +692,13 @@ class MemoryCharacterizer:
                 initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
-                delay=delay,
+                delay=resolved_delay,
             )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
-            parts[int(c)] = self._characterize_target(
+            parts[c] = self._characterize_target(
                 target,
-                cut=int(c),
+                cut=c,
                 num_interventions=resolved_num_interventions,
                 n_pasts=n_p,
                 n_futures=n_f,
@@ -679,7 +707,7 @@ class MemoryCharacterizer:
                 initial_rho=initial_rho,
                 parallel=parallel,
                 intervention_style=resolved_style,
-                delay=delay,
+                delay=resolved_delay,
             )
         return merge_cut_results(parts)
 
@@ -751,17 +779,18 @@ class MemoryCharacterizer:
         """Resolve the list of cuts to characterize.
 
         Args:
-            num_interventions: Intervention sequence length.
-            cut: Optional single cut.
-            cuts: ``"all"`` or explicit cut list.
+            num_interventions: Positive integer intervention sequence length.
+            cut: Optional integer cut in ``[1, num_interventions]``.
+            cuts: ``"all"`` or an explicit list of integer cuts in ``[1, num_interventions]``.
 
         Returns:
-            Sorted list of cut indices to evaluate.
+            List of cut indices to evaluate.
 
         Raises:
-            ValueError: If both ``cut`` and ``cuts`` are provided, or ``cuts`` is an
-                empty list.
+            ValueError: If both ``cut`` and ``cuts`` are provided, ``cuts`` is an
+                empty list, ``num_interventions`` is not positive, or a cut is out of range.
         """
+        resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
         if cuts is not None and cut is not None:
             msg = "Specify only one of cut=... or cuts=..., not both."
             raise ValueError(msg)
@@ -769,10 +798,12 @@ class MemoryCharacterizer:
             if cuts != "all" and len(cuts) == 0:
                 msg = "cuts must be 'all' or a non-empty list of cut indices."
                 raise ValueError(msg)
-            return list(range(1, int(num_interventions) + 1)) if cuts == "all" else [int(c) for c in cuts]
+            if cuts == "all":
+                return list(range(1, resolved_num_interventions + 1))
+            return [_default_cut(resolved_num_interventions, c) for c in cuts]
         if cut is not None:
-            return [int(cut)]
-        return [_default_cut(int(num_interventions), None)]
+            return [_default_cut(resolved_num_interventions, cut)]
+        return [_default_cut(resolved_num_interventions, None)]
 
     def _characterize_target(
         self,
@@ -796,11 +827,11 @@ class MemoryCharacterizer:
         Returns:
             Single-cut :class:`~mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult`.
         """
-        resolved_cut = _default_cut(int(num_interventions), cut)
+        resolved_cut = _default_cut(num_interventions, cut)
         out = run_memory_characterization(
             process=target,
             cut=resolved_cut,
-            num_interventions=int(num_interventions),
+            num_interventions=num_interventions,
             n_pasts=n_pasts,
             n_futures=n_futures,
             rng=rng,
@@ -837,13 +868,13 @@ class MemoryCharacterizer:
         Raises:
             ValueError: If ``probe_set`` is given for a multi-cut request.
         """
-        from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
-
-        operator = _require_hamiltonian(hamiltonian)
-        cut_list = MemoryCharacterizer._resolve_cut_list(int(num_interventions), cut=cut, cuts=cuts)
+        cut_list = MemoryCharacterizer._resolve_cut_list(num_interventions, cut=cut, cuts=cuts)
         if probe_set is not None and len(cut_list) > 1:
             msg = "probe_set cannot be reused across multiple cuts; omit probe_set for multi-cut characterize()."
             raise ValueError(msg)
+        from mqt.yaqs.characterization.memory.backends.exact import ExactBackend
+
+        operator = _require_hamiltonian(hamiltonian)
         solver = self._solver_for(hamiltonian)
         backend = ExactBackend(
             operator=operator,
@@ -856,13 +887,13 @@ class MemoryCharacterizer:
         )
         parts: dict[int, CharacterizationResult] = {}
         for c in cut_list:
-            resolved_cut = _default_cut(int(num_interventions), int(c))
+            resolved_cut = _default_cut(num_interventions, c)
             local_probe_set = probe_set
             if local_probe_set is None:
                 local_rng = rng if rng is not None else np.random.default_rng()
                 local_probe_set = sample_probes(
                     cut=resolved_cut,
-                    num_interventions=int(num_interventions),
+                    num_interventions=num_interventions,
                     n_pasts=n_pasts,
                     n_futures=n_futures,
                     rng=local_rng,
@@ -871,11 +902,11 @@ class MemoryCharacterizer:
             out = run_memory_characterization(
                 process=backend,
                 cut=resolved_cut,
-                num_interventions=int(num_interventions),
+                num_interventions=num_interventions,
                 probe_set=local_probe_set,
                 delay=delay,
             )
-            parts[int(resolved_cut)] = pack_result(out, cut=resolved_cut)
+            parts[resolved_cut] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
 
     def predict(  # ruff:ignore[no-self-use] -- public instance API
@@ -899,7 +930,7 @@ class MemoryCharacterizer:
             target: Trained surrogate or reference process tensor.
             rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
             sequence: Intervention kind string, per-slot list, or expanded sequence.
-            num_interventions: Sequence length; inferred from ``target`` when omitted.
+            num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
             return_sequence: If True, return the full ``num_interventions``-step trajectory
                 instead of the final state only.
             rng: RNG for stochastic intervention sampling.
@@ -908,19 +939,21 @@ class MemoryCharacterizer:
             Final (or full) site-0 reduced density matrix.
 
         Raises:
-            ValueError: If ``return_sequence=True`` for a process-tensor target.
-            TypeError: If ``target`` does not support surrogate-style prediction.
+            TypeError: If the explicit or inferred ``num_interventions`` is not an integer,
+                or ``target`` does not support surrogate-style prediction.
+            ValueError: If ``num_interventions`` is not positive or
+                ``return_sequence=True`` for a process-tensor target.
         """
+        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
+        if _matches_process_tensor(target) and return_sequence:
+            msg = "return_sequence=True is not supported for process tensor targets."
+            raise ValueError(msg)
         local_rng = rng if rng is not None else np.random.default_rng()
         seq = sequence
 
         if _matches_process_tensor(target):
-            if return_sequence:
-                msg = "return_sequence=True is not supported for process tensor targets."
-                raise ValueError(msg)
             rho_mat = coerce_rho_matrix(rho0)
             target.check_initial_rho(rho_mat)
-            resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
             if isinstance(seq, str):
                 slots = expand_interventions(seq, num_interventions=resolved_num_interventions, _rng=local_rng)
             else:
@@ -931,7 +964,6 @@ class MemoryCharacterizer:
             return np.asarray(rho_out, dtype=np.complex128)
 
         rho_mat = coerce_rho_matrix(rho0)
-        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
         predict_fn = getattr(target, "predict", None)
         if not callable(predict_fn):
             msg = f"Unsupported predict target type: {type(target).__name__}"

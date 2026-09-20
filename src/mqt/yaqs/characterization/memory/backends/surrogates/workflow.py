@@ -24,6 +24,8 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mps import MPS
 
+from .....core._validation import validate_integer
+
 if TYPE_CHECKING:
     import types
 
@@ -155,8 +157,8 @@ def build_training_dataset(
     Args:
         operator: Hamiltonian MPO. The chain length is inferred from ``operator.length``.
         sim_params: Analog simulation parameters.
-        num_interventions: Number of intervention steps.
-        n: Number of sequences to simulate.
+        num_interventions: Positive integer number of intervention steps.
+        n: Positive integer number of sequences to simulate.
         rng: Optional RNG (overrides ``seed`` if provided).
         seed: Optional seed used to create a default RNG.
         parallel: Whether to parallelize over sequences.
@@ -172,26 +174,20 @@ def build_training_dataset(
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
 
     Raises:
-        ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``),
-            ``n`` is not an integer, ``n`` is not positive, or ``operator`` is
-            not a qubit Hamiltonian.
+        ValueError: If either count is not positive, ``timesteps`` has the wrong length, or
+            ``operator`` is not a qubit Hamiltonian.
     """
-    if int(n) != n:
-        msg = f"n must be an integer, got {n!r}."
-        raise ValueError(msg)
-    n_sequences = int(n)
-    if n_sequences <= 0:
-        msg = f"n must be positive, got {n_sequences}."
-        raise ValueError(msg)
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+    n_sequences = validate_integer(n, name="n", minimum=1)
 
     validate_qubit_memory_operator(operator)
     chain_length = int(operator.length)
     if timesteps is None:
-        timesteps = [float(sim_params.dt)] * (int(num_interventions) + 1)
-    if len(timesteps) != int(num_interventions) + 1:
+        timesteps = [float(sim_params.dt)] * (resolved_num_interventions + 1)
+    if len(timesteps) != resolved_num_interventions + 1:
         msg = (
             f"Process-tensor schedule: timesteps length must be num_interventions+1="
-            f"{int(num_interventions) + 1}, got {len(timesteps)}."
+            f"{resolved_num_interventions + 1}, got {len(timesteps)}."
         )
         raise ValueError(msg)
 
@@ -212,7 +208,7 @@ def build_training_dataset(
     for _ in range(n_sequences):
         rho_in = sample_density_matrix(rng)
         step_pairs, choi_rows = sample_train_interventions(
-            int(num_interventions),
+            resolved_num_interventions,
             normalize_style(str(intervention_style)),
             rng,
         )
@@ -278,8 +274,8 @@ def train_surrogate_model(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        num_interventions: Number of intervention steps.
-        n: Number of sequences to simulate for training.
+        num_interventions: Positive integer number of intervention steps.
+        n: Positive integer number of sequences to simulate for training.
         seed: Seed used for data generation RNG.
         parallel: Whether to parallelize data generation.
         show_progress: Whether to show progress bars.
@@ -293,6 +289,9 @@ def train_surrogate_model(
     Returns:
         Trained :class:`ProcessTensorSurrogate`.
     """
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+    n_sequences = validate_integer(n, name="n", minimum=1)
+
     import torch  # ruff:ignore[import-outside-top-level]
 
     from .model import ProcessTensorSurrogate  # ruff:ignore[import-outside-top-level]
@@ -301,8 +300,8 @@ def train_surrogate_model(
     train_data = build_training_dataset(
         operator,
         sim_params,
-        num_interventions=int(num_interventions),
-        n=int(n),
+        num_interventions=resolved_num_interventions,
+        n=n_sequences,
         rng=rng,
         parallel=bool(parallel),
         show_progress=bool(show_progress),

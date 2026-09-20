@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import contextlib
+import sys
 from typing import Literal
 
 import numpy as np
@@ -277,13 +278,114 @@ def test_build_training_dataset_rejects_non_positive_n(n: int) -> None:
     """build_training_dataset rejects non-positive batch sizes before simulation."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
-    with pytest.raises(ValueError, match=r"n must be positive"):
+    with pytest.raises(ValueError, match=r"n must be >= 1"):
         build_training_dataset(op, params, num_interventions=1, n=n, parallel=False, show_progress=False)
 
 
-def test_build_training_dataset_rejects_non_integer_n() -> None:
-    """build_training_dataset rejects non-integral batch sizes before simulation."""
+@pytest.mark.parametrize("n", [False, 1.5, "1"])
+def test_build_training_dataset_rejects_non_integer_n(n: object) -> None:
+    """build_training_dataset rejects booleans and non-integral batch sizes before simulation."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1)
-    with pytest.raises(ValueError, match=r"n must be an integer"):
-        build_training_dataset(op, params, num_interventions=1, n=1.5, parallel=False, show_progress=False)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match=r"n must be an integer"):
+        build_training_dataset(
+            op,
+            params,
+            num_interventions=1,
+            n=n,  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("num_interventions", "error", "match"),
+    [
+        (0, ValueError, r"num_interventions must be >= 1"),
+        (-1, ValueError, r"num_interventions must be >= 1"),
+        (False, TypeError, r"num_interventions must be an integer"),
+        (1.5, TypeError, r"num_interventions must be an integer"),
+        ("1", TypeError, r"num_interventions must be an integer"),
+    ],
+)
+def test_build_training_dataset_rejects_invalid_intervention_counts_before_torch(
+    monkeypatch: pytest.MonkeyPatch,
+    num_interventions: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Dataset count validation runs before the optional PyTorch check."""
+    monkeypatch.setattr(workflow_module, "_require_torch", pytest.fail)
+
+    with pytest.raises(error, match=match):
+        build_training_dataset(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            AnalogSimParams(dt=0.1),
+            num_interventions=num_interventions,  # ty: ignore[invalid-argument-type]
+            n=1,
+            parallel=False,
+            show_progress=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("num_interventions", "n", "error", "match"),
+    [
+        (0, 1, ValueError, r"num_interventions must be >= 1"),
+        (-1, 1, ValueError, r"num_interventions must be >= 1"),
+        (1, False, TypeError, r"n must be an integer"),
+        (1, "1", TypeError, r"n must be an integer"),
+    ],
+)
+def test_train_surrogate_model_validates_counts_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+    num_interventions: object,
+    n: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Training rejects invalid counts before importing the optional model stack."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+    with pytest.raises(error, match=match):
+        train_surrogate_model(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            AnalogSimParams(dt=0.1),
+            num_interventions=num_interventions,  # ty: ignore[invalid-argument-type]
+            n=n,  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+
+def test_surrogate_workflows_accept_numpy_integer_counts_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NumPy integer counts pass lower-level validation before optional imports."""
+    operator = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+
+    def _stop_torch_check() -> None:
+        msg = "validated dataset counts"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(workflow_module, "_require_torch", _stop_torch_check)
+    with pytest.raises(RuntimeError, match="validated dataset counts"):
+        build_training_dataset(
+            operator,
+            params,
+            num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n=np.int64(1),  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+    monkeypatch.setitem(sys.modules, "torch", None)
+    with pytest.raises(ModuleNotFoundError):
+        train_surrogate_model(
+            operator,
+            params,
+            num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n=np.int64(1),  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )

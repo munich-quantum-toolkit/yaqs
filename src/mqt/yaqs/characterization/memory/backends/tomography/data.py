@@ -22,6 +22,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 
+from .....core._validation import validate_integer
 from .process_tensors import DenseProcessTensor
 
 if TYPE_CHECKING:
@@ -78,16 +79,23 @@ def accumulate_rank1_terms(
 
     Args:
         terms: Iterable of MPO terms.
-        num_steps: Number of intervention steps in the process tensor.
+        num_steps: Positive integer number of intervention steps in the process tensor.
         dims: Output density matrix dimensions (default (2,2)).
-        compress_every: Compress after accumulating this many terms.
+        compress_every: Positive integer number of terms to accumulate before compression.
         tol: Compression tolerance.
-        max_bond_dim: Optional maximum bond dimension.
-        n_sweeps: Number of compression sweeps.
+        max_bond_dim: Optional positive integer maximum bond dimension.
+        n_sweeps: Non-negative integer number of compression sweeps.
 
     Returns:
         Compressed MPO representing the sum of terms.
     """
+    resolved_num_steps = validate_integer(num_steps, name="num_steps", minimum=1)
+    resolved_compress_every = validate_integer(compress_every, name="compress_every", minimum=1)
+    resolved_max_bond_dim = (
+        None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
+    )
+    resolved_n_sweeps = validate_integer(n_sweeps, name="n_sweeps", minimum=0)
+
     pending: list[MPO] = []
     running: MPO | None = None
 
@@ -98,16 +106,18 @@ def accumulate_rank1_terms(
         chunk = MPO.mpo_sum(pending)
         pending.clear()
         running = chunk if running is None else running + chunk
-        running.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps)
+        running.compress(tol=tol, max_bond_dim=resolved_max_bond_dim, n_sweeps=resolved_n_sweeps)
 
     for term in terms:
         pending.append(term)
-        if len(pending) >= compress_every:
+        if len(pending) >= resolved_compress_every:
             _flush()
     _flush()
     if running is None:
         return _rank1_mpo_term(
-            np.zeros(dims, dtype=np.complex128), [np.eye(4, dtype=np.complex128)] * num_steps, weight=0.0
+            np.zeros(dims, dtype=np.complex128),
+            [np.eye(4, dtype=np.complex128)] * resolved_num_steps,
+            weight=0.0,
         )
     return running
 

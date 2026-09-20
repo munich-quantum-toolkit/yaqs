@@ -27,6 +27,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from .....core._validation import validate_integer
 from ...operational_memory.grid import assemble_probe_sequence
 from ...shared.encoding import (
     coerce_rho_matrix,
@@ -126,12 +127,19 @@ class ProcessTensorSurrogate(nn.Module):
             dim_ff: Feed-forward dimension inside encoder layers.
             dropout: Dropout rate.
             layernorm_in: Whether to apply a LayerNorm after the input projection.
-            num_interventions: Total sequence length for :meth:`evaluate_probes`. Set automatically by
-                :meth:`fit` from training targets; may be set here before training.
+            num_interventions: Optional positive integer total sequence length for
+                :meth:`evaluate_probes`. Set automatically by :meth:`fit` from training targets; may
+                be set here before training.
 
         Raises:
-            ValueError: If ``d_model`` is not divisible by ``nhead``.
+            ValueError: If ``nhead`` is not positive, ``d_model`` is not divisible by ``nhead``, or
+                ``num_interventions`` is set and is not positive.
         """
+        resolved_num_interventions = (
+            None
+            if num_interventions is None
+            else validate_integer(num_interventions, name="num_interventions", minimum=1)
+        )
         super().__init__()
         if nhead <= 0:
             msg = f"nhead must be positive, got {nhead}."
@@ -158,7 +166,7 @@ class ProcessTensorSurrogate(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(layer, num_layers=num_layers)
         self.head = nn.Linear(d_model, d_rho)
-        self.num_interventions: int | None = int(num_interventions) if num_interventions is not None else None
+        self.num_interventions = resolved_num_interventions
 
     @property
     def d_e(self) -> int:

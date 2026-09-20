@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 
+from ....core._validation import validate_integer
 from ..shared.encoding import extract_ket
 from ..shared.interventions import (
     DEFAULT_INTERVENTION_STYLE,
@@ -115,10 +116,10 @@ def sample_probes(
     """Sample random split-cut past/future probe ensembles.
 
     Args:
-        cut: Causal cut index ``c``.
-        num_interventions: Total sequence length.
-        n_pasts: Number of past probe branches.
-        n_futures: Number of future probe branches.
+        cut: Integer causal cut index ``c`` in ``[1, num_interventions]``.
+        num_interventions: Positive integer total sequence length.
+        n_pasts: Positive integer number of past probe branches.
+        n_futures: Positive integer number of future probe branches.
         rng: NumPy random generator.
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
 
@@ -126,19 +127,26 @@ def sample_probes(
         Populated :class:`ProbeSet`.
 
     Raises:
-        ValueError: If ``cut`` is invalid.
+        ValueError: If a count is not positive or ``cut`` exceeds ``num_interventions``.
     """
-    if not (1 <= cut <= num_interventions):
-        msg = f"cut must satisfy 1 <= cut <= num_interventions, got cut={cut}, num_interventions={num_interventions}"
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+    resolved_cut = validate_integer(cut, name="cut", minimum=1)
+    resolved_n_pasts = validate_integer(n_pasts, name="n_pasts", minimum=1)
+    resolved_n_futures = validate_integer(n_futures, name="n_futures", minimum=1)
+    if resolved_cut > resolved_num_interventions:
+        msg = (
+            "cut must satisfy 1 <= cut <= num_interventions, "
+            f"got cut={resolved_cut}, num_interventions={resolved_num_interventions}"
+        )
         raise ValueError(msg)
     style = normalize_style(intervention_style)
-    past_full = cut - 1
-    future_full = num_interventions - cut
+    past_full = resolved_cut - 1
+    future_full = resolved_num_interventions - resolved_cut
 
-    past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
+    past_features = np.empty((resolved_n_pasts, past_full + 1, 32), dtype=np.float32)
     past_pairs: list[list[Any]] = []
     past_cut_meas: list[np.ndarray] = []
-    for i in range(n_pasts):
+    for i in range(resolved_n_pasts):
         pairs_i: list[Any] = []
         for t in range(past_full):
             feat, step = sample_probe(rng, intervention_style=style)
@@ -149,10 +157,10 @@ def sample_probes(
         past_cut_meas.append(psi_m)
         past_pairs.append(pairs_i)
 
-    future_features = np.empty((n_futures, 1 + future_full, 32), dtype=np.float32)
+    future_features = np.empty((resolved_n_futures, 1 + future_full, 32), dtype=np.float32)
     future_prep_cut: list[np.ndarray] = []
     future_pairs: list[list[Any]] = []
-    for j in range(n_futures):
+    for j in range(resolved_n_futures):
         feat_p, psi_p = sample_cut_preparation(rng)
         future_features[j, 0] = feat_p
         future_prep_cut.append(psi_p)
@@ -164,8 +172,8 @@ def sample_probes(
         future_pairs.append(pairs_j)
 
     return ProbeSet(
-        cut=cut,
-        num_interventions=num_interventions,
+        cut=resolved_cut,
+        num_interventions=resolved_num_interventions,
         past_features=past_features,
         future_features=future_features,
         past_pairs=past_pairs,

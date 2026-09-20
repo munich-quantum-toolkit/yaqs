@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
 
+from ....core._validation import validate_integer
 from ..shared.interventions import DEFAULT_INTERVENTION_STYLE
 from .grid import assemble_probe_grid, compute_delayed_length
 from .response_matrix import assemble_response_matrix, compute_spectrum
@@ -113,7 +114,13 @@ def _validate_probe_set_geometry(
     Raises:
         ValueError: If ``probe_set`` was built for different ``cut`` or ``num_interventions``.
     """
-    if int(probe_set.cut) != int(cut) or int(probe_set.num_interventions) != int(num_interventions):
+    probe_cut = validate_integer(probe_set.cut, name="probe_set.cut", minimum=1)
+    probe_num_interventions = validate_integer(
+        probe_set.num_interventions,
+        name="probe_set.num_interventions",
+        minimum=1,
+    )
+    if probe_cut != cut or probe_num_interventions != num_interventions:
         msg = (
             f"probe_set was built for cut={probe_set.cut}, "
             f"num_interventions={probe_set.num_interventions}, but cut={cut}, "
@@ -251,16 +258,18 @@ def run_memory_characterization(
 
     Args:
         process: Operational-memory backend (exact, process tensor, or surrogate).
-        cut: Causal cut index.
-        num_interventions: Base sequence length (past + cut + future legs; excludes ``delay`` slots).
-        n_pasts: Past probe count when sampling internally.
-        n_futures: Future probe count when sampling internally.
+        cut: Integer causal cut index in ``[1, num_interventions]``.
+        num_interventions: Positive integer base sequence length (past + cut + future legs;
+            excludes ``delay`` slots).
+        n_pasts: Positive integer past probe count when sampling internally.
+        n_futures: Positive integer future probe count when sampling internally.
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
-        delay: Conditioned-reset bridge length. ``None`` uses the standard one-step causal
-            break. Every nonnegative value uses separate left and right boundary interventions.
+        delay: Optional non-negative integer conditioned-reset bridge length. ``None`` uses the
+            standard one-step causal break. Every integer value from zero uses separate left and
+            right boundary interventions.
         initial_rho: Optional site-0 state after the initial evolution segment and before the
             first intervention. Surrogate backends require this state.
 
@@ -272,16 +281,23 @@ def run_memory_characterization(
         columns.
 
     Raises:
-        ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
-            different ``cut`` or ``num_interventions``, a conditioned-reset delay is used with a
-            backend that does not support custom sequences, or a backend returns invalid responses
-            or retained-outcome probabilities.
+        ValueError: If a count is outside its allowed range, a supplied ``probe_set`` was built for
+            different geometry, a conditioned-reset delay is used with an unsupported backend, or
+            a backend returns invalid responses or retained-outcome probabilities.
     """
-    if delay is not None and delay < 0:
-        msg = f"delay must be >= 0, got {delay}"
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
+    resolved_cut = validate_integer(cut, name="cut", minimum=1)
+    resolved_n_pasts = validate_integer(n_pasts, name="n_pasts", minimum=1)
+    resolved_n_futures = validate_integer(n_futures, name="n_futures", minimum=1)
+    resolved_delay = None if delay is None else validate_integer(delay, name="delay", minimum=0)
+    if resolved_cut > resolved_num_interventions:
+        msg = (
+            "cut must satisfy 1 <= cut <= num_interventions, "
+            f"got cut={resolved_cut}, num_interventions={resolved_num_interventions}"
+        )
         raise ValueError(msg)
 
-    exact_backend_cls = _resolve_exact_backend_cls(delay=delay, parallel=parallel)
+    exact_backend_cls = _resolve_exact_backend_cls(delay=resolved_delay, parallel=parallel)
     execution_override: ExecutionConfig | None = None
     if parallel is not None and exact_backend_cls is not None and isinstance(process, exact_backend_cls):
         from ..backends.exact import ExactBackend  # ruff:ignore[import-outside-top-level]
@@ -289,20 +305,24 @@ def run_memory_characterization(
         assert isinstance(process, ExactBackend)
         execution_override = process.execution_config(parallel=parallel)
     if probe_set is not None:
-        _validate_probe_set_geometry(probe_set, cut=cut, num_interventions=num_interventions)
+        _validate_probe_set_geometry(
+            probe_set,
+            cut=resolved_cut,
+            num_interventions=resolved_num_interventions,
+        )
     probe_set = _resolve_probe_set(
         probe_set,
-        cut=cut,
-        num_interventions=num_interventions,
-        n_pasts=n_pasts,
-        n_futures=n_futures,
+        cut=resolved_cut,
+        num_interventions=resolved_num_interventions,
+        n_pasts=resolved_n_pasts,
+        n_futures=resolved_n_futures,
         rng=rng,
         intervention_style=intervention_style,
     )
     sim_probe_set, intervention_steps_list = _setup_delayed_probing(
         probe_set,
-        delay=delay,
-        num_interventions=num_interventions,
+        delay=resolved_delay,
+        num_interventions=resolved_num_interventions,
         process=process,
         exact_backend_cls=exact_backend_cls,
     )

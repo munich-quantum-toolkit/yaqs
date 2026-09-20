@@ -46,6 +46,7 @@ from mqt.yaqs.core.parallel_utils import (
     run_indexed_jobs,
 )
 
+from .....core._validation import validate_integer
 from ...shared.encoding import coerce_rho_matrix, normalize_backend_rho
 from ...shared.utils import (
     StochasticSolver,
@@ -139,7 +140,7 @@ def _reference_initial_rho(
         mcwf_static_ctx_list=None,
     )
 
-    n_traj = 1 if noise_model is None else int(num_trajectories)
+    n_traj = 1 if noise_model is None else num_trajectories
     rho_acc = np.zeros((2, 2), dtype=np.complex128)
     times_cache: dict[tuple[float, float], np.ndarray] = {}
     duration = float(durs[0])
@@ -190,7 +191,8 @@ def run_all_sequences(
         sim_params: Analog simulation parameters.
         timesteps: Process-tensor schedule evolution durations (length ``num_interventions + 1``).
         parallel: Whether to parallelize over sequences.
-        num_trajectories: MCWF trajectories per sequence (forced to 1 when noiseless).
+        num_trajectories: Positive integer number of MCWF trajectories per sequence (forced to 1
+            when noiseless).
         noise_model: Optional open-system noise model.
         basis: Tomography basis name.
         basis_seed: Optional seed when ``basis="random"``.
@@ -202,10 +204,11 @@ def run_all_sequences(
         Exhaustive :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Raises:
-        ValueError: If ``num_interventions=0``, the solver is unsupported,
-            ``num_trajectories`` is not an integer, ``num_trajectories`` is negative,
-            or ``num_trajectories`` is zero while ``noise_model`` is set.
+        ValueError: If ``num_trajectories`` is not positive, ``num_interventions=0``, or the solver
+            is unsupported.
     """
+    resolved_num_trajectories = validate_integer(num_trajectories, name="num_trajectories", minimum=1)
+
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
     stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)
@@ -217,18 +220,8 @@ def run_all_sequences(
     if num_interventions <= 0:
         msg = "No sequences for num_interventions=0."
         raise ValueError(msg)
-    if int(num_trajectories) != num_trajectories:
-        msg = f"num_trajectories must be an integer, got {num_trajectories!r}."
-        raise ValueError(msg)
-    num_trajectories = int(num_trajectories)
-    if num_trajectories < 0:
-        msg = f"num_trajectories must be non-negative, got {num_trajectories}."
-        raise ValueError(msg)
-    if noise_model is not None and num_trajectories == 0:
-        msg = "num_trajectories must be positive when noise_model is set."
-        raise ValueError(msg)
     if noise_model is None:
-        num_trajectories = 1
+        resolved_num_trajectories = 1
 
     initial_rho = _reference_initial_rho(
         operator,
@@ -236,7 +229,7 @@ def run_all_sequences(
         timesteps,
         noise_model=noise_model,
         solver=stochastic_solver,
-        num_trajectories=num_trajectories,
+        num_trajectories=resolved_num_trajectories,
     )
 
     def _enumerate_sequences(n_steps: int) -> list[tuple[int, ...]]:
@@ -264,11 +257,11 @@ def run_all_sequences(
         msg = f"Tomography does not support solver {stochastic_solver!r} (use MCWF or TJM)."
         raise ValueError(msg)
 
-    total_jobs = n_seq * num_trajectories
+    total_jobs = n_seq * resolved_num_trajectories
     payload: dict[str, Any] = {
         "intervention_steps": samples_intervention_steps,
         "initial_psi": _initial_psis_for_sequences(operator, stochastic_solver, n_seq),
-        "num_trajectories": num_trajectories,
+        "num_trajectories": resolved_num_trajectories,
         "operator": operator,
         "sim_params": local_params,
         "timesteps": timesteps,
@@ -299,9 +292,9 @@ def run_all_sequences(
 
     acc: dict[tuple[int, ...], list[Any]] = {}
     for i in range(n_seq):
-        acc[all_seqs[i]] = [aggregated_outputs[i], aggregated_weights[i], num_trajectories]
+        acc[all_seqs[i]] = [aggregated_outputs[i], aggregated_weights[i], resolved_num_trajectories]
 
-    final_seqs, final_outputs, final_weights = _finalize_sequence_averages(acc, float(num_trajectories))
+    final_seqs, final_outputs, final_weights = _finalize_sequence_averages(acc, float(resolved_num_trajectories))
 
     return SequenceData(
         sequences=final_seqs,
@@ -416,18 +409,18 @@ def build_process_tensor(
             ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
         noise_model: Optional open-system noise model (dense tomography only).
         parallel: Whether to parallelize dense tomography sequences or MPO construction.
-        num_trajectories: MCWF trajectories per sequence (dense path only).
+        num_trajectories: Positive integer number of MCWF trajectories per sequence (dense path only).
         basis: Tomography / Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
         return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
         check: Run self-consistency check for dense reconstruction.
         atol: Absolute tolerance for the dense self-check.
-        compress_every: Direct-MPO rank-1 accumulation compress interval.
+        compress_every: Positive integer direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
-        max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
-            construction. The supported default, ``None``, retains all branches. A finite cap can
-            violate process-tensor semantics, positivity, and causal normalization.
-        n_sweeps: MPO compression sweeps.
+        max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
+            for direct construction. The supported default, ``None``, retains all branches. A finite
+            cap can violate process-tensor semantics, positivity, and causal normalization.
+        n_sweeps: Non-negative integer number of MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -437,7 +430,8 @@ def build_process_tensor(
         Dense or MPO process-tensor wrapper depending on ``return_type``.
 
     Raises:
-        ValueError: If ``return_type`` is invalid, or ``noise_model`` is set with ``"mpo"``.
+        ValueError: If ``return_type`` is invalid, ``noise_model`` is set with ``"mpo"``, or a
+            selected-path size is outside its allowed range.
     """
     if return_type == "mpo":
         if noise_model is not None:
@@ -445,6 +439,11 @@ def build_process_tensor(
                 "return_type='mpo' uses direct construction and does not support noise_model; use return_type='dense'."
             )
             raise ValueError(msg)
+        resolved_max_bond_dim = (
+            None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
+        )
+        resolved_compress_every = validate_integer(compress_every, name="compress_every", minimum=1)
+        resolved_n_sweeps = validate_integer(n_sweeps, name="n_sweeps", minimum=0)
         from .direct import build_process_tensor_direct  # ruff:ignore[import-outside-top-level]
 
         return build_process_tensor_direct(
@@ -454,9 +453,9 @@ def build_process_tensor(
             basis=basis,
             basis_seed=basis_seed,
             tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
-            compress_every=compress_every,
+            max_bond_dim=resolved_max_bond_dim,
+            n_sweeps=resolved_n_sweeps,
+            compress_every=resolved_compress_every,
             solver=solver,
             initial_rho=initial_rho,
             initial_rho_atol=initial_rho_atol,
@@ -467,13 +466,15 @@ def build_process_tensor(
         msg = f"Unknown return_type {return_type!r} (expected 'dense' or 'mpo')."
         raise ValueError(msg)
 
+    resolved_num_trajectories = validate_integer(num_trajectories, name="num_trajectories", minimum=1)
+
     data = _construct_data(
         operator,
         sim_params,
         timesteps,
         noise_model=noise_model,
         parallel=parallel,
-        num_trajectories=num_trajectories,
+        num_trajectories=resolved_num_trajectories,
         basis=basis,
         basis_seed=basis_seed,
         solver=solver,

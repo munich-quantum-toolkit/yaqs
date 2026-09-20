@@ -19,6 +19,7 @@ from mqt.yaqs.characterization.memory.shared.interventions import (
     expand_interventions,
     normalize_style,
     resolve_unitary_sampler,
+    sample_intervention_sequence,
     sample_train_interventions,
 )
 
@@ -120,3 +121,43 @@ def test_sample_train_interventions_clifford() -> None:
     steps, choi = sample_train_interventions(3, "clifford", rng)
     assert len(steps) == 3
     assert choi.shape == (3, 32)
+
+
+@pytest.mark.parametrize(
+    ("num_interventions", "error", "match"),
+    [
+        (0, ValueError, r"num_interventions must be >= 1"),
+        (-1, ValueError, r"num_interventions must be >= 1"),
+        (False, TypeError, r"num_interventions must be an integer"),
+        (1.5, TypeError, r"num_interventions must be an integer"),
+        ("1", TypeError, r"num_interventions must be an integer"),
+    ],
+)
+def test_intervention_sampling_rejects_invalid_counts(
+    num_interventions: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Intervention samplers do not coerce invalid sequence lengths."""
+    rng = np.random.default_rng(6)
+    with pytest.raises(error, match=match):
+        sample_intervention_sequence(num_interventions, rng)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(error, match=match):
+        sample_train_interventions(
+            num_interventions,  # ty: ignore[invalid-argument-type]
+            "clifford",
+            rng,
+        )
+
+
+def test_intervention_sampling_accepts_numpy_integer_counts() -> None:
+    """NumPy integer intervention counts pass both lower-level sampler boundaries."""
+    rng = np.random.default_rng(7)
+    maps, rows = sample_intervention_sequence(np.int64(1), rng)  # ty: ignore[invalid-argument-type]
+    steps, features = sample_train_interventions(
+        np.int64(1),  # ty: ignore[invalid-argument-type]
+        "clifford",
+        rng,
+    )
+    assert len(maps) == len(steps) == 1
+    assert rows.shape == features.shape == (1, 32)
