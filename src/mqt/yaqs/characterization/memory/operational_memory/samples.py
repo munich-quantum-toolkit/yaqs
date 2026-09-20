@@ -116,10 +116,10 @@ def sample_probes(
     """Sample random split-cut past/future probe ensembles.
 
     Args:
-        cut: Causal cut index ``c`` in ``[1, num_interventions]``.
-        num_interventions: Positive total sequence length.
-        n_pasts: Positive number of past probe branches.
-        n_futures: Positive number of future probe branches.
+        cut: Integer causal cut index ``c`` in ``[1, num_interventions]``.
+        num_interventions: Positive integer total sequence length.
+        n_pasts: Positive integer number of past probe branches.
+        n_futures: Positive integer number of future probe branches.
         rng: NumPy random generator.
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
 
@@ -127,7 +127,7 @@ def sample_probes(
         Populated :class:`ProbeSet`.
 
     Raises:
-        ValueError: If ``cut`` is invalid.
+        ValueError: If a count is not positive or ``cut`` exceeds ``num_interventions``.
     """
     resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     resolved_cut = validate_integer(cut, name="cut", minimum=1)

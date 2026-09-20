@@ -81,8 +81,8 @@ def _resolve_probe_grid(
 
     Args:
         preset: ``"quick"``, ``"balanced"``, or ``"accurate"``.
-        n_pasts: Optional override for the number of past probes.
-        n_futures: Optional override for the number of future probes.
+        n_pasts: Optional positive integer override for the number of past probes.
+        n_futures: Optional positive integer override for the number of future probes.
 
     Returns:
         Tuple ``(n_pasts, n_futures)``.
@@ -156,7 +156,7 @@ def _resolve_num_interventions(target: Any, num_interventions: int | None) -> in
 
     Args:
         target: Process tensor, surrogate, or other characterized object.
-        num_interventions: Optional explicit intervention count.
+        num_interventions: Optional explicit positive integer intervention count.
 
     Returns:
         Resolved ``num_interventions``.
@@ -177,8 +177,8 @@ def _default_cut(num_interventions: int, cut: int | None) -> int:
     """Resolve causal cut, defaulting to the interior cut ``(num_interventions + 1) // 2``.
 
     Args:
-        num_interventions: Intervention sequence length.
-        cut: Optional explicit cut.
+        num_interventions: Positive integer intervention sequence length.
+        cut: Optional integer cut in ``[1, num_interventions]``.
 
     Returns:
         Valid cut in ``[1, num_interventions]``.
@@ -351,18 +351,19 @@ class MemoryCharacterizer:
             timesteps: Optional process-tensor schedule evolution durations (length
                 ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
             noise_model: Optional noise model (dense tomography only).
-            num_trajectories: Monte Carlo trajectories per tomography sample (dense only).
+            num_trajectories: Positive integer Monte Carlo trajectories per tomography sample
+                (dense only).
             basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
             return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
             check: Whether to validate CPTP properties during dense construction.
             atol: CPTP check tolerance.
-            compress_every: How often to compress while accumulating direct-MPO terms.
+            compress_every: Positive integer interval for compressing accumulated direct-MPO terms.
             tol: MPO compression tolerance.
-            max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
-                construction. The supported default, ``None``, retains all branches. A finite cap can
-                violate process-tensor semantics, positivity, and causal normalization.
-            n_sweeps: MPO compression sweeps.
+            max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
+                for direct construction. The supported default, ``None``, retains all branches. A
+                finite cap can violate process-tensor semantics, positivity, and causal normalization.
+            n_sweeps: Non-negative integer number of MPO compression sweeps.
             parallel: Override instance parallel setting for dense tomography or MPO construction.
             initial_rho: Optional expected site-0 reference after ``U_0``; validated when provided.
             initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -370,6 +371,23 @@ class MemoryCharacterizer:
         Returns:
             Dense or MPO process tensor depending on ``return_type``.
         """
+        resolved_num_trajectories = num_trajectories
+        resolved_max_bond_dim = max_bond_dim
+        resolved_compress_every = compress_every
+        resolved_n_sweeps = n_sweeps
+        if return_type == "dense":
+            resolved_num_trajectories = validate_integer(
+                num_trajectories,
+                name="num_trajectories",
+                minimum=1,
+            )
+        elif return_type == "mpo":
+            resolved_max_bond_dim = (
+                None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
+            )
+            resolved_compress_every = validate_integer(compress_every, name="compress_every", minimum=1)
+            resolved_n_sweeps = validate_integer(n_sweeps, name="n_sweeps", minimum=0)
+
         operator = _require_hamiltonian(hamiltonian)
         execution = self._execution if parallel is None else merge_execution_config(self._execution, parallel=parallel)
         return _build_process_tensor(
@@ -377,16 +395,16 @@ class MemoryCharacterizer:
             sim_params,
             timesteps,
             noise_model=noise_model,
-            num_trajectories=num_trajectories,
+            num_trajectories=resolved_num_trajectories,
             basis=basis,
             basis_seed=basis_seed,
             return_type=return_type,
             check=check,
             atol=atol,
-            compress_every=compress_every,
+            compress_every=resolved_compress_every,
             tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
+            max_bond_dim=resolved_max_bond_dim,
+            n_sweeps=resolved_n_sweeps,
             solver=self._solver_for(hamiltonian),
             parallel=execution.parallel,
             initial_rho=initial_rho,
@@ -581,13 +599,15 @@ class MemoryCharacterizer:
         Args:
             target: Hamiltonian, trained surrogate, or reference process tensor.
             sim_params: Required for Hamiltonian targets only.
-            num_interventions: Base split-cut sequence length (required for Hamiltonian targets).
-                An explicit ``delay`` adds ``delay + 1`` physical interventions.
-            cut: Single causal cut; mutually exclusive with ``cuts``.
-            cuts: ``"all"`` or explicit list for multi-cut Hamiltonian sweeps.
+            num_interventions: Positive integer base split-cut sequence length (required for
+                Hamiltonian targets). An explicit ``delay`` adds ``delay + 1`` physical interventions.
+            cut: Single integer causal cut in ``[1, num_interventions]``; mutually exclusive with
+                ``cuts``.
+            cuts: ``"all"`` or a list of integer cuts in ``[1, num_interventions]`` for multi-cut
+                Hamiltonian sweeps.
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
-            n_pasts: Override number of past probes.
-            n_futures: Override number of future probes.
+            n_pasts: Optional positive integer number of past probes.
+            n_futures: Optional positive integer number of future probes.
             intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
             rng: RNG for probe sampling.
             probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
@@ -596,8 +616,9 @@ class MemoryCharacterizer:
                 intervention. Required for surrogate targets and unsupported for Hamiltonian or
                 process-tensor targets.
             parallel: Override parallelism for process-tensor/surrogate probing.
-            delay: Conditioned-reset bridge length (Hamiltonian only). ``None`` uses the standard
-                causal break. Every nonnegative value uses the paper's separate boundary interventions.
+            delay: Optional non-negative integer conditioned-reset bridge length (Hamiltonian only).
+                ``None`` uses the standard causal break. Every integer value from zero uses the
+                paper's separate boundary interventions.
             **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
 
         Returns:
@@ -758,12 +779,12 @@ class MemoryCharacterizer:
         """Resolve the list of cuts to characterize.
 
         Args:
-            num_interventions: Intervention sequence length.
-            cut: Optional single cut.
-            cuts: ``"all"`` or explicit cut list.
+            num_interventions: Positive integer intervention sequence length.
+            cut: Optional integer cut in ``[1, num_interventions]``.
+            cuts: ``"all"`` or an explicit list of integer cuts in ``[1, num_interventions]``.
 
         Returns:
-            Sorted list of cut indices to evaluate.
+            List of cut indices to evaluate.
 
         Raises:
             ValueError: If both ``cut`` and ``cuts`` are provided, ``cuts`` is an
@@ -909,7 +930,7 @@ class MemoryCharacterizer:
             target: Trained surrogate or reference process tensor.
             rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
             sequence: Intervention kind string, per-slot list, or expanded sequence.
-            num_interventions: Sequence length; inferred from ``target`` when omitted.
+            num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
             return_sequence: If True, return the full ``num_interventions``-step trajectory
                 instead of the final state only.
             rng: RNG for stochastic intervention sampling.

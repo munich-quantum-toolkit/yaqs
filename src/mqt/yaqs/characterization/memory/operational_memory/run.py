@@ -258,17 +258,18 @@ def run_memory_characterization(
 
     Args:
         process: Operational-memory backend (exact, process tensor, or surrogate).
-        cut: Causal cut index in ``[1, num_interventions]``.
-        num_interventions: Positive base sequence length (past + cut + future legs; excludes
-            ``delay`` slots).
-        n_pasts: Positive past probe count when sampling internally.
-        n_futures: Positive future probe count when sampling internally.
+        cut: Integer causal cut index in ``[1, num_interventions]``.
+        num_interventions: Positive integer base sequence length (past + cut + future legs;
+            excludes ``delay`` slots).
+        n_pasts: Positive integer past probe count when sampling internally.
+        n_futures: Positive integer future probe count when sampling internally.
         rng: RNG for internal probe sampling.
         probe_set: Pre-sampled probes (optional).
         intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"`` for internal sampling.
         parallel: Override parallelism for :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend`.
-        delay: Conditioned-reset bridge length. ``None`` uses the standard one-step causal
-            break. Every nonnegative value uses separate left and right boundary interventions.
+        delay: Optional non-negative integer conditioned-reset bridge length. ``None`` uses the
+            standard one-step causal break. Every integer value from zero uses separate left and
+            right boundary interventions.
         initial_rho: Optional site-0 state after the initial evolution segment and before the
             first intervention. Surrogate backends require this state.
 
@@ -280,10 +281,9 @@ def run_memory_characterization(
         columns.
 
     Raises:
-        ValueError: If ``delay`` is negative, a supplied ``probe_set`` was built for a
-            different ``cut`` or ``num_interventions``, a conditioned-reset delay is used with a
-            backend that does not support custom sequences, or a backend returns invalid responses
-            or retained-outcome probabilities.
+        ValueError: If a count is outside its allowed range, a supplied ``probe_set`` was built for
+            different geometry, a conditioned-reset delay is used with an unsupported backend, or
+            a backend returns invalid responses or retained-outcome probabilities.
     """
     resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     resolved_cut = validate_integer(cut, name="cut", minimum=1)

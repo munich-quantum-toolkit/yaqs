@@ -127,11 +127,13 @@ class ProcessTensorSurrogate(nn.Module):
             dim_ff: Feed-forward dimension inside encoder layers.
             dropout: Dropout rate.
             layernorm_in: Whether to apply a LayerNorm after the input projection.
-            num_interventions: Optional positive total sequence length for :meth:`evaluate_probes`.
-                Set automatically by :meth:`fit` from training targets; may be set here before training.
+            num_interventions: Optional positive integer total sequence length for
+                :meth:`evaluate_probes`. Set automatically by :meth:`fit` from training targets; may
+                be set here before training.
 
         Raises:
-            ValueError: If ``d_model`` is not divisible by ``nhead``.
+            ValueError: If ``nhead`` is not positive, ``d_model`` is not divisible by ``nhead``, or
+                ``num_interventions`` is set and is not positive.
         """
         super().__init__()
         if nhead <= 0:

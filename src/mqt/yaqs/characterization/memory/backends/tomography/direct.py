@@ -327,11 +327,12 @@ def build_process_tensor_direct(
         basis: Discrete Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
         tol: MPO compression tolerance.
-        max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension. The supported
-            default, ``None``, retains all branches. A finite cap is an uncontrolled approximation
-            that can violate process-tensor semantics, positivity, and causal normalization.
-        n_sweeps: Non-negative number of MPO compression sweeps after each step.
-        compress_every: Positive rank-1 accumulation batch size before intermediate compression.
+        max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension.
+            The supported default, ``None``, retains all branches. A finite cap is an uncontrolled
+            approximation that can violate process-tensor semantics, positivity, and causal
+            normalization.
+        n_sweeps: Non-negative integer number of MPO compression sweeps after each step.
+        compress_every: Positive integer rank-1 accumulation batch size before intermediate compression.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional reference site-0 state after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -342,7 +343,8 @@ def build_process_tensor_direct(
         MPO process-tensor wrapper.
 
     Raises:
-        ValueError: If ``num_interventions`` is zero or the solver is unsupported.
+        ValueError: If a compression size is outside its allowed range, ``num_interventions`` is
+            zero, or the solver is unsupported.
     """
     resolved_max_bond_dim = (
         None if max_bond_dim is None else validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)

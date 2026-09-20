@@ -191,7 +191,8 @@ def run_all_sequences(
         sim_params: Analog simulation parameters.
         timesteps: Process-tensor schedule evolution durations (length ``num_interventions + 1``).
         parallel: Whether to parallelize over sequences.
-        num_trajectories: Positive number of MCWF trajectories per sequence (forced to 1 when noiseless).
+        num_trajectories: Positive integer number of MCWF trajectories per sequence (forced to 1
+            when noiseless).
         noise_model: Optional open-system noise model.
         basis: Tomography basis name.
         basis_seed: Optional seed when ``basis="random"``.
@@ -203,7 +204,8 @@ def run_all_sequences(
         Exhaustive :class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData`.
 
     Raises:
-        ValueError: If ``num_interventions=0`` or the solver is unsupported.
+        ValueError: If ``num_trajectories`` is not positive, ``num_interventions=0``, or the solver
+            is unsupported.
     """
     resolved_num_trajectories = validate_integer(num_trajectories, name="num_trajectories", minimum=1)
 
@@ -407,18 +409,18 @@ def build_process_tensor(
             ``num_interventions + 1``; defaults to ``[dt, dt]`` for one intervention leg).
         noise_model: Optional open-system noise model (dense tomography only).
         parallel: Whether to parallelize dense tomography sequences or MPO construction.
-        num_trajectories: Positive number of MCWF trajectories per sequence (dense path only).
+        num_trajectories: Positive integer number of MCWF trajectories per sequence (dense path only).
         basis: Tomography / Choi basis name.
         basis_seed: Optional seed when ``basis="random"``.
         return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
         check: Run self-consistency check for dense reconstruction.
         atol: Absolute tolerance for the dense self-check.
-        compress_every: Positive direct-MPO rank-1 accumulation compress interval.
+        compress_every: Positive integer direct-MPO rank-1 accumulation compress interval.
         tol: MPO compression tolerance.
-        max_bond_dim: Experimental cap on the branch ensemble and MPO bond dimension for direct
-            construction. The supported default, ``None``, retains all branches. A finite cap can
-            violate process-tensor semantics, positivity, and causal normalization.
-        n_sweeps: Non-negative number of MPO compression sweeps.
+        max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
+            for direct construction. The supported default, ``None``, retains all branches. A finite
+            cap can violate process-tensor semantics, positivity, and causal normalization.
+        n_sweeps: Non-negative integer number of MPO compression sweeps.
         solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
         initial_rho: Optional expected site-0 reference after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
@@ -428,7 +430,8 @@ def build_process_tensor(
         Dense or MPO process-tensor wrapper depending on ``return_type``.
 
     Raises:
-        ValueError: If ``return_type`` is invalid, or ``noise_model`` is set with ``"mpo"``.
+        ValueError: If ``return_type`` is invalid, ``noise_model`` is set with ``"mpo"``, or a
+            selected-path size is outside its allowed range.
     """
     if return_type == "mpo":
         if noise_model is not None:

@@ -157,8 +157,8 @@ def build_training_dataset(
     Args:
         operator: Hamiltonian MPO. The chain length is inferred from ``operator.length``.
         sim_params: Analog simulation parameters.
-        num_interventions: Positive number of intervention steps.
-        n: Positive number of sequences to simulate.
+        num_interventions: Positive integer number of intervention steps.
+        n: Positive integer number of sequences to simulate.
         rng: Optional RNG (overrides ``seed`` if provided).
         seed: Optional seed used to create a default RNG.
         parallel: Whether to parallelize over sequences.
@@ -174,8 +174,8 @@ def build_training_dataset(
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
 
     Raises:
-        ValueError: If ``timesteps`` has the wrong length (must be ``num_interventions + 1``)
-            or ``operator`` is not a qubit Hamiltonian.
+        ValueError: If either count is not positive, ``timesteps`` has the wrong length, or
+            ``operator`` is not a qubit Hamiltonian.
     """
     resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     n_sequences = validate_integer(n, name="n", minimum=1)
@@ -274,8 +274,8 @@ def train_surrogate_model(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        num_interventions: Positive number of intervention steps.
-        n: Positive number of sequences to simulate for training.
+        num_interventions: Positive integer number of intervention steps.
+        n: Positive integer number of sequences to simulate for training.
         seed: Seed used for data generation RNG.
         parallel: Whether to parallelize data generation.
         show_progress: Whether to show progress bars.

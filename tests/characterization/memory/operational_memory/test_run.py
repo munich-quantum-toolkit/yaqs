@@ -84,15 +84,30 @@ def test_run_memory_characterization_uses_object_backend() -> None:
     ("kwargs", "error", "match"),
     [
         ({"num_interventions": 0}, ValueError, r"num_interventions must be >= 1"),
+        ({"num_interventions": -1}, ValueError, r"num_interventions must be >= 1"),
         ({"num_interventions": 1.5}, TypeError, r"num_interventions must be an integer"),
+        ({"num_interventions": False}, TypeError, r"num_interventions must be an integer"),
+        ({"num_interventions": "1"}, TypeError, r"num_interventions must be an integer"),
+        ({"cut": 0}, ValueError, r"cut must be >= 1"),
+        ({"cut": -1}, ValueError, r"cut must be >= 1"),
         ({"cut": False}, TypeError, r"cut must be an integer"),
+        ({"cut": 1.5}, TypeError, r"cut must be an integer"),
+        ({"cut": "1"}, TypeError, r"cut must be an integer"),
         ({"cut": 3}, ValueError, r"cut must satisfy"),
         ({"n_pasts": 0}, ValueError, r"n_pasts must be >= 1"),
+        ({"n_pasts": -1}, ValueError, r"n_pasts must be >= 1"),
         ({"n_pasts": 1.5}, TypeError, r"n_pasts must be an integer"),
+        ({"n_pasts": False}, TypeError, r"n_pasts must be an integer"),
+        ({"n_pasts": "1"}, TypeError, r"n_pasts must be an integer"),
         ({"n_futures": 0}, ValueError, r"n_futures must be >= 1"),
+        ({"n_futures": -1}, ValueError, r"n_futures must be >= 1"),
         ({"n_futures": False}, TypeError, r"n_futures must be an integer"),
+        ({"n_futures": 1.5}, TypeError, r"n_futures must be an integer"),
+        ({"n_futures": "1"}, TypeError, r"n_futures must be an integer"),
         ({"delay": -1}, ValueError, r"delay must be >= 0"),
+        ({"delay": False}, TypeError, r"delay must be an integer"),
         ({"delay": 1.5}, TypeError, r"delay must be an integer"),
+        ({"delay": "0"}, TypeError, r"delay must be an integer"),
     ],
 )
 def test_run_memory_characterization_validates_sizes_before_backend_setup(
@@ -109,6 +124,28 @@ def test_run_memory_characterization_validates_sizes_before_backend_setup(
         run_memory_characterization(
             process=cast("OperationalMemoryBackend", object()),
             **options,  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_run_memory_characterization_accepts_numpy_integer_sizes_and_zero_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NumPy integer geometry and the zero-delay boundary pass validation."""
+
+    def _stop_backend_setup(*, delay: int | None, parallel: bool | None) -> None:
+        del delay, parallel
+        msg = "validated operational sizes"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(run_module, "_resolve_exact_backend_cls", _stop_backend_setup)
+    with pytest.raises(RuntimeError, match="validated operational sizes"):
+        run_memory_characterization(
+            process=cast("OperationalMemoryBackend", object()),
+            cut=np.int64(1),  # ty: ignore[invalid-argument-type]
+            num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n_pasts=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n_futures=np.int64(1),  # ty: ignore[invalid-argument-type]
+            delay=np.int64(0),  # ty: ignore[invalid-argument-type]
         )
 
 

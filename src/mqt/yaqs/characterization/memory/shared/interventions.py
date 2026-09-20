@@ -144,7 +144,7 @@ def sample_intervention_sequence(
     """Sample fresh interventions and return maps + per-step Choi features.
 
     Args:
-        num_interventions: Positive number of intervention steps.
+        num_interventions: Positive integer number of intervention steps.
         rng: Random number generator.
 
     Returns:
@@ -387,7 +387,7 @@ def sample_train_interventions(
     """Sample one training intervention sequence of length ``num_interventions``.
 
     Args:
-        num_interventions: Positive sequence length.
+        num_interventions: Positive integer sequence length.
         intervention_style: Intervention style for all slots.
         rng: NumPy random generator.
 

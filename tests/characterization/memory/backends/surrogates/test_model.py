@@ -255,8 +255,10 @@ def test_process_tensor_surrogate_num_interventions_for_probe_requires_num_inter
     ("num_interventions", "error", "match"),
     [
         (0, ValueError, r"num_interventions must be >= 1"),
+        (-1, ValueError, r"num_interventions must be >= 1"),
         (False, TypeError, r"num_interventions must be an integer"),
         (1.5, TypeError, r"num_interventions must be an integer"),
+        ("1", TypeError, r"num_interventions must be an integer"),
     ],
 )
 def test_process_tensor_surrogate_rejects_invalid_num_interventions(

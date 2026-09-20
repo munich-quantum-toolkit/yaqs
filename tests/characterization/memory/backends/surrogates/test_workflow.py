@@ -282,7 +282,7 @@ def test_build_training_dataset_rejects_non_positive_n(n: int) -> None:
         build_training_dataset(op, params, num_interventions=1, n=n, parallel=False, show_progress=False)
 
 
-@pytest.mark.parametrize("n", [False, 1.5])
+@pytest.mark.parametrize("n", [False, 1.5, "1"])
 def test_build_training_dataset_rejects_non_integer_n(n: object) -> None:
     """build_training_dataset rejects booleans and non-integral batch sizes before simulation."""
     op = MPO.ising(length=1, J=0.0, g=0.0)
@@ -302,8 +302,10 @@ def test_build_training_dataset_rejects_non_integer_n(n: object) -> None:
     ("num_interventions", "error", "match"),
     [
         (0, ValueError, r"num_interventions must be >= 1"),
+        (-1, ValueError, r"num_interventions must be >= 1"),
         (False, TypeError, r"num_interventions must be an integer"),
         (1.5, TypeError, r"num_interventions must be an integer"),
+        ("1", TypeError, r"num_interventions must be an integer"),
     ],
 )
 def test_build_training_dataset_rejects_invalid_intervention_counts_before_torch(
@@ -330,7 +332,9 @@ def test_build_training_dataset_rejects_invalid_intervention_counts_before_torch
     ("num_interventions", "n", "error", "match"),
     [
         (0, 1, ValueError, r"num_interventions must be >= 1"),
+        (-1, 1, ValueError, r"num_interventions must be >= 1"),
         (1, False, TypeError, r"n must be an integer"),
+        (1, "1", TypeError, r"n must be an integer"),
     ],
 )
 def test_train_surrogate_model_validates_counts_before_optional_imports(
@@ -348,6 +352,40 @@ def test_train_surrogate_model_validates_counts_before_optional_imports(
             AnalogSimParams(dt=0.1),
             num_interventions=num_interventions,  # ty: ignore[invalid-argument-type]
             n=n,  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+
+def test_surrogate_workflows_accept_numpy_integer_counts_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NumPy integer counts pass lower-level validation before optional imports."""
+    operator = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+
+    def _stop_torch_check() -> None:
+        msg = "validated dataset counts"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(workflow_module, "_require_torch", _stop_torch_check)
+    with pytest.raises(RuntimeError, match="validated dataset counts"):
+        build_training_dataset(
+            operator,
+            params,
+            num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n=np.int64(1),  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+    monkeypatch.setitem(sys.modules, "torch", None)
+    with pytest.raises(ModuleNotFoundError):
+        train_surrogate_model(
+            operator,
+            params,
+            num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n=np.int64(1),  # ty: ignore[invalid-argument-type]
             parallel=False,
             show_progress=False,
         )

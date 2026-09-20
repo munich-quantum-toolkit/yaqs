@@ -72,13 +72,26 @@ def test_sample_probes_cut_validation() -> None:
     ("kwargs", "error", "match"),
     [
         ({"num_interventions": 0}, ValueError, r"num_interventions must be >= 1"),
+        ({"num_interventions": -1}, ValueError, r"num_interventions must be >= 1"),
         ({"num_interventions": 1.5}, TypeError, r"num_interventions must be an integer"),
+        ({"num_interventions": False}, TypeError, r"num_interventions must be an integer"),
+        ({"num_interventions": "1"}, TypeError, r"num_interventions must be an integer"),
+        ({"cut": 0}, ValueError, r"cut must be >= 1"),
+        ({"cut": -1}, ValueError, r"cut must be >= 1"),
         ({"cut": False}, TypeError, r"cut must be an integer"),
+        ({"cut": 1.5}, TypeError, r"cut must be an integer"),
+        ({"cut": "1"}, TypeError, r"cut must be an integer"),
         ({"cut": 3}, ValueError, r"cut must satisfy"),
         ({"n_pasts": 0}, ValueError, r"n_pasts must be >= 1"),
+        ({"n_pasts": -1}, ValueError, r"n_pasts must be >= 1"),
         ({"n_pasts": 1.5}, TypeError, r"n_pasts must be an integer"),
+        ({"n_pasts": False}, TypeError, r"n_pasts must be an integer"),
+        ({"n_pasts": "1"}, TypeError, r"n_pasts must be an integer"),
         ({"n_futures": 0}, ValueError, r"n_futures must be >= 1"),
+        ({"n_futures": -1}, ValueError, r"n_futures must be >= 1"),
         ({"n_futures": False}, TypeError, r"n_futures must be an integer"),
+        ({"n_futures": 1.5}, TypeError, r"n_futures must be an integer"),
+        ({"n_futures": "1"}, TypeError, r"n_futures must be an integer"),
     ],
 )
 def test_sample_probes_validates_all_sizes(
@@ -92,6 +105,19 @@ def test_sample_probes_validates_all_sizes(
     options: dict[str, object] = {"cut": 1, "num_interventions": 2, "n_pasts": 2, "n_futures": 2, **kwargs}
     with pytest.raises(error, match=match):
         sample_probes(rng=np.random.default_rng(2), **options)  # ty: ignore[invalid-argument-type]
+
+
+def test_sample_probes_accepts_numpy_integer_sizes() -> None:
+    """NumPy integer probe geometry passes lower-level validation."""
+    probe_set = sample_probes(
+        cut=np.int64(1),  # ty: ignore[invalid-argument-type]
+        num_interventions=np.int64(1),  # ty: ignore[invalid-argument-type]
+        n_pasts=np.int64(1),  # ty: ignore[invalid-argument-type]
+        n_futures=np.int64(1),  # ty: ignore[invalid-argument-type]
+        rng=np.random.default_rng(3),
+    )
+    assert probe_set.cut == 1
+    assert probe_set.num_interventions == 1
 
 
 def test_sample_random_clifford_unitary_returns_copy() -> None:

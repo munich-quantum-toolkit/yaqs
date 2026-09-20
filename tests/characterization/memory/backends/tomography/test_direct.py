@@ -234,11 +234,19 @@ def test_finite_direct_cap_warns_that_the_path_is_experimental() -> None:
     ("kwargs", "error", "match"),
     [
         ({"max_bond_dim": 0}, ValueError, r"max_bond_dim must be >= 1"),
+        ({"max_bond_dim": -1}, ValueError, r"max_bond_dim must be >= 1"),
         ({"max_bond_dim": 1.5}, TypeError, r"max_bond_dim must be an integer"),
+        ({"max_bond_dim": False}, TypeError, r"max_bond_dim must be an integer"),
+        ({"max_bond_dim": "1"}, TypeError, r"max_bond_dim must be an integer"),
         ({"compress_every": 0}, ValueError, r"compress_every must be >= 1"),
+        ({"compress_every": -1}, ValueError, r"compress_every must be >= 1"),
         ({"compress_every": False}, TypeError, r"compress_every must be an integer"),
+        ({"compress_every": 1.5}, TypeError, r"compress_every must be an integer"),
+        ({"compress_every": "1"}, TypeError, r"compress_every must be an integer"),
         ({"n_sweeps": -1}, ValueError, r"n_sweeps must be >= 0"),
+        ({"n_sweeps": False}, TypeError, r"n_sweeps must be an integer"),
         ({"n_sweeps": 1.5}, TypeError, r"n_sweeps must be an integer"),
+        ({"n_sweeps": "0"}, TypeError, r"n_sweeps must be an integer"),
     ],
 )
 def test_direct_constructor_validates_compression_sizes(
@@ -255,4 +263,26 @@ def test_direct_constructor_validates_compression_sizes(
             AnalogSimParams(dt=0.1, max_bond_dim=8),
             timesteps=[0.0, 0.0],
             **kwargs,  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_direct_constructor_accepts_numpy_integer_sizes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NumPy integer direct-MPO sizes and zero sweeps pass validation."""
+
+    def _stop_solver(*_args: object, **_kwargs: object) -> None:
+        msg = "validated direct sizes"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(direct_module, "resolve_stochastic_solver", _stop_solver)
+    with (
+        pytest.warns(RuntimeWarning, match="finite max_bond_dim"),
+        pytest.raises(RuntimeError, match="validated direct sizes"),
+    ):
+        build_process_tensor_direct(
+            Hamiltonian.ising(length=1, J=0.0, g=0.0).mpo,
+            AnalogSimParams(dt=0.1, max_bond_dim=8),
+            timesteps=[0.0, 0.0],
+            max_bond_dim=np.int64(2),  # ty: ignore[invalid-argument-type]
+            compress_every=np.int64(1),  # ty: ignore[invalid-argument-type]
+            n_sweeps=np.int64(0),  # ty: ignore[invalid-argument-type]
         )

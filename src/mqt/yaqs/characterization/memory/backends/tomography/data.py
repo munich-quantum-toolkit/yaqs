@@ -79,12 +79,12 @@ def accumulate_rank1_terms(
 
     Args:
         terms: Iterable of MPO terms.
-        num_steps: Positive number of intervention steps in the process tensor.
+        num_steps: Positive integer number of intervention steps in the process tensor.
         dims: Output density matrix dimensions (default (2,2)).
-        compress_every: Positive number of terms to accumulate before compression.
+        compress_every: Positive integer number of terms to accumulate before compression.
         tol: Compression tolerance.
-        max_bond_dim: Optional positive maximum bond dimension.
-        n_sweeps: Non-negative number of compression sweeps.
+        max_bond_dim: Optional positive integer maximum bond dimension.
+        n_sweeps: Non-negative integer number of compression sweeps.
 
     Returns:
         Compressed MPO representing the sum of terms.
