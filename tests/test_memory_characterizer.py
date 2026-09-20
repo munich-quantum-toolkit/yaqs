@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -29,6 +30,17 @@ _PAPER_L = 6
 _PAPER_K = 20
 _PAPER_G = 1.0
 _PAPER_SEED = 0
+
+
+@dataclass(kw_only=True)
+class _InferredCountTarget:
+    """Minimal target that exposes an inferred intervention count."""
+
+    num_interventions: object
+
+    def _num_interventions_for_probe(self) -> object:
+        """Return the test-controlled inferred intervention count."""
+        return self.num_interventions
 
 
 def _paper_params() -> AnalogSimParams:
@@ -788,10 +800,192 @@ def test_characterize_rejects_invalid_probe_set(ham_and_params: tuple[Hamiltonia
         mc.characterize(ham, params, num_interventions=2, cut=1, probe_set={"bad": 1})
 
 
-@requires_torch
-def test_train_rejects_non_positive_n(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """MemoryCharacterizer.train rejects non-positive training batch sizes."""
+@pytest.mark.parametrize("method_name", ["sample", "train"])
+@pytest.mark.parametrize(
+    ("parameter", "value", "error", "match"),
+    [
+        ("num_interventions", 0, ValueError, "num_interventions must be >= 1"),
+        ("num_interventions", False, TypeError, "num_interventions must be an integer"),
+        ("num_interventions", 1.5, TypeError, "num_interventions must be an integer"),
+        ("n", 0, ValueError, "n must be >= 1"),
+        ("n", False, TypeError, "n must be an integer"),
+        ("n", 1.5, TypeError, "n must be an integer"),
+    ],
+)
+def test_sample_and_train_validate_counts_before_hamiltonian_conversion(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    parameter: str,
+    value: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Invalid sampling sizes fail before Hamiltonian conversion and optional imports."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
-    with pytest.raises(ValueError, match=r"n must be positive"):
-        mc.train(ham, params, num_interventions=1, n=0)
+
+    def _fail_conversion(_hamiltonian: Hamiltonian) -> None:
+        pytest.fail("Hamiltonian conversion must not run for invalid counts")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", _fail_conversion)
+    kwargs: dict[str, Any] = {"num_interventions": 1, "n": 1}
+    kwargs[parameter] = value
+    method = getattr(mc, method_name)
+    with pytest.raises(error, match=match):
+        method(ham, params, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value", "error", "match"),
+    [
+        ("n_pasts", 0, ValueError, "n_pasts must be >= 1"),
+        ("n_pasts", 1.5, TypeError, "n_pasts must be an integer"),
+        ("n_futures", 0, ValueError, "n_futures must be >= 1"),
+        ("n_futures", True, TypeError, "n_futures must be an integer"),
+    ],
+)
+def test_characterize_validates_probe_counts_before_backend_setup(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+    parameter: str,
+    value: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Invalid probe counts fail before converting or constructing a backend."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    def _fail_conversion(_hamiltonian: Hamiltonian) -> None:
+        pytest.fail("Hamiltonian conversion must not run for invalid probe counts")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", _fail_conversion)
+    kwargs: dict[str, Any] = {
+        "num_interventions": 2,
+        "cut": 1,
+        "n_pasts": 1,
+        "n_futures": 1,
+    }
+    kwargs[parameter] = value
+    with pytest.raises(error, match=match):
+        mc.characterize(ham, params, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [(0, ValueError), (False, TypeError), (1.5, TypeError)],
+)
+def test_characterize_validates_explicit_num_interventions_before_backend_setup(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+    value: object,
+    error: type[Exception],
+) -> None:
+    """Invalid explicit intervention counts fail before backend setup."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    def _fail_conversion(_hamiltonian: Hamiltonian) -> None:
+        pytest.fail("Hamiltonian conversion must not run for invalid intervention counts")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", _fail_conversion)
+    with pytest.raises(error, match="num_interventions must"):
+        mc.characterize(ham, params, num_interventions=cast("Any", value), cut=1)
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [(0, ValueError), (False, TypeError), (1.5, TypeError)],
+)
+def test_characterize_validates_inferred_num_interventions(value: object, error: type[Exception]) -> None:
+    """Invalid intervention counts inferred from a target are rejected."""
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+    with pytest.raises(error, match="num_interventions must"):
+        mc.characterize(_InferredCountTarget(num_interventions=value), cut=1, n_pasts=1, n_futures=1)
+
+
+@pytest.mark.parametrize(
+    ("cut_kwargs", "error"),
+    [
+        ({"cut": 0}, ValueError),
+        ({"cut": 3}, ValueError),
+        ({"cut": 1.5}, TypeError),
+        ({"cut": True}, TypeError),
+        ({"cuts": [1, 0]}, ValueError),
+        ({"cuts": [1, 3]}, ValueError),
+        ({"cuts": [1, 1.5]}, TypeError),
+        ({"cuts": [1, True]}, TypeError),
+    ],
+)
+def test_characterize_validates_single_and_listed_cuts_before_backend_setup(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+    cut_kwargs: dict[str, Any],
+    error: type[Exception],
+) -> None:
+    """Every requested cut is an integer within the intervention range."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    def _fail_conversion(_hamiltonian: Hamiltonian) -> None:
+        pytest.fail("Hamiltonian conversion must not run for invalid cuts")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", _fail_conversion)
+    with pytest.raises(error, match="cut must"):
+        mc.characterize(ham, params, num_interventions=2, **cut_kwargs)
+
+
+@pytest.mark.parametrize(
+    ("delay", "error"),
+    [(-1, ValueError), (False, TypeError), (1.5, TypeError)],
+)
+def test_characterize_validates_delay_before_backend_setup(
+    ham_and_params: tuple[Hamiltonian, AnalogSimParams],
+    monkeypatch: pytest.MonkeyPatch,
+    delay: object,
+    error: type[Exception],
+) -> None:
+    """A reset delay must be a non-negative integer before backend setup."""
+    ham, params = ham_and_params
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    def _fail_conversion(_hamiltonian: Hamiltonian) -> None:
+        pytest.fail("Hamiltonian conversion must not run for an invalid delay")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", _fail_conversion)
+    with pytest.raises(error, match="delay must"):
+        mc.characterize(ham, params, num_interventions=2, cut=1, delay=cast("Any", delay))
+
+
+@pytest.mark.parametrize(
+    ("target", "num_interventions", "error"),
+    [
+        (object(), 0, ValueError),
+        (object(), False, TypeError),
+        (object(), 1.5, TypeError),
+        (_InferredCountTarget(num_interventions=0), None, ValueError),
+        (_InferredCountTarget(num_interventions=False), None, TypeError),
+        (_InferredCountTarget(num_interventions=1.5), None, TypeError),
+    ],
+)
+def test_predict_validates_num_interventions_before_rho_conversion(
+    monkeypatch: pytest.MonkeyPatch,
+    target: object,
+    num_interventions: object,
+    error: type[Exception],
+) -> None:
+    """Explicit and inferred prediction lengths fail before density-matrix conversion."""
+    mc = MemoryCharacterizer(parallel=False, show_progress=False)
+
+    def _fail_rho_conversion(_rho: object) -> None:
+        pytest.fail("rho0 conversion must not run for an invalid intervention count")
+
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer.coerce_rho_matrix", _fail_rho_conversion)
+    with pytest.raises(error, match="num_interventions must"):
+        mc.predict(
+            target,
+            np.array([99.0]),
+            "haar",
+            num_interventions=cast("Any", num_interventions),
+        )
