@@ -251,6 +251,30 @@ def test_process_tensor_surrogate_num_interventions_for_probe_requires_num_inter
         model._num_interventions_for_probe()
 
 
+@pytest.mark.parametrize(
+    ("num_interventions", "error", "match"),
+    [
+        (0, ValueError, r"num_interventions must be >= 1"),
+        (False, TypeError, r"num_interventions must be an integer"),
+        (1.5, TypeError, r"num_interventions must be an integer"),
+    ],
+)
+def test_process_tensor_surrogate_rejects_invalid_num_interventions(
+    num_interventions: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """The surrogate constructor does not coerce invalid sequence lengths."""
+    with pytest.raises(error, match=match):
+        _tiny_model(num_interventions=num_interventions)  # ty: ignore[invalid-argument-type]
+
+
+def test_process_tensor_surrogate_accepts_numpy_num_interventions() -> None:
+    """The surrogate constructor accepts NumPy integer sequence lengths."""
+    model = _tiny_model(num_interventions=np.int64(2))  # ty: ignore[invalid-argument-type]
+    assert model.num_interventions == 2
+
+
 def test_process_tensor_surrogate_rho_to_features_casts_to_float64() -> None:
     """_rho_to_features preserves shape and promotes to float64."""
     torch = import_torch()
