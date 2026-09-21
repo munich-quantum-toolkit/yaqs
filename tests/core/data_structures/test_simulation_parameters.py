@@ -717,11 +717,19 @@ def test_digital_params_sorting_and_fields() -> None:
     assert params.num_mid_measurements == 2
 
 
-def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
-    """Constructor must assert when mixing PVM with non-PVM observables."""
+def test_analog_params_rejects_mixed_pvm_with_non_pvm() -> None:
+    """The analog constructor rejects mixed PVM and non-PVM observables."""
     pvm = Observable("101")
     z0 = Observable("z", sites=0)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="Mixed observable and projective-measurement simulation is not supported"):
+        _ = AnalogSimParams(observables=[pvm, z0])
+
+
+def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
+    """The digital constructor rejects mixed PVM and non-PVM observables."""
+    pvm = Observable("101")
+    z0 = Observable("z", sites=0)
+    with pytest.raises(ValueError, match="Mixed observable and projective-measurement simulation is not supported"):
         _ = DigitalSimParams(observables=[pvm, z0])
 
 
