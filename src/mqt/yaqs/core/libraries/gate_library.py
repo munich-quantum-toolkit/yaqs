@@ -49,10 +49,18 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     Returns:
         list[NDArray[np.complex128]]: A list containing one tensor per site resulting from the split.
             Each tensor has shape (2, 2, bond_left, bond_right); the outer bonds are 1.
+
+    Raises:
+        ValueError: If ``tensor`` does not encode a gate on at least two qubits.
     """
     num_sites = tensor.ndim // 2
-    assert num_sites >= 2
-    assert tensor.shape == (2,) * (2 * num_sites)
+    if tensor.ndim < 4 or tensor.ndim % 2 != 0:
+        msg = f"tensor must have an even number of axes for at least two sites, got {tensor.ndim}."
+        raise ValueError(msg)
+    expected_shape = (2,) * (2 * num_sites)
+    if tensor.shape != expected_shape:
+        msg = f"tensor must have shape {expected_shape}, got {tensor.shape}."
+        raise ValueError(msg)
 
     # Group the output and input leg of each site: (out_1, in_1, ..., out_n, in_n)
     matrix = np.transpose(tensor, [axis for site in range(num_sites) for axis in (site, num_sites + site)])

@@ -27,8 +27,11 @@ import json
 import numpy as np
 
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
+from mqt.yaqs.core.libraries.circuit_library_utils import extract_u_parameters
+from mqt.yaqs.core.libraries.gate_library import split_tensor
 
 
 def invalid_expect_sites():
@@ -55,6 +58,24 @@ def mismatched_shift_left():
     state.shift_orthogonality_center_left(1)
 
 
+def invalid_custom_mpo():
+    mpo = MPO()
+    mpo.custom(
+        [np.zeros((2, 2, 1, 2), dtype=np.complex128), np.zeros((2, 2, 3, 1), dtype=np.complex128)],
+        transpose=False,
+    )
+
+
+def invalid_finite_state_machine_mpo():
+    mpo = MPO()
+    mpo.finite_state_machine(
+        3,
+        np.zeros((1, 2, 2, 2), dtype=np.complex128),
+        np.zeros((3, 3, 2, 2), dtype=np.complex128),
+        np.zeros((3, 1, 2, 2), dtype=np.complex128),
+    )
+
+
 pvm = Observable("00")
 ordinary = Observable("z", 0)
 state = MPS(2, state="zeros")
@@ -69,6 +90,10 @@ calls = {
     "bond-dimensions": invalid_bond_dimensions,
     "shift-right-center-mismatch": mismatched_shift_right,
     "shift-left-center-mismatch": mismatched_shift_left,
+    "custom-mpo-bond-mismatch": invalid_custom_mpo,
+    "finite-state-machine-mpo-bond-mismatch": invalid_finite_state_machine_mpo,
+    "u-parameter-matrix-shape": lambda: extract_u_parameters(np.eye(3)),
+    "gate-tensor-shape": lambda: split_tensor(np.zeros((2, 2, 2))),
     "analog-observable-mix": lambda: AnalogSimParams(observables=[pvm, ordinary]),
     "digital-observable-mix": lambda: DigitalSimParams(observables=[pvm, ordinary]),
 }
@@ -183,6 +208,19 @@ def test_public_validation_matches_under_optimized_python() -> None:
         "shift-left-center-mismatch": [
             "ValueError",
             "shift_orthogonality_center_left: tracked center is 0, but shift requested from site 1.",
+        ],
+        "custom-mpo-bond-mismatch": [
+            "ValueError",
+            "MPO tensors must have matching adjacent bond dimensions.",
+        ],
+        "finite-state-machine-mpo-bond-mismatch": [
+            "ValueError",
+            "MPO tensors must have matching adjacent bond dimensions.",
+        ],
+        "u-parameter-matrix-shape": ["ValueError", "Input must be a 2x2 matrix."],
+        "gate-tensor-shape": [
+            "ValueError",
+            "tensor must have an even number of axes for at least two sites, got 3.",
         ],
         "analog-observable-mix": [
             "ValueError",
