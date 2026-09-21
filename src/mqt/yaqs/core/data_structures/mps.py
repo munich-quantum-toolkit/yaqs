@@ -924,16 +924,20 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                            Default is QR.
 
+        Raises:
+            ValueError: If the requested center is invalid or differs from the tracked center.
+
         """
         current_orthogonality_center = self._validate_center(
             current_orthogonality_center, name="current_orthogonality_center"
         )
         self._validate_decomposition(decomposition)
-        if self._orthogonality_center is not None:
-            assert self._orthogonality_center == current_orthogonality_center, (
+        if self._orthogonality_center is not None and self._orthogonality_center != current_orthogonality_center:
+            msg = (
                 f"shift_orthogonality_center_right: tracked center is {self._orthogonality_center}, "
                 f"but shift requested from site {current_orthogonality_center}."
             )
+            raise ValueError(msg)
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR" or current_orthogonality_center == self.length - 1:
             site_tensor, bond_tensor = right_qr(tensor)
@@ -981,16 +985,20 @@ class MPS:
             current_orthogonality_center: Site that currently holds the orthogonality center.
             decomposition: Decomposition used for the shift. ``"QR"`` is faster;
                 ``"SVD"`` can reduce the bond dimension.
+
+        Raises:
+            ValueError: If the requested center is invalid or differs from the tracked center.
         """
         current_orthogonality_center = self._validate_center(
             current_orthogonality_center, name="current_orthogonality_center"
         )
         self._validate_decomposition(decomposition)
-        if self._orthogonality_center is not None:
-            assert self._orthogonality_center == current_orthogonality_center, (
+        if self._orthogonality_center is not None and self._orthogonality_center != current_orthogonality_center:
+            msg = (
                 f"shift_orthogonality_center_left: tracked center is {self._orthogonality_center}, "
                 f"but shift requested from site {current_orthogonality_center}."
             )
+            raise ValueError(msg)
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR" or current_orthogonality_center == 0:
             site_tensor, bond_tensor = left_qr(tensor)

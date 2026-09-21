@@ -44,6 +44,17 @@ def invalid_bond_dimensions():
     state.check_if_valid_mps()
 
 
+def mismatched_shift_right():
+    state = MPS(3, state="zeros")
+    state.set_center(1)
+    state.shift_orthogonality_center_right(0)
+
+
+def mismatched_shift_left():
+    state = MPS(3, state="zeros")
+    state.shift_orthogonality_center_left(1)
+
+
 pvm = Observable("00")
 ordinary = Observable("z", 0)
 state = MPS(2, state="zeros")
@@ -56,6 +67,8 @@ calls = {
     "observable-sites": invalid_expect_sites,
     "bitstring": lambda: state.project_onto_bitstring("0x"),
     "bond-dimensions": invalid_bond_dimensions,
+    "shift-right-center-mismatch": mismatched_shift_right,
+    "shift-left-center-mismatch": mismatched_shift_left,
     "analog-observable-mix": lambda: AnalogSimParams(observables=[pvm, ordinary]),
     "digital-observable-mix": lambda: DigitalSimParams(observables=[pvm, ordinary]),
 }
@@ -163,6 +176,14 @@ def test_public_validation_matches_under_optimized_python() -> None:
         "observable-sites": ["TypeError", "observable sites must be an integer or a list of integers."],
         "bitstring": ["ValueError", "bitstring character at site 1 must be numeric, got 'x'."],
         "bond-dimensions": ["ValueError", "MPS bond between sites 0 and 1 has dimensions 1 and 2."],
+        "shift-right-center-mismatch": [
+            "ValueError",
+            "shift_orthogonality_center_right: tracked center is 1, but shift requested from site 0.",
+        ],
+        "shift-left-center-mismatch": [
+            "ValueError",
+            "shift_orthogonality_center_left: tracked center is 0, but shift requested from site 1.",
+        ],
         "analog-observable-mix": [
             "ValueError",
             "Mixed observable and projective-measurement simulation is not supported.",

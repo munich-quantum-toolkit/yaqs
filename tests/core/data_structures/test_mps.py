@@ -2859,13 +2859,24 @@ def test_evaluate_observables_with_nonzero_initial_center() -> None:
         assert results[site, 0] == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
 
 
-def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
-    """Shift helpers assert when the requested center disagrees with tracking."""
+def test_shift_orthogonality_center_rejects_mismatch() -> None:
+    """Shift helpers reject a requested center that disagrees with tracking."""
     mps = MPS(3, state="zeros")
     assert mps.orthogonality_center == 0
+
     mps.set_center(1)
-    with pytest.raises(AssertionError):
+    with pytest.raises(
+        ValueError,
+        match=r"shift_orthogonality_center_right: tracked center is 1, but shift requested from site 0\.",
+    ):
         mps.shift_orthogonality_center_right(0)
+
+    mps.set_center(0)
+    with pytest.raises(
+        ValueError,
+        match=r"shift_orthogonality_center_left: tracked center is 0, but shift requested from site 1\.",
+    ):
+        mps.shift_orthogonality_center_left(1)
 
 
 def test_orthogonality_center_preserved_by_deepcopy() -> None:
