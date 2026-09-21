@@ -719,6 +719,21 @@ def test_scalar_product_partial_site() -> None:
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
 
 
+def test_scalar_product_adjacent_sites_matches_merged_tensor_overlap() -> None:
+    """A two-site scalar product equals the overlap of the merged tensor blocks."""
+    shapes = [(2, 1, 3), (2, 3, 2), (2, 2, 1)]
+    left = random_mps(shapes, normalize=False, seed=1)
+    right = random_mps(shapes, normalize=False, seed=2)
+
+    merged_left = merge_two_site(left.tensors[0], left.tensors[1])
+    merged_right = merge_two_site(right.tensors[0], right.tensors[1])
+    expected = np.vdot(merged_left, merged_right)
+
+    actual = left.scalar_product(right, sites=[0, 1])
+
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+
+
 @pytest.mark.parametrize(
     ("sites", "error", "match"),
     [
