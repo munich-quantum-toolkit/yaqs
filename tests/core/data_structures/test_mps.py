@@ -184,15 +184,22 @@ def test_mps_initialization(state: str) -> None:
             np.testing.assert_allclose(vec, expected)
 
 
-@pytest.mark.parametrize("length", [0, -1, False, 1.5])
-def test_mps_rejects_invalid_length(length: object) -> None:
-    """An MPS length must be a positive integer.
+@pytest.mark.parametrize("length", [False, 1.5, "2", None])
+def test_mps_rejects_invalid_length_type(length: object) -> None:
+    """An MPS length must have an integer type.
 
     Args:
         length: Invalid chain length under test.
     """
-    with pytest.raises(ValueError, match="length must be a positive integer"):
+    with pytest.raises(TypeError, match="length must be an integer"):
         MPS(length)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+
+
+@pytest.mark.parametrize("length", [0, -1])
+def test_mps_rejects_non_positive_length(length: int) -> None:
+    """An MPS length must be positive."""
+    with pytest.raises(ValueError, match="length must be positive"):
+        MPS(length)
 
 
 def test_mps_rejects_tensor_count_mismatch() -> None:
@@ -712,12 +719,28 @@ def test_scalar_product_partial_site() -> None:
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
 
 
-def test_scalar_product_rejects_non_adjacent_site_pair() -> None:
-    """Partial two-site contractions require an ordered adjacent pair."""
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        (True, TypeError, "observable sites must be an integer or a list of integers"),
+        ("0", TypeError, "observable sites must be an integer or a list of integers"),
+        ([], ValueError, "observable must act on one or two sites"),
+        ([0, 1, 2], ValueError, "observable must act on one or two sites"),
+        (-1, ValueError, r"observable site must be in \[0, 2\]"),
+        (3, ValueError, r"observable site must be in \[0, 2\]"),
+        ([0, 2], ValueError, "scalar-product bond sites must be ordered nearest neighbors"),
+    ],
+)
+def test_scalar_product_rejects_invalid_sites(
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Partial contractions require supported, in-range site selections."""
     state = MPS(length=3, state="zeros")
 
-    with pytest.raises(ValueError, match="scalar-product bond sites must be ordered nearest neighbors"):
-        state.scalar_product(state, sites=[0, 2])
+    with pytest.raises(error, match=match):
+        state.scalar_product(state, sites=cast("Any", sites))
 
 
 @pytest.mark.parametrize(
@@ -3102,4 +3125,30 @@ def test_evaluate_observables_rejects_operator_without_sites() -> None:
     sim_params = Mock(sorted_observables=[observable])
 
     with pytest.raises(ValueError, match="Operator observables must have explicit sites"):
+        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+
+
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        (False, TypeError, "observable sites must be an integer or a list of integers"),
+        ("0", TypeError, "observable sites must be an integer or a list of integers"),
+        ([], ValueError, "observable must act on one or two sites"),
+        ([0, 1, 2], ValueError, "observable must act on one or two sites"),
+        (-1, ValueError, r"observable site must be in \[0, 1\]"),
+        (2, ValueError, r"observable site must be in \[0, 1\]"),
+    ],
+)
+def test_evaluate_observables_rejects_invalid_operator_sites(
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Batch evaluation validates ordinary observable sites before contraction."""
+    state = _product_state_mps(2)
+    observable = Observable("z", 0)
+    observable.sites = cast("Any", sites)
+    sim_params = Mock(sorted_observables=[observable])
+
+    with pytest.raises(error, match=match):
         state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)

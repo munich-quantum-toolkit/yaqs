@@ -112,11 +112,15 @@ class MPS:
                 Character ``i`` selects site ``i``.
 
         Raises:
+            TypeError: If ``length`` has an unsupported type.
             ValueError: If ``length`` is not positive, tensor or physical-dimension counts do not
                 match ``length``, or the requested state configuration is invalid.
         """
-        if not isinstance(length, Integral) or isinstance(length, bool) or length < 1:
-            msg = "length must be a positive integer."
+        if not isinstance(length, Integral) or isinstance(length, bool):
+            msg = "length must be an integer."
+            raise TypeError(msg)
+        if length < 1:
+            msg = "length must be positive."
             raise ValueError(msg)
         length = int(length)
 
@@ -1238,20 +1242,18 @@ class MPS:
         Returns:
             np.complex128: The resulting scalar product as a complex number.
 
-        Raises:
-            ValueError: If ``sites`` contains a non-adjacent pair or is otherwise invalid.
-
         Notes:
             When ``sites`` is set, this method contracts only the stored tensors
             at those sites. Use :meth:`norm`, :meth:`local_expect`, or
             :meth:`expect` for gauge-safe physical quantities.
         """
+        sites_list = None if sites is None else self._validate_observable_sites(sites)
         a_copy = copy.deepcopy(self)
         b_copy = copy.deepcopy(other)
         for i, tensor in enumerate(a_copy.tensors):
             a_copy.tensors[i] = np.conj(tensor)
 
-        if sites is None:
+        if sites_list is None:
             result = None
             for idx in range(self.length):
                 # contract at each site into a 4-leg tensor
@@ -1261,31 +1263,24 @@ class MPS:
             assert result is not None
             return np.complex128(np.squeeze(result))
 
-        if isinstance(sites, int) or len(sites) == 1:
-            if isinstance(sites, int):
-                i = sites
-            elif len(sites) == 1:
-                i = sites[0]
+        if len(sites_list) == 1:
+            i = sites_list[0]
             a = a_copy.tensors[i]
             b = b_copy.tensors[i]
             # sum over all three legs (p,l,r):
             val = oe.contract("ijk,ijk", a, b)
             return np.complex128(val)
 
-        if len(sites) == 2:
-            i, j = self._validate_bond_sites(sites, name="scalar-product bond")
+        i, j = self._validate_bond_sites(sites_list, name="scalar-product bond")
 
-            a_1 = a_copy.tensors[i]  # (p_i, l_i, r_i)
-            b_1 = b_copy.tensors[i]  # (p_i, l_i, r'_i)
-            a_2 = a_copy.tensors[j]  # (p_j, l_j=r_i, r_j)
-            b_2 = b_copy.tensors[j]  # (p_j, l'_j=r'_i, r_j)
+        a_1 = a_copy.tensors[i]  # (p_i, l_i, r_i)
+        b_1 = b_copy.tensors[i]  # (p_i, l_i, r'_i)
+        a_2 = a_copy.tensors[j]  # (p_j, l_j=r_i, r_j)
+        b_2 = b_copy.tensors[j]  # (p_j, l'_j=r'_i, r_j)
 
-            # Contraction: a_1(a,b,c), a_2(d,c,e), b_1(a,b,f), b_2(d,f,e)
-            val = oe.contract("abc,dce,abf,dfe->", a_1, a_2, b_1, b_2)
-            return np.complex128(val)
-
-        msg = f"Invalid `sites` argument: {sites!r}"
-        raise ValueError(msg)
+        # Contraction: a_1(a,b,c), a_2(d,c,e), b_1(a,b,f), b_2(d,f,e)
+        val = oe.contract("abc,dce,abf,dfe->", a_1, a_2, b_1, b_2)
+        return np.complex128(val)
 
     def expect_mpo(self, operator: MPO) -> np.complex128:
         r"""Return the full-chain MPO expectation value for the stored state.
@@ -1674,7 +1669,7 @@ class MPS:
                 if observable.sites is None:
                     msg = "Operator observables must have explicit sites."
                     raise ValueError(msg)
-                sites_list = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
+                sites_list = self._validate_observable_sites(observable.sites)
                 if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
                     if len(sites_list) == 1:
                         target = sites_list[0]
