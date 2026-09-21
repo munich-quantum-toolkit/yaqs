@@ -112,18 +112,24 @@ class MPS:
                 Character ``i`` selects site ``i``.
 
         Raises:
-            ValueError: If ``length`` is not positive or the provided ``state`` does not match a valid
-                initialization string.
+            TypeError: If ``length`` has an unsupported type.
+            ValueError: If ``length`` is not positive, tensor or physical-dimension counts do not
+                match ``length``, or the requested state configuration is invalid.
         """
-        if not isinstance(length, Integral) or isinstance(length, bool) or length < 1:
-            msg = "length must be a positive integer."
+        if not isinstance(length, Integral) or isinstance(length, bool):
+            msg = "length must be an integer."
+            raise TypeError(msg)
+        if length < 1:
+            msg = "length must be positive."
             raise ValueError(msg)
         length = int(length)
 
         self.flipped = False
         self._orthogonality_center: int | None = None
         if tensors is not None:
-            assert len(tensors) == length
+            if len(tensors) != length:
+                msg = f"Expected {length} MPS tensors, got {len(tensors)}."
+                raise ValueError(msg)
             self.tensors = tensors
         else:
             self.tensors = []
@@ -139,7 +145,9 @@ class MPS:
                 self.physical_dimensions.append(physical_dimensions)
         else:
             self.physical_dimensions = physical_dimensions
-        assert len(self.physical_dimensions) == length
+        if len(self.physical_dimensions) != length:
+            msg = f"Expected {length} physical dimensions, got {len(self.physical_dimensions)}."
+            raise ValueError(msg)
 
         def _bond_caps(target_dim: int) -> list[int]:
             """Compute feasible MPS bond dimensions for a target maximum.
@@ -292,7 +300,9 @@ class MPS:
                     self.tensors.append(tensor)
                     continue
                 elif state == "basis":
-                    assert basis_string is not None, "basis_string must be provided for 'basis' state initialization."
+                    if basis_string is None:
+                        msg = "basis_string must be provided for 'basis' state initialization."
+                        raise ValueError(msg)
                     self.init_mps_from_basis(basis_string, self.physical_dimensions)
                     break
                 else:
@@ -335,6 +345,70 @@ class MPS:
             msg = f"{name} must be in [0, {self.length - 1}], got {center!r}."
             raise ValueError(msg)
         return int(center)
+
+    def _validate_bond_sites(self, sites: object, *, name: str) -> tuple[int, int]:
+        """Validate an ordered nearest-neighbor bond.
+
+        Args:
+            sites: Candidate pair of site indices.
+            name: Quantity that uses the bond, for error messages.
+
+        Returns:
+            The validated pair as Python integers.
+
+        Raises:
+            TypeError: If ``sites`` is not a list of integers.
+            ValueError: If ``sites`` does not contain two ordered, adjacent, in-range indices.
+        """
+        if not isinstance(sites, list) or any(
+            isinstance(site, bool) or not isinstance(site, Integral) for site in sites
+        ):
+            msg = f"{name} sites must be a list of integers."
+            raise TypeError(msg)
+        if len(sites) != 2:
+            msg = f"{name} requires exactly two sites, got {sites!r}."
+            raise ValueError(msg)
+        i, j = (int(site) for site in sites)
+        if not 0 <= i < self.length or not 0 <= j < self.length:
+            msg = f"{name} sites must be in [0, {self.length - 1}], got {sites!r}."
+            raise ValueError(msg)
+        if j != i + 1:
+            msg = f"{name} sites must be ordered nearest neighbors, got {sites!r}."
+            raise ValueError(msg)
+        return i, j
+
+    def _validate_observable_sites(self, sites: object) -> list[int]:
+        """Validate one or two observable sites.
+
+        Args:
+            sites: One site or a list of one or two sites.
+
+        Returns:
+            Validated site indices as Python integers.
+
+        Raises:
+            TypeError: If a site or the site container has an invalid type.
+            ValueError: If the number of sites or a site index is invalid.
+        """
+        if isinstance(sites, Integral) and not isinstance(sites, bool):
+            site_values = [sites]
+        elif isinstance(sites, list):
+            site_values = sites
+        else:
+            msg = "observable sites must be an integer or a list of integers."
+            raise TypeError(msg)
+        if not 1 <= len(site_values) <= 2:
+            msg = f"observable must act on one or two sites, got {site_values!r}."
+            raise ValueError(msg)
+        if any(isinstance(site, bool) or not isinstance(site, Integral) for site in site_values):
+            msg = "observable sites must contain only integers."
+            raise TypeError(msg)
+        resolved_sites = [int(site) for site in site_values]
+        for site in resolved_sites:
+            if not 0 <= site < self.length:
+                msg = f"observable site must be in [0, {self.length - 1}], got {site}."
+                raise ValueError(msg)
+        return resolved_sites
 
     @staticmethod
     def _validate_decomposition(decomposition: str) -> None:
@@ -753,9 +827,7 @@ class MPS:
             np.float64: The entanglement entropy across the specified bond.
 
         """
-        assert len(sites) == 2, "Entropy is defined on a bond (two adjacent sites)."
-        i, j = sites
-        assert i + 1 == j, "Entropy is only defined for nearest-neighbor cut."
+        i, j = self._validate_bond_sites(sites, name="entropy")
 
         if self.tensors[i].shape[2] == 1:
             return np.float64(0.0)
@@ -788,10 +860,8 @@ class MPS:
             NDArray[np.float64]: The Schmidt spectrum (length 500),
             with unused entries filled with NaN.
         """
-        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
-        assert sites[0] + 1 == sites[1], "Schmidt spectrum only defined for nearest-neighbor cut."
+        i, j = self._validate_bond_sites(sites, name="Schmidt spectrum")
         top_schmidt_vals = 500
-        i, j = sites
 
         if self.tensors[i].shape[2] == 1:
             padded = np.full(top_schmidt_vals, np.nan)
@@ -854,16 +924,20 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                            Default is QR.
 
+        Raises:
+            ValueError: If the requested center is invalid or differs from the tracked center.
+
         """
         current_orthogonality_center = self._validate_center(
             current_orthogonality_center, name="current_orthogonality_center"
         )
         self._validate_decomposition(decomposition)
-        if self._orthogonality_center is not None:
-            assert self._orthogonality_center == current_orthogonality_center, (
+        if self._orthogonality_center is not None and self._orthogonality_center != current_orthogonality_center:
+            msg = (
                 f"shift_orthogonality_center_right: tracked center is {self._orthogonality_center}, "
                 f"but shift requested from site {current_orthogonality_center}."
             )
+            raise ValueError(msg)
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR" or current_orthogonality_center == self.length - 1:
             site_tensor, bond_tensor = right_qr(tensor)
@@ -911,16 +985,20 @@ class MPS:
             current_orthogonality_center: Site that currently holds the orthogonality center.
             decomposition: Decomposition used for the shift. ``"QR"`` is faster;
                 ``"SVD"`` can reduce the bond dimension.
+
+        Raises:
+            ValueError: If the requested center is invalid or differs from the tracked center.
         """
         current_orthogonality_center = self._validate_center(
             current_orthogonality_center, name="current_orthogonality_center"
         )
         self._validate_decomposition(decomposition)
-        if self._orthogonality_center is not None:
-            assert self._orthogonality_center == current_orthogonality_center, (
+        if self._orthogonality_center is not None and self._orthogonality_center != current_orthogonality_center:
+            msg = (
                 f"shift_orthogonality_center_left: tracked center is {self._orthogonality_center}, "
                 f"but shift requested from site {current_orthogonality_center}."
             )
+            raise ValueError(msg)
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR" or current_orthogonality_center == 0:
             site_tensor, bond_tensor = left_qr(tensor)
@@ -1172,20 +1250,18 @@ class MPS:
         Returns:
             np.complex128: The resulting scalar product as a complex number.
 
-        Raises:
-            ValueError: Invalid sites input
-
         Notes:
             When ``sites`` is set, this method contracts only the stored tensors
             at those sites. Use :meth:`norm`, :meth:`local_expect`, or
             :meth:`expect` for gauge-safe physical quantities.
         """
+        sites_list = None if sites is None else self._validate_observable_sites(sites)
         a_copy = copy.deepcopy(self)
         b_copy = copy.deepcopy(other)
         for i, tensor in enumerate(a_copy.tensors):
             a_copy.tensors[i] = np.conj(tensor)
 
-        if sites is None:
+        if sites_list is None:
             result = None
             for idx in range(self.length):
                 # contract at each site into a 4-leg tensor
@@ -1195,32 +1271,24 @@ class MPS:
             assert result is not None
             return np.complex128(np.squeeze(result))
 
-        if isinstance(sites, int) or len(sites) == 1:
-            if isinstance(sites, int):
-                i = sites
-            elif len(sites) == 1:
-                i = sites[0]
+        if len(sites_list) == 1:
+            i = sites_list[0]
             a = a_copy.tensors[i]
             b = b_copy.tensors[i]
             # sum over all three legs (p,l,r):
             val = oe.contract("ijk,ijk", a, b)
             return np.complex128(val)
 
-        if len(sites) == 2:
-            i, j = sites
-            assert j == i + 1, "Only nearest-neighbor two-site overlaps supported."
+        i, j = self._validate_bond_sites(sites_list, name="scalar-product bond")
 
-            a_1 = a_copy.tensors[i]  # (p_i, l_i, r_i)
-            b_1 = b_copy.tensors[i]  # (p_i, l_i, r'_i)
-            a_2 = a_copy.tensors[j]  # (p_j, l_j=r_i, r_j)
-            b_2 = b_copy.tensors[j]  # (p_j, l'_j=r'_i, r_j)
+        a_1 = a_copy.tensors[i]  # (p_i, l_i, r_i)
+        b_1 = b_copy.tensors[i]  # (p_i, l_i, r'_i)
+        a_2 = a_copy.tensors[j]  # (p_j, l_j=r_i, r_j)
+        b_2 = b_copy.tensors[j]  # (p_j, l'_j=r'_i, r_j)
 
-            # Contraction: a_1(a,b,c), a_2(d,c,e), b_1(a,b,f), b_2(d,f,e)
-            val = oe.contract("abc,dce,abf,dfe->", a_1, a_2, b_1, b_2)
-            return np.complex128(val)
-
-        msg = f"Invalid `sites` argument: {sites!r}"
-        raise ValueError(msg)
+        # Contraction: a_1(a,b,c), a_2(d,c,e), b_1(a,b,f), b_2(d,f,e)
+        val = oe.contract("abc,dce,abf,dfe->", a_1, a_2, b_1, b_2)
+        return np.complex128(val)
 
     def expect_mpo(self, operator: MPO) -> np.complex128:
         r"""Return the full-chain MPO expectation value for the stored state.
@@ -1569,7 +1637,8 @@ class MPS:
             column_index: Time or trajectory index for the column to fill.
 
         Raises:
-            ValueError: If an operator observable does not define sites.
+            TypeError: If an observable has an invalid site or bitstring type.
+            ValueError: If an observable has invalid sites or does not define required data.
 
         Notes:
             Deep-copies ``self`` once and reuses that working state for all observables.
@@ -1580,14 +1649,12 @@ class MPS:
         temp_state = copy.deepcopy(self)
         for obs_index, observable in enumerate(sim_params.sorted_observables):
             if observable.type == "diagnostic":
-                assert isinstance(observable.sites, list), "Given metric requires a list of sites"
-                assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
-                max_site = max(observable.sites)
-                min_site = min(observable.sites)
-                assert max_site - min_site == 1, "Entropy and Schmidt cuts must be nearest neighbor."
-                for s in observable.sites:
-                    assert s in range(self.length), f"Observable acting on non-existing site: {s}"
-                if not temp_state.check_covers_sites(observable.sites):
+                min_site, max_site = self._validate_bond_sites(
+                    observable.sites,
+                    name=f"{observable.name} diagnostic",
+                )
+                diagnostic_sites = [min_site, max_site]
+                if not temp_state.check_covers_sites(diagnostic_sites):
                     if temp_state.orthogonality_center is None:
                         temp_state.set_canonical_form(min_site)
                     else:
@@ -1595,20 +1662,22 @@ class MPS:
                         target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
                         temp_state.shift_center_to(target)
                 if observable.name == "entropy":
-                    results[obs_index, column_index] = temp_state.get_entropy(observable.sites)
+                    results[obs_index, column_index] = temp_state.get_entropy(diagnostic_sites)
                 elif observable.name == "schmidt_spectrum":
-                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(observable.sites)
+                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(diagnostic_sites)
 
             elif observable.type == "bitstring":
                 bitstring = observable.bitstring
-                assert bitstring is not None
+                if not isinstance(bitstring, str):
+                    msg = "Bitstring observables must define a string bitstring."
+                    raise TypeError(msg)
                 results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
 
             else:
                 if observable.sites is None:
                     msg = "Operator observables must have explicit sites."
                     raise ValueError(msg)
-                sites_list = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
+                sites_list = self._validate_observable_sites(observable.sites)
                 if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
                     if len(sites_list) == 1:
                         target = sites_list[0]
@@ -1638,18 +1707,7 @@ class MPS:
             known but misaligned; falls back to full contraction when the gauge is
             unknown (``None``).
         """
-        sites_list = None
-        if isinstance(observable.sites, int):
-            sites_list = [observable.sites]
-        elif isinstance(observable.sites, list):
-            sites_list = observable.sites
-
-        assert sites_list is not None, f"Invalid type in expect {type(observable.sites).__name__}"
-
-        assert len(sites_list) < 3, "Only one- and two-site observables are currently implemented."
-
-        for s in sites_list:
-            assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+        sites_list = self._validate_observable_sites(observable.sites)
 
         if self._orthogonality_center is None:
             exp = self.mixed_expectation(self, observable)
@@ -1897,16 +1955,35 @@ class MPS:
 
         Returns:
             float: Probability of obtaining the given bitstring under projective measurement.
+
+        Raises:
+            TypeError: If ``bitstring`` is not a string.
+            ValueError: If its length or a local state index is invalid.
         """
-        assert len(bitstring) == self.length, "Bitstring length must match number of sites"
+        if not isinstance(bitstring, str):
+            msg = "bitstring must be a string."
+            raise TypeError(msg)
+        if len(bitstring) != self.length:
+            msg = f"bitstring must contain {self.length} characters, got {len(bitstring)}."
+            raise ValueError(msg)
+        state_indices: list[int] = []
+        for site, char in enumerate(bitstring):
+            if not char.isdecimal():
+                msg = f"bitstring character at site {site} must be numeric, got {char!r}."
+                raise ValueError(msg)
+            state_index = int(char)
+            local_dim = self.physical_dimensions[site]
+            if not 0 <= state_index < local_dim:
+                msg = f"bitstring state index {state_index} at site {site} must be in [0, {local_dim - 1}]."
+                raise ValueError(msg)
+            state_indices.append(state_index)
+
         temp_state = copy.deepcopy(self)
         total_norm = 1.0
 
-        for site, char in enumerate(bitstring):
-            state_index = int(char)
+        for site, state_index in enumerate(state_indices):
             tensor = temp_state.tensors[site]
             local_dim = self.physical_dimensions[site]
-            assert 0 <= state_index < local_dim, f"Invalid state index {state_index} at site {site}"
 
             selected_state = np.zeros(local_dim)
             selected_state[state_index] = 1
@@ -1970,11 +2047,19 @@ class MPS:
         bond dimensions between consecutive tensors in the network are consistent.
         Specifically, it checks that the second dimension of each tensor matches the
         third dimension of the previous tensor.
+
+        Raises:
+            ValueError: If the tensor count or adjacent bond dimensions are inconsistent.
         """
-        assert len(self.tensors) == self.length, f"MPS has {len(self.tensors)} tensors but length {self.length}."
+        if len(self.tensors) != self.length:
+            msg = f"MPS has {len(self.tensors)} tensors but length {self.length}."
+            raise ValueError(msg)
         right_bond = self.tensors[0].shape[2]
-        for tensor in self.tensors[1::]:
-            assert tensor.shape[1] == right_bond
+        for site, tensor in enumerate(self.tensors[1:], start=1):
+            left_bond = tensor.shape[1]
+            if left_bond != right_bond:
+                msg = f"MPS bond between sites {site - 1} and {site} has dimensions {right_bond} and {left_bond}."
+                raise ValueError(msg)
             right_bond = tensor.shape[2]
 
     def check_canonical_form(self) -> list[int]:

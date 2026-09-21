@@ -397,6 +397,22 @@ def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMo
         raise ValueError(msg) from exc
 
 
+def _validate_observable_mix(observables: list[Observable]) -> None:
+    """Reject mixed projective-measurement and ordinary observables.
+
+    Args:
+        observables: Observables supplied for one simulation.
+
+    Raises:
+        ValueError: If the list contains both projective-measurement and ordinary observables.
+    """
+    has_pvm = any(observable.name == "pvm" for observable in observables)
+    has_ordinary = any(observable.name != "pvm" for observable in observables)
+    if has_pvm and has_ordinary:
+        msg = "Mixed observable and projective-measurement simulation is not supported."
+        raise ValueError(msg)
+
+
 def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Observable], tuple[int, ...]]:
     """Prepare a sorted evaluation order and a user-index to sorted-row mapping.
 
@@ -561,9 +577,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
-            "We currently have not implemented mixed observable and projective-measurement simulation."
-        )
+        _validate_observable_mix(obs_list)
         self.observables = obs_list
 
         n_steps = _validate_analog_time_grid(elapsed_time, dt)
@@ -701,9 +715,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
-        assert all(n.name == "pvm" for n in obs_list) or all(n.name != "pvm" for n in obs_list), (
-            "We currently have not implemented mixed observable and projective-measurement simulation."
-        )
+        _validate_observable_mix(obs_list)
         self.observables = obs_list
 
         self.shots = _validate_shots(shots)

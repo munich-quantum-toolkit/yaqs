@@ -800,6 +800,17 @@ def test_finite_state_machine() -> None:
     assert np.allclose(mpo.tensors[-1], np.transpose(right_bound, (2, 3, 0, 1)))
 
 
+def test_finite_state_machine_rejects_bond_mismatch() -> None:
+    """Finite-state-machine tensors must have matching adjacent bonds."""
+    mpo = MPO()
+    left_bound = np.zeros((1, 2, 2, 2), dtype=np.complex128)
+    inner = np.zeros((3, 3, 2, 2), dtype=np.complex128)
+    right_bound = np.zeros((3, 1, 2, 2), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="MPO tensors must have matching adjacent bond dimensions"):
+        mpo.finite_state_machine(3, left_bound, inner, right_bound)
+
+
 def test_custom_without_transpose_sets_physical_dimension() -> None:
     """custom(transpose=False) reads the physical index from axis 0."""
     pdim = 3
@@ -836,6 +847,17 @@ def test_custom() -> None:
     for original, created in zip(tensors, mpo.tensors, strict=True):
         assert original.shape == created.shape
         assert np.allclose(original, created)
+
+
+def test_custom_rejects_bond_mismatch() -> None:
+    """Custom MPO tensors must have matching adjacent bonds."""
+    tensors = [
+        np.zeros((2, 2, 1, 2), dtype=np.complex128),
+        np.zeros((2, 2, 3, 1), dtype=np.complex128),
+    ]
+
+    with pytest.raises(ValueError, match="MPO tensors must have matching adjacent bond dimensions"):
+        MPO().custom(tensors, transpose=False)
 
 
 def test_from_matrix() -> None:

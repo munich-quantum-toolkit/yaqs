@@ -1153,12 +1153,17 @@ class MPO:
             left_bound (NDArray[np.complex128]): The tensor at the left boundary.
             inner (NDArray[np.complex128]): The tensor for the inner sites.
             right_bound (NDArray[np.complex128]): The tensor at the right boundary.
+
+        Raises:
+            ValueError: If adjacent MPO tensors have inconsistent bond dimensions.
         """
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
             self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        assert self.check_if_valid_mpo(), "MPO initialized wrong"
+        if not self.check_if_valid_mpo():
+            msg = "MPO tensors must have matching adjacent bond dimensions."
+            raise ValueError(msg)
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
@@ -1180,13 +1185,18 @@ class MPO:
         Notes:
             This method sets the tensors, optionally transposes them, checks if the MPO is valid,
             and initializes the length and physical dimension of the MPO.
+
+        Raises:
+            ValueError: If adjacent MPO tensors have inconsistent bond dimensions.
         """
         self.tensors = tensors
         if transpose:
             for i, tensor in enumerate(self.tensors):
                 # left, right, sigma, sigma'
                 self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        assert self.check_if_valid_mpo(), "MPO initialized wrong"
+        if not self.check_if_valid_mpo():
+            msg = "MPO tensors must have matching adjacent bond dimensions."
+            raise ValueError(msg)
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
