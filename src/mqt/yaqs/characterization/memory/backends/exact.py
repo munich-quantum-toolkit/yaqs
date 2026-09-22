@@ -264,7 +264,7 @@ def simulate_exact(
             selects the all-zero state in the solver's native representation.
         parallel: Whether to parallelize sequence simulation.
         show_progress: Whether to show a progress bar.
-        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         _execution: Optional internal execution configuration.
         intervention_steps_list: Optional pre-built sequence grid (experiment geometries).
         static_ctx: Optional reusable MCWF static context (built when omitted for MCWF).

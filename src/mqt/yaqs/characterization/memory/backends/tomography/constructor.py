@@ -196,7 +196,7 @@ def run_all_sequences(
         noise_model: Optional open-system noise model.
         basis: Tomography basis name.
         basis_seed: Optional seed when ``basis="random"``.
-        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         show_progress: Whether to show a progress bar.
         _execution: Optional internal execution configuration.
 
@@ -337,7 +337,7 @@ def _construct_data(
         num_trajectories: Number of MCWF trajectories per sequence (forced to 1 if noiseless).
         basis: Tomography basis name.
         basis_seed: Optional seed used when ``basis="random"``.
-        solver: Stochastic solver name (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver name (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         show_progress: Whether to show a progress bar during simulation.
 
     Returns:
@@ -421,7 +421,7 @@ def build_process_tensor(
             for direct construction. The supported default, ``None``, retains all branches. A finite
             cap can violate process-tensor semantics, positivity, and causal normalization.
         n_sweeps: Non-negative integer number of MPO compression sweeps.
-        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         initial_rho: Optional expected site-0 reference after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
         _execution: Optional internal execution configuration.

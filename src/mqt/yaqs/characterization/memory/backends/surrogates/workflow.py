@@ -166,7 +166,7 @@ def build_training_dataset(
         timesteps: Optional process-tensor schedule evolution durations (defaults to
             ``[sim_params.dt] * (num_interventions + 1)``).
         init_mode: Initial-state sampling mode (see :func:`sample_initial_psi`).
-        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         intervention_style: Training intervention style (``"haar"``, ``"clifford"``, or
             ``"measure_prepare"``).
 
@@ -281,7 +281,8 @@ def train_surrogate_model(
         show_progress: Whether to show progress bars.
         timesteps: Optional per-step durations passed to :func:`build_training_dataset`.
         init_mode: Initial-state sampling mode passed to :func:`build_training_dataset`.
-        solver: Optional stochastic solver override passed to :func:`build_training_dataset`.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``) passed to
+            :func:`build_training_dataset`; defaults to ``"MCWF"``.
         intervention_style: Training intervention style passed to :func:`build_training_dataset`.
         model_kwargs: Optional keyword arguments forwarded to :class:`ProcessTensorSurrogate`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`ProcessTensorSurrogate.fit`.

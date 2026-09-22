@@ -333,7 +333,7 @@ def build_process_tensor_direct(
             normalization.
         n_sweeps: Non-negative integer number of MPO compression sweeps after each step.
         compress_every: Positive integer rank-1 accumulation batch size before intermediate compression.
-        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         initial_rho: Optional reference site-0 state after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
         parallel: Whether to parallelize branch extensions within each intervention step.
