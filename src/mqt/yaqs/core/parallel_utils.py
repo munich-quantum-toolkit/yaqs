@@ -18,6 +18,7 @@ from concurrent.futures import FIRST_COMPLETED, CancelledError, ProcessPoolExecu
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
+from threadpoolctl import threadpool_info, threadpool_limits
 from tqdm import tqdm
 
 from mqt.yaqs.core.linalg._threading import threadpool_limits_one  # ruff:ignore[import-private-name]
@@ -27,12 +28,6 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
 
 TRes = TypeVar("TRes")
-
-try:
-    from threadpoolctl import threadpool_info, threadpool_limits
-except ImportError:
-    threadpool_limits = None
-    threadpool_info = None
 
 MPContext = Literal["fork", "spawn", "auto"]
 
@@ -117,7 +112,7 @@ def get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.cont
 def limit_worker_threads(n_threads: int = 1) -> None:
     """Limit BLAS/OpenMP thread pools in the current process.
 
-    Sets environment variables and optional runtime hooks (numexpr, MKL,
+    Sets environment variables and runtime hooks (numexpr, MKL, and
     threadpoolctl) to avoid oversubscription when many worker processes run
     concurrently.
 
@@ -137,11 +132,10 @@ def limit_worker_threads(n_threads: int = 1) -> None:
         mkl = importlib.import_module("mkl")
         mkl.set_num_threads(n_threads)
 
-    if threadpool_limits is not None:
-        with contextlib.suppress(Exception):
-            threadpool_limits(limits=n_threads)
+    with contextlib.suppress(Exception):
+        threadpool_limits(limits=n_threads)
 
-    if os.environ.get("YAQS_THREAD_DEBUG", "") == "1" and threadpool_info is not None:
+    if os.environ.get("YAQS_THREAD_DEBUG", "") == "1":
         with contextlib.suppress(Exception):
             threadpool_info()
 

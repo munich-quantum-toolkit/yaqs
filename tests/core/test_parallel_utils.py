@@ -13,6 +13,7 @@ import contextlib
 import multiprocessing
 import os
 import sys
+from types import SimpleNamespace
 from typing import Any, cast
 
 import numba
@@ -116,6 +117,29 @@ def test_threading_config() -> None:
 
         with contextlib.suppress(Exception):
             numba.set_num_threads(original_numba_threads)
+
+
+def test_limit_worker_threads_applies_required_threadpool_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker setup always applies the mandatory threadpoolctl limit."""
+    limits_seen: list[int] = []
+    environment: dict[str, str] = {}
+
+    def missing_optional_module(name: str) -> None:
+        raise ImportError(name)
+
+    def record_thread_limit(*, limits: int) -> None:
+        limits_seen.append(limits)
+
+    monkeypatch.setattr(parallel_utils, "os", SimpleNamespace(environ=environment))
+    monkeypatch.setattr(parallel_utils, "importlib", SimpleNamespace(import_module=missing_optional_module))
+    monkeypatch.setattr(parallel_utils, "threadpool_limits", record_thread_limit)
+
+    parallel_utils.limit_worker_threads(2)
+
+    assert limits_seen == [2]
+    assert {environment[key] for key in parallel_utils.THREAD_ENV_VARS} == {"2"}
+    assert environment["OMP_DYNAMIC"] == "FALSE"
+    assert environment["MKL_DYNAMIC"] == "FALSE"
 
 
 def test_resolve_worker_ctx_and_unpack_flat_job() -> None:

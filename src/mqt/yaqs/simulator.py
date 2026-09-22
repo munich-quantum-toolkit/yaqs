@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import copy
 
-# ruff:file-ignore[module-import-not-at-top-of-file]
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
 # Thread caps are NOT set at module level to allow single-trajectory
@@ -58,37 +57,21 @@ import copy
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from itertools import starmap
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from numpy.typing import NDArray
+
     from .core.data_structures.mpo import MPO
     from .core.data_structures.noise_model import NoiseModel
     from .core.data_structures.observable import Observable
     from .core.parallel_utils import MPContext
-
-# Optional: extra control over threadpools inside worker processes.
-# We keep references as optionals, set by a guarded import.
-threadpool_limits: Callable[..., Any] | None
-threadpool_info: Callable[[], Any] | None
-try:
-    from threadpoolctl import threadpool_info as _threadpool_info
-    from threadpoolctl import threadpool_limits as _threadpool_limits
-except ImportError:  # pragma: no cover - optional dependency
-    threadpool_limits = None
-    threadpool_info = None
-else:
-    threadpool_limits = _threadpool_limits
-    threadpool_info = _threadpool_info
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
-from itertools import starmap
-from pathlib import Path
 
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
@@ -134,7 +117,6 @@ from .core.parallel_utils import (
     MPContext,
     available_cpus,
     call_serial_capped,
-    get_parallel_context,
     merge_execution_config,
     resolve_worker_ctx,
     run_backend_parallel,
@@ -159,16 +141,6 @@ def _select_analog_tjm_backend(order: int) -> Callable[..., Any]:
     validated_order = _validate_order(order)
     backends: dict[int, Callable[..., Any]] = {1: analog_tjm_1, 2: analog_tjm_2}
     return backends[validated_order]
-
-
-# ---------------------------------------------------------------------------
-# 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
-# ---------------------------------------------------------------------------
-TArg = TypeVar("TArg")
-TRes = TypeVar("TRes")
-
-# Backward-compatible alias for tests and docs that import the private name.
-_get_parallel_context = get_parallel_context
 
 
 # ---------------------------------------------------------------------------
@@ -1011,10 +983,6 @@ def _store_lindblad_final_state(
         )
 
 
-# Backward-compatible alias for in-module serial backend calls.
-_call_backend = call_serial_capped
-
-
 def _plan_digital_shots(
     sim_params: DigitalSimParams,
     *,
@@ -1285,7 +1253,7 @@ class Simulator:
             raise TypeError(msg)
 
         if noise_model is not None:
-            sample_seed = getattr(sim_params, "random_seed", None)
+            sample_seed = sim_params.random_seed
             noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=sample_seed))
 
         result = Result(sim_params=sim_params, noise_model=noise_model)

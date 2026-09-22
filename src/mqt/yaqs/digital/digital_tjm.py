@@ -633,7 +633,7 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
     Raises:
         ValueError: If the gate mode is unknown or heterogeneous SWAP routing is unsafe.
     """
-    gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    gate_mode: GateMode = sim_params.gate_mode
     if gate_mode not in {"tdvp", "full-tdvp", "swaps", "mpo"}:
         msg = f"Unknown gate_mode: {gate_mode!r}"
         raise ValueError(msg)

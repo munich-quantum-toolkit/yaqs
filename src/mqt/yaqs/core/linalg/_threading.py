@@ -15,16 +15,14 @@ package do not need the cap.
 
 from __future__ import annotations
 
-import contextlib
+from typing import TYPE_CHECKING
 
-try:
-    from threadpoolctl import threadpool_limits
-except ImportError:
-    threadpool_limits = None
+from threadpoolctl import threadpool_limits
+
+if TYPE_CHECKING:
+    import contextlib
 
 
 def threadpool_limits_one() -> contextlib.AbstractContextManager[None]:
     """Return a context manager that caps BLAS/OpenMP pools to one thread."""
-    if threadpool_limits is None:
-        return contextlib.nullcontext()
     return threadpool_limits(limits=1)
