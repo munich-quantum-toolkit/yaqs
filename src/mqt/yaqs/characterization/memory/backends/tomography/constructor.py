@@ -211,7 +211,7 @@ def run_all_sequences(
 
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
-    stochastic_solver = resolve_stochastic_solver(local_params, solver=solver)
+    stochastic_solver = resolve_stochastic_solver(solver=solver)
 
     basis_set, choi_basis, choi_indices, _choi_feat = assemble_fixed_basis(basis=basis, basis_seed=basis_seed)
     choi_duals = compute_dual_choi_basis(choi_basis)
@@ -350,7 +350,7 @@ def _construct_data(
         dt = float(sim_params.dt)
         timesteps = [dt, dt]
 
-    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
+    stochastic_solver = resolve_stochastic_solver(solver=solver)
     valid_solvers = {"MCWF", "TJM"}
     if stochastic_solver not in valid_solvers:
         msg = f"Tomography requires solvers {valid_solvers}, got {stochastic_solver!r}."

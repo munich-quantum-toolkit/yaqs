@@ -179,7 +179,6 @@ def validate_stochastic_solver(solver: StochasticSolver | str | None) -> Stochas
 
 
 def resolve_stochastic_solver(
-    sim_params: AnalogSimParams,
     *,
     solver: StochasticSolver | None = None,
     representation: CharacterizerRepresentation | None = None,
@@ -189,8 +188,7 @@ def resolve_stochastic_solver(
     """Return the stochastic unraveling backend for process-tensor schedule simulation.
 
     Args:
-        sim_params: Analog simulation parameters (legacy ``solver`` attribute may apply).
-        solver: Explicit solver override, or ``None`` to infer from ``representation`` / ``sim_params``.
+        solver: Explicit solver override. If omitted, infer from ``representation`` or default to MCWF.
         representation: Optional characterizer representation (``"vector"``, ``"mps"``, or ``"auto"``).
         chain_length: Chain length required when ``representation`` is set.
         vector_max_qubits: Maximum qubits for ``representation="auto"`` to select the vector backend.
@@ -213,9 +211,6 @@ def resolve_stochastic_solver(
             vector_max_qubits=vector_max_qubits,
         )
         return representation_to_solver(rep)
-    legacy = getattr(sim_params, "solver", None)
-    if legacy in {"MCWF", "TJM"}:
-        return legacy
     return "MCWF"
 
 

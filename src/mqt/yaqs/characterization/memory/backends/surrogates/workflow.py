@@ -192,7 +192,7 @@ def build_training_dataset(
         raise ValueError(msg)
 
     _require_torch()
-    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
+    stochastic_solver = resolve_stochastic_solver(solver=solver)
 
     static_ctx: MCWFContext | None = None
     if stochastic_solver == "MCWF":

@@ -148,7 +148,7 @@ def simulate_sequences(
         "mcwf_static_ctx": static_ctx,
         "mcwf_static_ctx_list": static_ctx_list,
         "_times_cache": {},
-        "solver": resolve_stochastic_solver(sim_params, solver=solver),
+        "solver": resolve_stochastic_solver(solver=solver),
     }
     if record_step_states:
         job_payload["e_features_rows"] = e_features_rows

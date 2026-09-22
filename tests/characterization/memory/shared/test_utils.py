@@ -204,20 +204,16 @@ def test_resolve_characterizer_representation_branches() -> None:
 
 
 def test_representation_to_solver_and_resolve_stochastic_solver() -> None:
-    """Solver resolution honors explicit solver, representation, and legacy params."""
+    """Solver resolution honors explicit solver, representation, and the MCWF default."""
     assert representation_to_solver("vector") == "MCWF"
     assert representation_to_solver("mps") == "TJM"
 
-    params = AnalogSimParams(dt=0.1)
-    assert resolve_stochastic_solver(params, solver="TJM") == "TJM"
-    assert resolve_stochastic_solver(params, representation="vector", chain_length=1) == "MCWF"
+    assert resolve_stochastic_solver(solver="TJM") == "TJM"
+    assert resolve_stochastic_solver(solver="TJM", representation="vector", chain_length=1) == "TJM"
+    assert resolve_stochastic_solver(representation="vector", chain_length=1) == "MCWF"
     with pytest.raises(ValueError, match="chain_length"):
-        resolve_stochastic_solver(params, representation="mps")
-
-    class _LegacyParams(AnalogSimParams):
-        solver: str = "TJM"
-
-    assert resolve_stochastic_solver(_LegacyParams(dt=0.1)) == "TJM"
+        resolve_stochastic_solver(representation="mps")
+    assert resolve_stochastic_solver() == "MCWF"
 
 
 def test_reprepare_site_zero_helpers_mcwf_and_mps() -> None:
