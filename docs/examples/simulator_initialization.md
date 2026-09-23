@@ -182,7 +182,7 @@ picks the best option per OS:
 | `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.parallel_utils import get_parallel_context
+from mqt.yaqs.simulator import get_parallel_context
 
 for choice in ("auto", "fork", "spawn"):
     try:
