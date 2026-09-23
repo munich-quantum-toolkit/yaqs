@@ -12,6 +12,8 @@ releases may include breaking changes.
 
 ### Added
 
+- hardened validation and release checks, removed legacy fallbacks ([#609])
+  ([**@aaronleesander**])
 - validated input throughout characterization module ([#606])
   ([**@aaronleesander**])
 - added validation checks for Hamiltonian inputs and expectation values ([#603])
@@ -286,6 +288,8 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#609]: https://github.com/munich-quantum-toolkit/yaqs/pull/609
+[#606]: https://github.com/munich-quantum-toolkit/yaqs/pull/606
 [#603]: https://github.com/munich-quantum-toolkit/yaqs/pull/603
 [#602]: https://github.com/munich-quantum-toolkit/yaqs/pull/602
 [#601]: https://github.com/munich-quantum-toolkit/yaqs/pull/601
