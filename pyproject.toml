@@ -219,7 +219,7 @@ filterwarnings = [
 log_level = "INFO"
 markers = [
   "jit: requires Numba JIT compilation and verifies compiled dispatchers",
-  "release: slow scientific validation for release and scheduled test runs",
+  "release: slow scientific validation for manual release test runs",
 ]
 minversion = "9.0"
 pythonpath = [ "tests" ]
