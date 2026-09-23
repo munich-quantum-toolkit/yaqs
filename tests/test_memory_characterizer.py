@@ -19,6 +19,7 @@ import pytest
 from torch_support import requires_torch
 
 from mqt.yaqs import MPO, AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.operational_memory.results import CharacterizationResult
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 
@@ -386,6 +387,7 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
+    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
     with pytest.raises(ValueError, match="initial_rho is supported only for surrogate characterization"):
         mc.characterize(

@@ -31,6 +31,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
+    _validate_analog_time_grid,
     _validate_tdvp_sweeps,
 )
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
@@ -88,8 +89,6 @@ def test_analog_simparams_zero_elapsed_time() -> None:
     [
         (100.1, 0.1),
         (1.0, 1.0 / 9015),
-        # Fine dt vs O(1) elapsed: residual is ~ulp(elapsed), not a fraction of dt.
-        (1.23456789, 1e-8),
     ],
 )
 def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt: float) -> None:
@@ -97,6 +96,11 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
     params = AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=elapsed_time, dt=dt)
 
     assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
+
+
+def test_analog_time_grid_validator_accepts_fine_float64_ratio_without_allocating_grid() -> None:
+    """Fine ``dt`` rounding is valid without constructing its 123-million-point grid."""
+    assert _validate_analog_time_grid(1.23456789, 1e-8) == 123_456_789
 
 
 @pytest.mark.parametrize(

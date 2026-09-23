@@ -15,6 +15,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 from tests.characterization.noise.fixtures import NoiseTestConfig, build_propagator
@@ -60,6 +61,7 @@ def test_characterize_smoke(noise_test_config: NoiseTestConfig) -> None:
         seed=1,
     )
 
+    assert isinstance(result, NoiseCharacterizationResult)
     assert result.best_loss >= 0.0
     assert result.ref_traj is not None
     assert result.fit_traj is not None
