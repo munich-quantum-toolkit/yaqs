@@ -32,11 +32,11 @@ jobs:
           - runs-on: ubuntu-24.04
             sessions: '["tests", "minimums-3.11", "minimums-3.14", "jit-tests", "release-package"]'
           - runs-on: ubuntu-24.04-arm
-            sessions: '["tests-3.14"]'
+            sessions: '["tests"]'
           - runs-on: macos-26
-            sessions: '["tests-3.14"]'
+            sessions: '["tests"]'
           - runs-on: windows-2025
-            sessions: '["tests-3.14", "jit-tests"]'
+            sessions: '["tests", "jit-tests"]'
     uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@ace7363a2a8e036e5efc6717be67f1eda29a120e # v2.4.2
     with:
       runs-on: ${{ matrix.runs-on }}
