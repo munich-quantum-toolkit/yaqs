@@ -270,6 +270,16 @@ other cases, including `gate_mode="swaps"`, use the extended gate MPO.
 Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window
 via `evolve_window`.
 
+```{warning}
+`"tdvp"` and `"full-tdvp"` are variational, approximate gate paths. With one
+sweep, a long-range entangling gate can fail to create every required Schmidt
+rank. This affects a long-range CZ on a product MPS, rank growth from two to
+four after a shallow preparation, and multi-gate RZZ ladders. More sweeps can
+improve some cases but do not guarantee exact gate application. Use the default
+`"mpo"` mode, or `"swaps"` for two-qubit gates, when gate-application accuracy
+up to the configured truncation is required.
+```
+
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into
 multiple substeps of equal total time. Values greater than `1` are opt-in and
 may improve accuracy on some circuits. The setting applies to all TDVP kernels
