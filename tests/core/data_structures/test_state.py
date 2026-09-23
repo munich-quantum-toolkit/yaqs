@@ -174,6 +174,15 @@ def test_from_mps_wraps_existing() -> None:
     assert spec.mps is mps
 
 
+def test_from_mps_rejects_mutated_invalid_tensor_structure() -> None:
+    """The public wrapper validates an MPS that was mutated after construction."""
+    mps = MPS(2, state="zeros")
+    mps.tensors[1] = np.zeros((2, 2, 1), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="bond between sites 0 and 1"):
+        State.from_mps(mps)
+
+
 def test_init_from_tensor_list() -> None:
     """List of cores is encoded as MPS at construction."""
     mps_ref = MPS(2, state="zeros")
@@ -245,6 +254,39 @@ def test_state_vector_explicit_length() -> None:
     vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
     spec = State(vector=vec, length=2)
     assert spec.length == 2
+
+
+def test_state_vector_infers_and_validates_mixed_dimensions() -> None:
+    """A dense vector uses supplied local dimensions when length is omitted."""
+    spec = State(vector=np.ones(6, dtype=np.complex128), physical_dimensions=[2, 3])
+    assert spec.length == 2
+
+    with pytest.raises(ValueError, match="vector size 2 does not match Hilbert dimension 3"):
+        State(vector=np.ones(2, dtype=np.complex128), physical_dimensions=[3])
+
+
+def test_state_vector_infers_uniform_dimensions_without_length() -> None:
+    """A scalar local dimension determines the chain length from the vector size."""
+    state = State(vector=np.ones(9, dtype=np.complex128), physical_dimensions=3)
+
+    assert state.length == 2
+    assert state.physical_dimensions == 3
+
+
+def test_state_vector_rejects_ambiguous_dimension_layouts() -> None:
+    """One-dimensional and empty layouts require an explicit site count."""
+    with pytest.raises(ValueError, match="length is required when physical_dimensions=1"):
+        State(vector=np.ones(1, dtype=np.complex128), physical_dimensions=1)
+    with pytest.raises(ValueError, match="physical_dimensions must contain at least one site"):
+        State(vector=np.ones(1, dtype=np.complex128), physical_dimensions=[])
+
+
+def test_state_vector_does_not_infer_zero_sites() -> None:
+    """A one-element vector needs an explicit one-dimensional site layout."""
+    with pytest.raises(ValueError, match="at least one site"):
+        State(vector=np.ones(1, dtype=np.complex128))
+
+    assert State(vector=np.ones(1, dtype=np.complex128), physical_dimensions=[1]).length == 1
 
 
 def test_state_density_matrix_explicit_length() -> None:
@@ -369,6 +411,12 @@ def test_state_vector_zero_norm_raises() -> None:
     """Zero state vectors are rejected at construction."""
     with pytest.raises(ValueError, match="non-zero"):
         State(vector=np.zeros(2, dtype=np.complex128))
+
+
+def test_state_density_matrix_rejects_negative_eigenvalue() -> None:
+    """Manual density matrices must be positive semidefinite."""
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        State(density_matrix=np.diag([1.1, -0.1]).astype(np.complex128))
 
 
 def test_state_density_matrix_renormalizes_trace() -> None:

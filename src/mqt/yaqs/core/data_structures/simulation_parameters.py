@@ -15,17 +15,16 @@ time, time steps, bond dimension limits, and thresholds. Simulation outputs are 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 import numpy as np
 
 from mqt.yaqs.core.linalg.svd_utils import TruncMode  # ruff: ignore[typing-only-first-party-import]
 
-from .._validation import validate_integer
-
-if TYPE_CHECKING:
-    from .observable import Observable
+from .._validation import validate_bool, validate_finite_real, validate_integer
+from .observable import Observable
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
@@ -71,24 +70,18 @@ def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
     return preset
 
 
-def _validate_random_seed(random_seed: int | None) -> None:
-    """Validate ``random_seed`` before storing it on simulation parameter objects.
+def _validate_random_seed(random_seed: int | None) -> int | None:
+    """Validate and normalize a simulation random seed.
 
     Args:
         random_seed: Base seed for reproducible stochastic runs, or ``None`` for unseeded RNG.
 
-    Raises:
-        TypeError: If ``random_seed`` is not ``None`` or an ``int``.
-        ValueError: If ``random_seed`` is negative.
+    Returns:
+        The seed normalized to a Python integer, or ``None``.
     """
     if random_seed is None:
-        return
-    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
-        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
-        raise TypeError(msg)
-    if random_seed < 0:
-        msg = f"random_seed must be non-negative, got {random_seed}."
-        raise ValueError(msg)
+        return None
+    return validate_integer(random_seed, name="random_seed", minimum=0)
 
 
 def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
@@ -168,6 +161,25 @@ def _validate_analog_time_grid(elapsed_time: float, dt: float) -> int:
         )
         raise ValueError(msg)
     return n_steps
+
+
+def _build_analog_time_grid(elapsed_time: float, dt: float) -> tuple[float, float, np.ndarray]:
+    """Validate analog time controls and construct their complete fixed-step grid.
+
+    Args:
+        elapsed_time: Total evolution time.
+        dt: Fixed evolution step.
+
+    Returns:
+        Normalized elapsed time, normalized step size, and the corresponding time grid.
+    """
+    n_steps = _validate_analog_time_grid(elapsed_time, dt)
+    elapsed = float(elapsed_time)
+    step = float(dt)
+    times = step * np.arange(n_steps + 1, dtype=np.float64)
+    if n_steps > 0:
+        times[-1] = elapsed
+    return elapsed, step, times
 
 
 def _validate_gate_mode(mode: GateMode) -> GateMode:
@@ -291,11 +303,11 @@ def _validate_krylov_tol(krylov_tol: float) -> float:
     Raises:
         ValueError: If ``krylov_tol`` is non-finite or not strictly positive.
     """
-    krylov_tol = float(krylov_tol)
-    if not np.isfinite(krylov_tol) or krylov_tol <= 0.0:
-        msg = f"krylov_tol must be a finite positive float, got {krylov_tol!r}."
+    normalized = validate_finite_real(krylov_tol, name="krylov_tol")
+    if normalized <= 0.0:
+        msg = f"krylov_tol must be positive, got {normalized!r}."
         raise ValueError(msg)
-    return krylov_tol
+    return normalized
 
 
 def _validate_svd_threshold(svd_threshold: float) -> float:
@@ -313,11 +325,11 @@ def _validate_svd_threshold(svd_threshold: float) -> float:
     Raises:
         ValueError: If ``svd_threshold`` is non-finite or negative.
     """
-    svd_threshold = float(svd_threshold)
-    if not np.isfinite(svd_threshold) or svd_threshold < 0.0:
-        msg = f"svd_threshold must be a finite non-negative float, got {svd_threshold!r}."
+    normalized = validate_finite_real(svd_threshold, name="svd_threshold")
+    if normalized < 0.0:
+        msg = f"svd_threshold must be non-negative, got {normalized!r}."
         raise ValueError(msg)
-    return svd_threshold
+    return normalized
 
 
 def _resolve_max_bond_dim(max_bond_dim: int | object | None, preset_value: int | None) -> int | None:
@@ -404,13 +416,54 @@ def _validate_observable_mix(observables: list[Observable]) -> None:
         observables: Observables supplied for one simulation.
 
     Raises:
+        TypeError: If an entry is not an :class:`Observable`.
         ValueError: If the list contains both projective-measurement and ordinary observables.
     """
+    for index, observable in enumerate(observables):
+        if not isinstance(observable, Observable):
+            msg = f"observables[{index}] must be an Observable, got {type(observable).__name__}."
+            raise TypeError(msg)
     has_pvm = any(observable.name == "pvm" for observable in observables)
     has_ordinary = any(observable.name != "pvm" for observable in observables)
     if has_pvm and has_ordinary:
         msg = "Mixed observable and projective-measurement simulation is not supported."
         raise ValueError(msg)
+
+
+def _validate_multi_time_observables(value: object) -> list[tuple[Observable, Observable]]:
+    """Validate and normalize two-time observable pairs.
+
+    Args:
+        value: ``None`` or a sequence of two-element observable sequences.
+
+    Returns:
+        Observable pairs normalized to a list of tuples.
+
+    Raises:
+        TypeError: If the outer value is not a sequence, an entry is not a pair,
+            or either pair element is not an :class:`Observable`.
+        ValueError: If a pair contains an unsupported observable type.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        msg = "multi_time_observables must be a sequence of Observable pairs."
+        raise TypeError(msg)
+
+    pairs: list[tuple[Observable, Observable]] = []
+    for index, pair in enumerate(value):
+        if isinstance(pair, (str, bytes)) or not isinstance(pair, Sequence) or len(pair) != 2:
+            msg = f"multi_time_observables[{index}] must be a pair of Observable objects."
+            raise TypeError(msg)
+        first, second = pair
+        if not isinstance(first, Observable) or not isinstance(second, Observable):
+            msg = f"multi_time_observables[{index}] must be a pair of Observable objects."
+            raise TypeError(msg)
+        if any(observable.type != "operator" or observable.interaction not in {1, 2} for observable in pair):
+            msg = f"multi_time_observables[{index}] must contain one- or two-site operator observables."
+            raise ValueError(msg)
+        pairs.append((first, second))
+    return pairs
 
 
 def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Observable], tuple[int, ...]]:
@@ -565,31 +618,23 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
                 one compression and renormalization after each ``dt`` step.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-            multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
-                pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
-                case ``(O, O)``.
+            multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of
+                one- or two-site operator pairs ``(A, B)`` evaluated as
+                ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special case ``(O, O)``.
             tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
                 symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
                 Default is ``"2site"``.
         """
-        _validate_random_seed(random_seed)
+        normalized_seed = _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
         _validate_observable_mix(obs_list)
         self.observables = obs_list
 
-        n_steps = _validate_analog_time_grid(elapsed_time, dt)
-        self.elapsed_time = float(elapsed_time)
-        self.dt = float(dt)
-        # Fixed-dt grid: backends evolve ``n_steps`` intervals of ``dt``. Pin the final
-        # stamp to ``elapsed_time`` only after the integer-multiple check (avoids float dust
-        # such as ``0.1 * 3 != 0.3`` without mislabeling non-integral durations).
-        self.times = self.dt * np.arange(n_steps + 1, dtype=np.float64)
-        if n_steps > 0:
-            self.times[-1] = self.elapsed_time
-        self.sample_timesteps = sample_timesteps
+        self.elapsed_time, self.dt, self.times = _build_analog_time_grid(elapsed_time, dt)
+        self.sample_timesteps = validate_bool(sample_timesteps, name="sample_timesteps")
         self.num_traj = _validate_num_traj(num_traj if num_traj is not None else preset_values["num_traj"])
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.trunc_mode = _validate_trunc_mode(trunc_mode)
@@ -599,11 +644,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = _validate_order(order)
         self.evolution_mode = _validate_evolution_mode(evolution_mode)
-        self.get_state = get_state
-        self.random_seed = random_seed
-        self.multi_time_observables: list[tuple[Observable, Observable]] = (
-            [] if multi_time_observables is None else list(multi_time_observables)
-        )
+        self.get_state = validate_bool(get_state, name="get_state")
+        self.random_seed = normalized_seed
+        self.multi_time_observables = _validate_multi_time_observables(multi_time_observables)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
         self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
@@ -618,7 +661,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
     output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
     state propagation is itself meaningful there.
     Observables and shots may be requested together; shots sample bitstrings from amplitudes
-    and do not projectively measure the configured observables.
+    and do not projectively measure the configured observables. Bitstring observables and
+    shot counts require qubit dimensions at every measured site.
 
     ``num_traj`` and ``shots`` are independent controls:
 
@@ -690,6 +734,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             shots: Total bitstring-sample budget for computational-basis readout, or
                 ``None`` to skip. The budget must be positive when set. It is independent
                 of ``num_traj``; with noise, the budget is distributed across trajectories.
+                Binary shot output requires an all-qubit state layout.
             num_traj: Positive number of noisy stochastic trajectories used to estimate
                 observables and trajectory diagnostics. Ignored for noiseless runs
                 (one trajectory is enough). When ``shots < num_traj`` in a noisy
@@ -711,7 +756,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP integrator geometry (default ``"2site"``).
 
         """
-        _validate_random_seed(random_seed)
+        normalized_seed = _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
@@ -729,27 +774,47 @@ class DigitalSimParams(_ObservableOrderingMixin):
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
-        self.get_state = get_state
-        self.sample_layers = sample_layers
+        self.get_state = validate_bool(get_state, name="get_state")
+        self.sample_layers = validate_bool(sample_layers, name="sample_layers")
         self.num_mid_measurements = _validate_num_mid_measurements(num_mid_measurements)
-        self.random_seed = random_seed
+        self.random_seed = normalized_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
         self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
 def _validate_simulation_controls(sim_params: AnalogSimParams | DigitalSimParams) -> None:
-    """Validate mutable allocation and execution controls before a simulation run.
+    """Validate and normalize mutable controls before a simulation run.
+
+    Analog validation also rebuilds :attr:`AnalogSimParams.times` from the
+    current ``elapsed_time`` and ``dt`` values.
 
     Args:
         sim_params: Analog or digital parameters supplied to an execution boundary.
 
     """
-    _validate_num_traj(sim_params.num_traj)
-    _validate_max_bond_dim(sim_params.max_bond_dim)
-    _validate_tdvp_sweeps(sim_params.tdvp_sweeps)
+    sim_params.observables = list(sim_params.observables)
+    _validate_observable_mix(sim_params.observables)
+    sim_params.num_traj = _validate_num_traj(sim_params.num_traj)
+    sim_params.max_bond_dim = _validate_max_bond_dim(sim_params.max_bond_dim)
+    sim_params.trunc_mode = _validate_trunc_mode(sim_params.trunc_mode)
+    sim_params.svd_threshold = _validate_svd_threshold(sim_params.svd_threshold)
+    sim_params.krylov_tol = _validate_krylov_tol(sim_params.krylov_tol)
+    sim_params.get_state = validate_bool(sim_params.get_state, name="get_state")
+    sim_params.random_seed = _validate_random_seed(sim_params.random_seed)
+    sim_params.tdvp_sweeps = _validate_tdvp_sweeps(sim_params.tdvp_sweeps)
+    sim_params.tdvp_mode = _validate_tdvp_mode(sim_params.tdvp_mode)
     if isinstance(sim_params, AnalogSimParams):
-        _validate_order(sim_params.order)
+        sim_params.elapsed_time, sim_params.dt, sim_params.times = _build_analog_time_grid(
+            sim_params.elapsed_time,
+            sim_params.dt,
+        )
+        sim_params.sample_timesteps = validate_bool(sim_params.sample_timesteps, name="sample_timesteps")
+        sim_params.order = _validate_order(sim_params.order)
+        sim_params.evolution_mode = _validate_evolution_mode(sim_params.evolution_mode)
+        sim_params.multi_time_observables = _validate_multi_time_observables(sim_params.multi_time_observables)
         return
-    _validate_shots(sim_params.shots)
-    _validate_num_mid_measurements(sim_params.num_mid_measurements)
+    sim_params.shots = _validate_shots(sim_params.shots)
+    sim_params.sample_layers = validate_bool(sim_params.sample_layers, name="sample_layers")
+    sim_params.num_mid_measurements = _validate_num_mid_measurements(sim_params.num_mid_measurements)
+    sim_params.gate_mode = _validate_gate_mode(sim_params.gate_mode)

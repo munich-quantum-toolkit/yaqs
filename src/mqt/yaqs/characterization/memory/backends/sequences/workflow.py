@@ -83,7 +83,7 @@ def simulate_sequences(
         context_vec: Optional static context vector attached to each sequence record when
             ``record_step_states=True``. Raises :class:`ValueError` when set while
             ``record_step_states=False``.
-        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
 
     Returns:
         If ``record_step_states=True``, a list of :class:`SequenceRecord`. If
@@ -148,7 +148,7 @@ def simulate_sequences(
         "mcwf_static_ctx": static_ctx,
         "mcwf_static_ctx_list": static_ctx_list,
         "_times_cache": {},
-        "solver": resolve_stochastic_solver(sim_params, solver=solver),
+        "solver": resolve_stochastic_solver(solver=solver),
     }
     if record_step_states:
         job_payload["e_features_rows"] = e_features_rows

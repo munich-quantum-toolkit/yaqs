@@ -333,7 +333,7 @@ def build_process_tensor_direct(
             normalization.
         n_sweeps: Non-negative integer number of MPO compression sweeps after each step.
         compress_every: Positive integer rank-1 accumulation batch size before intermediate compression.
-        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         initial_rho: Optional reference site-0 state after ``U_0``.
         initial_rho_atol: Tolerance for optional ``initial_rho`` validation.
         parallel: Whether to parallelize branch extensions within each intervention step.
@@ -365,7 +365,7 @@ def build_process_tensor_direct(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
+    stochastic_solver = resolve_stochastic_solver(solver=solver)
     if stochastic_solver not in {"MCWF", "TJM"}:
         msg = f"Direct construction requires solvers MCWF or TJM, got {stochastic_solver!r}."
         raise ValueError(msg)

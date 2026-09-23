@@ -182,13 +182,8 @@ picks the best option per OS:
 | `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.parallel_utils import get_parallel_context
-
-for choice in ("auto", "fork", "spawn"):
-    try:
-        get_parallel_context(choice)
-    except ValueError:
-        continue
+automatic_context = Simulator(mp_context="auto")
+portable_context = Simulator(mp_context="spawn")
 ```
 
 If you mix YAQS with GPU libraries or anything that does not survive `fork()`,

@@ -19,6 +19,7 @@ import pytest
 from torch_support import requires_torch
 
 from mqt.yaqs import MPO, AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory.operational_memory.results import CharacterizationResult
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 
@@ -60,6 +61,39 @@ def _paper_params() -> AnalogSimParams:
 
 def _paper_mc() -> MemoryCharacterizer:
     return MemoryCharacterizer(parallel=False, show_progress=False)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"representation": "AUTO"}, ValueError, "representation must be one of"),
+        ({"vector_max_qubits": -1}, ValueError, "vector_max_qubits must be >= 0"),
+    ],
+)
+def test_memory_characterizer_rejects_invalid_constructor_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Constructor settings fail before a characterization workflow starts."""
+    with pytest.raises(error, match=match):
+        MemoryCharacterizer(**cast("Any", kwargs))
+
+
+def test_memory_characterizer_revalidates_mutated_simulation_controls_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Memory workflows reject invalid post-construction controls before backend dispatch."""
+    params = AnalogSimParams()
+    params.order = 3
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", pytest.fail)
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._build_process_tensor", pytest.fail)
+
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            Hamiltonian.ising(1, J=0.0, g=0.0),
+            params,
+        )
 
 
 def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, num_interventions: int = _PAPER_K) -> ProbeSet:
@@ -353,6 +387,7 @@ def test_build_process_tensor_then_characterize(ham_and_params: tuple[Hamiltonia
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     pt = mc.build_process_tensor(ham, params, timesteps=[0.1, 0.1], num_trajectories=12, return_type="dense")
     out = mc.characterize(pt, cut=1, num_interventions=1, n_pasts=3, n_futures=3)
+    assert isinstance(out, CharacterizationResult)
     assert out.entropy(1) >= 0.0
     with pytest.raises(ValueError, match="initial_rho is supported only for surrogate characterization"):
         mc.characterize(

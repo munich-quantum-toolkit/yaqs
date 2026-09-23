@@ -14,7 +14,7 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -466,10 +466,24 @@ def test_checker_rejects_non_real_fidelity_threshold(fidelity: object) -> None:
         EquivalenceChecker(fidelity=fidelity)  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.parametrize("threshold", [-0.1, np.nan, np.inf])
+def test_checker_rejects_invalid_svd_threshold(threshold: float) -> None:
+    """The SVD threshold must be finite and non-negative."""
+    with pytest.raises(ValueError, match="threshold must be"):
+        EquivalenceChecker(threshold=threshold)
+
+
+@pytest.mark.parametrize("threshold", [True, "1e-6", 1 + 0j])
+def test_checker_rejects_non_real_svd_threshold(threshold: object) -> None:
+    """Boolean, string, and complex values are not real SVD thresholds."""
+    with pytest.raises(TypeError, match="threshold must be a real number"):
+        EquivalenceChecker(threshold=threshold)  # ty: ignore[invalid-argument-type]
+
+
 @pytest.mark.parametrize("max_workers", [0, -1])
 def test_checker_rejects_non_positive_max_workers(max_workers: int) -> None:
     """``max_workers`` must be positive when provided."""
-    with pytest.raises(ValueError, match="positive"):
+    with pytest.raises(ValueError, match=r"max_workers must be >= 1"):
         EquivalenceChecker(max_workers=max_workers)
 
 
@@ -488,6 +502,50 @@ def test_checker_rejects_non_int_max_workers() -> None:
 def test_equivalence_checker_defaults_parallel_true() -> None:
     """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
     assert EquivalenceChecker().parallel is True
+
+
+def test_equivalence_checker_accepts_numpy_ensemble_size() -> None:
+    """A NumPy integer reaches the shared per-call validator."""
+    circuit = QuantumCircuit(1)
+    result = EquivalenceChecker(representation="matrix").check(
+        circuit,
+        circuit,
+        noise_model=_pauli_x_noise(1, 0.0),
+        num_traj=cast("Any", np.int64(1)),
+    )
+
+    assert result["num_traj"] == 1
+
+
+def test_equivalence_checker_revalidates_mutable_settings() -> None:
+    """A setting changed after construction is checked before circuit loading."""
+    checker = EquivalenceChecker()
+    checker.representation = cast("Any", "dense")
+
+    with pytest.raises(ValueError, match="representation must be one of"):
+        checker.check(QuantumCircuit(1), QuantumCircuit(1))
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"parallel": "false"}, TypeError, "parallel must be a boolean"),
+        ({"representation": 1}, TypeError, "representation must be a string"),
+        ({"representation": "MPO"}, ValueError, "representation must be one of"),
+        ({"matrix_max_qubits": 1.5}, TypeError, "matrix_max_qubits must be an integer"),
+        ({"matrix_max_qubits": -1}, ValueError, "matrix_max_qubits must be >= 0"),
+        ({"mp_context": 1}, TypeError, "mp_context must be a string"),
+        ({"mp_context": "forkserver"}, ValueError, "mp_context must be one of"),
+    ],
+)
+def test_equivalence_checker_rejects_invalid_constructor_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Backend and execution selectors fail at the public constructor boundary."""
+    with pytest.raises(error, match=match):
+        EquivalenceChecker(**cast("Any", kwargs))
 
 
 def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
@@ -1144,19 +1202,19 @@ def test_return_trajectories_requires_noise_model() -> None:
 def test_return_trajectories_must_be_bool() -> None:
     """The trajectory-detail selector rejects non-boolean values."""
     qc = QuantumCircuit(1)
-    with pytest.raises(TypeError, match="return_trajectories must be bool"):
+    with pytest.raises(TypeError, match="return_trajectories must be a boolean"):
         EquivalenceChecker().check(qc, qc, return_trajectories=1)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
-        pytest.param({"num_traj": True}, TypeError, "num_traj must be int, got bool", id="num-traj-type"),
-        pytest.param({"num_traj": 0}, ValueError, "num_traj must be at least 1, got 0", id="num-traj-value"),
+        pytest.param({"num_traj": True}, TypeError, "num_traj must be an integer, got bool", id="num-traj-type"),
+        pytest.param({"num_traj": 0}, ValueError, "num_traj must be >= 1, got 0", id="num-traj-value"),
         pytest.param(
             {"random_seed": True},
             TypeError,
-            "random_seed must be int or None, got bool",
+            "random_seed must be an integer, got bool",
             id="random-seed-type",
         ),
         pytest.param(
@@ -1180,7 +1238,7 @@ def test_negative_random_seed_raises() -> None:
     circuit.cx(0, 1)
     checker = EquivalenceChecker(representation="matrix")
 
-    with pytest.raises(ValueError, match="random_seed must be non-negative, got -1"):
+    with pytest.raises(ValueError, match="random_seed must be >= 0, got -1"):
         checker.check(circuit, circuit, noise_model=_pauli_x_noise(2, 0.1), random_seed=-1)
 
 

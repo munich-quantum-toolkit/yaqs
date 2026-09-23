@@ -10,10 +10,12 @@
 from __future__ import annotations
 
 from concurrent.futures import CancelledError
+from typing import Any, cast
 
 import numpy as np
 import pytest
 
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 from tests.characterization.noise.fixtures import NoiseTestConfig, build_propagator
@@ -59,6 +61,7 @@ def test_characterize_smoke(noise_test_config: NoiseTestConfig) -> None:
         seed=1,
     )
 
+    assert isinstance(result, NoiseCharacterizationResult)
     assert result.best_loss >= 0.0
     assert result.ref_traj is not None
     assert result.fit_traj is not None
@@ -103,6 +106,24 @@ def test_execution_config_properties() -> None:
     assert nc.mp_context == "fork"
     assert nc.max_retries == 3
     assert CancelledError in nc.retry_exceptions
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"representation": "lindblad"}, ValueError, "representation must be one of"),
+        ({"lindblad_max_qubits": 1.5}, TypeError, "lindblad_max_qubits must be an integer"),
+        ({"vector_max_qubits": -1}, ValueError, "vector_max_qubits must be >= 0"),
+    ],
+)
+def test_noise_characterizer_rejects_invalid_constructor_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Constructor settings fail before an optimization workflow starts."""
+    with pytest.raises(error, match=match):
+        NoiseCharacterizer(**cast("Any", kwargs))
 
 
 def test_characterize_reference_model_path(noise_test_config: NoiseTestConfig) -> None:

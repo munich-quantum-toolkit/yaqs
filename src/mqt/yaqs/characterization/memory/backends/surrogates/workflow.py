@@ -23,8 +23,10 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.parallel_utils import merge_execution_config
 
 from .....core._validation import validate_integer
+from .....core.data_structures.simulation_parameters import _validate_simulation_controls
 
 if TYPE_CHECKING:
     import types
@@ -166,7 +168,7 @@ def build_training_dataset(
         timesteps: Optional process-tensor schedule evolution durations (defaults to
             ``[sim_params.dt] * (num_interventions + 1)``).
         init_mode: Initial-state sampling mode (see :func:`sample_initial_psi`).
-        solver: Optional stochastic solver override (``"MCWF"`` or ``"TJM"``).
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``); defaults to ``"MCWF"``.
         intervention_style: Training intervention style (``"haar"``, ``"clifford"``, or
             ``"measure_prepare"``).
 
@@ -177,8 +179,11 @@ def build_training_dataset(
         ValueError: If either count is not positive, ``timesteps`` has the wrong length, or
             ``operator`` is not a qubit Hamiltonian.
     """
+    _validate_simulation_controls(sim_params)
     resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     n_sequences = validate_integer(n, name="n", minimum=1)
+    execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
+    normalized_seed = None if seed is None else validate_integer(seed, name="seed", minimum=0)
 
     validate_qubit_memory_operator(operator)
     chain_length = int(operator.length)
@@ -192,14 +197,14 @@ def build_training_dataset(
         raise ValueError(msg)
 
     _require_torch()
-    stochastic_solver = resolve_stochastic_solver(sim_params, solver=solver)
+    stochastic_solver = resolve_stochastic_solver(solver=solver)
 
     static_ctx: MCWFContext | None = None
     if stochastic_solver == "MCWF":
         static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
 
     if rng is None:
-        rng = np.random.default_rng(0 if seed is None else int(seed))
+        rng = np.random.default_rng(0 if normalized_seed is None else normalized_seed)
 
     intervention_steps_list: list[list[Any]] = []
     initial_psis: list[np.ndarray | MPS] = []
@@ -239,13 +244,13 @@ def build_training_dataset(
             intervention_steps_list=intervention_steps_list,
             initial_psis=initial_psis,
             e_features_rows=choi_feature_rows_per_sequence,
-            parallel=bool(parallel),
-            show_progress=bool(show_progress),
+            parallel=execution.parallel,
+            show_progress=execution.show_progress,
             record_step_states=True,
             static_ctx=static_ctx,
             context_vec=None,
             solver=stochastic_solver,
-            _execution=_execution,
+            _execution=execution,
         ),
     )
     rho0_batch, features_batch, rho_seq_batch, _ctx = stack_sequence_records(samples)
@@ -281,7 +286,8 @@ def train_surrogate_model(
         show_progress: Whether to show progress bars.
         timesteps: Optional per-step durations passed to :func:`build_training_dataset`.
         init_mode: Initial-state sampling mode passed to :func:`build_training_dataset`.
-        solver: Optional stochastic solver override passed to :func:`build_training_dataset`.
+        solver: Stochastic solver (``"MCWF"`` or ``"TJM"``) passed to
+            :func:`build_training_dataset`; defaults to ``"MCWF"``.
         intervention_style: Training intervention style passed to :func:`build_training_dataset`.
         model_kwargs: Optional keyword arguments forwarded to :class:`ProcessTensorSurrogate`.
         train_kwargs: Optional keyword arguments forwarded to :meth:`ProcessTensorSurrogate.fit`.
@@ -289,27 +295,30 @@ def train_surrogate_model(
     Returns:
         Trained :class:`ProcessTensorSurrogate`.
     """
+    _validate_simulation_controls(sim_params)
     resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     n_sequences = validate_integer(n, name="n", minimum=1)
+    execution = merge_execution_config(_execution, parallel=parallel, show_progress=show_progress)
+    normalized_seed = None if seed is None else validate_integer(seed, name="seed", minimum=0)
 
     import torch  # ruff:ignore[import-outside-top-level]
 
     from .model import ProcessTensorSurrogate  # ruff:ignore[import-outside-top-level]
 
-    rng = np.random.default_rng(0 if seed is None else int(seed))
+    rng = np.random.default_rng(0 if normalized_seed is None else normalized_seed)
     train_data = build_training_dataset(
         operator,
         sim_params,
         num_interventions=resolved_num_interventions,
         n=n_sequences,
         rng=rng,
-        parallel=bool(parallel),
-        show_progress=bool(show_progress),
+        parallel=execution.parallel,
+        show_progress=execution.show_progress,
         timesteps=timesteps,
         init_mode=init_mode,
         solver=solver,
         intervention_style=intervention_style,
-        _execution=_execution,
+        _execution=execution,
     )
 
     resolved_model_kwargs = {} if model_kwargs is None else dict(model_kwargs)

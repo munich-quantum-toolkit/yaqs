@@ -23,7 +23,11 @@ from .. import linalg
 from .._validation import validate_integer, validate_real
 from ..methods.decompositions import left_qr, merge_two_site, right_qr, split_two_site
 from ..parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
-from .state_utils import _swap_two_site_factor_order
+from .state_utils import (
+    _swap_two_site_factor_order,
+    resolve_physical_dimensions,
+    validate_qubit_measurement_dimensions,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -54,7 +58,10 @@ def _measure_shots_worker(_shot_idx: int) -> int:
     Returns:
         The measured basis state encoded as an integer.
     """
-    return _MEASURE_SHOTS_CTX["mps"].measure_single_shot(_MEASURE_SHOTS_CTX["basis"])
+    # The parent validates the layout and basis once before it starts workers.
+    return _MEASURE_SHOTS_CTX["mps"]._measure_single_shot(  # ruff: ignore[private-member-access]
+        _MEASURE_SHOTS_CTX["basis"],
+    )
 
 
 class MPS:
@@ -87,7 +94,9 @@ class MPS:
 
         Args:
             length: Number of sites (qubits) in the MPS.
-            tensors: Predefined tensors representing the MPS. Must match `length` if provided.
+            tensors: Predefined open-boundary MPS tensors in ``(physical, left, right)``
+                order. The tensors must be finite rank-3 arrays with compatible bonds,
+                unit exterior bonds, and physical axes that match ``physical_dimensions``.
                 If None, tensors are initialized according to `state`.
             physical_dimensions: Physical dimension for each site. Defaults to qubit systems (dimension 2) if None.
             state: Initial state configuration. Valid options include:
@@ -113,8 +122,8 @@ class MPS:
 
         Raises:
             TypeError: If ``length`` has an unsupported type.
-            ValueError: If ``length`` is not positive, tensor or physical-dimension counts do not
-                match ``length``, or the requested state configuration is invalid.
+            ValueError: If ``length`` is not positive, tensor data are structurally invalid,
+                physical dimensions do not match, or the requested state configuration is invalid.
         """
         if not isinstance(length, Integral) or isinstance(length, bool):
             msg = "length must be an integer."
@@ -124,30 +133,25 @@ class MPS:
             raise ValueError(msg)
         length = int(length)
 
+        self.length = length
         self.flipped = False
         self._orthogonality_center: int | None = None
-        if tensors is not None:
+        if isinstance(physical_dimensions, list) and len(physical_dimensions) != length:
+            msg = f"Expected {length} physical dimensions, got {len(physical_dimensions)}."
+            raise ValueError(msg)
+        self.physical_dimensions = resolve_physical_dimensions(length, physical_dimensions)
+        if tensors is None:
+            self.tensors = []
+        else:
             if len(tensors) != length:
                 msg = f"Expected {length} MPS tensors, got {len(tensors)}."
                 raise ValueError(msg)
-            self.tensors = tensors
-        else:
-            self.tensors = []
-        self.length = length
-        if physical_dimensions is None:
-            # Default case is the qubit (2-level) case
-            self.physical_dimensions = []
-            for _ in range(self.length):
-                self.physical_dimensions.append(2)
-        elif isinstance(physical_dimensions, int):
-            self.physical_dimensions = []
-            for _ in range(self.length):
-                self.physical_dimensions.append(physical_dimensions)
-        else:
-            self.physical_dimensions = physical_dimensions
-        if len(self.physical_dimensions) != length:
-            msg = f"Expected {length} physical dimensions, got {len(self.physical_dimensions)}."
-            raise ValueError(msg)
+            try:
+                self.tensors = [np.asarray(tensor, dtype=np.complex128) for tensor in tensors]
+            except (TypeError, ValueError) as exc:
+                msg = "MPS tensors must contain numeric data."
+                raise ValueError(msg) from exc
+            self.check_if_valid_mps()
 
         def _bond_caps(target_dim: int) -> list[int]:
             """Compute feasible MPS bond dimensions for a target maximum.
@@ -242,7 +246,7 @@ class MPS:
             return q_mat.reshape(local_dim, chi_l, chi_r).astype(np.complex128)
 
         # Create d-level |0> state
-        if not tensors:
+        if tensors is None:
             haar_bond_cache: dict[str, list[int] | None] | None = None
             haar_rng_cache: dict[str, np.random.Generator | None] | None = None
             if state == "haar-random":
@@ -322,6 +326,31 @@ class MPS:
                 self._orthogonality_center = 0
         if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
+
+    @classmethod
+    def _from_tensor_window(
+        cls,
+        tensors: list[NDArray[np.complex128]],
+        physical_dimensions: list[int],
+    ) -> MPS:
+        """Build a trusted internal MPS window whose exterior bonds need not be one.
+
+        The caller must slice the tensors and dimensions from a validated MPS. This
+        constructor avoids treating a local work window as a standalone open-boundary
+        state and avoids rescanning tensor data inside gate-application loops.
+
+        Returns:
+            An MPS workspace that references the supplied tensors.
+        """
+        assert tensors, "An internal MPS window needs at least one tensor."
+        assert len(tensors) == len(physical_dimensions), "An internal MPS window needs one dimension per tensor."
+        window = cls.__new__(cls)
+        window.length = len(tensors)
+        window.flipped = False
+        window.tensors = list(tensors)
+        window.physical_dimensions = list(physical_dimensions)
+        window.set_center(None)
+        return window
 
     @property
     def orthogonality_center(self) -> int | None:
@@ -1742,25 +1771,34 @@ class MPS:
             outcome at site ``i``, so site ``0`` is the least-significant bit.
 
         Raises:
-            ValueError: If an invalid basis is provided.
+            ValueError: If an invalid basis is provided or any measured site is not a qubit.
 
         Notes:
             Prefer :meth:`measure` for a single-site sample when the center is already
             positioned. This method copies the MPS only when the center must move to
             site 0, then walks all sites through an active suffix tensor.
         """
+        basis = basis.upper()
+        if basis not in {"X", "Y", "Z"}:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+        validate_qubit_measurement_dimensions(self.physical_dimensions, name="Single-shot measurement")
+        return self._measure_single_shot(basis, rng)
+
+    def _measure_single_shot(self, basis: str, rng: np.random.Generator | None = None) -> int:
+        """Measure one shot after the caller validates the layout and basis.
+
+        Returns:
+            The measured basis state encoded as an integer.
+        """
         bitstring = []
 
-        basis = basis.upper()
         if basis == "Z":
             rotation = np.eye(2, dtype=complex)
         elif basis == "X":
             rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
-        elif basis == "Y":
-            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
         else:
-            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
-            raise ValueError(msg)
+            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
 
         if rng is None:
             rng = np.random.default_rng()
@@ -1810,15 +1848,24 @@ class MPS:
             A dictionary from measured basis-state integers to counts. Bit ``i``
             of each key stores the outcome at site ``i``.
 
+        Raises:
+            ValueError: If ``shots`` or ``basis`` is invalid, or any measured
+                site is not a qubit.
+
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
             - A progress bar (via tqdm) displays the progress of the measurement process.
 
         """
         shots = validate_integer(shots, name="shots", minimum=1)
+        basis = basis.upper()
+        if basis not in {"X", "Y", "Z"}:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+        validate_qubit_measurement_dimensions(self.physical_dimensions, name="Shot measurement")
         results: dict[int, int] = {}
         if shots == 1:
-            basis_state = self.measure_single_shot(basis)
+            basis_state = self._measure_single_shot(basis)
             results[basis_state] = results.get(basis_state, 0) + 1
             return results
 
@@ -1826,7 +1873,7 @@ class MPS:
         if max_workers == 1:
             with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
                 for _ in range(shots):
-                    outcome = self.measure_single_shot(basis)
+                    outcome = self._measure_single_shot(basis)
                     results[outcome] = results.get(outcome, 0) + 1
                     pbar.update(1)
             return results
@@ -1882,10 +1929,16 @@ class MPS:
             int: The measurement outcome (0 or 1 for qubits).
 
         Raises:
-            ValueError: If an invalid site or basis is provided.
+            ValueError: If an invalid site or basis is provided, or the target site is not a qubit.
         """
         if site < 0 or site >= self.length:
             msg = f"Invalid site {site} for MPS of length {self.length}."
+            raise ValueError(msg)
+        if self.physical_dimensions[site] != 2:
+            msg = (
+                f"Measurement requires a qubit target, but site {site} has "
+                f"physical dimension {self.physical_dimensions[site]}."
+            )
             raise ValueError(msg)
 
         # Shift orthogonality center to target site.
@@ -1958,7 +2011,8 @@ class MPS:
 
         Raises:
             TypeError: If ``bitstring`` is not a string.
-            ValueError: If its length or a local state index is invalid.
+            ValueError: If its length or a local state index is invalid, or if
+                any measured site is not a qubit.
         """
         if not isinstance(bitstring, str):
             msg = "bitstring must be a string."
@@ -1973,6 +2027,9 @@ class MPS:
                 raise ValueError(msg)
             state_index = int(char)
             local_dim = self.physical_dimensions[site]
+            if local_dim != 2:
+                msg = f"Bitstring measurement requires qubit sites, but site {site} has physical dimension {local_dim}."
+                raise ValueError(msg)
             if not 0 <= state_index < local_dim:
                 msg = f"bitstring state index {state_index} at site {site} must be in [0, {local_dim - 1}]."
                 raise ValueError(msg)
@@ -2043,24 +2100,52 @@ class MPS:
 
         Check if the current tensor network is a valid Matrix Product State (MPS).
 
-        This method verifies that the tensor count matches :attr:`length` and that the
-        bond dimensions between consecutive tensors in the network are consistent.
-        Specifically, it checks that the second dimension of each tensor matches the
-        third dimension of the previous tensor.
+        This method verifies the tensor count, rank, finite values, physical dimensions,
+        open boundary bonds, and adjacent bond dimensions.
 
         Raises:
-            ValueError: If the tensor count or adjacent bond dimensions are inconsistent.
+            ValueError: If the tensor network is structurally invalid.
         """
         if len(self.tensors) != self.length:
             msg = f"MPS has {len(self.tensors)} tensors but length {self.length}."
             raise ValueError(msg)
-        right_bond = self.tensors[0].shape[2]
-        for site, tensor in enumerate(self.tensors[1:], start=1):
+        if len(self.physical_dimensions) != self.length:
+            msg = f"MPS has {len(self.physical_dimensions)} physical dimensions but length {self.length}."
+            raise ValueError(msg)
+
+        right_bond: int | None = None
+        for site, (tensor, physical_dimension) in enumerate(
+            zip(self.tensors, self.physical_dimensions, strict=True),
+        ):
+            if tensor.ndim != 3:
+                msg = f"MPS tensor at site {site} must have rank 3, got rank {tensor.ndim}."
+                raise ValueError(msg)
+            if tensor.size == 0 or any(dimension <= 0 for dimension in tensor.shape):
+                msg = f"MPS tensor at site {site} must be nonempty."
+                raise ValueError(msg)
+            if not np.all(np.isfinite(tensor)):
+                msg = f"MPS tensor at site {site} must contain only finite values."
+                raise ValueError(msg)
+            if tensor.shape[0] != physical_dimension:
+                msg = (
+                    f"MPS tensor at site {site} has physical dimension {tensor.shape[0]}, "
+                    f"but physical_dimensions[{site}] is {physical_dimension}."
+                )
+                raise ValueError(msg)
+
             left_bond = tensor.shape[1]
-            if left_bond != right_bond:
+            if site == 0 and left_bond != 1:
+                msg = f"MPS left boundary bond must have dimension 1, got {left_bond}."
+                raise ValueError(msg)
+            if right_bond is not None and left_bond != right_bond:
                 msg = f"MPS bond between sites {site - 1} and {site} has dimensions {right_bond} and {left_bond}."
                 raise ValueError(msg)
             right_bond = tensor.shape[2]
+
+        assert right_bond is not None
+        if right_bond != 1:
+            msg = f"MPS right boundary bond must have dimension 1, got {right_bond}."
+            raise ValueError(msg)
 
     def check_canonical_form(self) -> list[int]:
         """Checks canonical form of MPS.

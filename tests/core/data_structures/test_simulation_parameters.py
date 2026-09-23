@@ -31,6 +31,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
+    _validate_analog_time_grid,
     _validate_tdvp_sweeps,
 )
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
@@ -88,8 +89,6 @@ def test_analog_simparams_zero_elapsed_time() -> None:
     [
         (100.1, 0.1),
         (1.0, 1.0 / 9015),
-        # Fine dt vs O(1) elapsed: residual is ~ulp(elapsed), not a fraction of dt.
-        (1.23456789, 1e-8),
     ],
 )
 def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt: float) -> None:
@@ -97,6 +96,11 @@ def test_analog_simparams_accepts_float64_rounding_dust(elapsed_time: float, dt:
     params = AnalogSimParams(observables=[Observable("x", 0)], elapsed_time=elapsed_time, dt=dt)
 
     assert params.times[-1] == pytest.approx(elapsed_time, rel=0.0, abs=0.0)
+
+
+def test_analog_time_grid_validator_accepts_fine_float64_ratio_without_allocating_grid() -> None:
+    """Fine ``dt`` rounding is valid without constructing its 123-million-point grid."""
+    assert _validate_analog_time_grid(1.23456789, 1e-8) == 123_456_789
 
 
 @pytest.mark.parametrize(
@@ -482,15 +486,26 @@ def test_digital_simparams_rejects_none_preset() -> None:
 @pytest.mark.parametrize("bad_tol", [0.0, -1.0, float("inf"), float("nan")])
 def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
     """krylov_tol must be finite and strictly positive."""
-    with pytest.raises(ValueError, match="krylov_tol must be a finite positive float"):
+    with pytest.raises(ValueError, match="krylov_tol"):
         _ = AnalogSimParams(krylov_tol=bad_tol)
 
 
 @pytest.mark.parametrize("bad_threshold", [-1.0, float("inf"), float("nan")])
 def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
     """svd_threshold must be finite and non-negative."""
-    with pytest.raises(ValueError, match="svd_threshold must be a finite non-negative float"):
+    with pytest.raises(ValueError, match="svd_threshold"):
         _ = AnalogSimParams(svd_threshold=bad_threshold)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [("krylov_tol", True), ("svd_threshold", "1e-6")],
+)
+def test_simparams_rejects_coerced_real_controls(field: str, invalid: object) -> None:
+    """Numerical tolerances reject Boolean and string coercion."""
+    kwargs: dict[str, Any] = {field: invalid}
+    with pytest.raises(TypeError, match=field):
+        AnalogSimParams(**kwargs)
 
 
 def test_simparams_allows_zero_svd_threshold() -> None:
@@ -725,6 +740,35 @@ def test_analog_params_rejects_mixed_pvm_with_non_pvm() -> None:
         _ = AnalogSimParams(observables=[pvm, z0])
 
 
+@pytest.mark.parametrize(
+    "multi_time_observables",
+    [
+        [(Observable("z", 0),)],
+        [(Observable("z", 0), object())],
+    ],
+)
+def test_analog_params_rejects_invalid_multi_time_observable_pairs(multi_time_observables: object) -> None:
+    """Each two-time entry must contain exactly two Observable objects."""
+    with pytest.raises(TypeError, match=r"multi_time_observables\[0\].*pair of Observable"):
+        AnalogSimParams(multi_time_observables=cast("Any", multi_time_observables))
+
+
+def test_analog_params_rejects_non_sequence_multi_time_observables() -> None:
+    """The outer multi-time observable container must be a sequence."""
+    with pytest.raises(TypeError, match="multi_time_observables must be a sequence"):
+        AnalogSimParams(multi_time_observables=cast("Any", object()))
+
+
+@pytest.mark.parametrize(
+    "unsupported",
+    [Observable("entropy", [0, 1]), Observable("00")],
+)
+def test_analog_params_rejects_unsupported_multi_time_observables(unsupported: Observable) -> None:
+    """Two-time pairs accept only local operators supported by ensemble evolution."""
+    with pytest.raises(ValueError, match="one- or two-site operator observables"):
+        AnalogSimParams(multi_time_observables=[(unsupported, Observable("z", 0))])
+
+
 def test_digital_params_rejects_mixed_pvm_with_non_pvm() -> None:
     """The digital constructor rejects mixed PVM and non-PVM observables."""
     pvm = Observable("101")
@@ -830,7 +874,7 @@ def test_random_seed_rejects_invalid_type(
     kwargs: dict[str, object],
 ) -> None:
     """random_seed must be None or int."""
-    with pytest.raises(TypeError, match="random_seed must be int or None"):
+    with pytest.raises(TypeError, match="random_seed must be an integer"):
         param_cls(random_seed="not-a-seed", **kwargs)  # ty: ignore[invalid-argument-type]
 
 
@@ -847,8 +891,44 @@ def test_random_seed_rejects_negative(
     kwargs: dict[str, object],
 ) -> None:
     """random_seed must be non-negative when set."""
-    with pytest.raises(ValueError, match="random_seed must be non-negative"):
+    with pytest.raises(ValueError, match="random_seed must be >= 0"):
         param_cls(random_seed=-1, **kwargs)  # ty: ignore[invalid-argument-type]
+
+
+def test_simparams_accept_numpy_scalar_flags_and_seed() -> None:
+    """Equivalent NumPy Boolean and integer controls normalize to Python scalars."""
+    analog = AnalogSimParams(
+        sample_timesteps=cast("Any", np.zeros((), dtype=np.bool_)[()]),
+        get_state=cast("Any", np.ones((), dtype=np.bool_)[()]),
+        random_seed=cast("Any", np.int64(4)),
+    )
+    digital = DigitalSimParams(
+        get_state=cast("Any", np.ones((), dtype=np.bool_)[()]),
+        sample_layers=cast("Any", np.zeros((), dtype=np.bool_)[()]),
+        random_seed=cast("Any", np.int64(5)),
+    )
+
+    assert analog.sample_timesteps is False
+    assert analog.get_state is True
+    assert analog.random_seed == 4
+    assert digital.get_state is True
+    assert digital.sample_layers is False
+    assert digital.random_seed == 5
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        pytest.param(lambda: AnalogSimParams(sample_timesteps=cast("Any", "false")), id="analog-sampling"),
+        pytest.param(lambda: AnalogSimParams(get_state=cast("Any", 1)), id="analog-state"),
+        pytest.param(lambda: DigitalSimParams(get_state=cast("Any", "true")), id="digital-state"),
+        pytest.param(lambda: DigitalSimParams(sample_layers=cast("Any", 0)), id="digital-sampling"),
+    ],
+)
+def test_simparams_reject_non_boolean_flags(factory: Callable[[], object]) -> None:
+    """Simulation output flags require Boolean values rather than truthiness."""
+    with pytest.raises(TypeError, match="must be a boolean"):
+        factory()
 
 
 def test_digital_simparams_allows_outputless_program_configuration() -> None:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pytest
@@ -34,6 +34,9 @@ from mqt.yaqs.characterization.memory.shared.metrics import (
 from mqt.yaqs.characterization.memory.shared.utils import extract_site0_rho
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 with contextlib.suppress(ImportError):
     from torch.utils.data import TensorDataset
@@ -352,6 +355,60 @@ def test_train_surrogate_model_validates_counts_before_optional_imports(
             AnalogSimParams(dt=0.1),
             num_interventions=num_interventions,  # ty: ignore[invalid-argument-type]
             n=n,  # ty: ignore[invalid-argument-type]
+            parallel=False,
+            show_progress=False,
+        )
+
+
+def test_build_training_dataset_rejects_invalid_seed_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dataset construction validates its seed before importing PyTorch."""
+    monkeypatch.setattr(workflow_module, "_require_torch", pytest.fail)
+
+    with pytest.raises(TypeError, match="seed must be an integer"):
+        build_training_dataset(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            AnalogSimParams(dt=0.1),
+            num_interventions=1,
+            n=1,
+            seed=1.5,  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_train_surrogate_model_rejects_invalid_parallel_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Surrogate training validates its execution flag before importing PyTorch."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+    with pytest.raises(TypeError, match="parallel must be a boolean"):
+        train_surrogate_model(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            AnalogSimParams(dt=0.1),
+            num_interventions=1,
+            n=1,
+            parallel="false",  # ty: ignore[invalid-argument-type]
+        )
+
+
+@pytest.mark.parametrize("workflow", [build_training_dataset, train_surrogate_model])
+def test_surrogate_workflows_revalidate_mutated_simulation_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    workflow: Callable[..., object],
+) -> None:
+    """Public surrogate workflows reject invalid mutable controls before optional imports."""
+    params = AnalogSimParams(dt=0.1)
+    params.order = 3
+    monkeypatch.setattr(workflow_module, "_require_torch", pytest.fail)
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
+        workflow(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            params,
+            num_interventions=1,
+            n=1,
             parallel=False,
             show_progress=False,
         )

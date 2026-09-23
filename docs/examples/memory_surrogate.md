@@ -39,10 +39,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.backends.surrogates.workflow import build_training_dataset
 from mqt.yaqs.characterization.memory.shared.encoding import encode_rho_pauli, unpack_rho8
 from mqt.yaqs.characterization.memory.shared.metrics import mean_trace_distance_rho8
-from mqt.yaqs.core.data_structures.mpo import MPO
 
 PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
 
@@ -104,8 +102,8 @@ surrogate’s final-step predictions to the Hamiltonian targets used during
 dataset construction:
 
 ```{code-cell} ipython3
-held_out = build_training_dataset(
-    MPO.ising(length=length, J=1.0, g=1.0),
+held_out = mc.sample(
+    ham,
     params,
     num_interventions=num_interventions,
     n=60,

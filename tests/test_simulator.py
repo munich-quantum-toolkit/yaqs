@@ -51,6 +51,7 @@ from tests.conftest import (
     requires_qasm3_import,
     write_qasm_file,
 )
+from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,40 +84,62 @@ def test_simulator_retry_exceptions_setter() -> None:
     assert sim.retry_exceptions == (ValueError,)
 
 
-@pytest.mark.parametrize(
-    ("kind", "field", "invalid", "error"),
-    [
-        ("analog", "num_traj", 0, ValueError),
-        ("analog", "max_bond_dim", True, TypeError),
-        ("analog", "tdvp_sweeps", 0, ValueError),
-        ("analog", "order", 3, ValueError),
-        ("digital", "num_traj", -1, ValueError),
-        ("digital", "max_bond_dim", 0, ValueError),
-        ("digital", "num_mid_measurements", -1, ValueError),
-        ("digital", "shots", 0, ValueError),
-        ("digital", "tdvp_sweeps", 1.0, TypeError),
-    ],
-)
-def test_run_revalidates_mutated_controls_before_result_allocation(
-    kind: str,
-    field: str,
-    invalid: object,
-    error: type[Exception],
-) -> None:
-    """Mutable simulation controls are checked before constructing a result."""
+def test_simulator_execution_setters_update_and_validate_values() -> None:
+    """Facade setters update configuration and retain shared validation."""
+    sim = Simulator(parallel=False)
+
+    sim.show_progress = False
+    sim.mp_context = "spawn"
+    sim.max_retries = 2
+
+    assert sim.show_progress is False
+    assert sim.mp_context == "spawn"
+    assert sim.max_retries == 2
+
+    with pytest.raises(TypeError, match="parallel"):
+        sim.parallel = cast("Any", "false")
+
+    assert sim.parallel is False
+
+
+def test_run_rejects_mutated_non_observable_before_result_allocation() -> None:
+    """Run-time validation rejects a non-Observable added after construction."""
     state = State(1, initial="zeros")
     runner = Simulator(parallel=False, show_progress=False)
-    if kind == "analog":
-        params = AnalogSimParams(get_state=True)
-        setattr(params, field, invalid)
-        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
-            runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
-    else:
-        params = DigitalSimParams(get_state=True)
-        setattr(params, field, invalid)
-        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
-            runner.run(state, QuantumCircuit(1), params)
+    params = AnalogSimParams(get_state=True)
+    params.observables = cast("Any", [object()])
+
+    with (
+        patch.object(simulator, "Result") as mock_result,
+        pytest.raises(TypeError, match=r"observables\[0\] must be an Observable"),
+    ):
+        runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
+
     mock_result.assert_not_called()
+
+
+def test_run_rebuilds_mutated_analog_time_grid() -> None:
+    """A run evolves and reports the grid implied by the current time controls."""
+    params = AnalogSimParams(
+        observables=[Observable("z", 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+    )
+    params.elapsed_time = 0.2
+    params.dt = 0.05
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros", representation="vector"),
+        Hamiltonian.ising(1, J=0.0, g=0.0),
+        params,
+    )
+
+    expected_times = [0.0, 0.05, 0.1, 0.15, 0.2]
+    np.testing.assert_allclose(params.times, expected_times)
+    assert result.times is not None
+    np.testing.assert_allclose(result.times, expected_times)
+    np.testing.assert_allclose(result.expectation_values[0], np.ones(5), atol=1e-12)
 
 
 def test_simulator_parallel_serial_equivalence() -> None:
@@ -167,8 +190,8 @@ def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) ->
     assert "Running trajectories" not in captured.out
 
 
-def test_simulator_run_returns_result() -> None:
-    """:meth:`Simulator.run` returns a :class:`Result` holding all simulation outputs."""
+def test_simulator_run_returns_result_with_input_parameter_reference() -> None:
+    """The result references the input parameter object after run-time normalization."""
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
@@ -380,6 +403,40 @@ def test_trapped_ion_position_grid_vector_and_mps_simulation_agree() -> None:
         -initial_displacement,
         atol=3e-2,
     )
+
+
+def _zero_heterogeneous_hamiltonian(physical_dimensions: list[int]) -> Hamiltonian:
+    """Return a zero Hamiltonian with one MPO core per supplied local dimension."""
+    mpo = MPO()
+    mpo.custom(
+        [np.zeros((dimension, dimension, 1, 1), dtype=np.complex128) for dimension in physical_dimensions],
+        transpose=False,
+    )
+    return Hamiltonian.from_mpo(mpo)
+
+
+def test_analog_pairing_compares_local_physical_dimensions() -> None:
+    """Matching mixed dimensions run, while a different local order fails before evolution."""
+    dimensions = [2, 3]
+    params = AnalogSimParams(elapsed_time=0.1, dt=0.1, get_state=True)
+    simulator_instance = Simulator(parallel=False, show_progress=False)
+
+    result = simulator_instance.run(
+        State(2, initial="zeros", physical_dimensions=dimensions),
+        _zero_heterogeneous_hamiltonian(dimensions),
+        params,
+    )
+
+    assert result.output_state is not None
+    assert result.output_state.mps.physical_dimensions == dimensions
+    vector = np.zeros(6, dtype=np.complex128)
+    vector[0] = 1.0
+    with pytest.raises(ValueError, match="physical dimensions"):
+        simulator_instance.run(
+            State(2, vector=vector, physical_dimensions=dimensions),
+            _zero_heterogeneous_hamiltonian(list(reversed(dimensions))),
+            params,
+        )
 
 
 def test_density_matrix_get_state() -> None:
@@ -890,6 +947,57 @@ def test_mismatch() -> None:
         Simulator(show_progress=False).run(initial_state, circuit, sim_params, noise_model)
 
 
+def test_standalone_circuit_preserves_idle_non_qubit_spectator() -> None:
+    """Standalone compilation permits qubit gates that do not target an idle qutrit."""
+    dimensions = [2, 3, 2]
+    circuit = QuantumCircuit(3)
+    circuit.x(0)
+    circuit.cx(0, 2)
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(3, initial="zeros", physical_dimensions=dimensions),
+        circuit,
+        DigitalSimParams(gate_mode="mpo", get_state=True, max_bond_dim=8),
+    )
+
+    assert result.output_state is not None
+    vector = result.output_state.mps.to_vec()
+    expected_index = mixed_radix_index((1, 0, 1), tuple(dimensions))
+    assert np.argmax(np.abs(vector)) == expected_index
+    assert abs(vector[expected_index]) ** 2 == pytest.approx(1.0, abs=1e-10)
+
+
+def test_standalone_circuit_rejects_non_qubit_target_and_swap_route() -> None:
+    """Standalone compilation applies the same heterogeneous-layout rules as programs."""
+    target_circuit = QuantumCircuit(3)
+    target_circuit.x(1)
+    with pytest.raises(ValueError, match="targets site 1 with physical dimension 3"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros", physical_dimensions=[2, 3, 2]),
+            target_circuit,
+            DigitalSimParams(get_state=True),
+        )
+
+    routed_circuit = QuantumCircuit(3)
+    routed_circuit.cx(0, 2)
+    with pytest.raises(ValueError, match=r"cannot route.*non-qubit spectator"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(3, initial="zeros", physical_dimensions=[2, 3, 2]),
+            routed_circuit,
+            DigitalSimParams(gate_mode="swaps", get_state=True),
+        )
+
+
+def test_standalone_circuit_rejects_shots_on_non_qubit_layout() -> None:
+    """Binary shot output is unavailable when the circuit state contains a qutrit."""
+    with pytest.raises(ValueError, match="Shot measurement requires qubit sites"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(2, initial="zeros", physical_dimensions=[2, 3]),
+            QuantumCircuit(2),
+            DigitalSimParams(shots=1),
+        )
+
+
 def test_two_site_correlator_left_boundary() -> None:
     """Tests the expectation value of a two-site correlator in analog simulation at the left boundary.
 
@@ -1289,39 +1397,34 @@ def test_transmon_simulation() -> None:
     )
     T_swap = np.pi / (np.sqrt(2) * g)
 
+    leakage_projector = np.diag([0.0, 0.0, 1.0]).astype(np.complex128)
     sim_params = AnalogSimParams(
-        observables=[Observable(bitstring) for bitstring in ["000", "001", "010", "011", "100", "101", "110", "111"]],
+        observables=[Observable(leakage_projector, site) for site in range(length)],
         elapsed_time=T_swap,
         dt=T_swap / 100,
-        sample_timesteps=False,
+        sample_timesteps=True,
+        get_state=True,
     )
     result = Simulator(show_progress=False).run(state, H_0, sim_params)
 
-    res0 = result.expectation_values[0]
-    assert res0 is not None, "Expected results to be set by Simulator.run"
-    # Initialize leakage as a numpy array of ones:
-    leakage = np.ones_like(res0)
+    assert result.output_state is not None
+    final_vector = result.output_state.mps.to_vec()
+    dimensions = (qubit_dim, resonator_dim, qubit_dim)
+    binary_strings = ["000", "001", "010", "011", "100", "101", "110", "111"]
+    probabilities = {
+        bitstring: abs(final_vector[mixed_radix_index(tuple(map(int, bitstring)), dimensions)]) ** 2
+        for bitstring in binary_strings
+    }
 
-    for meas, res in zip(result.observables, result.expectation_values, strict=True):
-        assert meas.bitstring is not None
-        assert res is not None, f"No results for bitstring {meas.bitstring!r}"
-
-        # subtract elementwise
-        leakage -= res
-
-        # use meas.bitstring, not meas.bitstring
-        if meas.bitstring == "111":
-            # small pop in 111
-            np.testing.assert_array_less(np.max(res), 1e-2)
-        elif meas.bitstring == "100":
-            np.testing.assert_allclose(res[-1], 0, atol=5e-2)
-        elif meas.bitstring == "001":
-            np.testing.assert_allclose(res[-1], 1, atol=1e-1)
-        elif meas.bitstring == "010":
-            np.testing.assert_allclose(res[-1], 0, atol=5e-2)
-
-    # finally check total leakage
-    np.testing.assert_array_less(leakage, 5e-2)
+    assert probabilities["111"] < 1e-2
+    assert probabilities["100"] == pytest.approx(0.0, abs=5e-2)
+    assert probabilities["001"] == pytest.approx(1.0, abs=1e-1)
+    assert probabilities["010"] == pytest.approx(0.0, abs=5e-2)
+    assert 1.0 - sum(probabilities.values()) < 5e-2
+    leakage_curves = [np.asarray(values) for values in result.expectation_values if values is not None]
+    assert len(leakage_curves) == length
+    leakage_population = sum(leakage_curves, start=np.zeros_like(leakage_curves[0]))
+    assert np.max(leakage_population) < 5e-2
 
 
 def test_analog_result_observables_preserve_user_order() -> None:
@@ -1492,6 +1595,44 @@ def test_analog_dense_representations_reject_bitstring_observables() -> None:
         state = State(2, initial="zeros", representation=representation)
         with pytest.raises(ValueError, match=r"Bitstring observables require State\.representation='mps'"):
             Simulator(show_progress=False).run(state, hamiltonian, sim_params)
+
+
+def test_analog_bitstring_observable_rejects_non_qubit_layout() -> None:
+    """A binary full-state observable cannot measure a mixed-dimensional MPS."""
+    dimensions = [2, 3]
+    with pytest.raises(ValueError, match="Bitstring measurement requires qubit sites"):
+        Simulator(parallel=False, show_progress=False).run(
+            State(2, initial="zeros", physical_dimensions=dimensions),
+            _zero_heterogeneous_hamiltonian(dimensions),
+            AnalogSimParams(observables=[Observable("00")], elapsed_time=0.1, dt=0.1),
+        )
+
+
+def test_analog_dense_representation_rejects_mps_diagnostic() -> None:
+    """A dense analog backend rejects a diagnostic that requires MPS bond data."""
+    hamiltonian = Hamiltonian.ising(2, 1.0, 0.5)
+    sim_params = AnalogSimParams([Observable("entropy", sites=[0, 1])], elapsed_time=0.1, dt=0.1)
+    state = State(2, initial="zeros", representation="vector")
+
+    with pytest.raises(ValueError, match=r"require State\.representation='mps'"):
+        Simulator(show_progress=False).run(state, hamiltonian, sim_params)
+
+
+def test_analog_single_state_rejects_multi_time_observables() -> None:
+    """Two-time correlators are available only for deterministic list-state ensembles."""
+    probe = Observable("z", 0)
+    sim_params = AnalogSimParams(
+        elapsed_time=0.1,
+        dt=0.1,
+        multi_time_observables=[(probe, probe)],
+    )
+
+    with pytest.raises(ValueError, match=r"only for list\[State\] unitary ensemble"):
+        Simulator(show_progress=False).run(
+            State(2, initial="zeros", representation="vector"),
+            Hamiltonian.ising(2, 1.0, 0.5),
+            sim_params,
+        )
 
 
 def test_analog_run_rejects_mpo_operator() -> None:

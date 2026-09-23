@@ -26,6 +26,7 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
+from ..core.data_structures.state_utils import validate_qubit_measurement_dimensions
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
@@ -341,7 +342,9 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     state (MPS): The matrix product state (MPS) representing the quantum state.
     node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
     """
-    _apply_single_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0])
+    gate = convert_dag_to_tensor_algorithm(node)[0]
+    _validate_gate_layout(gate, tuple(state.physical_dimensions), None)
+    _apply_single_qubit_gate(state, gate)
 
 
 def construct_generator_mpo(
@@ -412,13 +415,13 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
         state.set_canonical_form(window[0], decomposition="QR")
         rel_center = 0
 
-    short_mpo = MPO()
-    short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
+    short_mpo = MPO._from_tensor_window(  # ruff: ignore[private-member-access]
+        mpo.tensors[window[0] : window[1] + 1],
+    )
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
-    short_state = MPS(
-        length=window[1] - window[0] + 1,
-        tensors=state.tensors[window[0] : window[1] + 1],
-        physical_dimensions=state.physical_dimensions[window[0] : window[1] + 1],
+    short_state = MPS._from_tensor_window(  # ruff: ignore[private-member-access]
+        state.tensors[window[0] : window[1] + 1],
+        state.physical_dimensions[window[0] : window[1] + 1],
     )
     if rel_center is not None:
         short_state.set_center(rel_center)
@@ -600,10 +603,9 @@ def apply_long_range_gate_mpo(
     elif not first_site <= center <= last_site:
         state.shift_center_to(first_site if center < first_site else last_site)
 
-    window = MPS(
-        length=last_site - first_site + 1,
-        tensors=state.tensors[first_site : last_site + 1],
-        physical_dimensions=state.physical_dimensions[first_site : last_site + 1],
+    window = MPS._from_tensor_window(  # ruff: ignore[private-member-access]
+        state.tensors[first_site : last_site + 1],
+        state.physical_dimensions[first_site : last_site + 1],
     )
     MPO.from_gate(gate, window.length, physical_dimensions=window.physical_dimensions).multiply(
         window, sim_params=sim_params, compress=True
@@ -633,7 +635,7 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
     Raises:
         ValueError: If the gate mode is unknown or heterogeneous SWAP routing is unsafe.
     """
-    gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    gate_mode: GateMode = sim_params.gate_mode
     if gate_mode not in {"tdvp", "full-tdvp", "swaps", "mpo"}:
         msg = f"Unknown gate_mode: {gate_mode!r}"
         raise ValueError(msg)
@@ -649,9 +651,6 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
 
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
-
-    if gate_mode == "swaps" and not _swap_route_is_valid(state.physical_dimensions, site0, site1):
-        raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
 
     if gate_mode == "full-tdvp":
         if has_generator:
@@ -688,7 +687,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
         ``(first_site, last_site)`` for downstream local noise handling.
 
     """
-    return _apply_two_qubit_gate(state, convert_dag_to_tensor_algorithm(node)[0], sim_params)
+    gate = convert_dag_to_tensor_algorithm(node)[0]
+    _validate_gate_layout(gate, tuple(state.physical_dimensions), sim_params.gate_mode)
+    return _apply_two_qubit_gate(state, gate, sim_params)
 
 
 def digital_tjm(
@@ -726,15 +727,38 @@ def digital_tjm(
         diagnostics are populated when observables are requested (or for get-state-only
         runs that follow the observable path). Counts are populated when ``shots`` is set
         (possibly an empty dict when this trajectory's allocation is zero).
+
+    Raises:
+        ValueError: If a standalone call has incompatible state, circuit, gate,
+            or binary-readout dimensions.
     """
     traj_idx, initial_state, noise_model, sim_params, circuit = args
-
-    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
-    compiled = compiled_circuit if compiled_circuit is not None else _compile_circuit(circuit)
-    diagnostics: NDArray[np.float64] | None = None
-    results: NDArray[np.float64] | None = None
     wants_obs = bool(sim_params.observables)
     wants_shots = sim_params.shots is not None
+    if compiled_circuit is None:
+        if initial_state.length != circuit.num_qubits:
+            msg = f"State length {initial_state.length} does not match circuit qubit count {circuit.num_qubits}."
+            raise ValueError(msg)
+        if any(observable.type == "bitstring" for observable in sim_params.observables):
+            validate_qubit_measurement_dimensions(
+                initial_state.physical_dimensions,
+                name="Bitstring measurement",
+            )
+        if wants_shots:
+            validate_qubit_measurement_dimensions(
+                initial_state.physical_dimensions,
+                name="Shot measurement",
+            )
+        compiled = _compile_circuit(
+            circuit,
+            tuple(initial_state.physical_dimensions),
+            gate_mode=sim_params.gate_mode,
+        )
+    else:
+        compiled = compiled_circuit
+    state = copy.deepcopy(initial_state) if copy_initial_state else initial_state
+    diagnostics: NDArray[np.float64] | None = None
+    results: NDArray[np.float64] | None = None
     shots_only = wants_shots and not wants_obs
     noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
 

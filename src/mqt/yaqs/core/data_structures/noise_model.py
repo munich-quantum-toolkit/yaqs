@@ -86,6 +86,8 @@ _CROSSTALK_RE = re.compile(r"^crosstalk_[xyz]{2}$")
 _LONGRANGE_CROSSTALK_RE = re.compile(r"^longrange_crosstalk_[xyz]{2}$")
 _SUPPORTED_DISTRIBUTIONS = frozenset({"normal", "lognormal", "truncated_normal"})
 _DISTRIBUTION_KEYS = frozenset({"distribution", "mean", "std"})
+_PROCESS_KEYS = frozenset({"name", "sites", "strength", "matrix", "factors"})
+_SCHEDULED_JUMP_KEYS = frozenset({"time", "sites", "name", "matrix"})
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,15 @@ def _require_mapping(entry: object, kind: str) -> dict[str, Any]:
         msg = f"Each {kind} must be a dictionary."
         raise TypeError(msg)
     return cast("dict[str, Any]", entry)
+
+
+def _reject_unknown_keys(entry: dict[str, Any], kind: str, supported_keys: frozenset[str]) -> None:
+    unknown_keys = set(entry) - supported_keys
+    if unknown_keys:
+        unknown = ", ".join(sorted(repr(key) for key in unknown_keys))
+        supported = ", ".join(sorted(repr(key) for key in supported_keys))
+        msg = f"Unknown {kind} key(s): {unknown}. Supported keys: {supported}."
+        raise ValueError(msg)
 
 
 def _validate_name(name: object, kind: str) -> str:
@@ -305,15 +316,16 @@ class NoiseModel:
     @staticmethod
     def _normalize_scheduled_jump(jump: object) -> dict[str, Any]:
         original = _require_mapping(jump, "scheduled jump")
+        if "factors" in original:
+            msg = "Scheduled jumps do not accept 'factors'; use 'matrix' for custom operators."
+            raise ValueError(msg)
+        _reject_unknown_keys(original, "scheduled jump", _SCHEDULED_JUMP_KEYS)
         for key in ("time", "sites", "name"):
             if key not in original:
                 msg = f"Each scheduled jump must have a '{key}' key."
                 raise ValueError(msg)
 
         jump_dict = dict(original)
-        if "factors" in jump_dict:
-            msg = "Scheduled jumps do not accept 'factors'; use 'matrix' for custom operators."
-            raise ValueError(msg)
         jump_dict["name"] = _validate_name(jump_dict["name"], "Scheduled jump")
         jump_dict["time"] = _validate_finite_real(jump_dict["time"], "Scheduled jump time")
         sites = _normalize_sites(jump_dict["sites"], "Scheduled jump")
@@ -460,6 +472,7 @@ class NoiseModel:
     @staticmethod
     def _normalize_process(original: object) -> dict[str, Any]:
         source = _require_mapping(original, "noise process")
+        _reject_unknown_keys(source, "noise process", _PROCESS_KEYS)
         for key in ("name", "sites", "strength"):
             if key not in source:
                 msg = f"Each process must have a '{key}' key."

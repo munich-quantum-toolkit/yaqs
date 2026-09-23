@@ -105,6 +105,41 @@ def test_one_site_matrix_explicit() -> None:
     assert not _allclose(p["matrix"], PauliX.matrix)
 
 
+def test_supported_top_level_noise_keys_are_accepted() -> None:
+    """All documented process and scheduled-jump keys remain valid."""
+    custom = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=complex)
+    model = NoiseModel(
+        processes=[{"name": "custom", "sites": [0], "strength": 0.1, "matrix": custom}],
+        scheduled_jumps=[{"time": 0.5, "sites": [0], "name": "custom", "matrix": custom}],
+    )
+
+    np.testing.assert_allclose(model.processes[0]["matrix"], custom)
+    np.testing.assert_allclose(model.scheduled_jumps[0]["matrix"], custom)
+
+
+def test_unknown_noise_process_key_rejected_before_name_lookup() -> None:
+    """A misspelled custom matrix key cannot silently select a named operator."""
+    with pytest.raises(ValueError, match=r"Unknown noise process key\(s\): 'matrx'"):
+        _ = NoiseModel([
+            {
+                "name": "pauli_x",
+                "sites": [0],
+                "strength": 0.1,
+                "matrx": np.eye(2, dtype=complex),
+            }
+        ])
+
+
+def test_unknown_scheduled_jump_key_rejected_before_name_lookup() -> None:
+    """A misspelled scheduled-jump matrix key cannot trigger library lookup."""
+    with pytest.raises(ValueError, match=r"Unknown scheduled jump key\(s\): 'matrx'"):
+        _ = NoiseModel(
+            scheduled_jumps=[
+                {"time": 0.5, "sites": [0], "name": "x", "matrx": np.eye(2, dtype=complex)},
+            ]
+        )
+
+
 def test_one_site_matrix_auto() -> None:
     """Test that one-site processes auto-fill a 2x2 'matrix'.
 

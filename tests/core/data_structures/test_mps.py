@@ -210,6 +210,60 @@ def test_mps_rejects_tensor_count_mismatch() -> None:
         MPS(2, tensors=[tensor])
 
 
+@pytest.mark.parametrize(
+    ("tensors", "physical_dimensions", "error"),
+    [
+        pytest.param([np.zeros((2, 1), dtype=np.complex128)], [2], "rank 3", id="rank"),
+        pytest.param([np.zeros((2, 0, 1), dtype=np.complex128)], [2], "nonempty", id="empty"),
+        pytest.param(
+            [np.array([np.nan, 0.0], dtype=np.complex128).reshape(2, 1, 1)],
+            [2],
+            "finite",
+            id="non-finite",
+        ),
+        pytest.param([np.zeros((3, 1, 1), dtype=np.complex128)], [2], "physical dimension", id="metadata"),
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], [2], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 1, 2), dtype=np.complex128)], [2], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.zeros((2, 1, 2), dtype=np.complex128),
+                np.zeros((3, 3, 1), dtype=np.complex128),
+            ],
+            [2, 3],
+            "bond between sites 0 and 1",
+            id="adjacent-bond",
+        ),
+    ],
+)
+def test_mps_rejects_invalid_custom_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    physical_dimensions: list[int],
+    error: str,
+) -> None:
+    """Manual MPS tensors are validated once at construction."""
+    with pytest.raises(ValueError, match=error):
+        MPS(len(tensors), tensors=tensors, physical_dimensions=physical_dimensions)
+
+
+def test_mps_accepts_valid_mixed_dimension_tensors() -> None:
+    """Manual MPS tensors support finite mixed local dimensions and open boundaries."""
+    tensors = [
+        np.ones((2, 1, 2), dtype=np.complex128),
+        np.ones((3, 2, 1), dtype=np.complex128),
+    ]
+
+    mps = MPS(2, tensors=tensors, physical_dimensions=[2, 3])
+
+    assert mps.physical_dimensions == [2, 3]
+    mps.check_if_valid_mps()
+
+
+def test_mps_rejects_nonnumeric_custom_tensor() -> None:
+    """Manual MPS cores must contain numeric data."""
+    with pytest.raises(ValueError, match="numeric data"):
+        MPS(1, tensors=[cast("Any", [["invalid"]])])
+
+
 def test_mps_rejects_physical_dimension_count_mismatch() -> None:
     """Physical-dimension counts must match the declared MPS length."""
     with pytest.raises(ValueError, match="Expected 2 physical dimensions, got 1"):
@@ -248,7 +302,7 @@ def test_mps_custom_tensors() -> None:
     pdim = 2
     t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
     t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
-    t3 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 2, 1)).astype(np.complex128)
     tensors = [t1, t2, t3]
 
     mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
@@ -783,11 +837,12 @@ def test_project_onto_bitstring_rejects_invalid_input(
         state.project_onto_bitstring(cast("Any", bitstring))
 
 
-def test_project_onto_bitstring_accepts_mixed_local_dimensions() -> None:
-    """Each bitstring digit is checked against its site's physical dimension."""
-    state = MPS(2, physical_dimensions=[2, 3], state="basis", basis_string="12")
+def test_project_onto_bitstring_rejects_non_qubit_layout() -> None:
+    """Binary projection does not reinterpret digits as qudit basis indices."""
+    state = MPS(2, physical_dimensions=[2, 3], state="zeros")
 
-    assert state.project_onto_bitstring("12") == pytest.approx(1.0)
+    with pytest.raises(ValueError, match="Bitstring measurement requires qubit sites"):
+        state.project_onto_bitstring("00")
 
 
 def _independent_dense_expect_mpo(state: MPS, operator: MPO) -> np.complex128:
@@ -991,7 +1046,8 @@ def test_expect_mpo_rejects_invalid_mps_tensor_structure(
     error: str,
 ) -> None:
     """Malformed MPS tensors are rejected before singleton bonds can broadcast."""
-    state = MPS(length=len(tensors), tensors=tensors)
+    state = MPS(length=len(tensors), state="zeros")
+    state.tensors = tensors
     operator = MPO.identity(len(tensors))
 
     with pytest.raises(ValueError, match=error):
@@ -1499,6 +1555,33 @@ def test_single_shot_basis() -> None:
         assert psi_y_minus.measure_single_shot(basis="Y") == 1
 
 
+def test_measurements_reject_unknown_basis() -> None:
+    """Single and repeated measurement accept only the documented Pauli bases."""
+    state = MPS(length=1, state="zeros")
+
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_single_shot(basis="A")
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_shots(shots=1, basis="A")
+
+
+def test_measurement_rejects_only_measured_non_qubit_sites() -> None:
+    """A qubit can be measured beside an idle qutrit, but binary full-chain readout cannot."""
+    state = MPS(2, state="zeros", physical_dimensions=[2, 3])
+
+    assert state.measure(0) == 0
+    with pytest.raises(ValueError, match="site 1 has physical dimension 3"):
+        state.measure(1)
+    with pytest.raises(ValueError, match="Single-shot measurement requires qubit sites"):
+        state.measure_single_shot()
+    with (
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor,
+        pytest.raises(ValueError, match="Shot measurement requires qubit sites"),
+    ):
+        state.measure_shots(2)
+    mock_executor.assert_not_called()
+
+
 def test_single_shot_conditional_probabilities_match_dense_distribution() -> None:
     """Each deterministic measurement path has its exact dense Born probability."""
     state = _entangled_mps(length=3, seed=41)
@@ -1860,6 +1943,15 @@ def test_check_if_valid_mps_rejects_tensor_count_mismatch() -> None:
         mps.check_if_valid_mps()
 
 
+def test_check_if_valid_mps_rejects_dimension_count_mismatch() -> None:
+    """Physical-dimension metadata must contain one entry per tensor."""
+    mps = MPS(2, state="zeros")
+    mps.physical_dimensions.pop()
+
+    with pytest.raises(ValueError, match="1 physical dimensions but length 2"):
+        mps.check_if_valid_mps()
+
+
 def test_check_if_valid_mps_rejects_bond_dimension_mismatch() -> None:
     """A mismatched adjacent bond reports both sites and dimensions."""
     mps = MPS(2, state="zeros")
@@ -1926,7 +2018,7 @@ def test_check_canonical_form_left() -> None:
     unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
     unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
     tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[2, 2, 3])
     res = mps.check_canonical_form()
     assert 0 in res
 
@@ -1936,7 +2028,7 @@ def test_check_canonical_form_right() -> None:
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_mid = unitary_group.rvs(6).astype(np.complex128).reshape((2, 3, 6))
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[3, 2, 2])
     res = mps.check_canonical_form()
     assert 2 in res
 
@@ -1946,7 +2038,7 @@ def test_check_canonical_form_middle() -> None:
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_right = unitary_group.rvs(3).astype(np.complex128).reshape(3, 3, 1)
     tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[3, 2, 3])
     res = mps.check_canonical_form()
     assert 1 in res
 
@@ -2396,7 +2488,8 @@ def test_assert_bond_shapes_consistent_raises_on_mismatch() -> None:
     t0 = np.zeros((2, 1, 3), dtype=complex)
     t1 = np.zeros((2, 2, 1), dtype=complex)
     t2 = np.zeros((2, 1, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps = MPS(length=3, state="zeros")
+    mps.tensors = [t0, t1, t2]
     with pytest.raises(ValueError, match="bond mismatch"):
         mps.assert_bond_shapes_consistent()
 
@@ -2470,7 +2563,8 @@ def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
     t0 = np.zeros((2, 1, 4), dtype=complex)
     t1 = np.zeros((2, 2, 1), dtype=complex)
     t2 = np.zeros((2, 1, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps = MPS(length=3, state="zeros")
+    mps.tensors = [t0, t1, t2]
     mps.ensure_internal_bond_dims((0,), 4)
 
     assert mps.tensors[0].shape == (2, 1, 4)

@@ -39,6 +39,95 @@ if TYPE_CHECKING:
 ComplexTensor = NDArray[np.complex128]
 
 
+def _validate_mpo_tensors(
+    tensors: Sequence[np.ndarray],
+    *,
+    expected_length: int | None = None,
+    physical_dimension: int | None = None,
+) -> None:
+    """Validate an MPO tensor chain in YAQS axis order.
+
+    Args:
+        tensors: Site tensors with ``(physical_out, physical_in, left, right)`` axes.
+        expected_length: Optional tensor count recorded by the containing MPO.
+        physical_dimension: Optional legacy dimension metadata for site 0.
+
+    Raises:
+        ValueError: If the tensor chain is empty or structurally invalid.
+    """
+    if expected_length is not None and len(tensors) != expected_length:
+        msg = f"MPO has {len(tensors)} tensors but length {expected_length}."
+        raise ValueError(msg)
+    if not tensors:
+        msg = "MPO tensors must be a non-empty sequence."
+        raise ValueError(msg)
+
+    right_bond: int | None = None
+    for site, tensor in enumerate(tensors):
+        if tensor.ndim != 4:
+            msg = f"MPO tensor at site {site} must have rank 4, got rank {tensor.ndim}."
+            raise ValueError(msg)
+        if tensor.size == 0 or any(dimension <= 0 for dimension in tensor.shape):
+            msg = f"MPO tensor at site {site} must be nonempty."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(tensor)):
+            msg = f"MPO tensor at site {site} must contain only finite values."
+            raise ValueError(msg)
+        physical_out, physical_in, left_bond, site_right_bond = tensor.shape
+        if physical_out != physical_in:
+            msg = f"MPO tensor at site {site} must have equal physical dimensions, got ({physical_out}, {physical_in})."
+            raise ValueError(msg)
+        if site == 0 and left_bond != 1:
+            msg = f"MPO left boundary bond must have dimension 1, got {left_bond}."
+            raise ValueError(msg)
+        if right_bond is not None and left_bond != right_bond:
+            msg = f"MPO bond between sites {site - 1} and {site} has dimensions {right_bond} and {left_bond}."
+            raise ValueError(msg)
+        right_bond = site_right_bond
+
+    assert right_bond is not None
+    if right_bond != 1:
+        msg = f"MPO right boundary bond must have dimension 1, got {right_bond}."
+        raise ValueError(msg)
+    if physical_dimension is not None and physical_dimension != tensors[0].shape[0]:
+        msg = (
+            f"MPO physical_dimension is {physical_dimension}, but site 0 has physical dimension {tensors[0].shape[0]}."
+        )
+        raise ValueError(msg)
+
+
+def _prepare_mpo_tensors(
+    tensors: Sequence[np.ndarray],
+    *,
+    transpose: bool,
+) -> list[ComplexTensor]:
+    """Convert numeric input tensors to the internal MPO layout and validate them.
+
+    Args:
+        tensors: MPO site tensors in the caller's selected axis order.
+        transpose: Whether to convert from ``(left, right, physical_out, physical_in)``.
+
+    Returns:
+        Validated tensors in ``(physical_out, physical_in, left, right)`` order.
+
+    Raises:
+        ValueError: If a tensor is not numeric, has the wrong rank, or forms an invalid chain.
+    """
+    converted: list[ComplexTensor] = []
+    for site, tensor in enumerate(tensors):
+        try:
+            array = np.asarray(tensor, dtype=np.complex128)
+        except (TypeError, ValueError) as exc:
+            msg = f"MPO tensor at site {site} must contain numeric data."
+            raise ValueError(msg) from exc
+        if array.ndim != 4:
+            msg = f"MPO tensor at site {site} must have rank 4, got rank {array.ndim}."
+            raise ValueError(msg)
+        converted.append(np.transpose(array, (2, 3, 0, 1)) if transpose else array)
+    _validate_mpo_tensors(converted)
+    return converted
+
+
 class MPO:
     """Matrix Product Operator (MPO) for YAQS tensor-network simulations.
 
@@ -102,6 +191,23 @@ class MPO:
     tensors: list[ComplexTensor]
     length: int
     physical_dimension: int
+
+    @classmethod
+    def _from_tensor_window(cls, tensors: list[ComplexTensor]) -> MPO:
+        """Build a trusted internal MPO window whose exterior bonds need not be one.
+
+        The caller must slice ``tensors`` from a validated MPO. This constructor is
+        for local numerical workspaces, not user-supplied standalone operators.
+
+        Returns:
+            An MPO workspace that references the supplied tensors.
+        """
+        assert tensors, "An internal MPO window needs at least one tensor."
+        window = cls()
+        window.tensors = list(tensors)
+        window.length = len(tensors)
+        window.physical_dimension = int(tensors[0].shape[0])
+        return window
 
     def apply_local_operator(
         self,
@@ -174,6 +280,8 @@ class MPO:
         for s in range(d_out):
             traced[0, 0] += tensor[s, s]
         self.tensors[site] = traced
+        if site == 0:
+            self.physical_dimension = 1
 
     def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
         """Return a new MPO with all sites not in ``keep_sites`` traced out.
@@ -580,8 +688,8 @@ class MPO:
         dipole-like interaction terms.
 
         Parameters:
-            length: Total number of sites in the chain (should be even).
-                        Qubit sites are placed at even indices, resonators at odd.
+            length: Positive number of sites. Qubit sites are placed at even
+                indices and resonators at odd indices.
             qubit_dim: Local Hilbert space dimension of each transmon qubit.
             resonator_dim: Local Hilbert space dimension of each resonator.
             qubit_freq: Finite-real bare frequency of the transmon qubits.
@@ -593,6 +701,9 @@ class MPO:
         Returns:
             An MPO instance representing the coupled transmon-resonator chain.
 
+        Raises:
+            ValueError: If ``length`` is not positive or a physical coefficient is invalid.
+
         Notes:
             - The Hamiltonian for each qubit is modeled as a Duffing oscillator:
                 H_q = ω_q * n_q + (alpha/2) * n_q (n_q - 1)
@@ -600,8 +711,11 @@ class MPO:
                 H_r = ω_r * n_r
             - The interaction is implemented via dipole coupling:
                 H_int = g * (b + b†)(a + a†)
-            - The MPO bond dimension is 4.
+            - The MPO bond dimension is 3.
         """
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
         qubit_freq = validate_real(qubit_freq, name="qubit_freq")
         resonator_freq = validate_real(resonator_freq, name="resonator_freq")
         anharmonicity = validate_real(anharmonicity, name="anharmonicity")
@@ -614,8 +728,6 @@ class MPO:
 
         id_q = np.eye(qubit_dim, dtype=complex)
         id_r = np.eye(resonator_dim, dtype=complex)
-        zero_q = np.zeros_like(id_q)
-        zero_r = np.zeros_like(id_r)
 
         n_q = b_dag.matrix @ b.matrix
         n_r = a_dag.matrix @ a.matrix
@@ -628,50 +740,31 @@ class MPO:
         tensors: list[np.ndarray] = []
 
         for i in range(length):
-            if i % 2 == 0:
-                # Qubit site
-                if i == 0:
-                    tensor = np.array(
-                        [
-                            [
-                                h_q,
-                                id_q,
-                                coupling * x_q,
-                                id_q,
-                            ]
-                        ],
-                        dtype=object,
-                    )  # (1, 4, dq, dq)
-
-                elif i == length - 1:
-                    tensor = np.array(
-                        [
-                            [id_q],
-                            [coupling * x_q],
-                            [id_q],
-                            [h_q],
-                        ],
-                        dtype=object,
-                    )  # (4, 1, dq, dq)
-
-                else:
-                    tensor = np.empty((4, 4, qubit_dim, qubit_dim), dtype=object)
-                    tensor[:, :] = [[zero_q for _ in range(4)] for _ in range(4)]
-                    tensor[0, 0] = h_q
-                    tensor[0, 1] = id_q
-                    tensor[0, 2] = coupling * x_q  # right resonator
-                    tensor[1, 3] = coupling * x_q  # left resonator
-                    tensor[0, 3] = id_q
-                    tensor[3, 3] = id_q
+            identity, local_h, position = (id_q, h_q, x_q) if i % 2 == 0 else (id_r, h_r, x_r)
+            local_dim = identity.shape[0]
+            if length == 1:
+                tensor = local_h.reshape(1, 1, local_dim, local_dim)
+            elif i == 0:
+                tensor = np.stack((local_h, coupling * position, identity), axis=0).reshape(
+                    1,
+                    3,
+                    local_dim,
+                    local_dim,
+                )
+            elif i == length - 1:
+                tensor = np.stack((identity, position, local_h), axis=0).reshape(
+                    3,
+                    1,
+                    local_dim,
+                    local_dim,
+                )
             else:
-                # Resonator site
-                tensor = np.empty((4, 4, resonator_dim, resonator_dim), dtype=object)
-                tensor[:, :] = [[zero_r for _ in range(4)] for _ in range(4)]
-                tensor[0, 0] = id_r
-                tensor[1, 2] = h_r
-                tensor[2, 0] = x_r
-                tensor[3, 1] = x_r
-                tensor[3, 3] = id_r
+                tensor = np.zeros((3, 3, local_dim, local_dim), dtype=np.complex128)
+                tensor[0, 0] = identity
+                tensor[1, 0] = position
+                tensor[2, 0] = local_h
+                tensor[2, 1] = coupling * position
+                tensor[2, 2] = identity
 
             # (left, right, phys_out, phys_in) -> (phys_out, phys_in, left, right)
             tensors.append(np.transpose(tensor, (2, 3, 0, 1)))
@@ -1155,19 +1248,24 @@ class MPO:
             right_bound (NDArray[np.complex128]): The tensor at the right boundary.
 
         Raises:
-            ValueError: If adjacent MPO tensors have inconsistent bond dimensions.
+            ValueError: If ``length`` is inconsistent or the tensors do not form a
+                finite, square, open-boundary MPO chain.
         """
-        self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
-        for i, tensor in enumerate(self.tensors):
-            # left, right, sigma, sigma'
-            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        if not self.check_if_valid_mpo():
-            msg = "MPO tensors must have matching adjacent bond dimensions."
+        tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
+        if len(tensors) != length:
+            msg = f"Expected {length} finite-state-machine tensors, got {len(tensors)}."
             raise ValueError(msg)
-        self.length = len(self.tensors)
+        self.tensors = _prepare_mpo_tensors(tensors, transpose=True)
+        self.length = length
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
+    # The shared tensor validator raises the documented ValueError.
+    def custom(
+        self,
+        tensors: list[NDArray[np.complex128]],
+        *,
+        transpose: bool = True,
+    ) -> None:
         """Custom MPO from tensors.
 
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
@@ -1187,16 +1285,10 @@ class MPO:
             and initializes the length and physical dimension of the MPO.
 
         Raises:
-            ValueError: If adjacent MPO tensors have inconsistent bond dimensions.
-        """
-        self.tensors = tensors
-        if transpose:
-            for i, tensor in enumerate(self.tensors):
-                # left, right, sigma, sigma'
-                self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        if not self.check_if_valid_mpo():
-            msg = "MPO tensors must have matching adjacent bond dimensions."
-            raise ValueError(msg)
+            ValueError: If ``tensors`` is empty, nonnumeric, nonfinite, has the wrong
+                rank, has unequal physical legs, or has invalid boundary or adjacent bonds.
+        """  # ruff: ignore[docstring-extraneous-exception]
+        self.tensors = _prepare_mpo_tensors(tensors, transpose=transpose)
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
@@ -1672,7 +1764,7 @@ class MPO:
         returns a new MPS object with the converted tensors.
 
         Returns:
-            MPS: An MPS object containing the reshaped tensors.
+            An MPS containing the reshaped tensors and their product physical dimensions.
         """
         converted_tensors: list[NDArray[np.complex128]] = [
             np.reshape(
@@ -1682,7 +1774,8 @@ class MPO:
             for tensor in self.tensors
         ]
 
-        return MPS(self.length, converted_tensors)
+        physical_dimensions = [tensor.shape[0] * tensor.shape[1] for tensor in self.tensors]
+        return MPS(self.length, converted_tensors, physical_dimensions=physical_dimensions)
 
     def _compute_bond_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
         """Return operator Schmidt singular values across a nearest-neighbor bond."""
@@ -2111,19 +2204,26 @@ class MPO:
         """MPO validity check.
 
         Check if the current tensor network is a valid Matrix Product Operator (MPO).
-        This method verifies the consistency of the bond dimensions between adjacent tensors
-        in the network. Specifically, it checks that the right bond dimension of each tensor
-        matches the left bond dimension of the subsequent tensor.
+        This method verifies the tensor count, rank, finite values, physical dimensions,
+        open boundary bonds, adjacent bonds, and site-0 dimension metadata.
 
         Returns:
             bool: True if the tensor network is a valid MPO, False otherwise.
         """
-        right_bond = self.tensors[0].shape[3]
-        for tensor in self.tensors[1::]:
-            if tensor.shape[2] != right_bond:
-                return False
-            right_bond = tensor.shape[3]
+        try:
+            _validate_mpo_tensors(
+                self.tensors,
+                expected_length=self.length,
+                physical_dimension=self.physical_dimension,
+            )
+        except (AttributeError, TypeError, ValueError):
+            return False
         return True
+
+    @property
+    def physical_dimensions(self) -> tuple[int, ...]:
+        """Local physical dimension derived from each site tensor."""
+        return tuple(int(tensor.shape[0]) for tensor in self.tensors)
 
     def check_if_identity(self, fidelity: float) -> bool:
         """MPO Identity check.

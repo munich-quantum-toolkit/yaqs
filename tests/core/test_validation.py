@@ -19,13 +19,20 @@ from typing import cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.core._validation import validate_real
+from mqt.yaqs.core._validation import (
+    validate_bool,
+    validate_choice,
+    validate_finite_real,
+    validate_integer,
+    validate_real,
+)
 
 _OPTIMIZED_VALIDATION_SCRIPT = r"""
 import json
 
 import numpy as np
 
+from mqt.yaqs import Hamiltonian, Simulator, State
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
@@ -76,6 +83,16 @@ def invalid_finite_state_machine_mpo():
     )
 
 
+def invalid_mutated_simulation_control():
+    params = AnalogSimParams(observables=[ordinary], elapsed_time=0.0, dt=0.1)
+    params.num_traj = 0
+    Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="zeros", representation="vector"),
+        Hamiltonian.ising(1, J=0.0, g=0.0),
+        params,
+    )
+
+
 pvm = Observable("00")
 ordinary = Observable("z", 0)
 state = MPS(2, state="zeros")
@@ -84,6 +101,7 @@ calls = {
     "length-type": lambda: MPS(1.5),
     "tensor-count": lambda: MPS(2, tensors=[tensor]),
     "basis-string": lambda: MPS(2, state="basis"),
+    "density-matrix-psd": lambda: State(density_matrix=np.diag([1.0, -0.5])),
     "bond-sites": lambda: state.get_entropy([1, 0]),
     "observable-sites": invalid_expect_sites,
     "bitstring": lambda: state.project_onto_bitstring("0x"),
@@ -96,6 +114,7 @@ calls = {
     "gate-tensor-shape": lambda: split_tensor(np.zeros((2, 2, 2))),
     "analog-observable-mix": lambda: AnalogSimParams(observables=[pvm, ordinary]),
     "digital-observable-mix": lambda: DigitalSimParams(observables=[pvm, ordinary]),
+    "mutated-simulation-control": invalid_mutated_simulation_control,
 }
 
 observed = {}
@@ -125,6 +144,50 @@ def _run_optimized_validation_script(*interpreter_args: str) -> dict[str, list[s
         timeout=30,
     )
     return cast("dict[str, list[str]]", json.loads(completed.stdout))
+
+
+def test_scalar_validators_accept_numpy_equivalents() -> None:
+    """Strict scalar validation accepts equivalent NumPy scalar types."""
+    assert validate_bool(np.bool_(1), name="enabled") is True
+    assert validate_integer(np.int64(3), name="count", minimum=1) == 3
+    assert validate_finite_real(np.float32(0.25), name="threshold") == pytest.approx(0.25)
+
+
+@pytest.mark.parametrize("value", [1, "false", None])
+def test_validate_bool_rejects_truthy_and_falsey_non_booleans(value: object) -> None:
+    """Boolean settings do not use Python truth-value coercion."""
+    with pytest.raises(TypeError, match="enabled must be a boolean"):
+        validate_bool(value, name="enabled")
+
+
+def test_validate_choice_requires_an_exact_supported_string() -> None:
+    """Selectors reject non-strings and unsupported spellings."""
+    allowed = ("auto", "vector")
+    with pytest.raises(TypeError, match="representation must be a string"):
+        validate_choice(1, name="representation", allowed=allowed)
+    with pytest.raises(ValueError, match="representation must be one of"):
+        validate_choice("AUTO", name="representation", allowed=allowed)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, np.ones((), dtype=np.bool_)[()]])
+def test_validate_integer_rejects_non_integer_values(value: object) -> None:
+    """Integer settings reject booleans and fractional values."""
+    with pytest.raises(TypeError, match="count must be an integer"):
+        validate_integer(value, name="count")
+
+
+def test_validate_integer_enforces_minimum() -> None:
+    """Integer settings apply their shared inclusive lower bound."""
+    with pytest.raises(ValueError, match=r"count must be >= 1"):
+        validate_integer(0, name="count", minimum=1)
+
+
+@pytest.mark.parametrize("value", [True, 1 + 0j, np.nan, np.inf])
+def test_validate_finite_real_rejects_non_real_or_non_finite_values(value: object) -> None:
+    """Finite-real settings reject booleans, complex values, NaN, and infinity."""
+    error = TypeError if isinstance(value, (bool, complex)) else ValueError
+    with pytest.raises(error, match="threshold must be"):
+        validate_finite_real(value, name="threshold")
 
 
 @pytest.mark.parametrize(
@@ -197,6 +260,13 @@ def test_public_validation_matches_under_optimized_python() -> None:
         "length-type": ["TypeError", "length must be an integer."],
         "tensor-count": ["ValueError", "Expected 2 MPS tensors, got 1."],
         "basis-string": ["ValueError", "basis_string must be provided for 'basis' state initialization."],
+        "density-matrix-psd": [
+            "ValueError",
+            (
+                "density_matrix must be positive semidefinite within atol=1e-12 and rtol=1e-10; "
+                "minimum eigenvalue is -5.000e-01."
+            ),
+        ],
         "bond-sites": ["ValueError", "entropy sites must be ordered nearest neighbors, got [1, 0]."],
         "observable-sites": ["TypeError", "observable sites must be an integer or a list of integers."],
         "bitstring": ["ValueError", "bitstring character at site 1 must be numeric, got 'x'."],
@@ -211,11 +281,11 @@ def test_public_validation_matches_under_optimized_python() -> None:
         ],
         "custom-mpo-bond-mismatch": [
             "ValueError",
-            "MPO tensors must have matching adjacent bond dimensions.",
+            "MPO bond between sites 0 and 1 has dimensions 2 and 3.",
         ],
         "finite-state-machine-mpo-bond-mismatch": [
             "ValueError",
-            "MPO tensors must have matching adjacent bond dimensions.",
+            "MPO bond between sites 0 and 1 has dimensions 2 and 3.",
         ],
         "u-parameter-matrix-shape": ["ValueError", "Input must be a 2x2 matrix."],
         "gate-tensor-shape": [
@@ -230,6 +300,7 @@ def test_public_validation_matches_under_optimized_python() -> None:
             "ValueError",
             "Mixed observable and projective-measurement simulation is not supported.",
         ],
+        "mutated-simulation-control": ["ValueError", "num_traj must be >= 1, got 0."],
     }
 
     normal = _run_optimized_validation_script()

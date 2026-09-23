@@ -18,9 +18,12 @@ from concurrent.futures import FIRST_COMPLETED, CancelledError, ProcessPoolExecu
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
+from threadpoolctl import threadpool_info, threadpool_limits
 from tqdm import tqdm
 
 from mqt.yaqs.core.linalg._threading import threadpool_limits_one  # ruff:ignore[import-private-name]
+
+from ._validation import validate_bool, validate_choice, validate_integer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -28,13 +31,8 @@ if TYPE_CHECKING:
 
 TRes = TypeVar("TRes")
 
-try:
-    from threadpoolctl import threadpool_info, threadpool_limits
-except ImportError:
-    threadpool_limits = None
-    threadpool_info = None
-
 MPContext = Literal["fork", "spawn", "auto"]
+_MP_CONTEXTS: tuple[MPContext, ...] = ("fork", "spawn", "auto")
 
 THREAD_ENV_VARS: dict[str, str] = {
     "OMP_NUM_THREADS": "1",
@@ -117,7 +115,7 @@ def get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.cont
 def limit_worker_threads(n_threads: int = 1) -> None:
     """Limit BLAS/OpenMP thread pools in the current process.
 
-    Sets environment variables and optional runtime hooks (numexpr, MKL,
+    Sets environment variables and runtime hooks (numexpr, MKL, and
     threadpoolctl) to avoid oversubscription when many worker processes run
     concurrently.
 
@@ -137,11 +135,10 @@ def limit_worker_threads(n_threads: int = 1) -> None:
         mkl = importlib.import_module("mkl")
         mkl.set_num_threads(n_threads)
 
-    if threadpool_limits is not None:
-        with contextlib.suppress(Exception):
-            threadpool_limits(limits=n_threads)
+    with contextlib.suppress(Exception):
+        threadpool_limits(limits=n_threads)
 
-    if os.environ.get("YAQS_THREAD_DEBUG", "") == "1" and threadpool_info is not None:
+    if os.environ.get("YAQS_THREAD_DEBUG", "") == "1":
         with contextlib.suppress(Exception):
             threadpool_info()
 
@@ -194,11 +191,26 @@ class ExecutionConfig:
     retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError)
 
     def __post_init__(self) -> None:
-        """Normalize and validate retry exception targets at construction time.
+        """Normalize and validate execution settings at construction time.
 
         Raises:
-            TypeError: If ``retry_exceptions`` is not a tuple/list of exception classes.
+            TypeError: If ``retry_exceptions`` has an invalid container or entry.
         """
+        object.__setattr__(self, "parallel", validate_bool(self.parallel, name="parallel"))
+        if self.max_workers is not None:
+            object.__setattr__(
+                self,
+                "max_workers",
+                validate_integer(self.max_workers, name="max_workers", minimum=1),
+            )
+        object.__setattr__(self, "show_progress", validate_bool(self.show_progress, name="show_progress"))
+        object.__setattr__(
+            self,
+            "mp_context",
+            validate_choice(self.mp_context, name="mp_context", allowed=_MP_CONTEXTS),
+        )
+        object.__setattr__(self, "max_retries", validate_integer(self.max_retries, name="max_retries", minimum=0))
+
         raw = self.retry_exceptions
         if isinstance(raw, tuple):
             excs = raw
@@ -216,7 +228,7 @@ class ExecutionConfig:
     def resolved_max_workers(self) -> int:
         """Return the effective worker count."""
         if self.max_workers is not None:
-            return max(1, int(self.max_workers))
+            return self.max_workers
         return max(1, available_cpus() - 1)
 
 
@@ -244,18 +256,15 @@ def merge_execution_config(
     base = execution or ExecutionConfig()
     updates: dict[str, Any] = {}
     if parallel is not None:
-        updates["parallel"] = bool(parallel)
+        updates["parallel"] = parallel
     if show_progress is not None:
-        updates["show_progress"] = bool(show_progress)
+        updates["show_progress"] = show_progress
     if max_workers is not _UNSET:
-        if isinstance(max_workers, int):
-            updates["max_workers"] = max_workers
-        else:
-            updates["max_workers"] = None
+        updates["max_workers"] = max_workers
     if mp_context is not None:
         updates["mp_context"] = mp_context
     if max_retries is not None:
-        updates["max_retries"] = int(max_retries)
+        updates["max_retries"] = max_retries
     return replace(base, **updates) if updates else base
 
 
