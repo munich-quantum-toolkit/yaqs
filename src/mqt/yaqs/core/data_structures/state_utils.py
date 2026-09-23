@@ -14,11 +14,22 @@ from typing import TYPE_CHECKING, Literal, cast
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
 
 Representation = Literal["mps", "vector", "density_matrix"]
 
 _ALLOWED_REPRESENTATIONS = frozenset({"mps", "vector", "density_matrix"})
+_STATE_VALIDATION_RTOL = 1e-10
+_STATE_VALIDATION_ATOL = 1e-12
+
+
+def _max_component_magnitude(value: NDArray[np.complex128]) -> float:
+    """Return the largest finite real or imaginary component magnitude."""
+    real_scale = float(np.max(np.abs(value.real), initial=0.0))
+    imag_scale = float(np.max(np.abs(value.imag), initial=0.0))
+    return max(real_scale, imag_scale)
 
 
 def validate_representation(value: str) -> Representation:
@@ -87,7 +98,7 @@ def preset_is_product_state(initial: str) -> bool:
 
 def resolve_physical_dimensions(
     length: int,
-    physical_dimensions: list[int] | int | None,
+    physical_dimensions: list[int] | int | np.integer | None,
 ) -> list[int]:
     """Resolve per-site physical dimensions (default: qubits).
 
@@ -100,24 +111,44 @@ def resolve_physical_dimensions(
     """
     if physical_dimensions is None:
         return [2] * length
-    if isinstance(physical_dimensions, int):
-        if physical_dimensions <= 0:
+    if isinstance(physical_dimensions, (int, np.integer)):
+        if isinstance(physical_dimensions, bool) or physical_dimensions <= 0:
             msg = (
                 f"resolve_physical_dimensions: physical_dimensions must be a positive integer, "
                 f"got {physical_dimensions}."
             )
             raise ValueError(msg)
-        return [physical_dimensions] * length
+        return [int(physical_dimensions)] * length
     if len(physical_dimensions) != length:
         msg = f"physical_dimensions length {len(physical_dimensions)} != {length}."
         raise ValueError(msg)
     resolved: list[int] = []
     for i, dim in enumerate(physical_dimensions):
-        if not isinstance(dim, int) or dim <= 0:
+        if not isinstance(dim, (int, np.integer)) or isinstance(dim, bool) or dim <= 0:
             msg = f"resolve_physical_dimensions: physical_dimensions[{i}] must be a positive integer, got {dim!r}."
             raise ValueError(msg)
-        resolved.append(dim)
+        resolved.append(int(dim))
     return resolved
+
+
+def validate_qubit_measurement_dimensions(
+    physical_dimensions: Sequence[int],
+    *,
+    name: str = "Measurement",
+) -> None:
+    """Require qubit dimensions for a bitstring or shot measurement.
+
+    Args:
+        physical_dimensions: Local physical dimension at each measured site.
+        name: Operation name used in the error message.
+
+    Raises:
+        ValueError: If any measured site does not have physical dimension 2.
+    """
+    for site, dimension in enumerate(physical_dimensions):
+        if dimension != 2:
+            msg = f"{name} requires qubit sites, but site {site} has physical dimension {dimension}."
+            raise ValueError(msg)
 
 
 def local_vector_for_preset(
@@ -273,14 +304,22 @@ def normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
         The normalized vector.
 
     Raises:
-        ValueError: If the vector has zero norm.
+        ValueError: If the vector is not one-dimensional, contains non-finite
+            values, or has zero norm.
     """
-    vec = np.asarray(vec, dtype=np.complex128).reshape(-1)
-    norm = np.linalg.norm(vec)
-    if norm == 0:
+    value = np.array(vec, dtype=np.complex128, copy=True)
+    if value.ndim != 1:
+        msg = f"State vector must be a one-dimensional array, got shape {value.shape}."
+        raise ValueError(msg)
+    if not np.all(np.isfinite(value)):
+        msg = "State vector must contain only finite values."
+        raise ValueError(msg)
+    scale = _max_component_magnitude(value)
+    if scale <= 0.0:
         msg = "State vector must be non-zero."
         raise ValueError(msg)
-    return vec / norm
+    scaled = value / scale
+    return scaled / np.linalg.norm(scaled)
 
 
 def _resolve_site_dims(
@@ -486,19 +525,63 @@ def embed_two_site_factors(
 
 
 def normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return a trace-one copy of a density matrix.
+    """Validate and return a trace-one copy of a density matrix.
+
+    Hermiticity uses ``atol=1e-12`` and ``rtol=1e-10`` after scaling by
+    the largest real or imaginary component. Positive semidefiniteness uses
+    the same absolute and relative tolerances on the eigenvalue scale. This
+    makes both tests independent of the input matrix's overall normalization.
+
+    Returns:
+        A normalized copy of ``rho``.
 
     Raises:
-        ValueError: If ``rho`` is not square or has zero trace.
+        ValueError: If ``rho`` is not a finite square matrix, is not Hermitian
+            or positive semidefinite within the documented tolerances, or does
+            not have a positive real trace.
     """
-    rho = np.asarray(rho, dtype=np.complex128)
-    if rho.ndim != 2 or rho.shape[0] != rho.shape[1]:
+    value = np.array(rho, dtype=np.complex128, copy=True)
+    if value.ndim != 2 or value.shape[0] == 0 or value.shape[0] != value.shape[1]:
         msg = "density_matrix must be a square 2-D array."
         raise ValueError(msg)
-    trace = np.trace(rho)
-    if np.isclose(trace, 0.0):
-        msg = "density_matrix must have non-zero trace."
+    if not np.all(np.isfinite(value)):
+        msg = "density_matrix must contain only finite values."
         raise ValueError(msg)
-    if not np.isclose(trace, 1.0):
-        rho /= trace
-    return rho
+
+    scale = _max_component_magnitude(value)
+    if scale <= 0.0:
+        msg = "density_matrix must have a positive real trace."
+        raise ValueError(msg)
+    scaled = value / scale
+    if not np.allclose(
+        scaled,
+        scaled.conj().T,
+        rtol=_STATE_VALIDATION_RTOL,
+        atol=_STATE_VALIDATION_ATOL,
+    ):
+        msg = (
+            f"density_matrix must be Hermitian within atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}."
+        )
+        raise ValueError(msg)
+
+    trace = np.trace(scaled)
+    trace_scale = float(np.sum(np.abs(np.diag(scaled))))
+    trace_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * trace_scale
+    if abs(trace.imag) > trace_tolerance or trace.real <= 0.0:
+        msg = "density_matrix must have a positive real trace."
+        raise ValueError(msg)
+
+    hermitian = 0.5 * (scaled + scaled.conj().T)
+    eigenvalues = np.linalg.eigvalsh(hermitian)
+    eigenvalue_scale = float(np.max(np.abs(eigenvalues), initial=0.0))
+    psd_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * eigenvalue_scale
+    minimum = float(eigenvalues[0])
+    if minimum < -psd_tolerance:
+        msg = (
+            "density_matrix must be positive semidefinite within "
+            f"atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}; "
+            f"minimum eigenvalue is {minimum:.3e}."
+        )
+        raise ValueError(msg)
+
+    return hermitian / float(np.trace(hermitian).real)

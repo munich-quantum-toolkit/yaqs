@@ -75,7 +75,6 @@ if TYPE_CHECKING:
     from .core.parallel_utils import MPContext
 
 from qiskit.circuit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
@@ -112,6 +111,7 @@ from .core.data_structures.simulation_program import (
     stitch_program_results,
 )
 from .core.data_structures.state import State
+from .core.data_structures.state_utils import resolve_physical_dimensions, validate_qubit_measurement_dimensions
 from .core.parallel_utils import (
     WORKER_CTX,
     ExecutionConfig,
@@ -122,7 +122,7 @@ from .core.parallel_utils import (
     run_backend_parallel,
 )
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
-from .digital.digital_tjm import digital_tjm
+from .digital.digital_tjm import _compile_circuit, _CompiledCircuit, digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 
 __all__ = ["Simulator", "available_cpus"]
@@ -204,19 +204,29 @@ def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, NDA
 
 def _digital_worker(
     traj_idx: int,
+    payload: dict[str, Any] | None = None,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Execute a single digital simulation trajectory.
+
+    Args:
+        traj_idx: Trajectory index.
+        payload: Optional serial execution context. Process workers use
+            :data:`WORKER_CTX` instead.
 
     Returns:
         Observable data, diagnostics, shot counts, and optional final MPS (any may be ``None``).
     """
-    return digital_tjm((
-        traj_idx,
-        WORKER_CTX["initial_state"],
-        WORKER_CTX["noise_model"],
-        WORKER_CTX["sim_params"],
-        WORKER_CTX["operator"],
-    ))
+    context = resolve_worker_ctx(payload)
+    return digital_tjm(
+        (
+            traj_idx,
+            context["initial_state"],
+            context["noise_model"],
+            context["sim_params"],
+            context["operator"],
+        ),
+        compiled_circuit=context["compiled_circuit"],
+    )
 
 
 _ProgramSegmentTrajectory = tuple[
@@ -796,15 +806,46 @@ def _materialized_mps(state: State) -> MPS | None:
         return None
 
 
+def _state_physical_dimensions(state: State) -> tuple[int, ...]:
+    """Return the local dimensions represented by ``state``.
+
+    Returns:
+        One physical dimension per state site.
+    """
+    mps = _materialized_mps(state)
+    if mps is not None:
+        return tuple(mps.physical_dimensions)
+    return tuple(resolve_physical_dimensions(state.length, state.physical_dimensions))
+
+
 def _validate_state_hamiltonian_pairing(state: State, hamiltonian: Hamiltonian) -> None:
     """Check ``State`` and ``Hamiltonian`` can be evolved together.
 
     Raises:
-        ValueError: If lengths are incompatible.
+        ValueError: If lengths or local physical dimensions are incompatible.
     """
     if state.length != hamiltonian.length:
         msg = f"State.length={state.length} does not match Hamiltonian.length={hamiltonian.length}."
         raise ValueError(msg)
+    state_dimensions = _state_physical_dimensions(state)
+    hamiltonian_dimensions = tuple(hamiltonian.physical_dimensions)
+    if state_dimensions != hamiltonian_dimensions:
+        msg = (
+            f"State physical dimensions {state_dimensions} do not match "
+            f"Hamiltonian physical dimensions {hamiltonian_dimensions}."
+        )
+        raise ValueError(msg)
+
+
+def _validate_qubit_readout(
+    physical_dimensions: Sequence[int],
+    sim_params: AnalogSimParams | DigitalSimParams,
+) -> None:
+    """Reject binary readout requests on non-qubit sites."""
+    if any(observable.type == "bitstring" for observable in sim_params.observables):
+        validate_qubit_measurement_dimensions(physical_dimensions, name="Bitstring measurement")
+    if isinstance(sim_params, DigitalSimParams) and sim_params.shots is not None:
+        validate_qubit_measurement_dimensions(physical_dimensions, name="Shot measurement")
 
 
 def _prepare_hamiltonian_for_run(
@@ -933,7 +974,7 @@ def _store_observable_trajectory(
 
 def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
     if final_mps is not None:
-        result.output_state = State.from_mps(final_mps)
+        result.output_state = State._from_trusted_mps(final_mps)  # ruff: ignore[private-member-access]
 
 
 def _store_mcwf_final_state(
@@ -1365,7 +1406,9 @@ class Simulator:
                 if shot_counts is not None:
                     segment_result.measurements[traj_index] = shot_counts
                 if checkpoint is not None:
-                    segment_result.output_state = State.from_mps(checkpoint)
+                    segment_result.output_state = State._from_trusted_mps(  # ruff: ignore[private-member-access]
+                        checkpoint,
+                    )
             if trajectory_final is not None:
                 final_mps = trajectory_final
 
@@ -1418,7 +1461,7 @@ class Simulator:
             segment_results=segment_results,
         )
         if final_mps is not None:
-            result.output_state = State.from_mps(final_mps)
+            result.output_state = State._from_trusted_mps(final_mps)  # ruff: ignore[private-member-access]
         return result
 
     # -----------------------------------------------------------------------
@@ -1473,6 +1516,7 @@ class Simulator:
             for spec in initial_state_list:
                 spec.ensure_encoded("mps")
                 _validate_state_hamiltonian_pairing(spec, operator)
+                _validate_qubit_readout(spec.mps.physical_dimensions, sim_params)
             if noise_model is not None:
                 validate_noise_model_for_run(
                     noise_model,
@@ -1501,6 +1545,8 @@ class Simulator:
         initial_state.ensure_encoded(state_rep)
         mps = _materialized_mps(initial_state)
         _validate_state_hamiltonian_pairing(initial_state, operator)
+        if mps is not None:
+            _validate_qubit_readout(mps.physical_dimensions, sim_params)
         if noise_model is not None:
             validate_noise_model_for_run(
                 noise_model,
@@ -1678,6 +1724,7 @@ class Simulator:
         self,
         initial_state: MPS,
         operator: QuantumCircuit,
+        compiled_circuit: _CompiledCircuit,
         sim_params: DigitalSimParams,
         noise_model: NoiseModel | None,
         result: Result,
@@ -1697,11 +1744,6 @@ class Simulator:
         Raises:
             ValueError: If ``get_state`` is ``True`` with a non-trivial noise model.
         """
-        backend: Callable[
-            [tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]],
-            Any,
-        ] = digital_tjm
-
         wants_obs = bool(sim_params.observables)
         wants_shots = sim_params.shots is not None
         shots_only = wants_shots and not wants_obs
@@ -1715,12 +1757,7 @@ class Simulator:
 
         effective_num_mid_measurements = sim_params.num_mid_measurements
         if sim_params.sample_layers:
-            dag = circuit_to_dag(operator)
-            effective_num_mid_measurements = sum(
-                1
-                for n in dag.op_nodes()
-                if n.op.name == "barrier" and str(getattr(n.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
-            )
+            effective_num_mid_measurements = compiled_circuit.num_mid_measurements
 
         if wants_obs:
             _prepare_result_observables(
@@ -1754,6 +1791,7 @@ class Simulator:
             "noise_model": noise_model,
             "sim_params": worker_params,
             "operator": operator,
+            "compiled_circuit": compiled_circuit,
         }
         if per_call_shots is not None:
             payload["per_call_shots"] = per_call_shots
@@ -1806,13 +1844,18 @@ class Simulator:
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
             else:
                 n_threads = available_cpus()
-                args: list[tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit]] = [
-                    (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
-                ]
-                iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
-                for i, arg in enumerate(iterator):
+                iterator = tqdm(
+                    range(effective_num_traj),
+                    desc="Running trajectories",
+                    ncols=80,
+                    disable=not self.show_progress,
+                )
+                for i in iterator:
                     traj_data, traj_diag, shot_counts, traj_final = call_serial_capped(
-                        backend, arg, n_threads=n_threads
+                        _digital_worker,
+                        i,
+                        payload,
+                        n_threads=n_threads,
                     )
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
         finally:
@@ -1856,6 +1899,13 @@ class Simulator:
             msg = "State and circuit qubit counts do not match."
             raise ValueError(msg)
 
+        _validate_qubit_readout(mps.physical_dimensions, sim_params)
+        compiled_circuit = _compile_circuit(
+            operator,
+            tuple(mps.physical_dimensions),
+            gate_mode=sim_params.gate_mode,
+        )
+
         if noise_model is not None:
             validate_noise_model_for_run(
                 noise_model,
@@ -1865,7 +1915,7 @@ class Simulator:
                 is_digital=True,
             )
 
-        self._run_digital_sim(mps, operator, sim_params, noise_model, result)
+        self._run_digital_sim(mps, operator, compiled_circuit, sim_params, noise_model, result)
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)

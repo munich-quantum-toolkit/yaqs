@@ -1823,6 +1823,52 @@ def test_standalone_swap_routing_rejects_non_qubit_spectator() -> None:
         apply_two_qubit_gate(state, node, params)
 
 
+def test_standalone_gate_wrappers_reject_non_qubit_targets() -> None:
+    """Direct one- and two-qubit gate helpers validate their target sites."""
+    state = MPS(2, state="zeros", physical_dimensions=[3, 2])
+    params = DigitalSimParams(observables=[Observable("z", 1)], gate_mode="mpo")
+
+    single_circuit = QuantumCircuit(2)
+    single_circuit.x(0)
+    single_node = next(node for node in circuit_to_dag(single_circuit).front_layer() if node.op.name == "x")
+    with pytest.raises(ValueError, match="targets site 0 with physical dimension 3"):
+        apply_single_qubit_gate(state, single_node)
+
+    two_site_circuit = QuantumCircuit(2)
+    two_site_circuit.cx(0, 1)
+    two_site_node = next(node for node in circuit_to_dag(two_site_circuit).front_layer() if node.op.name == "cx")
+    with pytest.raises(ValueError, match="targets site 0 with physical dimension 3"):
+        apply_two_qubit_gate(state, two_site_node, params)
+
+
+def test_direct_digital_tjm_rejects_non_qubit_gate_target() -> None:
+    """Direct trajectory execution compiles gates against the state layout."""
+    state = MPS(2, state="zeros", physical_dimensions=[2, 3])
+    circuit = QuantumCircuit(2)
+    circuit.x(1)
+
+    with pytest.raises(ValueError, match="targets site 1 with physical dimension 3"):
+        digital_tjm((0, state, None, DigitalSimParams(get_state=True), circuit))
+
+
+def test_direct_digital_tjm_rejects_circuit_size_mismatch() -> None:
+    """Direct trajectory execution requires one circuit wire per state site."""
+    state = MPS(1, state="zeros")
+    circuit = QuantumCircuit(2)
+    circuit.x(1)
+
+    with pytest.raises(ValueError, match="State length 1 does not match circuit qubit count 2"):
+        digital_tjm((0, state, None, DigitalSimParams(get_state=True), circuit))
+
+
+def test_direct_digital_tjm_rejects_non_qubit_shots() -> None:
+    """Direct trajectory execution rejects unsupported qudit readout."""
+    state = MPS(2, state="zeros", physical_dimensions=[2, 3])
+
+    with pytest.raises(ValueError, match="Shot measurement requires qubit sites"):
+        digital_tjm((0, state, None, DigitalSimParams(shots=1), QuantumCircuit(2)))
+
+
 def test_freeze_gate_arrays_protects_array_generator() -> None:
     """Compiled gates make an array-valued generator read-only."""
     gate = X()

@@ -31,6 +31,7 @@ from .simulation_parameters import (
     _validate_order,
     _validate_simulation_controls,
 )
+from .state_utils import validate_qubit_measurement_dimensions
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -655,6 +656,11 @@ def _compile_digital_segment(
         random_seed=random_seed,
     )
     assert isinstance(execution_params, DigitalSimParams)
+    if execution_params.shots is not None:
+        validate_qubit_measurement_dimensions(
+            signature.physical_dimensions,
+            name=f"segments[{index}] shot measurement",
+        )
     compiled_circuit = _compile_circuit(
         segment.circuit,
         signature.physical_dimensions,
@@ -709,6 +715,11 @@ def _compile_program(
     num_traj = _resolve_program_num_traj(program)
     random_seed = program.random_seed
     observables = program.observables
+    if any(observable.type == "bitstring" for observable in observables):
+        validate_qubit_measurement_dimensions(
+            signature.physical_dimensions,
+            name="Bitstring measurement",
+        )
 
     for index, segment in enumerate(program.segments):
         resolved_noise_model = segment.noise_model if segment.noise_model is not None else default_noise_model

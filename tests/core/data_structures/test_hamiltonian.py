@@ -76,6 +76,48 @@ def test_hamiltonian_from_manual_tensors() -> None:
     ]
     h = Hamiltonian(tensors=tensors)
     assert h.mpo.length == 2
+    assert h.physical_dimensions == (2, 2)
+
+
+def test_hamiltonian_manual_tensors_reuse_mpo_validation() -> None:
+    """Tensor-backed Hamiltonians reject invalid MPO cores at construction."""
+    tensor = np.full((1, 1, 2, 2), np.nan, dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="finite"):
+        Hamiltonian(tensors=[tensor])
+
+
+def test_hamiltonian_manual_tensor_dimensions_match_metadata() -> None:
+    """Uniform tensor physical legs must match physical_dimension."""
+    tensor = np.eye(3, dtype=np.complex128).reshape(1, 1, 3, 3)
+
+    with pytest.raises(ValueError, match="do not match physical_dimension=2"):
+        Hamiltonian(tensors=[tensor])
+
+
+def test_hamiltonian_from_mpo_exposes_mixed_physical_dimensions() -> None:
+    """MPO-backed Hamiltonians derive each local dimension from the tensor axes."""
+    mpo = MPO()
+    mpo.custom(
+        [
+            np.ones((2, 2, 1, 1), dtype=np.complex128),
+            np.ones((3, 3, 1, 1), dtype=np.complex128),
+        ],
+        transpose=False,
+    )
+
+    hamiltonian = Hamiltonian.from_mpo(mpo)
+
+    assert hamiltonian.physical_dimensions == (2, 3)
+
+
+def test_hamiltonian_from_mpo_rejects_invalid_tensor_structure() -> None:
+    """Wrapping an MPO revalidates mutable tensor data."""
+    mpo = MPO.identity(1)
+    mpo.tensors[0][0, 0, 0, 0] = np.nan
+
+    with pytest.raises(ValueError, match="structurally valid"):
+        Hamiltonian.from_mpo(mpo)
 
 
 def test_hamiltonian_matrix_explicit_length() -> None:
@@ -615,6 +657,23 @@ def test_piecewise_rejects_empty_or_nested_or_mismatched_pieces() -> None:
         Hamiltonian.piecewise([(static, 0.1), (Hamiltonian.ising(3, J=1.0, g=0.5), 0.1)])
     with pytest.raises(ValueError, match="finite and positive"):
         Hamiltonian.piecewise([(static, 0.0)])
+
+
+def test_piecewise_rejects_mismatched_local_dimensions() -> None:
+    """Same-length pieces must describe the same local Hilbert spaces."""
+    mixed_mpo = MPO()
+    mixed_mpo.custom(
+        [
+            np.ones((2, 2, 1, 1), dtype=np.complex128),
+            np.ones((3, 3, 1, 1), dtype=np.complex128),
+        ],
+        transpose=False,
+    )
+    mixed = Hamiltonian.from_mpo(mixed_mpo)
+    qubits = Hamiltonian.ising(2, J=1.0, g=0.5)
+
+    with pytest.raises(ValueError, match=r"physical dimensions \(2, 2\).*\(2, 3\)"):
+        Hamiltonian.piecewise([(mixed, 0.1), (qubits, 0.1)])
 
 
 def test_piecewise_cannot_materialize_a_single_operator() -> None:

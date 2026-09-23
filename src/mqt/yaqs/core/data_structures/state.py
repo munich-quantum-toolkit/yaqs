@@ -16,6 +16,7 @@ import numpy as np
 from .mps import MPS
 from .state_utils import (
     Representation,
+    infer_chain_length,
     infer_qubit_length,
     normalize_density_matrix,
     normalize_vector,
@@ -30,6 +31,61 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 __all__ = ["Representation", "State"]
+
+
+def _resolve_dense_length(
+    hilbert_dim: int,
+    length: int | None,
+    physical_dimensions: list[int] | int | None,
+    *,
+    dimension_name: str,
+) -> int:
+    """Resolve and validate the site layout for manual dense state data.
+
+    Args:
+        hilbert_dim: Dense vector or matrix dimension.
+        length: Explicit site count, if supplied.
+        physical_dimensions: Uniform or per-site local dimensions.
+        dimension_name: Input label for mismatch errors.
+
+    Returns:
+        The validated number of sites.
+
+    Raises:
+        ValueError: If the local dimensions do not define ``hilbert_dim`` or
+            cannot determine a positive site count.
+    """
+    if length is None:
+        if physical_dimensions is None:
+            resolved_length = infer_qubit_length(hilbert_dim)
+        elif isinstance(physical_dimensions, (int, np.integer)):
+            local_dimension = resolve_physical_dimensions(1, physical_dimensions)[0]
+            if local_dimension == 1:
+                msg = "length is required when physical_dimensions=1 for manual dense state data."
+                raise ValueError(msg)
+            resolved_length = infer_chain_length(hilbert_dim, physical_dimension=local_dimension)
+        else:
+            resolved_length = len(physical_dimensions)
+            if resolved_length == 0:
+                msg = "physical_dimensions must contain at least one site."
+                raise ValueError(msg)
+    else:
+        resolved_length = length
+
+    if resolved_length < 1:
+        msg = (
+            "Manual dense state data must describe at least one site. "
+            "Pass physical_dimensions=[1] to represent a one-dimensional site."
+        )
+        raise ValueError(msg)
+
+    expected = int(np.prod(resolve_physical_dimensions(resolved_length, physical_dimensions)))
+    if hilbert_dim != expected:
+        msg = (
+            f"{dimension_name} {hilbert_dim} does not match Hilbert dimension {expected} for length={resolved_length}."
+        )
+        raise ValueError(msg)
+    return resolved_length
 
 
 class State:
@@ -69,21 +125,27 @@ class State:
         """Build a state specification.
 
         Args:
-            length: Number of lattice sites. Inferred from ``tensors`` (list length),
-                or from the Hilbert-space dimension of ``vector`` / ``density_matrix``
-                when that dimension is a power of two. Required for preset-only construction.
+            length: Number of lattice sites. Inferred from ``tensors`` (list length).
+                For ``vector`` and ``density_matrix``, a per-site
+                ``physical_dimensions`` list sets the length, a scalar dimension
+                defines the uniform base, and the default infers a qubit layout.
+                Required for preset-only construction.
             initial: Product-state preset passed to :class:`MPS` when no manual data is given.
                 Same options as ``MPS(..., state=...)`` (``"zeros"``, ``"ones"``, ``"x+"``, …).
             representation: For preset-only states: ``"mps"`` (default, TJM), ``"vector"`` (MCWF),
                 or ``"density_matrix"`` (Lindblad). Ignored when ``tensors``, ``vector``, or
                 ``density_matrix`` is passed (inferred automatically).
-            physical_dimensions: Per-site physical dimension(s); default is qubits (2).
+            physical_dimensions: Per-site physical dimension(s); default is
+                qubits (2). For dense manual data, the dimensions must multiply
+                to the vector or matrix dimension.
             tensors: MPS tensor cores (rank-3 arrays per site); ``representation`` inferred as ``"mps"``.
-            vector: 1-D state vector in site-0-LSB order; ``representation``
-                inferred as ``"vector"``.
-            density_matrix: 2-D square array whose row and column indices use
+            vector: Finite, nonzero 1-D state vector in site-0-LSB order;
+                ``representation`` inferred as ``"vector"``.
+            density_matrix: Finite, Hermitian, positive-semidefinite 2-D square
+                array with positive real trace. Its row and column indices use
                 site-0-LSB order; ``representation`` inferred as
-                ``"density_matrix"``.
+                ``"density_matrix"``. Hermiticity and positive semidefiniteness
+                use scale-aware ``atol=1e-12`` and ``rtol=1e-10`` checks.
             pad: Bond-dimension padding passed through to :class:`MPS` (preset/tensor paths only).
             basis_string: Computational-basis string when ``initial="basis"``.
                 Character ``i`` selects site ``i``; this site-order string is not
@@ -91,9 +153,10 @@ class State:
             seed: RNG seed for ``initial="random"`` when building dense product vectors.
 
         Raises:
-            ValueError: If more than one of ``tensors``, ``vector``, and ``density_matrix`` is set,
-                if ``length`` cannot be inferred, if ``length`` is not positive, or if array shapes
-                are invalid, or if a vector or density matrix has zero norm or trace.
+            ValueError: If more than one of ``tensors``, ``vector``, and
+                ``density_matrix`` is set; if ``length`` cannot be inferred or
+                is not positive; or if manual state data is malformed or not a
+                valid quantum state.
         """
         if length is not None and length <= 0:
             msg = "length must be a positive integer."
@@ -134,37 +197,32 @@ class State:
             reject_preset_only_kwargs(initial=initial, pad=pad, basis_string=basis_string, seed=seed)
             self._vector = normalize_vector(vector)
             hilbert_dim = self._vector.size
-            if length is None:
-                self.length = infer_qubit_length(hilbert_dim)
-            else:
-                expected = int(np.prod(resolve_physical_dimensions(length, physical_dimensions)))
-                if hilbert_dim != expected:
-                    msg = f"vector size {hilbert_dim} does not match Hilbert dimension {expected} for length={length}."
-                    raise ValueError(msg)
-                self.length = length
+            self.length = _resolve_dense_length(
+                hilbert_dim,
+                length,
+                physical_dimensions,
+                dimension_name="vector size",
+            )
             if representation is not None and representation != "vector":
                 msg = "representation is inferred as 'vector' from vector=; omit representation=."
                 raise ValueError(msg)
             self.representation = "vector"
+            self._encoded_as = "vector"
         elif density_matrix is not None:
             reject_preset_only_kwargs(initial=initial, pad=pad, basis_string=basis_string, seed=seed)
             self._density_matrix = normalize_density_matrix(density_matrix)
             hilbert_dim = self._density_matrix.shape[0]
-            if length is None:
-                self.length = infer_qubit_length(hilbert_dim)
-            else:
-                expected = int(np.prod(resolve_physical_dimensions(length, physical_dimensions)))
-                if hilbert_dim != expected:
-                    msg = (
-                        f"density_matrix dimension {hilbert_dim} does not match Hilbert dimension "
-                        f"{expected} for length={length}."
-                    )
-                    raise ValueError(msg)
-                self.length = length
+            self.length = _resolve_dense_length(
+                hilbert_dim,
+                length,
+                physical_dimensions,
+                dimension_name="density_matrix dimension",
+            )
             if representation is not None and representation != "density_matrix":
                 msg = "representation is inferred as 'density_matrix' from density_matrix=; omit representation=."
                 raise ValueError(msg)
             self.representation = "density_matrix"
+            self._encoded_as = "density_matrix"
         else:
             if length is None:
                 msg = "length is required when not passing tensors, vector, or density_matrix."
@@ -189,13 +247,34 @@ class State:
         Returns:
             A :class:`State` that references ``mps`` and is already encoded as ``"mps"``.
         """
-        wrapped = cls(mps.length, physical_dimensions=list(mps.physical_dimensions))
-        wrapped._tensors = [np.asarray(t, dtype=np.complex128) for t in mps.tensors]
-        wrapped._mps = mps
-        wrapped._encoded_as = "mps"
-        wrapped.representation = "mps"
-        wrapped._encode("mps")
+        mps.check_if_valid_mps()
+        return cls._from_trusted_mps(mps)
+
+    @classmethod
+    def _from_trusted_mps(cls, mps: MPS) -> State:
+        """Wrap an internally produced MPS without rescanning its tensors.
+
+        Returns:
+            A :class:`State` that references ``mps`` and is already encoded as ``"mps"``.
+        """
+        wrapped = cls.__new__(cls)
+        wrapped._attach_trusted_mps(mps)  # ruff: ignore[private-member-access]  # initialized via __new__
         return wrapped
+
+    def _attach_trusted_mps(self, mps: MPS) -> None:
+        """Initialize this unallocated wrapper from an internally produced MPS."""
+        self.initial = "zeros"
+        self.physical_dimensions = list(mps.physical_dimensions)
+        self._tensors = list(mps.tensors)
+        self.pad = None
+        self.basis_string = None
+        self.seed = None
+        self.length = mps.length
+        self.representation = "mps"
+        self._encoded_as = "mps"
+        self._mps = mps
+        self._vector = None
+        self._density_matrix = None
 
     def _build_mps(self) -> MPS:
         """Return the MPS representation, building it from tensors or presets if needed.

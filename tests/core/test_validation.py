@@ -101,6 +101,7 @@ calls = {
     "length-type": lambda: MPS(1.5),
     "tensor-count": lambda: MPS(2, tensors=[tensor]),
     "basis-string": lambda: MPS(2, state="basis"),
+    "density-matrix-psd": lambda: State(density_matrix=np.diag([1.0, -0.5])),
     "bond-sites": lambda: state.get_entropy([1, 0]),
     "observable-sites": invalid_expect_sites,
     "bitstring": lambda: state.project_onto_bitstring("0x"),
@@ -259,6 +260,13 @@ def test_public_validation_matches_under_optimized_python() -> None:
         "length-type": ["TypeError", "length must be an integer."],
         "tensor-count": ["ValueError", "Expected 2 MPS tensors, got 1."],
         "basis-string": ["ValueError", "basis_string must be provided for 'basis' state initialization."],
+        "density-matrix-psd": [
+            "ValueError",
+            (
+                "density_matrix must be positive semidefinite within atol=1e-12 and rtol=1e-10; "
+                "minimum eigenvalue is -5.000e-01."
+            ),
+        ],
         "bond-sites": ["ValueError", "entropy sites must be ordered nearest neighbors, got [1, 0]."],
         "observable-sites": ["TypeError", "observable sites must be an integer or a list of integers."],
         "bitstring": ["ValueError", "bitstring character at site 1 must be numeric, got 'x'."],
@@ -273,11 +281,11 @@ def test_public_validation_matches_under_optimized_python() -> None:
         ],
         "custom-mpo-bond-mismatch": [
             "ValueError",
-            "MPO tensors must have matching adjacent bond dimensions.",
+            "MPO bond between sites 0 and 1 has dimensions 2 and 3.",
         ],
         "finite-state-machine-mpo-bond-mismatch": [
             "ValueError",
-            "MPO tensors must have matching adjacent bond dimensions.",
+            "MPO bond between sites 0 and 1 has dimensions 2 and 3.",
         ],
         "u-parameter-matrix-shape": ["ValueError", "Input must be a 2x2 matrix."],
         "gate-tensor-shape": [

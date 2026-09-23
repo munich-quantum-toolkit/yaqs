@@ -661,7 +661,8 @@ class DigitalSimParams(_ObservableOrderingMixin):
     output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
     state propagation is itself meaningful there.
     Observables and shots may be requested together; shots sample bitstrings from amplitudes
-    and do not projectively measure the configured observables.
+    and do not projectively measure the configured observables. Bitstring observables and
+    shot counts require qubit dimensions at every measured site.
 
     ``num_traj`` and ``shots`` are independent controls:
 
@@ -733,6 +734,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             shots: Total bitstring-sample budget for computational-basis readout, or
                 ``None`` to skip. The budget must be positive when set. It is independent
                 of ``num_traj``; with noise, the budget is distributed across trajectories.
+                Binary shot output requires an all-qubit state layout.
             num_traj: Positive number of noisy stochastic trajectories used to estimate
                 observables and trajectory diagnostics. Ignored for noiseless runs
                 (one trajectory is enough). When ``shots < num_traj`` in a noisy

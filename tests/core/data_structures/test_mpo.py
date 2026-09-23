@@ -686,6 +686,66 @@ def test_trapped_ion_validation(kwargs: dict[str, Any], match: str) -> None:
         MPO.trapped_ion(**kwargs)
 
 
+def test_coupled_transmon_even_chain_matches_dense_reference() -> None:
+    """The open MPO includes every onsite term and nearest-neighbor coupling."""
+    length = 4
+    qubit_dim = 2
+    resonator_dim = 3
+    qubit_freq = 5.0
+    resonator_freq = 6.0
+    anharmonicity = -0.2
+    coupling = 0.1
+    dimensions = [qubit_dim, resonator_dim, qubit_dim, resonator_dim]
+
+    mpo = MPO.coupled_transmon(
+        length,
+        qubit_dim,
+        resonator_dim,
+        qubit_freq,
+        resonator_freq,
+        anharmonicity,
+        coupling,
+    )
+
+    destroy_qubit = Destroy(qubit_dim)
+    destroy_resonator = Destroy(resonator_dim)
+    number_qubit = destroy_qubit.dag().matrix @ destroy_qubit.matrix
+    number_resonator = destroy_resonator.dag().matrix @ destroy_resonator.matrix
+    h_qubit = qubit_freq * number_qubit + (anharmonicity / 2) * number_qubit @ (number_qubit - np.eye(qubit_dim))
+    h_resonator = resonator_freq * number_resonator
+    x_qubit = destroy_qubit.dag().matrix + destroy_qubit.matrix
+    x_resonator = destroy_resonator.dag().matrix + destroy_resonator.matrix
+    local_hamiltonians = (h_qubit, h_resonator, h_qubit, h_resonator)
+    positions = (x_qubit, x_resonator, x_qubit, x_resonator)
+
+    expected = np.zeros((int(np.prod(dimensions)),) * 2, dtype=np.complex128)
+    for site, local_hamiltonian in enumerate(local_hamiltonians):
+        expected += embed_one_site_operator(
+            local_hamiltonian,
+            length,
+            site,
+            physical_dimensions=dimensions,
+        )
+    for site in range(length - 1):
+        expected += coupling * embed_two_site_factors(
+            positions[site],
+            positions[site + 1],
+            length,
+            site,
+            site + 1,
+            physical_dimensions=dimensions,
+        )
+
+    assert mpo.physical_dimensions == tuple(dimensions)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_coupled_transmon_rejects_empty_chain() -> None:
+    """A coupled-transmon Hamiltonian needs at least one site."""
+    with pytest.raises(ValueError, match="length must be positive"):
+        MPO.coupled_transmon(0, 2, 3, 5.0, 6.0, -0.2, 0.1)
+
+
 def test_fermi_hubbard_1d_correct_operator() -> None:
     """Verify the fermionic 1D Fermi-Hubbard MPO matches the dense Hamiltonian."""
     length = 3
@@ -807,8 +867,16 @@ def test_finite_state_machine_rejects_bond_mismatch() -> None:
     inner = np.zeros((3, 3, 2, 2), dtype=np.complex128)
     right_bound = np.zeros((3, 1, 2, 2), dtype=np.complex128)
 
-    with pytest.raises(ValueError, match="MPO tensors must have matching adjacent bond dimensions"):
+    with pytest.raises(ValueError, match="MPO bond between sites 0 and 1 has dimensions 2 and 3"):
         mpo.finite_state_machine(3, left_bound, inner, right_bound)
+
+
+def test_finite_state_machine_rejects_invalid_length() -> None:
+    """The declared length must include both supplied boundary tensors."""
+    tensor = np.ones((1, 1, 2, 2), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="Expected 1 finite-state-machine tensors, got 2"):
+        MPO().finite_state_machine(1, tensor, tensor, tensor)
 
 
 def test_custom_without_transpose_sets_physical_dimension() -> None:
@@ -845,8 +913,9 @@ def test_custom() -> None:
     assert len(mpo.tensors) == length
 
     for original, created in zip(tensors, mpo.tensors, strict=True):
-        assert original.shape == created.shape
-        assert np.allclose(original, created)
+        expected = np.transpose(original, (2, 3, 0, 1))
+        assert expected.shape == created.shape
+        assert np.allclose(expected, created)
 
 
 def test_custom_rejects_bond_mismatch() -> None:
@@ -856,8 +925,55 @@ def test_custom_rejects_bond_mismatch() -> None:
         np.zeros((2, 2, 3, 1), dtype=np.complex128),
     ]
 
-    with pytest.raises(ValueError, match="MPO tensors must have matching adjacent bond dimensions"):
+    with pytest.raises(ValueError, match="MPO bond between sites 0 and 1 has dimensions 2 and 3"):
         MPO().custom(tensors, transpose=False)
+
+
+@pytest.mark.parametrize(
+    ("tensors", "error"),
+    [
+        pytest.param([], "non-empty", id="empty-chain"),
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], "rank 4", id="rank"),
+        pytest.param([np.zeros((0, 0, 1, 1), dtype=np.complex128)], "nonempty", id="empty-tensor"),
+        pytest.param(
+            [np.full((2, 2, 1, 1), np.inf, dtype=np.complex128)],
+            "finite",
+            id="non-finite",
+        ),
+        pytest.param([np.zeros((2, 3, 1, 1), dtype=np.complex128)], "equal physical", id="physical-legs"),
+        pytest.param([np.zeros((2, 2, 2, 1), dtype=np.complex128)], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 2, 1, 2), dtype=np.complex128)], "right boundary", id="right-boundary"),
+    ],
+)
+def test_custom_rejects_invalid_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    error: str,
+) -> None:
+    """Manual MPO tensors are validated once at construction."""
+    with pytest.raises(ValueError, match=error):
+        MPO().custom(tensors, transpose=False)
+
+
+def test_custom_accepts_mixed_physical_dimensions() -> None:
+    """A custom MPO can use different square physical dimensions by site."""
+    mpo = MPO()
+    mpo.custom(
+        [
+            np.ones((2, 2, 1, 2), dtype=np.complex128),
+            np.ones((3, 3, 2, 1), dtype=np.complex128),
+        ],
+        transpose=False,
+    )
+
+    assert mpo.physical_dimension == 2
+    assert mpo.physical_dimensions == (2, 3)
+    assert mpo.check_if_valid_mpo()
+
+
+def test_custom_rejects_nonnumeric_tensor() -> None:
+    """Manual MPO cores must contain numeric data."""
+    with pytest.raises(ValueError, match="numeric data"):
+        MPO().custom([cast("Any", [[[["invalid"]]]])], transpose=False)
 
 
 def test_from_matrix() -> None:
@@ -1040,6 +1156,23 @@ def test_to_mps() -> None:
         assert tensor.shape == (pdim2, bond_in, bond_out)
 
 
+def test_to_mps_records_each_product_physical_dimension() -> None:
+    """MPO.to_mps records each reshaped output-input dimension."""
+    mpo = MPO()
+    mpo.custom(
+        [
+            np.ones((2, 2, 1, 1), dtype=np.complex128),
+            np.ones((3, 3, 1, 1), dtype=np.complex128),
+        ],
+        transpose=False,
+    )
+
+    mps = mpo.to_mps()
+
+    assert mps.physical_dimensions == [4, 9]
+    mps.check_if_valid_mps()
+
+
 def test_check_if_valid_mpo() -> None:
     """Test that a valid MPO passes the check_if_valid_mpo method without raising errors.
 
@@ -1052,11 +1185,32 @@ def test_check_if_valid_mpo() -> None:
     assert mpo.check_if_valid_mpo() is True
 
 
+def test_check_if_valid_mpo_rejects_uninitialized_builder() -> None:
+    """An MPO with no tensor data is not a valid operator."""
+    assert MPO().check_if_valid_mpo() is False
+
+
 def test_check_if_valid_mpo_detects_bond_mismatch() -> None:
     """Invalid bond dimensions return False instead of asserting."""
     mpo = MPO.ising(3, 1.0, 0.5)
     mpo.tensors[1] = mpo.tensors[1].copy()
     mpo.tensors[1] = np.zeros((2, 2, 2, 99), dtype=np.complex128)
+    assert mpo.check_if_valid_mpo() is False
+
+
+def test_check_if_valid_mpo_detects_dimension_metadata_mismatch() -> None:
+    """The legacy scalar dimension must describe site 0."""
+    mpo = MPO.identity(1, physical_dimension=3)
+    mpo.physical_dimension = 2
+
+    assert mpo.check_if_valid_mpo() is False
+
+
+def test_check_if_valid_mpo_detects_tensor_count_mismatch() -> None:
+    """Stored tensor count must agree with MPO length metadata."""
+    mpo = MPO.identity(1)
+    mpo.length = 2
+
     assert mpo.check_if_valid_mpo() is False
 
 
