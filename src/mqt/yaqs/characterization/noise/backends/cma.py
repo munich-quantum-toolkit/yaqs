@@ -9,13 +9,25 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Protocol
 
-import cma
 import numpy as np
 from scipy.optimize import minimize_scalar
 
 from mqt.yaqs.core._validation import validate_finite_real, validate_integer  # ruff: ignore[import-private-name] -- shared package-internal validators
+
+# CMA treats Matplotlib as optional but warns during import when it is absent.
+# YAQS does not use CMA's plotting helpers, so keep that third-party warning at
+# the integration boundary instead of suppressing it throughout the test suite.
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Could not import matplotlib\.pyplot, therefore.*",
+        category=UserWarning,
+        module=r"cma\.s",
+    )
+    import cma
 
 
 class ScalarLoss(Protocol):
