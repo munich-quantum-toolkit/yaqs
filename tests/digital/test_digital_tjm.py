@@ -1869,6 +1869,15 @@ def test_direct_digital_tjm_rejects_non_qubit_shots() -> None:
         digital_tjm((0, state, None, DigitalSimParams(shots=1), QuantumCircuit(2)))
 
 
+def test_direct_digital_tjm_rejects_non_qubit_bitstring_observable() -> None:
+    """Direct trajectory execution rejects binary observables on qudit layouts."""
+    state = MPS(2, state="zeros", physical_dimensions=[2, 3])
+    params = DigitalSimParams(observables=[Observable("00")])
+
+    with pytest.raises(ValueError, match="Bitstring measurement requires qubit sites"):
+        digital_tjm((0, state, None, params, QuantumCircuit(2)))
+
+
 def test_freeze_gate_arrays_protects_array_generator() -> None:
     """Compiled gates make an array-valued generator read-only."""
     gate = X()

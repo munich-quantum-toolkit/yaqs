@@ -265,6 +265,22 @@ def test_state_vector_infers_and_validates_mixed_dimensions() -> None:
         State(vector=np.ones(2, dtype=np.complex128), physical_dimensions=[3])
 
 
+def test_state_vector_infers_uniform_dimensions_without_length() -> None:
+    """A scalar local dimension determines the chain length from the vector size."""
+    state = State(vector=np.ones(9, dtype=np.complex128), physical_dimensions=3)
+
+    assert state.length == 2
+    assert state.physical_dimensions == 3
+
+
+def test_state_vector_rejects_ambiguous_dimension_layouts() -> None:
+    """One-dimensional and empty layouts require an explicit site count."""
+    with pytest.raises(ValueError, match="length is required when physical_dimensions=1"):
+        State(vector=np.ones(1, dtype=np.complex128), physical_dimensions=1)
+    with pytest.raises(ValueError, match="physical_dimensions must contain at least one site"):
+        State(vector=np.ones(1, dtype=np.complex128), physical_dimensions=[])
+
+
 def test_state_vector_does_not_infer_zero_sites() -> None:
     """A one-element vector needs an explicit one-dimensional site layout."""
     with pytest.raises(ValueError, match="at least one site"):

@@ -233,7 +233,6 @@ _ProgramSegmentTrajectory = tuple[
     np.ndarray | None,
     np.ndarray | None,
     dict[int, int] | None,
-    MPS | None,
 ]
 _ProgramTrajectory = tuple[tuple[_ProgramSegmentTrajectory, ...], MPS | None]
 
@@ -629,12 +628,7 @@ def _execute_program_trajectory(
                 msg = f"Program segment {instruction.index} did not return its propagated state."
                 raise RuntimeError(msg)
             current_state = next_state
-            checkpoint = (
-                copy.deepcopy(current_state)
-                if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
-                else None
-            )
-            segment_payloads.append((traj_data, traj_diag, shot_counts, checkpoint))
+            segment_payloads.append((traj_data, traj_diag, shot_counts))
             index += 1
             continue
         if not isinstance(instruction, _CompiledAnalogInstruction):
@@ -666,12 +660,7 @@ def _execute_program_trajectory(
                 msg = f"Program segment {instruction.index} did not return its propagated state."
                 raise RuntimeError(msg)
             current_state = next_state
-            checkpoint = (
-                copy.deepcopy(current_state)
-                if instruction.sim_params.get_state and not _noise_model_is_stochastic(instruction.noise_model)
-                else None
-            )
-            segment_payloads.append((traj_data, traj_diag, None, checkpoint))
+            segment_payloads.append((traj_data, traj_diag, None))
         else:
             hand_off_trajectory = _order2_hand_off(instructions, run[-1])
             traj_data, traj_diag, next_state = _execute_merged_analog_run(
@@ -692,7 +681,7 @@ def _execute_program_trajectory(
             else:
                 sample_timestep_offset = 0
                 continue_order2_trajectory = False
-            for analog_instruction, (seg_data, seg_diag) in zip(
+            for _analog_instruction, (seg_data, seg_diag) in zip(
                 run,
                 _split_merged_analog_results(
                     traj_data,
@@ -702,14 +691,7 @@ def _execute_program_trajectory(
                 ),
                 strict=True,
             ):
-                checkpoint = (
-                    copy.deepcopy(current_state)
-                    if analog_instruction.sim_params.get_state
-                    and analog_instruction is run[-1]
-                    and not _noise_model_is_stochastic(analog_instruction.noise_model)
-                    else None
-                )
-                segment_payloads.append((seg_data, seg_diag, None, checkpoint))
+                segment_payloads.append((seg_data, seg_diag, None))
 
         index += len(run)
 
@@ -1393,7 +1375,7 @@ class Simulator:
                 segment_payloads,
                 strict=True,
             ):
-                traj_data, traj_diag, shot_counts, checkpoint = segment_payload
+                traj_data, traj_diag, shot_counts = segment_payload
                 if traj_data is not None and segment_result.observables:
                     _store_observable_trajectory(
                         segment_result,
@@ -1405,10 +1387,6 @@ class Simulator:
                     diag_per_traj[:, traj_index, :] = traj_diag
                 if shot_counts is not None:
                     segment_result.measurements[traj_index] = shot_counts
-                if checkpoint is not None:
-                    segment_result.output_state = State._from_trusted_mps(  # ruff: ignore[private-member-access]
-                        checkpoint,
-                    )
             if trajectory_final is not None:
                 final_mps = trajectory_final
 

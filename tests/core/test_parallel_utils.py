@@ -176,10 +176,19 @@ def test_get_parallel_context_explicit_fork_and_spawn() -> None:
 def test_merge_execution_config_applies_overrides() -> None:
     """merge_execution_config overlays parallel and worker settings."""
     base = ExecutionConfig(parallel=True, max_workers=3, show_progress=True)
-    merged = merge_execution_config(base, parallel=False, max_workers=2, show_progress=False)
+    merged = merge_execution_config(
+        base,
+        parallel=False,
+        max_workers=2,
+        show_progress=False,
+        mp_context="spawn",
+        max_retries=2,
+    )
     assert merged.parallel is False
     assert merged.max_workers == 2
     assert merged.show_progress is False
+    assert merged.mp_context == "spawn"
+    assert merged.max_retries == 2
 
 
 def test_merge_execution_config_clears_max_workers() -> None:

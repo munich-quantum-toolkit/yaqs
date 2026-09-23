@@ -740,6 +740,21 @@ def test_coupled_transmon_even_chain_matches_dense_reference() -> None:
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
 
 
+def test_coupled_transmon_single_site_matches_local_hamiltonian() -> None:
+    """A one-site chain contains the transmon onsite term without a bond channel."""
+    qubit_dim = 3
+    qubit_freq = 5.0
+    anharmonicity = -0.2
+    destroy = Destroy(qubit_dim)
+    number = destroy.dag().matrix @ destroy.matrix
+    expected = qubit_freq * number + (anharmonicity / 2) * number @ (number - np.eye(qubit_dim))
+
+    mpo = MPO.coupled_transmon(1, qubit_dim, 4, qubit_freq, 6.0, anharmonicity, 0.1)
+
+    assert mpo.physical_dimensions == (qubit_dim,)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
 def test_coupled_transmon_rejects_empty_chain() -> None:
     """A coupled-transmon Hamiltonian needs at least one site."""
     with pytest.raises(ValueError, match="length must be positive"):
@@ -1210,6 +1225,14 @@ def test_check_if_valid_mpo_detects_tensor_count_mismatch() -> None:
     """Stored tensor count must agree with MPO length metadata."""
     mpo = MPO.identity(1)
     mpo.length = 2
+
+    assert mpo.check_if_valid_mpo() is False
+
+
+def test_check_if_valid_mpo_detects_invalid_tensor_rank() -> None:
+    """The validity check detects rank corruption after construction."""
+    mpo = MPO.identity(1)
+    mpo.tensors[0] = np.zeros((2, 2, 1), dtype=np.complex128)
 
     assert mpo.check_if_valid_mpo() is False
 

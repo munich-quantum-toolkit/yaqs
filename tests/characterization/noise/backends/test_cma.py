@@ -200,6 +200,7 @@ def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
         ({"x0": np.zeros((1, 2))}, "x0 must be one-dimensional"),
         ({"x0": np.array([np.nan])}, "x0 must not contain non-finite"),
         ({"x0": np.array([0.1, 0.2]), "x_low": np.array([0.0])}, "x_low shape"),
+        ({"x0": np.array([0.1, 0.2]), "x_up": np.array([1.0])}, "x_up shape"),
         ({"x0": np.array([0.1]), "x_up": np.array([np.nan])}, "x_up must not contain NaN"),
         (
             {"x0": np.array([0.1]), "x_low": np.array([0.2]), "x_up": np.array([0.2])},
@@ -219,6 +220,16 @@ def test_cma_opt_rejects_invalid_parameter_vectors(kwargs: dict[str, np.ndarray]
 
     with pytest.raises(ValueError, match=match):
         cma_opt(objective, kwargs["x0"], x_low=kwargs.get("x_low"), x_up=kwargs.get("x_up"))
+
+
+def test_cma_opt_rejects_ragged_parameter_vector() -> None:
+    """A ragged sequence reports the optimizer-vector contract instead of a NumPy error."""
+
+    def objective(x: np.ndarray) -> float:
+        return float(np.sum(x**2))
+
+    with pytest.raises(TypeError, match="x0 must be a one-dimensional numeric array"):
+        cma_opt(objective, cast("Any", [[0.1], [0.2, 0.3]]))
 
 
 @pytest.mark.parametrize("x0", [["0.1"], [True], [1 + 0j]])

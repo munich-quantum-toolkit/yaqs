@@ -753,6 +753,12 @@ def test_analog_params_rejects_invalid_multi_time_observable_pairs(multi_time_ob
         AnalogSimParams(multi_time_observables=cast("Any", multi_time_observables))
 
 
+def test_analog_params_rejects_non_sequence_multi_time_observables() -> None:
+    """The outer multi-time observable container must be a sequence."""
+    with pytest.raises(TypeError, match="multi_time_observables must be a sequence"):
+        AnalogSimParams(multi_time_observables=cast("Any", object()))
+
+
 @pytest.mark.parametrize(
     "unsupported",
     [Observable("entropy", [0, 1]), Observable("00")],

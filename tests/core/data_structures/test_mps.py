@@ -1555,6 +1555,16 @@ def test_single_shot_basis() -> None:
         assert psi_y_minus.measure_single_shot(basis="Y") == 1
 
 
+def test_measurements_reject_unknown_basis() -> None:
+    """Single and repeated measurement accept only the documented Pauli bases."""
+    state = MPS(length=1, state="zeros")
+
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_single_shot(basis="A")
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_shots(shots=1, basis="A")
+
+
 def test_measurement_rejects_only_measured_non_qubit_sites() -> None:
     """A qubit can be measured beside an idle qutrit, but binary full-chain readout cannot."""
     state = MPS(2, state="zeros", physical_dimensions=[2, 3])
@@ -1930,6 +1940,15 @@ def test_check_if_valid_mps_rejects_tensor_count_mismatch() -> None:
     mps.tensors.append(mps.tensors[-1].copy())
 
     with pytest.raises(ValueError, match="4 tensors but length 3"):
+        mps.check_if_valid_mps()
+
+
+def test_check_if_valid_mps_rejects_dimension_count_mismatch() -> None:
+    """Physical-dimension metadata must contain one entry per tensor."""
+    mps = MPS(2, state="zeros")
+    mps.physical_dimensions.pop()
+
+    with pytest.raises(ValueError, match="1 physical dimensions but length 2"):
         mps.check_if_valid_mps()
 
 

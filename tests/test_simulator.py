@@ -84,9 +84,17 @@ def test_simulator_retry_exceptions_setter() -> None:
     assert sim.retry_exceptions == (ValueError,)
 
 
-def test_simulator_execution_setter_validates_value() -> None:
-    """Facade setters retain the shared execution-setting validation."""
+def test_simulator_execution_setters_update_and_validate_values() -> None:
+    """Facade setters update configuration and retain shared validation."""
     sim = Simulator(parallel=False)
+
+    sim.show_progress = False
+    sim.mp_context = "spawn"
+    sim.max_retries = 2
+
+    assert sim.show_progress is False
+    assert sim.mp_context == "spawn"
+    assert sim.max_retries == 2
 
     with pytest.raises(TypeError, match="parallel"):
         sim.parallel = cast("Any", "false")
