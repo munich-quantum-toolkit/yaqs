@@ -14,7 +14,6 @@ from __future__ import annotations
 from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING, Any
 
-from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
@@ -179,6 +178,12 @@ class NoiseCharacterizer:
         if (reference_model is None) == (ref_expectations is None):
             msg = "Specify exactly one of reference_model= or ref_expectations=."
             raise ValueError(msg)
+
+        # CMA imports its optional plotting support. Keep that path out of a
+        # normal top-level YAQS import, which must work without Matplotlib.
+        from mqt.yaqs.characterization.noise.optimization.run import (  # ruff: ignore[import-outside-top-level]
+            run_optimization_characterization,
+        )
 
         self.result = run_optimization_characterization(
             hamiltonian=hamiltonian,
