@@ -137,6 +137,7 @@ def test_mutated_time_controls_are_rebuilt_before_reference_shape_validation() -
     np.testing.assert_allclose(sim_params.times, [0.0, 0.1, 0.2])
 
 
+@pytest.mark.release
 def test_run_optimization_characterization_three_site_digital_twin() -> None:
     """3-site Lindblad fit from experimental trajectories recovers rates and dynamics."""
     (
