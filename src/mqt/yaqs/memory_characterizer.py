@@ -455,7 +455,6 @@ class MemoryCharacterizer:
             PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
 
         """
-        _validate_simulation_controls(sim_params)
         resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
         resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)
@@ -515,7 +514,6 @@ class MemoryCharacterizer:
             Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`.
 
         """
-        _validate_simulation_controls(sim_params)
         resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
         resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)

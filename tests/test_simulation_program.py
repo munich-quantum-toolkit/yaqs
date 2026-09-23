@@ -1685,6 +1685,16 @@ def test_program_rejects_program_owned_fields_on_segment_params() -> None:
         SimulationProgram([(_zero_hamiltonian(2), AnalogSimParams(get_state=True))])
 
 
+def test_program_accepts_numpy_boolean() -> None:
+    """Program-level scalar settings use the shared scalar validators."""
+    program = SimulationProgram(
+        [(QuantumCircuit(1), DigitalSimParams())],
+        get_state=np.ones((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+    )
+
+    assert program.get_state is True
+
+
 def test_program_num_traj_configures_the_ensemble() -> None:
     """The program count wins without mutating lower-level parameter objects."""
     analog_params = AnalogSimParams()

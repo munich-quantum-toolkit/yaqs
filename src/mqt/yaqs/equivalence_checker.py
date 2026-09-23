@@ -503,13 +503,32 @@ class EquivalenceChecker:
             mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` for noisy process pools.
 
         """
-        self.threshold = _validate_threshold(threshold)
-        self.fidelity = _validate_fidelity(fidelity)
-        self.representation = _validate_representation(representation)
-        self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
-        self.parallel = validate_bool(parallel, name="parallel")
-        self.max_workers = _validate_max_workers(max_workers)
-        self.mp_context = validate_choice(mp_context, name="mp_context", allowed=_MP_CONTEXTS)
+        self.threshold = threshold
+        self.fidelity = fidelity
+        self.representation = representation
+        self.matrix_max_qubits = matrix_max_qubits
+        self.parallel = parallel
+        self.max_workers = max_workers
+        self.mp_context = mp_context
+        self._validate_settings()
+
+    def _validate_settings(self) -> None:
+        """Validate mutable checker settings before backend selection."""
+        threshold = _validate_threshold(self.threshold)
+        fidelity = _validate_fidelity(self.fidelity)
+        representation = _validate_representation(self.representation)
+        matrix_max_qubits = _validate_matrix_max_qubits(self.matrix_max_qubits)
+        parallel = validate_bool(self.parallel, name="parallel")
+        max_workers = _validate_max_workers(self.max_workers)
+        mp_context = validate_choice(self.mp_context, name="mp_context", allowed=_MP_CONTEXTS)
+
+        self.threshold = threshold
+        self.fidelity = fidelity
+        self.representation = representation
+        self.matrix_max_qubits = matrix_max_qubits
+        self.parallel = parallel
+        self.max_workers = max_workers
+        self.mp_context = mp_context
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:
         """Choose the concrete backend for a given circuit width.
@@ -725,22 +744,11 @@ class EquivalenceChecker:
                 negative, or the noise model cannot be sampled.
             TypeError: If an ensemble option or ``noise_model`` has an invalid type.
         """
-        if isinstance(num_traj, bool) or not isinstance(num_traj, int):
-            msg = f"num_traj must be int, got {type(num_traj).__name__}."
-            raise TypeError(msg)
-        if num_traj < 1:
-            msg = f"num_traj must be at least 1, got {num_traj}."
-            raise ValueError(msg)
+        self._validate_settings()
+        num_traj = validate_integer(num_traj, name="num_traj", minimum=1)
         if random_seed is not None:
-            if isinstance(random_seed, bool) or not isinstance(random_seed, int):
-                msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
-                raise TypeError(msg)
-            if random_seed < 0:
-                msg = f"random_seed must be non-negative, got {random_seed}."
-                raise ValueError(msg)
-        if not isinstance(return_trajectories, bool):
-            msg = f"return_trajectories must be bool, got {type(return_trajectories).__name__}."
-            raise TypeError(msg)
+            random_seed = validate_integer(random_seed, name="random_seed", minimum=0)
+        return_trajectories = validate_bool(return_trajectories, name="return_trajectories")
         if noise_model is None:
             if num_traj != 1:
                 msg = "num_traj must be 1 when noise_model is None."

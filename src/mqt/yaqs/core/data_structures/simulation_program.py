@@ -20,7 +20,7 @@ from qiskit.circuit import QuantumCircuit
 
 from ...digital.digital_tjm import _compile_circuit, _CompiledCircuit
 from ...digital.utils.qasm_utils import load_circuit
-from .._validation import validate_integer
+from .._validation import validate_bool, validate_integer
 from .hamiltonian import Hamiltonian
 from .noise_model import NoiseModel
 from .observable import Observable
@@ -96,7 +96,6 @@ def _normalize_program_settings(
 
     Raises:
         TypeError: If a keyword argument has the wrong type.
-        ValueError: If ``num_traj`` or ``random_seed`` is out of range.
     """
     if observables is None:
         obs_tuple: tuple[Observable, ...] = ()
@@ -113,15 +112,9 @@ def _normalize_program_settings(
 
     if num_traj is not None:
         num_traj = validate_integer(num_traj, name="num_traj", minimum=1)
-    if random_seed is not None and (isinstance(random_seed, bool) or not isinstance(random_seed, int)):
-        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
-        raise TypeError(msg)
-    if random_seed is not None and random_seed < 0:
-        msg = f"random_seed must be non-negative, got {random_seed}."
-        raise ValueError(msg)
-    if not isinstance(get_state, bool):
-        msg = f"get_state must be bool, got {type(get_state).__name__}."
-        raise TypeError(msg)
+    if random_seed is not None:
+        random_seed = validate_integer(random_seed, name="random_seed", minimum=0)
+    get_state = validate_bool(get_state, name="get_state")
 
     return obs_tuple, num_traj, random_seed, get_state
 

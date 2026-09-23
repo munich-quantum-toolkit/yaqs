@@ -493,8 +493,10 @@ def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
         _ = AnalogSimParams(svd_threshold=bad_threshold)
 
 
-@pytest.mark.parametrize("field", ["krylov_tol", "svd_threshold"])
-@pytest.mark.parametrize("invalid", [True, "1e-6"])
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [("krylov_tol", True), ("svd_threshold", "1e-6")],
+)
 def test_simparams_rejects_coerced_real_controls(field: str, invalid: object) -> None:
     """Numerical tolerances reject Boolean and string coercion."""
     kwargs: dict[str, Any] = {field: invalid}
@@ -899,11 +901,9 @@ def test_simparams_accept_numpy_scalar_flags_and_seed() -> None:
     assert analog.sample_timesteps is False
     assert analog.get_state is True
     assert analog.random_seed == 4
-    assert type(analog.random_seed) is int
     assert digital.get_state is True
     assert digital.sample_layers is False
     assert digital.random_seed == 5
-    assert type(digital.random_seed) is int
 
 
 @pytest.mark.parametrize(

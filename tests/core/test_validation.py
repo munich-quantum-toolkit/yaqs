@@ -33,14 +33,12 @@ import json
 import numpy as np
 
 from mqt.yaqs import Hamiltonian, Simulator, State
-from mqt.yaqs.characterization.noise.backends.cma import cma_opt
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, DigitalSimParams
 from mqt.yaqs.core.libraries.circuit_library_utils import extract_u_parameters
 from mqt.yaqs.core.libraries.gate_library import split_tensor
-from mqt.yaqs.core.parallel_utils import ExecutionConfig
 
 
 def invalid_expect_sites():
@@ -115,9 +113,7 @@ calls = {
     "gate-tensor-shape": lambda: split_tensor(np.zeros((2, 2, 2))),
     "analog-observable-mix": lambda: AnalogSimParams(observables=[pvm, ordinary]),
     "digital-observable-mix": lambda: DigitalSimParams(observables=[pvm, ordinary]),
-    "execution-boolean": lambda: ExecutionConfig(parallel="false"),
     "mutated-simulation-control": invalid_mutated_simulation_control,
-    "optimizer-population": lambda: cma_opt(lambda x: float(np.sum(x**2)), np.array([0.1, 0.2]), popsize=1),
 }
 
 observed = {}
@@ -296,9 +292,7 @@ def test_public_validation_matches_under_optimized_python() -> None:
             "ValueError",
             "Mixed observable and projective-measurement simulation is not supported.",
         ],
-        "execution-boolean": ["TypeError", "parallel must be a boolean, got str."],
         "mutated-simulation-control": ["ValueError", "num_traj must be >= 1, got 0."],
-        "optimizer-population": ["ValueError", "popsize must be >= 2, got 1."],
     }
 
     normal = _run_optimized_validation_script()

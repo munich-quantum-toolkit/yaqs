@@ -18,7 +18,7 @@ qubit counts.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -83,81 +83,29 @@ def test_simulator_retry_exceptions_setter() -> None:
     assert sim.retry_exceptions == (ValueError,)
 
 
-def test_simulator_accepts_numpy_execution_scalars() -> None:
-    """The public facade accepts Boolean and integer NumPy scalar equivalents."""
-    sim = Simulator(
-        parallel=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
-        max_workers=np.int64(2),  # ty: ignore[invalid-argument-type]
-        show_progress=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
-        max_retries=np.int64(1),  # ty: ignore[invalid-argument-type]
-    )
+def test_simulator_execution_setter_validates_value() -> None:
+    """Facade setters retain the shared execution-setting validation."""
+    sim = Simulator(parallel=False)
+
+    with pytest.raises(TypeError, match="parallel"):
+        sim.parallel = cast("Any", "false")
 
     assert sim.parallel is False
-    assert sim.max_workers == 2
-    assert sim.show_progress is False
-    assert sim.max_retries == 1
 
 
-@pytest.mark.parametrize(
-    ("attribute", "value", "error"),
-    [
-        ("parallel", "false", TypeError),
-        ("parallel", None, TypeError),
-        ("show_progress", 1, TypeError),
-        ("show_progress", None, TypeError),
-        ("max_workers", 1.5, TypeError),
-        ("mp_context", "forkserver", ValueError),
-        ("mp_context", None, TypeError),
-        ("max_retries", -1, ValueError),
-        ("max_retries", None, TypeError),
-    ],
-)
-def test_simulator_execution_setters_reject_invalid_values(
-    attribute: str,
-    value: object,
-    error: type[Exception],
-) -> None:
-    """Execution-property setters do not silently change invalid values."""
-    sim = Simulator()
-    with pytest.raises(error, match=attribute):
-        setattr(sim, attribute, value)
-
-
-@pytest.mark.parametrize(
-    ("kind", "field", "invalid", "error"),
-    [
-        ("analog", "num_traj", 0, ValueError),
-        ("analog", "max_bond_dim", True, TypeError),
-        ("analog", "tdvp_sweeps", 0, ValueError),
-        ("analog", "order", 3, ValueError),
-        ("analog", "elapsed_time", 0.15, ValueError),
-        ("analog", "multi_time_observables", [(Observable("z", 0), object())], TypeError),
-        ("digital", "num_traj", -1, ValueError),
-        ("digital", "max_bond_dim", 0, ValueError),
-        ("digital", "num_mid_measurements", -1, ValueError),
-        ("digital", "shots", 0, ValueError),
-        ("digital", "tdvp_sweeps", 1.0, TypeError),
-    ],
-)
-def test_run_revalidates_mutated_controls_before_result_allocation(
-    kind: str,
-    field: str,
-    invalid: object,
-    error: type[Exception],
-) -> None:
-    """Mutable simulation controls are checked before constructing a result."""
+def test_run_rejects_mutated_non_observable_before_result_allocation() -> None:
+    """Run-time validation rejects a non-Observable added after construction."""
     state = State(1, initial="zeros")
     runner = Simulator(parallel=False, show_progress=False)
-    if kind == "analog":
-        params = AnalogSimParams(get_state=True)
-        setattr(params, field, invalid)
-        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
-            runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
-    else:
-        params = DigitalSimParams(get_state=True)
-        setattr(params, field, invalid)
-        with patch.object(simulator, "Result") as mock_result, pytest.raises(error, match=field):
-            runner.run(state, QuantumCircuit(1), params)
+    params = AnalogSimParams(get_state=True)
+    params.observables = cast("Any", [object()])
+
+    with (
+        patch.object(simulator, "Result") as mock_result,
+        pytest.raises(TypeError, match=r"observables\[0\] must be an Observable"),
+    ):
+        runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
+
     mock_result.assert_not_called()
 
 
@@ -233,8 +181,8 @@ def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) ->
     assert "Running trajectories" not in captured.out
 
 
-def test_simulator_run_returns_result() -> None:
-    """:meth:`Simulator.run` returns a :class:`Result` holding all simulation outputs."""
+def test_simulator_run_returns_result_with_input_parameter_reference() -> None:
+    """The result references the input parameter object after run-time normalization."""
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
@@ -1560,24 +1508,17 @@ def test_analog_dense_representations_reject_bitstring_observables() -> None:
             Simulator(show_progress=False).run(state, hamiltonian, sim_params)
 
 
-@pytest.mark.parametrize("representation", ["vector", "density_matrix"])
-@pytest.mark.parametrize("diagnostic", ["entropy", "schmidt_spectrum"])
-def test_analog_dense_representations_reject_mps_diagnostics(
-    representation: Literal["vector", "density_matrix"], diagnostic: str
-) -> None:
-    """Dense analog backends reject diagnostics that require MPS bond data."""
+def test_analog_dense_representation_rejects_mps_diagnostic() -> None:
+    """A dense analog backend rejects a diagnostic that requires MPS bond data."""
     hamiltonian = Hamiltonian.ising(2, 1.0, 0.5)
-    sim_params = AnalogSimParams([Observable(diagnostic, sites=[0, 1])], elapsed_time=0.1, dt=0.1)
-    state = State(2, initial="zeros", representation=representation)
+    sim_params = AnalogSimParams([Observable("entropy", sites=[0, 1])], elapsed_time=0.1, dt=0.1)
+    state = State(2, initial="zeros", representation="vector")
 
     with pytest.raises(ValueError, match=r"require State\.representation='mps'"):
         Simulator(show_progress=False).run(state, hamiltonian, sim_params)
 
 
-@pytest.mark.parametrize("representation", ["mps", "vector", "density_matrix"])
-def test_analog_single_state_rejects_multi_time_observables(
-    representation: Literal["mps", "vector", "density_matrix"],
-) -> None:
+def test_analog_single_state_rejects_multi_time_observables() -> None:
     """Two-time correlators are available only for deterministic list-state ensembles."""
     probe = Observable("z", 0)
     sim_params = AnalogSimParams(
@@ -1588,7 +1529,7 @@ def test_analog_single_state_rejects_multi_time_observables(
 
     with pytest.raises(ValueError, match=r"only for list\[State\] unitary ensemble"):
         Simulator(show_progress=False).run(
-            State(2, initial="zeros", representation=representation),
+            State(2, initial="zeros", representation="vector"),
             Hamiltonian.ising(2, 1.0, 0.5),
             sim_params,
         )

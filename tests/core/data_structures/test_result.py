@@ -114,8 +114,8 @@ def test_result_noise_model_reflects_sampled_noise() -> None:
     assert not hasattr(shot_params, "noise_model")
 
 
-def test_sim_params_not_mutated_after_analog_run() -> None:
-    """User-supplied sim_params are unchanged after Simulator.run."""
+def test_analog_run_keeps_outputs_out_of_sim_params() -> None:
+    """Simulation results do not add output fields to the input configuration."""
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)

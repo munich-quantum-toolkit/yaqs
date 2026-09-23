@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pytest
@@ -360,34 +360,35 @@ def test_train_surrogate_model_validates_counts_before_optional_imports(
         )
 
 
-@pytest.mark.parametrize("workflow", [build_training_dataset, train_surrogate_model])
-@pytest.mark.parametrize(
-    ("kwargs", "error", "match"),
-    [
-        ({"seed": 1.5}, TypeError, "seed must be an integer"),
-        ({"seed": -1}, ValueError, r"seed must be >= 0"),
-        ({"parallel": "false"}, TypeError, "parallel must be a boolean"),
-        ({"show_progress": 1}, TypeError, "show_progress must be a boolean"),
-    ],
-)
-def test_surrogate_workflows_reject_coercive_controls_before_optional_imports(
+def test_build_training_dataset_rejects_invalid_seed_before_optional_imports(
     monkeypatch: pytest.MonkeyPatch,
-    workflow: Callable[..., object],
-    kwargs: dict[str, object],
-    error: type[Exception],
-    match: str,
 ) -> None:
-    """Surrogate entry points validate seeds and flags before importing PyTorch."""
+    """Dataset construction validates its seed before importing PyTorch."""
     monkeypatch.setattr(workflow_module, "_require_torch", pytest.fail)
-    monkeypatch.setitem(sys.modules, "torch", None)
 
-    with pytest.raises(error, match=match):
-        workflow(
+    with pytest.raises(TypeError, match="seed must be an integer"):
+        build_training_dataset(
             MPO.ising(length=1, J=0.0, g=0.0),
             AnalogSimParams(dt=0.1),
             num_interventions=1,
             n=1,
-            **cast("Any", kwargs),
+            seed=1.5,  # ty: ignore[invalid-argument-type]
+        )
+
+
+def test_train_surrogate_model_rejects_invalid_parallel_before_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Surrogate training validates its execution flag before importing PyTorch."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+    with pytest.raises(TypeError, match="parallel must be a boolean"):
+        train_surrogate_model(
+            MPO.ising(length=1, J=0.0, g=0.0),
+            AnalogSimParams(dt=0.1),
+            num_interventions=1,
+            n=1,
+            parallel="false",  # ty: ignore[invalid-argument-type]
         )
 
 

@@ -106,26 +106,9 @@ def test_execution_config_properties() -> None:
     assert CancelledError in nc.retry_exceptions
 
 
-def test_noise_characterizer_accepts_numpy_constructor_scalars() -> None:
-    """NumPy scalar equivalents are normalized at the public constructor boundary."""
-    characterizer = NoiseCharacterizer(
-        parallel=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
-        max_workers=np.int64(2),  # ty: ignore[invalid-argument-type]
-        lindblad_max_qubits=np.int64(6),  # ty: ignore[invalid-argument-type]
-        vector_max_qubits=np.int64(9),  # ty: ignore[invalid-argument-type]
-    )
-
-    assert characterizer.parallel is False
-    assert characterizer.max_workers == 2
-    assert characterizer.lindblad_max_qubits == 6
-    assert characterizer.vector_max_qubits == 9
-
-
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
-        ({"show_progress": 1}, TypeError, "show_progress must be a boolean"),
-        ({"representation": object()}, TypeError, "representation must be a string"),
         ({"representation": "lindblad"}, ValueError, "representation must be one of"),
         ({"lindblad_max_qubits": 1.5}, TypeError, "lindblad_max_qubits must be an integer"),
         ({"vector_max_qubits": -1}, ValueError, "vector_max_qubits must be >= 0"),

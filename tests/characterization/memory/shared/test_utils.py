@@ -203,6 +203,14 @@ def test_resolve_characterizer_representation_branches() -> None:
         resolve_characterizer_representation(1, "bad")  # ty: ignore[invalid-argument-type]
 
 
+def test_resolve_characterizer_representation_rejects_mutated_settings() -> None:
+    """Resolver validation rejects characterizer fields mutated after construction."""
+    with pytest.raises(ValueError, match="representation must be one of"):
+        resolve_characterizer_representation(2, " AUTO ")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="vector_max_qubits must be an integer"):
+        resolve_characterizer_representation(2, "auto", vector_max_qubits="10")  # ty: ignore[invalid-argument-type]
+
+
 def test_representation_to_solver_and_resolve_stochastic_solver() -> None:
     """Solver resolution honors explicit solver, representation, and the MCWF default."""
     assert representation_to_solver("vector") == "MCWF"
