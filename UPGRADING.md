@@ -290,8 +290,10 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 
 ### `Result` field map
 
-`Simulator.run` no longer mutates the `*SimParams` you pass in.
-`result.sim_params` references your original configuration unchanged.
+`Simulator.run` no longer writes output data onto the `*SimParams` you pass in.
+Before execution, it validates and normalizes mutable controls in place. For
+`AnalogSimParams`, this also rebuilds `times` from the current `elapsed_time`
+and `dt`. `result.sim_params` references the same normalized object.
 
 | Old (`sim_params` / `Observable`)           | New (`result`)                 |
 | ------------------------------------------- | ------------------------------ |
