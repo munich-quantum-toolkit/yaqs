@@ -39,8 +39,9 @@ simulation, including functionality for:
 :meth:`Simulator.run` returns a :class:`~mqt.yaqs.core.data_structures.result.Result`
 holding every simulation output (aggregated expectation values, per-trajectory data,
 shared time grid, optional output state, measurement counts, and the sampled noise
-model). The ``*SimParams`` object passed in is never mutated; ``Result.sim_params``
-references it unchanged.
+model). Before execution, the simulator normalizes mutable ``*SimParams`` controls
+in place and rebuilds an analog time grid from the current ``elapsed_time`` and
+``dt``. ``Result.sim_params`` references that normalized object.
 """
 
 from __future__ import annotations
@@ -117,7 +118,6 @@ from .core.parallel_utils import (
     MPContext,
     available_cpus,
     call_serial_capped,
-    merge_execution_config,
     resolve_worker_ctx,
     run_backend_parallel,
 )
@@ -1078,12 +1078,12 @@ class Simulator:
         """Initialize the simulator with execution-side configuration.
 
         Args:
-            parallel: If ``True`` (default), use a process pool for multi-trajectory runs.
-            max_workers: Maximum worker processes when running in parallel. ``None`` (default)
-                resolves to ``max(1, available_cpus() - 1)``.
-            show_progress: Show a tqdm progress bar during trajectory execution.
+            parallel: Boolean that enables a process pool for multi-trajectory runs.
+            max_workers: Positive worker-process cap. ``None`` (default) resolves to
+                ``max(1, available_cpus() - 1)``.
+            show_progress: Boolean that controls the tqdm progress bar.
             mp_context: Multiprocessing start method (``"auto"``, ``"fork"``, or ``"spawn"``).
-            max_retries: Maximum retries for transient worker errors.
+            max_retries: Non-negative maximum retries for transient worker errors.
             retry_exceptions: Exception types that trigger a retry.
         """
         self._execution = ExecutionConfig(
@@ -1102,7 +1102,7 @@ class Simulator:
 
     @parallel.setter
     def parallel(self, value: bool) -> None:
-        self._execution = merge_execution_config(self._execution, parallel=bool(value))
+        self._execution = replace(self._execution, parallel=value)
 
     @property
     def max_workers(self) -> int:
@@ -1111,10 +1111,7 @@ class Simulator:
 
     @max_workers.setter
     def max_workers(self, value: int | None) -> None:
-        self._execution = merge_execution_config(
-            self._execution,
-            max_workers=None if value is None else int(value),
-        )
+        self._execution = replace(self._execution, max_workers=value)
 
     @property
     def show_progress(self) -> bool:
@@ -1123,7 +1120,7 @@ class Simulator:
 
     @show_progress.setter
     def show_progress(self, value: bool) -> None:
-        self._execution = merge_execution_config(self._execution, show_progress=bool(value))
+        self._execution = replace(self._execution, show_progress=value)
 
     @property
     def mp_context(self) -> MPContext:
@@ -1132,7 +1129,7 @@ class Simulator:
 
     @mp_context.setter
     def mp_context(self, value: MPContext) -> None:
-        self._execution = merge_execution_config(self._execution, mp_context=value)
+        self._execution = replace(self._execution, mp_context=value)
 
     @property
     def max_retries(self) -> int:
@@ -1141,7 +1138,7 @@ class Simulator:
 
     @max_retries.setter
     def max_retries(self, value: int) -> None:
-        self._execution = merge_execution_config(self._execution, max_retries=int(value))
+        self._execution = replace(self._execution, max_retries=value)
 
     @property
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
@@ -1197,8 +1194,8 @@ class Simulator:
 
         Returns:
             A :class:`~mqt.yaqs.core.data_structures.result.Result` holding all
-            simulation outputs. The supplied ``sim_params`` is not mutated;
-            ``Result.sim_params`` references the original configuration object.
+            simulation outputs. Validation normalizes mutable ``sim_params``
+            controls in place; ``Result.sim_params`` references that object.
 
         Raises:
             ValueError: If no output is specified (neither observables, shots, nor ``get_state``).
@@ -1457,8 +1454,13 @@ class Simulator:
                 on ``mps`` or ``vector`` representations (the trajectory ensemble has no
                 single representative state). Lindblad ``density_matrix`` evolution always
                 returns the exact ensemble-averaged state when ``get_state=True``. Bitstring
-                observables currently require the ``mps`` representation.
+                and diagnostic observables currently require the ``mps`` representation.
+                ``multi_time_observables`` require list-of-state unitary ensemble execution.
         """
+        if sim_params.multi_time_observables and not isinstance(initial_state, list):
+            msg = "multi_time_observables are supported only for list[State] unitary ensemble runs."
+            raise ValueError(msg)
+
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
             if operator.is_piecewise:
@@ -1492,6 +1494,9 @@ class Simulator:
         state_rep = initial_state.representation
         if state_rep != "mps" and any(observable.type == "bitstring" for observable in sim_params.observables):
             msg = f"Bitstring observables require State.representation='mps'; got {state_rep!r}."
+            raise ValueError(msg)
+        if state_rep != "mps" and any(observable.type == "diagnostic" for observable in sim_params.observables):
+            msg = f"Entropy and Schmidt-spectrum observables require State.representation='mps'; got {state_rep!r}."
             raise ValueError(msg)
         initial_state.ensure_encoded(state_rep)
         mps = _materialized_mps(initial_state)

@@ -14,7 +14,7 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -466,10 +466,24 @@ def test_checker_rejects_non_real_fidelity_threshold(fidelity: object) -> None:
         EquivalenceChecker(fidelity=fidelity)  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.parametrize("threshold", [-0.1, np.nan, np.inf])
+def test_checker_rejects_invalid_svd_threshold(threshold: float) -> None:
+    """The SVD threshold must be finite and non-negative."""
+    with pytest.raises(ValueError, match="threshold must be"):
+        EquivalenceChecker(threshold=threshold)
+
+
+@pytest.mark.parametrize("threshold", [True, "1e-6", 1 + 0j])
+def test_checker_rejects_non_real_svd_threshold(threshold: object) -> None:
+    """Boolean, string, and complex values are not real SVD thresholds."""
+    with pytest.raises(TypeError, match="threshold must be a real number"):
+        EquivalenceChecker(threshold=threshold)  # ty: ignore[invalid-argument-type]
+
+
 @pytest.mark.parametrize("max_workers", [0, -1])
 def test_checker_rejects_non_positive_max_workers(max_workers: int) -> None:
     """``max_workers`` must be positive when provided."""
-    with pytest.raises(ValueError, match="positive"):
+    with pytest.raises(ValueError, match=r"max_workers must be >= 1"):
         EquivalenceChecker(max_workers=max_workers)
 
 
@@ -488,6 +502,45 @@ def test_checker_rejects_non_int_max_workers() -> None:
 def test_equivalence_checker_defaults_parallel_true() -> None:
     """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
     assert EquivalenceChecker().parallel is True
+
+
+def test_equivalence_checker_accepts_numpy_constructor_scalars() -> None:
+    """NumPy real, integer, and Boolean scalars preserve their setting semantics."""
+    checker = EquivalenceChecker(
+        threshold=np.float32(1e-6),  # ty: ignore[invalid-argument-type]
+        fidelity=np.float64(0.9),
+        matrix_max_qubits=np.int64(4),  # ty: ignore[invalid-argument-type]
+        parallel=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+        max_workers=np.int64(2),  # ty: ignore[invalid-argument-type]
+    )
+
+    assert checker.threshold == pytest.approx(1e-6)
+    assert checker.fidelity == pytest.approx(0.9)
+    assert checker.matrix_max_qubits == 4
+    assert checker.parallel is False
+    assert checker.max_workers == 2
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"parallel": "false"}, TypeError, "parallel must be a boolean"),
+        ({"representation": 1}, TypeError, "representation must be a string"),
+        ({"representation": "MPO"}, ValueError, "representation must be one of"),
+        ({"matrix_max_qubits": 1.5}, TypeError, "matrix_max_qubits must be an integer"),
+        ({"matrix_max_qubits": -1}, ValueError, "matrix_max_qubits must be >= 0"),
+        ({"mp_context": 1}, TypeError, "mp_context must be a string"),
+        ({"mp_context": "forkserver"}, ValueError, "mp_context must be one of"),
+    ],
+)
+def test_equivalence_checker_rejects_invalid_constructor_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Backend and execution selectors fail at the public constructor boundary."""
+    with pytest.raises(error, match=match):
+        EquivalenceChecker(**cast("Any", kwargs))
 
 
 def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:

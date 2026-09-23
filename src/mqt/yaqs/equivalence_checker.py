@@ -31,6 +31,7 @@ import numpy as np
 from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.converters import circuit_to_dag
 
+from .core._validation import validate_bool, validate_choice, validate_finite_real, validate_integer
 from .core.data_structures.mpo import MPO
 from .core.data_structures.noise_model import NoiseModel, is_pauli, validate_noise_model_for_run
 from .core.parallel_utils import WORKER_CTX, available_cpus, reassemble_indexed, run_backend_parallel
@@ -62,6 +63,7 @@ __all__ = [
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
+_MP_CONTEXTS: tuple[MPContext, ...] = ("fork", "spawn", "auto")
 _PAULI_GATES = {"x": XGate(), "y": YGate(), "z": ZGate()}
 _PAULI_MATRICES = {label: np.asarray(gate.to_matrix()) for label, gate in _PAULI_GATES.items()}
 _PAULI_PRODUCTS = {
@@ -130,14 +132,9 @@ def _validate_representation(representation: str) -> Representation:
     Returns:
         A validated ``Representation`` literal.
 
-    Raises:
-        ValueError: If ``representation`` is not one of ``auto``, ``matrix``, or ``mpo``.
     """
-    allowed = ("auto", "matrix", "mpo")
-    if representation not in allowed:
-        msg = f"representation must be one of {allowed!r}, got {representation!r}."
-        raise ValueError(msg)
-    return representation
+    allowed: tuple[Representation, ...] = ("auto", "matrix", "mpo")
+    return validate_choice(representation, name="representation", allowed=allowed)
 
 
 def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
@@ -149,17 +146,8 @@ def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
     Returns:
         The validated non-negative cutover value.
 
-    Raises:
-        TypeError: If ``matrix_max_qubits`` is not an ``int``.
-        ValueError: If ``matrix_max_qubits`` is negative.
     """
-    if isinstance(matrix_max_qubits, bool) or not isinstance(matrix_max_qubits, int):
-        msg = f"matrix_max_qubits must be int, got {type(matrix_max_qubits).__name__}."
-        raise TypeError(msg)
-    if matrix_max_qubits < 0:
-        msg = f"matrix_max_qubits must be non-negative, got {matrix_max_qubits}."
-        raise ValueError(msg)
-    return matrix_max_qubits
+    return validate_integer(matrix_max_qubits, name="matrix_max_qubits", minimum=0)
 
 
 def _validate_max_workers(max_workers: int | None) -> int | None:
@@ -171,19 +159,52 @@ def _validate_max_workers(max_workers: int | None) -> int | None:
     Returns:
         The validated cap, or ``None``.
 
-    Raises:
-        TypeError: If ``max_workers`` is not ``None`` or a non-boolean ``int``.
-        ValueError: If ``max_workers`` is not positive.
     """
     if max_workers is None:
         return None
-    if isinstance(max_workers, bool) or not isinstance(max_workers, int):
-        msg = f"max_workers must be int or None, got {type(max_workers).__name__}."
-        raise TypeError(msg)
-    if max_workers <= 0:
-        msg = f"max_workers must be positive, got {max_workers}."
+    return validate_integer(max_workers, name="max_workers", minimum=1)
+
+
+def _validate_threshold(threshold: float) -> float:
+    """Validate the non-negative SVD truncation threshold.
+
+    Args:
+        threshold: Candidate truncation threshold.
+
+    Returns:
+        The finite threshold as a Python :class:`float`.
+
+    Raises:
+        ValueError: If ``threshold`` is negative.
+    """
+    normalized = validate_finite_real(threshold, name="threshold")
+    if normalized < 0:
+        msg = f"threshold must be non-negative, got {normalized}."
         raise ValueError(msg)
-    return max_workers
+    return normalized
+
+
+def _validate_fidelity(fidelity: float) -> float:
+    """Validate the finite root-overlap threshold.
+
+    Args:
+        fidelity: Candidate root-overlap threshold.
+
+    Returns:
+        The finite threshold as a Python :class:`float`.
+
+    Raises:
+        ValueError: If ``fidelity`` is non-finite or outside ``[0, 1]``.
+    """
+    try:
+        normalized = validate_finite_real(fidelity, name="fidelity")
+    except ValueError:
+        msg = f"fidelity must be finite and between 0 and 1 inclusive, got {fidelity}."
+        raise ValueError(msg) from None
+    if not 0 <= normalized <= 1:
+        msg = f"fidelity must be finite and between 0 and 1 inclusive, got {normalized}."
+        raise ValueError(msg)
+    return normalized
 
 
 def _pauli_labels(process: dict[str, Any]) -> tuple[str, ...] | None:
@@ -468,38 +489,27 @@ class EquivalenceChecker:
         """Initialize the checker with numerical thresholds and backend options.
 
         Args:
-            threshold: SVD truncation threshold in the MPO update (default ``1e-13``).
+            threshold: Finite, non-negative SVD truncation threshold in the MPO update.
             fidelity: Minimum root overlap for an identity check (default
                 ``1 - 1e-13``), on the scale returned by both check modes.
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
-            matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
-            parallel: Enable parallel checkerboard MPO pair updates on noiseless checks
+            matrix_max_qubits: Non-negative cutover for ``representation="auto"``.
+            parallel: Boolean that enables parallel checkerboard MPO pair updates on noiseless checks
                 (effective only from 12 qubits upward) and process-pool execution of noisy
                 trajectory ensembles (default ``True``).
-            max_workers: Cap on worker threads for noiseless MPO checks, and on processes for
-                noisy trajectory ensembles. Process pools use at most ``num_traj`` workers.
-            mp_context: Start method when a noisy-ensemble process pool is used.
+            max_workers: Positive cap on worker threads for noiseless MPO checks and processes
+                for noisy trajectory ensembles. ``None`` selects the default.
+            mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` for noisy process pools.
 
-        Raises:
-            TypeError: If ``fidelity`` is not a real number.
-            ValueError: If ``fidelity`` is non-finite or outside ``[0, 1]``.
         """
-        if isinstance(fidelity, bool) or not isinstance(fidelity, (int, float, np.floating, np.integer)):
-            msg = f"fidelity must be a real number, got {type(fidelity).__name__}."
-            raise TypeError(msg)
-        fidelity = float(fidelity)
-        if not math.isfinite(fidelity) or not 0 <= fidelity <= 1:
-            msg = f"fidelity must be finite and between 0 and 1 inclusive, got {fidelity}."
-            raise ValueError(msg)
-
-        self.threshold = threshold
-        self.fidelity = fidelity
+        self.threshold = _validate_threshold(threshold)
+        self.fidelity = _validate_fidelity(fidelity)
         self.representation = _validate_representation(representation)
         self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
-        self.parallel = parallel
+        self.parallel = validate_bool(parallel, name="parallel")
         self.max_workers = _validate_max_workers(max_workers)
-        self.mp_context = mp_context
+        self.mp_context = validate_choice(mp_context, name="mp_context", allowed=_MP_CONTEXTS)
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:
         """Choose the concrete backend for a given circuit width.

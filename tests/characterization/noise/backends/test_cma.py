@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import types
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -191,3 +191,87 @@ def test_cma_opt_forwards_seed(monkeypatch: MonkeyPatch) -> None:
     )
 
     assert created[0].options["seed"] == 42
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"x0": np.array([])}, "x0 must not be empty"),
+        ({"x0": np.zeros((1, 2))}, "x0 must be one-dimensional"),
+        ({"x0": np.array([np.nan])}, "x0 must not contain non-finite"),
+        ({"x0": np.array([0.1, 0.2]), "x_low": np.array([0.0])}, "x_low shape"),
+        ({"x0": np.array([0.1]), "x_up": np.array([np.nan])}, "x_up must not contain NaN"),
+        (
+            {"x0": np.array([0.1]), "x_low": np.array([0.2]), "x_up": np.array([0.2])},
+            "x_low entry must be strictly smaller",
+        ),
+        (
+            {"x0": np.array([0.3]), "x_low": np.array([0.0]), "x_up": np.array([0.2])},
+            "x0 entry must lie within",
+        ),
+    ],
+)
+def test_cma_opt_rejects_invalid_parameter_vectors(kwargs: dict[str, np.ndarray], match: str) -> None:
+    """Malformed parameter vectors and bounds fail before optimizer construction."""
+
+    def objective(x: np.ndarray) -> float:
+        return float(np.sum(x**2))
+
+    with pytest.raises(ValueError, match=match):
+        cma_opt(objective, kwargs["x0"], x_low=kwargs.get("x_low"), x_up=kwargs.get("x_up"))
+
+
+@pytest.mark.parametrize("x0", [["0.1"], [True], [1 + 0j]])
+def test_cma_opt_rejects_coercive_parameter_vectors(x0: object) -> None:
+    """Optimizer vectors must contain real numeric values before conversion."""
+
+    def objective(x: np.ndarray) -> float:
+        return float(np.sum(x**2))
+
+    with pytest.raises(TypeError, match="x0 must be a one-dimensional real numeric array"):
+        cma_opt(objective, cast("Any", x0))
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "error"),
+    [
+        ("sigma0", 0.0, ValueError),
+        ("sigma0", np.inf, ValueError),
+        ("sigma0", True, TypeError),
+        ("popsize", 1, ValueError),
+        ("popsize", 4.0, TypeError),
+        ("max_iter", 0, ValueError),
+        ("max_iter", 2.0, TypeError),
+        ("seed", -1, ValueError),
+        ("seed", 1.5, TypeError),
+    ],
+)
+def test_cma_opt_rejects_invalid_scalar_controls(name: str, value: object, error: type[Exception]) -> None:
+    """CMA-ES controls use explicit Boolean, integer, and finite-real contracts."""
+
+    def objective(x: np.ndarray) -> float:
+        return float(np.sum(x**2))
+
+    kwargs: dict[str, Any] = {name: value}
+    with pytest.raises(error, match=name):
+        cma_opt(objective, np.array([0.1, 0.2]), **kwargs)
+
+
+def test_cma_opt_accepts_numpy_scalar_controls(monkeypatch: MonkeyPatch) -> None:
+    """Equivalent NumPy scalar controls are normalized before CMA-ES dispatch."""
+    created = _patch_strategy(monkeypatch, DummyStrategy)
+
+    def objective(x: np.ndarray) -> float:
+        return float(np.sum(x**2))
+
+    cma_opt(
+        objective,
+        np.array([0.1, 0.2]),
+        sigma0=np.float64(0.1),
+        popsize=cast("Any", np.int64(4)),
+        max_iter=cast("Any", np.int64(1)),
+        seed=cast("Any", np.int64(3)),
+    )
+
+    assert created[0].options["popsize"] == 4
+    assert created[0].options["seed"] == 3

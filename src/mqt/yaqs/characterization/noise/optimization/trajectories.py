@@ -177,6 +177,9 @@ def resolve_reference_expectations(
         if ref_array.ndim != 2:
             msg = f"ref_expectations must be 2-D, got shape {ref_array.shape}."
             raise ValueError(msg)
+        if not np.isfinite(ref_array).all():
+            msg = "ref_expectations must contain only finite values."
+            raise ValueError(msg)
         if ref_array.shape[0] != len(observables):
             msg = (
                 f"ref_expectations has {ref_array.shape[0]} rows but {len(observables)} fitting observables were given."

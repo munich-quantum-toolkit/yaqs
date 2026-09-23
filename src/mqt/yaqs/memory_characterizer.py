@@ -49,9 +49,12 @@ from mqt.yaqs.characterization.memory.shared.utils import (
     validate_qubit_memory_operator,
 )
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    _validate_simulation_controls,  # ruff: ignore[import-private-name] -- facade validates mutable controls before memory backends read them
+)
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext, merge_execution_config
 
-from .core._validation import validate_integer
+from .core._validation import validate_choice, validate_integer
 
 if TYPE_CHECKING:
     from numpy.random import Generator
@@ -65,6 +68,7 @@ if TYPE_CHECKING:
 
 
 _DEFAULT_CHARACTERIZATION_PRESET = "balanced"
+_CHARACTERIZER_REPRESENTATIONS: tuple[CharacterizerRepresentation, ...] = ("vector", "mps", "auto")
 _CHARACTERIZATION_PRESETS: dict[str, tuple[int, int]] = {
     "quick": (8, 8),
     "balanced": (32, 32),
@@ -254,13 +258,13 @@ class MemoryCharacterizer:
         """Configure execution and representation defaults for characterization workflows.
 
         Args:
-            parallel: Whether to parallelize sequence simulation.
-            max_workers: Cap on worker processes when ``parallel=True``.
-            show_progress: Whether to show tqdm progress bars.
+            parallel: Boolean that enables parallel sequence simulation.
+            max_workers: Positive worker-process cap, or ``None`` for the default.
+            show_progress: Boolean that controls tqdm progress bars.
             representation: ``"vector"``, ``"mps"``, or ``"auto"`` stochastic solver choice.
-            vector_max_qubits: Auto cutover threshold from vector to MPS simulation.
-            mp_context: Multiprocessing start method.
-            max_retries: Retries for transient worker failures.
+            vector_max_qubits: Non-negative auto cutover from vector to MPS simulation.
+            mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` multiprocessing start method.
+            max_retries: Non-negative retry count for transient worker failures.
             retry_exceptions: Exception types that trigger a worker retry.
         """
         self._execution = ExecutionConfig(
@@ -271,8 +275,12 @@ class MemoryCharacterizer:
             max_retries=max_retries,
             retry_exceptions=retry_exceptions,
         )
-        self.representation = representation
-        self.vector_max_qubits = int(vector_max_qubits)
+        self.representation = validate_choice(
+            representation,
+            name="representation",
+            allowed=_CHARACTERIZER_REPRESENTATIONS,
+        )
+        self.vector_max_qubits = validate_integer(vector_max_qubits, name="vector_max_qubits", minimum=0)
 
     @property
     def parallel(self) -> bool:
@@ -371,6 +379,7 @@ class MemoryCharacterizer:
         Returns:
             Dense or MPO process tensor depending on ``return_type``.
         """
+        _validate_simulation_controls(sim_params)
         resolved_num_trajectories = num_trajectories
         resolved_max_bond_dim = max_bond_dim
         resolved_compress_every = compress_every
@@ -446,6 +455,7 @@ class MemoryCharacterizer:
             PyTorch ``TensorDataset`` with ``(E_features, rho0, rho_seq)`` tensors.
 
         """
+        _validate_simulation_controls(sim_params)
         resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
         resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)
@@ -505,6 +515,7 @@ class MemoryCharacterizer:
             Trained :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`.
 
         """
+        _validate_simulation_controls(sim_params)
         resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
         resolved_n = validate_integer(n, name="n", minimum=1)
         operator = _require_hamiltonian(hamiltonian)
@@ -656,6 +667,7 @@ class MemoryCharacterizer:
             if sim_params is None:
                 msg = "characterize(hamiltonian, sim_params, num_interventions=...) requires AnalogSimParams."
                 raise TypeError(msg)
+            _validate_simulation_controls(sim_params)
             if num_interventions is None:
                 msg = "characterize(hamiltonian, sim_params, ...) requires num_interventions=."
                 raise ValueError(msg)

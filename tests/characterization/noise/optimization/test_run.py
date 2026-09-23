@@ -10,8 +10,10 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
+from mqt.yaqs.characterization.noise.optimization import run as optimization_run
 from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.optimization.trajectories import simulate_observable_trajectories
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -82,6 +84,57 @@ def _digital_twin_setup() -> tuple[
         init_guess,
         experimental_data,
     )
+
+
+def test_invalid_optimizer_bounds_fail_before_forward_model_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bound-count mismatch fails before simulation or optimizer dispatch."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    init_state = State(1, initial="zeros")
+    observables = [Observable("z", 0)]
+    sim_params = AnalogSimParams(observables=observables, elapsed_time=0.1, dt=0.1)
+    init_guess = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+
+    def fail_if_called(_execution: ExecutionConfig) -> None:
+        pytest.fail("Forward-model setup ran before optimizer input validation.")
+
+    monkeypatch.setattr(optimization_run, "build_simulator", fail_if_called)
+    with pytest.raises(ValueError, match="x_low shape"):
+        run_optimization_characterization(
+            hamiltonian=hamiltonian,
+            sim_params=sim_params,
+            init_state=init_state,
+            init_guess=init_guess,
+            observables=observables,
+            ref_expectations=np.zeros((1, 2)),
+            x_low=np.zeros(2),
+            x_up=np.ones(1),
+            execution=ExecutionConfig(parallel=False, show_progress=False),
+        )
+
+
+def test_mutated_time_controls_are_rebuilt_before_reference_shape_validation() -> None:
+    """Noise fitting validates reference data against the current analog time grid."""
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    init_state = State(1, initial="zeros")
+    observables = [Observable("z", 0)]
+    sim_params = AnalogSimParams(observables=observables, elapsed_time=0.1, dt=0.1)
+    sim_params.elapsed_time = 0.2
+    init_guess = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+
+    with pytest.raises(ValueError, match="2 columns but sim_params defines 3"):
+        run_optimization_characterization(
+            hamiltonian=hamiltonian,
+            sim_params=sim_params,
+            init_state=init_state,
+            init_guess=init_guess,
+            observables=observables,
+            ref_expectations=np.zeros((1, 2)),
+            x_low=np.zeros(1),
+            x_up=np.ones(1),
+            execution=ExecutionConfig(parallel=False, show_progress=False),
+        )
+
+    np.testing.assert_allclose(sim_params.times, [0.0, 0.1, 0.2])
 
 
 def test_run_optimization_characterization_three_site_digital_twin() -> None:

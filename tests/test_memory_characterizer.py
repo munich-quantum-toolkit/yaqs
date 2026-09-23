@@ -62,6 +62,66 @@ def _paper_mc() -> MemoryCharacterizer:
     return MemoryCharacterizer(parallel=False, show_progress=False)
 
 
+def test_memory_characterizer_accepts_numpy_constructor_scalars() -> None:
+    """NumPy scalar equivalents are normalized at the public constructor boundary."""
+    characterizer = MemoryCharacterizer(
+        parallel=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+        max_workers=np.int64(2),  # ty: ignore[invalid-argument-type]
+        vector_max_qubits=np.int64(8),  # ty: ignore[invalid-argument-type]
+    )
+
+    assert characterizer.parallel is False
+    assert characterizer.max_workers == 2
+    assert characterizer.vector_max_qubits == 8
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"parallel": "false"}, TypeError, "parallel must be a boolean"),
+        ({"representation": 1}, TypeError, "representation must be a string"),
+        ({"representation": "AUTO"}, ValueError, "representation must be one of"),
+        ({"vector_max_qubits": 1.5}, TypeError, "vector_max_qubits must be an integer"),
+        ({"vector_max_qubits": -1}, ValueError, "vector_max_qubits must be >= 0"),
+    ],
+)
+def test_memory_characterizer_rejects_invalid_constructor_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Constructor settings fail before a characterization workflow starts."""
+    with pytest.raises(error, match=match):
+        MemoryCharacterizer(**cast("Any", kwargs))
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value", "error", "match"),
+    [
+        ("order", 3, ValueError, "order must be 1 or 2"),
+        ("dt", "0.1", TypeError, "dt must be a real number"),
+    ],
+)
+def test_memory_characterizer_revalidates_mutated_simulation_controls_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    attribute: str,
+    value: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Memory workflows reject invalid post-construction controls before backend dispatch."""
+    params = AnalogSimParams()
+    setattr(params, attribute, value)
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._require_hamiltonian", pytest.fail)
+    monkeypatch.setattr("mqt.yaqs.memory_characterizer._build_process_tensor", pytest.fail)
+
+    with pytest.raises(error, match=match):
+        MemoryCharacterizer(parallel=False, show_progress=False).build_process_tensor(
+            Hamiltonian.ising(1, J=0.0, g=0.0),
+            params,
+        )
+
+
 def _sample_cut_probes(*, cut: int, n_pasts: int, n_futures: int, num_interventions: int = _PAPER_K) -> ProbeSet:
     rng = np.random.default_rng(_PAPER_SEED + 10_000 * int(cut))
     return sample_probes(
