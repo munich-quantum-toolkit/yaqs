@@ -290,7 +290,7 @@ def test_extend_gate_site_permutation() -> None:
     mpo_tensors = extend_gate(tensor, sites)
     assert len(mpo_tensors) == 3
 
-    order = list(np.argsort(sites))
+    order = sorted(range(len(sites)), key=lambda idx: sites[idx])
     expected = np.transpose(tensor, [*order, *[3 + idx for idx in order]]).reshape(8, 8)
     assert_allclose(_mpo_train_to_matrix(mpo_tensors), expected, atol=1e-12)
 
