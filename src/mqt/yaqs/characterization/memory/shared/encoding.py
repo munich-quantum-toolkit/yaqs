@@ -238,7 +238,7 @@ def normalize_backend_rho(rho_final: ArrayLike) -> np.ndarray:
     # This is conservative: any small negativity falls back to the projection path.
     eps = 1e-12
     w = np.linalg.eigvalsh(rho_h).real
-    if float(w.min()) >= -eps:
+    if float(w[0]) >= -eps:
         tr2 = np.trace(rho_h)
         if abs(tr2) > 1e-15:
             rho_h /= tr2

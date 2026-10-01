@@ -184,15 +184,96 @@ def test_mps_initialization(state: str) -> None:
             np.testing.assert_allclose(vec, expected)
 
 
-@pytest.mark.parametrize("length", [0, -1, False, 1.5])
-def test_mps_rejects_invalid_length(length: object) -> None:
-    """An MPS length must be a positive integer.
+@pytest.mark.parametrize("length", [False, 1.5, "2", None])
+def test_mps_rejects_invalid_length_type(length: object) -> None:
+    """An MPS length must have an integer type.
 
     Args:
         length: Invalid chain length under test.
     """
-    with pytest.raises(ValueError, match="length must be a positive integer"):
+    with pytest.raises(TypeError, match="length must be an integer"):
         MPS(length)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+
+
+@pytest.mark.parametrize("length", [0, -1])
+def test_mps_rejects_non_positive_length(length: int) -> None:
+    """An MPS length must be positive."""
+    with pytest.raises(ValueError, match="length must be positive"):
+        MPS(length)
+
+
+def test_mps_rejects_tensor_count_mismatch() -> None:
+    """Custom tensor counts must match the declared MPS length."""
+    tensor = np.zeros((2, 1, 1), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match="Expected 2 MPS tensors, got 1"):
+        MPS(2, tensors=[tensor])
+
+
+@pytest.mark.parametrize(
+    ("tensors", "physical_dimensions", "error"),
+    [
+        pytest.param([np.zeros((2, 1), dtype=np.complex128)], [2], "rank 3", id="rank"),
+        pytest.param([np.zeros((2, 0, 1), dtype=np.complex128)], [2], "nonempty", id="empty"),
+        pytest.param(
+            [np.array([np.nan, 0.0], dtype=np.complex128).reshape(2, 1, 1)],
+            [2],
+            "finite",
+            id="non-finite",
+        ),
+        pytest.param([np.zeros((3, 1, 1), dtype=np.complex128)], [2], "physical dimension", id="metadata"),
+        pytest.param([np.zeros((2, 2, 1), dtype=np.complex128)], [2], "left boundary", id="left-boundary"),
+        pytest.param([np.zeros((2, 1, 2), dtype=np.complex128)], [2], "right boundary", id="right-boundary"),
+        pytest.param(
+            [
+                np.zeros((2, 1, 2), dtype=np.complex128),
+                np.zeros((3, 3, 1), dtype=np.complex128),
+            ],
+            [2, 3],
+            "bond between sites 0 and 1",
+            id="adjacent-bond",
+        ),
+    ],
+)
+def test_mps_rejects_invalid_custom_tensor_structure(
+    tensors: list[NDArray[np.complex128]],
+    physical_dimensions: list[int],
+    error: str,
+) -> None:
+    """Manual MPS tensors are validated once at construction."""
+    with pytest.raises(ValueError, match=error):
+        MPS(len(tensors), tensors=tensors, physical_dimensions=physical_dimensions)
+
+
+def test_mps_accepts_valid_mixed_dimension_tensors() -> None:
+    """Manual MPS tensors support finite mixed local dimensions and open boundaries."""
+    tensors = [
+        np.ones((2, 1, 2), dtype=np.complex128),
+        np.ones((3, 2, 1), dtype=np.complex128),
+    ]
+
+    mps = MPS(2, tensors=tensors, physical_dimensions=[2, 3])
+
+    assert mps.physical_dimensions == [2, 3]
+    mps.check_if_valid_mps()
+
+
+def test_mps_rejects_nonnumeric_custom_tensor() -> None:
+    """Manual MPS cores must contain numeric data."""
+    with pytest.raises(ValueError, match="numeric data"):
+        MPS(1, tensors=[cast("Any", [["invalid"]])])
+
+
+def test_mps_rejects_physical_dimension_count_mismatch() -> None:
+    """Physical-dimension counts must match the declared MPS length."""
+    with pytest.raises(ValueError, match="Expected 2 physical dimensions, got 1"):
+        MPS(2, physical_dimensions=[2])
+
+
+def test_mps_basis_state_requires_basis_string() -> None:
+    """Basis-state construction requires an explicit basis string."""
+    with pytest.raises(ValueError, match="basis_string must be provided"):
+        MPS(2, state="basis")
 
 
 def test_mps_accepts_numpy_integer_length_and_centers() -> None:
@@ -221,7 +302,7 @@ def test_mps_custom_tensors() -> None:
     pdim = 2
     t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
     t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
-    t3 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 2, 1)).astype(np.complex128)
     tensors = [t1, t2, t3]
 
     mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
@@ -692,6 +773,78 @@ def test_scalar_product_partial_site() -> None:
     np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
 
 
+def test_scalar_product_adjacent_sites_matches_merged_tensor_overlap() -> None:
+    """A two-site scalar product equals the overlap of the merged tensor blocks."""
+    shapes = [(2, 1, 3), (2, 3, 2), (2, 2, 1)]
+    left = random_mps(shapes, normalize=False, seed=1)
+    right = random_mps(shapes, normalize=False, seed=2)
+
+    merged_left = merge_two_site(left.tensors[0], left.tensors[1])
+    merged_right = merge_two_site(right.tensors[0], right.tensors[1])
+    expected = np.vdot(merged_left, merged_right)
+
+    actual = left.scalar_product(right, sites=[0, 1])
+
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        (True, TypeError, "observable sites must be an integer or a list of integers"),
+        ("0", TypeError, "observable sites must be an integer or a list of integers"),
+        ([], ValueError, "observable must act on one or two sites"),
+        ([0, 1, 2], ValueError, "observable must act on one or two sites"),
+        (-1, ValueError, r"observable site must be in \[0, 2\]"),
+        (3, ValueError, r"observable site must be in \[0, 2\]"),
+        ([0, 2], ValueError, "scalar-product bond sites must be ordered nearest neighbors"),
+    ],
+)
+def test_scalar_product_rejects_invalid_sites(
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Partial contractions require supported, in-range site selections."""
+    state = MPS(length=3, state="zeros")
+
+    with pytest.raises(error, match=match):
+        state.scalar_product(state, sites=cast("Any", sites))
+
+
+@pytest.mark.parametrize(
+    ("bitstring", "error", "match"),
+    [
+        (None, TypeError, "bitstring must be a string"),
+        (1, TypeError, "bitstring must be a string"),
+        ("0", ValueError, "bitstring must contain 2 characters"),
+        ("000", ValueError, "bitstring must contain 2 characters"),
+        ("0x", ValueError, "character at site 1 must be numeric"),
+        ("1x", ValueError, "character at site 1 must be numeric"),
+        ("20", ValueError, r"state index 2 at site 0 must be in \[0, 1\]"),
+        ("12", ValueError, r"state index 2 at site 1 must be in \[0, 1\]"),
+    ],
+)
+def test_project_onto_bitstring_rejects_invalid_input(
+    bitstring: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Bitstring projection rejects invalid types, lengths, and local state indices."""
+    state = MPS(2, state="zeros")
+
+    with pytest.raises(error, match=match):
+        state.project_onto_bitstring(cast("Any", bitstring))
+
+
+def test_project_onto_bitstring_rejects_non_qubit_layout() -> None:
+    """Binary projection does not reinterpret digits as qudit basis indices."""
+    state = MPS(2, physical_dimensions=[2, 3], state="zeros")
+
+    with pytest.raises(ValueError, match="Bitstring measurement requires qubit sites"):
+        state.project_onto_bitstring("00")
+
+
 def _independent_dense_expect_mpo(state: MPS, operator: MPO) -> np.complex128:
     """Compute an MPO expectation by enumerating the full product basis.
 
@@ -893,7 +1046,8 @@ def test_expect_mpo_rejects_invalid_mps_tensor_structure(
     error: str,
 ) -> None:
     """Malformed MPS tensors are rejected before singleton bonds can broadcast."""
-    state = MPS(length=len(tensors), tensors=tensors)
+    state = MPS(length=len(tensors), state="zeros")
+    state.tensors = tensors
     operator = MPO.identity(len(tensors))
 
     with pytest.raises(ValueError, match=error):
@@ -1119,6 +1273,33 @@ def test_local_observable_dimension_mismatch_raises() -> None:
 
     with pytest.raises(ValueError, match="does not match site 0 dimension 3"):
         psi_mps.expect(Observable(np.eye(2), 0))
+
+
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        (None, TypeError, "observable sites must be an integer or a list of integers"),
+        ("0", TypeError, "observable sites must be an integer or a list of integers"),
+        ([], ValueError, "observable must act on one or two sites"),
+        ([0, 1, 2], ValueError, "observable must act on one or two sites"),
+        ([False], TypeError, "observable sites must contain only integers"),
+        ([0, 1.5], TypeError, "observable sites must contain only integers"),
+        (-1, ValueError, r"observable site must be in \[0, 1\]"),
+        (2, ValueError, r"observable site must be in \[0, 1\]"),
+    ],
+)
+def test_expect_rejects_invalid_observable_sites(
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Expectation values require one or two in-range integer sites."""
+    state = MPS(2, state="zeros")
+    observable = Observable("z", 0)
+    observable.sites = cast("Any", sites)
+
+    with pytest.raises(error, match=match):
+        state.expect(observable)
 
 
 def test_two_site_local_observable_dimension_mismatch_raises() -> None:
@@ -1372,6 +1553,33 @@ def test_single_shot_basis() -> None:
     psi_y_minus = MPS(length=1, state="y-")
     for _ in range(10):
         assert psi_y_minus.measure_single_shot(basis="Y") == 1
+
+
+def test_measurements_reject_unknown_basis() -> None:
+    """Single and repeated measurement accept only the documented Pauli bases."""
+    state = MPS(length=1, state="zeros")
+
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_single_shot(basis="A")
+    with pytest.raises(ValueError, match="Invalid basis: A"):
+        state.measure_shots(shots=1, basis="A")
+
+
+def test_measurement_rejects_only_measured_non_qubit_sites() -> None:
+    """A qubit can be measured beside an idle qutrit, but binary full-chain readout cannot."""
+    state = MPS(2, state="zeros", physical_dimensions=[2, 3])
+
+    assert state.measure(0) == 0
+    with pytest.raises(ValueError, match="site 1 has physical dimension 3"):
+        state.measure(1)
+    with pytest.raises(ValueError, match="Single-shot measurement requires qubit sites"):
+        state.measure_single_shot()
+    with (
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor,
+        pytest.raises(ValueError, match="Shot measurement requires qubit sites"),
+    ):
+        state.measure_shots(2)
+    mock_executor.assert_not_called()
 
 
 def test_single_shot_conditional_probabilities_match_dense_distribution() -> None:
@@ -1731,7 +1939,25 @@ def test_check_if_valid_mps_rejects_tensor_count_mismatch() -> None:
     mps = MPS(3, state="zeros")
     mps.tensors.append(mps.tensors[-1].copy())
 
-    with pytest.raises(AssertionError, match="4 tensors but length 3"):
+    with pytest.raises(ValueError, match="4 tensors but length 3"):
+        mps.check_if_valid_mps()
+
+
+def test_check_if_valid_mps_rejects_dimension_count_mismatch() -> None:
+    """Physical-dimension metadata must contain one entry per tensor."""
+    mps = MPS(2, state="zeros")
+    mps.physical_dimensions.pop()
+
+    with pytest.raises(ValueError, match="1 physical dimensions but length 2"):
+        mps.check_if_valid_mps()
+
+
+def test_check_if_valid_mps_rejects_bond_dimension_mismatch() -> None:
+    """A mismatched adjacent bond reports both sites and dimensions."""
+    mps = MPS(2, state="zeros")
+    mps.tensors[1] = np.zeros((2, 2, 1), dtype=np.complex128)
+
+    with pytest.raises(ValueError, match=r"bond between sites 0 and 1 has dimensions 1 and 2"):
         mps.check_if_valid_mps()
 
 
@@ -1792,7 +2018,7 @@ def test_check_canonical_form_left() -> None:
     unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
     unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
     tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[2, 2, 3])
     res = mps.check_canonical_form()
     assert 0 in res
 
@@ -1802,7 +2028,7 @@ def test_check_canonical_form_right() -> None:
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_mid = unitary_group.rvs(6).astype(np.complex128).reshape((2, 3, 6))
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[3, 2, 2])
     res = mps.check_canonical_form()
     assert 2 in res
 
@@ -1812,7 +2038,7 @@ def test_check_canonical_form_middle() -> None:
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_right = unitary_group.rvs(3).astype(np.complex128).reshape(3, 3, 1)
     tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
-    mps = MPS(length=3, tensors=tensors)
+    mps = MPS(length=3, tensors=tensors, physical_dimensions=[3, 2, 3])
     res = mps.check_canonical_form()
     assert 1 in res
 
@@ -2262,7 +2488,8 @@ def test_assert_bond_shapes_consistent_raises_on_mismatch() -> None:
     t0 = np.zeros((2, 1, 3), dtype=complex)
     t1 = np.zeros((2, 2, 1), dtype=complex)
     t2 = np.zeros((2, 1, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps = MPS(length=3, state="zeros")
+    mps.tensors = [t0, t1, t2]
     with pytest.raises(ValueError, match="bond mismatch"):
         mps.assert_bond_shapes_consistent()
 
@@ -2336,7 +2563,8 @@ def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
     t0 = np.zeros((2, 1, 4), dtype=complex)
     t1 = np.zeros((2, 2, 1), dtype=complex)
     t2 = np.zeros((2, 1, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps = MPS(length=3, state="zeros")
+    mps.tensors = [t0, t1, t2]
     mps.ensure_internal_bond_dims((0,), 4)
 
     assert mps.tensors[0].shape == (2, 1, 4)
@@ -2506,13 +2734,31 @@ def test_non_unitary_apply_local_invalidates_center_and_preserves_bond_metrics(
     np.testing.assert_allclose(values, expected, atol=1e-12)
 
 
-def test_get_entropy_asserts_on_non_adjacent_or_wrong_len() -> None:
-    """get_entropy asserts on invalid site lists."""
+@pytest.mark.parametrize("method_name", ["get_entropy", "get_schmidt_spectrum"])
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        ((1, 2), TypeError, "sites must be a list of integers"),
+        ([1], ValueError, "requires exactly two sites"),
+        ([1, 3], ValueError, "sites must be ordered nearest neighbors"),
+        ([2, 1], ValueError, "sites must be ordered nearest neighbors"),
+        ([-1, 0], ValueError, r"sites must be in \[0, 3\]"),
+        ([3, 4], ValueError, r"sites must be in \[0, 3\]"),
+        ([True, 1], TypeError, "sites must be a list of integers"),
+        ([1, 1.5], TypeError, "sites must be a list of integers"),
+    ],
+)
+def test_bond_diagnostics_reject_invalid_sites(
+    method_name: str,
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Bond diagnostics require two ordered, adjacent, in-range integer sites."""
     mps = _product_state_mps(4)
-    with pytest.raises(AssertionError):
-        _ = mps.get_entropy([1])  # wrong length
-    with pytest.raises(AssertionError):
-        _ = mps.get_entropy([1, 3])  # non-adjacent
+
+    with pytest.raises(error, match=match):
+        getattr(mps, method_name)(sites)
 
 
 def test_get_schmidt_spectrum_product_padding() -> None:
@@ -2539,15 +2785,6 @@ def test_get_schmidt_spectrum_bell_pair_values_and_padding() -> None:
     assert non_nan.size == 2
     assert np.allclose(non_nan, 1 / np.sqrt(2), atol=1e-12)
     assert np.all(np.isnan(spec[2:]))
-
-
-def test_get_schmidt_spectrum_asserts_on_invalid_sites() -> None:
-    """get_schmidt_spectrum asserts on non-adjacent or wrong-length site lists."""
-    mps = _product_state_mps(5)
-    with pytest.raises(AssertionError):
-        _ = mps.get_schmidt_spectrum([2])  # wrong length
-    with pytest.raises(AssertionError):
-        _ = mps.get_schmidt_spectrum([1, 3])  # non-adjacent
 
 
 def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None:
@@ -2731,13 +2968,24 @@ def test_evaluate_observables_with_nonzero_initial_center() -> None:
         assert results[site, 0] == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
 
 
-def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
-    """Shift helpers assert when the requested center disagrees with tracking."""
+def test_shift_orthogonality_center_rejects_mismatch() -> None:
+    """Shift helpers reject a requested center that disagrees with tracking."""
     mps = MPS(3, state="zeros")
     assert mps.orthogonality_center == 0
+
     mps.set_center(1)
-    with pytest.raises(AssertionError):
+    with pytest.raises(
+        ValueError,
+        match=r"shift_orthogonality_center_right: tracked center is 1, but shift requested from site 0\.",
+    ):
         mps.shift_orthogonality_center_right(0)
+
+    mps.set_center(0)
+    with pytest.raises(
+        ValueError,
+        match=r"shift_orthogonality_center_left: tracked center is 0, but shift requested from site 1\.",
+    ):
+        mps.shift_orthogonality_center_left(1)
 
 
 def test_orthogonality_center_preserved_by_deepcopy() -> None:
@@ -2945,29 +3193,48 @@ def test_check_covers_sites() -> None:
     mps.set_center(None)
 
 
-def test_evaluate_observables_meta_validation_errors() -> None:
-    """Meta-observable input validation: wrong length and non-adjacent sites must assert."""
+@pytest.mark.parametrize(
+    ("name", "sites", "error", "match"),
+    [
+        ("entropy", 1, TypeError, "sites must be a list of integers"),
+        ("entropy", [1], ValueError, "requires exactly two sites"),
+        ("schmidt_spectrum", [0, 2], ValueError, "sites must be ordered nearest neighbors"),
+        ("entropy", [2, 1], ValueError, "sites must be ordered nearest neighbors"),
+        ("entropy", [-1, 0], ValueError, r"sites must be in \[0, 3\]"),
+        ("entropy", [3, 4], ValueError, r"sites must be in \[0, 3\]"),
+    ],
+)
+def test_evaluate_observables_rejects_invalid_diagnostic_sites(
+    name: str,
+    sites: int | list[int],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Diagnostic observables require an ordered adjacent in-range site pair."""
     mps = _product_state_mps(4)
-
-    # Wrong length (entropy expects exactly two adjacent indices)
-    sim_bad_len = AnalogSimParams(
-        [Observable("entropy", [1])],
+    sim_params = AnalogSimParams(
+        [Observable(name, sites)],
         elapsed_time=0.1,
         dt=0.1,
     )
-    results_len = np.empty((1, 1), dtype=np.float64)
-    with pytest.raises(AssertionError):
-        mps.evaluate_observables(sim_bad_len, results_len, column_index=0)
 
-    # Non-adjacent Schmidt cut
-    sim_non_adj = AnalogSimParams(
-        [Observable("schmidt_spectrum", [0, 2])],
-        elapsed_time=0.1,
-        dt=0.1,
-    )
-    results_adj = np.empty((1, 1), dtype=object)
-    with pytest.raises(AssertionError):
-        mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
+    with pytest.raises(error, match=match):
+        mps.evaluate_observables(sim_params, np.empty((1, 1), dtype=object), column_index=0)
+
+
+@pytest.mark.parametrize("bitstring", [None, 1])
+def test_evaluate_observables_rejects_malformed_bitstring_observable(bitstring: object) -> None:
+    """Batch evaluation rejects bitstring observables without string data."""
+    observable = Observable("00")
+    observable.bitstring = cast("Any", bitstring)
+    sim_params = AnalogSimParams([observable], elapsed_time=0.1, dt=0.1)
+
+    with pytest.raises(TypeError, match="Bitstring observables must define a string bitstring"):
+        _product_state_mps(2).evaluate_observables(
+            sim_params,
+            np.empty((1, 1), dtype=np.float64),
+            column_index=0,
+        )
 
 
 def test_evaluate_observables_rejects_operator_without_sites() -> None:
@@ -2978,4 +3245,30 @@ def test_evaluate_observables_rejects_operator_without_sites() -> None:
     sim_params = Mock(sorted_observables=[observable])
 
     with pytest.raises(ValueError, match="Operator observables must have explicit sites"):
+        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+
+
+@pytest.mark.parametrize(
+    ("sites", "error", "match"),
+    [
+        (False, TypeError, "observable sites must be an integer or a list of integers"),
+        ("0", TypeError, "observable sites must be an integer or a list of integers"),
+        ([], ValueError, "observable must act on one or two sites"),
+        ([0, 1, 2], ValueError, "observable must act on one or two sites"),
+        (-1, ValueError, r"observable site must be in \[0, 1\]"),
+        (2, ValueError, r"observable site must be in \[0, 1\]"),
+    ],
+)
+def test_evaluate_observables_rejects_invalid_operator_sites(
+    sites: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Batch evaluation validates ordinary observable sites before contraction."""
+    state = _product_state_mps(2)
+    observable = Observable("z", 0)
+    observable.sites = cast("Any", sites)
+    sim_params = Mock(sorted_observables=[observable])
+
+    with pytest.raises(error, match=match):
         state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)

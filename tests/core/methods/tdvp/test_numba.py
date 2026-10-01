@@ -9,9 +9,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+import numba
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.methods.tdvp.numba import (
     build_dense_heff_bond_numba,
@@ -19,8 +19,20 @@ from mqt.yaqs.core.methods.tdvp.numba import (
 )
 from mqt.yaqs.core.methods.tdvp.primitives import build_dense_heff_site
 
-if TYPE_CHECKING:
-    import pytest
+
+@pytest.mark.jit
+def test_tdvp_dispatchers_compile() -> None:
+    """TDVP kernels compile and execute when Numba JIT is enabled."""
+    assert getattr(numba.config, "DISABLE_JIT", 0) == 0
+
+    left_env = np.ones((1, 1, 1), dtype=np.complex128)
+    right_env = np.ones((1, 1, 1), dtype=np.complex128)
+    op = np.ones((1, 1, 1, 1), dtype=np.complex128)
+
+    np.testing.assert_array_equal(build_dense_heff_site_numba(left_env, right_env, op), [[1.0]])
+    np.testing.assert_array_equal(build_dense_heff_bond_numba(left_env, right_env), [[1.0]])
+    assert build_dense_heff_site_numba.signatures
+    assert build_dense_heff_bond_numba.signatures
 
 
 def test_build_dense_heff_site_numba() -> None:

@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 import numpy as np
 
+from ....core._validation import validate_integer
 from .encoding import _flatten_choi4, extract_ket
 
 InterventionStyle = Literal["haar", "clifford", "measure_prepare"]
@@ -143,16 +144,17 @@ def sample_intervention_sequence(
     """Sample fresh interventions and return maps + per-step Choi features.
 
     Args:
-        num_interventions: Number of intervention steps.
+        num_interventions: Positive integer number of intervention steps.
         rng: Random number generator.
 
     Returns:
         Tuple ``(maps, choi_features)`` where ``maps`` has length ``num_interventions`` and
         ``choi_features`` has shape ``(num_interventions, 32)``.
     """
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     maps: list[InterventionMap] = []
     rows: list[np.ndarray] = []
-    for _ in range(int(num_interventions)):
+    for _ in range(resolved_num_interventions):
         emap, _rho_prep, _effect, choi_mat = _sample_random_intervention(rng)
         maps.append(emap)
         rows.append(_flatten_choi4(choi_mat))
@@ -385,19 +387,20 @@ def sample_train_interventions(
     """Sample one training intervention sequence of length ``num_interventions``.
 
     Args:
-        num_interventions: Sequence length.
+        num_interventions: Positive integer sequence length.
         intervention_style: Intervention style for all slots.
         rng: NumPy random generator.
 
     Returns:
         Tuple ``(steps, choi_features)`` suitable for surrogate training sequences.
     """
+    resolved_num_interventions = validate_integer(num_interventions, name="num_interventions", minimum=1)
     if intervention_style == "measure_prepare":
-        maps, choi = sample_intervention_sequence(int(num_interventions), rng)
+        maps, choi = sample_intervention_sequence(resolved_num_interventions, rng)
         steps: list[Any] = []
         for emap in maps:
             psi_meas = extract_ket(emap.effect)
             psi_prep = extract_ket(emap.rho_prep)
             steps.append((psi_meas, psi_prep))
         return steps, choi
-    return encode_interventions(intervention_style, num_interventions=int(num_interventions), rng=rng)
+    return encode_interventions(intervention_style, num_interventions=resolved_num_interventions, rng=rng)

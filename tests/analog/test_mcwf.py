@@ -111,6 +111,23 @@ def test_mcwf_unitary_rabi() -> None:
     assert np.all(diff < 1e-4), f"Max diff: {np.max(diff)}"
 
 
+def test_mcwf_final_only_zero_duration_measures_initial_state() -> None:
+    """A zero-duration final-only MCWF run measures the initial vector state."""
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(1, initial="ones", representation="vector"),
+        Hamiltonian.ising(1, J=0.0, g=0.0),
+        AnalogSimParams(
+            observables=[Observable("z", 0)],
+            elapsed_time=0.0,
+            dt=0.1,
+            num_traj=1,
+            sample_timesteps=False,
+        ),
+    )
+
+    np.testing.assert_allclose(result.expectation_values[0], [-1.0], atol=1e-12)
+
+
 def test_mcwf_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2

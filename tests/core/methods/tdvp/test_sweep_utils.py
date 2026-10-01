@@ -464,7 +464,9 @@ def test_align_bond_syncs_mismatched_shapes() -> None:
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
     t0[0, 0, 0] = 1.0
     t1[0, 0, 0] = 1.0
-    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    state = MPS(2, state="zeros")
+    # Public construction rejects this mismatch; the internal repair still handles later mutation.
+    state.tensors = [t0, t1]
     params = DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     _align_bond(state, 0, params)
     assert state.tensors[0].shape[2] == state.tensors[1].shape[1]
@@ -572,7 +574,9 @@ def test_sync_bond_dim_aligns_mismatched_bond_widths() -> None:
     """Bond sync pads mismatched virtual indices before targeting a shared dimension."""
     t0 = np.zeros((2, 1, 2), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
-    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    state = MPS(2, state="zeros")
+    # Public construction rejects this mismatch; the internal repair still handles later mutation.
+    state.tensors = [t0, t1]
     _sync_bond_dim(state, 0, 2, DigitalSimParams(preset="exact", get_state=True, max_bond_dim=2))
     assert state.tensors[0].shape[2] == 2
     assert state.tensors[1].shape[1] == 2

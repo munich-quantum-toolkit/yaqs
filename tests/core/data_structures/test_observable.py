@@ -128,7 +128,7 @@ def test_observable_rejects_unknown_names(name: str) -> None:
 def test_observable_rejects_gate_instance() -> None:
     """Observable definitions do not accept gate objects."""
     with pytest.raises(TypeError, match="named observable or a numeric matrix"):
-        Observable(BaseGate(np.eye(2)), 0)  # ty: ignore[invalid-argument-type]  # exercise runtime validation
+        Observable(BaseGate(np.eye(2)), 0)  # exercise runtime validation
 
 
 def test_observable_rejects_non_hermitian_matrix() -> None:

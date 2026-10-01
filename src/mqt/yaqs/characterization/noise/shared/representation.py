@@ -12,6 +12,8 @@ from __future__ import annotations
 import copy
 from typing import TYPE_CHECKING, Literal
 
+from ....core._validation import validate_choice, validate_integer
+
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.data_structures.state_utils import Representation
@@ -42,25 +44,26 @@ def resolve_noise_representation(
     Returns:
         Resolved ``"density_matrix"``, ``"vector"``, or ``"mps"``.
 
-    Raises:
-        ValueError: If ``representation`` is invalid.
     """
-    rep = str(representation).strip().lower()
-    n_sites = int(chain_length)
+    rep = validate_choice(
+        representation,
+        name="representation",
+        allowed=("density_matrix", "vector", "mps", "auto"),
+    )
+    n_sites = validate_integer(chain_length, name="chain_length", minimum=1)
+    max_lindblad_sites = validate_integer(lindblad_max_qubits, name="lindblad_max_qubits", minimum=0)
+    max_vector_sites = validate_integer(vector_max_qubits, name="vector_max_qubits", minimum=0)
     if rep == "density_matrix":
         return "density_matrix"
     if rep == "vector":
         return "vector"
     if rep == "mps":
         return "mps"
-    if rep == "auto":
-        if n_sites <= int(lindblad_max_qubits):
-            return "density_matrix"
-        if n_sites <= int(vector_max_qubits):
-            return "vector"
-        return "mps"
-    msg = f"representation must be 'density_matrix', 'vector', 'mps', or 'auto', got {representation!r}."
-    raise ValueError(msg)
+    if n_sites <= max_lindblad_sites:
+        return "density_matrix"
+    if n_sites <= max_vector_sites:
+        return "vector"
+    return "mps"
 
 
 def prepare_state_for_representation(

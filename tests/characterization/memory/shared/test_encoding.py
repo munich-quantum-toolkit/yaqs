@@ -67,6 +67,12 @@ def test_normalize_backend_rho_returns_physical_dm() -> None:
     assert float(evals.min()) >= -1e-12
 
 
+def test_normalize_backend_rho_preserves_physical_dm() -> None:
+    """Physical backend output remains unchanged."""
+    rho = np.array([[0.75, 0.25j], [-0.25j, 0.25]], dtype=np.complex128)
+    np.testing.assert_allclose(normalize_backend_rho(rho), rho)
+
+
 def test_pauli_tomography_roundtrip_and_identity_component() -> None:
     """Four-component Pauli tomography reconstructs rho; I expectation is unity."""
     rng = np.random.default_rng(0)

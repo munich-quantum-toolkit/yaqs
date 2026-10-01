@@ -189,6 +189,29 @@ def test_ref_expectations_shape_validation() -> None:
         )
 
 
+@pytest.mark.parametrize("invalid", [np.nan, np.inf, -np.inf])
+def test_ref_expectations_rejects_non_finite_values(invalid: float) -> None:
+    """Experimental reference trajectories must contain finite observations."""
+    hamiltonian, init_state, observables, sim_params, _reference_model = _three_site_problem()
+    execution = ExecutionConfig(parallel=False, show_progress=False)
+    reference = np.zeros((len(observables), len(sim_params.times)))
+    reference[0, 0] = invalid
+
+    with pytest.raises(ValueError, match="only finite values"):
+        resolve_reference_expectations(
+            sim_params=sim_params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            observables=observables,
+            reference_model=None,
+            ref_expectations=reference,
+            simulator=build_simulator(execution),
+            representation="density_matrix",
+            lindblad_max_qubits=8,
+            vector_max_qubits=10,
+        )
+
+
 def test_resolve_prepared_state_encodes_density_matrix() -> None:
     """resolve_prepared_state returns an encoded state for Lindblad."""
     hamiltonian, init_state, _, _, _ = _three_site_problem()

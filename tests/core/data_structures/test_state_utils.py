@@ -29,6 +29,7 @@ from mqt.yaqs.core.data_structures.state_utils import (
     product_state_vector,
     reject_preset_only_kwargs,
     resolve_physical_dimensions,
+    validate_qubit_measurement_dimensions,
     validate_representation,
 )
 from mqt.yaqs.digital.utils.matrix_utils import embed_unitary
@@ -55,7 +56,14 @@ def test_resolve_physical_dimensions_defaults() -> None:
 
 def test_resolve_physical_dimensions_int_broadcast() -> None:
     """Integer physical dimension is broadcast to all sites."""
-    assert resolve_physical_dimensions(2, 3) == [3, 3]
+    assert resolve_physical_dimensions(2, np.int64(3)) == [3, 3]
+
+
+def test_resolve_physical_dimensions_rejects_boolean() -> None:
+    """Boolean values are not physical dimensions despite being integer subclasses."""
+    physical_dimension = True
+    with pytest.raises(ValueError, match="positive integer"):
+        resolve_physical_dimensions(2, physical_dimension)
 
 
 def test_resolve_physical_dimensions_list_mismatch() -> None:
@@ -74,6 +82,12 @@ def test_resolve_physical_dimensions_rejects_nonpositive_list_element() -> None:
     """Each list element must be a strictly positive integer."""
     with pytest.raises(ValueError, match=r"physical_dimensions\[1\]"):
         resolve_physical_dimensions(2, [2, -1])
+
+
+def test_validate_qubit_measurement_dimensions_rejects_qutrit() -> None:
+    """Bitstring and shot measurement reject non-qubit sites."""
+    with pytest.raises(ValueError, match=r"site 1 has physical dimension 3"):
+        validate_qubit_measurement_dimensions([2, 3], name="Shot measurement")
 
 
 def test_infer_chain_length_general_base() -> None:
@@ -106,6 +120,19 @@ def test_normalize_vector_zero_raises() -> None:
         normalize_vector(np.zeros(2, dtype=np.complex128))
 
 
+@pytest.mark.parametrize(
+    ("vector", "error"),
+    [
+        (np.array([[1.0, 0.0]], dtype=np.complex128), "one-dimensional"),
+        (np.array([1.0, np.inf], dtype=np.complex128), "finite"),
+    ],
+)
+def test_normalize_vector_rejects_malformed_data(vector: np.ndarray, error: str) -> None:
+    """Manual vectors must be one-dimensional and finite."""
+    with pytest.raises(ValueError, match=error):
+        normalize_vector(vector)
+
+
 def test_normalize_vector_unit_norm() -> None:
     """Non-zero vectors are scaled to unit norm."""
     vec = np.array([3.0, 4.0], dtype=np.complex128)
@@ -114,11 +141,26 @@ def test_normalize_vector_unit_norm() -> None:
 
 
 def test_normalize_density_matrix_invalid() -> None:
-    """Density matrix must be square with non-zero trace."""
+    """Density matrix must be square with positive real trace."""
     with pytest.raises(ValueError, match="square 2-D"):
         normalize_density_matrix(np.ones((2, 3), dtype=np.complex128))
-    with pytest.raises(ValueError, match="non-zero trace"):
+    with pytest.raises(ValueError, match="positive real trace"):
         normalize_density_matrix(np.zeros((2, 2), dtype=np.complex128))
+
+
+@pytest.mark.parametrize(
+    ("rho", "error"),
+    [
+        (np.array([[1.0, np.inf], [np.inf, 1.0]], dtype=np.complex128), "finite"),
+        (np.array([[1.0, 1.0j], [1.0j, 1.0]], dtype=np.complex128), "Hermitian"),
+        (np.diag([1.1, -0.1]).astype(np.complex128), "positive semidefinite"),
+        (-np.eye(2, dtype=np.complex128), "positive real trace"),
+    ],
+)
+def test_normalize_density_matrix_rejects_nonphysical_data(rho: np.ndarray, error: str) -> None:
+    """Manual density matrices must be finite, Hermitian, PSD, and positive-trace."""
+    with pytest.raises(ValueError, match=error):
+        normalize_density_matrix(rho)
 
 
 def test_normalize_density_matrix_renormalizes_trace() -> None:
@@ -126,6 +168,18 @@ def test_normalize_density_matrix_renormalizes_trace() -> None:
     rho = 2.0 * np.eye(2, dtype=np.complex128)
     out = normalize_density_matrix(rho)
     assert np.isclose(np.trace(out), 1.0)
+
+
+def test_normalize_density_matrix_accepts_small_scale_and_roundoff() -> None:
+    """Scale-aware checks accept a physical state with roundoff-scale residuals."""
+    rho = 1e-200 * np.array(
+        [[0.75, 0.25 + 1e-13j], [0.25 - 2e-13j, 0.25]],
+        dtype=np.complex128,
+    )
+    out = State(density_matrix=rho).density_matrix
+    np.testing.assert_allclose(out, out.conj().T, atol=1e-15)
+    assert np.isclose(np.trace(out), 1.0)
+    assert np.linalg.eigvalsh(out)[0] >= -1e-12
 
 
 def test_reject_preset_only_kwargs() -> None:

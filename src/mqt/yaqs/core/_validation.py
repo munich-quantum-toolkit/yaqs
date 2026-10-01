@@ -10,10 +10,82 @@
 from __future__ import annotations
 
 import math
-from numbers import Complex, Integral
+from numbers import Complex, Integral, Real
+from typing import TypeVar, cast
+
+import numpy as np
 
 _REAL_RTOL = 1e-10
 _REAL_ATOL = 1e-12
+
+_TString = TypeVar("_TString", bound=str)
+
+
+def validate_bool(value: object, *, name: str) -> bool:
+    """Validate and normalize a Boolean scalar.
+
+    Args:
+        value: Candidate Boolean. Python and NumPy Boolean scalars are accepted.
+        name: Parameter name used in error messages.
+
+    Returns:
+        The value normalized to a Python :class:`bool`.
+
+    Raises:
+        TypeError: If ``value`` is not a Python or NumPy Boolean scalar.
+    """
+    if not isinstance(value, (bool, np.bool_)):
+        msg = f"{name} must be a boolean, got {type(value).__name__}."
+        raise TypeError(msg)
+    return bool(value)
+
+
+def validate_choice(value: object, *, name: str, allowed: tuple[_TString, ...]) -> _TString:
+    """Validate a string selector against its supported values.
+
+    Args:
+        value: Candidate selector.
+        name: Parameter name used in error messages.
+        allowed: Exact supported string values.
+
+    Returns:
+        The validated selector.
+
+    Raises:
+        TypeError: If ``value`` is not a string.
+        ValueError: If ``value`` is not one of ``allowed``.
+    """
+    if not isinstance(value, str):
+        msg = f"{name} must be a string, got {type(value).__name__}."
+        raise TypeError(msg)
+    if value not in allowed:
+        msg = f"{name} must be one of {allowed!r}, got {value!r}."
+        raise ValueError(msg)
+    return cast("_TString", value)
+
+
+def validate_finite_real(value: object, *, name: str) -> float:
+    """Validate and normalize a finite real scalar.
+
+    Args:
+        value: Candidate scalar. Python and NumPy real scalars are accepted.
+        name: Parameter name used in error messages.
+
+    Returns:
+        The value normalized to a Python :class:`float`.
+
+    Raises:
+        TypeError: If ``value`` is a Boolean or not a real scalar.
+        ValueError: If ``value`` is not finite.
+    """
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, Real):
+        msg = f"{name} must be a real number, got {type(value).__name__}."
+        raise TypeError(msg)
+    normalized = float(value)
+    if not math.isfinite(normalized):
+        msg = f"{name} must be finite, got {normalized!r}."
+        raise ValueError(msg)
+    return normalized
 
 
 def validate_integer(value: object, *, name: str, minimum: int | None = None) -> int:

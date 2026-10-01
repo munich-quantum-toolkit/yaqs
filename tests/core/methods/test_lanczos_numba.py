@@ -7,9 +7,30 @@
 
 """Tests for Numba-accelerated Lanczos methods."""
 
+import numba
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.methods.lanczos_numba import normalize_and_store, orthogonalize_step
+
+
+@pytest.mark.jit
+def test_lanczos_dispatchers_compile() -> None:
+    """Lanczos kernels compile and execute when Numba JIT is enabled."""
+    assert getattr(numba.config, "DISABLE_JIT", 0) == 0
+
+    vectors = np.zeros((2, 2), dtype=np.complex128, order="F")
+    vectors[0, 0] = 1.0
+    candidate = np.ones(2, dtype=np.complex128)
+    alpha = np.zeros(2)
+    beta = np.zeros(1)
+
+    norm = orthogonalize_step(vectors, candidate, 0, alpha, beta)
+    normalize_and_store(vectors, candidate, 0, norm)
+
+    np.testing.assert_allclose(vectors[:, 1], [0.0, 1.0])
+    assert orthogonalize_step.signatures
+    assert normalize_and_store.signatures
 
 
 def test_orthogonalize_step() -> None:

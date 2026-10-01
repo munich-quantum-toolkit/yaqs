@@ -209,7 +209,7 @@ def test_program_rejects_invalid_observables_sequence() -> None:
 
 def test_program_rejects_non_boolean_get_state() -> None:
     """The program-level output switch does not silently accept integers."""
-    with pytest.raises(TypeError, match="get_state must be bool"):
+    with pytest.raises(TypeError, match="get_state"):
         SimulationProgram(
             [(QuantumCircuit(2), DigitalSimParams())],
             get_state=1,  # ty: ignore[invalid-argument-type]  # exercise runtime validation
@@ -246,7 +246,7 @@ def test_program_accepts_and_normalizes_numpy_num_traj() -> None:
 @pytest.mark.parametrize("random_seed", [True, 1.5, "2"])
 def test_program_rejects_non_integer_random_seed(random_seed: object) -> None:
     """The program-wide seed does not accept integer-like values."""
-    with pytest.raises(TypeError, match="random_seed must be int or None"):
+    with pytest.raises(TypeError, match="random_seed"):
         SimulationProgram(
             [(QuantumCircuit(2), DigitalSimParams())],
             random_seed=random_seed,  # ty: ignore[invalid-argument-type]
@@ -255,7 +255,7 @@ def test_program_rejects_non_integer_random_seed(random_seed: object) -> None:
 
 def test_program_rejects_negative_random_seed() -> None:
     """A program seed must be non-negative when provided."""
-    with pytest.raises(ValueError, match="random_seed must be non-negative"):
+    with pytest.raises(ValueError, match="random_seed"):
         SimulationProgram([(QuantumCircuit(2), DigitalSimParams())], random_seed=-1)
 
 

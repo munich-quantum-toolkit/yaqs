@@ -120,6 +120,30 @@ def test_simulate_sequences_mcwf_final_states_and_records_smoke() -> None:
     assert s0.rho_seq.shape == (1, 8)
 
 
+def test_simulate_sequences_ignores_dynamic_sim_params_solver() -> None:
+    """An arbitrary simulation-parameter attribute does not select the sequence backend."""
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1)
+    vars(params)["solver"] = "TJM"
+    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
+    psi0 = np.array([1.0, 0.0], dtype=np.complex128)
+
+    finals = simulate_sequences(
+        operator=op,
+        sim_params=params,
+        timesteps=[0.0, 0.0],
+        intervention_steps_list=[[(psi0, psi0)]],
+        initial_psis=[psi0.copy()],
+        static_ctx=static_ctx,
+        parallel=False,
+        show_progress=False,
+        record_step_states=False,
+    )
+
+    assert isinstance(finals, np.ndarray)
+    assert finals.shape == (1, 8)
+
+
 def test_simulate_sequences_record_diagnostics_incompatible_with_record_step_states() -> None:
     """Diagnostic recording cannot be combined with per-step sequence records."""
     op = MPO.ising(length=1, J=0.0, g=0.0)

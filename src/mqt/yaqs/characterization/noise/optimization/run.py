@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.noise.backends.cma import cma_opt
+from mqt.yaqs.characterization.noise.backends.cma import cma_opt, validate_cma_inputs
 from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
 from mqt.yaqs.characterization.noise.optimization.trajectories import (
     build_simulator,
@@ -27,6 +27,7 @@ from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
 )
+from mqt.yaqs.core.data_structures.simulation_parameters import _validate_simulation_controls  # ruff: ignore[import-private-name] -- characterization reads the derived time grid before its first Simulator call
 
 if TYPE_CHECKING:
     from mqt.yaqs.characterization.noise.optimization.loss import TrajectoryLoss
@@ -116,6 +117,10 @@ def run_optimization_characterization(
     Returns:
         Structured optimization result including optional trajectory arrays.
     """
+    _validate_simulation_controls(sim_params)
+    initial_parameters = np.array([proc["strength"] for proc in init_guess.processes], dtype=float)
+    validate_cma_inputs(initial_parameters, x_low, x_up, **optimizer_kwargs)
+
     simulator = build_simulator(execution)
     ref_array, times, prepared_state = resolve_reference_expectations(
         sim_params=sim_params,
@@ -145,7 +150,7 @@ def run_optimization_characterization(
 
     x_best, best_loss, loss_history, _parameter_history = cma_opt(
         loss,
-        np.array([proc["strength"] for proc in init_guess.processes], dtype=float),
+        initial_parameters,
         x_low=x_low,
         x_up=x_up,
         **optimizer_kwargs,

@@ -43,6 +43,18 @@ def test_resolve_invalid_representation_raises() -> None:
         resolve_noise_representation(2, cast("NoiseRepresentation", "invalid"))
 
 
+def test_resolve_noise_representation_rejects_mutated_settings() -> None:
+    """Resolver validation rejects characterizer fields mutated after construction."""
+    with pytest.raises(ValueError, match="representation must be one of"):
+        resolve_noise_representation(2, cast("NoiseRepresentation", " AUTO "))
+    with pytest.raises(TypeError, match="lindblad_max_qubits must be an integer"):
+        resolve_noise_representation(
+            2,
+            "auto",
+            lindblad_max_qubits="8",  # ty: ignore[invalid-argument-type]
+        )
+
+
 def test_resolve_auto_lindblad_first() -> None:
     """Auto mode prefers Lindblad, then MCWF, then TJM by chain length."""
     assert resolve_noise_representation(1, "auto") == "density_matrix"

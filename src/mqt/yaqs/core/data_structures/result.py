@@ -8,10 +8,9 @@
 """Result container returned by :meth:`~mqt.yaqs.Simulator.run`.
 
 This module defines :class:`Result`, which holds all outputs produced by a simulation
-run. :class:`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and
-:class:`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams` remain
-read-only configuration; the simulator never mutates the objects passed to
-:meth:`~mqt.yaqs.Simulator.run`.
+run. Before execution, :meth:`~mqt.yaqs.Simulator.run` normalizes mutable simulation
+controls in place and rebuilds analog time grids from the current duration and step
+size. :attr:`Result.sim_params` references that validated configuration.
 """
 
 from __future__ import annotations
@@ -158,7 +157,7 @@ class Result:
     """Result of a :meth:`~mqt.yaqs.Simulator.run` call.
 
     Holds all simulation outputs. For standalone runs, :attr:`sim_params` is the
-    read-only configuration object the user passed in. For a
+    validated configuration object the user passed in. For a
     :class:`~mqt.yaqs.SimulationProgram`, the outer result uses ``sim_params=None``
     and exposes stitched :attr:`expectation_values`, :attr:`times`, and
     :attr:`counts` like a normal run; :attr:`segment_results` retains per-segment

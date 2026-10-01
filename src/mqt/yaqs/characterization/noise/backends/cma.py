@@ -9,11 +9,25 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Protocol
 
-import cma
 import numpy as np
 from scipy.optimize import minimize_scalar
+
+from mqt.yaqs.core._validation import validate_finite_real, validate_integer  # ruff: ignore[import-private-name] -- shared package-internal validators
+
+# CMA treats Matplotlib as optional but warns during import when it is absent.
+# YAQS does not use CMA's plotting helpers, so keep that third-party warning at
+# the integration boundary instead of suppressing it throughout the test suite.
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Could not import matplotlib\.pyplot, therefore.*",
+        category=UserWarning,
+        module=r"cma\.s",
+    )
+    import cma
 
 
 class ScalarLoss(Protocol):
@@ -22,6 +36,109 @@ class ScalarLoss(Protocol):
     def __call__(self, x: np.ndarray) -> float:
         """Evaluate the loss at ``x``."""
         ...
+
+
+def _as_parameter_vector(value: object, *, name: str, allow_infinite: bool) -> np.ndarray:
+    """Return a validated one-dimensional optimizer vector.
+
+    Args:
+        value: Candidate vector.
+        name: Parameter name used in error messages.
+        allow_infinite: Whether positive and negative infinity are valid entries.
+
+    Returns:
+        A floating-point one-dimensional array.
+
+    Raises:
+        TypeError: If ``value`` cannot be converted to a numeric array.
+        ValueError: If the array is not one-dimensional, is empty, or contains
+            unsupported non-finite values.
+    """
+    try:
+        raw = np.asarray(value)
+    except (TypeError, ValueError) as exc:
+        msg = f"{name} must be a one-dimensional numeric array."
+        raise TypeError(msg) from exc
+    if raw.ndim != 1:
+        msg = f"{name} must be one-dimensional, got shape {raw.shape}."
+        raise ValueError(msg)
+    if raw.size == 0:
+        msg = f"{name} must not be empty."
+        raise ValueError(msg)
+    if (
+        not np.issubdtype(raw.dtype, np.number)
+        or np.issubdtype(raw.dtype, np.bool_)
+        or np.issubdtype(raw.dtype, np.complexfloating)
+    ):
+        msg = f"{name} must be a one-dimensional real numeric array."
+        raise TypeError(msg)
+    array = raw.astype(float, copy=False)
+    if np.isnan(array).any() or (not allow_infinite and not np.isfinite(array).all()):
+        qualifier = "NaN" if allow_infinite else "non-finite"
+        msg = f"{name} must not contain {qualifier} values."
+        raise ValueError(msg)
+    return array
+
+
+def validate_cma_inputs(
+    x0: object,
+    x_low: object | None = None,
+    x_up: object | None = None,
+    sigma0: object = 0.01,
+    popsize: object = 4,
+    max_iter: object = 500,
+    seed: object | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, int, int, int | None]:
+    """Validate and normalize CMA-ES inputs before selecting an optimizer.
+
+    Args:
+        x0: Initial parameter vector.
+        x_low: Optional per-parameter lower bounds.
+        x_up: Optional per-parameter upper bounds.
+        sigma0: Initial CMA-ES step size.
+        popsize: CMA-ES population size.
+        max_iter: Maximum optimizer iteration count.
+        seed: Optional CMA-ES random seed.
+
+    Returns:
+        Normalized initial values, bounds, step size, population size, iteration
+        count, and seed.
+
+    Raises:
+        ValueError: If vector shapes, bounds, or scalar ranges are invalid.
+    """
+    initial = _as_parameter_vector(x0, name="x0", allow_infinite=False)
+    lower = (
+        np.full(initial.shape, -np.inf, dtype=float)
+        if x_low is None
+        else _as_parameter_vector(x_low, name="x_low", allow_infinite=True)
+    )
+    upper = (
+        np.full(initial.shape, np.inf, dtype=float)
+        if x_up is None
+        else _as_parameter_vector(x_up, name="x_up", allow_infinite=True)
+    )
+    if lower.shape != initial.shape:
+        msg = f"x_low shape {lower.shape} must match x0 shape {initial.shape}."
+        raise ValueError(msg)
+    if upper.shape != initial.shape:
+        msg = f"x_up shape {upper.shape} must match x0 shape {initial.shape}."
+        raise ValueError(msg)
+    if np.any(lower >= upper):
+        msg = "Each x_low entry must be strictly smaller than the corresponding x_up entry."
+        raise ValueError(msg)
+    if np.any(initial < lower) or np.any(initial > upper):
+        msg = "Every x0 entry must lie within its corresponding [x_low, x_up] interval."
+        raise ValueError(msg)
+
+    sigma = validate_finite_real(sigma0, name="sigma0")
+    if sigma <= 0.0:
+        msg = f"sigma0 must be positive, got {sigma}."
+        raise ValueError(msg)
+    population = validate_integer(popsize, name="popsize", minimum=2)
+    iterations = validate_integer(max_iter, name="max_iter", minimum=1)
+    normalized_seed = None if seed is None else validate_integer(seed, name="seed", minimum=0)
+    return initial, lower, upper, sigma, population, iterations, normalized_seed
 
 
 def _optimize_scalar_bounded(
@@ -89,13 +206,15 @@ def cma_opt(
         Best parameter vector, best loss, per-evaluation loss history, and
         parameter history.
     """
-    x0 = np.asarray(x0, dtype=float)
-    if x_low is None:
-        x_low = -np.inf * np.ones_like(x0)
-    if x_up is None:
-        x_up = np.inf * np.ones_like(x0)
-    x_low = np.asarray(x_low, dtype=float)
-    x_up = np.asarray(x_up, dtype=float)
+    x0, x_low, x_up, sigma0, popsize, max_iter, seed = validate_cma_inputs(
+        x0,
+        x_low,
+        x_up,
+        sigma0,
+        popsize,
+        max_iter,
+        seed,
+    )
 
     if x0.size == 1 and np.isfinite(x_low).all() and np.isfinite(x_up).all():
         return _optimize_scalar_bounded(loss, x0, x_low, x_up)

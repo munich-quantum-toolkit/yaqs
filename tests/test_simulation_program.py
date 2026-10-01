@@ -39,6 +39,7 @@ from mqt.yaqs.core.data_structures.simulation_program import (
     _expand_analog_operator,  # ruff: ignore[import-private-name]  # shared analog interval helper
 )
 from mqt.yaqs.core.random_utils import make_trajectory_rng
+from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1685,6 +1686,16 @@ def test_program_rejects_program_owned_fields_on_segment_params() -> None:
         SimulationProgram([(_zero_hamiltonian(2), AnalogSimParams(get_state=True))])
 
 
+def test_program_accepts_numpy_boolean() -> None:
+    """Program-level scalar settings use the shared scalar validators."""
+    program = SimulationProgram(
+        [(QuantumCircuit(1), DigitalSimParams())],
+        get_state=np.ones((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+    )
+
+    assert program.get_state is True
+
+
 def test_program_num_traj_configures_the_ensemble() -> None:
     """The program count wins without mutating lower-level parameter objects."""
     analog_params = AnalogSimParams()
@@ -1859,6 +1870,13 @@ def _heterogeneous_zero_hamiltonian(physical_dimensions: list[int]) -> Hamiltoni
     return Hamiltonian.from_mpo(mpo)
 
 
+def _basis_probability(state: State, digits: tuple[int, ...]) -> float:
+    """Return one mixed-radix computational-basis probability."""
+    dimensions = tuple(state.mps.physical_dimensions)
+    index = mixed_radix_index(digits, dimensions)
+    return float(abs(state.mps.to_vec()[index]) ** 2)
+
+
 def test_heterogeneous_program_preserves_idle_spectator() -> None:
     """Analog evolution and qubit gates preserve an idle non-qubit site."""
     dimensions = [2, 2, 3]
@@ -1883,7 +1901,7 @@ def test_heterogeneous_program_preserves_idle_spectator() -> None:
 
     assert result.output_state is not None
     assert result.output_state.mps.physical_dimensions == dimensions
-    assert result.output_state.mps.project_onto_bitstring("110") == pytest.approx(1.0)
+    assert _basis_probability(result.output_state, (1, 1, 0)) == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("gate_mode", ["mpo", "tdvp", "full-tdvp"])
@@ -1903,7 +1921,7 @@ def test_long_range_qubit_gate_crosses_non_qubit_spectator(gate_mode: GateMode) 
 
     assert result.output_state is not None
     assert result.output_state.mps.physical_dimensions == dimensions
-    assert result.output_state.mps.project_onto_bitstring("101") == pytest.approx(1.0, abs=1e-8)
+    assert _basis_probability(result.output_state, (1, 0, 1)) == pytest.approx(1.0, abs=1e-8)
 
 
 @pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
@@ -1923,7 +1941,7 @@ def test_multi_qubit_gate_crosses_non_qubit_spectator(gate_mode: GateMode) -> No
 
     assert result.output_state is not None
     assert result.output_state.mps.physical_dimensions == dimensions
-    assert result.output_state.mps.project_onto_bitstring("1101") == pytest.approx(1.0, abs=1e-8)
+    assert _basis_probability(result.output_state, (1, 1, 0, 1)) == pytest.approx(1.0, abs=1e-8)
 
 
 def test_heterogeneous_program_rejects_incompatible_gate_target_and_swap_route() -> None:
@@ -1942,6 +1960,24 @@ def test_heterogeneous_program_rejects_incompatible_gate_target_and_swap_route()
         Simulator(parallel=False, show_progress=False).run(
             State(3, initial="zeros", physical_dimensions=[2, 3, 2]),
             SimulationProgram([(routed_circuit, DigitalSimParams(gate_mode="swaps"))], get_state=True),
+        )
+
+
+def test_heterogeneous_program_rejects_binary_readout() -> None:
+    """Program compilation rejects bitstrings and shots on a non-qubit layout."""
+    state = State(2, initial="zeros", physical_dimensions=[2, 3])
+    circuit = QuantumCircuit(2)
+
+    with pytest.raises(ValueError, match="Bitstring measurement requires qubit sites"):
+        Simulator(parallel=False, show_progress=False).run(
+            state,
+            SimulationProgram([(circuit, DigitalSimParams())], observables=[Observable("00")]),
+        )
+
+    with pytest.raises(ValueError, match="shot measurement requires qubit sites"):
+        Simulator(parallel=False, show_progress=False).run(
+            state,
+            SimulationProgram([(circuit, DigitalSimParams(shots=1))]),
         )
 
 

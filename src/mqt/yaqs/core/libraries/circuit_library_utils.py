@@ -42,8 +42,13 @@ def extract_u_parameters(
 
     Returns:
         A tuple (θ, φ, λ) of real gate angles.
+
+    Raises:
+        ValueError: If ``matrix`` is not a 2x2 matrix.
     """
-    assert matrix.shape == (2, 2), "Input must be a 2x2 matrix."
+    if matrix.shape != (2, 2):
+        msg = "Input must be a 2x2 matrix."
+        raise ValueError(msg)
 
     # strip global phase
     u: NDArray[np.complex128] = matrix.astype(np.complex128)

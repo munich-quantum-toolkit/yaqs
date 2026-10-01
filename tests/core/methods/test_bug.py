@@ -68,10 +68,10 @@ def _is_right_isometric(tensor: NDArray[np.complex128], *, atol: float = 1e-10) 
 def test_prepare_canonical_site_tensors_single_site() -> None:
     """Preparation for a length-1 MPS leaves the physical tensor unchanged."""
     mps_tensor = crandn(2, 3, 4)
-    mps = MPS(1, tensors=[mps_tensor])
+    mps = MPS._from_tensor_window([mps_tensor], [2])  # ruff: ignore[private-member-access]
     ref_mps = deepcopy(mps)
     mpo = MPO()
-    mpo.custom([crandn(2, 2, 1, 1)])
+    mpo.custom([crandn(2, 2, 1, 1)], transpose=False)
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert np.allclose(left_envs[0], np.eye(3).reshape(3, 1, 3))
@@ -81,7 +81,7 @@ def test_prepare_canonical_site_tensors_single_site() -> None:
 def test_prepare_canonical_site_tensors_three_sites() -> None:
     """Preparation for a length-3 MPS matches the explicit QR reference."""
     mps_tensors = [crandn(shape) for shape in [(2, 3, 4), (2, 4, 5), (2, 5, 3)]]
-    mps = MPS(3, tensors=mps_tensors)
+    mps = MPS._from_tensor_window(mps_tensors, [2, 2, 2])  # ruff: ignore[private-member-access]
     ref_mps = deepcopy(mps)
     mpo_tensors = [crandn(shape) for shape in [(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)]]
     mpo = MPO()

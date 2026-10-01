@@ -34,7 +34,7 @@ from mqt.yaqs.core.libraries.circuit_library_utils import (
 
 def test_extract_u_parameters_invalid_shape() -> None:
     """extract_u_parameters must reject non-2x2 inputs."""
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="Input must be a 2x2 matrix"):
         extract_u_parameters(np.eye(3, dtype=np.complex128))
 
 

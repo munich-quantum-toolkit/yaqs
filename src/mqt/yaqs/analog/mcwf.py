@@ -274,7 +274,8 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
 
         if sim_params.sample_timesteps:
             measure(psi, t_idx)
-        elif t_idx == num_steps - 1:
-            measure(psi, 0)
+
+    if not sim_params.sample_timesteps:
+        measure(psi, 0)
 
     return results, None, psi if sim_params.get_state else None

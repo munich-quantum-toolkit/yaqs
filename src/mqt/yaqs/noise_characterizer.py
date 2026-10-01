@@ -14,13 +14,14 @@ from __future__ import annotations
 from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING, Any
 
-from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.shared.representation import (
     DEFAULT_LINDBLAD_MAX_QUBITS,
     DEFAULT_VECTOR_MAX_QUBITS,
     NoiseRepresentation,
 )
 from mqt.yaqs.core.parallel_utils import ExecutionConfig, MPContext
+
+from .core._validation import validate_choice, validate_integer
 
 if TYPE_CHECKING:
     import numpy as np
@@ -31,6 +32,9 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.observable import Observable
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
     from mqt.yaqs.core.data_structures.state import State
+
+
+_NOISE_REPRESENTATIONS: tuple[NoiseRepresentation, ...] = ("density_matrix", "vector", "mps", "auto")
 
 
 class NoiseCharacterizer:
@@ -70,14 +74,14 @@ class NoiseCharacterizer:
         """Configure execution and representation defaults for noise characterization.
 
         Args:
-            parallel: Whether to parallelize trajectory execution.
-            max_workers: Cap on worker processes when ``parallel=True``.
-            show_progress: Whether to show tqdm progress bars.
+            parallel: Boolean that enables parallel trajectory execution.
+            max_workers: Positive worker-process cap, or ``None`` for the default.
+            show_progress: Boolean that controls tqdm progress bars.
             representation: Forward-model selection (``"auto"`` prefers Lindblad on small chains).
-            lindblad_max_qubits: Auto cutover to Lindblad master-equation evolution.
-            vector_max_qubits: Auto cutover from MCWF to TJM.
-            mp_context: Multiprocessing start method.
-            max_retries: Retries for transient worker failures.
+            lindblad_max_qubits: Non-negative auto cutover to Lindblad evolution.
+            vector_max_qubits: Non-negative auto cutover from MCWF to TJM.
+            mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` multiprocessing start method.
+            max_retries: Non-negative retry count for transient worker failures.
             retry_exceptions: Exception types that trigger a worker retry.
         """
         self._execution = ExecutionConfig(
@@ -88,9 +92,17 @@ class NoiseCharacterizer:
             max_retries=max_retries,
             retry_exceptions=retry_exceptions,
         )
-        self.representation = representation
-        self.lindblad_max_qubits = int(lindblad_max_qubits)
-        self.vector_max_qubits = int(vector_max_qubits)
+        self.representation = validate_choice(
+            representation,
+            name="representation",
+            allowed=_NOISE_REPRESENTATIONS,
+        )
+        self.lindblad_max_qubits = validate_integer(
+            lindblad_max_qubits,
+            name="lindblad_max_qubits",
+            minimum=0,
+        )
+        self.vector_max_qubits = validate_integer(vector_max_qubits, name="vector_max_qubits", minimum=0)
         self.result: NoiseCharacterizationResult | None = None
 
     @property
@@ -166,6 +178,12 @@ class NoiseCharacterizer:
         if (reference_model is None) == (ref_expectations is None):
             msg = "Specify exactly one of reference_model= or ref_expectations=."
             raise ValueError(msg)
+
+        # CMA imports its optional plotting support. Keep that path out of a
+        # normal top-level YAQS import, which must work without Matplotlib.
+        from mqt.yaqs.characterization.noise.optimization.run import (  # ruff: ignore[import-outside-top-level]
+            run_optimization_characterization,
+        )
 
         self.result = run_optimization_characterization(
             hamiltonian=hamiltonian,

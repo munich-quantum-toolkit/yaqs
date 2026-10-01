@@ -268,9 +268,11 @@ fig.tight_layout()
 
 ## Representation
 
-`MemoryCharacterizer(representation="auto")` mirrors `Simulator`: `"vector"`
-selects MCWF, `"mps"` selects TJM for the **environment** chain. With `"auto"`,
-MCWF is used when `hamiltonian.length <= vector_max_qubits` (default 10).
+`AnalogSimParams` configures the evolution and does not select the memory
+backend. `MemoryCharacterizer(representation="auto")` mirrors `Simulator`:
+`"vector"` selects MCWF, `"mps"` selects TJM for the **environment** chain. With
+`"auto"`, MCWF is used when `hamiltonian.length <= vector_max_qubits` (default
+10).
 
 ## Temporal entanglement from a process tensor
 

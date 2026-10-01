@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Sequence
+from numbers import Integral
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -98,8 +99,8 @@ class Hamiltonian:
     :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`: site ``0`` is the
     least-significant, fastest-varying subsystem. For qubits, this matches
     Qiskit's statevector and operator order. Manual dense and sparse matrices
-    must be finite and Hermitian. Manual tensor cores and wrapped MPOs are
-    trusted to represent a globally Hermitian operator.
+    must be finite and Hermitian. YAQS validates manual tensor cores and wrapped
+    MPOs structurally but trusts them to represent a globally Hermitian operator.
     """
 
     def __init__(
@@ -117,8 +118,9 @@ class Hamiltonian:
 
         Args:
             length: Number of sites. Inferred from ``len(tensors)`` or matrix dimension when omitted.
-            tensors: Trusted MPO tensor cores in ascending physical-site order.
-                Each core uses ``(left, right, physical_out, physical_in)`` axes.
+            tensors: MPO tensor cores in ascending physical-site order. Each core uses
+                ``(left, right, physical_out, physical_in)`` axes and must form a finite,
+                open-boundary chain with uniform local dimension ``physical_dimension``.
                 YAQS does not check the represented global operator for Hermiticity.
             matrix: Finite Hermitian dense operator matrix in site-0-LSB order.
             sparse_matrix: Finite Hermitian sparse operator in site-0-LSB order.
@@ -128,9 +130,14 @@ class Hamiltonian:
             ValueError: If no manual data is given, data are mutually exclusive, shapes are invalid,
                 or ``physical_dimension`` is not positive.
         """
-        if physical_dimension <= 0:
+        if (
+            not isinstance(physical_dimension, Integral)
+            or isinstance(physical_dimension, bool)
+            or physical_dimension <= 0
+        ):
             msg = "physical_dimension must be a positive integer."
             raise ValueError(msg)
+        physical_dimension = int(physical_dimension)
 
         manual = [tensors is not None, matrix is not None, sparse_matrix is not None]
         if sum(manual) != 1:
@@ -160,7 +167,8 @@ class Hamiltonian:
         """Validate and store MPO tensor cores, then materialize the MPO.
 
         Raises:
-            ValueError: If ``tensors`` is empty or ``length`` disagrees with ``len(tensors)``.
+            ValueError: If ``tensors`` is empty, structurally invalid, disagrees with
+                ``length``, or has physical axes inconsistent with ``physical_dimension``.
         """
         if len(tensors) == 0:
             msg = "tensors must be a non-empty list of MPO cores."
@@ -172,6 +180,12 @@ class Hamiltonian:
         self.length = n_sites if length is None else length
         self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
         self.ensure_mpo()
+        if self.mpo.physical_dimensions != (self.physical_dimension,) * self.length:
+            msg = (
+                "Tensor physical dimensions "
+                f"{self.mpo.physical_dimensions} do not match physical_dimension={self.physical_dimension}."
+            )
+            raise ValueError(msg)
 
     def _init_from_matrix(
         self,
@@ -229,13 +243,19 @@ class Hamiltonian:
     def from_mpo(cls, mpo: MPO) -> Hamiltonian:
         """Wrap an existing trusted :class:`MPO`.
 
-        YAQS assumes that ``mpo`` represents a Hermitian global operator. It
-        does not test individual cores, which need not be Hermitian in a valid
-        MPO gauge, or densify the full operator for a global check.
+        YAQS validates the MPO tensor structure and assumes that ``mpo`` represents
+        a Hermitian global operator. It does not require individual cores to be
+        Hermitian or densify the full operator for a global check.
 
         Returns:
             A :class:`Hamiltonian` referencing ``mpo``.
+
+        Raises:
+            ValueError: If ``mpo`` does not contain a structurally valid tensor chain.
         """
+        if not mpo.check_if_valid_mpo():
+            msg = "mpo must contain a structurally valid MPO tensor chain."
+            raise ValueError(msg)
         wrapped = cls.__new__(cls)
         attach_mpo(wrapped, mpo)
         return wrapped
@@ -255,7 +275,7 @@ class Hamiltonian:
             TypeError: If ``pieces`` is not a sequence of ``(Hamiltonian, duration)`` pairs
                 or a duration is not a real number.
             ValueError: If ``pieces`` is empty, a piece is itself piecewise, a duration is
-                not finite and positive, or piece lengths disagree.
+                not finite and positive, or piece lengths or local dimensions disagree.
         """
         if isinstance(pieces, (str, bytes)) or not isinstance(pieces, Sequence):
             msg = "pieces must be a non-empty sequence of (Hamiltonian, duration) pairs."
@@ -267,6 +287,7 @@ class Hamiltonian:
 
         normalized: list[tuple[Hamiltonian, float]] = []
         length: int | None = None
+        physical_dimensions: tuple[int, ...] | None = None
         for index, item in enumerate(raw_pieces):
             if not isinstance(item, tuple) or len(item) != 2:
                 msg = f"pieces[{index}] must be a (Hamiltonian, duration) tuple."
@@ -287,8 +308,15 @@ class Hamiltonian:
                 raise ValueError(msg)
             if length is None:
                 length = hamiltonian.length
+                physical_dimensions = hamiltonian.physical_dimensions
             elif hamiltonian.length != length:
                 msg = f"pieces[{index}] length {hamiltonian.length} does not match piece 0 length {length}."
+                raise ValueError(msg)
+            elif hamiltonian.physical_dimensions != physical_dimensions:
+                msg = (
+                    f"pieces[{index}] physical dimensions {hamiltonian.physical_dimensions} "
+                    f"do not match piece 0 physical dimensions {physical_dimensions}."
+                )
                 raise ValueError(msg)
             normalized.append((hamiltonian, duration_f))
 
@@ -588,6 +616,15 @@ class Hamiltonian:
             msg = "Dense matrix is not available."
             raise RuntimeError(msg)
         return self._matrix
+
+    @property
+    def physical_dimensions(self) -> tuple[int, ...]:
+        """Local physical dimension at each Hamiltonian site."""
+        if self.is_piecewise:
+            return self.pieces[0][0].physical_dimensions
+        if self._mpo is not None:
+            return self._mpo.physical_dimensions
+        return (self.physical_dimension,) * self.length
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return a dense matrix in site-0-LSB order.

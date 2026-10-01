@@ -13,9 +13,11 @@ import contextlib
 import multiprocessing
 import os
 import sys
+from types import SimpleNamespace
 from typing import Any, cast
 
 import numba
+import numpy as np
 import pytest
 
 from mqt.yaqs.core import parallel_utils
@@ -118,6 +120,29 @@ def test_threading_config() -> None:
             numba.set_num_threads(original_numba_threads)
 
 
+def test_limit_worker_threads_applies_required_threadpool_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker setup always applies the mandatory threadpoolctl limit."""
+    limits_seen: list[int] = []
+    environment: dict[str, str] = {}
+
+    def missing_optional_module(name: str) -> None:
+        raise ImportError(name)
+
+    def record_thread_limit(*, limits: int) -> None:
+        limits_seen.append(limits)
+
+    monkeypatch.setattr(parallel_utils, "os", SimpleNamespace(environ=environment))
+    monkeypatch.setattr(parallel_utils, "importlib", SimpleNamespace(import_module=missing_optional_module))
+    monkeypatch.setattr(parallel_utils, "threadpool_limits", record_thread_limit)
+
+    parallel_utils.limit_worker_threads(2)
+
+    assert limits_seen == [2]
+    assert {environment[key] for key in parallel_utils.THREAD_ENV_VARS} == {"2"}
+    assert environment["OMP_DYNAMIC"] == "FALSE"
+    assert environment["MKL_DYNAMIC"] == "FALSE"
+
+
 def test_resolve_worker_ctx_and_unpack_flat_job() -> None:
     """Worker helpers resolve pool context and flat job indices."""
     payload = {"num_trajectories": 2, "x": 1}
@@ -151,10 +176,19 @@ def test_get_parallel_context_explicit_fork_and_spawn() -> None:
 def test_merge_execution_config_applies_overrides() -> None:
     """merge_execution_config overlays parallel and worker settings."""
     base = ExecutionConfig(parallel=True, max_workers=3, show_progress=True)
-    merged = merge_execution_config(base, parallel=False, max_workers=2, show_progress=False)
+    merged = merge_execution_config(
+        base,
+        parallel=False,
+        max_workers=2,
+        show_progress=False,
+        mp_context="spawn",
+        max_retries=2,
+    )
     assert merged.parallel is False
     assert merged.max_workers == 2
     assert merged.show_progress is False
+    assert merged.mp_context == "spawn"
+    assert merged.max_retries == 2
 
 
 def test_merge_execution_config_clears_max_workers() -> None:
@@ -163,6 +197,50 @@ def test_merge_execution_config_clears_max_workers() -> None:
     merged = merge_execution_config(base, max_workers=None)
     assert merged.max_workers is None
     assert merged.resolved_max_workers() == max(1, available_cpus() - 1)
+
+
+def test_execution_config_normalizes_numpy_scalar_equivalents() -> None:
+    """NumPy Boolean and integer scalars retain their execution-setting meaning."""
+    config = ExecutionConfig(
+        parallel=np.zeros((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+        max_workers=np.int64(3),  # ty: ignore[invalid-argument-type]
+        show_progress=np.ones((), dtype=np.bool_)[()],  # ty: ignore[invalid-argument-type]
+        max_retries=np.int64(2),  # ty: ignore[invalid-argument-type]
+    )
+
+    assert config.parallel is False
+    assert config.max_workers == 3
+    assert config.show_progress is True
+    assert config.max_retries == 2
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"parallel": "false"}, TypeError, "parallel must be a boolean"),
+        ({"show_progress": 1}, TypeError, "show_progress must be a boolean"),
+        ({"max_workers": 1.5}, TypeError, "max_workers must be an integer"),
+        ({"max_workers": 0}, ValueError, "max_workers must be >= 1"),
+        ({"max_retries": 1.5}, TypeError, "max_retries must be an integer"),
+        ({"max_retries": -1}, ValueError, "max_retries must be >= 0"),
+        ({"mp_context": 1}, TypeError, "mp_context must be a string"),
+        ({"mp_context": "forkserver"}, ValueError, "mp_context must be one of"),
+    ],
+)
+def test_execution_config_rejects_invalid_public_settings(
+    kwargs: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Execution settings fail instead of being coerced to another behavior."""
+    with pytest.raises(error, match=match):
+        ExecutionConfig(**cast("Any", kwargs))
+
+
+def test_merge_execution_config_does_not_coerce_invalid_overrides() -> None:
+    """Merging an override applies the same strict validation as construction."""
+    with pytest.raises(TypeError, match="max_workers must be an integer"):
+        merge_execution_config(ExecutionConfig(), max_workers=cast("Any", 1.5))
 
 
 def test_call_serial_capped_preserves_order() -> None:

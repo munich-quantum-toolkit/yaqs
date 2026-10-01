@@ -25,6 +25,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.libraries.operator_matrices import PAULI_X, PAULI_Y, PAULI_Z
 
+from ....core._validation import validate_choice, validate_integer
 from ..shared.encoding import SITE0_KET
 
 if TYPE_CHECKING:
@@ -55,18 +56,19 @@ def resolve_characterizer_representation(
     Returns:
         Resolved ``"vector"`` or ``"mps"``.
 
-    Raises:
-        ValueError: If ``representation`` is invalid.
     """
-    rep = str(representation).strip().lower()
+    rep = validate_choice(
+        representation,
+        name="representation",
+        allowed=("vector", "mps", "auto"),
+    )
+    n_sites = validate_integer(chain_length, name="chain_length", minimum=1)
+    max_vector_sites = validate_integer(vector_max_qubits, name="vector_max_qubits", minimum=0)
     if rep == "vector":
         return "vector"
     if rep == "mps":
         return "mps"
-    if rep == "auto":
-        return "vector" if int(chain_length) <= int(vector_max_qubits) else "mps"
-    msg = f"representation must be 'vector', 'mps', or 'auto', got {representation!r}."
-    raise ValueError(msg)
+    return "vector" if n_sites <= max_vector_sites else "mps"
 
 
 def representation_to_solver(rep: Literal["vector", "mps"]) -> StochasticSolver:
@@ -179,7 +181,6 @@ def validate_stochastic_solver(solver: StochasticSolver | str | None) -> Stochas
 
 
 def resolve_stochastic_solver(
-    sim_params: AnalogSimParams,
     *,
     solver: StochasticSolver | None = None,
     representation: CharacterizerRepresentation | None = None,
@@ -189,8 +190,7 @@ def resolve_stochastic_solver(
     """Return the stochastic unraveling backend for process-tensor schedule simulation.
 
     Args:
-        sim_params: Analog simulation parameters (legacy ``solver`` attribute may apply).
-        solver: Explicit solver override, or ``None`` to infer from ``representation`` / ``sim_params``.
+        solver: Explicit solver override. If omitted, infer from ``representation`` or default to MCWF.
         representation: Optional characterizer representation (``"vector"``, ``"mps"``, or ``"auto"``).
         chain_length: Chain length required when ``representation`` is set.
         vector_max_qubits: Maximum qubits for ``representation="auto"`` to select the vector backend.
@@ -213,9 +213,6 @@ def resolve_stochastic_solver(
             vector_max_qubits=vector_max_qubits,
         )
         return representation_to_solver(rep)
-    legacy = getattr(sim_params, "solver", None)
-    if legacy in {"MCWF", "TJM"}:
-        return legacy
     return "MCWF"
 
 

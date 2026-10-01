@@ -97,13 +97,17 @@ def test_split_tensor_valid_shape() -> None:
     assert t2.shape[1] == 2
 
 
-def test_split_tensor_invalid_shape() -> None:
-    """Test that split_tensor raises an AssertionError when the input tensor does not have shape (2,2,2,2).
-
-    The test creates a tensor of shape (2,2,2) and expects an assertion error.
-    """
-    tensor = np.zeros((2, 2, 2), dtype=np.complex128)
-    with pytest.raises(AssertionError):
+@pytest.mark.parametrize(
+    ("shape", "message"),
+    [
+        ((2, 2, 2), "tensor must have an even number of axes for at least two sites, got 3"),
+        ((2, 3, 2, 2), r"tensor must have shape \(2, 2, 2, 2\), got \(2, 3, 2, 2\)"),
+    ],
+)
+def test_split_tensor_invalid_shape(shape: tuple[int, ...], message: str) -> None:
+    """Reject tensors that do not encode a multi-qubit gate."""
+    tensor = np.zeros(shape, dtype=np.complex128)
+    with pytest.raises(ValueError, match=message):
         split_tensor(tensor)
 
 
@@ -286,7 +290,7 @@ def test_extend_gate_site_permutation() -> None:
     mpo_tensors = extend_gate(tensor, sites)
     assert len(mpo_tensors) == 3
 
-    order = list(np.argsort(sites))
+    order = sorted(range(len(sites)), key=lambda idx: sites[idx])
     expected = np.transpose(tensor, [*order, *[3 + idx for idx in order]]).reshape(8, 8)
     assert_allclose(_mpo_train_to_matrix(mpo_tensors), expected, atol=1e-12)
 
