@@ -153,5 +153,5 @@ repos:
     rev: v0.0.82
     hooks:
       - id: ty
-        args: [--isolated]
+        args: [--isolated, --all-extras]
         priority: 8

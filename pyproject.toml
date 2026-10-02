@@ -81,9 +81,6 @@ test = [
   "pytest-cov>=7.1",
   "pytest-sugar>=1.1.1",
   "pytest-xdist[psutil]>=3.8",
-  "qiskit-qasm3-import>=0.5",
-  "torch!=2.14; sys_platform=='linux' and platform_machine=='aarch64'",
-  "torch>=2.2",
 ]
 docs = [
   "furo>=2025.12.19",
