@@ -1642,8 +1642,6 @@ docs = [
     { name = "sphinx-llm" },
     { name = "sphinxcontrib-bibtex" },
     { name = "sphinxext-opengraph" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
 ]
 test = [
     { name = "pytest" },
@@ -1694,10 +1692,6 @@ docs = [
     { name = "sphinx-llm", specifier = ">=1" },
     { name = "sphinxcontrib-bibtex", specifier = ">=2.7" },
     { name = "sphinxext-opengraph", specifier = ">=0.13" },
-    { name = "torch", specifier = ">=2.2" },
-    { name = "torch", marker = "python_full_version >= '3.13'", specifier = ">=2.6" },
-    { name = "torch", marker = "python_full_version >= '3.14'", specifier = ">=2.9" },
-    { name = "torch", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "!=2.14,!=2.14.1" },
 ]
 test = [
     { name = "pytest", specifier = ">=9.0.1" },
