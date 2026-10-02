@@ -65,9 +65,6 @@ repos:
     hooks:
       - id: uv-lock
         priority: 0
-        pass_filenames: false
-        env:
-          UV_RESOLUTION: highest
 
   ## Check for common capitalization mistakes
   - repo: local
