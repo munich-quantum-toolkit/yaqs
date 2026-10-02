@@ -106,7 +106,6 @@ def _run_tests(
     *,
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
-    extra_torch: bool = False,
 ) -> None:
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
@@ -114,19 +113,14 @@ def _run_tests(
         # disable Numba JIT coverage
         env["NUMBA_DISABLE_JIT"] = "1"
 
-    uv_args = [
+    session.run(
         "uv",
         "run",
         "--no-dev",  # do not auto-install dev dependencies
         "--group",
         "test",
+        "--all-extras",
         *install_args,
-    ]
-    if extra_torch:
-        uv_args.extend(["--extra", "torch"])
-
-    session.run(
-        *uv_args,
         "pytest",
         *run_args,
         *session.posargs,
@@ -138,7 +132,7 @@ def _run_tests(
 @nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, default=True)
 def tests(session: nox.Session) -> None:
     """Run the test suite."""
-    _run_tests(session, run_args=["-m", "not release and not jit"], extra_torch=True)
+    _run_tests(session, run_args=["-m", "not release and not jit"])
 
 
 @nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, venv_backend="uv")
@@ -149,7 +143,6 @@ def minimums(session: nox.Session) -> None:
             session,
             install_args=["--resolution=lowest-direct"],
             run_args=["-Wdefault", "-m", "not release and not jit"],
-            extra_torch=True,
         )
         env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
         session.run("uv", "tree", "--frozen", env=env)
@@ -161,23 +154,16 @@ def _run_focused_tests(
     run_args: Sequence[str],
     env_overrides: Mapping[str, str],
 ) -> None:
-    """Run a fixed serial test selection without optional test dependencies."""
+    """Run a fixed serial test selection without coverage."""
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location, **env_overrides}
     session.run(
         "uv",
         "run",
         "--no-dev",
-        "--with",
-        "pytest>=9.0.1",
-        "--with",
-        "pytest-xdist[psutil]>=3.8",
+        "--group",
+        "test",
         "pytest",
-        "-o",
-        "addopts=",
-        "-ra",
-        "--showlocals",
-        "-p",
-        "no:cacheprovider",
+        "--numprocesses=0",
         *run_args,
         env=env,
     )
@@ -208,21 +194,13 @@ def jit_tests(session: nox.Session) -> None:
     )
 
 
-def _venv_python(venv_dir: Path) -> Path:
-    """Return the Python executable for a virtual environment on this platform."""
-    if os.name == "nt":
-        return venv_dir / "Scripts" / "python.exe"
-    return venv_dir / "bin" / "python"
-
-
-@nox.session(name="release-package", python="3.14", reuse_venv=False)
+@nox.session(name="release-package", python="3.14", venv_backend="none")
 def release_package(session: nox.Session) -> None:
     """Build and test the wheel from a clean temporary environment."""
     source_root = Path.cwd().resolve()
     with tempfile.TemporaryDirectory() as temp_dir_name:
         temp_dir = Path(temp_dir_name)
         dist_dir = temp_dir / "dist"
-        venv_dir = temp_dir / "venv"
 
         session.run("uv", "build", "--out-dir", dist_dir, external=True)
         wheels = list(dist_dir.glob("*.whl"))
@@ -233,10 +211,6 @@ def release_package(session: nox.Session) -> None:
                 f"found {len(wheels)} wheel(s) and {len(source_distributions)} source distribution(s)."
             )
 
-        session.run("uv", "venv", "--python", str(session.python), "--no-project", venv_dir, external=True)
-        python = _venv_python(venv_dir)
-        session.run("uv", "pip", "install", "--python", python, wheels[0], external=True)
-
         smoke_env = {
             **_CAPPED_NUMERICAL_THREADS,
             "PYTHONNOUSERSITE": "1",
@@ -245,7 +219,15 @@ def release_package(session: nox.Session) -> None:
         }
         with session.chdir(temp_dir):
             session.run(
-                python,
+                "uv",
+                "run",
+                "--isolated",
+                "--no-project",
+                "--python",
+                str(session.python),
+                "--with",
+                wheels[0],
+                "python",
                 "-W",
                 "error",
                 "-c",
@@ -282,6 +264,7 @@ def docs(session: nox.Session) -> None:
         "--no-dev",  # do not auto-install dev dependencies
         "--group",
         "docs",
+        "--all-extras",
         "sphinx-autobuild" if serve else "sphinx-build",
         *shared_args,
         env=env,

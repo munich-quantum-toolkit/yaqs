@@ -30,7 +30,7 @@ jobs:
       matrix:
         include:
           - runs-on: ubuntu-26.04
-            sessions: '["tests", "minimums-3.11", "minimums-3.14", "jit-tests", "release-package"]'
+            sessions: '["minimums-3.11", "minimums-3.14", "tests", "jit-tests", "release-package"]'
           - runs-on: ubuntu-26.04-arm
             sessions: '["tests"]'
           - runs-on: macos-26
