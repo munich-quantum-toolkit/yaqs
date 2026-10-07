@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, Observable, State
 from mqt.yaqs.characterization.noise.optimization import run as optimization_run
 from mqt.yaqs.characterization.noise.optimization.run import run_optimization_characterization
 from mqt.yaqs.characterization.noise.optimization.trajectories import simulate_observable_trajectories
@@ -84,6 +84,43 @@ def _digital_twin_setup() -> tuple[
         init_guess,
         experimental_data,
     )
+
+
+@pytest.mark.parametrize("n_parameters", [1, 2])
+@pytest.mark.parametrize("limit", [2, 4])
+def test_public_noise_fit_honors_limit_and_reports_initial_model_loss(n_parameters: int, limit: int) -> None:
+    """Scalar and CMA-ES fits honor controls and match an analytic initial-model baseline."""
+    observables = [Observable("z", 0)]
+    params = AnalogSimParams(observables, elapsed_time=0.4, dt=0.1, sample_timesteps=True)
+    strengths = [0.3, 0.1][:n_parameters]
+    initial_model = NoiseModel([
+        {"name": name, "sites": [0], "strength": strength}
+        for name, strength in zip(["pauli_x", "pauli_y"], strengths, strict=False)
+    ])
+    reference = np.exp(-2 * 0.08 * params.times)[None, :]
+    initial_trajectory = np.exp(-2 * sum(strengths) * params.times)[None, :]
+    expected_loss = float(np.mean((initial_trajectory - reference) ** 2))
+    result = NoiseCharacterizer(parallel=False, show_progress=False, representation="density_matrix").characterize(
+        Hamiltonian.ising(1, J=0.0, g=0.0),
+        params,
+        init_state=State(1),
+        init_guess=initial_model,
+        observables=observables,
+        ref_expectations=reference,
+        x_low=np.zeros(n_parameters),
+        x_up=np.full(n_parameters, 0.5),
+        max_iter=limit,
+        popsize=4,
+        sigma0=0.04,
+        seed=42,
+    )
+    assert len(result.loss_history) == (limit if n_parameters == 1 else 4 * limit)
+    assert result.initial_loss == pytest.approx(expected_loss, rel=1e-7, abs=1e-10)
+    assert result.sqrt_loss_before() == pytest.approx(np.sqrt(expected_loss), rel=1e-7, abs=1e-10)
+    assert not np.isclose(result.loss_history[0], expected_loss, rtol=1e-5, atol=1e-10)
+    assert result.best_loss == pytest.approx(min(result.loss_history))
+    assert result.sqrt_loss_after() == pytest.approx(np.sqrt(result.best_loss))
+    np.testing.assert_allclose([process["strength"] for process in initial_model.processes], strengths)
 
 
 def test_invalid_optimizer_bounds_fail_before_forward_model_setup(monkeypatch: pytest.MonkeyPatch) -> None:
