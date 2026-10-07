@@ -226,6 +226,7 @@ def _digital_worker(
             context["operator"],
         ),
         compiled_circuit=context["compiled_circuit"],
+        show_progress=context["show_progress"],
     )
 
 
@@ -556,6 +557,7 @@ def _execute_digital_instruction(
     rng: np.random.Generator,
     *,
     effective_num_traj: int,
+    show_progress: bool = True,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Execute one digital program segment.
 
@@ -577,6 +579,7 @@ def _execute_digital_instruction(
             copy_initial_state=False,
             rng=rng,
             compiled_circuit=instruction.compiled_circuit,
+            show_progress=show_progress,
         )
     finally:
         if shots is not None:
@@ -588,6 +591,8 @@ def _execute_program_trajectory(
     initial_state: MPS,
     compiled: _CompiledProgram,
     effective_num_traj: int,
+    *,
+    show_progress: bool = True,
 ) -> _ProgramTrajectory:
     """Execute one complete compiled program with one owned state and RNG.
 
@@ -596,6 +601,7 @@ def _execute_program_trajectory(
         initial_state: Deep-copied into the worker-owned MPS.
         compiled: Validated program instructions.
         effective_num_traj: Ensemble size used for shot distribution.
+        show_progress: Whether to show shot-readout progress.
 
     Returns:
         Per-segment trajectory payloads and the optional requested final MPS.
@@ -623,6 +629,7 @@ def _execute_program_trajectory(
                 instruction,
                 rng,
                 effective_num_traj=effective_num_traj,
+                show_progress=show_progress,
             )
             if next_state is None:
                 msg = f"Program segment {instruction.index} did not return its propagated state."
@@ -755,6 +762,7 @@ def _program_worker(traj_idx: int, payload: dict[str, Any] | None = None) -> _Pr
         context["initial_state"],
         context["compiled_program"],
         context["effective_num_traj"],
+        show_progress=context["show_progress"],
     )
 
 
@@ -1084,7 +1092,7 @@ class Simulator:
         parallel: Whether to execute trajectories in parallel via a process pool.
         max_workers: Maximum number of worker processes when ``parallel=True``.
             Defaults to ``max(1, available_cpus() - 1)``.
-        show_progress: Whether to display a tqdm progress bar.
+        show_progress: Whether to display trajectory and shot-readout progress bars.
         mp_context: Multiprocessing context: ``"auto"`` (default), ``"fork"``,
             or ``"spawn"``. ``"auto"`` selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
         max_retries: Maximum retry attempts for transient worker errors.
@@ -1107,7 +1115,7 @@ class Simulator:
             parallel: Boolean that enables a process pool for multi-trajectory runs.
             max_workers: Positive worker-process cap. ``None`` (default) resolves to
                 ``max(1, available_cpus() - 1)``.
-            show_progress: Boolean that controls the tqdm progress bar.
+            show_progress: Whether to display trajectory and shot-readout progress bars.
             mp_context: Multiprocessing start method (``"auto"``, ``"fork"``, or ``"spawn"``).
             max_retries: Non-negative maximum retries for transient worker errors.
             retry_exceptions: Exception types that trigger a retry.
@@ -1366,6 +1374,7 @@ class Simulator:
             "initial_state": initial_state.mps,
             "compiled_program": compiled,
             "effective_num_traj": effective_num_traj,
+            "show_progress": self.show_progress,
         }
         final_mps: MPS | None = None
 
@@ -1774,6 +1783,7 @@ class Simulator:
             "sim_params": worker_params,
             "operator": operator,
             "compiled_circuit": compiled_circuit,
+            "show_progress": self.show_progress,
         }
         if per_call_shots is not None:
             payload["per_call_shots"] = per_call_shots

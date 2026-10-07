@@ -3356,3 +3356,16 @@ def test_noise_sites_generator_path() -> None:
     assert list(sites) == [0, 1, 2]
     assert results is not None
     assert np.all(np.isfinite(results))
+
+
+@pytest.mark.parametrize("combined", [False, True])
+def test_direct_digital_shots_do_not_create_pool(monkeypatch: pytest.MonkeyPatch, *, combined: bool) -> None:
+    """Direct digital trajectories sample all allocated shots without another pool."""
+    monkeypatch.setattr("mqt.yaqs.core.data_structures.mps.available_cpus", lambda: 8)
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    params = DigitalSimParams(shots=6, observables=[Observable("z", 0)] if combined else None)
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as pool:
+        _, _, counts, _ = digital_tjm((0, MPS(2, state="zeros"), None, params, circuit), show_progress=False)
+    pool.assert_not_called()
+    assert counts == {1: 6}

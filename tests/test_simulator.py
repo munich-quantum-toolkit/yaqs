@@ -54,6 +54,7 @@ from tests.conftest import (
 from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from mqt.yaqs.core.data_structures.state import Representation
@@ -2562,3 +2563,54 @@ def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
                 multi_time_observables=[(Observable("z", 0), Observable("z", 0))],
             ),
         )
+
+
+@pytest.mark.parametrize("show_progress", [False, True])
+@pytest.mark.parametrize("combined", [False, True])
+@pytest.mark.parametrize("parallel", [False, True])
+def test_digital_shot_execution_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    show_progress: bool,
+    combined: bool,
+    parallel: bool,
+) -> None:
+    """Simulator controls shot progress and prevents pools inside trajectories."""
+
+    def run_parallel(
+        *,
+        worker_fn: Callable[[int, dict[str, object]], object],
+        payload: dict[str, object],
+        n_jobs: int,
+        max_workers: int,
+        **_kwargs: object,
+    ) -> Iterator[tuple[int, object]]:
+        assert max_workers == 2
+        for index in range(n_jobs):
+            yield index, worker_fn(index, payload)
+
+    monkeypatch.setattr(simulator, "run_backend_parallel", run_parallel)
+    monkeypatch.setattr("mqt.yaqs.core.data_structures.mps.available_cpus", lambda: 8)
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    circuit.cx(0, 1)
+    noise = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.01}]) if combined else None
+    params = DigitalSimParams(
+        shots=12,
+        observables=[Observable("z", 0)] if combined else None,
+        num_traj=3,
+        random_seed=YAQS_TEST_SEED,
+    )
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as pool:
+        result = Simulator(parallel=parallel, max_workers=2, show_progress=show_progress).run(
+            State(2, initial="zeros"), circuit, params, noise
+        )
+    pool.assert_not_called()
+    assert result.counts == {3: 12}
+    if combined:
+        np.testing.assert_allclose(result.expectation_values[0], -1.0)
+    output = capsys.readouterr().err
+    assert ("Measuring shots" in output) is show_progress
+    if not show_progress:
+        assert not output

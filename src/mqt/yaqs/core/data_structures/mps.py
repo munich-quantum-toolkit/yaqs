@@ -1834,7 +1834,7 @@ class MPS:
                 )
         return sum(c << i for i, c in enumerate(bitstring))
 
-    def measure_shots(self, shots: int, basis: str = "Z") -> dict[int, int]:
+    def measure_shots(self, shots: int, basis: str = "Z", *, show_progress: bool = True) -> dict[int, int]:
         """Perform multiple single-shot measurements on an MPS and aggregate the results.
 
         This function executes a specified number of measurement shots on the given MPS. For each shot,
@@ -1844,19 +1844,34 @@ class MPS:
         Args:
             shots: The positive number of measurement shots to perform.
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+            show_progress: Whether to display shot-measurement progress.
 
         Returns:
             A dictionary from measured basis-state integers to counts. Bit ``i``
             of each key stores the outcome at site ``i``.
 
-        Raises:
-            ValueError: If ``shots`` or ``basis`` is invalid, or any measured
-                site is not a qubit.
-
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
-            - A progress bar (via tqdm) displays the progress of the measurement process.
+            - A progress bar displays measurement progress unless ``show_progress=False``.
 
+        """
+        return self._measure_shots(shots, basis, show_progress=show_progress, parallel=True)
+
+    def _measure_shots(self, shots: int, basis: str = "Z", *, show_progress: bool, parallel: bool) -> dict[int, int]:
+        """Sample shots with executor-owned progress and process-pool policy.
+
+        Args:
+            shots: Positive shot count.
+            basis: Measurement basis.
+            show_progress: Whether to display shot-measurement progress.
+            parallel: Whether shot readout may create a process pool.
+
+        Returns:
+            Counts by measured basis-state integer.
+
+        Raises:
+            ValueError: If ``shots`` or ``basis`` is invalid, or a measured site
+                is not a qubit.
         """
         shots = validate_integer(shots, name="shots", minimum=1)
         basis = basis.upper()
@@ -1870,9 +1885,9 @@ class MPS:
             results[basis_state] = results.get(basis_state, 0) + 1
             return results
 
-        max_workers = max(1, min(max(1, available_cpus() - 1), shots))
+        max_workers = max(1, min(max(1, available_cpus() - 1), shots)) if parallel else 1
         if max_workers == 1:
-            with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
+            with tqdm(total=shots, desc="Measuring shots", ncols=80, disable=not show_progress) as pbar:
                 for _ in range(shots):
                     outcome = self._measure_single_shot(basis)
                     results[outcome] = results.get(outcome, 0) + 1
@@ -1890,7 +1905,7 @@ class MPS:
                 initializer=_measure_shots_worker_init,
                 initargs=(self, basis),
             ) as executor,
-            tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
+            tqdm(total=shots, desc="Measuring shots", ncols=80, disable=not show_progress) as pbar,
         ):
             futures: dict[Future[int], None] = {}
             next_shot = 0

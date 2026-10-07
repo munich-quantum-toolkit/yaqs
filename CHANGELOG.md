@@ -73,6 +73,8 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed shot readout progress bar suppression ([#622])
+  ([**@aaronleesander**])
 - fixed noise characterization iteration limits and initial loss ([#621])
   ([**@aaronleesander**])
 - fixed Schmidt spectrum simulation results ([#620])
@@ -292,6 +294,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#622]: https://github.com/munich-quantum-toolkit/yaqs/pull/622
 [#621]: https://github.com/munich-quantum-toolkit/yaqs/pull/621
 [#620]: https://github.com/munich-quantum-toolkit/yaqs/pull/620
 [#609]: https://github.com/munich-quantum-toolkit/yaqs/pull/609
