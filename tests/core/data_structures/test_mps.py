@@ -1892,10 +1892,12 @@ def test_inplace_measure() -> None:
     assert np.isclose(psi.expect(Observable("x", 2)), 1.0 if outcome == 0 else -1.0)
 
 
-def test_multi_shot() -> None:
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+def test_multi_shot(*, parallel: bool, monkeypatch: pytest.MonkeyPatch) -> None:
     """Full-chain readout of a basis state counts every shot at the expected integer."""
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 3 if parallel else 1)
     psi_mps = MPS(length=3, state="ones")
-    assert psi_mps.measure_shots(shots=10) == {7: 10}
+    assert psi_mps.measure_shots(shots=10, show_progress=False) == {7: 10}
 
 
 def test_norm() -> None:

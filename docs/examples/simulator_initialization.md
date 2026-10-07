@@ -172,14 +172,19 @@ serial runs.
 
 ## `mp_context`: multiprocessing start method
 
-`mp_context` controls how worker processes are spawned. The default `"auto"`
-picks the best option per OS:
+`mp_context` controls how worker processes start. The default `"auto"` selects a
+start method per OS:
 
-| Value     | Behaviour                                                                                                       |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| `"auto"`  | `"fork"` on Linux, `"spawn"` everywhere else.                                                                   |
-| `"fork"`  | Fastest worker startup; reuses Python state from the parent. Safe in YAQS because BLAS/OpenMP pools are capped. |
-| `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
+| Value     | Behaviour                                                                   |
+| --------- | --------------------------------------------------------------------------- |
+| `"auto"`  | `"forkserver"` on Linux, `"spawn"` everywhere else.                         |
+| `"fork"`  | Copies the parent process. Avoid when the parent has active threads.        |
+| `"spawn"` | Fresh interpreter per worker. Used on Windows/macOS and available on Linux. |
+
+On Linux, `"auto"` creates workers through a separate server process. The first
+pool has extra startup cost, but workers do not fork the application's threaded
+process. Numerical thread limits control resource use; they do not make an
+explicit `"fork"` safe when the parent has active threads.
 
 ```{code-cell} ipython3
 automatic_context = Simulator(mp_context="auto")

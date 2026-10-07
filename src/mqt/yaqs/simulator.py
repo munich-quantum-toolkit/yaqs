@@ -1095,7 +1095,7 @@ class Simulator:
             Defaults to ``max(1, available_cpus() - 1)``.
         show_progress: Whether to display trajectory and shot-readout progress bars.
         mp_context: Multiprocessing context: ``"auto"`` (default), ``"fork"``,
-            or ``"spawn"``. ``"auto"`` selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
+            or ``"spawn"``. ``"auto"`` selects ``"forkserver"`` on Linux and ``"spawn"`` elsewhere.
         max_retries: Maximum retry attempts for transient errors in process pool workers.
         retry_exceptions: Exception types that trigger a retry in a process pool.
     """

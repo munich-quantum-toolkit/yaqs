@@ -66,6 +66,34 @@ def test_simulate_observable_trajectories_shape() -> None:
     assert expectations.shape == (len(observables), len(times))
 
 
+def test_seeded_observable_trajectories_match_in_serial_and_parallel() -> None:
+    """Noise-fitting forward trajectories agree with automatic process-pool execution."""
+    hamiltonian, init_state, observables, _sim_params, noise = _three_site_problem()
+    params = AnalogSimParams(
+        observables=observables,
+        elapsed_time=0.2,
+        dt=0.1,
+        num_traj=8,
+        random_seed=42,
+        order=1,
+    )
+    results = [
+        simulate_observable_trajectories(
+            sim_params=params,
+            hamiltonian=hamiltonian,
+            init_state=init_state,
+            noise_model=noise,
+            observables=observables,
+            simulator=build_simulator(ExecutionConfig(parallel=parallel, max_workers=2, show_progress=False)),
+            representation="mps",
+        )
+        for parallel in (False, True)
+    ]
+    serial, parallel = results
+    np.testing.assert_array_equal(parallel[1], serial[1])
+    np.testing.assert_allclose(parallel[0], serial[0], atol=1e-12)
+
+
 def test_ref_expectations_path_matches_simulation() -> None:
     """Precomputed expectations are accepted when shapes match the fitting set."""
     hamiltonian, init_state, observables, sim_params, reference_model = _three_site_problem()
