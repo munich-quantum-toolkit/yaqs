@@ -56,28 +56,41 @@ def allocate_observable_buffers(
     times: NDArray[float64] | None = None
 
     if isinstance(sim_params, AnalogSimParams):
-        if sim_params.sample_timesteps:
-            times = np.asarray(sim_params.times, dtype=np.float64)
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, len(sim_params.times)), dtype=np.float64))
-                expectation_values.append(np.empty(len(sim_params.times), dtype=np.float64))
-        else:
-            times = np.asarray([sim_params.elapsed_time], dtype=np.float64)
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, 1), dtype=np.complex128))
-                expectation_values.append(np.empty(1, dtype=np.float64))
-    elif isinstance(sim_params, DigitalSimParams):
+        times = np.asarray(
+            sim_params.times if sim_params.sample_timesteps else [sim_params.elapsed_time], dtype=np.float64
+        )
+        num_samples = len(times)
+        scalar_dtype = np.float64 if sim_params.sample_timesteps else np.complex128
+    else:
         mid = num_mid_measurements if num_mid_measurements is not None else sim_params.num_mid_measurements
-        if sim_params.sample_layers:
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, mid + 2), dtype=np.complex128))
-                expectation_values.append(np.empty(mid + 2, dtype=np.float64))
-        else:
-            for _ in range(num_observables):
-                trajectories.append(np.empty((num_traj, 1), dtype=np.complex128))
-                expectation_values.append(np.empty(1, dtype=np.float64))
+        num_samples = mid + 2 if sim_params.sample_layers else 1
+        scalar_dtype = np.complex128
+
+    for index in range(num_observables):
+        is_spectrum = sim_params.observables[index].name == "schmidt_spectrum"
+        sample_shape = (num_samples, 500) if is_spectrum else (num_samples,)
+        trajectories.append(np.empty((num_traj, *sample_shape), dtype=np.float64 if is_spectrum else scalar_dtype))
+        expectation_values.append(np.empty(sample_shape, dtype=np.float64))
 
     return trajectories, expectation_values, times
+
+
+def allocate_worker_observable_buffer(
+    sim_params: AnalogSimParams | DigitalSimParams,
+    num_samples: int,
+) -> NDArray:
+    """Allocate scalar or array-valued cells for one worker's sampled observables.
+
+    Args:
+        sim_params: Parameters with observables in worker evaluation order.
+        num_samples: Number of sample columns.
+
+    Returns:
+        A two-dimensional buffer. Spectrum cells hold coefficient arrays; other
+        cells hold scalar values. Scalar-only runs keep a numeric buffer.
+    """
+    dtype = object if any(obs.name == "schmidt_spectrum" for obs in sim_params.observables) else np.float64
+    return np.zeros((len(sim_params.observables), num_samples), dtype=dtype)
 
 
 def allocate_diagnostic_buffers(
@@ -123,19 +136,19 @@ def aggregate_diagnostics(per_traj: NDArray[float64]) -> tuple[NDArray[float64],
 
 
 def aggregate_trajectories(result: Result) -> None:
-    """Aggregate per-trajectory observable data into ``result.expectation_values``.
+    """Average samples over trajectories, treating absent Schmidt ranks as zero.
 
-    Computes the mean across trajectories (or concatenates Schmidt spectra) for each
-    observable index.
+    Spectrum columns absent from every trajectory retain NaN padding. A mean
+    spectrum is a mean of pure-trajectory coefficients, not a mixed-state spectrum.
     """
     for i, observable in enumerate(result.observables):
-        traj = result.trajectories[i]
+        trajectories = result.trajectories[i]
         if observable.name == "schmidt_spectrum":
-            assert isinstance(traj, np.ndarray), "Schmidt spectrum trajectories must be stored in an ndarray"
-            all_values = [np.asarray(trajectory).ravel() for trajectory in traj]
-            result.expectation_values[i] = np.concatenate(all_values)
+            present = ~np.isnan(trajectories)
+            mean = np.mean(np.where(present, trajectories, 0.0), axis=0)
+            result.expectation_values[i] = np.where(np.any(present, axis=0), mean, np.nan)
         else:
-            result.expectation_values[i] = np.mean(traj, axis=0)
+            result.expectation_values[i] = np.mean(trajectories, axis=0)
 
 
 def aggregate_counts(result: Result) -> None:
@@ -163,7 +176,13 @@ class Result:
     :attr:`counts` like a normal run; :attr:`segment_results` retains per-segment
     detail. :attr:`observables` preserves the user-supplied ordering;
     :attr:`expectation_values` and :attr:`trajectories` hold the corresponding
-    data in lock-step by index. For MPS-backed runs with observables,
+    data in lock-step by index. Scalar observables have trajectory shape
+    ``(num_traj, num_samples)`` and mean shape ``(num_samples,)``. Schmidt spectra
+    add a final axis of 500 descending coefficients, with NaN padding. Their means
+    count missing ranks as zero; columns missing from every trajectory remain NaN.
+    These means describe pure-trajectory coefficients, not a mixed-state spectrum.
+    Programs expose per-trajectory data in :attr:`segment_results`.
+    For MPS-backed runs with observables,
     :attr:`runtime_cost`, :attr:`max_bond`, and :attr:`total_bond` are populated
     automatically. Nested segment results use :attr:`segment_index`,
     :attr:`segment_type`, and :attr:`time_offset`.

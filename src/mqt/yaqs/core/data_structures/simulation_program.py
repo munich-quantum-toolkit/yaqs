@@ -841,7 +841,10 @@ def stitch_program_results(
         time_parts.append(_build_segment_timeline(segment, len(first_values)))
         for index, values in enumerate(segment.expectation_values):
             arr = np.asarray(values)
-            if arr.ndim != 1 or len(arr) != len(first_values):
+            expected_shape = (
+                (len(first_values), 500) if observables[index].name == "schmidt_spectrum" else (len(first_values),)
+            )
+            if arr.shape != expected_shape:
                 msg = f"Segment {segment.segment_index} observable {index} has inconsistent shape."
                 raise ValueError(msg)
             expectation_parts[index].append(arr)

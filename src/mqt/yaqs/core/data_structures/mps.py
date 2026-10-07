@@ -1662,7 +1662,8 @@ class MPS:
         Args:
             sim_params: Simulation parameters containing sorted observables.
             results: 2D array where ``results[observable_index, column_index]`` stores
-                expectation values.
+                scalar values or a Schmidt-coefficient array. Spectrum requests
+                require an object buffer.
             column_index: Time or trajectory index for the column to fill.
 
         Raises:
