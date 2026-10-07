@@ -6,23 +6,6 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
-### Schmidt spectra retain trajectory and sample axes
-
-`Observable("schmidt_spectrum", sites=[0, 1])` supports sampled and final-only
-MPS analog, digital, ensemble, and program runs, including noisy trajectories.
-Spectrum results replace concatenated data with these shapes:
-
-- `result.trajectories[i]`: `(num_traj, num_samples, 500)`;
-- `result.expectation_values[i]`: `(num_samples, 500)`.
-
-Coefficients are descending, with unused entries filled with `NaN`. The mean
-counts missing ranks as zero and keeps columns absent from every trajectory as
-`NaN`. It describes pure-trajectory coefficients, not a mixed-state Schmidt
-spectrum, and need not be normalized. Scalar observable shapes are unchanged.
-Programs stitch means along the sample axis; read trajectory spectra from
-`result.segment_results[i].trajectories`. Direct `MPS.get_schmidt_spectrum()`
-retains its existing 500-entry convention.
-
 ### Breaking: physical sites use one spatial ordering
 
 YAQS now uses one public spatial dense-basis order. Site 0 is the

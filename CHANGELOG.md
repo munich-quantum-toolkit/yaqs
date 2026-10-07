@@ -73,9 +73,6 @@ releases may include breaking changes.
 
 ### Fixed
 
-- repaired sampled and final Schmidt spectra across MPS analog, digital,
-  ensemble, and program runs, including noisy trajectories, with explicit sample
-  and coefficient axes and trajectory means ([#TBD]) ([**@aaronleesander**])
 - stabilized direct process tensor characterization ([#601])
   ([**@aaronleesander**])
 - fixed inconsistent physical-site ordering across state and Hamiltonian
@@ -291,8 +288,6 @@ for previous changelogs._
 
 <!-- PR links -->
 
-<!-- Replace #TBD with the pull request number before merging. -->
-[#TBD]: https://github.com/munich-quantum-toolkit/yaqs/pulls
 [#609]: https://github.com/munich-quantum-toolkit/yaqs/pull/609
 [#606]: https://github.com/munich-quantum-toolkit/yaqs/pull/606
 [#603]: https://github.com/munich-quantum-toolkit/yaqs/pull/603
