@@ -46,6 +46,7 @@ def _finalize_result(
     propagator: Propagator,
     x_best: np.ndarray,
     best_loss: float,
+    initial_loss: float,
     loss_history: list[float],
     ref_traj: np.ndarray,
     times: np.ndarray,
@@ -57,6 +58,7 @@ def _finalize_result(
         propagator: Forward model used for the final fit trajectory.
         x_best: Best parameter vector found by the optimizer.
         best_loss: Best scalar loss value.
+        initial_loss: Loss of the supplied initial model before optimization.
         loss_history: Per-evaluation loss trace.
         ref_traj: Reference trajectories matched during fitting.
         times: Simulation time grid.
@@ -71,6 +73,7 @@ def _finalize_result(
     return NoiseCharacterizationResult(
         optimal_model=optimal_model,
         best_loss=float(best_loss),
+        initial_loss=initial_loss,
         best_parameters=np.asarray(x_best, dtype=float),
         loss_history=loss_history,
         ref_traj=ref_traj,
@@ -112,7 +115,11 @@ def run_optimization_characterization(
         representation: Forward-model selection.
         lindblad_max_qubits: Auto cutover to Lindblad evolution.
         vector_max_qubits: Auto cutover from MCWF to TJM.
-        **optimizer_kwargs: Keyword arguments forwarded to the CMA-ES backend.
+        **optimizer_kwargs: Keyword arguments forwarded to the optimizer.
+            ``max_iter`` limits CMA-ES generations or the bounded scalar
+            search's evaluation count (SciPy can evaluate twice with a limit of
+            one). The separate initial-model and final fitted-trajectory
+            evaluations are excluded.
 
     Returns:
         Structured optimization result including optional trajectory arrays.
@@ -148,6 +155,7 @@ def run_optimization_characterization(
         prepared_state=prepared_state,
     )
 
+    initial_loss = float(loss(initial_parameters))
     x_best, best_loss, loss_history, _parameter_history = cma_opt(
         loss,
         initial_parameters,
@@ -161,6 +169,7 @@ def run_optimization_characterization(
         propagator=propagator,
         x_best=x_best,
         best_loss=best_loss,
+        initial_loss=initial_loss,
         loss_history=loss_history,
         ref_traj=ref_array,
         times=times,

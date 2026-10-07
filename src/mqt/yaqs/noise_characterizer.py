@@ -166,7 +166,11 @@ class NoiseCharacterizer:
             x_up: Upper parameter bounds.
             reference_model: Optional reference model to simulate target trajectories.
             ref_expectations: Optional experimental trajectories with shape ``(n_obs, n_times)``.
-            **optimizer_kwargs: Keyword arguments forwarded to the CMA-ES backend.
+            **optimizer_kwargs: Keyword arguments forwarded to the optimizer.
+                ``max_iter`` limits CMA-ES generations or bounded scalar-search
+                evaluations. SciPy can evaluate twice with ``max_iter=1``.
+                Initial-model loss and final fitted-trajectory evaluations are
+                outside this limit.
 
         Returns:
             Structured optimization result including fitted and reference trajectories.
