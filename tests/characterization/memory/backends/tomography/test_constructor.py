@@ -19,6 +19,7 @@ import mqt.yaqs.characterization.memory.backends.tomography.constructor as const
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.constructor import run_all_sequences
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
@@ -79,6 +80,125 @@ def test_build_process_tensor_stores_reference_initial_rho() -> None:
         ham, params, timesteps=[0.0, 0.0], return_type="dense"
     )
     np.testing.assert_allclose(pt.initial_rho, np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128), atol=1e-10)
+
+
+def test_noisy_dense_process_tensor_matches_initial_excitation_channel() -> None:
+    """Noisy tomography preserves retained-outcome probabilities and mixed conditional states."""
+    duration = 0.1
+    survival = 0.4
+    num_trajectories = 256
+    params = AnalogSimParams(dt=duration, max_bond_dim=8, random_seed=42)
+    noise = NoiseModel([{"name": "raising", "sites": [0], "strength": -np.log(survival) / duration}])
+    pt = MemoryCharacterizer(parallel=False, show_progress=False, representation="vector").build_process_tensor(
+        Hamiltonian.ising(length=1, J=0.0, g=0.0),
+        params,
+        timesteps=[duration, 0.0],
+        noise_model=noise,
+        num_trajectories=num_trajectories,
+        basis="standard",
+        return_type="dense",
+    )
+
+    # Excitation from |0> leaves population exp(-gamma * duration) in |0>.
+    reference_initial = np.diag([survival, 1.0 - survival]).astype(np.complex128)
+    sampling_tolerance = 5.0 * np.sqrt(survival * (1.0 - survival) / num_trajectories)
+    np.testing.assert_allclose(pt.initial_rho, reference_initial, atol=sampling_tolerance, rtol=0.0)
+    probes = ProbeSet(
+        cut=1,
+        num_interventions=1,
+        past_features=np.zeros((2, 1, 32), dtype=np.float32),
+        future_features=np.zeros((2, 1, 32), dtype=np.float32),
+        past_pairs=[[], []],
+        past_cut_meas=[np.array([1.0, 0.0]), np.array([0.0, 1.0])],
+        future_prep_cut=[np.array([1.0, 1.0]) / np.sqrt(2.0), np.array([1.0, 1.0j]) / np.sqrt(2.0)],
+        future_pairs=[[], []],
+    )
+    responses, weights = pt.evaluate_probes_with_weights(probes)
+    expected_weights = np.array([[survival, survival], [1.0 - survival, 1.0 - survival]])
+    expected_responses = np.array([[[1.0, 1.0, 0.0, 0.0], [1.0, 0.0, 1.0, 0.0]]] * 2)
+    np.testing.assert_allclose(weights, expected_weights, atol=sampling_tolerance, rtol=0.0)
+    np.testing.assert_allclose(responses, expected_responses, atol=1e-12, rtol=0.0)
+
+    rotation = np.array([[np.cos(0.2), -np.sin(0.2)], [np.sin(0.2), np.cos(0.2)]])
+    outcome_operator = rotation @ np.diag([1.0, 0.5])
+
+    def retain_outcome(rho: np.ndarray) -> np.ndarray:
+        """Apply one outcome of a nonunitary filter followed by a rotation.
+
+        Args:
+            rho: Input system density matrix.
+
+        Returns:
+            Subnormalized output for the retained outcome.
+        """
+        return outcome_operator @ rho @ outcome_operator.conj().T
+
+    reference = retain_outcome(reference_initial)
+    reference /= np.trace(reference)
+    # Propagate five binomial standard errors through conditional normalization.
+    conditional_tolerance = 0.0
+    for population in (survival - sampling_tolerance, survival + sampling_tolerance):
+        bound = retain_outcome(np.diag([population, 1.0 - population]))
+        bound /= np.trace(bound)
+        conditional_tolerance = max(conditional_tolerance, float(np.max(np.abs(bound - reference))))
+    prediction = pt.predict([retain_outcome])
+    np.testing.assert_allclose(prediction, reference, atol=conditional_tolerance, rtol=0.0)
+    assert np.trace(prediction) == pytest.approx(1.0, abs=1e-12)
+    noiseless_output = retain_outcome(np.diag([1.0, 0.0]))
+    assert np.linalg.norm(reference - noiseless_output) > 2.0 * conditional_tolerance
+
+
+def test_noisy_dense_process_tensor_matches_consecutive_excitation_channels() -> None:
+    """Consecutive noisy slots reproduce independent excitation channels after each retained outcome."""
+    duration = 0.2
+    survival = 0.5
+    num_trajectories = 512
+    params = AnalogSimParams(dt=duration, elapsed_time=duration, max_bond_dim=8, random_seed=42)
+    noise = NoiseModel([{"name": "raising", "sites": [0], "strength": -np.log(survival) / duration}])
+    pt = MemoryCharacterizer(parallel=False, show_progress=False, representation="vector").build_process_tensor(
+        Hamiltonian.ising(length=1, J=0.0, g=0.0),
+        params,
+        timesteps=[duration, duration],
+        noise_model=noise,
+        num_trajectories=num_trajectories,
+        basis="standard",
+        return_type="dense",
+    )
+    probes = ProbeSet(
+        cut=1,
+        num_interventions=1,
+        past_features=np.zeros((2, 1, 32), dtype=np.float32),
+        future_features=np.zeros((2, 1, 32), dtype=np.float32),
+        past_pairs=[[], []],
+        past_cut_meas=[np.array([1.0, 0.0]), np.array([0.0, 1.0])],
+        future_prep_cut=[np.array([1.0, 1.0]) / np.sqrt(2.0), np.array([1.0, 1.0j]) / np.sqrt(2.0)],
+        future_pairs=[[], []],
+    )
+    responses, weights = pt.evaluate_probes_with_weights(probes)
+    weight_tolerance = 5.0 * np.sqrt(survival * (1.0 - survival) / num_trajectories)
+    np.testing.assert_allclose(weights, 0.5, atol=weight_tolerance, rtol=0.0)
+
+    # Each prepared state has ground population 1/2, so its no-jump probability is 3/4.
+    no_jump_probability = (1.0 + survival) / 2.0
+    no_jump_coherence = 2.0 * np.sqrt(survival) / (1.0 + survival)
+    no_jump_z = (survival - 1.0) / (1.0 + survival)
+    for past_idx in range(2):
+        for future_idx in range(2):
+            retained_trajectories = num_trajectories * weights[past_idx, future_idx]
+            standard_error = np.sqrt(no_jump_probability * (1.0 - no_jump_probability) / retained_trajectories)
+            # Five binomial standard errors for the normalized conditional ensemble.
+            coherence_tolerance = 5.0 * no_jump_coherence * standard_error
+            z_tolerance = 5.0 * (no_jump_z + 1.0) * standard_error
+            coherence_idx = future_idx + 1
+            np.testing.assert_allclose(
+                responses[past_idx, future_idx, coherence_idx],
+                np.sqrt(survival),
+                atol=coherence_tolerance,
+                rtol=0.0,
+            )
+            assert responses[past_idx, future_idx, 3] == pytest.approx(survival - 1.0, abs=z_tolerance)
+            assert responses[past_idx, future_idx, 0] == pytest.approx(1.0, abs=1e-12)
+            assert responses[past_idx, future_idx, 2 - future_idx] == pytest.approx(0.0, abs=1e-12)
 
 
 def test_build_process_tensor_validates_initial_rho_arg() -> None:

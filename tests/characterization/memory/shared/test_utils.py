@@ -193,6 +193,30 @@ def test_evolve_backend_state_forwards_shared_tjm_rng(monkeypatch: pytest.Monkey
     assert received_rng is rng
 
 
+def test_evolve_backend_state_forwards_shared_mcwf_rng(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Characterization passes its shared stream to MCWF evolution."""
+    received_rng: np.random.Generator | None = None
+
+    def fake_backend(
+        _args: tuple[int, object],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[None, None, np.ndarray]:
+        nonlocal received_rng
+        received_rng = rng
+        return None, None, np.array([1.0, 0.0], dtype=np.complex128)
+
+    monkeypatch.setattr(utils_module, "mcwf", fake_backend)
+    op = MPO.ising(length=1, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.05, elapsed_time=0.05, get_state=True)
+    state = _initialize_backend_state(op, solver="MCWF")
+    rng = np.random.default_rng(17)
+
+    _evolve_backend_state(state, op, None, params, solver="MCWF", rng=rng)
+
+    assert received_rng is rng
+
+
 def test_resolve_characterizer_representation_branches() -> None:
     """Representation resolver covers vector, mps, auto, and invalid inputs."""
     assert resolve_characterizer_representation(2, "vector") == "vector"

@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import scipy.sparse
@@ -331,6 +333,90 @@ def test_mcwf_trajectory_rng_seeding_reproducible() -> None:
     res_a = sim.run(state, hamiltonian, _params(), noise)
     res_b = sim.run(state, hamiltonian, _params(), noise)
     np.testing.assert_allclose(res_a.expectation_values[0], res_b.expectation_values[0])
+
+
+def test_mcwf_shared_rng_matches_uninterrupted_trajectory() -> None:
+    """One RNG preserves the noisy trajectory when evolution is split into segments."""
+    initial = np.array([1.0, 0.0], dtype=np.complex128)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 12.0}])
+    segment_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        observables=[Observable("z", 0)],
+        get_state=True,
+        random_seed=YAQS_TEST_SEED,
+    )
+    context = preprocess_mcwf(
+        psi_initial=initial,
+        h_sparse=scipy.sparse.csr_matrix((2, 2)),
+        noise_model=noise,
+        sim_params=segment_params,
+        num_sites=1,
+    )
+    initial_before = context.psi_initial.copy()
+    assert context.step_propagator is not None
+    propagator_before = context.step_propagator.copy()
+    whole_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.2,
+        observables=[Observable("z", 0)],
+        get_state=True,
+        random_seed=YAQS_TEST_SEED,
+    )
+    whole_rng = np.random.default_rng(17)
+    segment_rng = np.random.default_rng(17)
+    rng_before = segment_rng.bit_generator.state
+
+    whole_values, _, whole_state = mcwf_mod.mcwf((0, replace(context, sim_params=whole_params)), rng=whole_rng)
+    first_values, _, first_state = mcwf_mod.mcwf((0, context), rng=segment_rng)
+    assert first_state is not None
+    first_before = first_state.copy()
+    second_values, _, second_state = mcwf_mod.mcwf((0, replace(context, psi_initial=first_state)), rng=segment_rng)
+    assert whole_state is not None
+    assert second_state is not None
+
+    np.testing.assert_allclose(np.concatenate((first_values, second_values[:, 1:]), axis=1), whole_values, atol=1e-12)
+    np.testing.assert_allclose(second_state, whole_state, atol=1e-12)
+    assert np.any(whole_values[0] < -0.5)
+    assert segment_rng.bit_generator.state == whole_rng.bit_generator.state
+    assert segment_rng.bit_generator.state != rng_before
+    np.testing.assert_array_equal(initial, initial_before)
+    np.testing.assert_array_equal(context.psi_initial, initial_before)
+    np.testing.assert_array_equal(context.step_propagator, propagator_before)
+    np.testing.assert_array_equal(first_state, first_before)
+    assert context.sim_params is segment_params
+
+
+def test_mcwf_supplied_rng_takes_precedence_over_configured_seed() -> None:
+    """A supplied RNG determines the trajectory even when configured seeds differ."""
+    params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.2,
+        observables=[Observable("z", 0)],
+        get_state=True,
+        random_seed=1,
+    )
+    context = preprocess_mcwf(
+        psi_initial=np.array([1.0, 0.0], dtype=np.complex128),
+        h_sparse=scipy.sparse.csr_matrix((2, 2)),
+        noise_model=NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 12.0}]),
+        sim_params=params,
+        num_sites=1,
+    )
+    first_rng = np.random.default_rng(17)
+    second_rng = np.random.default_rng(17)
+    rng_before = first_rng.bit_generator.state
+
+    first_values, _, first_state = mcwf_mod.mcwf((0, context), rng=first_rng)
+    params.random_seed = 2
+    second_values, _, second_state = mcwf_mod.mcwf((0, context), rng=second_rng)
+    assert first_state is not None
+    assert second_state is not None
+
+    np.testing.assert_allclose(first_values, second_values, atol=1e-12)
+    np.testing.assert_allclose(first_state, second_state, atol=1e-12)
+    assert first_rng.bit_generator.state == second_rng.bit_generator.state
+    assert first_rng.bit_generator.state != rng_before
 
 
 def test_mcwf_noisy_evolution_with_propagator_via_simulator() -> None:
