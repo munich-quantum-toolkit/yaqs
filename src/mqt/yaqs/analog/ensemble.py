@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core.data_structures.result import allocate_worker_observable_buffer
 from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
@@ -86,9 +87,9 @@ def ensemble_member_worker(
     num_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
-        observable_results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=np.float64)
+        observable_results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        observable_results = np.zeros((len(sim_params.sorted_observables), 1), dtype=np.float64)
+        observable_results = allocate_worker_observable_buffer(sim_params, 1)
 
     phis: list[MPS] = []
     multi_time_results: NDArray[np.complex128] | None = None

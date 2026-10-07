@@ -95,6 +95,10 @@ class Observable:
     on all-qubit chains, the periodic wrap ``{0, length - 1}`` during
     simulation.
 
+    Entropy and Schmidt spectra are MPS diagnostics supported during simulation.
+    Schmidt-spectrum result arrays retain the sample and coefficient axes; see
+    :class:`~mqt.yaqs.Result` for trajectory and mean shapes.
+
     Attributes:
         name: Canonical observable or diagnostic name.
         matrix: Local operator matrix, or ``None`` for diagnostics and bitstrings.
