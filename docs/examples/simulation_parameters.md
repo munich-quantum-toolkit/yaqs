@@ -47,6 +47,17 @@ Named observables that require configuration accept keyword-only factory
 arguments. Missing or unknown arguments raise `TypeError`, so misspelled
 parameters are not silently ignored.
 
+`schmidt_spectrum` is an MPS diagnostic for two adjacent sites in ascending
+order. Sampled and final-only runs, including noisy trajectories, return
+descending Schmidt coefficients with 500 entries and `NaN` padding.
+`result.trajectories[i]` has shape `(num_traj, num_samples, 500)`;
+`result.expectation_values[i]` has shape `(num_samples, 500)` and averages
+coefficients over trajectories. Missing ranks count as zero; columns absent from
+all trajectories at a sample remain `NaN`. This mean is not the Schmidt spectrum
+of the mixed state and need not be normalized. Square each trajectory's
+coefficients to obtain its Schmidt probabilities. Programs stitch mean spectra
+along the sample axis and retain trajectories in `result.segment_results`.
+
 ## Start with a preset
 
 You do **not** need to tune every numerical knob before running a simulation.
