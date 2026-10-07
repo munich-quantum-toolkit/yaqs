@@ -951,7 +951,10 @@ def _store_observable_trajectory(
     """Store one trajectory's observable data into result buffers in user order."""
     _, observable_sorted_indices = _prepare_observable_ordering(sim_params.observables)
     for user_i, sorted_i in enumerate(observable_sorted_indices):
-        result.trajectories[user_i][traj_index] = sorted_traj_data[sorted_i]
+        values = sorted_traj_data[sorted_i]
+        if result.observables[user_i].name == "schmidt_spectrum":
+            values = np.stack(values)
+        result.trajectories[user_i][traj_index] = values
 
 
 def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
@@ -1221,7 +1224,8 @@ class Simulator:
             controls in place; ``Result.sim_params`` references that object.
 
         Raises:
-            ValueError: If no output is specified (neither observables, shots, nor ``get_state``).
+            ValueError: If no output is specified (neither observables, shots, nor ``get_state``),
+                or the requested observables are unsupported by the selected representation.
             TypeError: If ``sim_params`` is missing for a standalone run, supplied for a
                 program, or the initial state is incompatible with the selected mode.
         """
