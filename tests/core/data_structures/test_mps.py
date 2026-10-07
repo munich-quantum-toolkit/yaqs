@@ -1582,12 +1582,31 @@ def test_measurement_rejects_only_measured_non_qubit_sites() -> None:
     mock_executor.assert_not_called()
 
 
-def test_single_shot_conditional_probabilities_match_dense_distribution() -> None:
-    """Each deterministic measurement path has its exact dense Born probability."""
+@pytest.mark.parametrize(
+    ("basis", "eigenstates"),
+    [
+        ("Z", np.eye(2)),
+        ("X", np.array([[1, 1], [1, -1]]) / np.sqrt(2.0)),
+        ("Y", np.array([[1, 1], [1j, -1j]]) / np.sqrt(2.0)),
+    ],
+)
+@pytest.mark.parametrize("center", [0, 2, None])
+def test_single_shot_conditional_probabilities_match_dense_distribution(
+    basis: str, eigenstates: np.ndarray, center: int | None
+) -> None:
+    """Pauli measurement paths have exact Born probabilities and preserve the source MPS."""
     state = _entangled_mps(length=3, seed=41)
-    state.shift_center_to(2)
-    state.set_center(None)
-    dense_probabilities = np.abs(state.to_vec()) ** 2
+    state.shift_center_to(2 if center is None else center)
+    if center is None:
+        state.set_center(None)
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+    center_before = state.orthogonality_center
+
+    # Columns are tensor products of the local +1 and -1 Pauli eigenstates.
+    measurement_basis = eigenstates
+    for _ in range(state.length - 1):
+        measurement_basis = np.kron(measurement_basis, eigenstates)
+    dense_probabilities = np.abs(measurement_basis.conj().T @ state.to_vec()) ** 2
     dense_probabilities /= dense_probabilities.sum()
 
     for outcome, expected in enumerate(dense_probabilities):
@@ -1608,8 +1627,11 @@ def test_single_shot_conditional_probabilities_match_dense_distribution() -> Non
         shot_rng = Mock(spec=np.random.Generator)
         shot_rng.choice.side_effect = choose
 
-        assert state.measure_single_shot(rng=shot_rng) == outcome
+        assert state.measure_single_shot(basis=basis, rng=shot_rng) == outcome
         assert path_probability == pytest.approx(expected, abs=1e-12)
+        assert state.orthogonality_center == center_before
+        for actual, original in zip(state.tensors, tensors_before, strict=True):
+            np.testing.assert_array_equal(actual, original)
 
 
 @pytest.mark.parametrize(
