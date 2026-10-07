@@ -258,7 +258,9 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
         dt=0.05,
         multi_time_observables=[(z0, z0), (z0, z1)],
     )
-    result = Simulator(parallel=True, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    result = Simulator(parallel=True, max_workers=2, show_progress=False).run(
+        states, hamiltonian, sim_params, noise_model=None
+    )
     assert result.expectation_values[0] is not None
     assert result.multi_time_results is not None
 

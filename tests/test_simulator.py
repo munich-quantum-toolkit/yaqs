@@ -36,6 +36,7 @@ from mqt.yaqs import (
     NoiseModel,
     Observable,
     Result,
+    SimulationProgram,
     Simulator,
     State,
     simulator,
@@ -175,6 +176,113 @@ def test_simulator_parallel_serial_equivalence() -> None:
         assert serial_vals is not None
         assert parallel_vals is not None
         np.testing.assert_allclose(serial_vals, parallel_vals, atol=1e-10)
+
+
+@pytest.mark.parametrize("workflow", ["analog-mps", "analog-vector", "digital", "program", "ensemble"])
+@pytest.mark.parametrize("worker_mode", ["explicit", "xdist"])
+def test_simulator_one_worker_runs_inline(
+    workflow: str,
+    worker_mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One worker preserves seeded results and inputs without creating a pool."""
+    if worker_mode == "xdist":
+        monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
+        monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+        parallel_runner = Simulator(parallel=True, show_progress=False)
+        serial_threads = 1
+    else:
+        monkeypatch.setattr(simulator, "available_cpus", lambda: 4)
+        parallel_runner = Simulator(parallel=True, max_workers=1, show_progress=False)
+        serial_threads = 4
+    assert parallel_runner.max_workers == 1
+
+    representation: Representation = "vector" if workflow == "analog-vector" else "mps"
+    states = [State(2, initial="zeros", representation=representation)]
+    if workflow == "ensemble":
+        states.append(State(2, initial="ones"))
+    initial_vectors = [state.vector.copy() if representation == "vector" else state.mps.to_vec() for state in states]
+    initial_centers = [state.mps.orthogonality_center for state in states] if representation == "mps" else []
+    hamiltonian = Hamiltonian.ising(2, J=0.2, g=0.3)
+    circuit = QuantumCircuit(2)
+    circuit.ry(0.7, 0)
+    circuit.cx(0, 1)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.5}])
+    num_jobs = 2 if workflow == "ensemble" else 4
+
+    def run(runner: Simulator) -> Result:
+        observables = [Observable("z", site) for site in range(2)]
+        if workflow == "digital":
+            params = DigitalSimParams(observables=observables, num_traj=4, random_seed=YAQS_TEST_SEED)
+            return runner.run(states[0], circuit, params, noise)
+        if workflow == "program":
+            program = SimulationProgram(
+                [(circuit, DigitalSimParams()), (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1))],
+                observables=observables,
+                num_traj=4,
+                random_seed=YAQS_TEST_SEED,
+            )
+            return runner.run(states[0], program, noise_model=noise)
+        analog_params = AnalogSimParams(
+            observables=observables,
+            elapsed_time=0.2,
+            dt=0.1,
+            num_traj=4,
+            random_seed=YAQS_TEST_SEED,
+        )
+        if workflow == "ensemble":
+            return runner.run(states, hamiltonian, analog_params)
+        return runner.run(states[0], hamiltonian, analog_params, noise)
+
+    with (
+        patch.object(simulator, "run_backend_parallel", side_effect=AssertionError("Unexpected process pool")) as pool,
+        patch.object(simulator, "call_serial_capped", wraps=simulator.call_serial_capped) as inline,
+    ):
+        serial_result = run(Simulator(parallel=False, show_progress=False))
+        assert inline.call_count == num_jobs
+        assert all(call.kwargs["n_threads"] == serial_threads for call in inline.call_args_list)
+        inline.reset_mock()
+        parallel_result = run(parallel_runner)
+        assert inline.call_count == num_jobs
+        assert all(call.kwargs["n_threads"] == 1 for call in inline.call_args_list)
+        pool.assert_not_called()
+
+    serial_segments = serial_result.segment_results or [serial_result]
+    parallel_segments = parallel_result.segment_results or [parallel_result]
+    for serial, parallel in zip(serial_segments, parallel_segments, strict=True):
+        assert len(serial.expectation_values) == len(parallel.expectation_values) == 2
+        for serial_mean, parallel_mean, serial_traj, parallel_traj in zip(
+            serial.expectation_values,
+            parallel.expectation_values,
+            serial.trajectories,
+            parallel.trajectories,
+            strict=True,
+        ):
+            assert serial_traj.shape[0] == parallel_traj.shape[0] == num_jobs
+            np.testing.assert_allclose(parallel_traj, serial_traj, atol=1e-12)
+            np.testing.assert_allclose(parallel_mean, serial_mean, atol=1e-12)
+    for state, initial_vector in zip(states, initial_vectors, strict=True):
+        vector = state.vector if representation == "vector" else state.mps.to_vec()
+        np.testing.assert_array_equal(vector, initial_vector)
+    if representation == "mps":
+        assert [state.mps.orthogonality_center for state in states] == initial_centers
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert not captured.err
+
+
+def test_simulator_one_worker_propagates_backend_failure() -> None:
+    """Inline execution propagates a backend failure without process-pool retries."""
+    params = AnalogSimParams(observables=[Observable("z", 0)], elapsed_time=0.1, dt=0.1, num_traj=2)
+    noise = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.5}])
+    runner = Simulator(parallel=True, max_workers=1, max_retries=3, show_progress=False)
+    with (
+        patch.object(simulator, "analog_tjm_1", side_effect=OSError("Backend failed")) as backend,
+        pytest.raises(OSError, match="Backend failed"),
+    ):
+        runner.run(State(1, initial="zeros"), Hamiltonian.ising(1, J=0.0, g=0.0), params, noise)
+    backend.assert_called_once()
 
 
 def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) -> None:
