@@ -1685,9 +1685,14 @@ def test_measure_shots_single_shot() -> None:
 def test_measure_shots_rejects_invalid_counts_before_measurement(shots: object, error: type[Exception]) -> None:
     """Invalid shot counts fail before sampling or creating workers."""
     psi = MPS(length=1, state="zeros")
-    with patch.object(psi, "measure_single_shot") as mock_measure, pytest.raises(error, match="shots"):
+    with (
+        patch("numpy.random.default_rng") as mock_rng,
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor,
+        pytest.raises(error, match="shots"),
+    ):
         psi.measure_shots(shots=cast("Any", shots))
-    mock_measure.assert_not_called()
+    mock_rng.assert_not_called()
+    mock_executor.assert_not_called()
 
 
 def test_measure_shots_accepts_numpy_integer() -> None:
@@ -2297,7 +2302,7 @@ def test_haar_random_invalid_pad_raises() -> None:
         _ = MPS(length=6, state="haar-random", pad=0)
 
 
-def test_haar_random_entropy_statistics_vs_random_mps() -> None:
+def test_haar_random_entropy_statistics_vs_random_mps(monkeypatch: pytest.MonkeyPatch) -> None:
     """Haar-random MPS should show higher mean entropy and lower variance than random tensors."""
     length = 8
     chi_max = 4
@@ -2306,7 +2311,22 @@ def test_haar_random_entropy_statistics_vs_random_mps() -> None:
 
     bonds = _expected_uniform_clipped_bonds(length, chi_max)
     shapes = [(2, bonds[i], bonds[i + 1]) for i in range(length)]
-    local_rng = np.random.default_rng(1234)
+    create_rng = np.random.default_rng
+    local_rng = create_rng(1234)
+    haar_rng = create_rng(1235)
+
+    def seeded_rng(seed: np.random.Generator | int | None = None) -> np.random.Generator:
+        """Use a fixed Haar sample stream and preserve explicit seeds.
+
+        Args:
+            seed: Seed or generator passed to NumPy.
+
+        Returns:
+            The generator for the requested sample stream.
+        """
+        return haar_rng if seed is None else create_rng(seed)
+
+    monkeypatch.setattr(np.random, "default_rng", seeded_rng)
 
     rand_entropies = np.empty(num_samples, dtype=np.float64)
     haar_entropies = np.empty(num_samples, dtype=np.float64)

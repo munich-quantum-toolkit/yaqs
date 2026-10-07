@@ -703,81 +703,68 @@ def test_digital_combined_observables_and_shots() -> None:
     assert combined.max_bond is not None
 
 
-def test_digital_combined_observables_and_shots_noisy() -> None:
-    """Noisy combined runs keep obs-only expectations and distribute shots across trajs."""
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+@pytest.mark.parametrize("shots", [2, 10], ids=["zero-shot-trajectories", "all-trajectories-sampled"])
+def test_digital_combined_observables_and_shots_noisy(shots: int, *, parallel: bool) -> None:
+    """Shot readout preserves seeded noisy trajectories and shares the total budget."""
     num_qubits = 2
-    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
+    angle = 1.0
+    circuit = QuantumCircuit(num_qubits)
+    circuit.ry(angle, 0)
+    circuit.cx(0, 1)
     circuit.measure_all()
     obs = [Observable("z", i) for i in range(num_qubits)]
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
-    num_traj = 4
-    shots = 10
-    sim = Simulator(parallel=False, show_progress=False)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.5}])
+    num_traj = 8
 
-    obs_only = sim.run(
+    obs_only = Simulator(parallel=False, show_progress=False).run(
         State(num_qubits, initial="zeros"),
         circuit,
-        DigitalSimParams(observables=obs, num_traj=num_traj, max_bond_dim=16, random_seed=YAQS_TEST_SEED),
+        DigitalSimParams(observables=obs, num_traj=num_traj, max_bond_dim=4, random_seed=YAQS_TEST_SEED),
         noise_model,
     )
-    combined = sim.run(
+    combined = Simulator(parallel=parallel, max_workers=2, show_progress=False).run(
         State(num_qubits, initial="zeros"),
         circuit,
         DigitalSimParams(
             observables=obs,
             shots=shots,
             num_traj=num_traj,
-            max_bond_dim=16,
+            max_bond_dim=4,
             random_seed=YAQS_TEST_SEED,
         ),
         noise_model,
     )
 
     assert len(combined.expectation_values) == num_qubits
+    assert len(combined.trajectories) == num_qubits
     for i in range(num_qubits):
-        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i])
+        reference = obs_only.trajectories[i]
+        sampled = combined.trajectories[i]
+        assert reference is not None
+        assert sampled is not None
+        assert sampled.shape == (num_traj, 1)
+        np.testing.assert_allclose(sampled, reference, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i], rtol=0, atol=1e-12)
+
+    z0, z1 = combined.trajectories
+    assert z0 is not None
+    assert z1 is not None
+    # X jumps flip Z on qubit 0; the untouched qubit keeps its prepared expectation.
+    np.testing.assert_allclose(np.abs(z0), np.cos(angle), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(z1, np.cos(angle), rtol=0, atol=1e-12)
+    assert np.any(z0.real < 0)
+    assert np.any(z0.real > 0)
+
     assert combined.counts is not None
     assert sum(combined.counts.values()) == shots
+    assert set(combined.counts) <= set(range(2**num_qubits))
     assert len(combined.measurements) == num_traj
+    per_traj_totals = [0 if measurement is None else sum(measurement.values()) for measurement in combined.measurements]
+    base, remainder = divmod(shots, num_traj)
+    expected_totals = [base + 1] * remainder + [base] * (num_traj - remainder)
+    assert sorted(per_traj_totals) == sorted(expected_totals)
     assert combined.max_bond is not None
-
-
-@pytest.mark.parametrize("parallel", [False, True])
-def test_digital_combined_noisy_shots_less_than_num_traj(*, parallel: bool) -> None:
-    """When shots < num_traj, zero-shot trajs contribute no counts but still feed observables."""
-    num_qubits = 2
-    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
-    circuit.measure_all()
-    obs = [Observable("z", i) for i in range(num_qubits)]
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
-    num_traj = 4
-    shots = 2
-    sim = Simulator(parallel=parallel, max_workers=2 if parallel else None, show_progress=False)
-
-    result = sim.run(
-        State(num_qubits, initial="zeros"),
-        circuit,
-        DigitalSimParams(
-            observables=obs,
-            shots=shots,
-            num_traj=num_traj,
-            max_bond_dim=16,
-            random_seed=YAQS_TEST_SEED,
-        ),
-        noise_model,
-    )
-
-    assert result.counts is not None
-    assert sum(result.counts.values()) == shots
-    assert len(result.measurements) == num_traj
-    # Two trajectories get one shot each; the rest must be empty or None (never a phantom shot).
-    per_traj_totals = [0 if m is None else sum(m.values()) for m in result.measurements]
-    assert sorted(per_traj_totals) == [0, 0, 1, 1]
-    assert len(result.expectation_values) == num_qubits
-    for values in result.expectation_values:
-        assert values is not None
-        assert np.size(values) > 0
-    assert result.max_bond is not None
 
 
 def test_digital_shots_get_state() -> None:
