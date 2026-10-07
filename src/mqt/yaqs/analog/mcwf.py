@@ -212,13 +212,19 @@ def _apply_noisy_step(
     return jumped / np.linalg.norm(jumped)
 
 
-def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
+def mcwf(
+    args: tuple[int, MCWFContext],
+    *,
+    rng: np.random.Generator | None = None,
+) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Run a single Monte Carlo wavefunction trajectory.
 
     Args:
         args: A tuple containing:
             - int: Trajectory identifier (used for RNG seeding in parallel runs).
             - MCWFContext: Pre-computed simulation context from ``preprocess_mcwf``.
+        rng: Optional trajectory RNG continued across consecutive segments.
+            When omitted, create a generator using the configured seed.
 
     Returns:
         An array of expectation values for each observable over time.
@@ -228,10 +234,11 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
     dt = sim_params.dt
 
     psi = ctx.psi_initial.copy()
-    if sim_params.random_seed is not None:
-        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
-    else:
-        rng = np.random.default_rng()
+    if rng is None:
+        if sim_params.random_seed is not None:
+            rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+        else:
+            rng = np.random.default_rng()
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)

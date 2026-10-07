@@ -470,7 +470,7 @@ def _evolve_backend_state(
         solver: Backend solver name.
         traj_idx: MCWF trajectory index (used for deterministic seeding in the backend).
         static_ctx: Optional preprocessed MCWF context.
-        rng: Optional trajectory RNG reused across consecutive TJM segments.
+        rng: Optional trajectory RNG reused across consecutive MCWF or TJM segments.
 
     Returns:
         The evolved backend state returned by the selected solver. For TJM, this
@@ -489,7 +489,7 @@ def _evolve_backend_state(
         dynamic_ctx = copy.copy(static_ctx)
         dynamic_ctx.psi_initial = np.asarray(state, dtype=np.complex128)
         dynamic_ctx.sim_params = step_params
-        _, _, out = mcwf((traj_idx, dynamic_ctx))
+        _, _, out = mcwf((traj_idx, dynamic_ctx), rng=rng)
         if out is None:
             msg = "MCWF backend returned None state."
             raise RuntimeError(msg)
