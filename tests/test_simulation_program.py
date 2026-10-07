@@ -2042,6 +2042,7 @@ def test_compiled_gates_are_executor_owned_and_never_mutated(monkeypatch: pytest
         copy_initial_state: bool = True,
         rng: np.random.Generator | None = None,
         compiled_circuit: _CompiledCircuit | None = None,
+        show_progress: bool = True,
     ) -> tuple[np.ndarray | None, np.ndarray | None, dict[int, int] | None, MPS | None]:
         assert compiled_circuit is not None
         before = fingerprint(compiled_circuit)
@@ -2050,6 +2051,7 @@ def test_compiled_gates_are_executor_owned_and_never_mutated(monkeypatch: pytest
             copy_initial_state=copy_initial_state,
             rng=rng,
             compiled_circuit=compiled_circuit,
+            show_progress=show_progress,
         )
         assert fingerprint(compiled_circuit) == before
         compiled_ids.append(id(compiled_circuit))
@@ -2280,3 +2282,25 @@ def test_hahn_echo_refocuses_detuning_but_not_markovian_dephasing() -> None:
     assert 0.3 < echo_magnetization < 0.9
     assert no_pulse_magnetization < 0.2
     assert echo_magnetization > no_pulse_magnetization + 0.3
+
+
+@pytest.mark.parametrize("show_progress", [False, True])
+def test_program_shot_progress_control(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], *, show_progress: bool
+) -> None:
+    """Program segments inherit quiet readout and do not create shot pools."""
+
+    def unexpected_pool(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Simulator shot readout must not create a process pool.")
+
+    monkeypatch.setattr("mqt.yaqs.core.data_structures.mps.available_cpus", lambda: 8)
+    monkeypatch.setattr("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor", unexpected_pool)
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    program = SimulationProgram([(circuit, DigitalSimParams(shots=8))])
+    result = Simulator(parallel=False, show_progress=show_progress).run(State(2), program)
+    assert result.counts == {1: 8}
+    output = capsys.readouterr().err
+    assert ("Measuring shots" in output) is show_progress
+    if not show_progress:
+        assert not output

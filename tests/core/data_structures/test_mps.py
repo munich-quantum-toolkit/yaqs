@@ -3272,3 +3272,26 @@ def test_evaluate_observables_rejects_invalid_operator_sites(
 
     with pytest.raises(error, match=match):
         state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+
+
+@pytest.mark.parametrize("show_progress", [False, True])
+@pytest.mark.parametrize("workers", [1, 4])
+def test_measure_shots_progress_control(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], *, show_progress: bool, workers: int
+) -> None:
+    """Shot progress follows its flag in serial and pooled readout."""
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: workers)
+    monkeypatch.setattr(mps_mod, "get_parallel_context", lambda _mode: None)
+    monkeypatch.setattr(mps_mod, "ProcessPoolExecutor", _ImmediateProcessPoolExecutor)
+    monkeypatch.setattr(mps_mod, "wait", lambda futures, **_: (list(futures), []))
+    assert MPS(length=1, state="zeros").measure_shots(5, show_progress=show_progress) == {0: 5}
+    assert ("Measuring shots" in capsys.readouterr().err) is show_progress
+
+
+def test_measure_shots_shows_progress_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Direct shot readout remains visible by default."""
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    assert MPS(length=1, state="zeros").measure_shots(3) == {0: 3}
+    assert "Measuring shots" in capsys.readouterr().err
