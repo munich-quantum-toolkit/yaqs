@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.data_structures.mpo import MPO
+from ..core.data_structures.result import allocate_worker_observable_buffer
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
@@ -287,9 +288,9 @@ def analog_tjm_2(
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
+        results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        results = np.zeros((len(sim_params.sorted_observables), 1))
+        results = allocate_worker_observable_buffer(sim_params, 1)
 
     final_state: MPS | None = None
 
@@ -421,9 +422,9 @@ def analog_tjm_1(
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
 
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=object)
+        results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        results = np.zeros((len(sim_params.sorted_observables), 1), dtype=object)
+        results = allocate_worker_observable_buffer(sim_params, 1)
 
     # Apply scheduled jumps at t=times[0] before the initial sample so observables
     # and get_state agree (later timesteps also sample after the jump event).

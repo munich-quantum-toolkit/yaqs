@@ -26,6 +26,7 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
+from ..core.data_structures.result import allocate_worker_observable_buffer
 from ..core.data_structures.state_utils import validate_qubit_measurement_dimensions
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
@@ -772,15 +773,14 @@ def digital_tjm(
         mid = compiled.num_mid_measurements if sim_params.sample_layers else 0
         num_cols = (mid + 2) if sim_params.sample_layers else 1
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
-        n_obs = len(sim_params.sorted_observables)
         if sim_params.sample_layers:
             state.normalize(form="B", decomposition="QR")
-            results = np.zeros((n_obs, mid + 2))
+            results = allocate_worker_observable_buffer(sim_params, mid + 2)
             state.record_diagnostics(diagnostics, 0)
             if wants_obs:
                 state.evaluate_observables(sim_params, results, 0)
         else:
-            results = np.zeros((n_obs, 1))
+            results = allocate_worker_observable_buffer(sim_params, 1)
 
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)

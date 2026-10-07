@@ -386,6 +386,110 @@ def test_program_compilation_rejects_unsupported_inputs(
         Simulator(parallel=False, show_progress=False).run(state, program)
 
 
+@pytest.mark.parametrize("sample", [False, True])
+@pytest.mark.parametrize("pair_list", [False, True])
+@pytest.mark.parametrize("noisy", [False, True])
+def test_program_schmidt_spectra_preserve_samples_and_trajectory_axes(
+    *, sample: bool, pair_list: bool, noisy: bool
+) -> None:
+    """Program spectra stitch the sample axis and keep pure trajectories in segments."""
+    preparation = QuantumCircuit(2)
+    preparation.ry(2 * np.arccos(0.8), 0)
+    preparation.cx(0, 1)
+    segments = [
+        (preparation, DigitalSimParams(sample_layers=sample)),
+        (_zero_hamiltonian(2), AnalogSimParams(elapsed_time=0.1, dt=0.1, sample_timesteps=sample)),
+    ]
+    observables = [Observable("schmidt_spectrum", [0, 1]), Observable("z", 1), Observable("entropy", [0, 1])]
+    runner = Simulator(parallel=False, show_progress=False)
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.8}]) if noisy else None
+    if pair_list:
+        result = runner.run(State(2), segments, noise_model=noise, observables=observables, num_traj=8, random_seed=42)
+    else:
+        result = runner.run(
+            State(2),
+            SimulationProgram(segments, observables=observables, num_traj=8, random_seed=42),
+            noise_model=noise,
+        )
+    num_samples = 2 if sample else 1
+    num_traj = 8 if noisy else 1
+    assert result.times is not None
+    assert result.expectation_values[0].shape == (2 * num_samples, 500)
+    parts = []
+    for segment in result.segment_results:
+        spectra = segment.trajectories[0]
+        assert spectra.shape == (num_traj, num_samples, 500)
+        assert np.all(np.isnan(spectra[:, :, 2:]))
+        probabilities = np.nan_to_num(spectra) ** 2
+        np.testing.assert_allclose(np.sum(probabilities, axis=-1), 1.0, atol=1e-12)
+        entropy = -np.sum(probabilities * np.log(np.maximum(probabilities, np.finfo(float).tiny)), axis=-1)
+        np.testing.assert_allclose(segment.trajectories[2], entropy, atol=1e-12)
+        if not noisy:
+            np.testing.assert_allclose(np.nan_to_num(spectra[0, -1, :2]), [0.8, 0.6], atol=1e-12)
+        parts.append(segment.expectation_values[0])
+    np.testing.assert_allclose(result.expectation_values[0], np.concatenate(parts, axis=0), equal_nan=True)
+
+
+@pytest.mark.parametrize("sample", [False, True])
+@pytest.mark.parametrize("order", [1, 2])
+def test_program_schmidt_spectra_survive_merged_analog_segments(order: int, *, sample: bool) -> None:
+    """Merged analog execution retains each segment's requested spectrum samples."""
+    hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.0)
+    program = SimulationProgram(
+        [
+            (hamiltonian, AnalogSimParams(elapsed_time=0.1, dt=0.1, order=order, sample_timesteps=sample)),
+            (hamiltonian, AnalogSimParams(elapsed_time=0.2, dt=0.1, order=order, sample_timesteps=sample)),
+        ],
+        observables=[Observable("schmidt_spectrum", [0, 1])],
+    )
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="x+"), program)
+    assert result.times is not None
+    spectra = result.expectation_values[0]
+    assert spectra.shape == (len(result.times), 500)
+    expected = np.column_stack((np.cos(result.times), np.sin(result.times)))
+    np.testing.assert_allclose(np.nan_to_num(spectra[:, :2]), expected, atol=1e-12)
+    assert np.all(np.isnan(spectra[:, 2:]))
+
+
+def test_noisy_program_schmidt_spectra_are_reproducible_in_parallel() -> None:
+    """Worker transfer preserves each spectrum and trajectory identity."""
+    preparation = QuantumCircuit(2)
+    preparation.ry(2 * np.arccos(0.8), 0)
+    preparation.cx(0, 1)
+    program = SimulationProgram(
+        [(preparation, DigitalSimParams()), (_zero_hamiltonian(2), AnalogSimParams(elapsed_time=0.1, dt=0.1))],
+        observables=[Observable("schmidt_spectrum", [0, 1]), Observable("z", 1)],
+        num_traj=8,
+        random_seed=42,
+    )
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.8}])
+    serial = Simulator(parallel=False, show_progress=False).run(State(2), program, noise_model=noise)
+    parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(State(2), program, noise_model=noise)
+    for actual, expected in zip(parallel.segment_results, serial.segment_results, strict=True):
+        np.testing.assert_allclose(actual.trajectories[0], expected.trajectories[0], equal_nan=True)
+    np.testing.assert_allclose(parallel.expectation_values[0], serial.expectation_values[0], equal_nan=True)
+
+
+def test_program_final_state_spectrum_matches_dense_reference() -> None:
+    """A noiseless mixed program exposes its final MPS spectrum directly."""
+    preparation = QuantumCircuit(2)
+    preparation.ry(2 * np.arccos(0.8), 0)
+    preparation.cx(0, 1)
+    program = SimulationProgram(
+        [(preparation, DigitalSimParams()), (_zero_hamiltonian(2), AnalogSimParams(elapsed_time=0.1, dt=0.1))],
+        observables=[Observable("z", 1), Observable("entropy", [0, 1]), Observable("x", 0)],
+        get_state=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(State(2), program)
+    assert result.output_state is not None
+    spectrum = result.output_state.mps.get_schmidt_spectrum([0, 1])
+    dense = np.array([0.8, 0.0, 0.0, 0.6])
+    np.testing.assert_allclose(spectrum[:2], np.linalg.svd(dense.reshape(2, 2), compute_uv=False), atol=1e-12)
+    assert np.all(np.isnan(spectrum[2:]))
+    assert result.times is not None
+    assert all(values.shape == result.times.shape for values in result.expectation_values)
+
+
 def test_program_compilation_rejects_unsupported_analog_parameters() -> None:
     """Program compilation rejects standalone-only analog configuration."""
     params = AnalogSimParams(multi_time_observables=[(Observable("z", 0), Observable("z", 0))])

@@ -39,8 +39,6 @@ from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from numpy.typing import NDArray
-
     from mqt.yaqs.core.data_structures.simulation_parameters import (
         GateMode,
         SimulationPreset,
@@ -629,71 +627,6 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
     np.testing.assert_allclose(run_result.expectation_values[0], expected)
 
 
-def test_aggregate_trajectories_schmidt_concatenation() -> None:
-    """Schmidt spectrum: results = concatenation of raveled arrays from list entries.
-
-    Provide a list of arrays with different shapes (1D/2D) to confirm `.ravel()` and
-    `np.concatenate` behavior.
-    """
-    ss_obs = Observable("schmidt_spectrum", sites=[1, 2])
-
-    # List of arrays (the method requires a list, not a single ndarray)
-    a = np.array([0.8, 0.6], dtype=np.float64)
-    b = np.array([0.4, 0.3], dtype=np.float64)  # will ravel to [0.4, 0.3]
-    c = np.array([0.2, 0.1], dtype=np.float64)  # will ravel to [0.2, 0.1]
-    traj_arr = np.array([a, b, c])
-
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3)
-    run_result = Result(sim_params=sim, observables=[ss_obs], trajectories=[traj_arr], expectation_values=[np.empty(1)])
-
-    aggregate_trajectories(run_result)
-
-    np.testing.assert_allclose(
-        run_result.expectation_values[0], np.array([0.8, 0.6, 0.4, 0.3, 0.2, 0.1], dtype=np.float64)
-    )
-
-
-def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
-    """Combination: both regular and Schmidt observables are updated correctly."""
-    # Regular observable with 3 trajectories x 2 time steps
-    x_obs = Observable("x", sites=2)
-    x_traj = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]], dtype=np.float64)
-
-    ss_obs = Observable("schmidt_spectrum", sites=[0, 1])
-    ss_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
-
-    sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
-    run_result = Result(
-        sim_params=sim,
-        observables=[x_obs, ss_obs],
-        trajectories=[x_traj, ss_traj],
-        expectation_values=[np.empty(2), np.empty(4)],
-    )
-
-    aggregate_trajectories(run_result)
-
-    np.testing.assert_allclose(run_result.expectation_values[0], np.array([1.0, 1.0], dtype=np.float64))
-    np.testing.assert_allclose(run_result.expectation_values[1], np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
-
-
-def test_aggregate_trajectories_schmidt_requires_array() -> None:
-    """For Schmidt spectrum, trajectories must be a *array*; list should raise AssertionError."""
-    ss_obs = Observable("schmidt_spectrum", sites=[2, 3])
-    bad_traj = [0.9, 0.1]
-
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1)
-
-    run_result = Result(
-        sim_params=sim,
-        observables=[ss_obs],
-        trajectories=cast("list[NDArray]", [bad_traj]),
-        expectation_values=[np.empty(1)],
-    )
-
-    with pytest.raises(AssertionError):
-        aggregate_trajectories(run_result)
-
-
 def test_digital_params_sorting_and_fields() -> None:
     """Constructor sorts non-PVM observables by site; PVM observables are appended."""
     obs_z3 = Observable("z", sites=3)
@@ -802,63 +735,6 @@ def test_digital_aggregate_regular_mean() -> None:
     aggregate_trajectories(run_result)
 
     np.testing.assert_allclose(run_result.expectation_values[0], traj.mean(axis=0))
-
-
-def test_digital_aggregate_schmidt_concat() -> None:
-    """Schmidt spectrum: concatenation of raveled list entries."""
-    ssp = Observable("schmidt_spectrum", sites=[0, 1])
-    ssp_traj = np.array([
-        np.array([0.9, 0.8], dtype=np.float64),
-        np.array([0.6, 0.4], dtype=np.float64),
-        np.array([0.2, 0.1], dtype=np.float64),
-    ])
-
-    params = DigitalSimParams(observables=[ssp], num_traj=3)
-    run_result = Result(sim_params=params, observables=[ssp], trajectories=[ssp_traj], expectation_values=[np.empty(6)])
-    aggregate_trajectories(run_result)
-
-    np.testing.assert_allclose(
-        run_result.expectation_values[0], np.array([0.9, 0.8, 0.6, 0.4, 0.2, 0.1], dtype=np.float64)
-    )
-
-
-def test_digital_aggregate_mixed_regular_and_schmidt() -> None:
-    """Combination case: regular and Schmidt updated correctly in one call."""
-    z = Observable("z", sites=0)
-    z_traj = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
-
-    ssp = Observable("schmidt_spectrum", sites=[1, 2])
-    ssp_traj = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
-
-    params = DigitalSimParams(observables=[z, ssp], num_traj=2)
-    run_result = Result(
-        sim_params=params,
-        observables=[z, ssp],
-        trajectories=[z_traj, ssp_traj],
-        expectation_values=[np.empty(2), np.empty(4)],
-    )
-    aggregate_trajectories(run_result)
-
-    np.testing.assert_allclose(run_result.expectation_values[0], np.array([2.0, 3.0], dtype=np.float64))
-    np.testing.assert_allclose(run_result.expectation_values[1], np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
-
-
-def test_digital_aggregate_schmidt_requires_array() -> None:
-    """Schmidt branch must assert if trajectories is not an array."""
-    ssp = Observable("schmidt_spectrum", sites=[0, 1])
-    bad_traj = [0.9, 0.1]
-
-    params = DigitalSimParams(observables=[ssp], num_traj=1)
-
-    run_result = Result(
-        sim_params=params,
-        observables=[ssp],
-        trajectories=cast("list[NDArray]", [bad_traj]),
-        expectation_values=[np.empty(1)],
-    )
-
-    with pytest.raises(AssertionError):
-        aggregate_trajectories(run_result)
 
 
 @pytest.mark.parametrize(

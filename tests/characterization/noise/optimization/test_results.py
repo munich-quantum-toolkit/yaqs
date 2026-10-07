@@ -21,6 +21,7 @@ def _minimal_result(
     best_loss: float = 0.01,
     best_parameters: np.ndarray | None = None,
     loss_history: list[float] | None = None,
+    initial_loss: float | None = 4.0,
     ref_traj: np.ndarray | None = None,
     fit_traj: np.ndarray | None = None,
 ) -> NoiseCharacterizationResult:
@@ -30,15 +31,17 @@ def _minimal_result(
         best_loss=best_loss,
         best_parameters=np.array([0.1]) if best_parameters is None else best_parameters,
         loss_history=[1.0, 0.01] if loss_history is None else loss_history,
+        initial_loss=initial_loss,
         ref_traj=np.zeros((1, 3)) if ref_traj is None else ref_traj,
         fit_traj=np.zeros((1, 3)) if fit_traj is None else fit_traj,
     )
 
 
-def test_sqrt_loss_helpers() -> None:
+@pytest.mark.parametrize("initial_loss", [0.0, 4.0])
+def test_sqrt_loss_helpers(initial_loss: float) -> None:
     """Result exposes square-root loss before and after optimization."""
-    result = _minimal_result()
-    assert result.sqrt_loss_before() == pytest.approx(1.0)
+    result = _minimal_result(initial_loss=initial_loss)
+    assert result.sqrt_loss_before() == pytest.approx(np.sqrt(initial_loss))
     assert result.sqrt_loss_after() == pytest.approx(0.1)
 
 
@@ -49,10 +52,16 @@ def test_trajectory_rmse_zero_for_identical_trajs() -> None:
     assert result.trajectory_rmse() == pytest.approx(0.0)
 
 
-def test_sqrt_loss_before_raises_on_empty_history() -> None:
-    """sqrt_loss_before requires a non-empty loss history."""
+def test_sqrt_loss_before_does_not_require_candidate_history() -> None:
+    """The initial-model loss remains available without optimizer candidates."""
     result = _minimal_result(loss_history=[])
-    with pytest.raises(ValueError, match="loss_history is empty"):
+    assert result.sqrt_loss_before() == pytest.approx(2.0)
+
+
+def test_sqrt_loss_before_requires_initial_model_loss() -> None:
+    """Candidate history cannot supply an unknown initial-model loss."""
+    result = _minimal_result(initial_loss=None)
+    with pytest.raises(ValueError, match="initial_loss is unavailable"):
         result.sqrt_loss_before()
 
 

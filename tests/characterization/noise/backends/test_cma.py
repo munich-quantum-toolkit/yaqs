@@ -100,6 +100,29 @@ def test_cma_opt_scalar_fallback() -> None:
     assert len(param_history) == len(loss_history)
 
 
+@pytest.mark.parametrize("limit", [1, 2, 3])
+def test_scalar_optimizer_honors_evaluation_limit(limit: int) -> None:
+    """A small scalar-search limit bounds candidate evaluations, including SciPy startup."""
+    evaluated = []
+
+    def objective(x: np.ndarray) -> float:
+        evaluated.append(x.copy())
+        return float((x[0] - 0.08) ** 2)
+
+    xbest, best, history, parameters = cma_opt(
+        objective,
+        np.array([0.3]),
+        x_low=np.array([0.0]),
+        x_up=np.array([0.5]),
+        max_iter=limit,
+    )
+    assert len(evaluated) == max(2, limit)
+    assert len(history) == len(evaluated)
+    np.testing.assert_allclose(parameters, evaluated)
+    assert best == min(history)
+    np.testing.assert_allclose(xbest, evaluated[int(np.argmin(history))])
+
+
 def test_cma_opt_default_bounds(monkeypatch: MonkeyPatch) -> None:
     """Unbounded optimization uses infinite lower and upper limits."""
     pytest.importorskip("cma")

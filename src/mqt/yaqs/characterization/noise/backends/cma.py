@@ -146,6 +146,7 @@ def _optimize_scalar_bounded(
     _x0: np.ndarray,
     x_low: np.ndarray,
     x_up: np.ndarray,
+    max_iter: int,
 ) -> tuple[np.ndarray, float, list[float], list[np.ndarray]]:
     """Minimize a one-dimensional bounded loss.
 
@@ -156,6 +157,7 @@ def _optimize_scalar_bounded(
         _x0: Initial parameter vector with length one (unused; search is global on bounds).
         x_low: Lower bound vector with length one.
         x_up: Upper bound vector with length one.
+        max_iter: Evaluation stopping limit passed to SciPy's bounded search.
 
     Returns:
         Best parameter vector, best loss, per-evaluation loss history, and
@@ -174,7 +176,7 @@ def _optimize_scalar_bounded(
         evaluate,
         bounds=(float(x_low[0]), float(x_up[0])),
         method="bounded",
-        options={"xatol": 1e-8},
+        options={"xatol": 1e-8, "maxiter": max_iter},
     )
     best_idx = int(np.argmin(f_history))
     return x_history[best_idx], f_history[best_idx], f_history, x_history
@@ -199,7 +201,11 @@ def cma_opt(
         x_up: Optional per-dimension upper bounds.
         sigma0: Initial step size.
         popsize: Population size.
-        max_iter: Maximum optimizer iterations.
+        max_iter: Maximum CMA-ES generations. For a single parameter with finite
+            bounds, this is SciPy's bounded-search evaluation stopping limit.
+            SciPy can perform two evaluations even when ``max_iter=1``.
+            Initial-model loss and final fitted-trajectory evaluation are
+            outside this limit.
         seed: Optional RNG seed forwarded to CMA-ES for reproducible runs.
 
     Returns:
@@ -217,7 +223,7 @@ def cma_opt(
     )
 
     if x0.size == 1 and np.isfinite(x_low).all() and np.isfinite(x_up).all():
-        return _optimize_scalar_bounded(loss, x0, x_low, x_up)
+        return _optimize_scalar_bounded(loss, x0, x_low, x_up, max_iter)
 
     f_history: list[float] = []
     x_history: list[np.ndarray] = []

@@ -21,7 +21,12 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class NoiseCharacterizationResult:
-    """Outcome of an analytical optimization noise-parameter fit."""
+    """Outcome of an analytical optimization noise-parameter fit.
+
+    ``initial_loss`` is the mean-squared trajectory mismatch of the supplied
+    initial model. ``loss_history`` contains optimizer candidate evaluations,
+    excluding that separate baseline evaluation.
+    """
 
     optimal_model: NoiseModel
     best_loss: float
@@ -30,20 +35,21 @@ class NoiseCharacterizationResult:
     ref_traj: np.ndarray | None = None
     fit_traj: np.ndarray | None = None
     times: np.ndarray | None = None
+    initial_loss: float | None = None
 
     def sqrt_loss_before(self) -> float:
         """Return ``sqrt(J)`` before optimization.
 
         Returns:
-            Square root of the first loss value in ``loss_history``.
+            Square root of the initial model's ``initial_loss``.
 
         Raises:
-            ValueError: If ``loss_history`` is empty.
+            ValueError: If the result has no stored initial-model loss.
         """
-        if not self.loss_history:
-            msg = "loss_history is empty."
+        if self.initial_loss is None:
+            msg = "initial_loss is unavailable; the initial model must be evaluated before optimization."
             raise ValueError(msg)
-        return float(math.sqrt(self.loss_history[0]))
+        return float(math.sqrt(self.initial_loss))
 
     def sqrt_loss_after(self) -> float:
         """Return ``sqrt(J)`` after optimization.

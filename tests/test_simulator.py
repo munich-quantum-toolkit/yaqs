@@ -57,6 +57,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
+    from mqt.yaqs.core.data_structures.state import Representation
+
 
 def test_simulator_defaults() -> None:
     """Simulator() initializes with sensible defaults (parallel=True, auto mp_context)."""
@@ -1609,14 +1611,201 @@ def test_analog_bitstring_observable_rejects_non_qubit_layout() -> None:
         )
 
 
-def test_analog_dense_representation_rejects_mps_diagnostic() -> None:
+@pytest.mark.parametrize("representation", ["vector", "density_matrix"])
+@pytest.mark.parametrize("name", ["entropy", "schmidt_spectrum"])
+def test_analog_dense_representation_rejects_mps_diagnostic(representation: Representation, name: str) -> None:
     """A dense analog backend rejects a diagnostic that requires MPS bond data."""
     hamiltonian = Hamiltonian.ising(2, 1.0, 0.5)
-    sim_params = AnalogSimParams([Observable("entropy", sites=[0, 1])], elapsed_time=0.1, dt=0.1)
-    state = State(2, initial="zeros", representation="vector")
+    sim_params = AnalogSimParams([Observable(name, sites=[0, 1])], elapsed_time=0.1, dt=0.1)
+    state = State(2, initial="zeros", representation=representation)
 
     with pytest.raises(ValueError, match=r"require State\.representation='mps'"):
         Simulator(show_progress=False).run(state, hamiltonian, sim_params)
+
+
+def _schmidt_pair_state() -> State:
+    """Return the normalized pure state 0.8|00> + 0.6|11> as MPS tensors."""
+    left = np.zeros((2, 1, 2), dtype=complex)
+    right = np.zeros((2, 2, 1), dtype=complex)
+    left[0, 0, 0], left[1, 0, 1] = 0.8, 0.6
+    right[0, 0, 0], right[1, 1, 0] = 1.0, 1.0
+    return State(tensors=[left, right])
+
+
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("sample", [False, True])
+@pytest.mark.parametrize("duration", [0.0, 0.3])
+def test_analog_schmidt_spectrum_matches_dense_evolution(order: int, duration: float, *, sample: bool) -> None:
+    """Both analog orders preserve spectrum samples, scalar order, and changing rank."""
+    observables = [Observable("x", 1), Observable("schmidt_spectrum", [0, 1]), Observable("entropy", [0, 1])]
+    params = AnalogSimParams(observables, elapsed_time=duration, dt=0.1, order=order, sample_timesteps=sample)
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="x+"), Hamiltonian.ising(2, J=1.0, g=0.0), params
+    )
+    assert result.times is not None
+    samples = result.times
+    spectra = result.expectation_values[1]
+    assert spectra.shape == (len(samples), 500)
+    assert result.trajectories[1].shape == (1, len(samples), 500)
+    np.testing.assert_allclose(result.trajectories[1][0], spectra, equal_nan=True)
+    for index, time in enumerate(samples):
+        dense = 0.5 * np.exp(1j * time * np.array([1.0, -1.0, -1.0, 1.0]))
+        expected = np.linalg.svd(dense.reshape(2, 2), compute_uv=False)
+        np.testing.assert_allclose(np.nan_to_num(spectra[index, :2]), expected, atol=1e-12)
+        assert np.all(np.isnan(spectra[index, 2:]))
+        probabilities = expected**2
+        entropy = -np.sum(probabilities * np.log(np.maximum(probabilities, np.finfo(float).tiny)))
+        np.testing.assert_allclose(result.expectation_values[2][index], entropy, atol=1e-12)
+    np.testing.assert_allclose(result.expectation_values[0], np.cos(2 * samples), atol=1e-12)
+
+
+@pytest.mark.parametrize("sample", [False, True])
+def test_digital_schmidt_spectra_match_qiskit_at_each_cut(*, sample: bool) -> None:
+    """Two spectrum observables retain cut and sample order beside scalar outputs."""
+    first = QuantumCircuit(3)
+    first.ry(0.6, 0)
+    first.h(1)
+    first.cx(0, 1)
+    circuit = first.copy()
+    circuit.barrier(label="SAMPLE_OBSERVABLES")
+    circuit.ry(0.3, 2)
+    circuit.cx(1, 2)
+    observables = [
+        Observable("x", 2),
+        Observable("schmidt_spectrum", [1, 2]),
+        Observable("z", 0),
+        Observable("schmidt_spectrum", [0, 1]),
+    ]
+    params = DigitalSimParams(observables=observables, sample_layers=sample)
+    result = Simulator(parallel=False, show_progress=False).run(State(3), circuit, params)
+    references = [
+        Statevector.from_int(0, 8),
+        Statevector.from_instruction(first),
+        Statevector.from_instruction(circuit),
+    ]
+    if not sample:
+        references = references[-1:]
+    for obs_index, cut in [(1, 1), (3, 0)]:
+        spectra = result.expectation_values[obs_index]
+        assert spectra.shape == (len(references), 500)
+        assert result.trajectories[obs_index].shape == (1, len(references), 500)
+        for time_index, reference in enumerate(references):
+            expected = np.linalg.svd(reference.data.reshape((2 ** (cut + 1), -1), order="F"), compute_uv=False)
+            np.testing.assert_allclose(np.nan_to_num(spectra[time_index, : len(expected)]), expected, atol=1e-12)
+            assert np.all(np.isnan(spectra[time_index, len(expected) :]))
+    for obs_index, pauli in [(0, "XII"), (2, "IIZ")]:
+        expected = [reference.expectation_value(Pauli(pauli)).real for reference in references]
+        np.testing.assert_allclose(result.expectation_values[obs_index], expected, atol=1e-12)
+
+
+@pytest.mark.parametrize("sample", [False, True])
+@pytest.mark.parametrize("duration", [0.0, 0.1])
+def test_ensemble_schmidt_spectra_average_missing_ranks_as_zero(duration: float, *, sample: bool) -> None:
+    """Ensemble spectra retain each member and average coefficients without rank bias."""
+    params = AnalogSimParams(
+        [Observable("z", 0), Observable("schmidt_spectrum", [0, 1])],
+        elapsed_time=duration,
+        dt=0.1,
+        sample_timesteps=sample,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(
+        [State(2), _schmidt_pair_state()],
+        Hamiltonian.ising(2, J=0.0, g=0.0),
+        params,
+    )
+    num_samples = 2 if sample and duration > 0 else 1
+    assert result.trajectories[1].shape == (2, num_samples, 500)
+    np.testing.assert_allclose(result.trajectories[1][0, :, 0], 1.0)
+    np.testing.assert_allclose(np.nan_to_num(result.trajectories[1][0, :, 1]), 0.0)
+    assert np.all(np.isnan(result.trajectories[1][0, :, 2:]))
+    np.testing.assert_allclose(result.trajectories[1][1, :, :2], np.tile([0.8, 0.6], (num_samples, 1)))
+    np.testing.assert_allclose(result.expectation_values[1][:, :2], np.tile([0.9, 0.3], (num_samples, 1)))
+    assert np.all(np.isnan(result.expectation_values[1][:, 2:]))
+    np.testing.assert_allclose(result.expectation_values[0], 0.64)
+
+
+@pytest.mark.parametrize("workflow", ["analog-1", "analog-2", "digital"])
+@pytest.mark.parametrize("sample", [False, True])
+def test_noisy_schmidt_spectra_match_pure_trajectory_branches(workflow: str, *, sample: bool) -> None:
+    """Damped spectra follow analytic no-jump or product branches without a final state."""
+    gamma = 2.0
+    observables = [Observable("entropy", [0, 1]), Observable("schmidt_spectrum", [0, 1])]
+    params: AnalogSimParams | DigitalSimParams
+    operator: Hamiltonian | QuantumCircuit
+    if workflow == "digital":
+        circuit = QuantumCircuit(2)
+        circuit.ry(2 * np.arccos(0.8), 0)
+        circuit.cx(0, 1)
+        operator = circuit
+        state = State(2)
+        params = DigitalSimParams(observables=observables, num_traj=12, random_seed=42, sample_layers=sample)
+        times = np.array([0.0, 1.0]) if sample else np.array([1.0])
+    else:
+        operator = Hamiltonian.ising(2, J=0.0, g=0.0)
+        state = _schmidt_pair_state()
+        params = AnalogSimParams(
+            observables,
+            elapsed_time=0.3,
+            dt=0.1,
+            order=int(workflow[-1]),
+            num_traj=12,
+            random_seed=42,
+            sample_timesteps=sample,
+        )
+        times = params.times if sample else np.array([0.3])
+    noise = NoiseModel([{"name": "lowering", "sites": [0], "strength": gamma}])
+    result = Simulator(parallel=False, show_progress=False).run(state, operator, params, noise)
+    assert result.output_state is None
+    spectra = result.trajectories[1]
+    assert spectra.shape == (12, len(times), 500)
+    assert np.all(np.isnan(spectra[:, :, 2:]))
+    for time_index, time in enumerate(times):
+        coefficients = np.array([0.8, 0.6 * np.exp(-gamma * time / 2)])
+        coefficients /= np.linalg.norm(coefficients)
+        if workflow == "digital" and time == 0:
+            coefficients = np.array([1.0, 0.0])
+        for trajectory in spectra[:, time_index, :2]:
+            actual = np.nan_to_num(trajectory)
+            distance = min(np.linalg.norm(actual - coefficients), np.linalg.norm(actual - [1.0, 0.0]))
+            assert distance < 1e-10
+    probabilities = np.nan_to_num(spectra) ** 2
+    entropy = -np.sum(probabilities * np.log(np.maximum(probabilities, np.finfo(float).tiny)), axis=-1)
+    np.testing.assert_allclose(result.trajectories[0], entropy, atol=1e-12)
+    np.testing.assert_allclose(
+        np.nan_to_num(result.expectation_values[1][:, :2]), np.mean(np.nan_to_num(spectra[:, :, :2]), axis=0)
+    )
+
+
+@pytest.mark.parametrize("digital", [False, True])
+@pytest.mark.parametrize("sample", [False, True])
+def test_final_mps_spectrum_and_scalar_observables_match_dense_reference(*, digital: bool, sample: bool) -> None:
+    """Final-state spectra remain available and scalar outputs retain user order."""
+    state = _schmidt_pair_state()
+    observables = [Observable("z", 1), Observable("entropy", [0, 1]), Observable("x", 0)]
+    params: AnalogSimParams | DigitalSimParams
+    operator: Hamiltonian | QuantumCircuit
+    if digital:
+        params = DigitalSimParams(observables=observables, get_state=True, sample_layers=sample)
+        operator = QuantumCircuit(2)
+    else:
+        params = AnalogSimParams(observables, elapsed_time=0.1, dt=0.1, get_state=True, sample_timesteps=sample)
+        operator = Hamiltonian.ising(2, J=0.0, g=0.0)
+
+    result = Simulator(parallel=False, show_progress=False).run(state, operator, params)
+    assert result.output_state is not None
+    spectrum = result.output_state.mps.get_schmidt_spectrum([0, 1])
+    dense = np.array([0.8, 0.0, 0.0, 0.6])
+    expected_spectrum = np.linalg.svd(dense.reshape(2, 2), compute_uv=False)
+    np.testing.assert_allclose(spectrum[:2], expected_spectrum, atol=1e-12)
+    assert spectrum.shape == (500,)
+    assert np.all(np.isnan(spectrum[2:]))
+    expected_entropy = -np.sum(expected_spectrum**2 * np.log(expected_spectrum**2))
+    assert [(observable.name, observable.sites) for observable in result.observables] == [
+        (observable.name, observable.sites) for observable in observables
+    ]
+    for index, expected in enumerate([0.28, expected_entropy, 0.0]):
+        assert result.expectation_values[index].shape == (2 if sample else 1,)
+        np.testing.assert_allclose(result.expectation_values[index], expected, atol=1e-12)
 
 
 def test_analog_single_state_rejects_multi_time_observables() -> None:
