@@ -73,7 +73,9 @@ releases may include breaking changes.
 
 ### Fixed
 
-- avoided process startup for single-worker simulations ([PR pending])
+- avoided process startup for single-worker simulations ([#623])
+  ([**@aaronleesander**])
+- fixed shot readout progress bar suppression ([#622])
   ([**@aaronleesander**])
 - fixed noise characterization iteration limits and initial loss ([#621])
   ([**@aaronleesander**])
@@ -294,7 +296,8 @@ for previous changelogs._
 
 <!-- PR links -->
 
-[PR pending]: https://github.com/munich-quantum-toolkit/yaqs/pulls
+[#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623
+[#622]: https://github.com/munich-quantum-toolkit/yaqs/pull/622
 [#621]: https://github.com/munich-quantum-toolkit/yaqs/pull/621
 [#620]: https://github.com/munich-quantum-toolkit/yaqs/pull/620
 [#609]: https://github.com/munich-quantum-toolkit/yaqs/pull/609

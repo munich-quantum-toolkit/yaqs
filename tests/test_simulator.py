@@ -55,6 +55,7 @@ from tests.conftest import (
 from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from mqt.yaqs.core.data_structures.state import Representation
@@ -171,7 +172,7 @@ def test_simulator_parallel_serial_equivalence() -> None:
     result_parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
 
     for serial_vals, parallel_vals in zip(
-        result_serial.expectation_values, result_parallel.expectation_values, strict=False
+        result_serial.expectation_values, result_parallel.expectation_values, strict=True
     ):
         assert serial_vals is not None
         assert parallel_vals is not None
@@ -324,15 +325,9 @@ def test_simulator_module_does_not_export_run() -> None:
     assert not hasattr(simulator, "run"), "simulator.run should be removed; use Simulator.run instead."
 
 
-def test_analog_simulation() -> None:
-    """Test the branch for Hamiltonian simulation (analog simulation) using AnalogSimParams.
-
-    This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
-    It also creates a NoiseModel with two processes ("lowering" and "pauli_z") and corresponding strengths.
-    With AnalogSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
-    Simulator.run is called. The test then verifies that for each observable the results and trajectories have been
-    correctly initialized and that the measurement results are approximately as expected.
-    """
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+def test_analog_simulation(*, parallel: bool) -> None:
+    """Seeded noisy analog results match the reference in serial and parallel runs."""
     length = 5
     initial_state = State(length, initial="zeros")
 
@@ -354,59 +349,9 @@ def test_analog_simulation() -> None:
         {"name": name, "sites": [i], "strength": gamma} for i in range(length) for name in ["lowering", "pauli_z"]
     ])
 
-    result = Simulator(show_progress=False).run(initial_state, H, sim_params, noise_model)
-
-    expected_z = [
-        0.748947146695782,
-        0.8720515025769692,
-        0.8652609567462763,
-        0.8673233347433466,
-        0.6872036335377433,
-    ]
-    for i in range(len(result.observables)):
-        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
-        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(result.trajectories[i]) == sim_params.num_traj, (
-            "Trajectories was not initialized for AnalogSimParams 2."
-        )
-        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy analog observable simulation can drift slightly across platforms / minimum dependency sets
-        # due to floating-point reduction order and BLAS/LAPACK differences.
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
-
-
-def test_analog_simulation_parallel_off() -> None:
-    """Test the branch for Hamiltonian simulation (analog simulation) using AnalogSimParams, parallelization off.
-
-    This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
-    It also creates a NoiseModel with two processes ("lowering" and "pauli_z") and corresponding strengths.
-    With AnalogSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
-    Simulator.run is called. The test then verifies that for each observable the results and trajectories have been
-    correctly initialized and that the measurement results are approximately as expected.
-
-    Additionally, this tests that single-site observables can be initialized with a list of a single int for usability.
-    """
-    length = 5
-    initial_state = State(length, initial="zeros")
-
-    H = Hamiltonian.ising(length, J=1, g=0.5)
-    sim_params = AnalogSimParams(
-        observables=[Observable("z", site) for site in range(length)],
-        elapsed_time=1,
-        dt=0.1,
-        num_traj=10,
-        max_bond_dim=4,
-        svd_threshold=1e-6,
-        order=2,
-        sample_timesteps=False,
-        random_seed=YAQS_TEST_SEED,
+    result = Simulator(parallel=parallel, max_workers=2, show_progress=False).run(
+        initial_state, H, sim_params, noise_model
     )
-    gamma = 0.1
-    noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": gamma} for i in range(length) for name in ["lowering", "pauli_z"]
-    ])
-
-    result = Simulator(parallel=False, show_progress=False).run(initial_state, H, sim_params, noise_model)
 
     expected_z = [
         0.748947146695782,
@@ -415,7 +360,8 @@ def test_analog_simulation_parallel_off() -> None:
         0.8673233347433466,
         0.6872036335377433,
     ]
-    for i in range(len(result.observables)):
+    assert [observable.sites for observable in result.observables] == list(range(length))
+    for i in range(length):
         assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
         assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
         assert len(result.trajectories[i]) == sim_params.num_traj, (
@@ -711,14 +657,9 @@ def test_circuit_run_rejects_non_mps_state(state: State) -> None:
         Simulator(show_progress=False).run(state, circuit, sim_params, None)
 
 
-def test_digital_observables() -> None:
-    """Test the circuit-based simulation branch using DigitalSimParams.
-
-    This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
-    It configures DigitalSimParams with specified simulation parameters and a noise model (non-None).
-    Simulator.run is then called, and the test verifies that the observables' results and trajectories
-    are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
-    """
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+def test_digital_observables(*, parallel: bool) -> None:
+    """Seeded noisy digital results match the reference in serial and parallel runs."""
     num_qubits = 5
     state = State(num_qubits, initial="zeros")
 
@@ -738,7 +679,9 @@ def test_digital_observables() -> None:
         {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering", "pauli_z"]
     ])
 
-    result = Simulator(show_progress=False).run(state, circuit, sim_params, noise_model)
+    result = Simulator(parallel=parallel, max_workers=2, show_progress=False).run(
+        state, circuit, sim_params, noise_model
+    )
 
     expected_z = [
         0.6733214071546825,
@@ -747,13 +690,14 @@ def test_digital_observables() -> None:
         0.8628627940961556,
         0.6730350827430835,
     ]
-    for i in range(len(result.observables)):
-        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
-        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
+    assert [observable.sites for observable in result.observables] == list(range(num_qubits))
+    for i in range(num_qubits):
+        assert result.expectation_values[i] is not None, "Results was not initialized for DigitalSimParams."
+        assert result.trajectories[i] is not None, "Trajectories was not initialized for DigitalSimParams 1."
         assert len(result.trajectories[i]) == sim_params.num_traj, (
-            "Trajectories was not initialized for AnalogSimParams 2."
+            "Trajectories was not initialized for DigitalSimParams 2."
         )
-        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
+        assert len(result.expectation_values[i]) == 1, "Results was not initialized for DigitalSimParams."
         # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets.
         assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
@@ -779,53 +723,6 @@ def test_digital_observables_no_noise() -> None:
     expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
     fidelity = np.abs(np.vdot(sv, expected)) ** 2
     np.testing.assert_allclose(1, fidelity)
-
-
-def test_digital_observables_parallel_off() -> None:
-    """Test the circuit-based simulation branch using DigitalSimParams, parallelization off.
-
-    This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
-    It configures DigitalSimParams with specified simulation parameters and a noise model (non-None).
-    Simulator.run is then called, and the test verifies that the observables' results and trajectories
-    are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
-    """
-    num_qubits = 5
-    state = State(num_qubits, initial="zeros")
-
-    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
-    circuit.measure_all()
-
-    sim_params = DigitalSimParams(
-        observables=[Observable("z", site) for site in range(num_qubits)],
-        num_traj=10,
-        max_bond_dim=4,
-        krylov_tol=1e-12,
-        random_seed=YAQS_TEST_SEED,
-    )
-    # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
-    gamma = 1e-3
-    noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering", "pauli_z"]
-    ])
-
-    result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, noise_model)
-
-    expected_z = [
-        0.6733214071546825,
-        0.8502664720526317,
-        0.8709639049732125,
-        0.8628627940961556,
-        0.6730350827430835,
-    ]
-    for i in range(len(result.observables)):
-        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
-        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(result.trajectories[i]) == sim_params.num_traj, (
-            "Trajectories was not initialized for AnalogSimParams 2."
-        )
-        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        # Noisy digital observable simulation can drift slightly across platforms / minimum dependency sets.
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_digital_shots_noise() -> None:
@@ -915,81 +812,68 @@ def test_digital_combined_observables_and_shots() -> None:
     assert combined.max_bond is not None
 
 
-def test_digital_combined_observables_and_shots_noisy() -> None:
-    """Noisy combined runs keep obs-only expectations and distribute shots across trajs."""
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+@pytest.mark.parametrize("shots", [2, 10], ids=["zero-shot-trajectories", "all-trajectories-sampled"])
+def test_digital_combined_observables_and_shots_noisy(shots: int, *, parallel: bool) -> None:
+    """Shot readout preserves seeded noisy trajectories and shares the total budget."""
     num_qubits = 2
-    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
+    angle = 1.0
+    circuit = QuantumCircuit(num_qubits)
+    circuit.ry(angle, 0)
+    circuit.cx(0, 1)
     circuit.measure_all()
     obs = [Observable("z", i) for i in range(num_qubits)]
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
-    num_traj = 4
-    shots = 10
-    sim = Simulator(parallel=False, show_progress=False)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.5}])
+    num_traj = 8
 
-    obs_only = sim.run(
+    obs_only = Simulator(parallel=False, show_progress=False).run(
         State(num_qubits, initial="zeros"),
         circuit,
-        DigitalSimParams(observables=obs, num_traj=num_traj, max_bond_dim=16, random_seed=YAQS_TEST_SEED),
+        DigitalSimParams(observables=obs, num_traj=num_traj, max_bond_dim=4, random_seed=YAQS_TEST_SEED),
         noise_model,
     )
-    combined = sim.run(
+    combined = Simulator(parallel=parallel, max_workers=2, show_progress=False).run(
         State(num_qubits, initial="zeros"),
         circuit,
         DigitalSimParams(
             observables=obs,
             shots=shots,
             num_traj=num_traj,
-            max_bond_dim=16,
+            max_bond_dim=4,
             random_seed=YAQS_TEST_SEED,
         ),
         noise_model,
     )
 
     assert len(combined.expectation_values) == num_qubits
+    assert len(combined.trajectories) == num_qubits
     for i in range(num_qubits):
-        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i])
+        reference = obs_only.trajectories[i]
+        sampled = combined.trajectories[i]
+        assert reference is not None
+        assert sampled is not None
+        assert sampled.shape == (num_traj, 1)
+        np.testing.assert_allclose(sampled, reference, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(combined.expectation_values[i], obs_only.expectation_values[i], rtol=0, atol=1e-12)
+
+    z0, z1 = combined.trajectories
+    assert z0 is not None
+    assert z1 is not None
+    # X jumps flip Z on qubit 0; the untouched qubit keeps its prepared expectation.
+    np.testing.assert_allclose(np.abs(z0), np.cos(angle), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(z1, np.cos(angle), rtol=0, atol=1e-12)
+    assert np.any(z0.real < 0)
+    assert np.any(z0.real > 0)
+
     assert combined.counts is not None
     assert sum(combined.counts.values()) == shots
+    assert set(combined.counts) <= set(range(2**num_qubits))
     assert len(combined.measurements) == num_traj
+    per_traj_totals = [0 if measurement is None else sum(measurement.values()) for measurement in combined.measurements]
+    base, remainder = divmod(shots, num_traj)
+    expected_totals = [base + 1] * remainder + [base] * (num_traj - remainder)
+    assert sorted(per_traj_totals) == sorted(expected_totals)
     assert combined.max_bond is not None
-
-
-@pytest.mark.parametrize("parallel", [False, True])
-def test_digital_combined_noisy_shots_less_than_num_traj(*, parallel: bool) -> None:
-    """When shots < num_traj, zero-shot trajs contribute no counts but still feed observables."""
-    num_qubits = 2
-    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=2)
-    circuit.measure_all()
-    obs = [Observable("z", i) for i in range(num_qubits)]
-    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 1e-3}])
-    num_traj = 4
-    shots = 2
-    sim = Simulator(parallel=parallel, max_workers=2 if parallel else None, show_progress=False)
-
-    result = sim.run(
-        State(num_qubits, initial="zeros"),
-        circuit,
-        DigitalSimParams(
-            observables=obs,
-            shots=shots,
-            num_traj=num_traj,
-            max_bond_dim=16,
-            random_seed=YAQS_TEST_SEED,
-        ),
-        noise_model,
-    )
-
-    assert result.counts is not None
-    assert sum(result.counts.values()) == shots
-    assert len(result.measurements) == num_traj
-    # Two trajectories get one shot each; the rest must be empty or None (never a phantom shot).
-    per_traj_totals = [0 if m is None else sum(m.values()) for m in result.measurements]
-    assert sorted(per_traj_totals) == [0, 0, 1, 1]
-    assert len(result.expectation_values) == num_qubits
-    for values in result.expectation_values:
-        assert values is not None
-        assert np.size(values) > 0
-    assert result.max_bond is not None
 
 
 def test_digital_shots_get_state() -> None:
@@ -2670,3 +2554,54 @@ def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
                 multi_time_observables=[(Observable("z", 0), Observable("z", 0))],
             ),
         )
+
+
+@pytest.mark.parametrize("show_progress", [False, True])
+@pytest.mark.parametrize("combined", [False, True])
+@pytest.mark.parametrize("parallel", [False, True])
+def test_digital_shot_execution_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    show_progress: bool,
+    combined: bool,
+    parallel: bool,
+) -> None:
+    """Simulator controls shot progress and prevents pools inside trajectories."""
+
+    def run_parallel(
+        *,
+        worker_fn: Callable[[int, dict[str, object]], object],
+        payload: dict[str, object],
+        n_jobs: int,
+        max_workers: int,
+        **_kwargs: object,
+    ) -> Iterator[tuple[int, object]]:
+        assert max_workers == 2
+        for index in range(n_jobs):
+            yield index, worker_fn(index, payload)
+
+    monkeypatch.setattr(simulator, "run_backend_parallel", run_parallel)
+    monkeypatch.setattr("mqt.yaqs.core.data_structures.mps.available_cpus", lambda: 8)
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    circuit.cx(0, 1)
+    noise = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.01}]) if combined else None
+    params = DigitalSimParams(
+        shots=12,
+        observables=[Observable("z", 0)] if combined else None,
+        num_traj=3,
+        random_seed=YAQS_TEST_SEED,
+    )
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as pool:
+        result = Simulator(parallel=parallel, max_workers=2, show_progress=show_progress).run(
+            State(2, initial="zeros"), circuit, params, noise
+        )
+    pool.assert_not_called()
+    assert result.counts == {3: 12}
+    if combined:
+        np.testing.assert_allclose(result.expectation_values[0], -1.0)
+    output = capsys.readouterr().err
+    assert ("Measuring shots" in output) is show_progress
+    if not show_progress:
+        assert not output

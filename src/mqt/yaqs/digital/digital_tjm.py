@@ -699,13 +699,15 @@ def digital_tjm(
     copy_initial_state: bool = True,
     rng: np.random.Generator | None = None,
     compiled_circuit: _CompiledCircuit | None = None,
+    show_progress: bool = True,
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, dict[int, int] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
     Simulates one circuit trajectory (optionally with noise jumps).
 
     When ``shots`` is set, this worker may measure a per-trajectory allocation of the
-    total shot budget. For combined noisy runs the simulator distributes ``shots``
+    total shot budget. Readout runs serially within this trajectory.
+    For combined noisy runs the simulator distributes ``shots``
     across ``num_traj``; a zero allocation is valid and yields empty counts without
     calling :meth:`~mqt.yaqs.MPS.measure_shots` with ``0``.
 
@@ -722,6 +724,8 @@ def digital_tjm(
         compiled_circuit: Optional executor-owned pretranslated circuit reused
             without mutation across trajectories. Standalone calls compile the
             supplied circuit once.
+
+        show_progress: Whether to show shot-readout progress.
 
     Returns:
         ``(obs_results, diagnostics, counts, final_mps)``. Observable results and
@@ -817,7 +821,13 @@ def digital_tjm(
     if shots_only:
         has_explicit_shot_plan = "per_call_shots" in WORKER_CTX or "shot_distribution" in WORKER_CTX
         per_call = _per_call_shots(sim_params, traj_idx) if has_explicit_shot_plan or not noisy else 1
-        counts = state.measure_shots(per_call) if per_call > 0 else {}
+        counts = (
+            state._measure_shots(  # ruff: ignore[private-member-access]  # executor-owned readout policy
+                per_call, show_progress=show_progress, parallel=False
+            )
+            if per_call > 0
+            else {}
+        )
         return None, None, counts, final
 
     assert diagnostics is not None
@@ -830,7 +840,13 @@ def digital_tjm(
     if wants_shots:
         per_call = _per_call_shots(sim_params, traj_idx)
         # Zero allocation is valid when shots < num_traj; never call measure_shots(0).
-        counts = state.measure_shots(per_call) if per_call > 0 else {}
+        counts = (
+            state._measure_shots(  # ruff: ignore[private-member-access]  # executor-owned readout policy
+                per_call, show_progress=show_progress, parallel=False
+            )
+            if per_call > 0
+            else {}
+        )
 
     return results if wants_obs else None, diagnostics, counts, final
 

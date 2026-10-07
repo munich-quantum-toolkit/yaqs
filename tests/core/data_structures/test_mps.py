@@ -1582,12 +1582,31 @@ def test_measurement_rejects_only_measured_non_qubit_sites() -> None:
     mock_executor.assert_not_called()
 
 
-def test_single_shot_conditional_probabilities_match_dense_distribution() -> None:
-    """Each deterministic measurement path has its exact dense Born probability."""
+@pytest.mark.parametrize(
+    ("basis", "eigenstates"),
+    [
+        ("Z", np.eye(2)),
+        ("X", np.array([[1, 1], [1, -1]]) / np.sqrt(2.0)),
+        ("Y", np.array([[1, 1], [1j, -1j]]) / np.sqrt(2.0)),
+    ],
+)
+@pytest.mark.parametrize("center", [0, 2, None])
+def test_single_shot_conditional_probabilities_match_dense_distribution(
+    basis: str, eigenstates: np.ndarray, center: int | None
+) -> None:
+    """Pauli measurement paths have exact Born probabilities and preserve the source MPS."""
     state = _entangled_mps(length=3, seed=41)
-    state.shift_center_to(2)
-    state.set_center(None)
-    dense_probabilities = np.abs(state.to_vec()) ** 2
+    state.shift_center_to(2 if center is None else center)
+    if center is None:
+        state.set_center(None)
+    tensors_before = [tensor.copy() for tensor in state.tensors]
+    center_before = state.orthogonality_center
+
+    # Columns are tensor products of the local +1 and -1 Pauli eigenstates.
+    measurement_basis = eigenstates
+    for _ in range(state.length - 1):
+        measurement_basis = np.kron(measurement_basis, eigenstates)
+    dense_probabilities = np.abs(measurement_basis.conj().T @ state.to_vec()) ** 2
     dense_probabilities /= dense_probabilities.sum()
 
     for outcome, expected in enumerate(dense_probabilities):
@@ -1608,26 +1627,51 @@ def test_single_shot_conditional_probabilities_match_dense_distribution() -> Non
         shot_rng = Mock(spec=np.random.Generator)
         shot_rng.choice.side_effect = choose
 
-        assert state.measure_single_shot(rng=shot_rng) == outcome
+        assert state.measure_single_shot(basis=basis, rng=shot_rng) == outcome
         assert path_probability == pytest.approx(expected, abs=1e-12)
+        assert state.orthogonality_center == center_before
+        for actual, original in zip(state.tensors, tensors_before, strict=True):
+            np.testing.assert_array_equal(actual, original)
 
 
-def test_measure_shots_basis() -> None:
-    """Test measure_shots with different bases."""
-    psi_x_plus = MPS(length=1, state="x+")
-    results = psi_x_plus.measure_shots(shots=10, basis="X")
-    assert results == {0: 10}
+@pytest.mark.parametrize(
+    ("state", "basis", "probabilities", "outcomes", "expected_counts"),
+    [
+        ("x+", "X", (1.0, 0.0), (0, 0, 0), {0: 3}),
+        ("y+", "Y", (1.0, 0.0), (0, 0, 0), {0: 3}),
+        ("zeros", "X", (0.5, 0.5), (0, 1, 1), {0: 1, 1: 2}),
+        ("zeros", "Y", (0.5, 0.5), (1, 0, 0), {0: 2, 1: 1}),
+    ],
+)
+def test_measure_shots_basis(
+    state: str,
+    basis: str,
+    probabilities: tuple[float, float],
+    outcomes: tuple[int, ...],
+    expected_counts: dict[int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pauli-basis readout samples Born probabilities and counts each outcome."""
+    psi = MPS(length=1, state=state)
+    choices = iter(outcomes)
 
-    psi_y_plus = MPS(length=1, state="y+")
-    results = psi_y_plus.measure_shots(shots=10, basis="Y")
-    assert results == {0: 10}
+    def choose(size: int, *, p: np.ndarray) -> int:
+        """Check the Born probabilities and return the next prescribed outcome.
 
-    # Verify that X measurement on Z state gives 50/50
-    psi_zero = MPS(length=1, state="zeros")
-    results = psi_zero.measure_shots(shots=20, basis="X")
-    assert results.get(0, 0) > 0
-    assert results.get(1, 0) > 0
-    assert sum(results.values()) == 20
+        Returns:
+            The next outcome in the sample sequence.
+        """
+        assert size == 2
+        np.testing.assert_allclose(p, probabilities, atol=1e-12)
+        return next(choices)
+
+    shot_rng = Mock(spec=np.random.Generator)
+    shot_rng.choice.side_effect = choose
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    monkeypatch.setattr(np.random, "default_rng", lambda: shot_rng)
+
+    assert psi.measure_shots(shots=len(outcomes), basis=basis) == expected_counts
+    assert shot_rng.choice.call_count == len(outcomes)
 
 
 def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1663,9 +1707,14 @@ def test_measure_shots_single_shot() -> None:
 def test_measure_shots_rejects_invalid_counts_before_measurement(shots: object, error: type[Exception]) -> None:
     """Invalid shot counts fail before sampling or creating workers."""
     psi = MPS(length=1, state="zeros")
-    with patch.object(psi, "measure_single_shot") as mock_measure, pytest.raises(error, match="shots"):
+    with (
+        patch("numpy.random.default_rng") as mock_rng,
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor,
+        pytest.raises(error, match="shots"),
+    ):
         psi.measure_shots(shots=cast("Any", shots))
-    mock_measure.assert_not_called()
+    mock_rng.assert_not_called()
+    mock_executor.assert_not_called()
 
 
 def test_measure_shots_accepts_numpy_integer() -> None:
@@ -1844,18 +1893,9 @@ def test_inplace_measure() -> None:
 
 
 def test_multi_shot() -> None:
-    """Test measure over multiple shots on an MPS initialized in the |1> state.
-
-    This test performs 10 measurement shots on an MPS in the "ones" state and verifies that
-    the measurement result for the corresponding basis state (here, 7) is present, while an unexpected
-    key (e.g., 0) should not be present.
-    """
+    """Full-chain readout of a basis state counts every shot at the expected integer."""
     psi_mps = MPS(length=3, state="ones")
-    shots_dict = psi_mps.measure_shots(shots=10)
-    # Assuming that in the "ones" state the measurement outcome is encoded as 7.
-    assert shots_dict[7]
-    with pytest.raises(KeyError):
-        _ = shots_dict[0]
+    assert psi_mps.measure_shots(shots=10) == {7: 10}
 
 
 def test_norm() -> None:
@@ -2284,7 +2324,7 @@ def test_haar_random_invalid_pad_raises() -> None:
         _ = MPS(length=6, state="haar-random", pad=0)
 
 
-def test_haar_random_entropy_statistics_vs_random_mps() -> None:
+def test_haar_random_entropy_statistics_vs_random_mps(monkeypatch: pytest.MonkeyPatch) -> None:
     """Haar-random MPS should show higher mean entropy and lower variance than random tensors."""
     length = 8
     chi_max = 4
@@ -2293,7 +2333,22 @@ def test_haar_random_entropy_statistics_vs_random_mps() -> None:
 
     bonds = _expected_uniform_clipped_bonds(length, chi_max)
     shapes = [(2, bonds[i], bonds[i + 1]) for i in range(length)]
-    local_rng = np.random.default_rng(1234)
+    create_rng = np.random.default_rng
+    local_rng = create_rng(1234)
+    haar_rng = create_rng(1235)
+
+    def seeded_rng(seed: np.random.Generator | int | None = None) -> np.random.Generator:
+        """Use a fixed Haar sample stream and preserve explicit seeds.
+
+        Args:
+            seed: Seed or generator passed to NumPy.
+
+        Returns:
+            The generator for the requested sample stream.
+        """
+        return haar_rng if seed is None else create_rng(seed)
+
+    monkeypatch.setattr(np.random, "default_rng", seeded_rng)
 
     rand_entropies = np.empty(num_samples, dtype=np.float64)
     haar_entropies = np.empty(num_samples, dtype=np.float64)
@@ -3126,34 +3181,27 @@ def test_compress_rejects_invalid_private_restore_center_before_mutation() -> No
 
 
 def test_measure_single_shot_off_center() -> None:
-    """``measure_single_shot`` site-0 marginal matches ``measure`` when center starts away from site 0."""
-    mps = MPS(4, state="haar-random", pad=4)
-    mps.normalize("B")
+    """Both measurement methods sample the dense site-0 marginal from an off-center MPS."""
+    mps = _entangled_mps(length=4, seed=42)
     mps.set_canonical_form(2)
-
-    def local_z_probabilities(state: MPS, site: int) -> np.ndarray:
-        temp = copy.deepcopy(state)
-        if temp.orthogonality_center is not None:
-            if temp.orthogonality_center != site:
-                temp.shift_center_to(site)
-        else:
-            temp.set_canonical_form(site)
-        tensor = temp.tensors[site]
-        reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
-        probabilities = np.diag(reduced_density_matrix).real.copy()
-        return probabilities / probabilities.sum()
-
-    site0_probs = local_z_probabilities(mps, 0)
+    dense_probabilities = np.abs(mps.to_vec()) ** 2
+    site0_probs = dense_probabilities.reshape(-1, 2).sum(axis=0)
+    site0_probs /= site0_probs.sum()
     z_expectation = mps.mixed_expectation(mps, Observable("z", 0)).real
     np.testing.assert_allclose(site0_probs[0], (1 + z_expectation) / 2, atol=1e-10)
 
     rng = np.random.default_rng(0)
     shots = 3000
-    for bit in (0, 1):
-        measure_frac = sum(copy.deepcopy(mps).measure(0, rng=rng) == bit for _ in range(shots)) / shots
-        single_shot_frac = sum((mps.measure_single_shot(rng=rng) & 1) == bit for _ in range(shots)) / shots
-        assert measure_frac == pytest.approx(site0_probs[bit], abs=0.05)
-        assert single_shot_frac == pytest.approx(site0_probs[bit], abs=0.05)
+    measure_outcomes = np.fromiter(
+        (copy.deepcopy(mps).measure(0, rng=rng) for _ in range(shots)), dtype=int, count=shots
+    )
+    single_shot_outcomes = np.fromiter(
+        (mps.measure_single_shot(rng=rng) & 1 for _ in range(shots)), dtype=int, count=shots
+    )
+    for outcomes in (measure_outcomes, single_shot_outcomes):
+        counts = np.bincount(outcomes, minlength=2)
+        assert counts.sum() == shots
+        np.testing.assert_allclose(counts / shots, site0_probs, atol=0.05, rtol=0)
 
 
 def test_assert_center_unknown_gauge_raises() -> None:
@@ -3272,3 +3320,26 @@ def test_evaluate_observables_rejects_invalid_operator_sites(
 
     with pytest.raises(error, match=match):
         state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+
+
+@pytest.mark.parametrize("show_progress", [False, True])
+@pytest.mark.parametrize("workers", [1, 4])
+def test_measure_shots_progress_control(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], *, show_progress: bool, workers: int
+) -> None:
+    """Shot progress follows its flag in serial and pooled readout."""
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: workers)
+    monkeypatch.setattr(mps_mod, "get_parallel_context", lambda _mode: None)
+    monkeypatch.setattr(mps_mod, "ProcessPoolExecutor", _ImmediateProcessPoolExecutor)
+    monkeypatch.setattr(mps_mod, "wait", lambda futures, **_: (list(futures), []))
+    assert MPS(length=1, state="zeros").measure_shots(5, show_progress=show_progress) == {0: 5}
+    assert ("Measuring shots" in capsys.readouterr().err) is show_progress
+
+
+def test_measure_shots_shows_progress_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Direct shot readout remains visible by default."""
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    assert MPS(length=1, state="zeros").measure_shots(3) == {0: 3}
+    assert "Measuring shots" in capsys.readouterr().err
