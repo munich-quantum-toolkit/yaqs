@@ -6,6 +6,16 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Changed: single-worker simulations run in the calling process
+
+`Simulator(parallel=True)` uses a process pool only when both the job count and
+the resolved `max_workers` are greater than one. Runs with one worker execute in
+the calling process and keep the one-thread numerical limit used by pool
+workers.
+
+`max_retries` and `retry_exceptions` apply only to process workers. Exceptions
+from single-worker runs propagate directly, as they do with `parallel=False`.
+
 ### Breaking: physical sites use one spatial ordering
 
 YAQS now uses one public spatial dense-basis order. Site 0 is the
