@@ -1612,22 +1612,44 @@ def test_single_shot_conditional_probabilities_match_dense_distribution() -> Non
         assert path_probability == pytest.approx(expected, abs=1e-12)
 
 
-def test_measure_shots_basis() -> None:
-    """Test measure_shots with different bases."""
-    psi_x_plus = MPS(length=1, state="x+")
-    results = psi_x_plus.measure_shots(shots=10, basis="X")
-    assert results == {0: 10}
+@pytest.mark.parametrize(
+    ("state", "basis", "probabilities", "outcomes", "expected_counts"),
+    [
+        ("x+", "X", (1.0, 0.0), (0, 0, 0), {0: 3}),
+        ("y+", "Y", (1.0, 0.0), (0, 0, 0), {0: 3}),
+        ("zeros", "X", (0.5, 0.5), (0, 1, 1), {0: 1, 1: 2}),
+        ("zeros", "Y", (0.5, 0.5), (1, 0, 0), {0: 2, 1: 1}),
+    ],
+)
+def test_measure_shots_basis(
+    state: str,
+    basis: str,
+    probabilities: tuple[float, float],
+    outcomes: tuple[int, ...],
+    expected_counts: dict[int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pauli-basis readout samples Born probabilities and counts each outcome."""
+    psi = MPS(length=1, state=state)
+    choices = iter(outcomes)
 
-    psi_y_plus = MPS(length=1, state="y+")
-    results = psi_y_plus.measure_shots(shots=10, basis="Y")
-    assert results == {0: 10}
+    def choose(size: int, *, p: np.ndarray) -> int:
+        """Check the Born probabilities and return the next prescribed outcome.
 
-    # Verify that X measurement on Z state gives 50/50
-    psi_zero = MPS(length=1, state="zeros")
-    results = psi_zero.measure_shots(shots=20, basis="X")
-    assert results.get(0, 0) > 0
-    assert results.get(1, 0) > 0
-    assert sum(results.values()) == 20
+        Returns:
+            The next outcome in the sample sequence.
+        """
+        assert size == 2
+        np.testing.assert_allclose(p, probabilities, atol=1e-12)
+        return next(choices)
+
+    shot_rng = Mock(spec=np.random.Generator)
+    shot_rng.choice.side_effect = choose
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    monkeypatch.setattr(np.random, "default_rng", lambda: shot_rng)
+
+    assert psi.measure_shots(shots=len(outcomes), basis=basis) == expected_counts
+    assert shot_rng.choice.call_count == len(outcomes)
 
 
 def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1844,18 +1866,9 @@ def test_inplace_measure() -> None:
 
 
 def test_multi_shot() -> None:
-    """Test measure over multiple shots on an MPS initialized in the |1> state.
-
-    This test performs 10 measurement shots on an MPS in the "ones" state and verifies that
-    the measurement result for the corresponding basis state (here, 7) is present, while an unexpected
-    key (e.g., 0) should not be present.
-    """
+    """Full-chain readout of a basis state counts every shot at the expected integer."""
     psi_mps = MPS(length=3, state="ones")
-    shots_dict = psi_mps.measure_shots(shots=10)
-    # Assuming that in the "ones" state the measurement outcome is encoded as 7.
-    assert shots_dict[7]
-    with pytest.raises(KeyError):
-        _ = shots_dict[0]
+    assert psi_mps.measure_shots(shots=10) == {7: 10}
 
 
 def test_norm() -> None:
@@ -3126,34 +3139,27 @@ def test_compress_rejects_invalid_private_restore_center_before_mutation() -> No
 
 
 def test_measure_single_shot_off_center() -> None:
-    """``measure_single_shot`` site-0 marginal matches ``measure`` when center starts away from site 0."""
-    mps = MPS(4, state="haar-random", pad=4)
-    mps.normalize("B")
+    """Both measurement methods sample the dense site-0 marginal from an off-center MPS."""
+    mps = _entangled_mps(length=4, seed=42)
     mps.set_canonical_form(2)
-
-    def local_z_probabilities(state: MPS, site: int) -> np.ndarray:
-        temp = copy.deepcopy(state)
-        if temp.orthogonality_center is not None:
-            if temp.orthogonality_center != site:
-                temp.shift_center_to(site)
-        else:
-            temp.set_canonical_form(site)
-        tensor = temp.tensors[site]
-        reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
-        probabilities = np.diag(reduced_density_matrix).real.copy()
-        return probabilities / probabilities.sum()
-
-    site0_probs = local_z_probabilities(mps, 0)
+    dense_probabilities = np.abs(mps.to_vec()) ** 2
+    site0_probs = dense_probabilities.reshape(-1, 2).sum(axis=0)
+    site0_probs /= site0_probs.sum()
     z_expectation = mps.mixed_expectation(mps, Observable("z", 0)).real
     np.testing.assert_allclose(site0_probs[0], (1 + z_expectation) / 2, atol=1e-10)
 
     rng = np.random.default_rng(0)
     shots = 3000
-    for bit in (0, 1):
-        measure_frac = sum(copy.deepcopy(mps).measure(0, rng=rng) == bit for _ in range(shots)) / shots
-        single_shot_frac = sum((mps.measure_single_shot(rng=rng) & 1) == bit for _ in range(shots)) / shots
-        assert measure_frac == pytest.approx(site0_probs[bit], abs=0.05)
-        assert single_shot_frac == pytest.approx(site0_probs[bit], abs=0.05)
+    measure_outcomes = np.fromiter(
+        (copy.deepcopy(mps).measure(0, rng=rng) for _ in range(shots)), dtype=int, count=shots
+    )
+    single_shot_outcomes = np.fromiter(
+        (mps.measure_single_shot(rng=rng) & 1 for _ in range(shots)), dtype=int, count=shots
+    )
+    for outcomes in (measure_outcomes, single_shot_outcomes):
+        counts = np.bincount(outcomes, minlength=2)
+        assert counts.sum() == shots
+        np.testing.assert_allclose(counts / shots, site0_probs, atol=0.05, rtol=0)
 
 
 def test_assert_center_unknown_gauge_raises() -> None:

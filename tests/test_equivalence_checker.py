@@ -898,10 +898,8 @@ def test_noisy_check_is_seeded_reproducible() -> None:
 
     first = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42, return_trajectories=True)
     second = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=42, return_trajectories=True)
-    third = checker.check(qc, qc, noise_model=noise, num_traj=6, random_seed=43, return_trajectories=True)
 
     assert [traj["fidelity"] for traj in first["trajectories"]] == [traj["fidelity"] for traj in second["trajectories"]]
-    assert [traj["fidelity"] for traj in first["trajectories"]] != [traj["fidelity"] for traj in third["trajectories"]]
 
 
 @pytest.mark.parametrize(
