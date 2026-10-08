@@ -31,6 +31,10 @@ matrix methods practical to simulate. We encourage you to explore larger system
 sizes with our package, as we have put thought and effort into making these
 methods scalable.
 
+YAQS selects simulation methods from your inputs and provides presets that
+balance speed and numerical accuracy. You can get started without tuning every
+numerical setting, while still having control over individual settings when needed.
+
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
   <img width=30% src="https://img.shields.io/badge/documentation-blue?style=for-the-badge&logo=read%20the%20docs" alt="Documentation" />
