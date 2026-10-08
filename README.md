@@ -102,20 +102,19 @@ Evolve a 50-site Ising chain with local damping and print the final mean ⟨Z₀
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 
-length = 50
-state = State(length, initial="zeros")
-hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
-noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
-params = AnalogSimParams(
-    observables=[Observable("z", sites=0)],
-    elapsed_time=1.0,
-    dt=0.1,
-    num_traj=32,
-    max_bond_dim=64,
-    random_seed=0,
-)
-result = Simulator(parallel=False).run(state, hamiltonian, params, noise)
-print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
+if __name__ == "__main__":
+    length = 50
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
+    params = AnalogSimParams(
+        observables=[Observable("z", sites=0)],
+        elapsed_time=1.0,
+        dt=0.1,
+    )
+    simulator = Simulator()
+    result = simulator.run(state, hamiltonian, params, noise)
+    print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
 ```
 
 [analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
@@ -129,16 +128,19 @@ from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs import DigitalSimParams, Simulator, State
 
-length = 50
-circuit = QuantumCircuit(length)
-circuit.h(0)
-for site in range(1, length):
-    circuit.cx(site - 1, site)
-circuit.measure_all()
+if __name__ == "__main__":
+    length = 50
+    state = State(length, initial="zeros")
+    circuit = QuantumCircuit(length)
+    circuit.h(0)
+    for site in range(1, length):
+        circuit.cx(site - 1, site)
+    circuit.measure_all()
 
-params = DigitalSimParams(shots=1024, random_seed=0)
-result = Simulator(parallel=False).run(State(length, initial="zeros"), circuit, params)
-print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
+    params = DigitalSimParams(shots=1024)
+    simulator = Simulator()
+    result = simulator.run(state, circuit, params)
+    print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
 ```
 
 [shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html)
@@ -148,28 +150,24 @@ print({format(outcome, f"0{length}b"): count for outcome, count in result.counts
 Probe environmental memory in a 50-site chain and print the memory diagnostics.
 
 ```python
-import numpy as np
-
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
-hamiltonian = Hamiltonian.ising(length=50, J=1.0, g=1.0)
-params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=2)
-characterizer = MemoryCharacterizer(representation="mps", parallel=False)
-result = characterizer.characterize(
-    hamiltonian,
-    params,
-    num_interventions=6,
-    cut=3,
-    n_pasts=8,
-    n_futures=8,
-    rng=np.random.default_rng(0),
-)
-print(result.summary())
+if __name__ == "__main__":
+    hamiltonian = Hamiltonian.ising(length=50, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1)
+    characterizer = MemoryCharacterizer()
+    result = characterizer.characterize(
+        hamiltonian,
+        params,
+        num_interventions=6,
+        preset="quick",
+    )
+    print(result.summary())
 ```
 
 [memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
 
-For parallel scripts, use an `if __name__ == "__main__":` guard; see the
+The examples use default parallel execution. See the
 [execution guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulator_initialization.html)
 for worker controls.
 
