@@ -33,7 +33,8 @@ methods scalable.
 
 YAQS selects simulation methods from your inputs and provides presets that
 balance speed and numerical accuracy. You can get started without tuning every
-numerical setting, while still having control over individual settings when needed.
+numerical setting, while still having control over individual settings when
+needed.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
