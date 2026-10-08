@@ -73,6 +73,10 @@ releases may include breaking changes.
 
 ### Fixed
 
+- avoided process startup for single-worker simulations ([#624])
+  ([**@aaronleesander**])
+- cleaned up tests and fixed MCWF RNG continuity ([#623])
+  ([**@aaronleesander**])
 - fixed shot readout progress bar suppression ([#622])
   ([**@aaronleesander**])
 - fixed noise characterization iteration limits and initial loss ([#621])
@@ -294,6 +298,8 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
+[#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623
 [#622]: https://github.com/munich-quantum-toolkit/yaqs/pull/622
 [#621]: https://github.com/munich-quantum-toolkit/yaqs/pull/621
 [#620]: https://github.com/munich-quantum-toolkit/yaqs/pull/620

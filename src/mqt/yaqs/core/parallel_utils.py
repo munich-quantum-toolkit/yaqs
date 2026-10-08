@@ -99,7 +99,7 @@ def get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.cont
     """Return a multiprocessing context for worker processes.
 
     Args:
-        mp_context: Start method selector. ``"auto"`` uses ``"fork"`` on Linux and
+        mp_context: Start method selector. ``"auto"`` uses ``"forkserver"`` on Linux and
             ``"spawn"`` elsewhere; ``"fork"`` or ``"spawn"`` select that method explicitly.
 
     Returns:
@@ -107,7 +107,7 @@ def get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.cont
     """
     if mp_context == "auto":
         if sys.platform == "linux":
-            return multiprocessing.get_context("fork")
+            return multiprocessing.get_context("forkserver")
         return multiprocessing.get_context("spawn")
     return multiprocessing.get_context(mp_context)
 

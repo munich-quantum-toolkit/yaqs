@@ -1408,7 +1408,8 @@ def test_ensemble_trajectory_worker_uses_initialized_context() -> None:
     assert result["fidelity"] == pytest.approx(1.0, abs=1e-12)
 
 
-def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
+@pytest.mark.parametrize("mp_context", ["auto", "spawn"])
+def test_seeded_serial_and_process_pool_ensembles_agree(mp_context: Literal["auto", "spawn"]) -> None:
     """Serial and process-pool workers return the same seeded MPO ensemble."""
     qc = QuantumCircuit(2)
     qc.h(0)
@@ -1417,7 +1418,7 @@ def test_seeded_serial_and_process_pool_ensembles_agree() -> None:
     kwargs = {"noise_model": noise, "num_traj": 6, "random_seed": 0, "return_trajectories": True}
 
     serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc, qc, **kwargs)
-    pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, mp_context="spawn").check(
+    pooled = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, mp_context=mp_context).check(
         qc, qc, **kwargs
     )
     serial_fidelities = [traj["fidelity"] for traj in serial["trajectories"]]

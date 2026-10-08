@@ -13,6 +13,7 @@ import contextlib
 import multiprocessing
 import os
 import sys
+import threading
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -33,6 +34,50 @@ from mqt.yaqs.core.parallel_utils import (
     worker_init,
 )
 from mqt.yaqs.simulator import available_cpus as simulator_available_cpus
+
+
+def _indexed_pool_worker(job_idx: int, payload: dict[str, Any] | None = None) -> tuple[int, int]:
+    """Return the indexed value and worker PID after both workers reach the barrier."""
+    context = resolve_worker_ctx(payload)
+    if "barrier" in context:
+        context["barrier"].wait(timeout=30)
+    return job_idx + context["offset"], os.getpid()
+
+
+@pytest.mark.filterwarnings("error:This process.*is multi-threaded.*:DeprecationWarning")
+def test_auto_pool_from_threaded_parent_preserves_results() -> None:
+    """Automatic pools start safely beside a live thread and preserve indexed results."""
+    serial = run_indexed_jobs(
+        _indexed_pool_worker,
+        payload={"offset": 10},
+        n_jobs=2,
+        config=ExecutionConfig(parallel=False, show_progress=False),
+        desc="test",
+    )
+    stop = threading.Event()
+    thread = threading.Thread(target=stop.wait)
+    thread.start()
+    try:
+        assert thread.is_alive()
+        context = get_parallel_context()
+        pooled = run_indexed_jobs(
+            _indexed_pool_worker,
+            payload={"offset": 10, "barrier": context.Barrier(2)},
+            n_jobs=2,
+            config=ExecutionConfig(max_workers=2, show_progress=False, max_retries=0),
+            desc="test",
+        )
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert {index: value for index, (value, _pid) in pooled.items()} == {
+        index: value for index, (value, _pid) in serial.items()
+    }
+    worker_pids = {pid for _value, pid in pooled.values()}
+    assert len(worker_pids) == 2
+    assert os.getpid() not in worker_pids
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +141,7 @@ def test_threading_config() -> None:
     """Verify correct multiprocessing context and Numba threading configuration."""
     ctx = get_parallel_context()
     if sys.platform == "linux":
-        assert ctx.get_start_method() == "fork"
+        assert ctx.get_start_method() == "forkserver"
     else:
         assert ctx.get_start_method() == "spawn"
 

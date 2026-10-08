@@ -1081,22 +1081,23 @@ class Simulator:
     A :class:`Simulator` owns the execution-side configuration: how trajectories
     are parallelized, how many workers to use, whether to display a progress bar,
     which multiprocessing context to use, and the retry policy for transient
-    worker errors. The physics inputs (initial state, operator, simulation
+    errors in process pool workers. The physics inputs (initial state, operator, simulation
     parameters, optional noise model) are passed per call to :meth:`run`.
 
-    Multiple :meth:`run` calls share the same configuration. Each call constructs
-    its own short-lived process pool when ``parallel=True``; the pool is not
-    persisted across runs in the current implementation.
+    Multiple :meth:`run` calls share the same configuration. A call constructs
+    a short-lived process pool when ``parallel=True`` and both the job count
+    and ``max_workers`` exceed one. Other calls run in the current process.
+    A worker cap of one with ``parallel=True`` also limits numerical threads to one.
 
     Attributes:
-        parallel: Whether to execute trajectories in parallel via a process pool.
+        parallel: Whether to use a process pool for multiple jobs and workers.
         max_workers: Maximum number of worker processes when ``parallel=True``.
             Defaults to ``max(1, available_cpus() - 1)``.
         show_progress: Whether to display trajectory and shot-readout progress bars.
         mp_context: Multiprocessing context: ``"auto"`` (default), ``"fork"``,
-            or ``"spawn"``. ``"auto"`` selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
-        max_retries: Maximum retry attempts for transient worker errors.
-        retry_exceptions: Exception types that trigger a retry.
+            or ``"spawn"``. ``"auto"`` selects ``"forkserver"`` on Linux and ``"spawn"`` elsewhere.
+        max_retries: Maximum retry attempts for transient errors in process pool workers.
+        retry_exceptions: Exception types that trigger a retry in a process pool.
     """
 
     def __init__(
@@ -1112,13 +1113,13 @@ class Simulator:
         """Initialize the simulator with execution-side configuration.
 
         Args:
-            parallel: Boolean that enables a process pool for multi-trajectory runs.
+            parallel: Enable a process pool when both the job count and worker cap exceed one.
             max_workers: Positive worker-process cap. ``None`` (default) resolves to
-                ``max(1, available_cpus() - 1)``.
+                ``max(1, available_cpus() - 1)``. A cap of one runs in the current process.
             show_progress: Whether to display trajectory and shot-readout progress bars.
             mp_context: Multiprocessing start method (``"auto"``, ``"fork"``, or ``"spawn"``).
-            max_retries: Non-negative maximum retries for transient worker errors.
-            retry_exceptions: Exception types that trigger a retry.
+            max_retries: Non-negative maximum retries for transient errors in process pool workers.
+            retry_exceptions: Exception types that trigger a retry in a process pool.
         """
         self._execution = ExecutionConfig(
             parallel=parallel,
@@ -1131,7 +1132,7 @@ class Simulator:
 
     @property
     def parallel(self) -> bool:
-        """Whether parallel execution is enabled."""
+        """Whether process pools are enabled for multiple jobs and workers."""
         return self._execution.parallel
 
     @parallel.setter
@@ -1140,7 +1141,7 @@ class Simulator:
 
     @property
     def max_workers(self) -> int:
-        """Effective worker count for parallel execution."""
+        """Effective worker cap; one keeps execution in the current process."""
         return self._execution.resolved_max_workers()
 
     @max_workers.setter
@@ -1167,7 +1168,7 @@ class Simulator:
 
     @property
     def max_retries(self) -> int:
-        """Maximum retries per job in parallel execution."""
+        """Maximum retries per job in a process pool."""
         return self._execution.max_retries
 
     @max_retries.setter
@@ -1176,7 +1177,7 @@ class Simulator:
 
     @property
     def retry_exceptions(self) -> tuple[type[BaseException], ...]:
-        """Exception types that trigger a parallel job retry."""
+        """Exception types that trigger a retry in a process pool."""
         return self._execution.retry_exceptions
 
     @retry_exceptions.setter
@@ -1403,7 +1404,7 @@ class Simulator:
             if trajectory_final is not None:
                 final_mps = trajectory_final
 
-        if self.parallel and effective_num_traj > 1:
+        if self.parallel and effective_num_traj > 1 and self.max_workers > 1:
             for traj_index, trajectory in run_backend_parallel(
                 worker_fn=_program_worker,
                 payload=payload,
@@ -1428,7 +1429,7 @@ class Simulator:
                     _program_worker,
                     traj_index,
                     payload,
-                    n_threads=available_cpus(),
+                    n_threads=1 if self.parallel and self.max_workers == 1 else available_cpus(),
                 )
                 consume(traj_index, trajectory)
 
@@ -1638,7 +1639,7 @@ class Simulator:
         final_psi: np.ndarray | None = None
         final_rho: np.ndarray | None = None
 
-        if self.parallel and effective_num_traj > 1:
+        if self.parallel and effective_num_traj > 1 and self.max_workers > 1:
             for i, traj_payload in run_backend_parallel(
                 worker_fn=worker_fn,
                 payload=payload,
@@ -1662,7 +1663,7 @@ class Simulator:
                     else:
                         final_mps = cast("MPS", traj_final)
         else:
-            n_threads = available_cpus()
+            n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
 
             args: list[Any]
             if state_rep == "vector":
@@ -1820,7 +1821,7 @@ class Simulator:
                 final_mps = traj_final
 
         try:
-            if self.parallel and effective_num_traj > 1:
+            if self.parallel and effective_num_traj > 1 and self.max_workers > 1:
                 for i, traj_payload in run_backend_parallel(
                     worker_fn=_digital_worker,
                     payload=payload,
@@ -1835,7 +1836,7 @@ class Simulator:
                     traj_data, traj_diag, shot_counts, traj_final = traj_payload
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
             else:
-                n_threads = available_cpus()
+                n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
                 iterator = tqdm(
                     range(effective_num_traj),
                     desc="Running trajectories",
@@ -1977,7 +1978,7 @@ class Simulator:
             "operator": operator,
         }
 
-        if self.parallel and len(initial_states) > 1:
+        if self.parallel and len(initial_states) > 1 and self.max_workers > 1:
             for i, (obs_result, traj_diag, multi_time_result) in run_backend_parallel(
                 worker_fn=_ensemble_worker,
                 payload=payload,
@@ -1995,7 +1996,7 @@ class Simulator:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
         else:
-            n_threads = available_cpus()
+            n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
             args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
