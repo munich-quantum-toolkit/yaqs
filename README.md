@@ -35,34 +35,16 @@ tensor-network simulation depends on entanglement and accuracy settings.
 
 ## Key Features
 
-- **Analog simulation**: Large-scale open-system and unitary time evolution
-  using parallelized quantum trajectories when a noise model is attached [1]
-  (trajectory guidance [4]).
-- **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit
-  observables, shot-based readout, and OpenQASM inputs [3].
-- **Digital–analog simulation**: Compose analog evolution and digital operations
-  in one ordered program with automatic state handoff, program-wide observable
-  traces, and continuous stochastic trajectories across segment boundaries
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html)).
-- **Equivalence checking**: Scalable comparison of quantum circuits [2].
-- **Process characterization**: Quantify non-Markovian memory in multi-time
-  quantum processes, how much temporal history a process retains, with exact
-  reference checks where needed
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
-- **Process tensor surrogates**: Train a causal Transformer surrogate for fast
-  prediction of non-Markovian response to local interventions and measurement
-  over time
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
-- **Noise model characterization**: Fit Markovian Lindblad jump rates from
-  observable dynamics
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)).
-- **Hardware-oriented modeling**: Realistic noise models including Gaussian and
-  other strength distributions, plus hardware dynamics such as
-  transmon–resonator systems, and heterogeneous site dimensions
-  ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
-- **Multiple backends**: Monte Carlo wavefunction and master equation evolution
-  are available for analog simulation on smaller systems, alongside the scalable
-  MPS trajectory path.
+| Capability                                                                                                              | What users can do                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)                 | Simulate closed and open quantum dynamics.                                                                                                                |
+| [Digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)              | Simulate noisy circuits, measure observables, and sample shots.                                                                                           |
+| [Digital–analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html) | Combine analog evolution and circuit operations.                                                                                                          |
+| [Equivalence checking](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/equivalence_checking.html)           | Compare quantum circuits.                                                                                                                                 |
+| [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)               | Probe memory through intervention sequences and construct process tensors.                                                                                |
+| [Surrogate models](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)                   | Train models to predict probe dynamics under interventions; requires PyTorch.                                                                             |
+| [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)                 | Fit Lindblad jump rates from observable time series.                                                                                                      |
+| [Hardware modeling](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/hamiltonians.html)                      | Build device Hamiltonians and use [distributed noise strengths](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html). |
 
 If you have any questions, feel free to create a
 [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an
@@ -167,6 +149,10 @@ if __name__ == "__main__":
 
 [memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
 
+Trajectory count, time-step size, and MPS truncation affect numerical accuracy;
+see the
+[simulation parameter guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulation_parameters.html).
+
 The examples use default parallel execution. See the
 [execution guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulator_initialization.html)
 for worker controls.
@@ -174,14 +160,9 @@ for worker controls.
 **Documentation:**
 [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html)
 ·
-[Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
+[API reference](https://mqt.readthedocs.io/projects/yaqs/en/latest/api/mqt/yaqs/index.html)
 ·
-[Circuit observables](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
-·
-[Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
-·
-[Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
-· [Full guide](https://mqt.readthedocs.io/projects/yaqs)
+[Full documentation](https://mqt.readthedocs.io/projects/yaqs)
 
 ## Cite This
 
