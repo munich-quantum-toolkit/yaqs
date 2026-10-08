@@ -1,19 +1,36 @@
 # References
 
-MQT YAQS implements algorithms from peer-reviewed research. **When you use MQT
-YAQS in academic work, please cite the publications that correspond to the
-features you use:**
+MQT YAQS implements algorithms from research publications and preprints. When
+you use the library in academic work, please cite both the **YAQS software**
+{footcite:p}`YAQS` and the **MQT Handbook** {footcite:p}`mqt`.
+
+We expect to replace the YAQS software citation with a dedicated YAQS
+publication. Please use the current software citation for now.
+
+Also cite the research papers for the methods you use:
 
 - {footcite:p}`sander2025_TJM` for open **analog** system simulation (tensor
   jump method),
 - {footcite:p}`sander2025_CircuitTDVP` for **digital circuit** simulation,
-- {footcite:p}`sander2025_EquivalenceChecking` for **equivalence checking**, and
+- {footcite:p}`froehlich2026_NoisyCircuitTJM` for **noisy quantum circuit**
+  simulation,
+- {footcite:p}`sander2025_EquivalenceChecking` for **equivalence checking**,
 - {footcite:p}`sander2026_computationalregimes` for **trajectory unravellings**
-  and their computational trade-offs.
+  and their computational trade-offs,
+- {footcite:p}`ramos2026_NoiseLearning` for **noise characterization**, and
+- {footcite:p}`froehlich2026_BUG` for
+  **basis-update and Galerkin (BUG) time integration**.
 
 Representative BibTeX entries:
 
 ```bibtex
+@misc{YAQS,
+  author       = {Aaron Sander},
+  title        = {{YAQS}: Yet Another Quantum Simulator},
+  year         = {2025},
+  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
+}
+
 @article{sander2025_TJM,
   title     = {Large-scale stochastic simulation of open quantum systems},
   author    = {Sander, Aaron and Fr\"{o}hlich, Maximilian and Eigel, Martin and Eisert, Jens and Gel\ss{}, Patrick and Hinterm\"{u}ller, Michael and Milbradt, Richard M. and Wille, Robert and Mendl, Christian B.},
@@ -51,19 +68,39 @@ Representative BibTeX entries:
   archiveprefix = {arXiv},
   primaryclass  = {quant-ph},
 }
-```
 
-MQT YAQS is part of the Munich Quantum Toolkit, which is described in
-{cite:p}`mqt`.
+@misc{froehlich2026_NoisyCircuitTJM,
+  title         = {Noisy quantum circuit simulation with the tensor jump method},
+  author        = {Maximilian Fr\"{o}hlich and Aaron Sander and Martin Eigel and Robert Wille and Michael Hinterm\"{u}ller},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2607.01323},
+  eprint        = {2607.01323},
+  archiveprefix = {arXiv},
+  primaryclass  = {quant-ph},
+}
+
+@misc{ramos2026_NoiseLearning,
+  title         = {Scalable {Lindblad} Noise Learning via Stochastic Tensor-Network Simulation},
+  author        = {Alejandro R. Ramos Ramos and Maximilian Fr\"{o}hlich and Aaron Sander and Robert Wille and Martin Eigel and Patrick Gel\ss{} and Sebastian Pokutta},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2608.24668},
+  eprint        = {2608.24668},
+  archiveprefix = {arXiv},
+  primaryclass  = {quant-ph},
+}
+
+@misc{froehlich2026_BUG,
+  title         = {Basis-update and {Galerkin} time integration in canonical matrix-product-state form},
+  author        = {Maximilian Fr\"{o}hlich and Richard M. Milbradt and Martin Eigel and Aaron Sander and Robert Wille and Christian B. Mendl},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2608.16994},
+  eprint        = {2608.16994},
+  archiveprefix = {arXiv},
+  primaryclass  = {quant-ph},
+}
+```
 
 A full list of references is given below.
 
 ```{footbibliography}
-:filter: False
-
-sander2025_TJM
-sander2025_CircuitTDVP
-sander2025_EquivalenceChecking
-sander2026_computationalregimes
-mqt
 ```

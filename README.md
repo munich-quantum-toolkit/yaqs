@@ -9,20 +9,32 @@
 <p align="center">
   <a href="https://mqt.readthedocs.io">
     <picture>
-      <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="60%" alt="MQT YAQS Banner">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/logo-mqt-dark.svg" width="60%">
+      <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/logo-mqt-light.svg" width="60%" alt="MQT Logo">
     </picture>
   </a>
 </p>
 
-# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Simulation and characterization of quantum systems and their environments
 
-MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for
-**scalable, computationally efficient** simulation and characterization of open
-quantum dynamics, noisy quantum circuits, and hardware-realistic device models.
-MQT YAQS uses state-of-the-art techniques in these areas such as parallelized
-trajectories, tensor network compression, and problem-size-appropriate backends
-wherever possible (see [Cite This](#cite-this)). It is part of the
+MQT YAQS (pronounced "yaks") is a Python library for simulating quantum systems
+and studying their interaction with the environment. It supports analog
+evolution, noisy quantum circuits, circuit equivalence checking, and
+characterization of environmental memory and noise models. It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
+
+YAQS primarily uses tensor networks and quantum trajectories, with statevector
+and density matrix backends available for smaller simulations. Tensor network
+simulation cost depends strongly on entanglement and accuracy settings, which
+can make systems far larger than those accessible to statevector or density
+matrix methods practical to simulate. We encourage you to explore larger system
+sizes with our package, as we have put thought and effort into making these
+methods scalable.
+
+YAQS selects simulation methods from your inputs and provides presets that
+balance speed and numerical accuracy. You can get started without tuning every
+numerical setting, while still having control over individual settings when
+needed.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
@@ -32,40 +44,142 @@ wherever possible (see [Cite This](#cite-this)). It is part of the
 
 ## Key Features
 
-- **Analog simulation**: Large-scale open-system and unitary time evolution
-  using parallelized quantum trajectories when a noise model is attached [1]
-  (trajectory guidance [4]).
-- **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit
-  observables, shot-based readout, and OpenQASM 2 inputs [3]
-  (`uv pip install mqt-yaqs[qasm3]` for OpenQASM 3).
-- **Digital–analog simulation**: Compose analog evolution and digital operations
-  in one ordered program with automatic state handoff, program-wide observable
-  traces, and continuous stochastic trajectories across segment boundaries
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html)).
-- **Equivalence checking**: Scalable comparison of quantum circuits [2].
-- **Process characterization**: Quantify non-Markovian memory in multi-time
-  quantum processes, how much temporal history a process retains, with exact
-  reference checks where needed
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
-- **Process tensor surrogates**: Train a causal Transformer surrogate for fast
-  prediction of non-Markovian response to local interventions and measurement
-  over time
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)).
-- **Noise model characterization**: Fit Markovian Lindblad jump rates from
-  observable dynamics
-  ([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)).
-- **Hardware-oriented modeling**: Realistic noise models including Gaussian and
-  other strength distributions, plus hardware dynamics such as
-  transmon–resonator systems, and heterogeneous site dimensions
-  ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
-- **Multiple backends**: Monte Carlo wavefunction and master equation evolution
-  are available for analog simulation on smaller systems, alongside the scalable
-  MPS trajectory path.
+Analog, digital, and analog–digital simulations support both noiseless and noisy
+dynamics.
+
+| Capability                                                                                                              | What users can do                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)                 | Simulate large quantum systems using tensor networks and Monte Carlo methods.                                           |
+| [Digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)              | Simulate quantum circuits using tensor networks and sample measurement outcomes.                                        |
+| [Analog–digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html) | Combine analog evolution and quantum circuits in one simulation.                                                        |
+| [Equivalence checking](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/equivalence_checking.html)           | Check whether two quantum circuits behave the same, measure differences, and study the effects of noise on compilation. |
+| [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)               | Study a system's environment and understand memory effects from past interactions.                                      |
+| [Surrogate models](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)                   | Train models to predict dynamics that depend on past interactions (non-Markovian dynamics; requires PyTorch).           |
+| [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)                 | Learn a system's noise model from its observed dynamics.                                                                |
+| [Hardware modeling](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/hamiltonians.html)                      | Use device Hamiltonians together with realistic noise models.                                                           |
 
 If you have any questions, feel free to create a
 [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an
 [issue](https://github.com/munich-quantum-toolkit/yaqs/issues) on
 [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
+
+## Getting Started
+
+MQT YAQS requires **Python 3.11 or newer** and runs on Linux, macOS, and
+Windows. Install it from [PyPI](https://pypi.org/project/mqt.yaqs/) in a virtual
+environment using `uv`:
+
+```console
+uv pip install mqt.yaqs
+```
+
+Or use `pip`:
+
+```console
+python -m pip install mqt.yaqs
+```
+
+See the
+[installation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/installation.html)
+for environment setup and development installation.
+
+Optional extras support
+[OpenQASM 3 input](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
+(`qasm3`) and
+[surrogate training and prediction](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)
+(`torch`). The linked guides include installation steps.
+
+### Noisy analog evolution
+
+Evolve a 50-site Ising chain with local damping and print the final mean ⟨Z₀⟩.
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
+
+if __name__ == "__main__":
+    length = 50
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
+    params = AnalogSimParams(
+        observables=[Observable("z", sites=0)],
+        elapsed_time=1.0,
+        dt=0.1,
+    )
+    simulator = Simulator()
+    result = simulator.run(state, hamiltonian, params, noise)
+    print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
+```
+
+For more information, read the
+[analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html).
+
+### Noisy circuit simulation
+
+Prepare a 50-qubit GHZ circuit with local damping and print sampled bitstring
+counts.
+
+```python
+from qiskit.circuit import QuantumCircuit
+
+from mqt.yaqs import DigitalSimParams, NoiseModel, Simulator, State
+
+if __name__ == "__main__":
+    length = 50
+    state = State(length, initial="zeros")
+    circuit = QuantumCircuit(length)
+    circuit.h(0)
+    for site in range(1, length):
+        circuit.cx(site - 1, site)
+    circuit.measure_all()
+
+    noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
+    params = DigitalSimParams(shots=1024)
+    simulator = Simulator()
+    result = simulator.run(state, circuit, params, noise)
+    print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
+```
+
+For more information, read the
+[shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html).
+
+### Environmental memory characterization
+
+Probe environmental memory in a 50-site chain and print the memory diagnostics.
+
+```python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+
+if __name__ == "__main__":
+    hamiltonian = Hamiltonian.ising(length=50, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1)
+    characterizer = MemoryCharacterizer()
+    result = characterizer.characterize(
+        hamiltonian,
+        params,
+        num_interventions=6,
+        preset="quick",
+    )
+    print(result.summary())
+```
+
+For more information, read the
+[memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html).
+
+Trajectory count, time-step size, and MPS truncation affect numerical accuracy;
+see the
+[simulation parameter guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulation_parameters.html).
+
+The examples use default parallel execution. See the
+[execution guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulator_initialization.html)
+for worker controls.
+
+**Documentation:**
+[Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html)
+·
+[API reference](https://mqt.readthedocs.io/projects/yaqs/en/latest/api/mqt/yaqs/index.html)
+·
+[Full documentation](https://mqt.readthedocs.io/projects/yaqs)
 
 ## Contributors and Supporters
 
@@ -114,134 +228,36 @@ To support this endeavor, please consider:
   </a>
 </p>
 
-## Getting Started
-
-`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.yaqs/).
-
-```console
-uv pip install mqt.yaqs
-```
-
-### Simulation
-
-Noisy analog Hamiltonian simulation
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)):
-
-```python
-from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
-
-sim = Simulator(show_progress=False)
-state = State(length=3, initial="zeros")
-H = Hamiltonian.ising(length=3, J=1.0, g=0.5)
-noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
-params = AnalogSimParams(
-    observables=[Observable("z", sites=0)],
-    elapsed_time=0.5,
-    dt=0.1,
-    preset="fast",
-    num_traj=8,
-)
-print(sim.run(state, H, params, noise).expectation_values[0][-1])
-```
-
-Noisy digital circuit simulation
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)):
-
-```python
-from qiskit.circuit import QuantumCircuit
-
-from mqt.yaqs import NoiseModel, Observable, Simulator, State, DigitalSimParams
-
-circuit = QuantumCircuit(3)
-circuit.h(0)
-circuit.cx(0, 1)
-circuit.cx(1, 2)
-noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
-params = DigitalSimParams(observables=[Observable("z", sites=0)], preset="fast", num_traj=8)
-result = Simulator(show_progress=False).run(State(3, initial="zeros"), circuit, params, noise)
-print(result.expectation_values[0])
-```
-
-### Characterization
-
-Environmental memory characterization
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)):
-
-```python
-from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-
-ham = Hamiltonian.ising(length=3, J=1.0, g=0.5)
-params = AnalogSimParams(dt=0.1)
-result = MemoryCharacterizer(show_progress=False).characterize(
-    ham,
-    params,
-    num_interventions=4,
-    cut=2,
-    n_pasts=4,
-    n_futures=4,
-)
-print(result.summary())
-```
-
-Noise model characterization
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)):
-
-```python
-import numpy as np
-
-from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
-
-n = 2
-ham = Hamiltonian.ising(length=n, J=1.0, g=2.0)
-state = State(n, initial="zeros")
-observables = [Observable("z", sites=s) for s in range(n)]
-params = AnalogSimParams(observables=observables, elapsed_time=0.5, dt=0.1, sample_timesteps=True)
-reference = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.1} for s in range(n)])
-guess = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.3} for s in range(n)])
-result = NoiseCharacterizer(show_progress=False).characterize(
-    ham,
-    params,
-    init_state=state,
-    init_guess=guess,
-    observables=observables,
-    reference_model=reference,
-    x_low=np.zeros(n),
-    x_up=np.full(n, 0.5),
-    max_iter=30,
-    popsize=6,
-    seed=0,
-)
-print(result.optimal_model)
-```
-
-**Documentation:**
-[Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html)
-·
-[Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
-·
-[Circuit observables](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
-·
-[Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
-·
-[Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
-· [Full guide](https://mqt.readthedocs.io/projects/yaqs)
-
-## System Requirements
-
-MQT YAQS can be installed on all major operating systems with all
-[officially supported Python versions](https://devguide.python.org/versions/).
-Building (and running) is continuously tested under Linux, macOS, and Windows
-using the
-[latest available system versions for GitHub Actions](https://github.com/actions/runner-images).
-
 ## Cite This
 
-Please cite the work that best fits your use case.
+If you use YAQS in academic work, please cite both the
+[YAQS software](#yaqs-software) and the [MQT Handbook](#mqt-handbook). Also cite
+the papers for the methods you use.
 
-### Peer-Reviewed Research
+### YAQS software
+
+We expect to replace this software citation with a dedicated YAQS publication.
+Please use the citation below for now.
+
+```bibtex
+@misc{YAQS,
+  author       = {Aaron Sander},
+  title        = {{YAQS}: Yet Another Quantum Simulator},
+  year         = {2025},
+  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
+}
+```
+
+### MQT Handbook
+
+[[8]](https://doi.org/10.1109/QSW62656.2024.00013) R. Wille et al. The MQT
+Handbook: A Summary of Design Automation Tools and Software for Quantum
+Computing. _IEEE International Conference on Quantum Software (QSW)_ (2024).
+
+### Research publications
 
 When citing the underlying methods and research, please reference the most
-relevant peer-reviewed publications from the list below:
+relevant publications from the list below:
 
 [[1]](https://www.nature.com/articles/s41467-025-66846-x) A. Sander, M.
 Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R.
@@ -262,23 +278,17 @@ Eisert, M. Fröhlich, T. Peham, R. Wille. Computational regimes in
 matrix-product-state-based quantum trajectory simulations.
 _arXiv:2606.13779 (2026)._
 
-### The Munich Quantum Toolkit (the project)
+[[5]](https://arxiv.org/abs/2607.01323) M. Fröhlich, A. Sander, M. Eigel, R.
+Wille, M. Hintermüller. Noisy quantum circuit simulation with the tensor jump
+method. _arXiv:2607.01323 (2026)._
 
-When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
+[[6]](https://arxiv.org/abs/2608.24668) A. R. Ramos Ramos, M. Fröhlich, A.
+Sander, R. Wille, M. Eigel, P. Gelß, S. Pokutta. Scalable Lindblad Noise
+Learning via Stochastic Tensor-Network Simulation. _arXiv:2608.24668 (2026)._
 
-```bibtex
-@inproceedings{mqt,
-  title        = {The {{MQT}} Handbook: {{A}} Summary of Design Automation Tools and Software for Quantum Computing},
-  shorttitle   = {{The MQT Handbook}},
-  author       = {Wille, Robert and Berent, Lucas and Forster, Tobias and Kunasaikaran, Jagatheesan and Mato, Kevin and Peham, Tom and Quetschlich, Nils and Rovara, Damian and Sander, Aaron and Schmid, Ludwig and Schoenberger, Daniel and Stade, Yannick and Burgholzer, Lukas},
-  year         = 2024,
-  booktitle    = {IEEE International Conference on Quantum Software (QSW)},
-  doi          = {10.1109/QSW62656.2024.00013},
-  eprint       = {2405.17543},
-  eprinttype   = {arxiv},
-  addendum     = {A live version of this document is available at \url{https://mqt.readthedocs.io}}
-}
-```
+[[7]](https://arxiv.org/abs/2608.16994) M. Fröhlich, R. M. Milbradt, M. Eigel,
+A. Sander, R. Wille, C. B. Mendl. Basis-update and Galerkin time integration in
+canonical matrix-product-state form. _arXiv:2608.16994 (2026)._
 
 ---
 
