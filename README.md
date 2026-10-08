@@ -111,7 +111,8 @@ if __name__ == "__main__":
     print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
 ```
 
-[analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
+For more information, read the
+[analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html).
 
 ### Noisy circuit simulation
 
@@ -139,7 +140,8 @@ if __name__ == "__main__":
     print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
 ```
 
-[shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html)
+For more information, read the
+[shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html).
 
 ### Environmental memory characterization
 
@@ -161,7 +163,8 @@ if __name__ == "__main__":
     print(result.summary())
 ```
 
-[memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
+For more information, read the
+[memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html).
 
 Trajectory count, time-step size, and MPS truncation affect numerical accuracy;
 see the
