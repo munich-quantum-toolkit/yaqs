@@ -24,11 +24,12 @@ characterization of environmental memory and noise models. It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 YAQS primarily uses tensor networks and quantum trajectories, with statevector
-and density matrix backends available for smaller simulations. Tensor network simulation cost
-depends strongly on entanglement and accuracy settings, which can make systems far
-larger than those accessible to statevector or density matrix methods practical to simulate.
-We encourage you to explore larger system sizes with our package, as we have put
-thought and effort into making these methods scalable.
+and density matrix backends available for smaller simulations. Tensor network
+simulation cost depends strongly on entanglement and accuracy settings, which
+can make systems far larger than those accessible to statevector or density
+matrix methods practical to simulate. We encourage you to explore larger system
+sizes with our package, as we have put thought and effort into making these
+methods scalable.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
@@ -107,14 +108,15 @@ if __name__ == "__main__":
 
 [analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
 
-### Digital circuit and shot readout
+### Noisy circuit simulation
 
-Prepare a 50-qubit GHZ state and print sampled bitstring counts.
+Prepare a 50-qubit GHZ circuit with local damping and print sampled bitstring
+counts.
 
 ```python
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs import DigitalSimParams, Simulator, State
+from mqt.yaqs import DigitalSimParams, NoiseModel, Simulator, State
 
 if __name__ == "__main__":
     length = 50
@@ -125,9 +127,10 @@ if __name__ == "__main__":
         circuit.cx(site - 1, site)
     circuit.measure_all()
 
+    noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
     params = DigitalSimParams(shots=1024)
     simulator = Simulator()
-    result = simulator.run(state, circuit, params)
+    result = simulator.run(state, circuit, params, noise)
     print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
 ```
 
@@ -170,73 +173,7 @@ for worker controls.
 ·
 [Full documentation](https://mqt.readthedocs.io/projects/yaqs)
 
-## Cite This
-
-If you use YAQS in academic work, please cite both the
-[YAQS software](#yaqs-software) and the [MQT Handbook](#mqt-handbook). Also cite
-the papers for the methods you use.
-
-### YAQS software
-
-We expect to replace this software citation with a dedicated YAQS publication.
-Please use the citation below for now.
-
-```bibtex
-@misc{YAQS,
-  author       = {Aaron Sander},
-  title        = {{YAQS}: Yet Another Quantum Simulator},
-  year         = {2025},
-  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
-}
-```
-
-### Research publications
-
-When citing the underlying methods and research, please reference the most
-relevant publications from the list below:
-
-[[1]](https://www.nature.com/articles/s41467-025-66846-x) A. Sander, M.
-Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R.
-Wille, C. B. Mendl. Large-scale stochastic simulation of open quantum systems.
-_Nature Communications_ _16_, 11074 (2025).
-
-[[2]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf) A. Sander,
-L. Burgholzer, and R. Wille. Equivalence checking of quantum circuits via
-intermediary matrix product operator. _Phys. Rev. Research_ _7_, 023261 (2025).
-
-[[3]](https://arxiv.org/abs/2508.10096) A. Sander, M. Fröhlich, M. Ali, M.
-Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille.
-Quantum circuit simulation with a local time-dependent variational principle.
-_arXiv:2508.10096 (2025)._
-
-[[4]](https://arxiv.org/abs/2606.13779) A. Sander, S. Cichy, M. Eigel, J.
-Eisert, M. Fröhlich, T. Peham, R. Wille. Computational regimes in
-matrix-product-state-based quantum trajectory simulations.
-_arXiv:2606.13779 (2026)._
-
-[[5]](https://arxiv.org/abs/2607.01323) M. Fröhlich, A. Sander, M. Eigel, R.
-Wille, M. Hintermüller. Noisy quantum circuit simulation with the tensor jump
-method. _arXiv:2607.01323 (2026)._
-
-[[6]](https://arxiv.org/abs/2608.24668) A. R. Ramos Ramos, M. Fröhlich, A.
-Sander, R. Wille, M. Eigel, P. Gelß, S. Pokutta. Scalable Lindblad Noise
-Learning via Stochastic Tensor-Network Simulation. _arXiv:2608.24668 (2026)._
-
-[[7]](https://arxiv.org/abs/2608.16994) M. Fröhlich, R. M. Milbradt, M. Eigel,
-A. Sander, R. Wille, C. B. Mendl. Basis-update and Galerkin time integration in
-canonical matrix-product-state form. _arXiv:2608.16994 (2026)._
-
-### MQT Handbook
-
-[[8]](https://doi.org/10.1109/QSW62656.2024.00013) R. Wille et al. The MQT
-Handbook: A Summary of Design Automation Tools and Software for Quantum
-Computing. _IEEE International Conference on Quantum Software (QSW)_ (2024).
-
 ## Contributors and Supporters
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="40%" alt="MQT YAQS artwork">
-</p>
 
 The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
 the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the
@@ -282,6 +219,68 @@ To support this endeavor, please consider:
   <img width=20% src="https://img.shields.io/badge/Sponsor-white?style=for-the-badge&logo=githubsponsors&labelColor=black&color=blue" alt="Sponsor the MQT" />
   </a>
 </p>
+
+## Cite This
+
+If you use YAQS in academic work, please cite both the
+[YAQS software](#yaqs-software) and the [MQT Handbook](#mqt-handbook). Also cite
+the papers for the methods you use.
+
+### YAQS software
+
+We expect to replace this software citation with a dedicated YAQS publication.
+Please use the citation below for now.
+
+```bibtex
+@misc{YAQS,
+  author       = {Aaron Sander},
+  title        = {{YAQS}: Yet Another Quantum Simulator},
+  year         = {2025},
+  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
+}
+```
+
+### MQT Handbook
+
+[[8]](https://doi.org/10.1109/QSW62656.2024.00013) R. Wille et al. The MQT
+Handbook: A Summary of Design Automation Tools and Software for Quantum
+Computing. _IEEE International Conference on Quantum Software (QSW)_ (2024).
+
+### Research publications
+
+When citing the underlying methods and research, please reference the most
+relevant publications from the list below:
+
+[[1]](https://www.nature.com/articles/s41467-025-66846-x) A. Sander, M.
+Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R.
+Wille, C. B. Mendl. Large-scale stochastic simulation of open quantum systems.
+_Nature Communications_ _16_, 11074 (2025).
+
+[[2]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf) A. Sander,
+L. Burgholzer, and R. Wille. Equivalence checking of quantum circuits via
+intermediary matrix product operator. _Phys. Rev. Research_ _7_, 023261 (2025).
+
+[[3]](https://arxiv.org/abs/2508.10096) A. Sander, M. Fröhlich, M. Ali, M.
+Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille.
+Quantum circuit simulation with a local time-dependent variational principle.
+_arXiv:2508.10096 (2025)._
+
+[[4]](https://arxiv.org/abs/2606.13779) A. Sander, S. Cichy, M. Eigel, J.
+Eisert, M. Fröhlich, T. Peham, R. Wille. Computational regimes in
+matrix-product-state-based quantum trajectory simulations.
+_arXiv:2606.13779 (2026)._
+
+[[5]](https://arxiv.org/abs/2607.01323) M. Fröhlich, A. Sander, M. Eigel, R.
+Wille, M. Hintermüller. Noisy quantum circuit simulation with the tensor jump
+method. _arXiv:2607.01323 (2026)._
+
+[[6]](https://arxiv.org/abs/2608.24668) A. R. Ramos Ramos, M. Fröhlich, A.
+Sander, R. Wille, M. Eigel, P. Gelß, S. Pokutta. Scalable Lindblad Noise
+Learning via Stochastic Tensor-Network Simulation. _arXiv:2608.24668 (2026)._
+
+[[7]](https://arxiv.org/abs/2608.16994) M. Fröhlich, R. M. Milbradt, M. Eigel,
+A. Sander, R. Wille, C. B. Mendl. Basis-update and Galerkin time integration in
+canonical matrix-product-state form. _arXiv:2608.16994 (2026)._
 
 ---
 
