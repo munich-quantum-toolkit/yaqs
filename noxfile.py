@@ -245,10 +245,11 @@ def docs(session: nox.Session) -> None:
     args, posargs = parser.parse_known_args(session.posargs)
 
     serve = args.builder == "html" and session.interactive
+    install_args = ["--group", "docs", "--torch-backend", "cpu", "--exact", "-e", ".[qasm3,torch]"]
     if serve:
-        session.install("sphinx-autobuild")
+        install_args.append("sphinx-autobuild")
+    session.install(*install_args)
 
-    env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
     shared_args = [
         "-n",  # nitpicky mode
         "-T",  # full tracebacks
@@ -259,15 +260,9 @@ def docs(session: nox.Session) -> None:
     ]
 
     session.run(
-        "uv",
-        "run",
-        "--no-dev",  # do not auto-install dev dependencies
-        "--group",
-        "docs",
-        "--all-extras",
         "sphinx-autobuild" if serve else "sphinx-build",
         *shared_args,
-        env=env,
+        env={**_CAPPED_NUMERICAL_THREADS, "YAQS_MAX_WORKERS": "2"},
     )
 
 
