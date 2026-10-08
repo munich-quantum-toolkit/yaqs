@@ -9,20 +9,23 @@
 <p align="center">
   <a href="https://mqt.readthedocs.io">
     <picture>
-      <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="60%" alt="MQT YAQS Banner">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/logo-mqt-dark.svg" width="60%">
+      <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/logo-mqt-light.svg" width="60%" alt="MQT Logo">
     </picture>
   </a>
 </p>
 
-# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Simulation and characterization of quantum systems and their environments
 
-MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for
-**scalable, computationally efficient** simulation and characterization of open
-quantum dynamics, noisy quantum circuits, and hardware-realistic device models.
-MQT YAQS uses state-of-the-art techniques in these areas such as parallelized
-trajectories, tensor network compression, and problem-size-appropriate backends
-wherever possible (see [Cite This](#cite-this)). It is part of the
+MQT YAQS (pronounced "yaks") is a Python library for simulating quantum systems
+and studying their interaction with the environment. It supports analog
+evolution, noisy quantum circuits, circuit equivalence checking, and
+characterization of environmental memory and noise models. It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
+
+YAQS uses tensor networks and quantum trajectories, with statevector and
+density-matrix backends for smaller analog simulations. The cost of
+tensor-network simulation depends on entanglement and accuracy settings.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
@@ -68,6 +71,10 @@ If you have any questions, feel free to create a
 [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
 
 ## Contributors and Supporters
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="40%" alt="MQT YAQS artwork">
+</p>
 
 The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
 the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the
