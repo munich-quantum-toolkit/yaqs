@@ -97,8 +97,7 @@ Optional extras support
 
 ### Noisy analog evolution
 
-Simulate a 50-site Ising chain with local damping and measure the final mean
-⟨Z₀⟩ across quantum trajectories:
+Evolve a 50-site Ising chain with local damping and print the final mean ⟨Z₀⟩.
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
@@ -119,15 +118,11 @@ result = Simulator(parallel=False).run(state, hamiltonian, params, noise)
 print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
 ```
 
-Trajectory count, time step, and bond dimension control accuracy and cost. These
-illustrative settings do not establish convergence. See the
 [analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
-for time-resolved observables and accuracy controls.
 
 ### Digital circuit and shot readout
 
-Prepare a 50-qubit GHZ state and sample computational-basis measurements. The
-ideal state gives equal probabilities for the all-zero and all-one bitstrings:
+Prepare a 50-qubit GHZ state and print sampled bitstring counts.
 
 ```python
 from qiskit.circuit import QuantumCircuit
@@ -146,17 +141,11 @@ result = Simulator(parallel=False).run(State(length, initial="zeros"), circuit, 
 print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
 ```
 
-The printed dictionary maps bitstrings to shot counts. See the
 [shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html)
-and
-[noisy circuit guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
-for more workflows.
 
 ### Environmental memory characterization
 
-Treat site 0 of a 50-site chain as a probe coupled to the remaining 49 sites.
-Sample past and future operations on the probe to characterize environmental
-memory at a temporal cut:
+Probe environmental memory in a 50-site chain and print the memory diagnostics.
 
 ```python
 import numpy as np
@@ -178,17 +167,11 @@ result = characterizer.characterize(
 print(result.summary())
 ```
 
-The summary reports the response-matrix entropy and effective number of memory
-modes for the sampled probes. See the
 [memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
-for the probe settings and interpretation, or the
-[noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
-to fit Lindblad rates from observable dynamics.
 
-These examples use serial execution. See the
+For parallel scripts, use an `if __name__ == "__main__":` guard; see the
 [execution guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulator_initialization.html)
-for parallel runs and worker controls. Parallel scripts require an
-`if __name__ == "__main__":` guard.
+for worker controls.
 
 **Documentation:**
 [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html)
