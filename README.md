@@ -23,10 +23,10 @@ evolution, noisy quantum circuits, circuit equivalence checking, and
 characterization of environmental memory and noise models. It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
-YAQS primarily uses tensor networks and quantum trajectories, with statevector and
-density matrix backends available for smaller simulations. The cost of
-tensor network simulation depends primarily on entanglement and accuracy settings,
-rather than system size or number of qubits.
+YAQS primarily uses tensor networks and quantum trajectories, with statevector
+and density matrix backends available for smaller simulations. The cost of
+tensor network simulation depends primarily on entanglement and accuracy
+settings, rather than system size or number of qubits.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
@@ -39,17 +39,16 @@ rather than system size or number of qubits.
 Analog, digital, and analog–digital simulations support both noiseless and noisy
 dynamics.
 
-| Capability                                                                                                              | What users can do                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)                 | Simulate large quantum systems using tensor networks and Monte Carlo methods.                                                                            |
-| [Digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)              | Simulate quantum circuits using tensor networks and sample measurement outcomes.                                                                         |
-| [Analog–digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html) | Combine analog evolution and quantum circuits in one simulation.                                                                                         |
-| [Equivalence checking](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/equivalence_checking.html)           | Check whether two quantum circuits behave the same, measure differences, and study the effects of noise on compilation.                                                 |
-| [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)               | Study a system's environment and understand memory effects from past interactions.                                                                         |
-| [Surrogate models](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)                   | Train models to predict dynamics that depend on past interactions (non-Markovian dynamics; requires PyTorch).                                    |
-| [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)                 | Learn a system's noise model from its observed dynamics.                                                                                                 |
-| [Hardware modeling](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/hamiltonians.html)                      | Use device Hamiltonians together with realistic noise models. 
-|
+| Capability                                                                                                              | What users can do                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| [Analog simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)                 | Simulate large quantum systems using tensor networks and Monte Carlo methods.                                           |
+| [Digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)              | Simulate quantum circuits using tensor networks and sample measurement outcomes.                                        |
+| [Analog–digital simulation](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_analog_simulation.html) | Combine analog evolution and quantum circuits in one simulation.                                                        |
+| [Equivalence checking](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/equivalence_checking.html)           | Check whether two quantum circuits behave the same, measure differences, and study the effects of noise on compilation. |
+| [Environmental memory](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)               | Study a system's environment and understand memory effects from past interactions.                                      |
+| [Surrogate models](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)                   | Train models to predict dynamics that depend on past interactions (non-Markovian dynamics; requires PyTorch).           |
+| [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)                 | Learn a system's noise model from its observed dynamics.                                                                |
+| [Hardware modeling](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/hamiltonians.html)                      | Use device Hamiltonians together with realistic noise models.                                                           |
 
 If you have any questions, feel free to create a
 [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an
@@ -173,10 +172,10 @@ for worker controls.
 
 Please cite the work that best fits your use case.
 
-### Peer-Reviewed Research
+### Research publications
 
 When citing the underlying methods and research, please reference the most
-relevant peer-reviewed publications from the list below:
+relevant publications from the list below:
 
 [[1]](https://www.nature.com/articles/s41467-025-66846-x) A. Sander, M.
 Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R.
@@ -196,6 +195,18 @@ _arXiv:2508.10096 (2025)._
 Eisert, M. Fröhlich, T. Peham, R. Wille. Computational regimes in
 matrix-product-state-based quantum trajectory simulations.
 _arXiv:2606.13779 (2026)._
+
+[[5]](https://arxiv.org/abs/2607.01323) M. Fröhlich, A. Sander, M. Eigel, R.
+Wille, M. Hintermüller. Noisy quantum circuit simulation with the tensor jump
+method. _arXiv:2607.01323 (2026)._
+
+[[6]](https://arxiv.org/abs/2608.24668) A. R. Ramos Ramos, M. Fröhlich, A.
+Sander, R. Wille, M. Eigel, P. Gelß, S. Pokutta. Scalable Lindblad Noise
+Learning via Stochastic Tensor-Network Simulation. _arXiv:2608.24668 (2026)._
+
+[[7]](https://arxiv.org/abs/2608.16994) M. Fröhlich, R. M. Milbradt, M. Eigel,
+A. Sander, R. Wille, C. B. Mendl. Basis-update and Galerkin time integration in
+canonical matrix-product-state form. _arXiv:2608.16994 (2026)._
 
 ### The Munich Quantum Toolkit (the project)
 
