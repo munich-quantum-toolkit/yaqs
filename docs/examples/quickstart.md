@@ -50,80 +50,92 @@ plt.rcParams.update({
 })
 ```
 
-## Large-scale analog dynamics
+## Noisy analog dynamics
 
-Follow one excitation as it spreads through a **50-site XY spin chain**. YAQS
-uses an MPS rather than storing all $2^{50}$ state amplitudes.
+Compare coherent transport and damping in a **20-site XY spin chain**. YAQS uses
+an MPS and averages noisy dynamics over Monte Carlo trajectories.
 
 ```{code-cell} python
-from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 
-length = 50
+length = 20
 center = length // 2
 basis = "0" * center + "1" + "0" * (length - center - 1)
 state = State(length, initial="basis", basis_string=basis)
 hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
 params = AnalogSimParams(
     observables=[Observable("z", site) for site in range(length)],
-    elapsed_time=6.0,
-    dt=0.2,
+    elapsed_time=3.0,
+    dt=0.25,
+    num_traj=32,
     preset="fast",
+    random_seed=7,
 )
+relaxation_rate = 1.0
+noise = NoiseModel([
+    {"name": "lowering", "sites": [site], "strength": relaxation_rate} for site in range(length)
+])
 
 simulator = Simulator(show_progress=False)
-analog = simulator.run(state, hamiltonian, params)
+coherent = simulator.run(state, hamiltonian, params)
+dissipative = simulator.run(state, hamiltonian, params, noise)
 ```
 
 ```{code-cell} python
 :tags: [hide-input]
 from matplotlib.colors import PowerNorm
 
-occupation = (1 - np.asarray(analog.expectation_values).real) / 2
-sites = np.arange(length)
-fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.0), width_ratios=[1.2, 1])
-image = axes[0].pcolormesh(
-    analog.times, sites, occupation, shading="auto", cmap="cividis",
-    norm=PowerNorm(0.5, vmin=0, vmax=1), rasterized=True,
-)
-fig.colorbar(image, ax=axes[0], label=r"$\langle n_i\rangle$", ticks=[0, 0.1, 0.5, 1])
-axes[0].set(xlabel=r"Time $t$", ylabel=r"Site $i$", xlim=(0, 6), ylim=(-0.5, length - 0.5))
-axes[0].set_title("(a) Excitation transport", loc="left", fontsize=11)
-for time, color, marker in zip((2, 4, 6), ("#0072B2", "#D55E00", "#009E73"), ("o", "s", "^"), strict=True):
-    index = np.argmin(np.abs(analog.times - time))
-    axes[1].plot(sites, occupation[:, index], color=color, marker=marker, markevery=3, label=rf"$t={time}$")
-axes[1].set(xlabel=r"Site $i$", ylabel=r"Occupation $\langle n_i\rangle$", xlim=(0, length - 1), ylim=(0, 0.22))
-axes[1].set_title("(b) Spatial profiles", loc="left", fontsize=11)
-axes[1].legend()
+occupation = np.stack([
+    (1 - np.asarray(result.expectation_values).real) / 2
+    for result in (coherent, dissipative)
+])
+fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.8))
+for ax, values, title in zip(
+    axes[:2], occupation, ("(a) Noiseless", "(b) Damped"), strict=True,
+):
+    image = ax.pcolormesh(
+        coherent.times, np.arange(length), values, shading="auto", cmap="cividis",
+        norm=PowerNorm(0.5, vmin=0, vmax=1), rasterized=True,
+    )
+    ax.set(xlabel=r"Time $t$", ylabel=r"Site $i$")
+    ax.set_title(title, loc="left", fontsize=11)
+fig.colorbar(image, ax=list(axes[:2]), label=r"$\langle n_i\rangle$", ticks=[0, 0.1, 0.5, 1])
+axes[2].plot(coherent.times, occupation[0].sum(axis=0), color="#0072B2", label="Noiseless")
+axes[2].plot(coherent.times, occupation[1].sum(axis=0), "o-", color="#D55E00", label="Damped")
+axes[2].plot(coherent.times, np.exp(-relaxation_rate * coherent.times), "--", color="0.3", label="Damping law")
+axes[2].set(xlabel=r"Time $t$", ylabel=r"Total excitation $\sum_i\langle n_i\rangle$", ylim=(0, 1.08))
+axes[2].set_title("(c) Excitation loss", loc="left", fontsize=11)
+axes[2].legend()
 plt.show()
 ```
 
-The occupation $n_i=(1-Z_i)/2$ shows propagation and interference. The color
-scale emphasizes small occupations; the total excitation remains one. This
-low-excitation example stays inexpensive because its entanglement is limited.
-For noise, larger trajectory budgets, and convergence checks, see
-{doc}`analog_simulation` and {doc}`simulation_parameters`.
+The occupation $n_i=(1-Z_i)/2$ shows propagation and interference. Both heatmaps
+use the same color scale, which emphasizes small occupations. Damping removes
+excitations; the 32-trajectory estimate fluctuates around the exponential loss
+law. This low-excitation state has limited entanglement. See
+{doc}`analog_simulation` and {doc}`simulation_parameters` for larger budgets and
+convergence checks.
 
 ## Noisy circuit readout
 
-Prepare an eight-qubit GHZ circuit and compare ideal and damped readout with 256
-shots per run.
+Prepare a **16-qubit graph state** and compare noiseless and damped readout.
 
 ```{code-cell} python
 from qiskit import QuantumCircuit
 
 from mqt.yaqs import DigitalSimParams, NoiseModel, Simulator, State
 
-num_qubits = 8
+num_qubits = 16
 circuit = QuantumCircuit(num_qubits)
-circuit.h(0)
+circuit.h(range(num_qubits))
 for site in range(num_qubits - 1):
-    circuit.cx(site, site + 1)
+    circuit.cz(site, site + 1)
 circuit.measure_all()
 
 state = State(num_qubits, initial="zeros")
 params = DigitalSimParams(shots=256, preset="fast", random_seed=7)
 noise = NoiseModel([
-    {"name": "lowering", "sites": [site], "strength": 0.3} for site in range(num_qubits)
+    {"name": "lowering", "sites": [site], "strength": 0.5} for site in range(num_qubits)
 ])
 
 simulator = Simulator(show_progress=False)
@@ -134,36 +146,38 @@ damped = simulator.run(state, circuit, params, noise)
 ```{code-cell} python
 :tags: [hide-input]
 excitation_number = np.arange(num_qubits + 1)
+readout_probabilities = []
 fig, ax = plt.subplots(figsize=(5.4, 2.9))
-for result, offset, color, label in (
-    (ideal, -0.18, "#0072B2", "Ideal"),
-    (damped, 0.18, "#D55E00", "Damped"),
+for result, color, offset, label in (
+    (ideal, "#0072B2", -0.22, "Noiseless"),
+    (damped, "#D55E00", 0.22, "Damped"),
 ):
     probability = np.zeros(num_qubits + 1)
     for outcome, count in result.counts.items():
         probability[outcome.bit_count()] += count / params.shots
-    ax.bar(excitation_number + offset, probability, width=0.36, color=color,
-           edgecolor="white", linewidth=0.6, label=label)
-ax.set(xlabel="Number of excited qubits", ylabel="Measured probability", xticks=excitation_number, ylim=(0, 0.7))
+    readout_probabilities.append(probability)
+    ax.bar(excitation_number + offset, probability, width=0.42, color=color,
+           edgecolor="white", linewidth=0.5, alpha=0.9, label=label)
+ax.set(xlabel="Number of excited qubits", ylabel="Measured probability",
+       xlim=(-0.5, num_qubits + 0.5), xticks=np.arange(0, num_qubits + 1, 2))
 ax.legend()
 plt.show()
 ```
 
-The ideal populations lie at zero and eight excitations. Damping shifts weight
-toward lower excitation numbers. This histogram summarizes readout populations;
-see {doc}`circuit_shots` for bitstring counts and {doc}`circuit_observables` for
-expectation values and OpenQASM input.
+Damping shifts the readout toward fewer excitations. Each histogram summarizes
+256 shots. See {doc}`circuit_shots` for bitstring counts and
+{doc}`circuit_observables` for expectation values and OpenQASM input.
 
 ## Circuit equivalence
 
-Verify a transpiled circuit, then measure how an extra $Z$ rotation changes its
-agreement with the original.
+Verify a transpiled circuit, then compare the effects of an added rotation and
+increasing Pauli noise.
 
 ```{code-cell} python
 import numpy as np
 from qiskit import QuantumCircuit, transpile
 
-from mqt.yaqs import EquivalenceChecker
+from mqt.yaqs import EquivalenceChecker, NoiseModel
 
 circuit = QuantumCircuit(4)
 circuit.h(0)
@@ -174,43 +188,62 @@ decomposed = transpile(circuit, basis_gates=["rz", "sx", "x", "cx"])
 checker = EquivalenceChecker()
 print("Equivalent:", checker.check(circuit, decomposed)["equivalent"])
 angles = np.linspace(0, np.pi, 17)
-overlaps = []
+rotation_overlaps = []
 for angle in angles:
     perturbed = decomposed.copy()
     perturbed.rz(float(angle), 0)
-    overlaps.append(checker.check(circuit, perturbed)["fidelity"])
+    rotation_overlaps.append(checker.check(circuit, perturbed)["fidelity"])
+
+error_probabilities = np.linspace(0, 0.9, 10)
+noisy_checks = []
+for probability in error_probabilities:
+    noise = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": float(probability)}])
+    noisy_checks.append(checker.check(
+        circuit, decomposed, noise_model=noise, num_traj=128, random_seed=7,
+    ))
 ```
 
 ```{code-cell} python
 :tags: [hide-input]
-fig, ax = plt.subplots(figsize=(4.6, 2.9))
-ax.plot(angles, overlaps, "o", color="#0072B2", label="YAQS")
-ax.plot(angles, np.abs(np.cos(angles / 2)), "--", color="0.3", label=r"Analytic $|\cos(\theta/2)|$")
-ax.set(xlabel=r"Added rotation $\theta$ (rad)", ylabel="Normalized operator overlap",
-       xlim=(0, np.pi), ylim=(0, 1.05), xticks=[0, np.pi / 2, np.pi],
-       xticklabels=["0", r"$\pi/2$", r"$\pi$"])
-ax.legend()
+fig, axes = plt.subplots(1, 2, figsize=(6.8, 2.9), sharey=True)
+axes[0].plot(angles, rotation_overlaps, "o", color="#0072B2", label="YAQS")
+axes[0].plot(angles, np.abs(np.cos(angles / 2)), "--", color="0.3", label=r"$|\cos(\theta/2)|$")
+axes[0].set(xlabel=r"Added rotation $\theta$ (rad)", ylabel="Normalized overlap",
+            xlim=(-0.03, np.pi + 0.03), ylim=(0, 1.05), xticks=[0, np.pi / 2, np.pi],
+            xticklabels=["0", r"$\pi/2$", r"$\pi$"])
+axes[0].set_title("(a) Coherent error", loc="left", fontsize=11)
+axes[0].legend()
+axes[1].errorbar(error_probabilities, [check["fidelity"] for check in noisy_checks],
+                 yerr=[check["fidelity_error"] for check in noisy_checks],
+                 fmt="o", color="#D55E00", capsize=2, label="YAQS")
+axes[1].plot(error_probabilities, np.sqrt(1 - error_probabilities), "--", color="0.3", label=r"$\sqrt{1-p}$")
+axes[1].set(xlabel=r"Pauli error probability $p$", xlim=(-0.03, 0.93))
+axes[1].set_title("(b) Stochastic error", loc="left", fontsize=11)
+axes[1].legend()
 plt.show()
 ```
 
-An overlap of one indicates agreement up to a global phase. The added rotation
-produces a controlled difference with a known analytic overlap. See
-{doc}`equivalence_checking` for noise and accuracy controls.
+An overlap of one indicates agreement up to a global phase. Here, site 0 has one
+noise opportunity, after the first CX gate. A $Z$ error has zero overlap, so the
+ensemble's root-mean-square overlap is $\sqrt{1-p}$. Error bars show Monte Carlo
+standard errors. Noise is applied to the second circuit. See
+{doc}`equivalence_checking` for supported noise and accuracy controls.
 
 ## Environmental memory
 
-Compare the response modes of a qubit with and without coupling to a two-spin
-environment, using the same probe grid.
+Sweep the Ising coupling in a three-spin chain and compare the probe qubit's
+memory spectra using the same probe grid.
 
 ```{code-cell} python
 import numpy as np
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
+couplings = np.linspace(0, 1.5, 13)
 params = AnalogSimParams(elapsed_time=0.5, dt=0.5, preset="fast")
 characterizer = MemoryCharacterizer(show_progress=False)
 memories = []
-for coupling in (0.0, 1.0):
+for coupling in couplings:
     hamiltonian = Hamiltonian.ising(3, J=coupling, g=1.0)
     memories.append(characterizer.characterize(
         hamiltonian, params, num_interventions=4, cut=2, preset="quick",
@@ -220,127 +253,232 @@ for coupling in (0.0, 1.0):
 
 ```{code-cell} python
 :tags: [hide-input]
-fig, axes = plt.subplots(1, 2, figsize=(6.8, 3.0))
-for memory, color, marker, label in zip(
-    memories, ("#D55E00", "#0072B2"), ("s", "o"), ("Uncoupled", "Coupled"), strict=True,
-):
+fig, axes = plt.subplots(1, 2, figsize=(6.8, 3.0), width_ratios=[1.4, 1])
+colors = plt.colormaps["Reds"](np.linspace(0.35, 0.95, len(couplings)))
+for memory, color in zip(memories, colors, strict=True):
     spectrum = memory.singular_values(2)
     weights = spectrum**2 / np.sum(spectrum**2)
-    axes[0].semilogy(np.arange(1, len(weights) + 1), weights, marker=marker, color=color, label=label)
-axes[0].set(xlabel="Mode index", ylabel=r"Resolved mode weight $p_k$", ylim=(1e-10, 2))
-axes[0].set_title("(a) Memory spectrum", loc="left", fontsize=11)
-axes[0].legend()
-image = axes[1].imshow(np.abs(memories[1].response_matrix(2)), aspect="auto", cmap="cividis", origin="lower")
-axes[1].set(xlabel="Past probe index", ylabel="Future response row")
-axes[1].set_title("(b) Coupled response", loc="left", fontsize=11)
-fig.colorbar(image, ax=axes[1], label=r"$|V_{\mu j}|$")
+    axes[0].semilogy(np.arange(1, len(weights) + 1), weights, "o-",
+                     color=color, linewidth=1.2, markersize=3)
+axes[0].text(0.28, 0.14, "Coupling increases", transform=axes[0].transAxes,
+             ha="center", va="center", fontsize=10, color="black")
+axes[0].annotate("", xy=(0.82, 0.76), xytext=(0.50, 0.20),
+                 xycoords="axes fraction",
+                 arrowprops={"arrowstyle": "->", "color": "black",
+                             "lw": 1.5, "connectionstyle": "arc3,rad=0.25"})
+axes[0].set(xlabel="Mode index", ylabel=r"Resolved mode weight $p_k$", ylim=(1e-13, 2))
+axes[0].set_title("(a) Memory spectra", loc="left", fontsize=11)
+entropies = np.array([memory.entropy(2) for memory in memories])
+axes[1].fill_between(couplings, entropies, color=colors[3], alpha=0.3)
+axes[1].plot(couplings, entropies, "o-", color=colors[-1], linewidth=2.6,
+             markerfacecolor="white", markeredgewidth=1.2)
+axes[1].set(xlabel=r"Coupling $J$", ylabel=r"Memory entropy $S_V$",
+            xlim=(-0.03, 1.53), ylim=(-0.008, 0.34), xticks=[0, 0.5, 1, 1.5])
+axes[1].grid(axis="y", color="0.9", linewidth=0.5)
+axes[1].set_axisbelow(True)
+axes[1].set_title("(b) Resolved memory", loc="left", fontsize=11)
 plt.show()
 ```
 
 The weights $p_k=s_k^2/\sum_j s_j^2$ describe memory resolved by the sampled
-probes. Without coupling, this example has one resolved mode; coupling reveals
-additional modes. These weights are not the environment's state populations. See
-{doc}`characterization` for probe choices and interpretation.
+probes. Darker curves show larger $J$. Coupling redistributes weight among the
+resolved modes. The entropy measures this spread and peaks within this sweep.
+These weights are not environment-state populations. See {doc}`characterization`
+for probe choices and interpretation.
 
-## Noise characterization
+## Create a digital twin
 
-Learn a dephasing rate from synthetic dynamics and compare the fitted
-trajectories with the reference.
+Learn
+**relaxation and dephasing from measurements at the ends of a spin chain**. Then
+rerun the fitted model to predict transport through the unmeasured interior.
 
 ```{code-cell} python
 import numpy as np
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, Simulator, State
 
-hamiltonian = Hamiltonian.ising(2, J=1.0, g=1.0)
-observables = [Observable("z", 0), Observable("y", 0)]
-params = AnalogSimParams(observables=observables, elapsed_time=3.0, dt=0.1, preset="fast")
-reference = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.18}])
-guess = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.6}])
+length = 4
+state = State(length, initial="basis", basis_string="1000", representation="density_matrix")
+hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
+observables = [Observable("z", site) for site in range(length)]
+params = AnalogSimParams(observables=observables, elapsed_time=8.0, dt=0.1, preset="fast")
+reference = NoiseModel([
+    {"name": "lowering", "sites": [3], "strength": 0.35},
+    {"name": "pauli_z", "sites": [2], "strength": 0.12},
+])
+guess = NoiseModel([
+    {"name": "lowering", "sites": [3], "strength": 0.2},
+    {"name": "pauli_z", "sites": [2], "strength": 0.2},
+])
 
+simulator = Simulator(show_progress=False)
+measured = simulator.run(state, hamiltonian, params, reference)
 characterizer = NoiseCharacterizer(show_progress=False)
 fit = characterizer.characterize(
     hamiltonian,
     params,
-    init_state=State(2, initial="zeros"),
+    init_state=state,
     init_guess=guess,
-    observables=observables,
-    reference_model=reference,
-    x_low=np.array([0.0]),
-    x_up=np.array([1.0]),
-    max_iter=20,
+    observables=[observables[0], observables[-1]],
+    ref_expectations=np.asarray(measured.expectation_values)[[0, -1]],
+    x_low=np.zeros(2),
+    x_up=np.ones(2),
+    max_iter=40,
+    seed=7,
 )
-print("Fitted rate:", fit.best_parameters)
+reconstructed = simulator.run(state, hamiltonian, params, fit.optimal_model)
+print("Fitted rates:", fit.best_parameters.round(3))
 ```
 
 ```{code-cell} python
 :tags: [hide-input]
-fig, axes = plt.subplots(1, 2, figsize=(6.8, 3.0), width_ratios=[1.5, 1])
-for index, (color, label) in enumerate((("#0072B2", r"$\langle Z_0\rangle$"), ("#D55E00", r"$\langle Y_0\rangle$"))):
-    axes[0].plot(fit.times, fit.fit_traj[index], color=color, label=label)
-    axes[0].plot(fit.times[::2], fit.ref_traj[index, ::2], "o", color=color, markerfacecolor="white")
-axes[0].plot([], [], "o", color="0.3", markerfacecolor="white", label="Reference")
-axes[0].set(xlabel=r"Time $t$", ylabel="Expectation value", ylim=(-1.05, 1.05))
-axes[0].set_title("(a) Fitted dynamics", loc="left", fontsize=11)
-axes[0].legend()
-axes[1].bar([0, 1], [0.6, fit.best_parameters[0]], color=["#D55E00", "#0072B2"], width=0.55)
-axes[1].axhline(0.18, color="0.3", linestyle="--", linewidth=1.1, label="Reference")
-axes[1].set(xticks=[0, 1], xticklabels=["Initial guess", "Fit"], ylabel=r"Dephasing rate $\gamma$", ylim=(0, 0.7))
-axes[1].set_title("(b) Recovered rate", loc="left", fontsize=11)
-axes[1].legend()
+reference_dynamics = (1 - np.asarray(measured.expectation_values).real) / 2
+fitted_dynamics = (1 - np.asarray(reconstructed.expectation_values).real) / 2
+fig, axes = plt.subplots(1, 2, figsize=(6.8, 2.8), sharey=True)
+for ax, dynamics, title in zip(
+    axes, (reference_dynamics, fitted_dynamics),
+    ("(a) Reference transport", "(b) Fitted model"), strict=True,
+):
+    image = ax.pcolormesh(measured.times, np.arange(length), dynamics,
+                          shading="auto", cmap="cividis", vmin=0, vmax=1, rasterized=True)
+    ax.set(xlabel=r"Time $t$", yticks=np.arange(length))
+    ax.set_title(title, loc="left", fontsize=11)
+axes[0].set_ylabel(r"Site $i$")
+fig.colorbar(image, ax=list(axes), label=r"$\langle n_i\rangle$", ticks=[0, 0.5, 1])
 plt.show()
 ```
 
-For measured data, supply `ref_expectations` instead of `reference_model`. See
-{doc}`digital_twin` for data preparation and validation of the fitted model.
+The excitation propagates and reflects while a local sink removes population and
+dephasing changes transport. Only sites 0 and 3 enter the fit; sites 1 and 2
+check its predictions. Both heatmaps share a scale. This example uses synthetic
+observations without measurement noise from density-matrix simulation; replace
+the reference array with your measured traces. The fit assumes the two channel
+types and their sites are known. See {doc}`digital_twin` for data preparation
+and validation.
 
-## Surrogate prediction
+## Predict non-Markovian dynamics
 
-Train a model on control sequences, then compare its predictions on
-**new sequences** with Hamiltonian calculations. Install the `torch` extra
-first: `uv pip install "mqt.yaqs[torch]"`.
+Train a surrogate on **random unitary controls**, then explore how a pulse
+changes the coherence of a probe coupled to an environment spin. Install the
+`torch` extra first: `uv pip install "mqt.yaqs[torch]"`.
+
+```{note}
+**Experimental feature.** Surrogate modeling is not yet supported by a published
+YAQS paper. This example uses a short, two-intervention horizon. Validate
+predictions for your chosen controls and time horizon against reference
+simulations or measurements.
+```
 
 ```{code-cell} python
+import numpy as np
 import torch
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
-torch.manual_seed(7)
-hamiltonian = Hamiltonian.ising(3, J=1.0, g=0.7)
-params = AnalogSimParams(elapsed_time=0.2, dt=0.2, preset="fast")
+num_steps = 2
+interval = 0.6
+hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+params = AnalogSimParams(elapsed_time=interval, dt=interval, preset="fast")
 characterizer = MemoryCharacterizer(show_progress=False)
+```
+
+Train on 4,096 random sequences and select the model using 256 fresh random
+validation sequences. The environment starts in $|0\rangle$. The folded cell
+sets a small model and training budget for this documentation example.
+
+```{code-cell} python
+:tags: [hide-input]
+torch.manual_seed(7)
+schedule = [0.0] + [interval] * num_steps
+validation = characterizer.sample(
+    hamiltonian, params, num_interventions=num_steps, n=256, seed=99,
+    timesteps=schedule, intervention_style="haar",
+)
 model = characterizer.train(
-    hamiltonian, params, num_interventions=2, n=160, seed=7,
-    intervention_style="measure_prepare",
+    hamiltonian, params, num_interventions=num_steps, n=4096, seed=7,
+    timesteps=schedule, intervention_style="haar",
+    model_kwargs={"d_model": 64, "num_layers": 2, "dim_ff": 128},
+    train_kwargs={"epochs": 400, "lr": 1e-3, "val_dataset": validation},
 )
-held_out = characterizer.sample(
-    hamiltonian, params, num_interventions=2, n=48, seed=99,
-    intervention_style="measure_prepare",
-)
-features, rho0, target = held_out.tensors
-prediction = model.predict(features.numpy(), rho0.numpy(), return_numpy=True)
+```
+
+Start the probe in $|+\rangle$. Let it evolve for $t=0.6$, apply a rotation
+$R_z(\theta)$, then predict its state at $t=1.2$ for each pulse angle. These
+chosen sequences are not supplied during training.
+
+```{code-cell} python
+plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
+rho0 = np.outer(plus, plus.conj())
+identity = np.eye(2, dtype=complex)
+pulse_angles = np.linspace(0, 2 * np.pi, 61)
+predicted_states = np.asarray([
+    characterizer.predict(model, rho0, [
+        {"unitary": identity},
+        {"unitary": np.diag(np.exp(-0.5j * angle * np.array([1, -1])))},
+    ])
+    for angle in pulse_angles
+])
 ```
 
 ```{code-cell} python
 :tags: [hide-input]
-# Packed entries 0 and 6 are the two diagonal populations.
-z_reference = target.numpy()[:, -1, 0] - target.numpy()[:, -1, 6]
-z_prediction = prediction[:, -1, 0] - prediction[:, -1, 6]
-rmse = np.sqrt(np.mean((z_prediction - z_reference)**2))
-fig, ax = plt.subplots(figsize=(3.8, 3.5))
-ax.plot([-1, 1], [-1, 1], "--", color="0.3", linewidth=1.0, label="Exact agreement")
-ax.scatter(z_reference, z_prediction, s=25, color="#0072B2", alpha=0.8, edgecolor="white", linewidth=0.4)
-ax.text(0.06, 0.94, f"RMSE = {rmse:.3f}", transform=ax.transAxes, va="top")
-ax.set(xlabel=r"Hamiltonian reference $\langle Z\rangle$", ylabel=r"Surrogate prediction $\langle Z\rangle$",
-       xlim=(-1.05, 1.05), ylim=(-1.05, 1.05), xticks=[-1, 0, 1], yticks=[-1, 0, 1])
-ax.set_aspect("equal")
+from matplotlib.collections import LineCollection
+from matplotlib.patches import Circle
+
+predicted_coherence = 2 * np.abs(predicted_states[:, 0, 1])
+no_pulse_coherence = predicted_coherence[0]
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.4), gridspec_kw={"width_ratios": [1, 1.4]})
+
+# Show the final states projected onto the equatorial Bloch plane.
+bloch_xy = np.column_stack((
+    2 * predicted_states[:, 0, 1].real,
+    -2 * predicted_states[:, 0, 1].imag,
+))
+points = bloch_xy[:, None, :]
+segments = np.concatenate((points[:-1], points[1:]), axis=1)
+trajectory = LineCollection(segments, cmap="twilight_shifted",
+                            norm=plt.Normalize(0, 2 * np.pi), linewidth=2.6)
+trajectory.set_array((pulse_angles[:-1] + pulse_angles[1:]) / 2)
+axes[0].add_patch(Circle((0, 0), 1, facecolor="0.97", edgecolor="0.75", linewidth=0.8))
+axes[0].add_patch(Circle((0, 0), 0.5, fill=False, edgecolor="0.85", linewidth=0.6))
+axes[0].axhline(0, color="0.85", linewidth=0.6)
+axes[0].axvline(0, color="0.85", linewidth=0.6)
+axes[0].add_collection(trajectory)
+axes[0].plot(*bloch_xy[0], "o", color="0.3", markerfacecolor="white", markersize=6)
+axes[0].set(xlabel=r"$\langle X\rangle$", ylabel=r"$\langle Y\rangle$",
+            xlim=(-1.05, 1.05), ylim=(-1.05, 1.05), aspect="equal",
+            xticks=[-1, 0, 1], yticks=[-1, 0, 1])
+axes[0].set_title("(a) Final probe state", loc="left", fontsize=11)
+colorbar = fig.colorbar(trajectory, ax=axes[0], orientation="horizontal",
+                       shrink=0.8, pad=0.08, aspect=25, ticks=[0, np.pi, 2 * np.pi])
+colorbar.ax.set_xticklabels(["0", r"$\pi$", r"$2\pi$"])
+colorbar.set_label(r"Pulse angle $\theta$")
+
+axes[1].fill_between(pulse_angles, no_pulse_coherence, predicted_coherence,
+                     where=predicted_coherence >= no_pulse_coherence,
+                     interpolate=True, color="#0072B2", alpha=0.15)
+axes[1].fill_between(pulse_angles, no_pulse_coherence, predicted_coherence,
+                     where=predicted_coherence < no_pulse_coherence,
+                     interpolate=True, color="#D55E00", alpha=0.2)
+axes[1].plot(pulse_angles, predicted_coherence, color="#0072B2", linewidth=2.2,
+             label="With control pulse")
+axes[1].axhline(no_pulse_coherence, color="0.4", linestyle="--", linewidth=1.1,
+                label="Free evolution")
+axes[1].set(xlabel=r"Pulse angle $\theta$", ylabel=r"Final coherence $2|\rho_{01}|$",
+            xlim=(0, 2 * np.pi), ylim=(0, 1),
+            xticks=[0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi],
+            xticklabels=["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+axes[1].set_title("(b) Predicted coherence", loc="left", fontsize=11)
+axes[1].legend(loc="upper right", fontsize=9)
 plt.show()
 ```
 
-The scatter tests observable prediction on 48 held-out sequences. It does not
-certify every predicted density matrix or other control settings. See
-{doc}`memory_surrogate` for broader accuracy checks and prediction through
-{meth}`~mqt.yaqs.MemoryCharacterizer.predict`.
+The left panel shows the predicted final probe states in the Bloch plane; color
+identifies the pulse angle, and the open circle marks free evolution. The right
+panel shows their coherence. Blue shading marks an increase over free evolution;
+orange marks a decrease. All points use the same trained model and include both
+evolution intervals. See {doc}`memory_surrogate` for validation and checks of
+predicted density matrices.
 
 ## Next steps
 
@@ -350,6 +488,6 @@ certify every predicted density matrix or other control settings. See
 | Choose states and simulation backends  | {doc}`state_initialization`      |
 | Combine analog evolution and circuits  | {doc}`digital_analog_simulation` |
 | Check whether two circuits agree       | {doc}`equivalence_checking`      |
-| Learn noise models from dynamics       | {doc}`digital_twin`              |
+| Create a digital twin                  | {doc}`digital_twin`              |
 | Study memory in a system's environment | {doc}`characterization`          |
-| Train models for dynamics with memory  | {doc}`memory_surrogate`          |
+| Predict non-Markovian dynamics         | {doc}`memory_surrogate`          |
