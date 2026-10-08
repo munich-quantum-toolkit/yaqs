@@ -39,8 +39,7 @@ tensor-network simulation depends on entanglement and accuracy settings.
   using parallelized quantum trajectories when a noise model is attached [1]
   (trajectory guidance [4]).
 - **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit
-  observables, shot-based readout, and OpenQASM 2 inputs [3]
-  (`uv pip install mqt-yaqs[qasm3]` for OpenQASM 3).
+  observables, shot-based readout, and OpenQASM inputs [3].
 - **Digital–analog simulation**: Compose analog evolution and digital operations
   in one ordered program with automatic state handoff, program-wide observable
   traces, and continuous stochastic trajectories across segment boundaries
@@ -70,64 +69,31 @@ If you have any questions, feel free to create a
 [issue](https://github.com/munich-quantum-toolkit/yaqs/issues) on
 [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
 
-## Contributors and Supporters
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="40%" alt="MQT YAQS artwork">
-</p>
-
-The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
-the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the
-[Technical University of Munich](https://www.tum.de/) and supported by
-[MQSC](https://mq.sc). Among others, it is part of the
-[Munich Quantum Software Stack (MQSS)](https://www.munich-quantum-valley.de/research/research-areas/mqss)
-ecosystem, which is being developed as part of the
-[Munich Quantum Valley (MQV)](https://www.munich-quantum-valley.de) initiative.
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-logo-banner-dark.svg" width="90%">
-    <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-logo-banner-light.svg" width="90%" alt="MQT Partner Logos">
-  </picture>
-</p>
-
-Thank you to all the contributors who have helped make MQT YAQS a reality!
-
-<p align="center">
-  <a href="https://github.com/munich-quantum-toolkit/yaqs/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=munich-quantum-toolkit/yaqs" />
-  </a>
-</p>
-
-The MQT will remain free, open-source, and permissively licensed—now and in the
-future. We are firmly committed to keeping it open and actively maintained for
-the quantum computing community.
-
-To support this endeavor, please consider:
-
-- Starring and sharing our repositories:
-  <https://github.com/munich-quantum-toolkit>
-- Contributing code, documentation, tests, or examples via issues and pull
-  requests
-- Citing the MQT in your publications (see [Cite This](#cite-this))
-- Citing our research in your publications (see
-  [References](https://mqt.readthedocs.io/projects/yaqs/en/latest/references.html))
-- Using the MQT in research and teaching, and sharing feedback and use cases
-- Sponsoring us on GitHub: <https://github.com/sponsors/munich-quantum-toolkit>
-
-<p align="center">
-  <a href="https://github.com/sponsors/munich-quantum-toolkit">
-  <img width=20% src="https://img.shields.io/badge/Sponsor-white?style=for-the-badge&logo=githubsponsors&labelColor=black&color=blue" alt="Sponsor the MQT" />
-  </a>
-</p>
-
 ## Getting Started
 
-`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.yaqs/).
+MQT YAQS requires **Python 3.11 or newer** and runs on Linux, macOS, and
+Windows. Install it from [PyPI](https://pypi.org/project/mqt.yaqs/) in a virtual
+environment using `uv`:
 
 ```console
 uv pip install mqt.yaqs
 ```
+
+Or use `pip`:
+
+```console
+python -m pip install mqt.yaqs
+```
+
+See the
+[installation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/installation.html)
+for environment setup and development installation.
+
+Optional extras support
+[OpenQASM 3 input](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
+(`qasm3`) and
+[surrogate training and prediction](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)
+(`torch`). The linked guides include installation steps.
 
 ### Simulation
 
@@ -233,14 +199,6 @@ print(result.optimal_model)
 [Noise characterization](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
 · [Full guide](https://mqt.readthedocs.io/projects/yaqs)
 
-## System Requirements
-
-MQT YAQS can be installed on all major operating systems with all
-[officially supported Python versions](https://devguide.python.org/versions/).
-Building (and running) is continuously tested under Linux, macOS, and Windows
-using the
-[latest available system versions for GitHub Actions](https://github.com/actions/runner-images).
-
 ## Cite This
 
 Please cite the work that best fits your use case.
@@ -286,6 +244,57 @@ When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
   addendum     = {A live version of this document is available at \url{https://mqt.readthedocs.io}}
 }
 ```
+
+## Contributors and Supporters
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/yaqs/main/images/banner.jpeg" width="40%" alt="MQT YAQS artwork">
+</p>
+
+The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
+the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the
+[Technical University of Munich](https://www.tum.de/) and supported by
+[MQSC](https://mq.sc). Among others, it is part of the
+[Munich Quantum Software Stack (MQSS)](https://www.munich-quantum-valley.de/research/research-areas/mqss)
+ecosystem, which is being developed as part of the
+[Munich Quantum Valley (MQV)](https://www.munich-quantum-valley.de) initiative.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-logo-banner-dark.svg" width="90%">
+    <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-logo-banner-light.svg" width="90%" alt="MQT Partner Logos">
+  </picture>
+</p>
+
+Thank you to all the contributors who have helped make MQT YAQS a reality!
+
+<p align="center">
+  <a href="https://github.com/munich-quantum-toolkit/yaqs/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=munich-quantum-toolkit/yaqs" />
+  </a>
+</p>
+
+The MQT will remain free, open-source, and permissively licensed—now and in the
+future. We are firmly committed to keeping it open and actively maintained for
+the quantum computing community.
+
+To support this endeavor, please consider:
+
+- Starring and sharing our repositories:
+  <https://github.com/munich-quantum-toolkit>
+- Contributing code, documentation, tests, or examples via issues and pull
+  requests
+- Citing the MQT in your publications (see [Cite This](#cite-this))
+- Citing our research in your publications (see
+  [References](https://mqt.readthedocs.io/projects/yaqs/en/latest/references.html))
+- Using the MQT in research and teaching, and sharing feedback and use cases
+- Sponsoring us on GitHub: <https://github.com/sponsors/munich-quantum-toolkit>
+
+<p align="center">
+  <a href="https://github.com/sponsors/munich-quantum-toolkit">
+  <img width=20% src="https://img.shields.io/badge/Sponsor-white?style=for-the-badge&logo=githubsponsors&labelColor=black&color=blue" alt="Sponsor the MQT" />
+  </a>
+</p>
 
 ---
 
