@@ -95,97 +95,100 @@ Optional extras support
 [surrogate training and prediction](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/memory_surrogate.html)
 (`torch`). The linked guides include installation steps.
 
-### Simulation
+### Noisy analog evolution
 
-Noisy analog Hamiltonian simulation
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)):
+Simulate a 50-site Ising chain with local damping and measure the final mean
+⟨Z₀⟩ across quantum trajectories:
 
 ```python
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 
-sim = Simulator(show_progress=False)
-state = State(length=3, initial="zeros")
-H = Hamiltonian.ising(length=3, J=1.0, g=0.5)
-noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
+length = 50
+state = State(length, initial="zeros")
+hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+noise = NoiseModel([{"name": "lowering", "sites": [site], "strength": 0.05} for site in range(length)])
 params = AnalogSimParams(
     observables=[Observable("z", sites=0)],
-    elapsed_time=0.5,
+    elapsed_time=1.0,
     dt=0.1,
-    preset="fast",
-    num_traj=8,
+    num_traj=32,
+    max_bond_dim=64,
+    random_seed=0,
 )
-print(sim.run(state, H, params, noise).expectation_values[0][-1])
+result = Simulator(parallel=False).run(state, hamiltonian, params, noise)
+print(f"Final mean <Z_0>: {result.expectation_values[0][-1]:.3f}")
 ```
 
-Noisy digital circuit simulation
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)):
+Trajectory count, time step, and bond dimension control accuracy and cost. These
+illustrative settings do not establish convergence. See the
+[analog simulation guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/analog_simulation.html)
+for time-resolved observables and accuracy controls.
+
+### Digital circuit and shot readout
+
+Prepare a 50-qubit GHZ state and sample computational-basis measurements. The
+ideal state gives equal probabilities for the all-zero and all-one bitstrings:
 
 ```python
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs import NoiseModel, Observable, Simulator, State, DigitalSimParams
+from mqt.yaqs import DigitalSimParams, Simulator, State
 
-circuit = QuantumCircuit(3)
+length = 50
+circuit = QuantumCircuit(length)
 circuit.h(0)
-circuit.cx(0, 1)
-circuit.cx(1, 2)
-noise = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.05} for i in range(3)])
-params = DigitalSimParams(observables=[Observable("z", sites=0)], preset="fast", num_traj=8)
-result = Simulator(show_progress=False).run(State(3, initial="zeros"), circuit, params, noise)
-print(result.expectation_values[0])
+for site in range(1, length):
+    circuit.cx(site - 1, site)
+circuit.measure_all()
+
+params = DigitalSimParams(shots=1024, random_seed=0)
+result = Simulator(parallel=False).run(State(length, initial="zeros"), circuit, params)
+print({format(outcome, f"0{length}b"): count for outcome, count in result.counts.items()})
 ```
 
-### Characterization
+The printed dictionary maps bitstrings to shot counts. See the
+[shot-readout guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_shots.html)
+and
+[noisy circuit guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/circuit_observables.html)
+for more workflows.
 
-Environmental memory characterization
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)):
+### Environmental memory characterization
 
-```python
-from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-
-ham = Hamiltonian.ising(length=3, J=1.0, g=0.5)
-params = AnalogSimParams(dt=0.1)
-result = MemoryCharacterizer(show_progress=False).characterize(
-    ham,
-    params,
-    num_interventions=4,
-    cut=2,
-    n_pasts=4,
-    n_futures=4,
-)
-print(result.summary())
-```
-
-Noise model characterization
-([guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)):
+Treat site 0 of a 50-site chain as a probe coupled to the remaining 49 sites.
+Sample past and future operations on the probe to characterize environmental
+memory at a temporal cut:
 
 ```python
 import numpy as np
 
-from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
 
-n = 2
-ham = Hamiltonian.ising(length=n, J=1.0, g=2.0)
-state = State(n, initial="zeros")
-observables = [Observable("z", sites=s) for s in range(n)]
-params = AnalogSimParams(observables=observables, elapsed_time=0.5, dt=0.1, sample_timesteps=True)
-reference = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.1} for s in range(n)])
-guess = NoiseModel([{"name": "pauli_z", "sites": [s], "strength": 0.3} for s in range(n)])
-result = NoiseCharacterizer(show_progress=False).characterize(
-    ham,
+hamiltonian = Hamiltonian.ising(length=50, J=1.0, g=1.0)
+params = AnalogSimParams(dt=0.1, max_bond_dim=64, order=2)
+characterizer = MemoryCharacterizer(representation="mps", parallel=False)
+result = characterizer.characterize(
+    hamiltonian,
     params,
-    init_state=state,
-    init_guess=guess,
-    observables=observables,
-    reference_model=reference,
-    x_low=np.zeros(n),
-    x_up=np.full(n, 0.5),
-    max_iter=30,
-    popsize=6,
-    seed=0,
+    num_interventions=6,
+    cut=3,
+    n_pasts=8,
+    n_futures=8,
+    rng=np.random.default_rng(0),
 )
-print(result.optimal_model)
+print(result.summary())
 ```
+
+The summary reports the response-matrix entropy and effective number of memory
+modes for the sampled probes. See the
+[memory characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/characterization.html)
+for the probe settings and interpretation, or the
+[noise characterization guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/digital_twin.html)
+to fit Lindblad rates from observable dynamics.
+
+These examples use serial execution. See the
+[execution guide](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/simulator_initialization.html)
+for parallel runs and worker controls. Parallel scripts require an
+`if __name__ == "__main__":` guard.
 
 **Documentation:**
 [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html)
