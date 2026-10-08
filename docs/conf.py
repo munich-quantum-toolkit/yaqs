@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).parent.parent.resolve()
 
+# Limit docs kernels and child builds unless the runner supplies a budget.
+for name in (
+    "MKL_NUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+):
+    os.environ.setdefault(name, "1")
+os.environ.setdefault("YAQS_MAX_WORKERS", "2")
+
 # Keep matplotlib/font cache writable and local during docs builds.
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
 
@@ -104,6 +115,11 @@ myst_heading_anchors = 3
 
 nb_execution_mode = "cache"
 nb_execution_raise_on_error = True
+nb_execution_cache_path = str(ROOT / "docs" / "_build" / ".jupyter_cache")
+
+# Reuse HTML doctrees and notebook outputs when generating the Markdown files.
+llms_txt_build_parallel = False
+llms_txt_full_build = True
 
 
 class CDAStyle(UnsrtStyle):
