@@ -24,9 +24,11 @@ characterization of environmental memory and noise models. It is part of the
 [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 YAQS primarily uses tensor networks and quantum trajectories, with statevector
-and density matrix backends available for smaller simulations. The cost of
-tensor network simulation depends primarily on entanglement and accuracy
-settings, rather than system size or number of qubits.
+and density matrix backends available for smaller simulations. Tensor network simulation cost
+depends strongly on entanglement and accuracy settings, which can make systems far
+larger than those accessible to statevector or density matrix methods practical to simulate.
+We encourage you to explore larger system sizes with our package, as we have put
+thought and effort into making these methods scalable.
 
 <p align="center">
   <a href="https://mqt.readthedocs.io/projects/yaqs">
