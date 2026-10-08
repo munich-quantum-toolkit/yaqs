@@ -170,7 +170,23 @@ for worker controls.
 
 ## Cite This
 
-Please cite the work that best fits your use case.
+If you use YAQS in academic work, please cite both the
+[YAQS software](#yaqs-software) and the [MQT Handbook](#mqt-handbook). Also cite
+the papers for the methods you use.
+
+### YAQS software
+
+We expect to replace this software citation with a dedicated YAQS publication.
+Please use the citation below for now.
+
+```bibtex
+@misc{YAQS,
+  author       = {Aaron Sander},
+  title        = {{YAQS}: Yet Another Quantum Simulator},
+  year         = {2025},
+  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
+}
+```
 
 ### Research publications
 
@@ -208,23 +224,11 @@ Learning via Stochastic Tensor-Network Simulation. _arXiv:2608.24668 (2026)._
 A. Sander, R. Wille, C. B. Mendl. Basis-update and Galerkin time integration in
 canonical matrix-product-state form. _arXiv:2608.16994 (2026)._
 
-### The Munich Quantum Toolkit (the project)
+### MQT Handbook
 
-When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
-
-```bibtex
-@inproceedings{mqt,
-  title        = {The {{MQT}} Handbook: {{A}} Summary of Design Automation Tools and Software for Quantum Computing},
-  shorttitle   = {{The MQT Handbook}},
-  author       = {Wille, Robert and Berent, Lucas and Forster, Tobias and Kunasaikaran, Jagatheesan and Mato, Kevin and Peham, Tom and Quetschlich, Nils and Rovara, Damian and Sander, Aaron and Schmid, Ludwig and Schoenberger, Daniel and Stade, Yannick and Burgholzer, Lukas},
-  year         = 2024,
-  booktitle    = {IEEE International Conference on Quantum Software (QSW)},
-  doi          = {10.1109/QSW62656.2024.00013},
-  eprint       = {2405.17543},
-  eprinttype   = {arxiv},
-  addendum     = {A live version of this document is available at \url{https://mqt.readthedocs.io}}
-}
-```
+[[8]](https://doi.org/10.1109/QSW62656.2024.00013) R. Wille et al. The MQT
+Handbook: A Summary of Design Automation Tools and Software for Quantum
+Computing. _IEEE International Conference on Quantum Software (QSW)_ (2024).
 
 ## Contributors and Supporters
 

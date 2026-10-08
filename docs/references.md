@@ -1,8 +1,13 @@
 # References
 
-MQT YAQS implements algorithms from research publications and preprints. **When
-you use MQT YAQS in academic work, please cite the publications that correspond
-to the features you use:**
+MQT YAQS implements algorithms from research publications and preprints. When
+you use the library in academic work, please cite both the **YAQS software**
+{footcite:p}`YAQS` and the **MQT Handbook** {footcite:p}`mqt`.
+
+We expect to replace the YAQS software citation with a dedicated YAQS
+publication. Please use the current software citation for now.
+
+Also cite the research papers for the methods you use:
 
 - {footcite:p}`sander2025_TJM` for open **analog** system simulation (tensor
   jump method),
@@ -19,6 +24,13 @@ to the features you use:**
 Representative BibTeX entries:
 
 ```bibtex
+@misc{YAQS,
+  author       = {Aaron Sander},
+  title        = {{YAQS}: Yet Another Quantum Simulator},
+  year         = {2025},
+  howpublished = {\url{https://github.com/munich-quantum-toolkit/yaqs}}
+}
+
 @article{sander2025_TJM,
   title     = {Large-scale stochastic simulation of open quantum systems},
   author    = {Sander, Aaron and Fr\"{o}hlich, Maximilian and Eigel, Martin and Eisert, Jens and Gel\ss{}, Patrick and Hinterm\"{u}ller, Michael and Milbradt, Richard M. and Wille, Robert and Mendl, Christian B.},
@@ -87,9 +99,6 @@ Representative BibTeX entries:
   primaryclass  = {quant-ph},
 }
 ```
-
-MQT YAQS is part of the Munich Quantum Toolkit, which is described in
-{footcite:p}`mqt`.
 
 A full list of references is given below.
 
