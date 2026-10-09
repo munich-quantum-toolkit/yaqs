@@ -168,6 +168,85 @@ Damping shifts the readout toward fewer excitations. Each histogram summarizes
 256 shots. See {doc}`circuit_shots` for bitstring counts and
 {doc}`circuit_observables` for expectation values and OpenQASM input.
 
+## Noisy Analog-Digital Simulation
+
+Can digital gates reverse the spreading in an analog spin chain? Prepare one
+excitation in a **20-site XY chain**, then apply $Z$ gates on even sites halfway
+through the evolution. Compare free evolution, refocusing, and refocusing with
+dephasing.
+
+```{code-cell} python
+from qiskit import QuantumCircuit
+
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Hamiltonian, NoiseModel, Observable, SimulationProgram, Simulator, State
+
+length = 20
+center = length // 2
+state = State(length, initial="zeros")
+hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
+observables = [Observable("z", site) for site in range(length)]
+preparation = QuantumCircuit(length)
+preparation.x(center)
+phase_pulse = QuantumCircuit(length)
+phase_pulse.z(range(0, length, 2))
+
+analog_params = AnalogSimParams(elapsed_time=1.5, dt=0.25, order=2, preset="fast")
+digital_params = DigitalSimParams(preset="fast")
+free_program = SimulationProgram(
+    [(preparation, digital_params), (hamiltonian, analog_params), (hamiltonian, analog_params)],
+    observables=observables, num_traj=32, random_seed=7,
+)
+echo_program = SimulationProgram(
+    [(preparation, digital_params), (hamiltonian, analog_params),
+     (phase_pulse, digital_params), (hamiltonian, analog_params), (phase_pulse, digital_params)],
+    observables=observables, num_traj=32, random_seed=7,
+)
+dephasing_rate = 0.2
+noise = NoiseModel([
+    {"name": "pauli_z", "sites": [site], "strength": dephasing_rate} for site in range(length)
+])
+
+simulator = Simulator(show_progress=False)
+free_result = simulator.run(state, free_program)
+echo_result = simulator.run(state, echo_program)
+noisy_echo_result = simulator.run(state, echo_program, noise_model=noise)
+```
+
+```{code-cell} python
+:tags: [hide-input]
+from matplotlib.colors import PowerNorm
+
+fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.8), sharex=True, sharey=True)
+for index, (ax, result, title) in enumerate(zip(
+    axes, (free_result, echo_result, noisy_echo_result),
+    ("(a) Free evolution", "(b) Refocusing", "(c) Noisy refocusing"), strict=True,
+)):
+    segments = [segment for segment in result.segment_results if segment.segment_type == "analog"]
+    times = np.concatenate([segment.times + segment.time_offset for segment in segments])
+    values = np.concatenate([np.asarray(segment.expectation_values) for segment in segments], axis=1)
+    keep = np.r_[True, np.diff(times) > 0]
+    occupation = (1 - values[:, keep]) / 2
+    image = ax.pcolormesh(
+        times[keep], np.arange(length), occupation, shading="auto", cmap="cividis",
+        norm=PowerNorm(0.5, vmin=0, vmax=1), rasterized=True,
+    )
+    if index > 0:
+        ax.axvline(1.5, color="white", linestyle="--", linewidth=1)
+    ax.set(xlabel=r"Time $t$", xlim=(0, 3), yticks=[0, 5, 10, 15, 19])
+    ax.set_title(title, loc="left", fontsize=10)
+axes[0].set_ylabel(r"Site $i$")
+fig.colorbar(image, ax=list(axes), label=r"$\langle n_i\rangle$", ticks=[0, 0.1, 0.5, 1])
+plt.show()
+```
+
+The phase pulse reverses the XY exchange, bringing the excitation back at $t=3$.
+A final pulse restores the phase frame. Dephasing during the analog intervals
+preserves excitation but disrupts refocusing; the noisy panel averages 32
+trajectories at Lindblad rate $\gamma_z=0.2$. The gates are ideal and
+instantaneous. All panels share one color scale. See
+{doc}`digital_analog_simulation` for the pulse mechanism, program outputs, and
+noise comparisons.
+
 ## Circuit equivalence
 
 Verify a transpiled circuit, then compare the effects of an added rotation and
