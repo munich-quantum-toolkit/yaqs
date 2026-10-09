@@ -2,205 +2,299 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
-  execution_timeout: 600
+  execution_timeout: 300
 ---
 
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
+# Observable-Based Circuit Simulation
+
+The excitation transport in {doc}`analog_simulation` can also be simulated with
+a quantum circuit. We use the same **20-site XY chain**, localized excitation,
+and relaxation rates, then replace continuous Hamiltonian evolution with short
+sequences of exchange gates. Sampling observables between these sequences lets
+us reconstruct the occupation heatmaps and compare digital and analog dynamics.
+
+The example uses the standard YAQS installation and public interfaces. Run the
+cells in order in a notebook; in a script, use the entry-point guard in
+{doc}`simulator_initialization`. For bitstring counts rather than expectation
+values, see {doc}`circuit_shots`.
+
+## 1. Turn the XY Hamiltonian into gates
+
+The Hamiltonian exchanges excitations between neighboring sites,
+
+$$
+H=-\frac{1}{2}\sum_{i=0}^{L-2}(X_iX_{i+1}+Y_iY_{i+1}).
+$$
+
+As in the analog guide, we set the hopping amplitude to one and use $\hbar=1$.
+An exchange gate on sites $i$ and $i+1$ implements their contribution to the
+evolution. Qiskit's `XXPlusYYGate(-2 * duration)` gives
+$\exp[+i\,\mathtt{duration}(XX+YY)/2]$, with the sign set by this Hamiltonian.
+
+Gates on overlapping bonds do not commute. We approximate a time step with half
+a step on even bonds, a full step on odd bonds, then another half step on even
+bonds. This symmetric Trotter formula approaches the Hamiltonian dynamics as the
+step decreases. Each exchange gate preserves excitation number, including when
+noise acts between gates.
+
+```{code-cell} python
+import numpy as np
+from qiskit import QuantumCircuit
+from qiskit.circuit.library import XXPlusYYGate
+
+
+def xy_circuit(length, dt, steps):
+    """Build a symmetric XY Trotter circuit and count gate exposures per step."""
+    step_circuit = QuantumCircuit(length)
+    gate_exposures = np.zeros(length, dtype=int)
+    for parity, fraction in ((0, 0.5), (1, 1.0), (0, 0.5)):
+        for site in range(parity, length - 1, 2):
+            step_circuit.append(XXPlusYYGate(-2 * dt * fraction), [site, site + 1])
+            gate_exposures[[site, site + 1]] += 1
+
+    circuit = QuantumCircuit(length)
+    for step in range(steps):
+        circuit.compose(step_circuit, inplace=True)
+        if step < steps - 1:
+            circuit.barrier(label="SAMPLE_OBSERVABLES")
+    return circuit, gate_exposures
+
+
+length = 20
+dt = 0.25
+steps = 12
+circuit, gate_exposures = xy_circuit(length, dt, steps)
 ```
 
-# Circuit Observables
+The circuit represents evolution to $t=3$. Labelled barriers separate the
+Trotter steps so YAQS can sample observables at the same 13 times as the analog
+guide. `gate_exposures` counts each site's two-qubit gates in one step; we will
+use these counts to match the relaxation rate.
 
-Evolve a matrix-product state (MPS) through a Qiskit circuit and evaluate Pauli
-(or custom) observables. Pass observables on {class}`~mqt.yaqs.DigitalSimParams`
-and an optional {class}`~mqt.yaqs.NoiseModel` as the fourth argument to
-{meth}`~mqt.yaqs.Simulator.run` for open-system tensor-jump trajectories; omit
-it for a single unitary path (regardless of `num_traj`).
+## 2. Prepare the state and observables
 
-For computational-basis shot histograms, see {doc}`circuit_shots`. You can also
-request observables and `shots` together on one `DigitalSimParams`.
+Start with one excitation at site 10. Measuring $Z_i$ at every site gives the
+occupation through $\langle n_i\rangle=(1-\langle Z_i\rangle)/2$.
 
-| Workflow                    | Typical use                                         | Key settings                                                                             |
-| --------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **Final observables**       | Noise scaling, benchmarking, device studies         | `DigitalSimParams(observables=...)` evaluated after the last gate                        |
-| **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `sample_layers=True` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit   |
-| **Shot-based readout**      | Hardware-like bitstring statistics                  | `DigitalSimParams(shots=...)` — see {doc}`circuit_shots`                                 |
+```{code-cell} python
+from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 
-Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or
-OpenQASM strings). The initial state should use `representation="mps"` (the
-default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For
-accuracy presets, truncation knobs, and `random_seed`, see
-{doc}`simulation_parameters`. For log-normal disorder on noise strengths, see
-{doc}`realistic_noise_models`.
-
-```{code-cell} ipython3
-import matplotlib.pyplot as plt
-import numpy as np
-
-from mqt.yaqs import Simulator
-
+center = length // 2
+basis = "0" * center + "1" + "0" * (length - center - 1)
+state = State(length, initial="basis", basis_string=basis)
+observables = [Observable("z", site) for site in range(length)]
+params = DigitalSimParams(
+    observables=observables,
+    sample_layers=True,
+    num_traj=16,
+    preset="fast",
+    random_seed=7,
+)
 sim = Simulator(show_progress=False)
 ```
 
-## 1. Minimal run: unitary vs open-system noise
+`sample_layers=True` records observables at the circuit start, at each barrier
+labelled `SAMPLE_OBSERVABLES`, and after the final gates. Barrier labels are
+case-insensitive; unlabelled barriers do not trigger sampling. These checkpoints
+evaluate expectations without collapsing the state, unlike hardware mid-circuit
+measurements.
 
-Evolve a short Trotterized Ising circuit and compare final $\langle Z_i\rangle$
-without noise and with on-site amplitude damping:
+The noisy results average 16 trajectories, while a noiseless run uses one.
+Parallel execution remains enabled. The documentation suppresses progress bars;
+omit `show_progress=False` to see them. The preset controls numerical
+tolerances, while `num_traj` controls sampling uncertainty.
 
-```{code-cell} ipython3
-from mqt.yaqs import NoiseModel, Observable, State, DigitalSimParams
-from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+## 3. Match relaxation to circuit steps
 
-num_qubits = 3
-qc = create_ising_circuit(L=num_qubits, J=1.0, g=0.8, dt=0.1, timesteps=6)
-circuit_state = State(num_qubits, initial="zeros")
-circuit_params = DigitalSimParams(
-    observables=[Observable("z", site) for site in range(num_qubits)],
-    preset="fast",
-    num_traj=32,
-)
-noise_model = NoiseModel([
-    {"name": "lowering", "sites": [site], "strength": 0.05} for site in range(num_qubits)
-])
+The analog model uses a uniform relaxation rate $\gamma$ per unit of physical
+time. Circuit noise instead acts for one unit of noise time after each gate on
+two or more qubits, using only processes supported on that gate's qubits.
+Single-qubit gates and idle sites receive no noise.
 
-clean_result = sim.run(circuit_state, qc, circuit_params)
-noisy_result = sim.run(State(num_qubits, initial="zeros"), qc, circuit_params, noise_model)
-clean_z = np.array([float(np.real(v[0])) for v in clean_result.expectation_values])
-noisy_z = np.array([float(np.real(v[0])) for v in noisy_result.expectation_values])
+Using the same numerical strength for every gate would make damping depend on
+the number of gates rather than the represented duration. For a site involved in
+$m_i$ gates per Trotter step, set its circuit strength to
 
-fig, ax = plt.subplots(figsize=(5, 3), layout="constrained")
-x = np.arange(num_qubits)
-bar_width = 0.35
-ax.bar(x - bar_width / 2, clean_z, bar_width, label="unitary", color="0.55")
-ax.bar(x + bar_width / 2, noisy_z, bar_width, label="with damping", color="C0")
-ax.set_xticks(x, [rf"$\langle Z_{i}\rangle$" for i in range(num_qubits)])
-ax.set_ylim(-1.05, 1.05)
-ax.set_ylabel("expectation value")
-ax.set_title("Optional noise model on the fourth `run` argument")
-ax.legend(frameon=False)
-```
+$$
+\mathtt{strength}_i=\frac{\gamma\,\Delta t}{m_i}.
+$$
 
-In digital simulation the noise model is applied once per gate on two or more
-qubits: after the unitary update, one noise layer acts on processes whose sites
-all belong to the gate's qubits. Single-qubit gates and idle sites between the
-gate qubits receive no noise. Each gate counts as one unit of noise time; to
-model compiled depth, simulate the transpiled circuit.
+Here the end sites encounter two gates per step and interior sites encounter
+three. Dividing by these counts gives each site a total relaxation exposure of
+$\gamma\Delta t$ per step. Noise is still interleaved with the gates, so the
+finite-step evolution can differ from the continuous analog model. This rate
+mapping describes a digital approximation to that model; hardware gate noise
+should instead follow the device and its compiled operations.
 
-## 2. Noise-strength sweep
-
-On a longer chain, sweep a global relaxation rate $\gamma$ and track how each
-qubit's final $\langle Z_i \rangle$ moves toward $+1$ as damping dominates:
-
-```{code-cell} ipython3
-num_qubits = 5
-circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=10)
-state = State(num_qubits, initial="zeros")
-sim_params = DigitalSimParams(
-    observables=[Observable("z", site) for site in range(num_qubits)],
-    num_traj=64,
-    max_bond_dim=8,
-    svd_threshold=1e-6,
-)
-
-gammas = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
-heatmap = np.empty((num_qubits, len(gammas)))
-for j, gamma in enumerate(gammas):
-    damping = NoiseModel([
-        {"name": "lowering", "sites": [site], "strength": gamma} for site in range(num_qubits)
+```{code-cell} python
+rates = [0.0, 0.5, 1.5, 4.0]
+results = {}
+for rate in rates:
+    noise = None if rate == 0 else NoiseModel([
+        {"name": "lowering", "sites": [site],
+         "strength": rate * dt / gate_exposures[site]}
+        for site in range(length)
     ])
-    result = sim.run(state, circuit, sim_params, damping)
-    for i in range(num_qubits):
-        heatmap[i, j] = float(np.real(result.expectation_values[i][0]))
-
-fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
-colors = plt.cm.viridis(np.linspace(0.15, 0.85, num_qubits))
-for i in range(num_qubits):
-    ax.semilogx(gammas, heatmap[i], "o-", color=colors[i], linewidth=1.8, markersize=5, label=rf"$q_{i}$")
-ax.set_xlabel(r"Relaxation rate $\gamma$")
-ax.set_ylabel(r"$\langle Z_i \rangle$")
-ax.set_ylim(-1.05, 1.05)
-ax.legend(ncol=num_qubits, fontsize=8, loc="lower left", frameon=False)
-ax.set_title("Final magnetization vs damping strength")
-ax.grid(alpha=0.3, which="both")
+    results[rate] = sim.run(state, circuit, params, noise)
 ```
 
-## 3. Mid-circuit observables
+## 4. Read the sampled dynamics
 
-(mid-circuit-observables)=
+`expectation_values` contains one NumPy array per observable. The observable
+order follows the supplied list, and each array follows checkpoint order.
+Combine the arrays and convert $Z_i$ to occupation:
 
-```{note}
-This section uses `num_traj=64` during the documentation build. Increase
-`num_traj` locally for lower-variance layer curves.
-```
-
-Set `sample_layers=True` on
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams`
-and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you
-want measurements. YAQS records observables at the circuit start, after each
-labelled barrier, and after the final gate layer.
-
-The example below starts from $\ket{+}^{\otimes n}$, applies a chain of $R_{ZZ}$
-entanglers, and tracks how amplitude damping gradually drives each
-$\langle Z_i \rangle$ toward $+1$. Only barriers labelled `SAMPLE_OBSERVABLES`
-trigger sampling; unlabelled barriers are ignored.
-
-```{code-cell} ipython3
-from qiskit.circuit import QuantumCircuit
-
-layer_qubits = 5
-qc = QuantumCircuit(layer_qubits)
-
-for segment in range(6):
-    for i in range(layer_qubits - 1):
-        qc.rzz(0.7, i, i + 1)
-    if segment < 5:
-        qc.barrier(label="SAMPLE_OBSERVABLES")
-
-noise_factor = 0.1
-layer_noise = NoiseModel([
-    {"name": "lowering", "sites": [i], "strength": noise_factor} for i in range(layer_qubits)
+```{code-cell} python
+times = dt * np.arange(steps + 1)
+occupations = np.stack([
+    (1 - np.asarray(results[rate].expectation_values).real) / 2
+    for rate in rates
 ])
-
-layer_state = State(layer_qubits, initial="x+", pad=16)
-layer_params = DigitalSimParams(
-    observables=[Observable("z", i) for i in range(layer_qubits)],
-    num_traj=64,
-    sample_layers=True,
-    max_bond_dim=12,
-)
-
-layer_result = sim.run(layer_state, qc, layer_params, layer_noise)
-layer_traj = np.vstack([np.real(v) for v in layer_result.expectation_values])
-
-fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
-depth = np.arange(layer_traj.shape[1])
-qubit_labels = [rf"$q_{i}$" for i in range(layer_qubits)]
-im = ax.imshow(
-    layer_traj,
-    aspect="auto",
-    origin="lower",
-    vmin=-1,
-    vmax=1,
-    extent=(-0.5, layer_traj.shape[1] - 0.5, -0.5, layer_qubits - 0.5),
-)
-ax.set_xlabel("Sampling index")
-ax.set_ylabel("Qubit")
-ax.set_xticks(depth)
-ax.set_yticks(range(layer_qubits), qubit_labels)
-ax.set_title(r"Mid-circuit $\langle Z \rangle$ under damping")
-fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
+print(occupations.shape)
 ```
 
-The checkpoint index is a circuit-analysis coordinate rather than physical time.
-Standalone digital results leave `result.times` as `None`; plot against
-`np.arange(len(values))` for circuit depth. In a digital–analog
-`SimulationProgram`, digital checkpoints are placed on `result.times` at their
-segment's physical-time offset, preserving order as coincident samples.
+The shape is `(4, 20, 13)`: relaxation rates by sites by checkpoints. Digital
+results can store complex values; `.real` selects the real expectation of these
+Hermitian observables. `result.trajectories` retains the per-trajectory data.
 
-## 4. OpenQASM inputs
+A standalone circuit has `result.times=None` because its gates do not define
+physical durations. The `times` array above assigns physical times from our
+Trotter construction. For final observables only, omit `sample_layers=True`;
+each observable then has one sample. To collect counts too, supply `shots` and
+YAQS distributes that total budget across the noisy observable trajectories.
+
+## 5. Reconstruct the transport heatmaps
+
+The following panels use the analog guide's time window, noise strengths, and
+shared square-root color scale. They show absolute occupation, without
+normalizing by the remaining excitation.
+
+```{code-cell} python
+:tags: [hide-input]
+import matplotlib.pyplot as plt
+from matplotlib.colors import PowerNorm
+from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+set_matplotlib_formats("svg")
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "font.size": 11,
+    "axes.labelsize": 11,
+    "axes.linewidth": 0.7,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "legend.fontsize": 9,
+    "legend.frameon": False,
+    "lines.linewidth": 1.6,
+    "figure.constrained_layout.use": True,
+    "savefig.dpi": 180,
+})
+fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.4), sharex=True, sharey=True)
+for ax, values, rate, panel in zip(axes.flat, occupations, rates, "abcd", strict=True):
+    image = ax.pcolormesh(times, np.arange(length), values, shading="auto",
+                          cmap="cividis", norm=PowerNorm(0.5, vmin=0, vmax=1),
+                          rasterized=True)
+    label = "Noiseless" if rate == 0 else rf"$\gamma={rate:g}$"
+    ax.set_title(f"({panel}) {label}", loc="left", fontsize=11)
+    ax.set(xticks=[0, 1, 2, 3], yticks=[0, 5, 10, 15, 19])
+for ax in axes[-1]:
+    ax.set_xlabel(r"Represented time $t$")
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"Site $i$")
+fig.colorbar(image, ax=axes.ravel().tolist(),
+             label=r"Occupation $\langle n_i\rangle$", ticks=[0, 0.1, 0.5, 1])
+plt.show()
+```
+
+**Digital reconstruction of excitation transport and loss.** Exchange gates
+spread the initial excitation along the chain, while increasing relaxation
+suppresses occupation at later times. The broad patterns reproduce the analog
+example, with differences from Trotter splitting and finite trajectory sampling.
+
+The heatmaps alone do not tell us how close the circuit is to Hamiltonian
+evolution. To separate the approximation in the gates from sampling noise, we
+next compare the noiseless circuit with an analog reference and a finer circuit.
+
+## 6. Compare with analog evolution
+
+Run the same Hamiltonian without noise, then halve the circuit step while
+keeping the total duration fixed. Select every second checkpoint of the finer
+circuit to compare at the original sampling times.
+
+```{code-cell} python
+from mqt.yaqs import AnalogSimParams, Hamiltonian
+
+hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
+analog_params = AnalogSimParams(
+    observables=observables, elapsed_time=steps * dt, dt=dt, preset="fast",
+)
+analog = sim.run(state, hamiltonian, analog_params)
+analog_occupation = (1 - np.asarray(analog.expectation_values)) / 2
+
+fine_circuit, _ = xy_circuit(length, dt / 2, steps * 2)
+fine_result = sim.run(state, fine_circuit, params)
+fine_occupation = (1 - np.asarray(fine_result.expectation_values).real[:, ::2]) / 2
+```
+
+The first panel compares final occupation profiles. The second sums occupation
+over sites and compares noisy circuit estimates with the analog model's decay
+law, $N(t)=e^{-\gamma t}$. This law holds because the initial state contains one
+excitation, the Hamiltonian conserves excitation, and relaxation is uniform.
+
+```{code-cell} python
+:tags: [hide-input]
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.2))
+ax = axes[0]
+for values, label, style, color in (
+    (analog_occupation, "Analog", "-", "0.2"),
+    (occupations[0], r"Circuit $\Delta t=0.25$", "o", "#0072B2"),
+    (fine_occupation, r"Circuit $\Delta t=0.125$", "+", "#D55E00"),
+):
+    ax.plot(np.arange(length), values[:, -1], style, color=color,
+            label=label, markersize=4)
+ax.set(xlabel="Site", ylabel=r"Final occupation $\langle n_i\rangle$",
+       xticks=[0, 5, 10, 15, 19])
+ax.set_title("(a) Noiseless transport", loc="left", fontsize=11)
+ax.legend(loc="upper center", fontsize=8)
+
+ax = axes[1]
+colors = ["0.2", "#0072B2", "#009E73", "#D55E00"]
+fine_times = np.linspace(0, times[-1], 200)
+for rate, values, color in zip(rates, occupations, colors, strict=True):
+    ax.plot(times, values.sum(axis=0), "o", color=color, markersize=3,
+            label="Noiseless" if rate == 0 else rf"$\gamma={rate:g}$")
+    ax.plot(fine_times, np.exp(-rate * fine_times), "--", color=color, linewidth=1)
+ax.set(xlabel=r"Represented time $t$", ylabel=r"Total excitation $N(t)$",
+       xlim=(0, 3), ylim=(0, 1.08), xticks=[0, 1, 2, 3])
+ax.set_title("(b) Excitation survival", loc="left", fontsize=11)
+ax.legend(ncols=2, loc="upper right", bbox_to_anchor=(1, 0.9), fontsize=8)
+plt.show()
+```
+
+**Analog and digital transport compared at the same duration.** The final
+noiseless profiles agree closely, and a smaller Trotter step reduces the
+circuit's splitting error. Noisy survival estimates follow the uniform-loss
+decay within the resolution of this 16-trajectory example; dashed lines show the
+continuous-model reference.
+
+This comparison connects the two workflows through their physical model, rather
+than equating a circuit's gate count with elapsed time. Check Trotter-step
+convergence separately from MPS tolerances and trajectory uncertainty. For noisy
+refinement, rebuild the circuit and rescale the strengths using the new step and
+gate exposures. Finite-step noise splitting can also affect the spatial profile;
+agreement of total excitation alone does not validate that profile.
+
+## 7. OpenQASM inputs
 
 Pass an OpenQASM 2 source string (or file path) directly to
 {meth}`~mqt.yaqs.Simulator.run` instead of building a
@@ -235,7 +329,7 @@ OpenQASM 3 requires `uv pip install mqt-yaqs[qasm3]`.
 {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms;
 see {doc}`equivalence_checking`.
 
-## 5. Gate application modes
+## 8. Gate application modes
 
 `DigitalSimParams.gate_mode` selects how two-qubit gates are applied to the MPS.
 The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses
@@ -265,7 +359,7 @@ for mode in ("mpo", "tdvp"):
 print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 ```
 
-## 6. Related topics
+## Related topics
 
 - {doc}`digital_analog_simulation` — combine digital operations with analog
   evolution in one program
