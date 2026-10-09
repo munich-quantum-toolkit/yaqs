@@ -63,7 +63,7 @@ flowchart LR
 | Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
 | Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
 | Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
-| Transmon–resonator SWAP (noiseless vs noisy)                               | {doc}`examples/transmon_emulation`                                          |
+| Transfer an excitation between superconducting qubits                      | {doc}`examples/transmon_emulation`                                          |
 | Static and moving trapped-ion position-grid dynamics                       | {doc}`examples/trapped_ion`                                                 |
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
 | Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |

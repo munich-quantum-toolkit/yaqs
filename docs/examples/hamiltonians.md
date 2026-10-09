@@ -394,7 +394,8 @@ H_transmon = Hamiltonian.coupled_transmon(
 )
 ```
 
-A full SWAP-style open-system example is in {doc}`transmon_emulation`.
+For excitation transfer through a resonator, including relaxation and dephasing,
+see {doc}`transmon_emulation`.
 
 ## Trapped-ion position grid
 
