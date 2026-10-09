@@ -64,7 +64,7 @@ flowchart LR
 | Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
 | Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
 | Transfer an excitation between superconducting qubits                      | {doc}`examples/transmon_emulation`                                          |
-| Static and moving trapped-ion position-grid dynamics                       | {doc}`examples/trapped_ion`                                                 |
+| Transport a trapped ion and study motional noise                           | {doc}`examples/trapped_ion`                                                 |
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
 | Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
 | Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
@@ -133,7 +133,7 @@ Ensemble evolution <examples/ensemble_evolution>
 Scheduled jumps <examples/scheduled_jumps>
 Custom gates <examples/custom_gates>
 Superconducting qubit (transmon) emulation <examples/transmon_emulation>
-Trapped-ion emulation <examples/trapped_ion>
+Trapped ion emulation <examples/trapped_ion>
 Non-Markovian transformer models (experimental) <examples/memory_surrogate>
 
 ```

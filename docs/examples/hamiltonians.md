@@ -397,7 +397,7 @@ H_transmon = Hamiltonian.coupled_transmon(
 For excitation transfer through a resonator, including relaxation and dephasing,
 see {doc}`transmon_emulation`.
 
-## Trapped-ion position grid
+## Trapped ion position grid
 
 {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` builds a **static**
 Hamiltonian for one or two ions on a uniform position grid. Each ion is one MPO
@@ -440,8 +440,8 @@ H_pair = Hamiltonian.from_mpo(
 ```
 
 Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using
-`physical_dimensions=[len(positions)]` per ion site. A wavepacket reflection
-benchmark is in {doc}`trapped_ion`.
+`physical_dimensions=[len(positions)]` per ion site. For wavepacket oscillation,
+trap transport, and heating from random momentum kicks, see {doc}`trapped_ion`.
 
 ```{note}
 YAQS applies $\exp(-\mathrm{i}\,\Delta t\, H)$ during evolution. When using SI
