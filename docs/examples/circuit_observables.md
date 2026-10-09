@@ -294,6 +294,8 @@ refinement, rebuild the circuit and rescale the strengths using the new step and
 gate exposures. Finite-step noise splitting can also affect the spatial profile;
 agreement of total excitation alone does not validate that profile.
 
+(circuit-qasm-inputs)=
+
 ## 7. OpenQASM inputs
 
 Pass an OpenQASM 2 source string (or file path) directly to
@@ -334,7 +336,8 @@ see {doc}`equivalence_checking`.
 `DigitalSimParams.gate_mode` selects how two-qubit gates are applied to the MPS.
 The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses
 a local TDVP window when an analytic generator is available. See
-{doc}`simulation_parameters` and {doc}`custom_gates` for the full matrix.
+{doc}`simulation_parameters` for the available modes and
+{ref}`circuit-custom-gates` for matrix-backed gates.
 
 Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both
 modes:
@@ -359,13 +362,150 @@ for mode in ("mpo", "tdvp"):
 print({mode: round(value, 4) for mode, value in z0_by_mode.items()})
 ```
 
+(circuit-custom-gates)=
+
+## 9. Supply custom gates
+
+Add a custom unitary to a Qiskit circuit with `UnitaryGate`. YAQS translates the
+matrix automatically, so no gate registration is needed. This two-qubit example
+applies a phase only to the $|11\rangle$ component:
+
+```{code-cell} python
+from qiskit.circuit.library import UnitaryGate
+
+custom_unitary = np.diag([1, 1, 1, np.exp(0.4j)])
+custom_circuit = QuantumCircuit(2)
+custom_circuit.h([0, 1])
+custom_circuit.append(UnitaryGate(custom_unitary), [0, 1])
+
+custom_params = DigitalSimParams(observables=[Observable("x", 0)])
+custom_sim = Simulator(show_progress=False)
+custom_result = custom_sim.run(State(2, initial="zeros"), custom_circuit, custom_params)
+print(custom_result.expectation_values[0])
+```
+
+The final expectation is $\langle X_0\rangle=(1+\cos 0.4)/2$, about 0.9605. The
+matrix uses Qiskit's qubit ordering; YAQS converts it to its internal gate
+layout. The same input works with `shots`, noise, and sampling checkpoints under
+the circuit rules described above.
+
+Custom gate bodies in {ref}`circuit-qasm-inputs` follow the same translation
+path. Unknown unitary operations use a matrix fallback on up to eight qubits;
+decompose larger operations first. A matrix-backed gate has no analytic
+generator: TDVP gate modes use direct local updates for adjacent pairs and the
+MPO path for separated sites or larger gates. Keep `gate_mode="mpo"` unless you
+need another method.
+
+:::{dropdown} Supported instructions and gate translation
+
+Bind symbolic Qiskit parameters before simulation. YAQS translates known gate
+names through its gate library; other operations must provide a unitary matrix
+through Qiskit's `to_matrix()` or `Operator`. This also supports gates defined
+by a reusable Qiskit circuit or an OpenQASM gate body. Use a distinct name for a
+custom operation, since a name matching a built-in alias selects that built-in
+implementation.
+
+Terminal measurements are removed before simulation; request `shots` for
+readout. Measurements followed by further operations on the measured qubits are
+unsupported. `reset`, `delay`, `store`, classical conditions, and control-flow
+instructions are also unsupported. Ordinary barriers do not change the state;
+barriers labelled `SAMPLE_OBSERVABLES` mark sampling points.
+
+Digital gates require qubit target sites. Idle sites can have other local
+dimensions, but `gate_mode="swaps"` cannot route through a non-qubit site.
+
+Built-in `ccx`, `ccz`, and `cswap` gates translate without decomposition.
+Simulation applies gates on three or more qubits through an MPO, except
+supported product generators such as `ccx` and `ccz` in TDVP modes. The
+`"swaps"` mode also uses the MPO path for these larger gates.
+
+`EquivalenceChecker` accepts the same unitary and OpenQASM inputs. Gates on more
+than two qubits require its `"matrix"` backend; decompose them before using the
+`"mpo"` backend. See {doc}`equivalence_checking` for backend choice and
+measurement restrictions. Translation details and the supported alias list are
+in {mod}`~mqt.yaqs.digital.utils.dag_utils`.
+
+:::
+
+:::{dropdown} Low-level gate objects
+
+Application code should supply Qiskit circuits. For code that works directly
+with YAQS gate kernels, `GateLibrary.custom` constructs a matrix-backed
+{class}`~mqt.yaqs.core.libraries.gate_library.BaseGate`:
+
+```python
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+
+gate = GateLibrary.custom(np.eye(4, dtype=complex))
+gate.name = "my_gate"
+gate.set_sites(0, 1)
+```
+
+This constructor checks that the matrix is square with dimension $2^n$. The
+caller must supply a finite unitary. The resulting fields are:
+
+| Field         | Meaning                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `matrix`      | Gate matrix in YAQS gate order.                                |
+| `interaction` | Number of target qubits, inferred from the matrix size.        |
+| `sites`       | Target sites in their declared order.                          |
+| `tensor`      | Gate tensor; `set_sites` reshapes gates on two or more qubits. |
+| `generator`   | Optional local factors for a product-form TDVP generator.      |
+| `name`        | Gate identifier.                                               |
+
+In a manually supplied gate matrix, the first tensor factor acts on the first
+declared site. Qiskit translation handles its different matrix convention
+automatically. Creating this object does not register a new Qiskit gate or make
+it a valid operator argument to `Simulator.run`.
+
+Built-in gates subclass `BaseGate` and prepare tensors and optional generators
+in `set_sites`. See {class}`~mqt.yaqs.core.libraries.gate_library.CX` and
+{class}`~mqt.yaqs.core.libraries.gate_library.CCX` for examples.
+
+:::
+
+:::{dropdown} Product generators for digital TDVP
+
+A TDVP-capable gate has one $2\times2$ generator factor per target site. The
+factors define a product $G$ whose exponential at evolution time one must
+reproduce the gate, $U=\exp(-iG)$. For example, a ZZ phase rotation has
+$G=(\theta Z/2)\otimes Z$:
+
+```python
+from scipy.linalg import expm
+
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+
+theta = 0.3
+pauli_z = np.diag([1.0, -1.0])
+generator_factors = [theta * pauli_z / 2, pauli_z]
+phase_unitary = expm(-1j * np.kron(*generator_factors))
+phase_gate = GateLibrary.custom(phase_unitary)
+phase_gate.set_sites(0, 2)
+phase_gate.generator = generator_factors
+```
+
+The factors follow the declared `sites` order. YAQS places identities between
+separated factors when constructing the generator MPO. The caller must check
+that the full generator is Hermitian and reproduces the unitary; YAQS does not
+verify that relation. This low-level assignment does not change how a Qiskit
+`UnitaryGate` is translated.
+
+Digital generator evolution requires `tdvp_mode="2site"`. `tdvp_sweeps` divides
+the total generator time of one into substeps. TDVP gate application remains
+approximate and can miss required bond growth; see {doc}`simulation_parameters`
+for accuracy limits. Single-qubit gates always use direct contraction. For
+implementation details, see
+{func}`~mqt.yaqs.digital.digital_tjm.construct_generator_mpo`.
+
+:::
+
 ## Related topics
 
 - {doc}`digital_analog_simulation` — combine digital operations with analog
   evolution in one program
 - {doc}`circuit_shots` — computational-basis shot histograms with
   {class}`~mqt.yaqs.DigitalSimParams`
-- {doc}`custom_gates` — custom unitaries and gate translation
 - {doc}`realistic_noise_models` — log-normal and other distributed noise
   strengths
 - {doc}`equivalence_checking` — verify that two circuits implement the same

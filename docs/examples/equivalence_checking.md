@@ -297,7 +297,7 @@ and check that numerical truncation does not determine the answer. The returned
 
 Terminal measurements are ignored for unitary checks; mid-circuit measurements
 are unsupported. Decompose gates on more than two qubits before using the MPO
-backend. See {doc}`custom_gates` for supported gate translation.
+backend. See {ref}`circuit-custom-gates` for supported gate translation.
 
 ### Noise models and returned data
 

@@ -62,7 +62,7 @@ flowchart LR
 | Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models`                                      |
 | Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
 | Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
-| Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
+| Scheduled jumps at fixed times                                             | {ref}`noise-scheduled-jumps`                                                |
 | Transfer an excitation between superconducting qubits                      | {doc}`examples/transmon_emulation`                                          |
 | Transport a trapped ion and study motional noise                           | {doc}`examples/trapped_ion`                                                 |
 | Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
@@ -74,7 +74,7 @@ flowchart LR
 | Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
 | Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
 | Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
-| Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
+| Supply custom circuit gates                                                | {ref}`circuit-custom-gates`                                                 |
 
 ```{toctree}
 :caption: Start here
@@ -140,8 +140,6 @@ Circuit verification <examples/equivalence_checking>
 :titlesonly:
 
 Ensemble evolution <examples/ensemble_evolution>
-Scheduled jumps <examples/scheduled_jumps>
-Custom gates <examples/custom_gates>
 Non-Markovian transformer models (experimental) <examples/memory_surrogate>
 
 ```

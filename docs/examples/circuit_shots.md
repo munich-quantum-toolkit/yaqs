@@ -233,5 +233,5 @@ checkpoints, and gate-application modes.
 
 - {doc}`simulation_parameters` — sampling budgets and accuracy presets
 - {doc}`realistic_noise_models` — other channels, custom operators, and disorder
-- {doc}`custom_gates` — custom unitaries and gate translation
+- {ref}`circuit-custom-gates` — custom unitaries and gate translation
 - {doc}`equivalence_checking` — compare circuit behavior

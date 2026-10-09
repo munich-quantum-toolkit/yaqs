@@ -320,5 +320,5 @@ choices.
   Hamiltonians
 - {doc}`representation_comparison` — MPS, statevector, and density matrix
   backends
-- {doc}`scheduled_jumps` — deterministic jumps at specified times
+- {ref}`noise-scheduled-jumps` — deterministic jumps at specified times
 - {doc}`ensemble_evolution` — unitary ensemble correlations

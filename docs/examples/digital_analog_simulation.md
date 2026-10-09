@@ -305,8 +305,8 @@ contains the histogram from the last segment that sampled shots; inspect
 `segment_results` for earlier histograms. Program execution does not support
 `multi_time_observables`.
 
-For deterministic scheduled jumps, see {doc}`scheduled_jumps`. Jump times use
-the analog run's local clock and must follow its `dt` grid with `order=1`.
+For deterministic scheduled jumps, see {ref}`noise-scheduled-jumps`. Jump times
+use the analog run's local clock and must follow its `dt` grid with `order=1`.
 Consecutive compatible analog segments share that clock; a digital gate starts a
 new analog run. Use a segment noise override to attach a schedule to one
 interval. For device-specific noise strengths and distributions, see
