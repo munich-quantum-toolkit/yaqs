@@ -27,54 +27,18 @@ self
 
 ## User guide
 
-MQT YAQS targets workloads that need **scale and efficiency**: large noisy
-circuits, long analog time evolution, and hardware models with many degrees of
-freedom. For smaller systems, **MCWF** (`vector`) and **Lindblad**
-(`density_matrix`) analog backends are available as well; see
-{doc}`examples/representation_comparison`.
+Start with installation and the quickstart, then choose a guide for your task.
+The examples include working code and plots.
 
-The pages below are **executable notebooks**: code cells run during the
-documentation build, so examples stay in sync with the library. New users should
-start with {doc}`installation`, then {doc}`examples/quickstart`.
-
-```{mermaid}
-flowchart LR
-  state[State]
-  op[Hamiltonian or QuantumCircuit]
-  params["AnalogSimParams / DigitalSimParams"]
-  sim[Simulator]
-  result[Result]
-  state --> sim
-  op --> sim
-  params --> sim
-  sim --> result
-```
-
-### Find a guide
-
-| I want to…                                                                 | Read                                                                        |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Run my first simulation in under a minute                                  | {doc}`examples/quickstart`                                                  |
-| Configure truncation, presets, and trajectories                            | {doc}`examples/simulation_parameters`                                       |
-| Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
-| Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
-| Model realistic noise (log-normal and other distributions)                 | {doc}`examples/realistic_noise_models`                                      |
-| Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models`                                      |
-| Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
-| Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
-| Scheduled jumps at fixed times                                             | {ref}`noise-scheduled-jumps`                                                |
-| Transfer an excitation between superconducting qubits                      | {doc}`examples/transmon_emulation`                                          |
-| Transport a trapped ion and study motional noise                           | {doc}`examples/trapped_ion`                                                 |
-| Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
-| Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
-| Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
-| Build a Markovian noise digital twin from measured trajectories            | {doc}`examples/digital_twin`                                                |
-| Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
-| Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
-| Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
-| Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
-| Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
-| Supply custom circuit gates                                                | {ref}`circuit-custom-gates`                                                 |
+| Section                           | Guides                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start here                        | {doc}`Installation <installation>` · {doc}`Quickstart <examples/quickstart>`                                                                                                                                                                                                                                                                                         |
+| Simulation setup                  | {doc}`Quantum states <examples/state_initialization>` · {doc}`Hamiltonians <examples/hamiltonians>` · {doc}`Noise models <examples/realistic_noise_models>` · {doc}`State representations <examples/representation_comparison>` · {doc}`Simulation parameters <examples/simulation_parameters>` · {doc}`Simulator configuration <examples/simulator_initialization>` |
+| Simulation workflows              | {doc}`Analog <examples/analog_simulation>` · {doc}`Digital circuits <examples/circuit_observables>` · {doc}`Shot-based circuits <examples/circuit_shots>` · {doc}`Analog-digital <examples/digital_analog_simulation>`                                                                                                                                               |
+| Emulation                         | {doc}`Superconducting qubits <examples/transmon_emulation>` · {doc}`Trapped ions <examples/trapped_ion>`                                                                                                                                                                                                                                                             |
+| Characterization and verification | {doc}`Environmental memory <examples/characterization>` · {doc}`Noise characterization <examples/digital_twin>` · {doc}`Circuit verification <examples/equivalence_checking>`                                                                                                                                                                                        |
+| Advanced examples                 | {doc}`Ensemble evolution <examples/ensemble_evolution>` · {doc}`Non-Markovian surrogate models (experimental) <examples/memory_surrogate>`                                                                                                                                                                                                                           |
+| Reference and contributing        | {doc}`API <api/mqt/yaqs/index>` · {doc}`Citations <references>` · {doc}`Changelog <CHANGELOG>` · {doc}`Upgrade guide <UPGRADING>` · {doc}`Contributing <contributing>` · {doc}`Support <support>`                                                                                                                                                                    |
 
 ```{toctree}
 :caption: Start here
