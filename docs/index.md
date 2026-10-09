@@ -107,8 +107,8 @@ Simulator configuration <examples/simulator_initialization>
 :titlesonly:
 
 Analog simulation <examples/analog_simulation>
-Circuit simulation <examples/circuit_observables>
-Circuit measurements <examples/circuit_shots>
+Digital (circuit) simulation <examples/circuit_observables>
+Shot-based simulation <examples/circuit_shots>
 Analog-digital simulation <examples/digital_analog_simulation>
 ```
 
@@ -118,8 +118,8 @@ Analog-digital simulation <examples/digital_analog_simulation>
 :maxdepth: 1
 :titlesonly:
 
-Environmental memory <examples/characterization>
-Noise characterization <examples/digital_twin>
+Environmental memory characterization <examples/characterization>
+Noise model characterization <examples/digital_twin>
 Circuit verification <examples/equivalence_checking>
 ```
 
@@ -129,12 +129,12 @@ Circuit verification <examples/equivalence_checking>
 :maxdepth: 1
 :titlesonly:
 
-Ensembles and correlations <examples/ensemble_evolution>
+Ensemble evolution <examples/ensemble_evolution>
 Scheduled jumps <examples/scheduled_jumps>
 Custom gates <examples/custom_gates>
-Transmon emulation <examples/transmon_emulation>
+Superconducting qubit (transmon) emulation <examples/transmon_emulation>
 Trapped-ion emulation <examples/trapped_ion>
-Surrogate models (experimental) <examples/memory_surrogate>
+Non-Markovian transformer models (experimental) <examples/memory_surrogate>
 
 ```
 
