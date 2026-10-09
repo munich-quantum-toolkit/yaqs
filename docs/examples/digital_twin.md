@@ -2,276 +2,319 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
-  execution_timeout: 900
+  execution_timeout: 300
 ---
-
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
-```
 
 # Building a Digital Twin
 
-Build a **digital twin** of an open quantum system: learn unknown Lindblad jump
-rates from observable time series via simulator forward modeling and CMA-ES
-(analytical optimization), validate the fit on the measured traces, then deploy
-the learned model in {class}`~mqt.yaqs.Simulator` to predict **held-out**
-observables.
+Noise changes how excitations move through a quantum system. Measurements can
+help us estimate that noise and build a model of the observed dynamics. Here we
+learn relaxation and dephasing rates from measurements at the ends of a
+four-spin chain, then use the fitted model to predict transport through its
+unmeasured interior.
 
-The entry point is {class}`~mqt.yaqs.NoiseCharacterizer`.
+This extends {doc}`quickstart` with data preparation, parameter bounds, and
+validation. We generate synthetic observations so the underlying rates are
+known, but pass only the observed traces to the fitter. The example uses the
+standard YAQS installation and Matplotlib for plotting. Run the cells in order
+in a notebook; for a script, use the entry-point guard in
+{doc}`simulator_initialization`.
 
-```{note}
-A machine-learning pipeline with the same I/O (reference trajectories in, fitted
-``NoiseModel`` out) is planned for a future release.
-```
+## 1. Set up excitation transport
 
-```{note}
-Rates are not always uniquely identifiable from a sparse observable set. Judge a
-fit by **trajectory overlap** first; rate bars are secondary validation.
-```
+The XY Hamiltonian exchanges excitations between neighboring spins,
 
-```{note}
-**Forward backends:** `representation="auto"` (default) prefers deterministic
-Lindblad on small chains, then MCWF (`"vector"`), then TJM (`"mps"`). See
-{doc}`representation_comparison` for cross-backend validation.
-```
+$$
+H=-\frac{1}{2}\sum_{i=0}^{2}(X_iX_{i+1}+Y_iY_{i+1}).
+$$
 
-## 1. Minimal fit
+We start with one excitation at site 0. As in {doc}`analog_simulation`, the
+hopping amplitude is one and $\hbar=1$. Measuring $Z_i$ gives the occupation
+through $\langle n_i\rangle=(1-\langle Z_i\rangle)/2$.
 
-Three-site transverse-field Ising chain with homogeneous Pauli noise. Pass
-`reference_model=` to simulate target trajectories internally (benchmark
-shortcut); for lab data use `ref_expectations=` instead (section 3).
-
-```{code-cell} ipython3
-import matplotlib.pyplot as plt
+```{code-cell} python
 import numpy as np
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseCharacterizer, NoiseModel, Observable, Simulator, State
 
-n_sites = 3
-j_coupling = 1.0
-transverse_field = 2.0
-gamma_true = 0.08
-gamma_init = 0.35
-cma_seed = 42
-sites = list(range(n_sites))
-
-hamiltonian = Hamiltonian.ising(n_sites, J=j_coupling, g=transverse_field)
-init_state = State(n_sites, initial="zeros")
-
-fitting_observables = [
-    Observable("y", 0),
-    Observable("z", 0),
-    Observable("y", 1),
-]
-prediction_observables = [
-    Observable("x", 0),
-    Observable("x", 1),
-    Observable("x", 2),
-    Observable("z", 2),
-]
-
-sim_params = AnalogSimParams(
-    observables=fitting_observables,
-    elapsed_time=0.8,
-    dt=0.1,
-    order=1,
-    sample_timesteps=True,
-)
-
-reference_model = NoiseModel(
-    [{"name": "pauli_x", "sites": [s], "strength": gamma_true} for s in sites]
-    + [{"name": "pauli_y", "sites": [s], "strength": gamma_true} for s in sites]
-    + [{"name": "pauli_z", "sites": [s], "strength": gamma_true} for s in sites]
-)
-
-init_guess = NoiseModel(
-    [{"name": "pauli_x", "sites": [s], "strength": gamma_init} for s in sites]
-    + [{"name": "pauli_y", "sites": [s], "strength": gamma_init} for s in sites]
-    + [{"name": "pauli_z", "sites": [s], "strength": gamma_init} for s in sites]
-)
-
-rate_bounds_low = np.zeros(len(init_guess.processes))
-rate_bounds_high = np.full(len(init_guess.processes), 0.5)
-pauli_labels = ["X", "Y", "Z"]
-
-nc = NoiseCharacterizer(show_progress=False)
-result = nc.characterize(
-    hamiltonian,
-    sim_params,
-    init_state=init_state,
-    init_guess=init_guess,
-    observables=fitting_observables,
-    reference_model=reference_model,
-    x_low=rate_bounds_low,
-    x_up=rate_bounds_high,
-    sigma0=0.05,
-    popsize=8,
-    max_iter=40,
-    seed=cma_seed,
-)
-
-gamma_learned = np.array([
-    result.best_parameters[0:n_sites].mean(),
-    result.best_parameters[n_sites : 2 * n_sites].mean(),
-    result.best_parameters[2 * n_sites : 3 * n_sites].mean(),
-])
-times = result.times
-print(f"√J: {result.sqrt_loss_before():.3f} → {result.sqrt_loss_after():.2e}")
-print(f"fitting trajectory RMSE: {result.trajectory_rmse():.2e}")
-```
-
-## 2. Validate fitted dynamics and rates
-
-```{code-cell} ipython3
-gamma_reference = np.full(len(pauli_labels), gamma_true)
-ref_traj = result.ref_traj
-fit_traj = result.fit_traj
-
-fig, axes = plt.subplots(1, 3, figsize=(9, 2.8), gridspec_kw={"width_ratios": [1.1, 1.0, 1.0]})
-
-x_pos = np.arange(len(pauli_labels))
-bar_width = 0.35
-axes[0].bar(x_pos - bar_width / 2, gamma_reference, bar_width, label=r"$\gamma_{\mathrm{true}}$", color="0.35")
-axes[0].bar(x_pos + bar_width / 2, gamma_learned, bar_width, label="learned twin", color="C0")
-axes[0].set_xticks(x_pos, pauli_labels)
-axes[0].set_ylabel(r"$\gamma$")
-axes[0].set_title("Learned rates vs. hidden truth")
-axes[0].legend(loc="upper right", fontsize=8)
-
-fit_panels = [(0, r"$\langle Y_0\rangle$"), (1, r"$\langle Z_0\rangle$")]
-for ax, (obs_idx, ylabel) in zip(axes[1:], fit_panels, strict=True):
-    ax.plot(times, fit_traj[obs_idx], color="C0", lw=2.5, label="twin", zorder=1)
-    ax.plot(times, ref_traj[obs_idx], color="0.2", ls=":", lw=2.5, label="experiment", zorder=2)
-    ax.set_xlabel("time")
-    ax.set_ylabel(ylabel)
-    ax.set_ylim(-1.05, 1.05)
-    panel_rmse = float(np.sqrt(np.mean((fit_traj[obs_idx] - ref_traj[obs_idx]) ** 2)))
-    ax.text(0.03, 0.06, rf"RMSE={panel_rmse:.1e}", transform=ax.transAxes, fontsize=8)
-    ax.legend(loc="upper right", fontsize=8)
-
-fig.suptitle("Twin reproduces the experimental fitting observables", y=1.05, fontsize=11)
-fig.tight_layout()
-```
-
-## 3. Experimental data
-
-When trajectories come from the lab (or an external simulator), pass them as
-`ref_expectations` with shape `(n_obs, n_times)` matching `observables` and
-`sim_params.times`. Below we reuse the reference trajectories from section 1 as
-a stand-in for measured data.
-
-```{code-cell} ipython3
-experimental_data = np.asarray(result.ref_traj, dtype=float)
-
-lab_result = NoiseCharacterizer(show_progress=False).characterize(
-    hamiltonian,
-    sim_params,
-    init_state=init_state,
-    init_guess=init_guess,
-    observables=fitting_observables,
-    ref_expectations=experimental_data,
-    x_low=rate_bounds_low,
-    x_up=rate_bounds_high,
-    sigma0=0.05,
-    popsize=8,
-    max_iter=40,
-    seed=cma_seed,
-)
-print(f"lab-data fit RMSE: {lab_result.trajectory_rmse():.2e}")
-```
-
-## 4. Predict held-out observables with the twin
-
-Plug `result.optimal_model` into {class}`~mqt.yaqs.Simulator` and compare to the
-hidden reference on observables **not** used during fitting.
-
-```{code-cell} ipython3
-pred_params = AnalogSimParams(
-    observables=prediction_observables,
-    elapsed_time=sim_params.elapsed_time,
-    dt=sim_params.dt,
-    order=sim_params.order,
-    sample_timesteps=True,
-)
+length = 4
+state = State(length, initial="basis", basis_string="1000", representation="density_matrix")
+hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
+observables = [Observable("z", site) for site in range(length)]
+params = AnalogSimParams(observables=observables, elapsed_time=8.0, dt=0.1, preset="fast")
 simulator = Simulator(show_progress=False)
-
-twin_result = simulator.run(init_state, hamiltonian, pred_params, result.optimal_model)
-truth_result = simulator.run(init_state, hamiltonian, pred_params, reference_model)
-twin_traj = np.asarray(twin_result.expectation_values, dtype=float)
-truth_traj = np.asarray(truth_result.expectation_values, dtype=float)
-
-fig, axes = plt.subplots(1, 2, figsize=(7, 2.8))
-holdout_panels = [(0, r"$\langle X_0\rangle$"), (3, r"$\langle Z_2\rangle$")]
-for ax, (obs_idx, ylabel) in zip(axes, holdout_panels, strict=True):
-    ax.plot(times, twin_traj[obs_idx], color="C0", lw=2.5, label="twin", zorder=1)
-    ax.plot(times, truth_traj[obs_idx], color="0.2", ls=":", lw=2.5, label="reference", zorder=2)
-    ax.set_xlabel("time")
-    ax.set_ylabel(ylabel)
-    ax.set_ylim(-1.05, 1.05)
-    ax.legend(loc="upper right", fontsize=8)
-
-fig.suptitle("Twin predicts observables outside the fitting set", y=1.05, fontsize=11)
-fig.tight_layout()
 ```
 
-## 5. Stochastic experimental data (MCWF)
+The density-matrix state gives deterministic Lindblad dynamics without
+trajectory sampling error. We record all four sites to validate predictions
+later; only the endpoints will enter the fit. The documentation suppresses
+progress bars with `show_progress=False`; omit this argument to see progress.
 
-The same workflow works with trajectory-averaged MCWF data. Increase `num_traj`
-until observables stabilize; the objective becomes stochastic.
+## 2. See how noise changes the dynamics
 
-```{code-cell} ipython3
-mcwf_sim_params = AnalogSimParams(
-    observables=fitting_observables,
-    elapsed_time=0.8,
-    dt=0.1,
-    order=1,
-    num_traj=32,
-    sample_timesteps=True,
-)
+A local relaxation channel at site 3 removes excitations after they reach the
+far end of the chain. A dephasing channel at site 2 leaves the total excitation
+number unchanged by itself, but changes the interference that drives transport.
+The reference rates are $\gamma_{\mathrm{loss}}=0.35$ and $\gamma_\phi=0.12$.
 
-mcwf_result = NoiseCharacterizer(show_progress=False, representation="vector").characterize(
+```{code-cell} python
+def transport_noise(scale):
+    """Scale the reference relaxation and dephasing rates together."""
+    return NoiseModel([
+        {"name": "lowering", "sites": [3], "strength": 0.35 * scale},
+        {"name": "pauli_z", "sites": [2], "strength": 0.12 * scale},
+    ])
+
+
+noise_scales = [0.0, 0.5, 1.0, 3.0]
+reference_runs = {}
+occupations = {}
+for scale in noise_scales:
+    noise = None if scale == 0 else transport_noise(scale)
+    result = simulator.run(state, hamiltonian, params, noise)
+    reference_runs[scale] = result
+    occupations[scale] = (1 - np.asarray(result.expectation_values)) / 2
+
+times = reference_runs[1.0].times
+```
+
+`strength` is a Lindblad rate in inverse time. The jump operators are
+$L_{\mathrm{loss}}=\sqrt{\gamma_{\mathrm{loss}}}\,|0\rangle\langle1|_3$ and
+$L_\phi=\sqrt{\gamma_\phi}\,Z_2$. This convention gives the dephasing term
+$\gamma_\phi(Z_2\rho Z_2-\rho)$. The dimensionless `scale` multiplies both
+rates; it is not a per-gate error probability.
+
+The four heatmaps share their axes and a square-root color normalization, which
+keeps weak occupation visible while retaining the full range from zero to one.
+
+```{code-cell} python
+:tags: [hide-input]
+import matplotlib.pyplot as plt
+from matplotlib.colors import PowerNorm
+from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+set_matplotlib_formats("svg")
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "font.size": 10,
+    "axes.labelsize": 11,
+    "axes.linewidth": 0.8,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "svg.fonttype": "none",
+})
+occupation_norm = PowerNorm(gamma=0.5, vmin=0, vmax=1)
+fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.4), sharex=True, sharey=True, layout="constrained")
+titles = ["(a) No noise", "(b) Half the reference rates", "(c) Reference rates", "(d) Three times the reference rates"]
+for ax, scale, title in zip(axes.flat, noise_scales, titles, strict=True):
+    image = ax.pcolormesh(times, np.arange(length), occupations[scale], shading="auto", cmap="cividis", norm=occupation_norm, rasterized=True)
+    ax.set(title=title, yticks=np.arange(length), xlim=(0, 8))
+for ax in axes[-1]:
+    ax.set_xlabel(r"Time $t$")
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"Site $i$")
+fig.colorbar(image, ax=axes, label=r"Occupation $\langle n_i\rangle$", ticks=[0, 0.25, 0.5, 1], shrink=0.92)
+plt.show()
+```
+
+**Noise changes transport and weakens the returning excitation.** Without noise,
+the excitation reflects through the chain while its total population stays one.
+Relaxation removes population, and dephasing changes its spatial distribution.
+Both rates change together in this comparison, so the panels show their combined
+effect. We will fit the reference-rate case and use the other panels only to
+illustrate the physical changes.
+
+## 3. Select the observations and candidate channels
+
+Assume that only the endpoints can be measured. Select rows 0 and 3 of the
+synthetic $Z$ traces, keeping their time samples unchanged.
+
+```{code-cell} python
+fitting_sites = [0, 3]
+fitting_observables = [observables[site] for site in fitting_sites]
+reference_z = np.asarray(reference_runs[1.0].expectation_values)
+measured_z = reference_z[fitting_sites]
+
+print("Observation shape:", measured_z.shape)
+```
+
+`ref_expectations` must have shape `(n_observables, n_times)`. Here it is
+`(2, 81)`: rows follow `fitting_observables`, and columns follow `params.times`,
+including $t=0$. We fit $Z$ expectations, not occupations; convert measured
+occupations with `measured_z = 1 - 2 * measured_occupations` when necessary.
+Data from another time grid must first be aligned with the simulation grid.
+
+The candidate model specifies which channels exist and where they act. The
+optimizer will change their strengths only. We start both rates at 0.2 and allow
+each to range from zero to one.
+
+```{code-cell} python
+initial_guess = NoiseModel([
+    {"name": "lowering", "sites": [3], "strength": 0.2},
+    {"name": "pauli_z", "sites": [2], "strength": 0.2},
+])
+lower_bounds = np.zeros(2)
+upper_bounds = np.ones(2)
+```
+
+Bounds and fitted parameters follow the order of `initial_guess.processes`:
+relaxation first, dephasing second. These bounds restrict the search; they are
+not uncertainty intervals. The fit assumes the Hamiltonian, initial state,
+channel types, and channel locations are known. It does not discover an
+arbitrary noise model from the observations.
+
+## 4. Fit the rates
+
+`NoiseCharacterizer` repeatedly simulates candidate models and minimizes the
+mean-squared difference from the supplied traces. Its default backend selection
+uses deterministic Lindblad evolution for this four-spin problem.
+
+```{code-cell} python
+characterizer = NoiseCharacterizer(show_progress=False)
+fit = characterizer.characterize(
     hamiltonian,
-    mcwf_sim_params,
-    init_state=init_state,
-    init_guess=init_guess,
+    params,
+    init_state=state,
+    init_guess=initial_guess,
     observables=fitting_observables,
-    reference_model=reference_model,
-    x_low=rate_bounds_low,
-    x_up=rate_bounds_high,
-    sigma0=0.05,
-    popsize=8,
-    max_iter=20,
-    seed=cma_seed,
+    ref_expectations=measured_z,
+    x_low=lower_bounds,
+    x_up=upper_bounds,
+    max_iter=40,
+    seed=7,
 )
 
-fig, ax = plt.subplots(figsize=(4.5, 2.8))
-obs_idx = 1
-ax.plot(times, mcwf_result.fit_traj[obs_idx], color="C0", lw=2.5, label="MCWF twin", zorder=1)
-ax.plot(times, mcwf_result.ref_traj[obs_idx], color="0.2", ls=":", lw=2.5, label="experiment", zorder=2)
-ax.set_xlabel("time")
-ax.set_ylabel(r"$\langle Z_0\rangle$")
-ax.set_ylim(-1.05, 1.05)
-ax.legend(loc="upper right", fontsize=8)
-ax.set_title(f"MCWF fit: √J → {mcwf_result.sqrt_loss_after():.2e}")
-fig.tight_layout()
+print(f"Endpoint Z-trace RMSE: {fit.sqrt_loss_before():.4f} → {fit.trajectory_rmse():.2e}")
+for name, rate in zip(("Relaxation", "Dephasing"), fit.best_parameters, strict=True):
+    print(f"{name} rate: {rate:.4f}")
 ```
 
-## Workflow summary
+With two free parameters, YAQS uses the derivative-free CMA-ES optimizer.
+`max_iter=40` limits its generations, and `seed` fixes the optimizer's random
+search. This seed is separate from `AnalogSimParams.random_seed`, which controls
+stochastic simulation. Parallel execution remains enabled by default.
 
-| Step | Action                                                              |
-| ---- | ------------------------------------------------------------------- |
-| 1    | Collect experimental trajectories on a fitting observable set       |
-| 2    | `NoiseCharacterizer.characterize(..., ref_expectations=...)`        |
-| 3    | Compare learned rates and fitted-observable dynamics to reference   |
-| 4    | `Simulator.run` with `result.optimal_model` on held-out observables |
+For observations $z_{o,t}$, the fitted objective is
 
-## See also
+$$
+J=\frac{1}{N_{\mathrm{obs}}N_t}\sum_{o,t}
+\left(z_{o,t}^{\mathrm{model}}-z_{o,t}^{\mathrm{data}}\right)^2.
+$$
 
-- {doc}`representation_comparison` — Lindblad vs MCWF vs TJM on the same
-  benchmark
-- {doc}`analog_simulation` — open-system simulation overview
-- {doc}`characterization` — non-Markovian **memory** characterization (the
-  memory twin submodule)
+`sqrt_loss_before()` reports the initial model's RMSE. `trajectory_rmse()`
+reports the mismatch of the final fitted traces. `best_parameters` gives the
+rates in process order, and `optimal_model` is the fitted `NoiseModel` ready for
+simulation. The known synthetic rates let us check recovery, but a low training
+error alone does not establish unique parameters.
+
+## 5. Predict the unmeasured interior
+
+Rerun the fitted model with all four observables. Sites 1 and 2 were withheld
+from the optimization, so they test predictions beyond the fitted traces.
+
+```{code-cell} python
+reconstructed = simulator.run(state, hamiltonian, params, fit.optimal_model)
+fitted_z = np.asarray(reconstructed.expectation_values)
+fitted_occupation = (1 - fitted_z) / 2
+heldout_sites = [1, 2]
+heldout_rmse = np.sqrt(np.mean((fitted_z[heldout_sites] - reference_z[heldout_sites]) ** 2))
+
+print(f"Withheld interior Z-trace RMSE: {heldout_rmse:.2e}")
+```
+
+Compare the full dynamics on the same color scale, then inspect the withheld
+sites as time traces. Reference markers are spaced out for readability; all 81
+samples enter the error calculation.
+
+```{code-cell} python
+:tags: [hide-input]
+fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.6), layout="constrained")
+for ax, dynamics, title in zip(
+    axes[0],
+    (occupations[1.0], fitted_occupation),
+    ("(a) Synthetic reference", "(b) Fitted noise model"),
+    strict=True,
+):
+    image = ax.pcolormesh(times, np.arange(length), dynamics, shading="auto", cmap="cividis", norm=occupation_norm, rasterized=True)
+    ax.set(title=title, xlabel=r"Time $t$", ylabel=r"Site $i$", yticks=np.arange(length), xlim=(0, 8))
+fig.colorbar(image, ax=list(axes[0]), label=r"Occupation $\langle n_i\rangle$", ticks=[0, 0.5, 1])
+for ax, site, label in zip(axes[1], heldout_sites, ("(c)", "(d)"), strict=True):
+    ax.plot(times, fitted_occupation[site], color="#225c80", lw=1.8, label="Fitted prediction")
+    ax.plot(times[::4], occupations[1.0][site, ::4], "o", color="#bb563b", ms=3.5, markerfacecolor="white", label="Withheld reference")
+    ax.set(title=f"{label} Withheld site {site}", xlabel=r"Time $t$", ylabel=rf"Occupation $\langle n_{site}\rangle$", xlim=(0, 8), ylim=(0, 1))
+    ax.spines[["top", "right"]].set_visible(False)
+axes[1, 0].legend(frameon=False, fontsize=9, loc="upper right")
+plt.show()
+```
+
+**Endpoint observations recover the transport through the interior in this
+model.** The fitted heatmap reproduces the reference, including both withheld
+sites. This supports the fitted model for the specified Hamiltonian, initial
+state, and observation window. It does not certify the assumed channels or
+establish accuracy for other preparations, controls, or longer times. In
+experimental work, reserve independent measurements for this validation step.
+
+## Using measured data
+
+Replace `measured_z` with your measured expectation array and keep the same
+observable and time ordering. Supply exactly one of `ref_expectations` and
+`reference_model`. The latter generates reference traces internally and is a
+shortcut for synthetic benchmarks; it is not needed when measurements are
+already available.
+
+The example contains no measurement noise. Finite-shot data add uncertainty, and
+calibration drift or an incorrect Hamiltonian can also affect the fit. The
+current objective weights every observable and time sample equally; it does not
+accept per-sample uncertainty weights or return confidence intervals for the
+rates. Check residuals against measurement uncertainty and test withheld data
+before interpreting small differences between fitted parameters.
+
+Sparse observations can leave several rate combinations indistinguishable. Use
+more times, observables, or preparations to test identifiability. A successful
+optimization shows that a candidate model fits the chosen data; it does not
+prove that this model is unique or that the environment has no memory. For
+memory-sensitive probing, see {doc}`characterization`.
+
+## Further options
+
+### Forward models and sampling
+
+`NoiseCharacterizer(representation="auto")` uses density matrices up to eight
+qubits, vectors up to ten, and MPS above that size by default. Choose
+`"density_matrix"`, `"vector"`, or `"mps"` explicitly when needed. See
+{doc}`representation_comparison` for the numerical trade-offs.
+
+Vector and MPS fits use trajectory-averaged MCWF and TJM simulations.
+`sim_params.num_traj` controls their sampling budget; increasing it reduces
+sampling error at greater cost. Refine the time step and numerical tolerances as
+well as the trajectory count. A fixed `random_seed` makes the forward runs
+repeatable but does not remove their sampling error. Recheck the fitted model
+with more trajectories and independent seeds before drawing conclusions. For a
+small system, deterministic fitting can also use stochastic or measured
+reference data without making the candidate simulations stochastic.
+
+### Optimizer controls and results
+
+`sigma0` sets the initial CMA-ES search scale, and `popsize` sets the number of
+candidates per generation. A larger search budget or several starting points can
+help assess sensitivity to initialization. When there is only one free parameter
+with finite bounds, YAQS uses a bounded scalar search; `max_iter` then limits
+search evaluations rather than CMA-ES generations. Initial-model and final
+fitted-trajectory evaluations are outside either limit.
+
+`fit.ref_traj`, `fit.fit_traj`, and `fit.times` retain the fitted-observable
+comparison. `fit.loss_history` stores candidate losses; it excludes the initial
+model's separately evaluated baseline. `fit.best_loss` is the best search
+objective, while `fit.sqrt_loss_after()` gives its square root. On stochastic
+backends, the final rerun can differ from the best sampled objective. Inspect
+the traces as well as the optimizer's reported loss.
+
+See {class}`~mqt.yaqs.NoiseCharacterizer` for the full interface and
+{doc}`realistic_noise_models` for supported one-site and two-site jump
+processes.
