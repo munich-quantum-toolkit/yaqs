@@ -1,4 +1,4 @@
-# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Simulation and characterization of quantum systems and their environments
 
 MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for
 **scalable, computationally efficient** simulation and characterization of open
@@ -50,7 +50,7 @@ flowchart LR
   sim --> result
 ```
 
-### Learning paths
+### Find a guide
 
 | I want to…                                                                 | Read                                                                        |
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -107,8 +107,8 @@ Simulator configuration <examples/simulator_initialization>
 :titlesonly:
 
 Analog simulation <examples/analog_simulation>
-Circuit observables <examples/circuit_observables>
-Circuit shots <examples/circuit_shots>
+Circuit simulation <examples/circuit_observables>
+Circuit measurements <examples/circuit_shots>
 Analog-digital simulation <examples/digital_analog_simulation>
 ```
 
@@ -129,12 +129,12 @@ Circuit equivalence <examples/equivalence_checking>
 :maxdepth: 1
 :titlesonly:
 
-Ensemble evolution <examples/ensemble_evolution>
+Ensembles and correlations <examples/ensemble_evolution>
 Scheduled jumps <examples/scheduled_jumps>
 Custom gates <examples/custom_gates>
 Transmon emulation <examples/transmon_emulation>
 Trapped-ion emulation <examples/trapped_ion>
-Surrogate models <examples/memory_surrogate>
+Surrogate models (experimental) <examples/memory_surrogate>
 
 ```
 
@@ -154,7 +154,7 @@ Development tools <tooling>
 Support <support>
 ```
 
-## Contributors and Supporters
+## Contributors and supporters
 
 The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
 the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the
