@@ -77,104 +77,81 @@ flowchart LR
 | Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
 
 ```{toctree}
-:caption: Getting started
+:caption: Start here
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-installation
-examples/quickstart
-examples/state_initialization
-examples/simulator_initialization
-examples/simulation_parameters
+Installation <installation>
+Quickstart <examples/quickstart>
 ```
 
 ```{toctree}
-:caption: Analog simulation
+:caption: Simulation setup
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/hamiltonians
-examples/analog_simulation
-examples/realistic_noise_models
-examples/scheduled_jumps
-examples/ensemble_evolution
-examples/representation_comparison
-examples/transmon_emulation
-examples/trapped_ion
+Quantum states <examples/state_initialization>
+Hamiltonians <examples/hamiltonians>
+Noise models <examples/realistic_noise_models>
+State representations <examples/representation_comparison>
+Simulation parameters <examples/simulation_parameters>
+Simulator configuration <examples/simulator_initialization>
 ```
 
 ```{toctree}
-:caption: Environmental Memory Characterization
+:caption: Simulation workflows
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/characterization
-examples/memory_surrogate
+Analog simulation <examples/analog_simulation>
+Circuit observables <examples/circuit_observables>
+Circuit shots <examples/circuit_shots>
+Analog-digital simulation <examples/digital_analog_simulation>
 ```
 
 ```{toctree}
-:caption: Digital Twin
+:caption: Characterization and verification
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/digital_twin
+Environmental memory <examples/characterization>
+Noise characterization <examples/digital_twin>
+Circuit equivalence <examples/equivalence_checking>
 ```
 
 ```{toctree}
-:caption: Digital Circuit Simulation
+:caption: Advanced examples
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/circuit_observables
-examples/circuit_shots
-examples/custom_gates
-examples/equivalence_checking
+Ensemble evolution <examples/ensemble_evolution>
+Scheduled jumps <examples/scheduled_jumps>
+Custom gates <examples/custom_gates>
+Transmon emulation <examples/transmon_emulation>
+Trapped-ion emulation <examples/trapped_ion>
+Surrogate models <examples/memory_surrogate>
+
 ```
 
 ```{toctree}
-:caption: Digital–analog simulation
+:caption: Reference and contributing
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/digital_analog_simulation
-```
-
-```{toctree}
-:caption: Reference
-:hidden:
-:maxdepth: 1
-:titlesonly:
-
-references
-CHANGELOG
-UPGRADING
-```
-
-```{toctree}
-:caption: Developers
-:hidden:
-:maxdepth: 1
-:titlesonly:
-
-contributing
-ai_usage
-tooling
-support
-```
-
-```{toctree}
-:caption: API Reference
-:hidden:
-:glob:
-:maxdepth: 1
-
-api/mqt/yaqs/index
+API reference <api/mqt/yaqs/index>
+References and citations <references>
+Changelog <CHANGELOG>
+Upgrade guide <UPGRADING>
+Contributing <contributing>
+AI usage <ai_usage>
+Development tools <tooling>
+Support <support>
 ```
 
 ## Contributors and Supporters
