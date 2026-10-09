@@ -120,7 +120,7 @@ Analog-digital simulation <examples/digital_analog_simulation>
 
 Environmental memory <examples/characterization>
 Noise characterization <examples/digital_twin>
-Circuit equivalence <examples/equivalence_checking>
+Circuit verification <examples/equivalence_checking>
 ```
 
 ```{toctree}
