@@ -113,6 +113,16 @@ Analog-digital simulation <examples/digital_analog_simulation>
 ```
 
 ```{toctree}
+:caption: Emulation
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
+Superconducting qubit (transmon) emulation <examples/transmon_emulation>
+Trapped ion emulation <examples/trapped_ion>
+```
+
+```{toctree}
 :caption: Characterization and verification
 :hidden:
 :maxdepth: 1
@@ -132,8 +142,6 @@ Circuit verification <examples/equivalence_checking>
 Ensemble evolution <examples/ensemble_evolution>
 Scheduled jumps <examples/scheduled_jumps>
 Custom gates <examples/custom_gates>
-Superconducting qubit (transmon) emulation <examples/transmon_emulation>
-Trapped ion emulation <examples/trapped_ion>
 Non-Markovian transformer models (experimental) <examples/memory_surrogate>
 
 ```
