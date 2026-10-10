@@ -44,6 +44,52 @@ def _write_configuration(source: Path, extensions: list[str], extra: str = "") -
     )
 
 
+@pytest.mark.parametrize("missing_source", [False, True])
+def test_included_release_links(tmp_path: Path, *, missing_source: bool) -> None:
+    """Included release notes link to source and guides without changing the originals."""
+    pytest.importorskip("sphinx")
+    pytest.importorskip("myst_nb")
+    pytest.importorskip("pybtex")
+    source = tmp_path / "docs"
+    source.mkdir()
+    _write_configuration(source, ["myst_nb"], 'nb_execution_mode = "off"\n')
+    module = tmp_path / "src" / "example.py"
+    module.parent.mkdir()
+    if not missing_source:
+        module.write_text('"""Example source."""\n')
+    releases = {
+        "CHANGELOG.md": "# Changelog\n\nSee [example](src/example.py).\n",
+        "UPGRADING.md": "# Upgrading\n\nSee [guide](docs/guide.md#time-dependent-hamiltonians).\n",
+    }
+    for name, text in releases.items():
+        (tmp_path / name).write_text(text)
+        shutil.copyfile(Path(__file__).parents[2] / "docs" / name, source / name)
+    (source / "index.md").write_text("# Release documentation\n\n```{toctree}\nCHANGELOG\nUPGRADING\nguide\n```\n")
+    (source / "guide.md").write_text("# Guide\n\n## Time-dependent Hamiltonians\n")
+    output = tmp_path / "html"
+    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+        [sys.executable, "-m", "sphinx", "-W", "-T", "-b", "html", str(source), str(output)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    log = completed.stdout + completed.stderr
+    for name, text in releases.items():
+        assert (tmp_path / name).read_text() == text
+    if missing_source:
+        assert completed.returncode != 0
+        assert "cross-reference target not found: 'src/example.py'" in log
+        return
+    assert completed.returncode == 0, log
+    assert "WARNING:" not in log
+    assert (
+        'href="https://github.com/munich-quantum-toolkit/yaqs/blob/main/src/example.py"'
+        in (output / "CHANGELOG.html").read_text()
+    )
+    assert 'href="guide.html#time-dependent-hamiltonians"' in (output / "UPGRADING.html").read_text()
+
+
 def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
     """Both documentation formats retain outputs from one capped notebook run."""
     pytest.importorskip("sphinx")

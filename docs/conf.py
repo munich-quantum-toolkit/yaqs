@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -22,6 +23,7 @@ from pybtex.style.template import field, href
 if TYPE_CHECKING:
     from pybtex.database import Entry
     from pybtex.richtext import HRef
+    from sphinx.application import Sphinx
 
 ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
@@ -204,3 +206,21 @@ html_theme_options = {
     "source_directory": "docs/",
     "navigation_with_keys": True,
 }
+
+
+def _release_source_links(app: Sphinx, relative_path: Path, parent_docname: str, content: list[str]) -> None:
+    """Link repository source files from included release notes to GitHub."""
+    del parent_docname
+    if relative_path.as_posix() not in {"../CHANGELOG.md", "../UPGRADING.md"}:
+        return
+    repository = Path(app.srcdir).parent
+    for target in re.findall(r"\]\((src/[^)\s]+)\)", content[0]):
+        if (repository / target).is_file():
+            content[0] = content[0].replace(
+                f"]({target})", f"](https://github.com/munich-quantum-toolkit/yaqs/blob/main/{target})"
+            )
+
+
+def setup(app: Sphinx) -> None:
+    """Preserve repository links when release notes are included in the docs."""
+    app.connect("include-read", _release_source_links)
