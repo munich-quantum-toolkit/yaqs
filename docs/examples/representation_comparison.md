@@ -273,6 +273,7 @@ solver-specific controls.
 | Static-Hamiltonian analog evolution      | MPS, vector, and density matrix; noise must meet the restrictions in {doc}`realistic_noise_models`. |
 | Circuits and analog-digital programs     | MPS.                                                                                                |
 | Mixed initial state                      | Density matrix.                                                                                     |
+| Bitstring-probability observables        | MPS with qubits at every site.                                                                      |
 | Entropy and Schmidt-spectrum observables | MPS; noisy results describe pure trajectories, not the spectrum of a mixed density matrix.          |
 | Piecewise Hamiltonian                    | MPS with TDVP; see {doc}`hamiltonians`.                                                             |
 | Unitary `list[State]` ensemble           | MPS; see {doc}`ensemble_evolution`.                                                                 |

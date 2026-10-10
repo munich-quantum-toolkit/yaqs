@@ -292,8 +292,12 @@ Check grid spacing and boundaries before interpreting a quantitative result. The
 kinetic operator uses zero exterior boundary values, and a heated packet can
 reach the edges. Refine the grid and enlarge its range separately. The continuum
 Gaussian is also only an approximate ground state of the discrete Hamiltonian.
-For dimensional inputs, use compatible units and supply a Hamiltonian divided by
-$\hbar$ if your time unit requires it: YAQS evolves with $\exp(-iH\,dt)$.
+For dimensional inputs, pass `hbar` to `MPO.trapped_ion` in units consistent
+with the masses, positions, and angular frequency. The kinetic term depends on
+$\hbar^2$. For time in seconds, divide one MPO core by $\hbar$ with
+`mpo.tensors[0] /= hbar` before wrapping it with `Hamiltonian.from_mpo`. This
+converts the energy operator to $H/\hbar$ for YAQS's evolution convention
+$\exp(-iH\,dt)$.
 
 A slower or smoother transport protocol can reduce coherent residual motion. The
 kick model isolates heating from random impulses. Other noise processes require

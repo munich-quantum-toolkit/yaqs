@@ -97,8 +97,9 @@ damped = simulator.run(state, circuit, params, noise)
 ```
 
 Parallel execution remains enabled by default. `show_progress=False` suppresses
-bars in the documentation; omit it to see progress. The seed makes the sampling
-repeatable for the same configuration, but does not reduce sampling error.
+bars in the documentation; omit it to see progress. The seed repeats the random
+streams for jumps and sampled disorder for the same configuration, but does not
+seed final readout sampling. Shot counts can therefore vary between runs.
 
 ## 4. Read individual outcomes
 

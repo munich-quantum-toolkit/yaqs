@@ -287,7 +287,7 @@ every sampled overlap is zero does not establish zero uncertainty.
 Keep `representation="auto"` for automatic selection, or choose `"matrix"` or
 `"mpo"` explicitly. Dense matrix storage grows as $4^n$; MPO cost depends on the
 operator's bond dimensions and can also grow rapidly. The MPO method is
-described in {cite:p}`sander2025_EquivalenceChecking`.
+described in {footcite:p}`sander2025_EquivalenceChecking`.
 
 The constructor's `fidelity` sets the decision threshold, while `threshold` sets
 the MPO singular-value cutoff. These control different errors. For an
@@ -324,3 +324,6 @@ Parallel execution is enabled by default. `max_workers` caps concurrency, and
 `random_seed` makes sampled trajectories reproducible across worker scheduling.
 See {class}`~mqt.yaqs.EquivalenceChecker` for the full settings and returned
 fields.
+
+```{footbibliography}
+```

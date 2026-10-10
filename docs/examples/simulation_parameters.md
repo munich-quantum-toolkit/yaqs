@@ -143,8 +143,9 @@ to $\sigma^\alpha$, rather than spin operators $S^\alpha=\sigma^\alpha/2$.
 
 Two-site local operators support adjacent sites and the periodic end-to-end bond
 on qubit chains. Matrix factors follow the supplied site order. Bitstring
-probability requests cannot share an observable list with ordinary operators or
-entanglement diagnostics; shot counts can accompany ordinary observables.
+probabilities require an all-qubit MPS and cannot share an observable list with
+ordinary operators or entanglement diagnostics. Shot counts can accompany
+ordinary observables.
 
 For MPS entanglement across the bond between sites 1 and 2, request the adjacent
 pair:

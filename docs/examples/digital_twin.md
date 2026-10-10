@@ -198,7 +198,9 @@ for name, rate in zip(("Relaxation", "Dephasing"), fit.best_parameters, strict=T
 With two free parameters, YAQS uses the derivative-free CMA-ES optimizer.
 `max_iter=40` limits its generations, and `seed` fixes the optimizer's random
 search. This seed is separate from `AnalogSimParams.random_seed`, which controls
-stochastic simulation. Parallel execution remains enabled by default.
+stochastic simulation. `NoiseCharacterizer` defaults to in-process execution;
+set `parallel=True` to parallelize trajectories for vector or MPS forward
+models.
 
 For observations $z_{o,t}$, the fitted objective is
 
