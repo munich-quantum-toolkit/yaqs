@@ -104,7 +104,7 @@ params = AnalogSimParams(
     elapsed_time=transfer_time,
     dt=transfer_time / 80,
     order=2,
-    num_traj=32,
+    num_traj=24,
     preset="balanced",
     random_seed=7,
 )
@@ -117,7 +117,7 @@ state; local matrix observables also work with higher levels.
 
 The grid contains 81 samples over one transfer interval. The `balanced` preset
 sets numerical tolerances; `order=2` selects second-order TJM for noisy runs.
-Each noisy calculation averages 32 trajectories. Sampling error, timestep error,
+Each noisy calculation averages 24 trajectories. Sampling error, timestep error,
 and the chosen level cutoffs need separate convergence checks.
 
 ## 4. Follow the noiseless transfer
