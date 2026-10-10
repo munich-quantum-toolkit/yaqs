@@ -253,6 +253,8 @@ def docs(session: nox.Session) -> None:
     shared_args = [
         "-n",  # nitpicky mode
         "-T",  # full tracebacks
+        "-W",  # fail on warnings
+        "--keep-going",
         f"-b={args.builder}",
         "docs",
         f"docs/_build/{args.builder}",
@@ -262,7 +264,30 @@ def docs(session: nox.Session) -> None:
     session.run(
         "sphinx-autobuild" if serve else "sphinx-build",
         *shared_args,
-        env={**_CAPPED_NUMERICAL_THREADS, "YAQS_MAX_WORKERS": "2"},
+        env={**_CAPPED_NUMERICAL_THREADS, "YAQS_MAX_WORKERS": "3"},
+    )
+
+
+@nox.session(name="docs-check", python="3.14", reuse_venv=True)
+def docs_check(session: nox.Session) -> None:
+    """Test the build settings and check references without running guide notebooks."""
+    session.install("--group", "docs", "--group", "test", "--torch-backend", "cpu", "--exact", "-e", ".[qasm3,torch]")
+    session.run("pytest", "-n", "0", "tests/docs", env=_CAPPED_NUMERICAL_THREADS)
+    session.run(
+        "sphinx-build",
+        "-E",
+        "-a",
+        "-n",
+        "-T",
+        "-W",
+        "--keep-going",
+        "-D",
+        "nb_execution_mode=off",
+        "-D",
+        "llms_txt_enabled=0",
+        "docs",
+        "docs/_build/check",
+        env={**_CAPPED_NUMERICAL_THREADS, "YAQS_MAX_WORKERS": "3"},
     )
 
 

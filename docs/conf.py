@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from pybtex.richtext import HRef
 
 ROOT = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # Limit docs kernels and child builds unless the runner supplies a budget.
 for name in (
@@ -33,7 +35,8 @@ for name in (
     "OPENBLAS_NUM_THREADS",
 ):
     os.environ.setdefault(name, "1")
-os.environ.setdefault("YAQS_MAX_WORKERS", "2")
+# Automatic worker selection reserves one CPU, so this hint permits two workers.
+os.environ.setdefault("YAQS_MAX_WORKERS", "3")
 
 # Keep matplotlib/font cache writable and local during docs builds.
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
@@ -70,9 +73,11 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.bibtex",
     "sphinxext.opengraph",
+    "yaqs_api",
 ]
 
 source_suffix = [".rst", ".md"]
+nitpicky = True
 
 exclude_patterns = [
     "_build",
@@ -90,7 +95,9 @@ pygments_style = "colorful"
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "qiskit": ("https://docs.quantum.ibm.com/api/qiskit", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
+    "qiskit": ("https://quantum.cloud.ibm.com/docs/api/qiskit", None),
     "mqt": ("https://mqt.readthedocs.io/en/stable", None),
     "core": ("https://mqt.readthedocs.io/projects/core/en/stable", None),
     "ddsim": ("https://mqt.readthedocs.io/projects/ddsim/en/stable", None),
@@ -116,6 +123,21 @@ myst_heading_anchors = 3
 nb_execution_mode = "cache"
 nb_execution_raise_on_error = True
 nb_execution_cache_path = str(ROOT / "docs" / "_build" / ".jupyter_cache")
+# MyST-NB does not know sphinx-llm's builder name. Preserve figures instead of
+# selecting only their text representation in the generated Markdown.
+nb_mime_priority_overrides = [
+    ("llms-markdown", mime, priority)
+    for priority, mime in enumerate((
+        "image/svg+xml",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "text/markdown",
+        "text/latex",
+        "text/html",
+        "text/plain",
+    ))
+]
 
 # Reuse HTML doctrees and notebook outputs when generating the Markdown files.
 llms_txt_build_parallel = False
@@ -155,17 +177,20 @@ autoapi_ignore = [
 ]
 autoapi_options = [
     "members",
-    "imported-members",
     "show-inheritance",
     "special-members",
     "undoc-members",
 ]
-autoapi_keep_files = True
+# Do not carry generated pages for removed modules into the next build.
+autoapi_keep_files = False
 add_module_names = False
 toc_object_entries_show_parents = "hide"
 python_use_unqualified_type_names = True
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+# AutoAPI already indexes the real attributes. Keep Google-style attribute
+# descriptions as fields, without creating a second target for each attribute.
+napoleon_use_ivar = True
 
 # -- Options for HTML output -------------------------------------------------
 
