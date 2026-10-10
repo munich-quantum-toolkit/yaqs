@@ -35,8 +35,8 @@ The examples include working code and plots.
 | Start here                        | {doc}`Installation <installation>` · {doc}`Quickstart <examples/quickstart>`                                                                                                                                                                                                                                                                                         |
 | Simulation setup                  | {doc}`Quantum states <examples/state_initialization>` · {doc}`Hamiltonians <examples/hamiltonians>` · {doc}`Noise models <examples/realistic_noise_models>` · {doc}`State representations <examples/representation_comparison>` · {doc}`Simulation parameters <examples/simulation_parameters>` · {doc}`Simulator configuration <examples/simulator_initialization>` |
 | Simulation workflows              | {doc}`Analog <examples/analog_simulation>` · {doc}`Digital circuits <examples/circuit_observables>` · {doc}`Shot-based circuits <examples/circuit_shots>` · {doc}`Analog-digital <examples/digital_analog_simulation>`                                                                                                                                               |
-| Emulation                         | {doc}`Superconducting qubits <examples/transmon_emulation>` · {doc}`Trapped ions <examples/trapped_ion>`                                                                                                                                                                                                                                                             |
-| Characterization and verification | {doc}`Environmental memory <examples/characterization>` · {doc}`Noise characterization <examples/digital_twin>` · {doc}`Circuit verification <examples/equivalence_checking>`                                                                                                                                                                                        |
+| Emulation                         | {doc}`Digital twin <examples/digital_twin>` · {doc}`Superconducting qubits <examples/transmon_emulation>` · {doc}`Trapped ions <examples/trapped_ion>`                                                                                                                                                                                                               |
+| Characterization and verification | {doc}`Environmental memory <examples/characterization>` · {doc}`Circuit verification <examples/equivalence_checking>`                                                                                                                                                                                                                                                |
 | Advanced examples                 | {doc}`Ensemble evolution <examples/ensemble_evolution>` · {doc}`Non-Markovian surrogate models (experimental) <examples/memory_surrogate>`                                                                                                                                                                                                                           |
 | Reference and contributing        | {doc}`API <api/mqt/yaqs/index>` · {doc}`Citations <references>` · {doc}`Changelog <CHANGELOG>` · {doc}`Upgrade guide <UPGRADING>` · {doc}`Contributing <contributing>` · {doc}`Support <support>`                                                                                                                                                                    |
 
@@ -82,6 +82,7 @@ Analog-digital simulation <examples/digital_analog_simulation>
 :maxdepth: 1
 :titlesonly:
 
+Digital twin <examples/digital_twin>
 Superconducting qubit (transmon) emulation <examples/transmon_emulation>
 Trapped ion emulation <examples/trapped_ion>
 ```
@@ -93,7 +94,6 @@ Trapped ion emulation <examples/trapped_ion>
 :titlesonly:
 
 Environmental memory characterization <examples/characterization>
-Noise model characterization <examples/digital_twin>
 Circuit verification <examples/equivalence_checking>
 ```
 
