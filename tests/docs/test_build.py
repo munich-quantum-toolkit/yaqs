@@ -12,11 +12,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import zlib
 from pathlib import Path
+from string import Template
 
 import pytest
 
@@ -96,6 +98,7 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
     pytest.importorskip("myst_nb")
     pytest.importorskip("sphinx_llm.txt")
     pytest.importorskip("pybtex")
+    yaml = pytest.importorskip("yaml")
 
     source = tmp_path / "docs"
     source.mkdir()
@@ -144,8 +147,13 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
         environment.pop(name, None)
     environment["IPYTHONDIR"] = str(tmp_path / ".ipython")
     environment["JUPYTER_RUNTIME_DIR"] = str(tmp_path / ".jupyter")
+    environment["READTHEDOCS_VIRTUALENV_PATH"] = sys.prefix
+    environment["READTHEDOCS_OUTPUT"] = str(output.parent)
+    configuration = yaml.safe_load((Path(__file__).parents[2] / ".readthedocs.yaml").read_text())
+    command = configuration["build"]["jobs"]["build"]["html"][0]
     completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
-        [sys.executable, "-m", "sphinx", "-W", "-T", "-b", "html", str(source), str(output)],
+        [Template(argument).substitute(environment) for argument in shlex.split(command)],
+        cwd=tmp_path,
         env=environment,
         check=False,
         capture_output=True,

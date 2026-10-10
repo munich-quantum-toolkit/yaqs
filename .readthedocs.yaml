@@ -11,6 +11,13 @@ build:
   jobs:
     install:
       - uv pip install --python "$READTHEDOCS_VIRTUALENV_PATH/bin/python" --group docs --torch-backend cpu --exact -e '.[qasm3,torch]'
+    build:
+      html:
+        # Execute one notebook at a time; each simulation has its own worker budget.
+        - >-
+          "$READTHEDOCS_VIRTUALENV_PATH/bin/python" -u -m sphinx
+          -j 1 -n -T -W --keep-going -b html -d docs/_build/doctrees
+          docs "$READTHEDOCS_OUTPUT/html"
 
 python:
   install:
