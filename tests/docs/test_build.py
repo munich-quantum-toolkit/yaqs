@@ -93,7 +93,7 @@ def test_included_release_links(tmp_path: Path, *, missing_source: bool) -> None
 
 
 def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
-    """Both documentation formats retain outputs from one capped notebook run."""
+    """Publishing restores both formats from saved outputs without starting a kernel."""
     pytest.importorskip("sphinx")
     pytest.importorskip("myst_nb")
     pytest.importorskip("sphinx_llm.txt")
@@ -102,7 +102,7 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
 
     source = tmp_path / "docs"
     source.mkdir()
-    _write_configuration(source, ["myst_nb", "sphinx_llm.txt", "yaqs_api"])
+    _write_configuration(source, ["myst_nb", "sphinx_llm.txt", "yaqs_api", "yaqs_examples"])
     records = tmp_path / "executions.jsonl"
     (source / "index.md").write_text(
         "---\nfile_format: mystnb\nkernelspec:\n  name: python3\nlanguage_info:\n  name: python\n---\n\n"
@@ -149,8 +149,30 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
     environment["JUPYTER_RUNTIME_DIR"] = str(tmp_path / ".jupyter")
     environment["READTHEDOCS_VIRTUALENV_PATH"] = sys.prefix
     environment["READTHEDOCS_OUTPUT"] = str(output.parent)
+    environment["YAQS_DOCS_CACHE"] = str(tmp_path / "notebook-cache")
     configuration = yaml.safe_load((Path(__file__).parents[2] / ".readthedocs.yaml").read_text())
     command = configuration["build"]["jobs"]["build"]["html"][0]
+    generated = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+        [Template(argument).substitute(environment) for argument in shlex.split(command)],
+        cwd=tmp_path,
+        env={**environment, "YAQS_DOCS_EXECUTE": "1"},
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert generated.returncode == 0, generated.stdout + generated.stderr
+    assert (source / "_outputs" / "index.ipynb").is_file()
+    assert (source / "_outputs" / "manifest.json").is_file()
+    shutil.rmtree(output.parent)
+    shutil.rmtree(source / "_build")
+    shutil.rmtree(environment["YAQS_DOCS_CACHE"])
+    # Prose changes must appear beside the saved outputs without invalidating them.
+    index = source / "index.md"
+    index.write_text(
+        index.read_text().replace("# Executable documentation", "# Updated documentation\n\nRevised guide text.")
+    )
+    environment.pop("YAQS_DOCS_EXECUTE", None)
     completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
         [Template(argument).substitute(environment) for argument in shlex.split(command)],
         cwd=tmp_path,
@@ -180,6 +202,49 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
     assert (output / figures[0]).is_file()
     assert figures[0] in (output / "index.html").read_text()
     assert "image/svg+xml" not in markdown
+    assert "Updated documentation" in (output / "index.html").read_text()
+
+    package = tmp_path / "src" / "example.py"
+    package.parent.mkdir()
+    saved = source / "_outputs" / "index.ipynb"
+    original_source = index.read_text()
+    original_output = saved.read_text()
+    invalid_inputs = (
+        (index, original_source.replace("6 * 7", "6 * 8"), "stale example outputs"),
+        (
+            index,
+            original_source.replace("language_info:", "mystnb:\n  execution_mode: force\nlanguage_info:"),
+            "requires",
+        ),
+        (package, "changed = True\n", "package code or dependencies"),
+        (tmp_path / "uv.lock", "changed dependencies\n", "package code or dependencies"),
+        (source / "_outputs" / "manifest.json", None, "Missing or invalid example output manifest"),
+        (saved, None, "Missing or changed saved notebook"),
+        (saved, original_output + "\n", "Missing or changed saved notebook"),
+        (source / "conf.py", (source / "conf.py").read_text() + '\nnb_execution_mode = "force"\n', "requires"),
+    )
+    for path, replacement, message in invalid_inputs:
+        previous = path.read_text() if path.exists() else None
+        if replacement is None:
+            path.unlink()
+        else:
+            path.write_text(replacement)
+        rejected = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+            [sys.executable, "-m", "sphinx", "-E", "-W", "-b", "html", str(source), str(output)],
+            cwd=tmp_path,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert rejected.returncode != 0, str(path)
+        assert message in rejected.stdout + rejected.stderr
+        assert len(records.read_text().splitlines()) == 1
+        if previous is None:
+            path.unlink()
+        else:
+            path.write_text(previous)
 
 
 @pytest.mark.parametrize("missing_reference", [False, True])

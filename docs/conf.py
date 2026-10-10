@@ -76,6 +76,7 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinxext.opengraph",
     "yaqs_api",
+    "yaqs_examples",
 ]
 
 source_suffix = [".rst", ".md"]
@@ -83,6 +84,7 @@ nitpicky = True
 
 exclude_patterns = [
     "_build",
+    "_outputs",
     "**.ipynb_checkpoints",
     "**.jupyter_cache",
     "**jupyter_execute",
@@ -124,7 +126,7 @@ myst_heading_anchors = 3
 
 nb_execution_mode = "cache"
 nb_execution_raise_on_error = True
-nb_execution_cache_path = str(ROOT / "docs" / "_build" / ".jupyter_cache")
+nb_execution_cache_path = os.environ.get("YAQS_DOCS_CACHE", str(ROOT / "docs" / "_build" / ".jupyter_cache"))
 # MyST-NB does not know sphinx-llm's builder name. Preserve figures instead of
 # selecting only their text representation in the generated Markdown.
 nb_mime_priority_overrides = [

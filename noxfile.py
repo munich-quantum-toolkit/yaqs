@@ -245,7 +245,7 @@ def docs(session: nox.Session) -> None:
     args, posargs = parser.parse_known_args(session.posargs)
 
     serve = args.builder == "html" and session.interactive
-    install_args = ["--group", "docs", "--torch-backend", "cpu", "--exact", "-e", ".[qasm3,torch]"]
+    install_args = ["--group", "docs", "--exact", "-e", "."]
     if serve:
         install_args.append("sphinx-autobuild")
     session.install(*install_args)
@@ -268,10 +268,38 @@ def docs(session: nox.Session) -> None:
     )
 
 
+@nox.session(name="docs-execute", python="3.14", reuse_venv=True)
+def docs_execute(session: nox.Session) -> None:
+    """Execute all examples and regenerate saved notebook outputs."""
+    session.install("--group", "docs", "--torch-backend", "cpu", "--exact", "-e", ".[qasm3,torch]")
+    with tempfile.TemporaryDirectory(prefix="yaqs-docs-execution-") as cache:
+        session.run(
+            "sphinx-build",
+            "-E",
+            "-a",
+            "-n",
+            "-T",
+            "-W",
+            "--keep-going",
+            "-j",
+            "1",
+            "-d",
+            "docs/_build/executed-doctrees",
+            "docs",
+            "docs/_build/executed",
+            env={
+                **_CAPPED_NUMERICAL_THREADS,
+                "YAQS_MAX_WORKERS": "3",
+                "YAQS_DOCS_EXECUTE": "1",
+                "YAQS_DOCS_CACHE": cache,
+            },
+        )
+
+
 @nox.session(name="docs-check", python="3.14", reuse_venv=True)
 def docs_check(session: nox.Session) -> None:
     """Test the build settings and check references without running guide notebooks."""
-    session.install("--group", "docs", "--group", "test", "--torch-backend", "cpu", "--exact", "-e", ".[qasm3,torch]")
+    session.install("--group", "docs", "--group", "test", "--exact", "-e", ".")
     session.run("pytest", "-n", "0", "tests/docs", env=_CAPPED_NUMERICAL_THREADS)
     session.run(
         "sphinx-build",
@@ -281,8 +309,6 @@ def docs_check(session: nox.Session) -> None:
         "-T",
         "-W",
         "--keep-going",
-        "-D",
-        "nb_execution_mode=off",
         "-D",
         "llms_txt_enabled=0",
         "docs",
