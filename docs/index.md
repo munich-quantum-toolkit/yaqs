@@ -1,4 +1,4 @@
-# MQT YAQS — Scalable simulation and characterization for open systems, noisy circuits, and realistic hardware
+# MQT YAQS — Simulation and characterization of quantum systems and their environments
 
 MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for
 **scalable, computationally efficient** simulation and characterization of open
@@ -27,157 +27,104 @@ self
 
 ## User guide
 
-MQT YAQS targets workloads that need **scale and efficiency**: large noisy
-circuits, long analog time evolution, and hardware models with many degrees of
-freedom. For smaller systems, **MCWF** (`vector`) and **Lindblad**
-(`density_matrix`) analog backends are available as well; see
-{doc}`examples/representation_comparison`.
+Start with installation and the quickstart, then choose a guide for your task.
+The examples include working code and plots.
 
-The pages below are **executable notebooks**: code cells run during the
-documentation build, so examples stay in sync with the library. New users should
-start with {doc}`installation`, then {doc}`examples/quickstart`.
-
-```{mermaid}
-flowchart LR
-  state[State]
-  op[Hamiltonian or QuantumCircuit]
-  params["AnalogSimParams / DigitalSimParams"]
-  sim[Simulator]
-  result[Result]
-  state --> sim
-  op --> sim
-  params --> sim
-  sim --> result
-```
-
-### Learning paths
-
-| I want to…                                                                 | Read                                                                        |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Run my first simulation in under a minute                                  | {doc}`examples/quickstart`                                                  |
-| Configure truncation, presets, and trajectories                            | {doc}`examples/simulation_parameters`                                       |
-| Build Hamiltonians (Pauli, Hubbard, transmon, trapped ion, …)              | {doc}`examples/hamiltonians`                                                |
-| Simulate open-system (analog) dynamics with noise                          | {doc}`examples/analog_simulation`                                           |
-| Model realistic noise (log-normal and other distributions)                 | {doc}`examples/realistic_noise_models`                                      |
-| Define custom single-site jump operators                                   | {doc}`examples/realistic_noise_models`                                      |
-| Compare scalable MPS, MCWF, and Lindblad analog paths                      | {doc}`examples/representation_comparison`                                   |
-| Two-time correlations and typicality ensembles                             | {doc}`examples/ensemble_evolution`                                          |
-| Scheduled jumps at fixed times                                             | {doc}`examples/scheduled_jumps`                                             |
-| Transmon–resonator SWAP (noiseless vs noisy)                               | {doc}`examples/transmon_emulation`                                          |
-| Static and moving trapped-ion position-grid dynamics                       | {doc}`examples/trapped_ion`                                                 |
-| Characterize environmental memory effects via probing the process          | {doc}`examples/characterization`                                            |
-| Study how long environmental memory persists in a system                   | {ref}`Memory persistence <reset-delay>` in {doc}`examples/characterization` |
-| Train a surrogate and predict how a system evolves under control sequences | {doc}`examples/memory_surrogate`                                            |
-| Build a Markovian noise digital twin from measured trajectories            | {doc}`examples/digital_twin`                                                |
-| Validate predictions at short temporal horizons with exact references      | {doc}`examples/memory_surrogate`                                            |
-| Simulate a circuit and read observables                                    | {doc}`examples/circuit_observables`                                         |
-| Get hardware-like shot histograms                                          | {doc}`examples/circuit_shots`                                               |
-| Combine analog evolution and digital operations in one program             | {doc}`examples/digital_analog_simulation`                                   |
-| Verify two circuits are equivalent                                         | {doc}`examples/equivalence_checking`                                        |
-| Custom gate translation                                                    | {doc}`examples/custom_gates`                                                |
+| Section                           | Guides                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start here                        | {doc}`Installation <installation>` · {doc}`Quickstart <examples/quickstart>`                                                                                                                                                                                                                                                                                         |
+| Simulation setup                  | {doc}`Quantum states <examples/state_initialization>` · {doc}`Hamiltonians <examples/hamiltonians>` · {doc}`Noise models <examples/realistic_noise_models>` · {doc}`State representations <examples/representation_comparison>` · {doc}`Simulation parameters <examples/simulation_parameters>` · {doc}`Simulator configuration <examples/simulator_initialization>` |
+| Simulation workflows              | {doc}`Analog <examples/analog_simulation>` · {doc}`Digital circuits <examples/circuit_observables>` · {doc}`Shot-based circuits <examples/circuit_shots>` · {doc}`Analog-digital <examples/digital_analog_simulation>`                                                                                                                                               |
+| Emulation                         | {doc}`Digital twin <examples/digital_twin>` · {doc}`Superconducting qubits <examples/transmon_emulation>` · {doc}`Trapped ions <examples/trapped_ion>`                                                                                                                                                                                                               |
+| Characterization and verification | {doc}`Environmental memory <examples/characterization>` · {doc}`Circuit verification <examples/equivalence_checking>`                                                                                                                                                                                                                                                |
+| Advanced examples                 | {doc}`Ensemble evolution <examples/ensemble_evolution>` · {doc}`Non-Markovian surrogate models (experimental) <examples/memory_surrogate>`                                                                                                                                                                                                                           |
+| Reference and contributing        | {doc}`API <api/mqt/yaqs/index>` · {doc}`Citations <references>` · {doc}`Changelog <CHANGELOG>` · {doc}`Upgrade guide <UPGRADING>` · {doc}`Contributing <contributing>` · {doc}`Support <support>`                                                                                                                                                                    |
 
 ```{toctree}
-:caption: Getting started
+:caption: Start here
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-installation
-examples/quickstart
-examples/state_initialization
-examples/simulator_initialization
-examples/simulation_parameters
+Installation <installation>
+Quickstart <examples/quickstart>
 ```
 
 ```{toctree}
-:caption: Analog simulation
+:caption: Simulation setup
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/hamiltonians
-examples/analog_simulation
-examples/realistic_noise_models
-examples/scheduled_jumps
-examples/ensemble_evolution
-examples/representation_comparison
-examples/transmon_emulation
-examples/trapped_ion
+Quantum states <examples/state_initialization>
+Hamiltonians <examples/hamiltonians>
+Noise models <examples/realistic_noise_models>
+State representations <examples/representation_comparison>
+Simulation parameters <examples/simulation_parameters>
+Simulator configuration <examples/simulator_initialization>
 ```
 
 ```{toctree}
-:caption: Environmental Memory Characterization
+:caption: Simulation workflows
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/characterization
-examples/memory_surrogate
+Analog simulation <examples/analog_simulation>
+Digital (circuit) simulation <examples/circuit_observables>
+Shot-based simulation <examples/circuit_shots>
+Analog-digital simulation <examples/digital_analog_simulation>
 ```
 
 ```{toctree}
-:caption: Digital Twin
+:caption: Emulation
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/digital_twin
+Digital twin <examples/digital_twin>
+Superconducting qubit (transmon) emulation <examples/transmon_emulation>
+Trapped ion emulation <examples/trapped_ion>
 ```
 
 ```{toctree}
-:caption: Digital Circuit Simulation
+:caption: Characterization and verification
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/circuit_observables
-examples/circuit_shots
-examples/custom_gates
-examples/equivalence_checking
+Environmental memory characterization <examples/characterization>
+Circuit verification <examples/equivalence_checking>
 ```
 
 ```{toctree}
-:caption: Digital–analog simulation
+:caption: Advanced examples
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-examples/digital_analog_simulation
+Ensemble evolution <examples/ensemble_evolution>
+Non-Markovian surrogate models (experimental) <examples/memory_surrogate>
+
 ```
 
 ```{toctree}
-:caption: Reference
+:caption: Reference and contributing
 :hidden:
 :maxdepth: 1
 :titlesonly:
 
-references
-CHANGELOG
-UPGRADING
+API reference <api/mqt/yaqs/index>
+References and citations <references>
+Changelog <CHANGELOG>
+Upgrade guide <UPGRADING>
+Contributing <contributing>
+AI usage <ai_usage>
+Development tools <tooling>
+Support <support>
 ```
 
-```{toctree}
-:caption: Developers
-:hidden:
-:maxdepth: 1
-:titlesonly:
-
-contributing
-ai_usage
-tooling
-support
-```
-
-```{toctree}
-:caption: API Reference
-:hidden:
-:glob:
-:maxdepth: 1
-
-api/mqt/yaqs/index
-```
-
-## Contributors and Supporters
+## Contributors and supporters
 
 The _[Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io)_ is developed by
 the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the

@@ -2,360 +2,328 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
   execution_timeout: 300
 ---
 
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
+# Circuit Verification
+
+A circuit must use the gates and connections that a quantum device supports.
+Transpilation makes those changes, but the compiled circuit should still perform
+the intended operation. We first verify a circuit compiled for a hardware
+target, then introduce a rotation-angle bug and ask how hardware noise changes
+its agreement with the original circuit.
+
+This extends the circuit comparison in {doc}`quickstart`. The four-qubit example
+uses the standard YAQS installation and Matplotlib for plotting, without a
+hardware account. Run the cells in order in a notebook; for a script, use the
+entry-point guard in {doc}`simulator_initialization`.
+
+## 1. Compile for hardware constraints
+
+Our circuit entangles qubit 0 with every other qubit, then applies local
+rotations. A device with a line of nearest-neighbor connections cannot execute
+all three controlled-X gates directly. The transpiler must route the circuit and
+express its rotations in the device's native gate set.
+
+```{code-cell} python
+import numpy as np
+from qiskit import QuantumCircuit, transpile
+from qiskit.providers.fake_provider import GenericBackendV2
+
+num_qubits = 4
+original = QuantumCircuit(num_qubits)
+original.h(0)
+for site in range(1, num_qubits):
+    original.cx(0, site)
+for site in range(num_qubits):
+    original.ry(0.3 * (site + 1), site)
+
+connections = [[0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2]]
+backend = GenericBackendV2(
+    num_qubits,
+    basis_gates=["rz", "sx", "x", "cx"],
+    coupling_map=connections,
+    noise_info=False,
+)
+compiled = transpile(
+    original,
+    backend=backend,
+    initial_layout=list(range(num_qubits)),
+    optimization_level=1,
+    seed_transpiler=7,
+)
+
+print("Original gates:", dict(original.count_ops()))
+print("Compiled gates:", dict(compiled.count_ops()))
 ```
 
-# Equivalence Checking
+`GenericBackendV2` supplies an **offline hardware target**, not measured device
+data. To compile for a real device, pass that device's Qiskit backend instead.
+The native gates and connectivity then come from its target. YAQS does not
+import the backend's calibration data into a noise model; we define the noise
+separately below.
 
-YAQS can test whether two quantum circuits implement the same unitary map, up to
-a **global phase** and numerical tolerance. The public API is
-{class}`~mqt.yaqs.EquivalenceChecker`, which forms the composed operator
-$W = U_1 U_2^\dagger$ from the two circuits and checks whether $W$ is close to
-the identity.
+## 2. Align the outputs and verify the compiled circuit
 
-For most workflows—comparing a high-level circuit to a transpiled variant,
-regression tests on compiled circuits, or checking compiler passes—the
-**MPO backend** (`representation="mpo"`) is the intended tool. It scales to
-larger qubit counts via tensor-network updates and SVD truncation controlled by
-`threshold`. The **matrix backend** (`representation="matrix"`) is a dense,
-tensorized reference useful on very small circuits; both backends target the
-same equivalence criterion.
+Routing can leave logical outputs on different physical qubits. The checker
+compares circuit wires directly, so we must account for this mapping before
+interpreting a mismatch as a compiler bug. We fixed the initial placement to
+`[0, 1, 2, 3]`; the remaining change is the final output permutation.
 
-## Choosing a backend
+Append that permutation to the **reference** circuit. The compiled circuit stays
+as the device would execute it, including its routing gates. Qiskit's
+`PermutationGate` lists the input wire for each output position, so we invert
+the logical-to-physical map returned by `final_index_layout()`.
 
-| Backend                 | When to use                                                                      | Scaling                                                                             | Numerical knobs                          |
-| ----------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
-| **`mpo`** (recommended) | Default for real circuits; long-range gates; anything beyond a handful of qubits | Polynomial in qubits for many structured circuits; memory grows with bond dimension | `threshold` (SVD truncation), `fidelity` |
-| **`matrix`**            | Small-circuit checks, debugging, cross-checking the MPO path                     | Exponential in qubits ($4^n$ complex numbers for the dense operator tensor)         | `fidelity` only                          |
-| **`auto`**              | Convenience: picks matrix for `num_qubits <= matrix_max_qubits`, otherwise MPO   | Same as the selected backend                                                        | Both when MPO is selected                |
+```{code-cell} python
+from qiskit.circuit.library import PermutationGate
+
+from mqt.yaqs import EquivalenceChecker
+
+output_mapping = compiled.layout.final_index_layout()
+reference = original.copy()
+reference.append(PermutationGate(np.argsort(output_mapping).tolist()), range(num_qubits))
+reference = reference.decompose(gates_to_decompose=["permutation"])
+
+checker = EquivalenceChecker()
+verified = checker.check(reference, compiled)
+
+print("Logical output → physical qubit:", output_mapping)
+print("Equivalent:", verified["equivalent"])
+print(f"Overlap: {verified['fidelity']:.12f}")
+```
+
+For the reference unitary $U$ and compiled unitary $V$, the returned overlap is
+
+$$
+a=\frac{|\operatorname{Tr}(UV^\dagger)|}{2^n}.
+$$
+
+An overlap of one means that the circuits agree on every input state, up to a
+global phase. `equivalent` tests whether this value reaches the checker's
+`fidelity` setting, which defaults to `1 - 1e-13`. The compiled circuit passes
+this numerical check. This compares the full operation, rather than only the
+output from one chosen input state.
+
+The default checker selects its backend automatically: dense matrices for at
+most seven qubits, and a matrix product operator (MPO) for larger circuits. This
+small example therefore uses the matrix backend.
 
 ```{note}
-`representation="auto"` remains the constructor default, but
-**you should pass `representation="mpo"` explicitly** when equivalence checking
-is part of a pipeline you care about. Auto only avoids thinking about backend
-choice on tiny circuits; it does not change the fact that MPO is the primary
-algorithm in YAQS.
+The mapping above assumes the identity initial placement and equal circuit
+widths. For another initial layout or a backend that adds ancillas, also align
+the input wires and the circuit widths before checking. YAQS does not apply
+Qiskit's transpilation layout automatically.
 ```
 
-With the default cutover of **7** qubits (`matrix_max_qubits` on
-{class}`~mqt.yaqs.EquivalenceChecker`), auto uses the matrix backend only for
-circuits with **at most seven qubits**. From eight qubits upward, auto selects
-MPO. Override the cutover with `matrix_max_qubits` if needed.
+## 3. Introduce a rotation-angle bug
 
-## What “equivalent” means
+Suppose a compiler pass changes one native $R_z$ angle by $\delta$. We copy the
+compiled circuit and change its first `rz` instruction, leaving the routing and
+all other gates intact.
 
-Two circuits $C_1$ and $C_2$ on $n$ qubits are reported as equivalent when their
-unitaries $U_1$ and $U_2$ satisfy
+```{code-cell} python
+def with_angle_error(circuit, delta):
+    """Offset the first native Z rotation by delta radians."""
+    changed = circuit.copy()
+    index = next(i for i, instruction in enumerate(changed.data) if instruction.operation.name == "rz")
+    instruction = changed.data[index]
+    rotation = instruction.operation.copy()
+    rotation.params[0] += delta
+    changed.data[index] = instruction.replace(operation=rotation)
+    return changed
 
-```{math}
-U_1 U_2^\dagger \approx e^{i\phi}\, I
+
+angles = np.linspace(0, np.pi, 25)
+angle_overlaps = [checker.check(reference, with_angle_error(compiled, delta))["fidelity"] for delta in angles]
+bug_angle = np.pi / 2
+buggy = with_angle_error(compiled, bug_angle)
+bug_result = checker.check(reference, buggy)
+
+print("Buggy circuit equivalent:", bug_result["equivalent"])
+print(f"Overlap with a π/2 angle error: {bug_result['fidelity']:.4f}")
 ```
 
-for some global phase $\phi$, within `fidelity`. On the **matrix** path, only
-**final** measurements are stripped before building $U$; mid-circuit
-measurements raise an error. Barriers are ignored on the matrix path. The
-**MPO** backend walks circuit DAGs directly (measurements and barriers are
-skipped during zone extraction); mid-circuit measurements are not supported for
-unitary equivalence on either backend. Gates on more than two qubits (for
-example `ccx`) are supported on the matrix backend only; the MPO backend rejects
-them with a `ValueError`. Unknown unitaries translate via the matrix fallback,
-which supports at most eight qubits (see {doc}`custom_gates`). See
-{cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
-
-A noiseless `check` returns a dictionary:
-
-| Key                               | Type                | Meaning                                                                   |
-| --------------------------------- | ------------------- | ------------------------------------------------------------------------- |
-| `equivalent`                      | `bool`              | Whether the circuits pass the identity test                               |
-| `fidelity`                        | `float`             | Measured normalized overlap of $W=U_1U_2^\dagger$ with the identity       |
-| `elapsed_time`                    | `float`             | Wall time in seconds                                                      |
-| `representation`                  | `str`               | `"matrix"` or `"mpo"` — which backend ran                                 |
-| `matrix`                          | `ndarray` or `None` | Dense composed operator $W$ as a $(2^n, 2^n)$ matrix; matrix backend only |
-| `mpo`                             | `MPO` or `None`     | Composed operator on the MPO backend; `None` on matrix                    |
-| `schmidt_values`                  | `ndarray` or `None` | Center-cut operator Schmidt values (`length // 2`); MPO backend only      |
-| `center_cut_entanglement_entropy` | `float` or `None`   | Operator entanglement entropy at `length // 2`; MPO backend only          |
-| `global_entanglement_entropy`     | `float` or `None`   | Sum of operator entanglement entropies over internal bonds; MPO only      |
-
-## Parameters
-
-{class}`~mqt.yaqs.EquivalenceChecker` stores settings on the instance; circuits
-are passed to {meth}`~mqt.yaqs.EquivalenceChecker.check` each time.
-
-- **`threshold`** (default `1e-13`): singular-value cutoff during MPO updates.
-  Smaller values retain more bond dimension and are stricter; larger values
-  speed up checks at the cost of accuracy.
-- **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$
-  and the identity (global phase removed). It must be finite and between `0` and
-  `1`. Noiseless and noisy results use this same scale and threshold.
-- **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
-- **`matrix_max_qubits`** (default **7**): only affects `"auto"`.
-- **`parallel`** (default `True`): enables checkerboard **MPO** pair updates in
-  a **thread pool** from 12 qubits upward and allows noisy trajectories to use a
-  **process pool**. Set it to `False` to keep either path serial.
-- **`max_workers`** (default `None`): cap on worker threads when `parallel=True`
-  (noiseless MPO checks), and on worker processes for noisy ensembles. Worker
-  counts also respect the available CPUs and number of trajectories.
-- **`mp_context`**: start method for noisy-ensemble process pools (`"auto"`,
-  `"fork"`, `"spawn"`) when one is created. Noiseless MPO zone parallelism
-  inside `iterate()` still uses in-process threads.
-
-```{code-cell} ipython3
-from mqt.yaqs import EquivalenceChecker
-
-# Recommended: MPO for the circuits you care about
-mpo_checker = EquivalenceChecker(
-    representation="mpo",
-    threshold=1e-6,
-    fidelity=1 - 1e-13,
-)
-
-# Auto: matrix if num_qubits <= 7, else MPO
-auto_checker = EquivalenceChecker(representation="auto")
-```
-
-## Loading from OpenQASM
-
-{meth}`~mqt.yaqs.EquivalenceChecker.check` accepts OpenQASM 2 and OpenQASM 3
-inputs directly — no need to call Qiskit's loaders first. Pass a filesystem
-path, a `pathlib.Path`, or a raw OpenQASM string (when the first substantive
-line declares `OPENQASM`):
-
-```python
-checker = EquivalenceChecker(representation="mpo")
-
-# File paths (preferred when the program uses include directives)
-result = checker.check("original.qasm", "transpiled.qasm")
-
-# Raw source strings
-result = checker.check(qasm_source_a, qasm_source_b)
-```
-
-OpenQASM 3 requires the optional package `qiskit-qasm3-import`
-(`uv pip install mqt-yaqs[qasm3]`). The same path and string forms work with
-{meth}`~mqt.yaqs.Simulator.run` for circuit simulation.
-
-## Example: compare original and transpiled circuits
-
-The workflow below builds a parameterized circuit, transpiles it to another gate
-set, and checks equivalence with the **MPO backend**. This matches typical
-compiler-verification use cases.
-
-Define the number of qubits and circuit depth.
-
-```{code-cell} ipython3
-num_qubits = 5
-depth = num_qubits
-```
-
-Create a TwoLocal circuit and decompose it.
-
-```{code-cell} ipython3
-from qiskit.circuit.library.n_local import TwoLocal
-
-import numpy as np
-
-circuit = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=depth).decompose()
-num_pars = len(circuit.parameters)
-rng = np.random.default_rng()
-values = rng.uniform(-np.pi, np.pi, size=num_pars)
-circuit.assign_parameters(values, inplace=True)
-circuit.measure_all()
-```
-
-Transpile the circuit to a new basis.
-
-```{code-cell} ipython3
-from qiskit import transpile
-
-basis_gates = ["cz", "rz", "sx", "x", "id"]
-transpiled_circuit = transpile(circuit, basis_gates=basis_gates, optimization_level=1)
-```
-
-Run equivalence checking with the MPO backend.
-
-```{code-cell} ipython3
-from mqt.yaqs import EquivalenceChecker
-
-checker = EquivalenceChecker(representation="mpo", threshold=1e-6, fidelity=1 - 1e-13)
-result = checker.check(circuit, transpiled_circuit)
-```
-
-The same pair with `representation="auto"` on this five-qubit example selects
-the matrix backend because $5 \leq 7$. For a consistent pipeline, keep
-`representation="mpo"` as above.
-
-```{code-cell} ipython3
-auto_result = EquivalenceChecker(representation="auto").check(circuit, transpiled_circuit)
-```
-
-## Matrix backend (small circuits)
-
-The matrix backend builds $W = U_1 U_2^\dagger$ as a tensor with $2n$ indices of
-dimension 2 and applies local gate contractions. It uses the same trace-based
-identity test as the MPO path. Memory and time grow as $\mathcal{O}(4^n)$, so
-this backend is practical only for very small $n$.
-
-Use it when:
-
-- You want a dense reference on at most a few qubits.
-- You are debugging the equivalence machinery itself.
-
-```python
-small_checker = EquivalenceChecker(representation="matrix", fidelity=1 - 1e-13)
-```
-
-Forcing `representation="matrix"` on large circuits is allowed but can exhaust
-memory; prefer MPO instead.
-
-## Parallel execution
-
-Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO**
-checks on circuits where many independent updates can run at once. This is the
-default; below 12 qubits the implementation keeps a single noiseless check
-serial even when `parallel=True`, because thread overhead would dominate. A
-single matrix check is also serial. When a noise model is supplied, independent
-matrix or MPO trajectories can instead run across processes.
-
-Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
-MPO site tensors and can be computed in parallel in a shared thread pool (one
-pool per `iterate()` call). Temporal zones are still extracted from the DAGs
-serially; only the tensor contraction and SVD step runs concurrently. Long-range
-gate handling stays serial in this version.
-
-```{code-cell} ipython3
-wide_checker = EquivalenceChecker(
-    representation="mpo",
-    max_workers=4,
-)
-```
+For this single rotation error, the overlap is exactly $|\cos(\delta/2)|$ in
+exact arithmetic. The other gates cancel inside the trace, so the formula does
+not depend on where the faulty rotation occurs. A $\pi/2$ error gives an overlap
+of about 0.707 and fails the equivalence check. A smaller error also fails once
+its overlap falls below the chosen tolerance.
 
 (equivalence-noise-model)=
 
-## Comparing with a noise model
+## 4. Add a hardware noise model
 
-Passing a {class}`~mqt.yaqs.NoiseModel` asks how close a
-**compiled, hardware-like** circuit remains to an **ideal** specification under
-sampled noise. Each trajectory materializes a stochastic realization of the
-noise model on the compiled circuit. This gives a Monte Carlo comparison rather
-than an exact noisy-channel equivalence certificate.
+A correctly compiled circuit can still deviate from the intended operation
+because its gates are noisy. We model a Pauli error after each controlled-X
+gate: on each participating qubit, apply $X$, $Y$, or $Z$ with probability $p/3$
+each, and apply no error with probability $1-p$. Sweeping $p$ separates the
+noiseless compiler check from the effect of executing the circuit on noisy
+hardware.
 
-The checker rejects noise processes that it cannot materialize as stochastic
-circuit operations; those remain available through the simulator.
-
-Noise is sampled onto the **second** circuit argument only. A supported
-two-qubit unitary gate is a noise opportunity; single-qubit gates, gates on
-three or more qubits, barriers, and measurements are not. A process is eligible
-when its complete site support is contained in the gate support. The selected
-equivalence backend must also support the original gate.
-
-Within `EquivalenceChecker`, each resolved `strength` is a dimensionless branch
-probability $p_i$ at every eligible gate. Processes with the same exact site
-support form one categorical draw: process $i$ occurs with probability $p_i$,
-and no process from that support occurs with probability $1-\sum_i p_i$.
-Consequently, each same-support sum must be at most one. Different exact
-supports are sampled independently, so multiple errors may follow one gate. This
-also applies to overlapping supports such as `[0]` and `[0, 1]`, which may both
-be selected in one trajectory.
-
-For an isotropic Pauli error with total probability $p$ on each gate qubit,
-assign `strength=p/3` to X, Y, and Z on that one-qubit support. The identity
-then has probability $1-p$ on each qubit, and the per-qubit draws are
-independent.
-
-Writing $U_{\mathrm{ideal}}$ for the first circuit and $U_{\mathrm{noisy},r}$
-for trajectory $r$ of the second, the relative operator has the order
-
-```{math}
-Q_r = U_{\mathrm{ideal}} U_{\mathrm{noisy},r}^\dagger.
-```
-
-If $a_r = |\operatorname{Tr}(Q_r)| / d$ is the normalized root overlap, the
-sampled channel's process fidelity $F_{\mathrm{pro}}=\mathbb E[a_r^2]$ is
-estimated internally by
-
-```{math}
-\widehat F_{\mathrm{pro}} = \frac{1}{N}\sum_{r=1}^{N} a_r^2.
-```
-
-The public result stays on the noiseless scale:
-
-```{math}
-\mathtt{fidelity}=\sqrt{\widehat F_{\mathrm{pro}}}.
-```
-
-For $N>1$, `fidelity_error` is the approximate delta-method Monte Carlo standard
-error on this root-fidelity scale. It is `0.0` when every sampled overlap is
-zero and `None` for one trajectory.
-
-Apply noise to the transpiled circuit from the earlier example. The noisy call
-returns the same primary fields as the noiseless call:
-
-```{code-cell} ipython3
+```{code-cell} python
 from mqt.yaqs import NoiseModel
 
-checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
-noiseless = checker.check(circuit, transpiled_circuit)
-noise = NoiseModel([
-    {"name": "pauli_x", "sites": [qubit], "strength": 0.02} for qubit in range(num_qubits)
-])
-noisy = checker.check(
-    circuit,
-    transpiled_circuit,
-    noise_model=noise,
-    num_traj=24,
-    random_seed=0,
-)
+probabilities = np.array([0.0, 0.005, 0.015, 0.03, 0.06, 0.1])
+implementations = {"Correct compilation": compiled, "Rotation-angle bug": buggy}
+noise_results = {label: [] for label in implementations}
 
-print(f"noiseless: equivalent={noiseless['equivalent']}, fidelity={noiseless['fidelity']:.6f}")
-print(
-    "noisy:     "
-    f"sample threshold passed={noisy['equivalent']}, "
-    f"root process fidelity={noisy['fidelity']:.4f} "
-    f"+/- {noisy['fidelity_error']:.4f}"
-)
-print(f"trajectories: {noisy['num_traj']}")
+for probability in probabilities:
+    noise = NoiseModel([
+        {"name": f"pauli_{axis}", "sites": [site], "strength": float(probability / 3)}
+        for site in range(num_qubits)
+        for axis in "xyz"
+    ])
+    for label, circuit in implementations.items():
+        result = checker.check(
+            reference,
+            circuit,
+            noise_model=noise,
+            num_traj=256,
+            random_seed=7,
+        )
+        noise_results[label].append(result)
 ```
 
-Here `strength=0.02` means a 2% X-error probability on that qubit after each
-eligible two-qubit gate containing it. It is neither a Lindblad rate nor a 2%
-error probability for the complete circuit.
+**Noise acts on the second circuit only.** Every supported two-qubit unitary is
+a noise opportunity when it contains all sites of a process. Thus routing gates
+also contribute noise. Single-qubit gates, barriers, measurements, and gates on
+three or more qubits do not create noise opportunities.
 
-A noisy `check` returns
-{class}`~mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult` with the same
-fields as a noiseless check, plus `fidelity_error` and `num_traj`. Noisy
-`equivalent` compares the point estimate with `checker.fidelity`; it does not
-use the error bar and is not an exact certificate. For MPO checks, entropies are
-trajectory means and `schmidt_values` is the zero-padded mean trajectory
-spectrum, not a channel spectrum. `matrix` and `mpo` are `None` because the
-ensemble is a channel rather than one relative unitary. Pass
-`return_trajectories=True` to include the individual trajectory results.
+For the checker, `strength` is a
+**dimensionless probability per eligible gate**, not a Lindblad rate or a
+probability for the whole circuit. This differs from noise strengths in
+{doc}`analog_simulation` and {doc}`circuit_observables`. Processes with the same
+exact support are mutually exclusive, and their probabilities must sum to at
+most one. Different supports are sampled independently, including overlapping
+supports.
 
-Distribution-valued strengths are resolved once per `check` call, so every
-trajectory uses the same resolved probabilities. The checker then validates the
-same-support sums; an out-of-range draw raises `ValueError`. A nonnegative
-`random_seed` makes the sampled ensemble reproducible independently of process
-scheduling.
+Each trajectory gives a unitary $V_r$ with sampled Pauli errors. The noisy
+result reports the square root of the estimated process fidelity,
 
-## Performance notes
+$$
+\mathtt{fidelity}=\sqrt{\frac{1}{N}\sum_{r=1}^{N}
+\left|\frac{\operatorname{Tr}(UV_r^\dagger)}{2^n}\right|^2}.
+$$
 
-Internal benchmarks (`benchmarks/bench_equivalence_matrix_vs_mpo.py`) on random
-`EfficientSU2` circuits show the matrix backend winning only at very small qubit
-counts; MPO is faster from roughly eight qubits upward on those workloads. That
-aligns with the default auto cutover at seven qubits: auto uses matrix only
-where it is still affordable, and MPO for everything larger.
+This is the root-mean-square trajectory overlap, not the mean overlap or a
+measurement success probability. `fidelity_error` estimates its Monte Carlo
+standard error. Increasing `num_traj` reduces sampling uncertainty; it does not
+make the assumed hardware model more accurate.
 
-## Related topics
+## 5. Compare the bug and noise effects
 
-- {doc}`realistic_noise_models` — Pauli and dissipative process names, disorder
-- {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
-- {doc}`simulator_initialization` — running simulations with
-  {class}`~mqt.yaqs.Simulator`
-- {doc}`simulation_parameters` — presets and truncation for **simulation**
-  (separate from equivalence `threshold`)
+The left panel checks the controlled rotation error against its exact formula.
+The right panel compares correct and faulty compilations under the same noise
+model. Plotting code is folded so the verification workflow remains visible.
+
+```{code-cell} python
+:tags: [hide-input]
+import matplotlib.pyplot as plt
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "font.size": 10,
+    "axes.labelsize": 11,
+    "axes.linewidth": 0.8,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "svg.fonttype": "none",
+})
+%config InlineBackend.figure_formats = ['svg']
+
+colors = ["#225c80", "#bb563b"]
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.8), sharey=True, layout="constrained")
+fine_angles = np.linspace(0, np.pi, 200)
+axes[0].plot(fine_angles / np.pi, np.abs(np.cos(fine_angles / 2)), color="0.55", lw=1.7, label=r"$|\cos(\delta/2)|$")
+axes[0].plot(angles / np.pi, angle_overlaps, "o", ms=3.5, color=colors[0], label="YAQS")
+axes[0].plot(0.5, bug_result["fidelity"], "D", ms=5, color=colors[1], label=r"Bug: $\delta=\pi/2$")
+axes[0].set(xlabel=r"Rotation-angle error $\delta/\pi$", ylabel="Root process fidelity", xlim=(-0.03, 1.03))
+axes[0].legend(frameon=False, fontsize=9, loc="lower left")
+
+for (label, results), color in zip(noise_results.items(), colors, strict=True):
+    values = [result["fidelity"] for result in results]
+    errors = [result["fidelity_error"] for result in results]
+    axes[1].errorbar(100 * probabilities, values, yerr=errors, color=color, marker="o", ms=4, lw=1.6, capsize=2.5, label=label)
+axes[1].set(xlabel=r"Pauli-error probability per gate qubit $p$ (%)", xlim=(-0.3, 10.3))
+axes[1].legend(frameon=False, fontsize=9, loc="lower left")
+for label, ax in zip(("(a)", "(b)"), axes, strict=True):
+    ax.text(0.02, 1.03, label, transform=ax.transAxes, va="bottom", fontweight="bold")
+    ax.set_ylim(-0.04, 1.06)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(top=False, right=False)
+plt.show()
+```
+
+**Compiler errors and hardware noise reduce agreement in different ways.** (a)
+The noiseless overlap follows the single-angle error formula. (b) With no noise,
+the correct compilation agrees with the reference, while the faulty circuit
+starts below one. As the Pauli-error probability increases, both estimates fall
+in this example. Error bars show one Monte Carlo standard error from 256
+trajectories. Lines join sampled points.
+
+This comparison tells us whether compilation preserves the intended operation
+and how a specified hardware model changes its process fidelity. It does not
+identify an unknown bug or infer device noise from measurements. For learning
+noise strengths from observed dynamics, see {doc}`digital_twin`.
+
+For noisy results, `equivalent` applies the same overlap threshold to the point
+estimate without using its error bar. Treat this as a sampled comparison, not an
+exact noisy-channel certificate. In particular, a zero reported error bar when
+every sampled overlap is zero does not establish zero uncertainty.
+
+## Further options
+
+### Accuracy and backends
+
+Keep `representation="auto"` for automatic selection, or choose `"matrix"` or
+`"mpo"` explicitly. Dense matrix storage grows as $4^n$; MPO cost depends on the
+operator's bond dimensions and can also grow rapidly. The MPO method is
+described in {footcite:p}`sander2025_EquivalenceChecking`.
+
+The constructor's `fidelity` sets the decision threshold, while `threshold` sets
+the MPO singular-value cutoff. These control different errors. For an
+approximate comparison, choose a decision threshold that matches your purpose
+and check that numerical truncation does not determine the answer. The returned
+`representation` records which backend ran.
+
+Terminal measurements are ignored for unitary checks; mid-circuit measurements
+are unsupported. Decompose gates on more than two qubits before using the MPO
+backend. See {ref}`circuit-custom-gates` for supported gate translation.
+
+### Noise models and returned data
+
+The checker supports stochastic Pauli errors, including Pauli products. It
+rejects dissipative channels such as relaxation; use the simulator for those
+channels. See {doc}`realistic_noise_models` for model construction.
+Distribution-valued strengths are drawn once per `check`, then held fixed across
+its trajectories. The resolved same-support probabilities must still sum to at
+most one.
+
+Pass `return_trajectories=True` to keep each trajectory result. Noisy results
+have `matrix=None` and `mpo=None` because the ensemble is a channel. For MPO
+checks, returned entropies and zero-padded Schmidt spectra are trajectory means,
+not spectra of that channel. `fidelity_error` is `None` for a single trajectory.
+
+### Inputs and execution
+
+`check` accepts Qiskit circuits, OpenQASM file paths, and raw OpenQASM source
+strings. OpenQASM 3 requires the optional `mqt-yaqs[qasm3]` extra. File paths
+allow includes to resolve relative to the source file.
+
+Parallel execution is enabled by default. `max_workers` caps concurrency, and
+`mp_context` controls the start method for noisy process pools. A nonnegative
+`random_seed` makes sampled trajectories reproducible across worker scheduling.
+See {class}`~mqt.yaqs.EquivalenceChecker` for the full settings and returned
+fields.
+
+```{footbibliography}
+```

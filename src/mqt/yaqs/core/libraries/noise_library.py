@@ -209,15 +209,16 @@ class NoiseLibrary:
         lowering_two: Two-site lowering noise (11 --> 00).
         crosstalk_zz: Cross talk between neighboring sites along the z-axis.
         crosstalk_xx: Cross talk between neighboring sites along the x-axis.
-        crosstalk_y: Cross talk between neighboring sites along the y-axis.
+        crosstalk_yy: Cross talk between neighboring sites along the y-axis.
         crosstalk_xy: Cross talk between neighboring sites with X x Y.
         crosstalk_yx: Cross talk between neighboring sites with Y x X.
         crosstalk_zy: Cross talk between neighboring sites with Z x Y.
         crosstalk_zx: Cross talk between neighboring sites with Z x X.
         crosstalk_yz: Cross talk between neighboring sites with Y x Z.
         crosstalk_xz: Cross talk between neighboring sites with X x Z.
-        Note: Long-range crosstalk is handled by NoiseModel by attaching per-site
-        factors for non-adjacent pairs based on the process name (e.g., 'crosstalk_xy').
+
+    ``NoiseModel`` handles long-range crosstalk with per-site factors for
+    non-adjacent pairs, inferred from the process name (e.g., ``crosstalk_xy``).
     """
 
     # Canonical names

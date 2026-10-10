@@ -2,314 +2,230 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
   execution_timeout: 300
 ---
 
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
-```
-
 # Configuring the Simulator
 
-YAQS draws a sharp line between **what** you simulate and **how** it runs:
+`Simulator` controls how a calculation runs: parallel workers, progress bars,
+and worker-error handling. Construct one instance and reuse it for successive
+runs. The state, Hamiltonian or circuit, measurements, and noise are supplied
+with each call; their settings are described in {doc}`simulation_parameters`.
 
-| Layer                                                                                                                              | Role                                                                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`~mqt.yaqs.DigitalSimParams` | The physics: initial state, operator, time grid, observables, trajectory count, truncation.                                                                    |
-| {class}`~mqt.yaqs.NoiseModel`                                                                                                      | Optional physics input supplied to {meth}`~mqt.yaqs.Simulator.run`.                                                                                            |
-| {class}`~mqt.yaqs.Simulator`                                                                                                       | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
+## Run a small noisy simulation
 
-This page walks through every option on the {class}`~mqt.yaqs.Simulator` class
-so you can tune execution without touching the physics.
+This four-site Ising chain starts with every spin in $|1\rangle$. Local
+relaxation acts during the evolution, and eight trajectories contribute to the
+mean Pauli $Z$ expectations:
 
-```{code-cell} ipython3
-from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Result, Simulator, State
-```
+```{code-cell} python
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 
-A small reusable analog problem we will simulate throughout:
+length = 4
+state = State(length, initial="ones")
+hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+params = AnalogSimParams(
+    observables=[Observable("z", site) for site in range(length)],
+    elapsed_time=0.4,
+    dt=0.05,
+    num_traj=8,
+    random_seed=7,
+)
+noise = NoiseModel([
+    {"name": "lowering", "sites": [site], "strength": 0.4}
+    for site in range(length)
+])
 
-```{code-cell} ipython3
-L = 4
-H = Hamiltonian.ising(L, J=1.0, g=0.5)
-
-
-def make_params(num_traj: int = 8) -> AnalogSimParams:
-    """A short Ising evolution measuring `<Z>` on every site."""
-    return AnalogSimParams(
-        observables=[Observable("z", site) for site in range(L)],
-        elapsed_time=0.2,
-        dt=0.05,
-        num_traj=num_traj,
-        max_bond_dim=8,
-        svd_threshold=1e-9,
-        sample_timesteps=False,
-        random_seed=0,
-    )
-
-
-state = State(L, initial="zeros")
-```
-
-## Quick start: defaults
-
-Calling `Simulator()` with no arguments gives you parallel execution across most
-of your CPU cores, a `tqdm` progress bar, an `"auto"` multiprocessing context,
-and a generous retry policy.
-
-```{code-cell} ipython3
-sim = Simulator()
-```
-
-Every option is keyword-only, so you can override one without specifying the
-others:
-
-```{code-cell} ipython3
-quiet_sim = Simulator(show_progress=False)
-```
-
-## Reusing one `Simulator` across runs
-
-A `Simulator` instance is **stateless** with respect to the physics; the same
-instance can drive arbitrarily many {meth}`~mqt.yaqs.Simulator.run` calls. This
-is the recommended pattern in scripts and notebooks because it keeps execution
-configuration in one place.
-
-```{code-cell} ipython3
 sim = Simulator(show_progress=False)
-
-for noise_strength in (0.0, 0.05, 0.1):
-    params = make_params()
-    result = sim.run(state, H, params, noise_model=None)
+result = sim.run(state, hamiltonian, params, noise_model=noise)
 ```
 
-Each call constructs a short-lived `ProcessPoolExecutor` when `parallel=True`;
-pools are not persisted across {meth}`~mqt.yaqs.Simulator.run` calls, so you can
-safely change `sim.max_workers` (or replace `sim` entirely) between calls.
+Parallel execution remains enabled. The documentation suppresses progress bars
+with `show_progress=False`; use `Simulator()` to see progress in your own runs.
+The small trajectory budget illustrates execution and result access, rather than
+sampling convergence.
 
-## `parallel`: process-pool vs. in-process execution
+## Read the result and reuse the simulator
 
-`parallel=True` (the default) runs trajectories in worker processes via
-`concurrent.futures.ProcessPoolExecutor`. `parallel=False` runs every trajectory
-in the calling process, which is useful for:
+`run` returns a `Result`. Observable order matches the supplied list:
 
-- Debugging (full tracebacks, no pickling, breakpoints work).
-- Very small jobs where the pool startup cost dominates.
-- Notebook cells where you want to share state with the caller.
-
-Both modes produce identical results for a fixed `random_seed`:
-
-```{code-cell} ipython3
-import numpy as np
-
-params_serial = make_params()
-sim_serial = Simulator(parallel=False, show_progress=False)
-result_serial = sim_serial.run(state, H, params_serial)
-
-params_parallel = make_params()
-sim_parallel = Simulator(parallel=True, max_workers=2, show_progress=False)
-result_parallel = sim_parallel.run(state, H, params_parallel)
+```{code-cell} python
+times = result.times
+z0_mean = result.expectation_values[0]
+z0_trajectories = result.trajectories[0]
 ```
 
-```{note}
-For runs with `num_traj == 1` (e.g. noise-free analog/circuit dynamics,
-Lindblad), the simulator automatically takes the in-process path even with
-`parallel=True`. The pool is only spun up when there is more than one trajectory
-to dispatch.
+Here, `times` and `z0_mean` have nine entries, including time zero.
+`z0_trajectories` has shape `(8, 9)`: one row per trajectory and one column per
+time. `z0_mean` averages those rows. Circuit runs can also return readout counts
+in `result.counts`; see {doc}`circuit_shots`.
+
+Reuse the same simulator and inputs for a noiseless reference:
+
+```{code-cell} python
+reference = sim.run(state, hamiltonian, params)
 ```
 
-## `max_workers` and how the default is chosen
+Each run starts from the supplied initial state. It does not continue from the
+previous result. Sequential calls share execution settings, but they do not keep
+a worker pool alive. YAQS creates a pool only when the calculation has multiple
+independent jobs and more than one worker is available.
 
-When `max_workers` is left as `None`, the simulator picks
-`max(1, available_cpus() - 1)` to leave one core free for the parent process and
-the OS:
+## Choose the common execution controls
 
-```{code-cell} ipython3
-from mqt.yaqs.simulator import available_cpus
+All constructor options are keyword-only. Leave the defaults in place unless you
+need a specific execution budget or a quieter run.
 
-cpus = available_cpus()
-default_workers = Simulator().max_workers
-```
+| Option          | Default   | When to change it                                                                       |
+| --------------- | --------- | --------------------------------------------------------------------------------------- |
+| `show_progress` | `True`    | Set `False` to suppress trajectory and readout bars in documentation or logs.           |
+| `max_workers`   | Automatic | Set a positive integer to cap worker processes, for example `Simulator(max_workers=4)`. |
+| `parallel`      | `True`    | Set `False` to debug in the calling process or avoid process startup for a small job.   |
 
-{func}`~mqt.yaqs.core.parallel_utils.available_cpus` (re-exported as
-{func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and
-scheduler-aware. In priority order it honours:
+A pool requires `parallel=True`, more than one independent job, and
+`max_workers > 1`. Noiseless single-state evolution and density-matrix evolution
+run in the calling process. `max_workers=1` also keeps execution in that
+process, even when parallel execution is enabled, and limits numerical threads
+to one. Worker processes limit their own numerical threads to avoid multiplying
+thread pools across CPUs.
 
-1. `YAQS_MAX_WORKERS` (explicit user override; positive integer).
-2. `PYTEST_XDIST_WORKER` (returns `1` to avoid nested parallelism in tests).
-3. SLURM hints — `SLURM_CPUS_PER_TASK` then `SLURM_CPUS_ON_NODE`.
-4. Linux `os.sched_getaffinity(0)` (respects `taskset`, containers, cgroups).
-5. `os.cpu_count()` as a final fallback.
+You can change settings between calls, for example `sim.max_workers = 2` or
+`sim.show_progress = True`. Setting `sim.max_workers = None` restores automatic
+worker selection.
 
-Override the resolution either by setting the environment variable…
+## Run from a Python script
+
+Worker processes start through `forkserver` on Linux and `spawn` on Windows and
+macOS by default. These methods need a script entry-point guard so importing the
+script in a child process does not start the simulation again.
+
+Keep the imports and input definitions from the first example. Replace its
+simulator creation and run calls with this block, and keep subsequent run calls
+inside the guard:
 
 ```python
-# In a shell: export YAQS_MAX_WORKERS=4
+if __name__ == "__main__":
+    sim = Simulator()
+    result = sim.run(state, hamiltonian, params, noise_model=noise)
+    reference = sim.run(state, hamiltonian, params)
 ```
 
-…or by passing `max_workers` explicitly:
+Run the file with `python your_script.py`. In a notebook, execute the cells in
+order without adding this guard. If process startup is the cause of a debugging
+problem, `parallel=False` lets you inspect the calculation in the notebook's
+process.
 
-```{code-cell} ipython3
-sim_four = Simulator(max_workers=4, show_progress=False)
-```
+## Advanced execution options
 
-## `show_progress`: tqdm bars
+:::{dropdown} Automatic worker budgets and numerical threads
 
-`show_progress=True` (default) shows a `tqdm` bar labelled "Running
-trajectories" (or "Running unitary ensemble" for the deterministic ensemble
-path). Set `show_progress=False` to silence it — useful in test suites, batch
-scripts, and CI logs:
+With `max_workers=None`, the simulator uses `max(1, available_cpus() - 1)`. CPU
+discovery takes the first valid hint from:
 
-```{code-cell} ipython3
-silent = Simulator(show_progress=False)
-silent.run(state, H, make_params(num_traj=4))
-```
+1. `YAQS_MAX_WORKERS`.
+2. A pytest-xdist worker, which reports one CPU to avoid nested pools.
+3. `SLURM_CPUS_PER_TASK`, then `SLURM_CPUS_ON_NODE`.
+4. Process CPU affinity, when available.
+5. The operating system's CPU count.
 
-The bar is suppressed regardless of `parallel`, so the same flag also silences
-serial runs.
+Invalid or non-positive environment hints are ignored. The default worker policy
+then leaves one reported CPU free. Thus `YAQS_MAX_WORKERS=4` normally resolves
+to three workers; `Simulator(max_workers=4)` explicitly permits four. Use the
+constructor argument when you need an exact process cap. CPU affinity can
+restrict the available cores, but this discovery does not read every container
+CPU-quota setting.
 
-## `mp_context`: multiprocessing start method
+A worker cap bounds process count, not total memory. Each process needs its own
+simulation state. Reduce the cap when several concurrent trajectories exceed
+your memory budget. Numerical libraries are capped inside workers; turning off
+process parallelism does not promise unrestricted BLAS threading.
 
-`mp_context` controls how worker processes start. The default `"auto"` selects a
-start method per OS:
+:::
 
-| Value     | Behaviour                                                                   |
-| --------- | --------------------------------------------------------------------------- |
-| `"auto"`  | `"forkserver"` on Linux, `"spawn"` everywhere else.                         |
-| `"fork"`  | Copies the parent process. Avoid when the parent has active threads.        |
-| `"spawn"` | Fresh interpreter per worker. Used on Windows/macOS and available on Linux. |
+:::{dropdown} Multiprocessing start methods
 
-On Linux, `"auto"` creates workers through a separate server process. The first
-pool has extra startup cost, but workers do not fork the application's threaded
-process. Numerical thread limits control resource use; they do not make an
-explicit `"fork"` safe when the parent has active threads.
+`mp_context="auto"` selects `"forkserver"` on Linux and `"spawn"` elsewhere. For
+an explicit selection, the public options are `"spawn"` and `"fork"` on
+platforms that support them. There is no fallback for an unavailable method.
+Keep `"auto"` unless the environment requires a specific method.
 
-```{code-cell} ipython3
-automatic_context = Simulator(mp_context="auto")
-portable_context = Simulator(mp_context="spawn")
-```
+`"spawn"` starts a fresh interpreter for each worker. It can also be useful when
+combining YAQS with libraries that need fresh process initialization. `"fork"`
+copies the application's process and can be unsafe when the parent has active
+threads. Thread limits do not remove that risk. The automatic Linux context
+starts workers from a separate server process; its first pool has additional
+startup cost.
 
-If you mix YAQS with GPU libraries or anything that does not survive `fork()`,
-force `mp_context="spawn"`.
+Worker inputs must be pickleable. Pools are scoped to individual runs, although
+the Python forkserver helper can remain alive between calls. These execution
+choices do not change the requested simulation model.
 
-## `max_retries` and `retry_exceptions`
+:::
 
-Long parallel runs occasionally encounter transient worker failures: a worker is
-cancelled by the OS, a `TimeoutError` is raised, or a transient `OSError` (e.g.
-a temporary file system hiccup) propagates out of a backend. By default, the
-simulator retries each failing trajectory up to **10 times** for the following
-exception types:
+:::{dropdown} Retries for worker errors
 
-- `concurrent.futures.CancelledError`
-- `TimeoutError`
-- `OSError`
+`max_retries=10` allows up to ten additional attempts for a failed job in a
+process pool. The default `retry_exceptions` tuple contains
+`concurrent.futures.CancelledError`, `TimeoutError`, and `OSError`.
 
-```{code-cell} ipython3
-default_retries = Simulator().max_retries
-retry_types = Simulator().retry_exceptions
-```
+Only matching exceptions raised when retrieving a worker result trigger a retry.
+After the retry budget is exhausted, the error propagates. Other exceptions,
+including `ValueError`, propagate immediately under the default policy. Set
+`max_retries=0` to propagate the first worker failure, or supply a tuple of
+exception classes for a specific transient failure in your environment.
 
-Tighten the policy for fail-fast development (e.g. when bisecting an error):
+Retries do not impose a timeout, apply to in-process execution, or restart a
+broken pool. Pool startup and submission failures are outside this retry policy.
+Do not increase the retry budget to handle a repeatable error in the model.
 
-```{code-cell} ipython3
-strict = Simulator(max_retries=0, show_progress=False)
-```
+:::
 
-Or broaden it for unreliable environments:
+:::{dropdown} Other result fields and configuration references
 
-```{code-cell} ipython3
-import concurrent.futures
+Outputs that do not apply to a run remain `None` or empty. The API reference for
+{class}`~mqt.yaqs.Result` describes the full result structure:
 
-resilient = Simulator(
-    max_retries=20,
-    retry_exceptions=(concurrent.futures.CancelledError, TimeoutError, OSError, ConnectionError),
-    show_progress=False,
-)
-```
+| Fields                                              | Use                                                                                                                          |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `observables`, `expectation_values`, `trajectories` | Requested observables, their means, and individual realization data in the supplied order.                                   |
+| `times`                                             | Analog sample times, or the stitched timeline of a program with observables. Standalone circuits have no physical time axis. |
+| `counts`, `measurements`                            | Total circuit readout counts and per-trajectory histograms when shots are requested.                                         |
+| `output_state`                                      | A final state when `get_state=True` is supported; see {doc}`simulation_parameters`.                                          |
+| `max_bond`, `total_bond`, `runtime_cost`            | MPS bond diagnostics and an estimated contraction cost, when recorded.                                                       |
+| `multi_time_times`, `multi_time_results`            | Complex two-time correlations for unitary ensembles; see {doc}`ensemble_evolution`.                                          |
+| `segment_results`                                   | Individual results from a `SimulationProgram`; see {doc}`digital_analog_simulation`.                                         |
+| `sim_params`, `noise_model`                         | The validated simulation parameters and the noise model used by the run.                                                     |
 
-Permanent errors (e.g. `ValueError` from your physics setup, `AssertionError`
-from invariants) are not retried — they propagate after the first failure
-regardless of `max_retries`.
+For a standalone run, `result.sim_params` references the supplied parameter
+object. Validation normalizes that object and rebuilds its analog time grid; it
+is not an immutable snapshot. Construct a new parameter object when you need to
+retain a separate configuration. State and Hamiltonian wrappers may also
+populate cached representations, while evolution uses copies of their input
+states.
 
-## Inspecting the return value: `Result`
+A program's top-level `sim_params` is `None`; read segment parameters through
+`result.segment_results`. Program settings and trajectory budgets are explained
+in {doc}`digital_analog_simulation`.
 
-{meth}`~mqt.yaqs.Simulator.run` returns a {class}`~mqt.yaqs.Result` that holds
-every simulation output through a small, stable surface. The
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`
-you passed in is referenced unchanged at `result.sim_params`:
+For temporary storage, pickle can save results for later analysis with matching
+Python, YAQS, and dependency versions. This stores the result; it does not
+resume an interrupted simulation. Only load pickle files from a trusted source.
 
-```{code-cell} ipython3
-sim = Simulator(show_progress=False)
-params = make_params()
-result = sim.run(state, H, params)
-```
+:::
 
-The properties that don't apply to your simulation kind return `None` (or an
-empty list for `observables` when only shots were requested), so you can branch
-on them safely. The full set is:
+## Related guides
 
-| Property                                 | Populated for                                                                                                                                                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `observables`                            | Analog and digital runs with observables. Empty list for all digital runs without observables (shots-only and state-only, e.g. `get_state=True`).                                                      |
-| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                                                     |
-| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                                                        |
-| `times`                                  | Shared analog time grid; for digital–analog programs, the stitched physical timeline when observables are configured (`None` for shots-only / no-observable programs and standalone digital circuits). |
-| `runtime_cost`                           | MPS-backed analog and digital runs that are not shots-only (contraction-cost heuristic over time).                                                                                                     |
-| `max_bond`                               | MPS-backed analog and digital runs that are not shots-only (maximum bond dimension over time).                                                                                                         |
-| `total_bond`                             | MPS-backed analog and digital runs that are not shots-only (sum of internal bond dimensions).                                                                                                          |
-| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                                                               |
-| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `DigitalSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only.                                  |
-| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                                                      |
-| `counts`                                 | Digital runs with `shots` set (the `dict[int, int]` of aggregated measurement outcomes).                                                                                                               |
+- {doc}`simulation_parameters` — accuracy, sampling budgets, and output
+  requests.
+- {doc}`analog_simulation` — noisy analog dynamics.
+- {doc}`circuit_observables` — circuit expectations and checkpoints.
+- {doc}`digital_analog_simulation` — analog-digital programs and segment
+  results.
+- {doc}`representation_comparison` — choosing the analog state representation.
 
-A digital–analog {class}`~mqt.yaqs.SimulationProgram` returns a top-level
-{class}`~mqt.yaqs.Result` whose `sim_params` is `None`; read each segment's
-parameters from `result.segment_results[i].sim_params`. When observables are
-configured, `result.times` and `result.expectation_values` are stitched onto the
-physical program timeline; shots-only and other no-observable programs leave
-`result.times` as `None`. Observables and `random_seed` are set on the program
-(or as keyword arguments when passing a pair list to
-{meth}`~mqt.yaqs.Simulator.run`). Prefer setting `num_traj` the same way; when
-{attr}`~mqt.yaqs.SimulationProgram.num_traj` is omitted (`None`), execution
-falls back to the `num_traj` value specified consistently on every segment's
-parameter object. Conflicting segment values require an explicit program-level
-`num_traj`. A program that requests shots but no observables follows standalone
-digital semantics and executes one complete-program stochastic trajectory per
-shot.
-
-`Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and
-resume analysis from disk:
-
-```{code-cell} ipython3
-import pickle
-
-blob = pickle.dumps(result)
-restored: Result = pickle.loads(blob)  # noqa: S301
-```
-
-## Choosing settings for common scenarios
-
-| Scenario                                          | Recommended `Simulator(...)`                                           |
-| ------------------------------------------------- | ---------------------------------------------------------------------- |
-| Quick local run, want to see a progress bar       | `Simulator()`                                                          |
-| Notebook / docs build / CI logs                   | `Simulator(show_progress=False)`                                       |
-| Debugging a physics setup                         | `Simulator(parallel=False, show_progress=False)`                       |
-| Single-process benchmark, all cores in the worker | `Simulator(parallel=False)` and let BLAS/OpenMP use all threads        |
-| Fixed core budget (e.g. SLURM job step)           | `YAQS_MAX_WORKERS=N` in the environment, or `Simulator(max_workers=N)` |
-| Mixing with GPU / non-fork-safe code              | `Simulator(mp_context="spawn")`                                        |
-| Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
-
-For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`,
-`random_seed`, `sample_timesteps`, observables, noise), see
-{doc}`analog_simulation`, {doc}`representation_comparison`, and
-{doc}`state_initialization`.
-
-## Related topics
-
-- {doc}`quickstart` — minimal first simulation
-- {doc}`simulation_parameters` — physics-side presets and truncation
-- {doc}`analog_simulation` — TJM workflow with noise
-- {doc}`circuit_observables` — circuit observables, mid-circuit sampling, gate
-  modes
+Full constructor and `run` signatures are in the API reference for
+{class}`~mqt.yaqs.Simulator`.

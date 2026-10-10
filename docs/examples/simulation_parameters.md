@@ -2,6 +2,8 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
   execution_timeout: 300
@@ -9,355 +11,263 @@ mystnb:
 
 # Configuring Simulation Parameters
 
-YAQS separates **what you evolve** ({class}`~mqt.yaqs.State`, circuits,
-Hamiltonians) from **how you truncate and sample** via parameter objects passed
-to {meth}`~mqt.yaqs.Simulator.run`:
+Simulation parameters choose what to measure, when to record it, and the
+numerical accuracy. Start with a preset, then change the settings that matter
+for your calculation.
 
-| Class                               | Use when                                                                                     |
-| ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.AnalogSimParams`  | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
-| {class}`~mqt.yaqs.DigitalSimParams` | Circuit simulation: observables, computational-basis shots, or both.                         |
+| Class              | Use for                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `AnalogSimParams`  | Hamiltonian evolution, including noisy dynamics and unitary ensembles. |
+| `DigitalSimParams` | Circuit expectation values, shot counts, or a final state.             |
 
-This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator`
-execution options (parallelism, progress bars), see
-{doc}`simulator_initialization`.
+Pass the parameter object to `Simulator.run` with the initial state and
+Hamiltonian or circuit. Supply noise through `noise_model` in that call. The
+state representation selects the analog backend; see
+{doc}`representation_comparison`. Parallel execution and progress controls
+belong to `Simulator`, as described in {doc}`simulator_initialization`.
 
-## Observable string names
+## Choose a preset
 
-{class}`~mqt.yaqs.Observable` accepts a named Hermitian operator as its first
-argument. YAQS resolves the name internally, so standard measurements do not
-depend on gate classes.
+Both classes default to `preset="balanced"`. A preset supplies four settings:
 
-| String                   | Meaning                                                        | Example                                     |
-| ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
-| `"x"`, `"y"`, `"z"`      | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
-| `"id"`                   | Single-site identity operator                                  | `Observable("id", sites=0)`                 |
-| `"p0"`, `"p1"`           | Single-site computational-basis projectors                     | `Observable("p0", sites=0)`                 |
-| `"xx"`, `"yy"`, `"zz"`   | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
-| `"position"`             | Position operator for a supplied local position basis          | `Observable("position", 0, positions=grid)` |
-| `"entropy"`              | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
-| `"schmidt_spectrum"`     | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
-| binary bitstring         | Projection-valued measurement onto a computational basis state | see {doc}`circuit_observables`              |
+| Preset       | `svd_threshold` | `max_bond_dim` | `num_traj` | `krylov_tol` |
+| ------------ | --------------- | -------------- | ---------- | ------------ |
+| `"fast"`     | `1e-3`          | `16`           | `128`      | `1e-3`       |
+| `"balanced"` | `1e-6`          | `128`          | `256`      | `1e-4`       |
+| `"accurate"` | `1e-9`          | `4096`         | `1024`     | `1e-6`       |
+| `"exact"`    | `1e-13`         | `None`         | `1024`     | `1e-12`      |
 
-Observable matrices must be Hermitian. For custom unitaries and circuit gates,
-use {doc}`custom_gates`; those workflows use `GateLibrary` or Qiskit circuits
-directly.
+Use `"fast"` to explore a model and `"balanced"` as a starting point for
+accuracy checks. `"accurate"` tightens the numerical settings and increases the
+trajectory budget, at greater cost. `"exact"` provides strict reference settings
+and removes the bond cap; finite timesteps, truncation, and sampling error still
+apply. No preset establishes convergence for every model.
 
-Named observables that require configuration accept keyword-only factory
-arguments. Missing or unknown arguments raise `TypeError`, so misspelled
-parameters are not silently ignored.
+Explicit constructor arguments replace only the corresponding preset values:
 
-## Start with a preset
+```{code-cell} python
+from mqt.yaqs import AnalogSimParams, DigitalSimParams, Observable
 
-You do **not** need to tune every numerical knob before running a simulation.
-Pick a **preset** and let it fill in the truncation and sampling settings you
-may be unfamiliar with (`svd_threshold`, `max_bond_dim`, `num_traj` on
-analog/digital-observable runs, and `krylov_tol`).
-
-All `*SimParams` classes accept a keyword-only `preset` argument (default
-`"balanced"`):
-
-| `preset`               | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / digital observables) | `krylov_tol` |
-| ---------------------- | --------------- | -------------- | ----------------------------------------- | ------------ |
-| `"fast"`               | `1e-3`          | `16`           | `128`                                     | `1e-3`       |
-| `"balanced"` (default) | `1e-6`          | `128`          | `256`                                     | `1e-4`       |
-| `"accurate"`           | `1e-9`          | `4096`         | `1024`                                    | `1e-6`       |
-| `"exact"`              | `1e-13`         | `None`         | `1024`                                    | `1e-12`      |
-
-- **`"fast"`** — qualitative exploration and quick tests; not intended for
-  strict dense comparisons.
-- **`"balanced"`** — recommended default for exploratory work.
-- **`"accurate"`** — high-quality production settings.
-- **`"exact"`** — strict reference/debug preset with minimal internal numerical
-  relaxation. Stochastic trajectory sampling, finite time steps, and model error
-  still apply; this is not mathematically exact.
-
-`svd_threshold` controls **tensor-network SVD truncation** (bond truncation).
-`krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside
-TDVP updates. These are independent: tightening one does not change the other.
-`trunc_mode` (default `"discarded_weight"`) is unchanged across presets. The
-chosen preset name is stored on the object as `params.preset`.
-
-For analog BUG evolution, set `evolution_mode=EvolutionMode.BUG` (exported from
-`mqt.yaqs`). BUG uses center-augmented alternating endpoints with one
-compression and renormalization after each `dt` step; see
-{doc}`analog_simulation`.
-
-## Override only what you need
-
-**Explicit constructor arguments override the preset; everything you omit keeps
-the preset value.**
-
-That is the intended workflow when you know _some_ settings but not all:
-
-1. Choose the closest preset (`"fast"`, `"balanced"`, `"accurate"`, or
-   `"exact"`).
-2. Pass **only** the fields you want to change.
-3. Leave the rest unset — they stay at the preset defaults.
-
-Overridable preset fields:
-
-| Argument        | What it controls                                   |
-| --------------- | -------------------------------------------------- |
-| `svd_threshold` | SVD bond truncation during MPS/MPO updates         |
-| `max_bond_dim`  | Hard cap on bond dimension (`None` = no cap)       |
-| `num_traj`      | Trajectory count (analog / digital observables)    |
-| `krylov_tol`    | Adaptive Krylov/Lanczos matrix exponential in TDVP |
-
-Optional `shots` on `DigitalSimParams` is set explicitly and is **not** part of
-any preset.
-
-If you omit an overridable argument, the preset supplies it. If you pass a value
-explicitly, **that value wins** for that field only — the other preset fields
-are unchanged. For `max_bond_dim`, omit the argument to keep the preset cap;
-pass `None` explicitly to remove the cap.
-
-## Recommended usage
-
-```{code-cell} ipython3
-from mqt.yaqs import (
-    SIMULATION_PRESETS,
-    AnalogSimParams,
-    DigitalSimParams,
-    Observable,
-)
-
-
-def _trunc_summary(params: AnalogSimParams | DigitalSimParams) -> dict[str, object]:
-    """Collect preset-related fields for display."""
-    out: dict[str, object] = {
-        "preset": params.preset,
-        "svd_threshold": params.svd_threshold,
-        "max_bond_dim": params.max_bond_dim,
-        "krylov_tol": params.krylov_tol,
-    }
-    if isinstance(params, DigitalSimParams) and params.shots is not None:
-        out["shots"] = params.shots
-    out["num_traj"] = params.num_traj
-    return out
-```
-
-Pick a preset — no other truncation arguments required:
-
-```{code-cell} ipython3
-# Default: balanced preset fills in all truncation settings
-analog_params = AnalogSimParams()
-
-for name in ("fast", "balanced", "accurate", "exact"):
-    _trunc_summary(AnalogSimParams(preset=name))
-```
-
-Override **one** field; the rest stay from `"balanced"`:
-
-```{code-cell} ipython3
-balanced = AnalogSimParams(preset="balanced")
-tighter_krylov = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
-```
-
-Override **several** fields when you know exactly what you want; the remaining
-preset fields still apply:
-
-```{code-cell} ipython3
 custom_params = AnalogSimParams(
-    preset="fast",  # start from fast defaults for everything else
-    max_bond_dim=512,
-    num_traj=32,
-)
-_trunc_summary(custom_params)
-```
-
-Shot-based circuit simulation: set `shots` yourself, use a preset for
-truncation:
-
-```{code-cell} ipython3
-shot_params = DigitalSimParams(
-    shots=1024,
-    preset="fast",
-)
-_trunc_summary(shot_params)
-```
-
-## `AnalogSimParams`
-
-Besides the preset (and any overrides), you typically set the time grid
-(`elapsed_time`, `dt`), observables, and whether to record intermediate times
-(`sample_timesteps`). Analog backends use a fixed step size, so `dt` must be
-positive and `elapsed_time` must be a non-negative integer multiple of `dt`.
-Non-integral grids raise a `ValueError`; choose the step count first and set
-`elapsed_time = num_steps * dt` when constructing a grid programmatically.
-
-```{code-cell} ipython3
-L = 4
-observables = [Observable("z", site) for site in range(L)]
-
-analog = AnalogSimParams(
-    observables=observables,
-    elapsed_time=0.2,
-    dt=0.05,
-    preset="accurate",
-)
-_trunc_summary(analog)
-```
-
-Need a smaller bond cap for a quick test, but keep the rest of `"accurate"`?
-
-```{code-cell} ipython3
-analog_quick = AnalogSimParams(
-    observables=observables,
-    elapsed_time=0.2,
-    dt=0.05,
     preset="accurate",
     max_bond_dim=256,
-)
-_trunc_summary(analog_quick)
-```
-
-Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a
-{class}`~mqt.yaqs.State` and {class}`~mqt.yaqs.Hamiltonian` (see
-{doc}`analog_simulation`).
-
-## `DigitalSimParams`
-
-Used for circuit simulation. Set non-empty `observables` for expectation values,
-`shots` for computational-basis counts, and/or `get_state` for the final MPS.
-Observables and shots may be requested together. Optionally enable layer
-sampling with `sample_layers=True` (see {doc}`circuit_observables`).
-
-`num_traj` and `shots` are **independent** controls:
-
-| Parameter  | Meaning                                                                  |
-| ---------- | ------------------------------------------------------------------------ |
-| `num_traj` | Noisy stochastic trajectories for observables and trajectory diagnostics |
-| `shots`    | Total bitstring-sample budget                                            |
-
-- **Noisy + observables (+ optional shots):** run `num_traj` trajectories. If
-  `shots` is also set, that **total** budget is distributed across those
-  trajectories. `shots < num_traj` is supported: some trajectories still
-  contribute observables but receive zero measurement samples.
-- **Noisy + shots only:** `num_traj` is ignored; one single-shot trajectory is
-  run per shot, so configuring `num_traj` does not affect this path.
-- **Noiseless:** one trajectory is enough; all `shots` are sampled from that
-  final state.
-
-### Two-qubit gate mode (`gate_mode`)
-
-Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic
-MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path
-as `swaps` (the orthogonality center is moved onto the gate pair first, so the
-truncated SVD discards the smallest Schmidt coefficients of the state), and
-long-range gates contract an extended gate MPO site-wise (library leg ordering,
-MPS virtual index before MPO virtual index) followed by compression with
-`svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit
-gates are applied:
-
-- **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed
-  with adjacent SWAP insertion before and after the local update.
-- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the
-  generator MPO + **two-site TDVP (2TDVP)** on a local window.
-- **`full-tdvp`** — TDVP (generator MPO + 2TDVP on a local window) on every
-  two-qubit gate.
-
-Matrix-backed custom gates (from Qiskit `UnitaryGate` or other unknown
-unitaries) have no analytic generator. In `gate_mode="tdvp"` or `"full-tdvp"`,
-those gates use TEBD on nearest-neighbor pairs and the MPO path on long-range
-pairs instead of the TDVP generator window. See {doc}`custom_gates` for the full
-gate translation and custom-gate workflow.
-
-Gates on three or more qubits have no TEBD path: in the TDVP modes, gates with a
-product-form generator (`ccx`, `ccz`) use the generator MPO and TDVP window; all
-other cases, including `gate_mode="swaps"`, use the extended gate MPO.
-
-Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window
-via `evolve_window`.
-
-```{warning}
-`"tdvp"` and `"full-tdvp"` are variational, approximate gate paths. With one
-sweep, a long-range entangling gate can fail to create every required Schmidt
-rank. This affects a long-range CZ on a product MPS, rank growth from two to
-four after a shallow preparation, and multi-gate RZZ ladders. More sweeps can
-improve some cases but do not guarantee exact gate application. Use the default
-`"mpo"` mode, or `"swaps"` for two-qubit gates, when gate-application accuracy
-up to the configured truncation is required.
-```
-
-Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into
-multiple substeps of equal total time. Values greater than `1` are opt-in and
-may improve accuracy on some circuits. The setting applies to all TDVP kernels
-on `AnalogSimParams` and `DigitalSimParams`.
-
-Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"`
-(2TDVP), or `"dynamic"` (adaptive single/two-site updates). The default is
-**`"2site"`** (2TDVP) on `AnalogSimParams` and `DigitalSimParams`. Pass
-`"dynamic"` explicitly for adaptive 1/2-site switching during analog evolution.
-
-Substep geometry: each substep is **symmetric** (left-to-right then
-right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and
-digital gates. The total generator time applied to one digital gate remains `1`
-across all substeps. Noise and dissipation after TDVP still use the full
-physical step `dt` in analog simulation.
-
-```{code-cell} ipython3
-digital = DigitalSimParams(
-    observables=[Observable("z", 0)],
-    gate_mode="tdvp",
-    tdvp_sweeps=2,
-    preset="accurate",
-)
-_trunc_summary(digital)
-```
-
-```{code-cell} ipython3
-digital_default = DigitalSimParams(
-    observables=[Observable("z", 0)],
-    preset="accurate",
-)
-_trunc_summary(digital_default)
-```
-
-When `shots` is set, YAQS stores measurement histograms in `Result.counts` as a
-`dict[int, int]`. The integer key encodes the measured bitstring with
-**site 0 as the least-significant bit** (little-endian). This matches Qiskit’s
-default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via
-`int(bitstring, 2)`.
-
-```{code-cell} ipython3
-shot_params = DigitalSimParams(shots=1000)
-shot_exact = DigitalSimParams(shots=1000, preset="exact")
-```
-
-### Combined observables and shots
-
-Request both outputs on one `DigitalSimParams`. For a noisy run, set `num_traj`
-for the observable ensemble and `shots` for the total sample budget:
-
-```{code-cell} ipython3
-combined = DigitalSimParams(
-    observables=[Observable("z", 0)],
-    shots=1000,
     num_traj=64,
 )
-# Example of shots < num_traj (valid): two samples total, four trajectories.
-combined_sparse = DigitalSimParams(
-    observables=[Observable("z", 0)],
-    shots=2,
-    num_traj=4,
+```
+
+Here, `svd_threshold` and `krylov_tol` retain their `"accurate"` values. Omit
+`max_bond_dim` to keep the preset cap; pass `None` explicitly to remove it.
+Choose the preset when constructing the object. Assigning a new value to
+`params.preset` later does not reset the other fields. `shots` is always an
+explicit budget and is not part of a preset.
+
+## Set analog measurements and times
+
+For a four-site chain, record the local Pauli $Z$ expectations over two time
+units:
+
+```{code-cell} python
+analog_params = AnalogSimParams(
+    observables=[Observable("z", site) for site in range(4)],
+    elapsed_time=2.0,
+    dt=0.05,
 )
-_trunc_summary(combined)
 ```
 
-See {doc}`circuit_shots` for a full shot-readout example.
+The default `sample_timesteps=True` records 41 samples, including time zero and
+the final time. After the run, `result.times` holds the sampled times and
+`result.expectation_values[i]` holds the values for the $i$th supplied
+observable. Set `sample_timesteps=False` to keep only the final sample;
+evolution still uses the same `dt`.
 
-## Reference: preset table in code
+The timestep must be positive, and the duration must be non-negative and an
+integer multiple of `dt`. For a computed grid, set
+`elapsed_time = num_steps * dt` to keep the duration consistent with the step
+count. Invalid grids raise `ValueError`.
 
-The built-in values are defined in {data}`~mqt.yaqs.SIMULATION_PRESETS`:
+For noisy trajectory evolution, `num_traj` sets the number of realizations to
+average. A noiseless single-state run uses one realization. A density-matrix
+backend evolves the ensemble directly, while a supplied `list[State]` uses the
+list length as its ensemble size. See {doc}`analog_simulation` for a noisy
+walkthrough and {doc}`ensemble_evolution` for unitary ensemble averages.
 
-```{code-cell} ipython3
-SIMULATION_PRESETS
+## Choose circuit outputs
+
+Request observables, shots, or both. At least one output must be requested in a
+standalone run; `get_state=True` is another option for supported noiseless runs.
+
+```{code-cell} python
+observable_params = DigitalSimParams(observables=[Observable("z", 0)])
+shot_params = DigitalSimParams(shots=1024)
+combined_params = DigitalSimParams(
+    observables=[Observable("z", 0)],
+    shots=1024,
+    num_traj=64,
+)
 ```
 
-## Related topics
+Observables are recorded at the circuit's end by default. With
+`sample_layers=True`, YAQS also records the initial state and checkpoints marked
+by `circuit.barrier(label="SAMPLE_OBSERVABLES")`. It does not sample every
+circuit layer automatically. See {doc}`circuit_observables` for checkpoint
+placement and the resulting sample axis.
 
-- {doc}`quickstart` — minimal first simulation
-- {doc}`analog_simulation` — analog parameters in context
-- {doc}`circuit_observables` — observables, `gate_mode`, and layer sampling
-- {doc}`circuit_shots` — shot readout with `DigitalSimParams`
+`shots` is the total readout budget. `num_traj` controls the noisy observable
+ensemble, so the two settings have different roles:
+
+| Run                     | How YAQS uses the budgets                                                       |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| Noiseless               | Evolve once and sample all requested shots from the final state.                |
+| Noisy, with observables | Average `num_traj` trajectories. Distribute any requested shots across them.    |
+| Noisy, shots only       | Run one single-shot trajectory per shot; `num_traj` does not control this path. |
+
+A combined run supports `shots < num_traj`: every trajectory contributes to the
+observable mean, while some receive no readout samples. Counts appear in
+`result.counts` as integer keys and integer counts. Site 0 is the
+least-significant bit, matching Qiskit's `int(bitstring, 2)` convention. See
+{doc}`circuit_shots` for histogram plotting.
+
+## Choose observables and diagnostics
+
+Named operators avoid imports from gate libraries. The Pauli names below refer
+to $\sigma^\alpha$, rather than spin operators $S^\alpha=\sigma^\alpha/2$.
+
+| Request                           | Example                                                                |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| Single-site Pauli operator        | `Observable("z", 0)`; also `"x"` and `"y"`                             |
+| Identity or basis projector       | `Observable("id", 0)`, `Observable("p0", 0)`, or `Observable("p1", 0)` |
+| Two-site Pauli operator           | `Observable("zz", [0, 1])`; also `"xx"` and `"yy"`                     |
+| Position on a supplied grid       | `Observable("position", 0, positions=grid)`                            |
+| Probability of a full basis state | `Observable("0101")` for a four-qubit system                           |
+| Custom Hermitian operator         | `Observable(matrix, sites=0)` or `Observable(matrix, sites=[0, 1])`    |
+
+Two-site local operators support adjacent sites and the periodic end-to-end bond
+on qubit chains. Matrix factors follow the supplied site order. Bitstring
+probabilities require an all-qubit MPS and cannot share an observable list with
+ordinary operators or entanglement diagnostics. Shot counts can accompany
+ordinary observables.
+
+For MPS entanglement across the bond between sites 1 and 2, request the adjacent
+pair:
+
+```{code-cell} python
+diagnostic_params = AnalogSimParams(
+    observables=[
+        Observable("entropy", sites=[1, 2]),
+        Observable("schmidt_spectrum", sites=[1, 2]),
+    ],
+    elapsed_time=2.0,
+    dt=0.05,
+)
+```
+
+These diagnostics work at sampled times or circuit checkpoints, including noisy
+MPS runs. Spectra contain descending Schmidt coefficients, with up to 500
+entries and `NaN` padding. With noise, YAQS averages the pure-trajectory
+entropies and coefficients; these are not the entropy or spectrum of the
+ensemble's mixed density matrix. Missing ranks contribute zero to coefficient
+means, while ranks absent from every trajectory remain `NaN`.
+
+## Refine accuracy and retain results
+
+Change one source of error at a time and compare the observable that matters for
+your calculation:
+
+| Setting         | When to change it                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `dt`            | Reduce it at fixed analog duration to check time-step error.                                               |
+| `num_traj`      | Increase it to reduce uncertainty in noisy trajectory averages.                                            |
+| `max_bond_dim`  | Increase the MPS bond cap if it limits the evolving state. Larger bonds cost memory and time.              |
+| `svd_threshold` | Reduce it to retain more information during tensor truncation.                                             |
+| `krylov_tol`    | Reduce it to tighten local matrix-exponential solves in TDVP or BUG. This does not tighten SVD truncation. |
+
+Keep an explicit trajectory budget when comparing presets, since a preset
+changes that budget along with the numerical settings. Tensor truncation and
+integrator controls concern MPS evolution; dense backends use different
+numerical methods. See {doc}`representation_comparison` before changing them.
+
+Set `random_seed` to a non-negative integer to repeat jump decisions and sampled
+static disorder for the same input and configuration. It does not seed random
+state initialization or measurement-shot sampling.
+
+Set `get_state=True` to retain a supported final state in `result.output_state`.
+Noisy MPS, statevector, and circuit runs cannot return one final pure state for
+the trajectory ensemble. Noisy density-matrix evolution can return its final
+mixed state. Unitary list-of-state ensembles do not return a final ensemble
+state.
+
+## Advanced numerical options
+
+:::{dropdown} Analog integrators and two-time correlations
+
+MPS analog evolution defaults to `evolution_mode=EvolutionMode.TDVP`. Import
+`EvolutionMode` from `mqt.yaqs` and select `EvolutionMode.BUG` to use the BUG
+integrator. See {doc}`analog_simulation` for the workflow.
+
+`order=1` or `order=2` selects the TJM splitting order for noisy MPS evolution.
+This is separate from `tdvp_mode`, which controls the TDVP state updates:
+
+- `"2site"` (default) allows bond growth through two-site updates.
+- `"1site"` uses single-site updates with fixed bond dimensions.
+- `"dynamic"` switches between single-site and two-site updates.
+
+`tdvp_sweeps` defaults to 1. Increasing it subdivides each TDVP evolution step
+into symmetric substeps with the same total evolution time. In noisy analog
+runs, noise still acts on the full physical timestep `dt`; extra TDVP substeps
+do not refine that noise timestep.
+
+For two-time correlations, pass `multi_time_observables=[(A, B)]` with a
+noiseless MPS `list[State]` and a static Hamiltonian. `B` acts at time zero and
+`A` at the later time. The complex results appear in `multi_time_results`, with
+one row per pair. See {doc}`ensemble_evolution` for the definition and example.
+
+:::
+
+:::{dropdown} Circuit gate-application modes
+
+Keep `gate_mode="mpo"` unless you need to compare another method. It applies
+gates directly and compresses the result using the configured tensor truncation.
+The available modes are:
+
+| Mode              | Two-qubit gates                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `"mpo"` (default) | Direct local updates for neighbors; an extended gate MPO for separated sites.       |
+| `"swaps"`         | Route separated sites together with SWAPs, apply the gate, and restore their order. |
+| `"tdvp"`          | Direct local updates for neighbors; generator-based TDVP for separated sites.       |
+| `"full-tdvp"`     | Generator-based TDVP for both neighboring and separated sites.                      |
+
+TDVP gate paths are variational approximations and can miss the bond growth an
+entangling gate requires. Additional `tdvp_sweeps` may help, but do not
+guarantee exact gate application. Use `"mpo"`, or `"swaps"` for two-qubit gates,
+for direct application up to the configured truncation. Digital generator-based
+TDVP requires `tdvp_mode="2site"`.
+
+Matrix-backed custom gates without an analytic generator use direct local
+updates for neighbors and the MPO path for separated sites, including in TDVP
+modes. Gates on three or more qubits use an MPO, except supported product-form
+generators such as `ccx` and `ccz` in TDVP modes. See
+{ref}`circuit-custom-gates` for custom gate inputs.
+
+:::
+
+:::{dropdown} SVD truncation modes
+
+`trunc_mode="discarded_weight"` is the default. `svd_threshold` limits the sum
+of discarded squared singular values. The other modes interpret the threshold as
+a fraction of total squared weight (`"relative_discarded_weight"`), a ratio to
+the largest singular value (`"relative"`), or an absolute singular-value cutoff
+(`"hard_cutoff"`). `max_bond_dim` can force further truncation in every mode.
+Presets do not change `trunc_mode`.
+
+:::
+
+## Related guides
+
+- {doc}`quickstart` — simulation and characterization workflows.
+- {doc}`analog_simulation` — noisy spin dynamics and convergence checks.
+- {doc}`circuit_observables` — circuit dynamics and sampling checkpoints.
+- {doc}`circuit_shots` — noisy readout distributions.
+- {doc}`simulator_initialization` — execution controls and result fields.
+
+Full constructor signatures are in the API reference for
+{class}`~mqt.yaqs.AnalogSimParams` and {class}`~mqt.yaqs.DigitalSimParams`.

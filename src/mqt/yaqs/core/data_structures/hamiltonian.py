@@ -512,7 +512,7 @@ class Hamiltonian:
     def ensure_mpo(self) -> Hamiltonian:
         """Materialize and cache an MPO form (used by TJM / ``State.representation='mps'``).
 
-        Dense and sparse sources are converted via :meth:`MPO.from_matrix`
+        Dense and sparse sources are converted via :meth:`~mqt.yaqs.MPO.from_matrix`
         without changing the public site order. Sparse input is densified only
         when this path is requested. Large Hilbert-space conversions emit a
         ``RuntimeWarning`` matching the ``preprocess_mcwf`` threshold.

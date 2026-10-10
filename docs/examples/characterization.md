@@ -2,354 +2,395 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
-  execution_timeout: 900
+  execution_timeout: 300
 ---
-
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
-```
 
 # Probing Environmental Memory
 
-Open quantum systems in YAQS couple a **probe qubit** (site 0) to an
-**environment** simulated by the remaining chain. **Environmental memory**
-measures how long the environment keeps past control and measurement choices
-relevant for future probe responses, evaluated at a temporal cut $c$ in a
-sequence of interventions.
+A quantum system can leave information in its environment and encounter that
+information again later. To study this memory, we control one probe qubit,
+interrupt its evolution with a measurement and preparation, then ask whether its
+future responses still depend on the past. The interruption removes the probe's
+direct link to its earlier state while the environment keeps evolving.
 
-Memory characterization currently supports qubit Hamiltonians only.
+We extend the coupling sweep in {doc}`quickstart` to explain the probing
+schedule, the response matrix, and its spectrum. We then test memory persistence
+under repeated resets and add dephasing in a short process-tensor example. The
+examples use the standard YAQS installation and Matplotlib for plotting. Run the
+cells in order in a notebook; for a script, use the entry-point guard in
+{doc}`simulator_initialization`.
 
-Use {meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.characterize` to
-probe **operational memory**: assemble the **response matrix** $V(c)$, then read
-$S_V(c)$, $R(c)=\exp(S_V(c))$, and the mode spectrum.
+## 1. Define the probe and its environment
 
-Alternatively, build a process tensor (default: direct MPO) and call
-`compute_temporal_entropy` for **temporal entanglement** $S_{PT}(c)$ of the
-multi-time process itself — a distinct quantity from $S_V(c)$. For fast dynamics
-under control sequences, see {doc}`memory_surrogate`.
+Site 0 is our probe qubit. Sites 1 and 2 form an environment that we do not
+control or measure directly. All three spins evolve under the transverse-field
+Ising Hamiltonian
 
-## Setup
+$$
+H=-J(Z_0Z_1+Z_1Z_2)-g(X_0+X_1+X_2).
+$$
 
-```{code-cell} ipython3
-import matplotlib.pyplot as plt
+We fix $g=1$, use $\hbar=1$, and vary $J$. This changes both the
+probe–environment coupling and the bond within the environment. At $J=0$ the
+probe is isolated, giving a reference with no environmental memory. The default
+initial state is $|000\rangle$.
+
+```{code-cell} python
 import numpy as np
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 
-length = 4
-ham = Hamiltonian.ising(length=length, J=1.0, g=1.0)
-params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-mc = MemoryCharacterizer(show_progress=False)
-psi0 = make_zero_psi(length)
+length = 3
+couplings = np.linspace(0, 1.5, 13)
+params = AnalogSimParams(elapsed_time=0.5, dt=0.5, preset="fast")
+characterizer = MemoryCharacterizer(show_progress=False)
 ```
 
-Throughout, `num_interventions` is the probe-sequence length $k$ and `cut` is
-the causal-break index $c$ (the break sits at step $c-1$; future legs use steps
-$c+1,\ldots,k$). Use $k>1$ and an interior cut so both past and future probe
-legs contribute to $V(c)$.
-
-## Characterize with the Hamiltonian backend
-
-The full chain (system + environment) is simulated for each probe sequence. This
-is the reference memory metric when you have a microscopic open-system model.
-
-```{code-cell} ipython3
-cut, num_interventions = 4, 6
-ham_result = mc.characterize(
-    ham,
-    params,
-    cut=cut,
-    num_interventions=num_interventions,
-    n_pasts=8,
-    n_futures=8,
-    initial_psi=psi0,
-    rng=np.random.default_rng(42),
-)
-
-sv = ham_result.singular_values(cut)
-fig, axes = plt.subplots(1, 2, figsize=(8, 3))
-axes[0].semilogy(sv, "o-")
-axes[0].set_xlabel("mode index")
-axes[0].set_ylabel("singular value")
-axes[0].set_title(r"Memory spectrum at cut $c=4$")
-
-v = ham_result.response_matrix(cut)
-im = axes[1].imshow(np.abs(v), aspect="auto", cmap="viridis")
-axes[1].set_title(r"$|V(c)|$")
-axes[1].set_xlabel("history index")
-axes[1].set_ylabel("future probe and response channel")
-fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
-fig.suptitle(
-    rf"$S_V(c={cut})={ham_result.entropy(cut):.3f}$, "
-    rf"$R(c)={ham_result.modes(cut):.2f}$",
-    y=1.02,
-)
-fig.tight_layout()
-```
-
-Use `preset="quick"`, `"balanced"`, or `"accurate"` for default probe-grid
-sizes, or set `n_pasts` / `n_futures` explicitly.
-
-### Reading `CharacterizationResult`
-
-| Access                             | Meaning                                                                    |
-| ---------------------------------- | -------------------------------------------------------------------------- |
-| `result.entropy(c)`                | Environmental memory entropy $S_V(c)$                                      |
-| `result.modes(c)`                  | Effective memory modes $R(c)=\exp(S_V(c))$                                 |
-| `result.singular_values(c)`        | Resolution-retained spectrum used to compute $S_V(c)$                      |
-| `result.singular_values_full(c)`   | Every compact-SVD value, including zero and unresolved tail values         |
-| `result.left_singular_vectors(c)`  | All compact-SVD future-response directions as columns                      |
-| `result.right_singular_vectors(c)` | All compact-SVD history-combination directions as columns                  |
-| `result.response_matrix(c)`        | $V(c)$ with $4N_f$ IXYZ future-response rows and $N_h$ history columns     |
-| `result.probes(c)`                 | Probe arrays used at cut $c$ (for reuse or inspection)                     |
-| `result.summary()`                 | Human-readable table of entropies and modes                                |
+The characterizer selects the state representation automatically: vectors for
+small systems, and MPS for larger ones. Parallel execution remains enabled. The
+documentation suppresses progress bars; omit `show_progress=False` to see them.
+Memory characterization currently supports qubit Hamiltonians.
 
 (memory-theory)=
 
-## Theory: split-cut probing
+## 2. Choose the probing schedule
 
-Environmental memory asks: across a grid of past and future control settings on
-the probe, how many independent ways does the **environment** still correlate
-past choices with accessible future responses?
+Use four interventions separated by evolution intervals of `dt=0.5`. YAQS also
+evolves before the first intervention and after the last, giving five intervals
+and a total duration of 2.5. With `cut=2`, the second intervention is the
+**causal break**: measure a selected outcome and prepare a new probe state.
+There is one control before the break and two controls after it.
 
-The split-cut protocol:
+The default `intervention_style="haar"` draws random single-qubit unitaries for
+these controls. Past probes also choose the measurement at the break; future
+probes choose its preparation. Keeping these choices separate lets us test
+whether past settings affect the future through the environment.
 
-1. Sample past control legs $\alpha=(U_1,\ldots,U_{c-1})$ and future legs
-   $\beta=(V_{c+1},\ldots,V_k)$ on the probe.
-2. Insert a **causal break** at step $c$: measure on the past side and prepare
-   on the future side while the environment continues to evolve.
-3. For each grid entry, simulate the open system, record the joint probability
-   of the retained outcomes and the normalized final-system Pauli response
-   $\mathbf{r}=(\langle I\rangle,\langle X\rangle,\langle Y\rangle,\langle Z\rangle)$.
-4. Assemble the sampled response coefficients into $V(c)$. Its rows contain one
-   $(I,X,Y,Z)$ block per future probe, its columns label conditioned histories,
-   and $V_{(j,I),i}=w_{ij}$ for normalized output states. Compute $S_V(c)$ from
-   the normalized mode spectrum.
-
-For an SVD $V=U\Sigma W^\dagger$, each column pair associated with a retained,
-nonzero singular value defines a response mode: the column of $U$ gives the
-future-response direction, while the column of $W$ gives a combination of
-conditioned histories. With `U = result.left_singular_vectors(c)`,
-`s = result.singular_values_full(c)`, and
-`W = result.right_singular_vectors(c)`, the full factors satisfy
-`V = U @ np.diag(s) @ W.conj().T`. The full factors also contain directions
-paired with exact zeros or an unresolved numerical tail. Do not interpret those
-directions as resolved memory modes. Singular vectors are also not unique inside
-a degenerate singular subspace.
-
-Hamiltonian `characterize` obtains joint probabilities of the retained outcomes
-from the simulated intervention sequence (MCWF or TJM/MPS, per
-`representation`). Process-tensor backends obtain the same probabilities from
-the trace of each subnormalized contraction, while surrogates estimate them from
-their predicted pre-intervention reduced states.
-
-### Coupling strength and memory
-
-Stronger Ising coupling $J$ between the probe and the environment typically
-increases cross-cut memory. Reuse one `probe_set` when sweeping $J$:
-
-```{code-cell} ipython3
-j_values = np.linspace(0.0, 2.0, 9)
-anchor = mc.characterize(
-    Hamiltonian.ising(length=length, J=0.0, g=1.0),
+```{code-cell} python
+num_interventions = 4
+cut = 2
+anchor = characterizer.characterize(
+    Hamiltonian.ising(length, J=0.0, g=1.0),
     params,
     num_interventions=num_interventions,
     cut=cut,
-    n_pasts=8,
-    n_futures=8,
-    initial_psi=psi0,
-    rng=np.random.default_rng(42),
+    preset="quick",
+    rng=np.random.default_rng(7),
 )
-entropies = []
-for j in j_values:
-    result = mc.characterize(
-        Hamiltonian.ising(length=length, J=float(j), g=1.0),
+
+print(anchor.summary())
+print("Response matrix shape:", anchor.response_matrix(cut).shape)
+```
+
+`preset="quick"` selects eight past probes and eight future probes, giving 64
+sequences. This preset sets the probe grid; the preset on `AnalogSimParams` sets
+numerical accuracy. For Hamiltonian characterization, `dt` sets the interval
+between interventions. `elapsed_time` does not set the full probing horizon.
+Here it equals one interval so the simulation parameters have a valid time grid.
+
+For each past–future pair, YAQS retains the selected measurement outcome and
+records the final probe's $(I,X,Y,Z)$ responses. It multiplies each conditional
+response by the joint probability of the retained outcomes. The
+**response matrix** $V$ places each history in a column and each future's four
+response channels in consecutive rows. Its shape here is $(32,8)$, and its
+identity rows contain the outcome probabilities. Keeping these probabilities
+avoids treating a rare branch as though it occurred on every run.
+
+## 3. Sweep the coupling with the same probes
+
+Reuse `anchor` as `probe_set` so every coupling uses the same controls,
+measurements, and preparations. Otherwise a change in the sampled probes could
+be confused with a change in the environment.
+
+```{code-cell} python
+memories = [anchor]
+for coupling in couplings[1:]:
+    memory = characterizer.characterize(
+        Hamiltonian.ising(length, J=float(coupling), g=1.0),
         params,
         num_interventions=num_interventions,
         cut=cut,
         probe_set=anchor,
     )
-    entropies.append(result.entropy(cut))
+    memories.append(memory)
 
-fig, ax = plt.subplots(figsize=(5.5, 3))
-ax.plot(j_values, entropies, "o-")
-ax.set_xlabel(r"Ising coupling $J$")
-ax.set_ylabel(r"$S_V(c)$")
-ax.set_title(r"Environmental memory grows with probe-environment coupling")
-fig.tight_layout()
+mode_weights = []
+for memory in memories:
+    spectrum = memory.singular_values(cut)
+    mode_weights.append(spectrum**2 / np.sum(spectrum**2))
+entropies = np.array([memory.entropy(cut) for memory in memories])
 ```
 
-### Intervention styles
+The singular values $s_k$ describe independent combinations of past settings and
+future responses. Their normalized squared weights and entropy are
 
-`characterize` accepts `intervention_style=` (default `"haar"`):
+$$
+p_k=\frac{s_k^2}{\sum_j s_j^2},\qquad
+S_V=-\sum_k p_k\ln p_k.
+$$
 
-- **`"haar"`** — random unitaries on sequence legs; measure/prepare only at the
-  causal cut.
-- **`"measure_prepare"`** — rank-1 measure–prepare maps on every leg.
-- **`"clifford"`** — random single-qubit Clifford gates on legs.
+`singular_values(cut)` returns the spectrum retained for this entropy, after
+removing a numerical tail with relative squared weight at most $10^{-12}$.
+`singular_values_full(cut)` returns every compact-SVD value. The entropy uses
+natural logarithms, and `memory.modes(cut)` gives the effective mode number
+$R=\exp(S_V)$. One retained mode gives $S_V=0$ and $R=1$.
 
-Pass `probe_set=` from a Hamiltonian run so surrogate or exact-reference
-backends evaluate the **same** probe ensemble ({doc}`memory_surrogate`).
-Surrogate characterization also requires `initial_rho=`: the site-0 density
-matrix after the schedule's initial evolution segment and before its first
-intervention. For a surrogate trained against a reference process tensor, use
-that tensor's `initial_rho`.
+## 4. Read the spectrum and entropy
+
+The spectrum shows how coupling redistributes the response among modes. The
+entropy summarizes this spread, allowing us to compare the same probing
+experiment across the coupling sweep.
+
+```{code-cell} python
+:tags: [hide-input]
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+set_matplotlib_formats("svg")
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "font.size": 10,
+    "axes.labelsize": 11,
+    "axes.linewidth": 0.8,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "svg.fonttype": "none",
+})
+red_map = LinearSegmentedColormap.from_list("coupling_reds", plt.colormaps["Reds"](np.linspace(0.3, 0.95, 100)))
+norm = Normalize(couplings[0], couplings[-1])
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.8), layout="constrained")
+for coupling, weights in zip(couplings, mode_weights, strict=True):
+    axes[0].semilogy(np.arange(1, len(weights) + 1), weights, "o-", color=red_map(norm(coupling)), lw=1.3, ms=3)
+axes[0].set(xlabel="Mode index", ylabel=r"Retained mode weight $p_k$", ylim=(1e-13, 2), xticks=[1, 2, 4, 6, 8])
+fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=red_map), ax=axes[0], label=r"Coupling $J/g$", ticks=[0, 0.5, 1, 1.5], fraction=0.05, pad=0.03)
+axes[1].fill_between(couplings, entropies, color=red_map(0.35), alpha=0.3)
+axes[1].plot(couplings, entropies, "o-", color=red_map(0.95), lw=2.2, ms=4, markerfacecolor="white")
+axes[1].set(xlabel=r"Coupling $J/g$", ylabel=r"Memory entropy $S_V$ (nats)", xlim=(-0.03, 1.53), ylim=(-0.01, 0.34), xticks=[0, 0.5, 1, 1.5])
+for label, ax in zip(("(a)", "(b)"), axes, strict=True):
+    ax.text(0.02, 1.03, label, transform=ax.transAxes, va="bottom", fontweight="bold")
+    ax.spines[["top", "right"]].set_visible(False)
+plt.show()
+```
+
+**Coupling creates additional response modes, with a peak inside this sweep.**
+(a) Darker curves show larger $J$. The uncoupled probe has one retained mode;
+coupled dynamics distribute weight among additional modes. (b) The entropy
+reaches a maximum near $J/g=1.4$, then decreases. Stronger coupling does not
+imply a larger entropy for a fixed schedule and probe grid.
+
+These weights describe the responses accessible through the chosen experiment.
+They are not environment populations or Schmidt weights of a mixed state. A
+small entropy means that a few modes dominate these responses; it does not prove
+that every possible experiment would find the environment memoryless. Changing
+the interval, temporal cut, or controls can reveal different memory. The
+spectrum alone also does not certify that the memory is quantum rather than
+classical.
+
+## Further experiments
 
 (reset-delay)=
 
-## Memory persistence: conditioned reset delay
+### How long does memory persist under resets?
 
-Pass `delay=N`, for any $N\geq0$, to use the conditioned-reset protocol from
-Figure 5 of the response-matrix paper. The intervention at the history boundary
-applies the selected measurement and prepares $\lvert0\rangle$. YAQS then
-inserts $N$ selected-zero reset slots $(\lvert0\rangle,\lvert0\rangle)$ and
-applies a second selected-zero measurement before the sampled future
-preparation. The environment keeps evolving between these interventions. The
-selected history outcome and every selected-zero outcome contribute to the
-complete branch probability.
+A causal break interrupts the probe once. Repeated resets ask whether the
+selected histories remain distinguishable after a longer interruption. With
+`delay=N`, YAQS measures the selected history outcome and prepares $|0\rangle$,
+inserts $N$ selected-zero measure–prepare resets, then measures zero once more
+before the sampled future preparation. The environment evolves between all these
+interventions.
 
-The two boundary interventions remain separate at `delay=0`. The physical
-sequence length is therefore `num_interventions + delay + 1` for every explicit
-delay. Omitting `delay` uses the standard one-step causal break
-`(selected_history_measurement, sampled_future_preparation)` instead. This keeps
-ordinary characterization aligned across Hamiltonian, process-tensor, and
-surrogate backends.
-
-Extra reset time lets the environment decouple from the past before future
-controls act, so $S_V(c)$ often decreases at strong probe-environment coupling.
-Weaker coupling can show a nonmonotonic profile. The example below uses a
-smaller probe grid and shorter sequences than the paper campaign, but it uses
-the same conditioned-reset geometry. Reuse the same `probe_set` across the delay
-sweep. An explicit `delay` is supported for Hamiltonian characterization only.
-
-```{code-cell} ipython3
-delay_length = 6
-ham_delay = Hamiltonian.ising(length=delay_length, J=2.0, g=1.0)
-params_delay = AnalogSimParams(dt=0.1)
-mc_delay = MemoryCharacterizer(show_progress=False)
-delay_cut = 4
-delay_k = 6
-anchor_delay = mc_delay.characterize(
-    ham_delay,
-    params_delay,
-    num_interventions=delay_k,
-    cut=delay_cut,
-    delay=0,
-    n_pasts=6,
-    n_futures=6,
-    initial_psi=make_zero_psi(delay_length),
-    rng=np.random.default_rng(999_991),
-)
-delays = [0, 1, 2, 3]
-delay_entropies = []
+```{code-cell} python
+hamiltonian = Hamiltonian.ising(length, J=1.0, g=1.0)
+delays = np.arange(7)
+delay_memories = []
 for delay in delays:
-    result = mc_delay.characterize(
-        ham_delay,
-        params_delay,
-        num_interventions=delay_k,
-        cut=delay_cut,
-        delay=delay,
-        probe_set=anchor_delay,
+    delay_memories.append(characterizer.characterize(
+        hamiltonian,
+        params,
+        num_interventions=num_interventions,
+        cut=cut,
+        delay=int(delay),
+        probe_set=anchor,
+    ))
+delay_entropies = [memory.entropy(cut) for memory in delay_memories]
+```
+
+Every integer delay, including zero, uses separate boundary interventions. The
+sequence has `num_interventions + delay + 1` interventions and one more
+evolution interval. Omitting `delay` uses the standard single causal break, so
+the ordinary result and the `delay=0` result have different schedules.
+
+```{code-cell} python
+:tags: [hide-input]
+fig, ax = plt.subplots(figsize=(4.5, 2.6), layout="constrained")
+ax.plot(delays, delay_entropies, "o-", color="#225c80", lw=2, ms=5, markerfacecolor="white")
+ax.fill_between(delays, delay_entropies, color="#225c80", alpha=0.12)
+ax.set(xlabel="Selected-zero reset slots", ylabel=r"Memory entropy $S_V$ (nats)", xticks=delays, ylim=(0, None))
+ax.spines[["top", "right"]].set_visible(False)
+plt.show()
+```
+
+**The conditioned memory varies nonmonotonically with reset delay.** The finite
+spin environment continues to evolve and can return information to the probe.
+These resets retain particular outcomes rather than averaging over every
+measurement result. Their joint probability contributes to $V$, so this is a
+conditioned persistence experiment. It does not establish an all-outcome memory
+length. Explicit `delay` is supported for Hamiltonian characterization.
+
+### What changes when we add dephasing?
+
+The Hamiltonian `characterize` path does not accept a `NoiseModel`. To include
+Markovian noise, first reconstruct a **dense process tensor**, which records the
+response to interventions, then pass that tensor to `characterize`. We use two
+spins and one causal break to keep this exhaustive reconstruction small. Two
+evolution intervals of 0.5 surround the break; the probe and its one-spin
+environment retain $J=g=1$.
+
+```{code-cell} python
+from mqt.yaqs import NoiseModel
+
+short_hamiltonian = Hamiltonian.ising(2, J=1.0, g=1.0)
+noise_params = AnalogSimParams(elapsed_time=0.5, dt=0.025, preset="fast", random_seed=7)
+dephasing_rates = [0.0, 1.0, 4.0]
+process_tensors = []
+noise_memories = []
+short_anchor = None
+for rate in dephasing_rates:
+    noise = None if rate == 0 else NoiseModel([{"name": "pauli_z", "sites": [0], "strength": rate}])
+    process = characterizer.build_process_tensor(
+        short_hamiltonian,
+        noise_params,
+        timesteps=[0.5, 0.5],
+        return_type="dense",
+        noise_model=noise,
+        num_trajectories=512,
     )
-    delay_entropies.append(result.entropy(delay_cut))
+    memory = characterizer.characterize(
+        process,
+        cut=1,
+        preset="quick",
+        probe_set=short_anchor,
+        rng=np.random.default_rng(7),
+    )
+    short_anchor = memory if short_anchor is None else short_anchor
+    process_tensors.append(process)
+    noise_memories.append(memory)
 
-fig, ax = plt.subplots(figsize=(4.5, 3))
-ax.plot(delays, delay_entropies, "s-")
-ax.set_xlabel("reset delay at causal cut")
-ax.set_ylabel(r"$S_V(c)$")
-ax.set_title(r"Strong coupling: memory erodes with longer reset delay")
-ax.set_xticks(delays)
-fig.tight_layout()
+for rate, memory in zip(dephasing_rates, noise_memories, strict=True):
+    print(f"Dephasing rate {rate:g}: {memory.summary()}")
 ```
 
-## Representation
+Here `strength=rate` is a Lindblad rate, with jump operator
+$L=\sqrt{\gamma}\,Z_0$ and dissipator $\gamma(Z_0\rho Z_0-\rho)$. `timesteps`
+defines the two evolution intervals, while `noise_params.dt` sets the
+integration step within them. Each of the 16 tomography sequences averages 512
+trajectories for nonzero noise. The noiseless reconstruction uses one.
 
-`AnalogSimParams` configures the evolution and does not select the memory
-backend. `MemoryCharacterizer(representation="auto")` mirrors `Simulator`:
-`"vector"` selects MCWF, `"mps"` selects TJM for the **environment** chain. With
-`"auto"`, MCWF is used when `hamiltonian.length <= vector_max_qubits` (default
-10).
-
-## Temporal entanglement from a process tensor
-
-Operational memory ($S_V$) comes from probe responses. **Temporal entanglement**
-$S_{PT}(c)$ is computed directly from a process tensor at the same causal cut.
-By default, `build_process_tensor` uses direct MPO construction
-(`return_type="mpo"`). Pass `return_type="dense"` for exhaustive tomography
-(required for `noise_model`):
-
-```{code-cell} ipython3
-k = 2
-cut_pt = 1
-timesteps = [0.1] * (k + 1)
-
-pt_mpo = mc.build_process_tensor(
-    ham,
-    params,
-    timesteps=timesteps,
-)
-pt_dense = mc.build_process_tensor(
-    ham,
-    params,
-    timesteps=timesteps,
-    return_type="dense",
-)
-
-s_mpo = pt_mpo.compute_temporal_entropy(cut_pt)
-s_dense = pt_dense.compute_temporal_entropy(cut_pt)
-print(
-    f"S_PT(c={cut_pt}): mpo={s_mpo['entropy']:.4f}, "
-    f"dense={s_dense['entropy']:.4f}, schmidt_rank={s_mpo['schmidt_rank']}"
-)
-
-# The same exact process tensor also supports operational memory via characterize:
-pt_result = mc.characterize(
-    pt_mpo,
-    cut=cut_pt,
-    num_interventions=k,
-    n_pasts=6,
-    n_futures=6,
-    rng=np.random.default_rng(7),
-)
-print(f"S_V(c={cut_pt}) from process-tensor probes: {pt_result.entropy(cut_pt):.4f}")
+```{code-cell} python
+:tags: [hide-input]
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.6), layout="constrained")
+noise_colors = ["#225c80", "#b78730", "#bb563b"]
+for rate, memory, color in zip(dephasing_rates, noise_memories, noise_colors, strict=True):
+    spectrum = memory.singular_values(1)
+    weights = spectrum**2 / np.sum(spectrum**2)
+    axes[0].semilogy(np.arange(1, len(weights) + 1), weights, "o-", color=color, ms=4, lw=1.6, label=rf"$\gamma/g={rate:g}$")
+axes[0].set(xlabel="Mode index", ylabel=r"Retained mode weight $p_k$", xticks=[1, 2, 3, 4], ylim=(1e-8, 2))
+axes[0].legend(frameon=False, fontsize=9, loc="lower left")
+axes[1].bar(np.arange(3), [memory.entropy(1) for memory in noise_memories], color=noise_colors, width=0.6)
+axes[1].set(xlabel=r"Dephasing rate $\gamma/g$", ylabel=r"Memory entropy $S_V$ (nats)", xticks=np.arange(3), xticklabels=["0", "1", "4"])
+for label, ax in zip(("(a)", "(b)"), axes, strict=True):
+    ax.text(0.02, 1.03, label, transform=ax.transAxes, va="bottom", fontweight="bold")
+    ax.spines[["top", "right"]].set_visible(False)
+plt.show()
 ```
 
-Dense and default direct MPO construction agree on $S_{PT}$ for small $k$. The
-supported direct path is uncapped: at intervention leg $k$, it can retain up to
-$16^k$ histories and construct the same number of rank-one terms. Use it only
-for short horizons. `compress_every` limits an accumulation batch; it does not
-limit the number of histories. Dense tomography has the same $16^k$ sequence
-count and is required when you use `noise_model`.
+**Dephasing reduces the weight outside the leading response mode.** (a) The
+leading mode gains relative weight as the dephasing rate increases. (b) The
+sampled entropy falls. These values describe the two-spin, one-break schedule
+and should not be compared directly with the earlier four-intervention sweep.
+Small spectral weights can reflect trajectory sampling error; they do not all
+establish resolved physical modes. Increase the trajectory count and refine the
+integration step before interpreting the smallest weights.
 
-`MPOProcessTensor.compute_temporal_entropy()`, `MPOProcessTensor.qmi()`, and
-`MPOProcessTensor.cmi()` currently convert the complete MPO to a dense matrix.
-The matrix alone uses $64\,16^k$ bytes for $k$ intervention legs, before
-analysis workspace. On a typical workstation, restrict these calculations to
-about five legs. The matrix uses 64 MiB at five legs and 1 GiB at six legs.
+Coupling, resets, and added dephasing answer different questions about the same
+physical issue: which traces of earlier probe choices can affect later
+responses? Keep the probes and schedule fixed when comparing models, and check
+whether the observed spectrum persists as numerical and sampling accuracy
+improve.
+
+## Further options
+
+### Probe coverage and representations
+
+`preset="balanced"` uses a $32\times32$ grid and `"accurate"` uses
+$128\times128$. Set `n_pasts` and `n_futures` to choose counts explicitly.
+Larger grids test more controls; they are not extra trajectories of the same
+experiment. Check probe coverage as well as evolution accuracy.
+
+Use `intervention_style="clifford"` for random single-qubit Clifford controls,
+or `"measure_prepare"` for rank-one measurement and preparation on every leg.
+The default `"haar"` uses random unitaries away from the cut. The choice changes
+what memory the experiment can resolve.
+
+Pass `cuts=[...]` or `cuts="all"` to compare temporal cuts. Each cut needs its
+own probe geometry, so `probe_set` reuse is restricted to a single cut.
+`representation="auto"` on `MemoryCharacterizer` selects vectors up to ten
+qubits and MPS above that size. Set `"vector"` or `"mps"` explicitly when
+needed. `initial_psi` replaces the default all-zero state for Hamiltonian
+characterization. See {class}`~mqt.yaqs.MemoryCharacterizer` for execution and
+accuracy options.
+
+### Inspecting response modes
+
+Use `memory.response_matrix(cut)` to inspect $V$. The full compact-SVD factors
+from `left_singular_vectors`, `singular_values_full`, and
+`right_singular_vectors` satisfy $V=U\operatorname{diag}(s)W^\dagger$. The
+columns of $U$ describe future responses, while the columns of $W$ combine
+histories. Directions paired with an unresolved tail are not resolved modes, and
+vectors inside a degenerate singular subspace are not unique.
+
+### Process tensors and temporal entanglement
+
+`build_process_tensor` defaults to direct MPO construction for noiseless models.
+Use `return_type="dense"` for added noise, as above. Both constructions grow
+with $16^k$ intervention sequences or histories, so reserve them for short
+horizons. Direct construction retains all branches by default; `compress_every`
+controls an accumulation batch, not the total number of histories.
+
+A process tensor also provides `compute_temporal_entropy(cut)`, `qmi`, and
+`cmi`. These describe the multi-time process, while $S_V$ describes the sampled
+probe responses. They are distinct quantities. Reuse the noiseless short-horizon
+tensor to compute its temporal operator-Schmidt entropy:
+
+```{code-cell} python
+temporal = process_tensors[0].compute_temporal_entropy(1)
+print(f"Temporal entropy S_PT: {temporal['entropy']:.4f}")
+print(f"Response entropy S_V: {noise_memories[0].entropy(1):.4f}")
+```
+
+Both entropies use natural logarithms. Their values differ because they describe
+different objects. The MPO implementations of these diagnostics currently
+densify the tensor. Dense storage alone takes 64 MiB at five intervention legs
+and 1 GiB at six, before analysis workspace. Operational probing of an MPO
+process tensor does not require this conversion.
 
 ```{warning}
-Passing a finite `max_bond_dim` enables experimental direct-MPO truncation and
-emits a `RuntimeWarning`. This uncontrolled approximation can change the process
-tensor and does not preserve positivity or causal normalization. Do not use a
-capped result as a stable scientific reference.
+A finite `max_bond_dim` in direct process-tensor construction enables an
+experimental approximation that can violate positivity and causal normalization.
+Keep the supported default `None` for scientific references. Noisy tomography
+also has finite-sample error; validate reconstructed responses before using them
+as a reference.
 ```
 
-Operational characterization requires each contracted branch to be Hermitian and
-positive semidefinite, with trace in $[0,1]$. Response assembly also checks that
-each normalized qubit response lies in the Bloch ball. QMI and CMI always
-normalize the process tensor and validate positive semidefiniteness and causal
-normalization. Remove an experimental finite cap by setting `max_bond_dim=None`,
-or use a sufficiently accurate dense reconstruction when you need $S_V$ from a
-process tensor. `characterize(pt, ...)` uses native MPO
-`evaluate_probes_with_weights` without densifying the V-matrix path.
-
-## Related topics
-
-- {doc}`quickstart` — minimal characterize and surrogate predict snippets
-- {doc}`memory_surrogate` — train a surrogate, predict dynamics, validate
-  against exact references
-- API reference: :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`
+For predicting dynamics under new controls with a trained model, see
+{doc}`memory_surrogate`. Surrogate characterization requires `initial_rho`, the
+site-0 state after initial evolution and before the first intervention. Use the
+reference process tensor's `initial_rho` when the surrogate was trained against
+that tensor, and reuse the same `probe_set` for a direct comparison.

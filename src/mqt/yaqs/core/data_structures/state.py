@@ -92,7 +92,7 @@ class State:
     """Initial quantum state for :meth:`~mqt.yaqs.Simulator.run`.
 
     Specify *what* to simulate (length, preset, optional raw data) and *how* to represent it
-    during evolution (:attr:`representation`). Materialization happens at construction;
+    during evolution (``representation``). Materialization happens at construction;
     pass the ``State`` to :meth:`~mqt.yaqs.Simulator.run` (including in parameter loops).
 
     - **Presets** — ``State(L, initial="zeros")``; default ``representation="mps"`` (TJM).
@@ -330,7 +330,7 @@ class State:
 
     @property
     def mps(self) -> MPS:
-        """MPS when :attr:`representation` is ``"mps"``.
+        """MPS when ``representation`` is ``"mps"``.
 
         Raises:
             RuntimeError: If the state is not encoded as ``"mps"``.

@@ -26,7 +26,7 @@ def sparse_to_csr(matrix: scipy.sparse.spmatrix) -> scipy.sparse.csr_matrix:
 
 
 def attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
-    """Initialize ``wrapped`` from an existing MPO (factory helper for :meth:`Hamiltonian.from_mpo`)."""
+    """Initialize ``wrapped`` from an existing MPO (helper for :meth:`~mqt.yaqs.Hamiltonian.from_mpo`)."""
     wrapped.length = mpo.length
     wrapped.physical_dimension = mpo.physical_dimension
     # Private fields: wrapped is a fresh Hamiltonian from __new__; attach_mpo is the sole initializer.
@@ -42,7 +42,7 @@ def attach_piecewise(
     pieces: tuple[tuple[Hamiltonian, float], ...],
     length: int,
 ) -> None:
-    """Initialize ``wrapped`` from static Hamiltonian pieces (factory helper for :meth:`Hamiltonian.piecewise`)."""
+    """Initialize ``wrapped`` from static Hamiltonian pieces (helper for :meth:`~mqt.yaqs.Hamiltonian.piecewise`)."""
     wrapped.length = length
     wrapped.physical_dimension = pieces[0][0].physical_dimension
     wrapped._tensors = None  # ruff:ignore[private-member-access]

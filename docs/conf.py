@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import os
+import re
+import sys
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,8 +23,22 @@ from pybtex.style.template import field, href
 if TYPE_CHECKING:
     from pybtex.database import Entry
     from pybtex.richtext import HRef
+    from sphinx.application import Sphinx
 
 ROOT = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
+
+# Limit docs kernels and child builds unless the runner supplies a budget.
+for name in (
+    "MKL_NUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+):
+    os.environ.setdefault(name, "1")
+# Automatic worker selection reserves one CPU, so this hint permits two workers.
+os.environ.setdefault("YAQS_MAX_WORKERS", "3")
 
 # Keep matplotlib/font cache writable and local during docs builds.
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
@@ -59,12 +75,16 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.bibtex",
     "sphinxext.opengraph",
+    "yaqs_api",
+    "yaqs_examples",
 ]
 
 source_suffix = [".rst", ".md"]
+nitpicky = True
 
 exclude_patterns = [
     "_build",
+    "_outputs",
     "**.ipynb_checkpoints",
     "**.jupyter_cache",
     "**jupyter_execute",
@@ -79,7 +99,9 @@ pygments_style = "colorful"
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "qiskit": ("https://docs.quantum.ibm.com/api/qiskit", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
+    "qiskit": ("https://quantum.cloud.ibm.com/docs/api/qiskit", None),
     "mqt": ("https://mqt.readthedocs.io/en/stable", None),
     "core": ("https://mqt.readthedocs.io/projects/core/en/stable", None),
     "ddsim": ("https://mqt.readthedocs.io/projects/ddsim/en/stable", None),
@@ -104,6 +126,26 @@ myst_heading_anchors = 3
 
 nb_execution_mode = "cache"
 nb_execution_raise_on_error = True
+nb_execution_cache_path = os.environ.get("YAQS_DOCS_CACHE", str(ROOT / "docs" / "_build" / ".jupyter_cache"))
+# MyST-NB does not know sphinx-llm's builder name. Preserve figures instead of
+# selecting only their text representation in the generated Markdown.
+nb_mime_priority_overrides = [
+    ("llms-markdown", mime, priority)
+    for priority, mime in enumerate((
+        "image/svg+xml",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "text/markdown",
+        "text/latex",
+        "text/html",
+        "text/plain",
+    ))
+]
+
+# Reuse HTML doctrees and notebook outputs when generating the Markdown files.
+llms_txt_build_parallel = False
+llms_txt_full_build = True
 
 
 class CDAStyle(UnsrtStyle):
@@ -139,17 +181,20 @@ autoapi_ignore = [
 ]
 autoapi_options = [
     "members",
-    "imported-members",
     "show-inheritance",
     "special-members",
     "undoc-members",
 ]
-autoapi_keep_files = True
+# Do not carry generated pages for removed modules into the next build.
+autoapi_keep_files = False
 add_module_names = False
 toc_object_entries_show_parents = "hide"
 python_use_unqualified_type_names = True
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+# AutoAPI already indexes the real attributes. Keep Google-style attribute
+# descriptions as fields, without creating a second target for each attribute.
+napoleon_use_ivar = True
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -163,3 +208,21 @@ html_theme_options = {
     "source_directory": "docs/",
     "navigation_with_keys": True,
 }
+
+
+def _release_source_links(app: Sphinx, relative_path: Path, parent_docname: str, content: list[str]) -> None:
+    """Link repository source files from included release notes to GitHub."""
+    del parent_docname
+    if relative_path.as_posix() not in {"../CHANGELOG.md", "../UPGRADING.md"}:
+        return
+    repository = Path(app.srcdir).parent
+    for target in re.findall(r"\]\((src/[^)\s]+)\)", content[0]):
+        if (repository / target).is_file():
+            content[0] = content[0].replace(
+                f"]({target})", f"](https://github.com/munich-quantum-toolkit/yaqs/blob/main/{target})"
+            )
+
+
+def setup(app: Sphinx) -> None:
+    """Preserve repository links when release notes are included in the docs."""
+    app.connect("include-read", _release_source_links)
