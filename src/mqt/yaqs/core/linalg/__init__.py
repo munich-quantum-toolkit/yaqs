@@ -8,7 +8,8 @@
 """SciPy-style dense linear algebra with BLAS-thread-safe defaults.
 
 This package mirrors :mod:`scipy.linalg` for the subset of operations YAQS uses
-internally; submodules group related helpers (e.g. :mod:`.expm`, :mod:`.svd`).
+internally; submodules group related helpers (e.g. :mod:`~mqt.yaqs.core.linalg.expm`,
+:mod:`~mqt.yaqs.core.linalg.svd`).
 """
 
 from __future__ import annotations

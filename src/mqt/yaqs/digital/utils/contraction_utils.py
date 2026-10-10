@@ -56,7 +56,7 @@ def apply_gate(
         theta (NDArray[np.complex128]): The local tensor to update.
         site0 (int): The first qubit (site) index.
         site1 (int): The second qubit (site) index.
-        conjugate (bool, optional): Whether to apply the conjugated version of the gate tensor. Defaults to False.
+        conjugate: Whether to apply the conjugated version of the gate tensor. Defaults to False.
 
     Returns:
         NDArray[np.complex128]: The updated local tensor after applying the gate.
@@ -140,7 +140,7 @@ def apply_temporal_zone(
         theta (NDArray[np.complex128]): The local tensor to update.
         dag (DAGCircuit): The DAGCircuit from which to extract the temporal zone.
         qubits (list[int]): The qubit indices on which to apply the temporal zone (typically two neighboring qubits).
-        conjugate (bool, optional): Whether to apply the gates in conjugated form. Defaults to False.
+        conjugate: Whether to apply the gates in conjugated form. Defaults to False.
 
     Returns:
         NDArray[np.complex128]: The updated tensor after applying the temporal zone.

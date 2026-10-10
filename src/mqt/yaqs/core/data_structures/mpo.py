@@ -1915,7 +1915,7 @@ class MPO:
         :meth:`to_sparse_matrix` use the same order.
 
         Returns:
-            Dense operator matrix acting on vectors from :meth:`MPS.to_vec`.
+            Dense operator matrix acting on vectors from :meth:`~mqt.yaqs.MPS.to_vec`.
         """
         mat = self.tensors[-1]
         for tensor in reversed(self.tensors[:-1]):

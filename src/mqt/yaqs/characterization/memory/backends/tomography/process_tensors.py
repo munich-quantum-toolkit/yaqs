@@ -200,7 +200,7 @@ def validate_initial_rho(
 def convert_probe_callable(
     step: AnyInterventionStep,
 ) -> Callable[[NDArray[np.complex128]], NDArray[np.complex128]]:
-    """Convert a probe-grid step to a CP map callable for :meth:`~SupportsPredict.predict`.
+    """Convert a probe-grid step to a CP map callable for process-tensor prediction.
 
     Args:
         step: Structured dict step or measure/prepare ket pair.
@@ -220,13 +220,14 @@ def convert_probe_callable(
 
 
 def evaluate_probes(process_tensor: SupportsPredict, probe_set: ProbeSet) -> np.ndarray:
-    """Evaluate split-cut probe Pauli responses via process-tensor :meth:`predict`.
+    """Evaluate split-cut probe Pauli responses through process-tensor prediction.
 
     Shared by dense and MPO process tensors for operational-memory V-matrix assembly.
     Does not densify MPO tensors.
 
     Args:
-        process_tensor: Backend implementing :meth:`~SupportsPredict.predict`.
+        process_tensor: Backend implementing
+            :meth:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.SupportsPredict.predict`.
         probe_set: Sampled split-cut probes.
 
     Returns:
@@ -1043,7 +1044,8 @@ class MPOProcessTensor(MPO):
     def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
         """Evaluate split-cut probe Pauli responses for V-matrix assembly.
 
-        Uses native MPO :meth:`predict` (does not densify the process tensor).
+        Uses :meth:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor.predict`
+        without densifying the process tensor.
 
         Args:
             probe_set: Sampled split-cut probes.
