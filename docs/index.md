@@ -104,7 +104,7 @@ Circuit verification <examples/equivalence_checking>
 :titlesonly:
 
 Ensemble evolution <examples/ensemble_evolution>
-Non-Markovian transformer models (experimental) <examples/memory_surrogate>
+Non-Markovian surrogate models (experimental) <examples/memory_surrogate>
 
 ```
 
