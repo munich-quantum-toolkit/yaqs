@@ -8,6 +8,10 @@
 #     prek install
 #
 
+# Saved notebooks are generated from the checked Markdown cells. Formatting their
+# copies would invalidate the output manifest and repeat checks of the same code.
+exclude: ^docs/_outputs/.*\.ipynb$
+
 ci:
   autoupdate_commit_msg: "⬆️🪝 update pre-commit hooks"
   autoupdate_schedule: quarterly

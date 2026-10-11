@@ -1,0 +1,85 @@
+{
+  "runtime": "26a68889dee2dd035426197b92930edf467dc2231aaf0617087d9a60a95a894b",
+  "environment": {
+    "python": "3.14.2",
+    "mqt.yaqs": "0.6.1.dev306+gd3f16427f.d20261010",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "qiskit": "2.5.2",
+    "myst-nb": "1.4.0"
+  },
+  "notebooks": {
+    "examples/analog_simulation.md": {
+      "inputs": "82e212babe360ab5e463ec8df7e4cf20fd50ed1e332280d85f1ae3da77782f2a",
+      "sha256": "da7932f0aa5ad7ddbb88c6c202a14913458d4c2c30393fa5cb76018d950edf6d"
+    },
+    "examples/characterization.md": {
+      "inputs": "76a808e463c921cd3f2615d718ab8a4eee344cb79f379919cd2b7d08bb4702a3",
+      "sha256": "c4c892043be034706de59be6342fe4f20a4f0b0838184cd331e26305d7583eb2"
+    },
+    "examples/circuit_observables.md": {
+      "inputs": "001b16f304bebc81a638bcf7f8825782b2635fe99567e2ccc78d5abd54f462e3",
+      "sha256": "ccb255261f53b9ef06b7a8ea29ca34a46451e19775d29be4738dcf473f517ed5"
+    },
+    "examples/circuit_shots.md": {
+      "inputs": "c70da7ba94370119b025bd136ef95dfd969804f2daad264b6d43db279bf22211",
+      "sha256": "bafba85bc2805db14ff545fa9bbd94371ebd5dfb611656eafc92c46d34e1c016"
+    },
+    "examples/digital_analog_simulation.md": {
+      "inputs": "e50dae39c76469ecf9200247f527e75c3b61a47ceff3b84f55f94ead817a7b4a",
+      "sha256": "381ad238d82cc4633974f40fa86339399109fe5cb34c64a92fd328c4e57f98b3"
+    },
+    "examples/digital_twin.md": {
+      "inputs": "15b9a88f309282017c5f4778262cd10ea4dbe578d81ff237447e8ebae2bd002a",
+      "sha256": "1562cee35f913fc910e0e5210b1f3213b2ea123a9ada6ce3f8bd7cbf8ac69f72"
+    },
+    "examples/ensemble_evolution.md": {
+      "inputs": "7248268da7bafd0bd135dbcc7dba71e3a5f445a813759f4e9211c75104a0891b",
+      "sha256": "c44717678def06e333bbfe61cdbcdb5680d402931563a2d0b7efee5f4473cf78"
+    },
+    "examples/equivalence_checking.md": {
+      "inputs": "2699f078a801ab9cc39fc02a2918c5f19a1a8c310b501e587f743972d980f6dd",
+      "sha256": "4fbd529ced5be38d33cccb5f1384af6778d2aa0f51c1588b7a376c25d00f41bc"
+    },
+    "examples/hamiltonians.md": {
+      "inputs": "b62224074d85fb4e0c277e52e379c1a083b2611ea45b0da0aea6bd41ab9ad8d4",
+      "sha256": "e7acd992c5ae7b6569bea733b774b07f81a81904c6cde3557b64eb83009f26ea"
+    },
+    "examples/memory_surrogate.md": {
+      "inputs": "24601f1e39b1f4615c947c5bbd1e3329b3d2fff76f94969c3d85d8a87352d98f",
+      "sha256": "003a5c27c843f7e1a744307652e782e138910f153724f02cbba03f047eef37bc"
+    },
+    "examples/quickstart.md": {
+      "inputs": "13df95d9944015b3b5ab87a820c58b35897b572c0497cd444f05f8c209bca245",
+      "sha256": "2c0ddd9d86ed51264dbee2d278d5456176f5ff4daa75872dc1c8d7d2e9c7ed46"
+    },
+    "examples/realistic_noise_models.md": {
+      "inputs": "25f2cb4f20dc93446b340828c1f481fd36a933af2f69a3a0fbaebfcd28f3475f",
+      "sha256": "0665c26d5c20dfb16f9fb36efae5af8fd7a06d9c240d005b7c738d2804376c83"
+    },
+    "examples/representation_comparison.md": {
+      "inputs": "98be45e8dbcd5f8031598e4f1da4fb36b8269cd0575b177fed84511577875b93",
+      "sha256": "f982b824f982a4177e873565aa8ac629d765b076d50540feb310f2587300eac8"
+    },
+    "examples/simulation_parameters.md": {
+      "inputs": "491837e1260626ff1bc5bac53076e8aaf801a1ef46f7032b7d49a9185f557b5e",
+      "sha256": "fe21a22f1d07ec1e53ea98ef0c52966160c2ae40e4059629a591894c9b8c18ad"
+    },
+    "examples/simulator_initialization.md": {
+      "inputs": "633cdce6caca17f471a25cd6874451d6d3c52149bf81e3328900e6955fa3ef6e",
+      "sha256": "2f4788b60ac63e2ec7910cc0b76c33fc0422d92fb6f5b1e1b93f9663c83d1665"
+    },
+    "examples/state_initialization.md": {
+      "inputs": "c84de05e36fc2d4de745881e6c4a9342060c02c4a6bee91bba9e8653ea0bfec4",
+      "sha256": "a188d39df83150e4e94d7930a870ee2f1d25375a4a286c9ff0cb1879a6c2cb76"
+    },
+    "examples/transmon_emulation.md": {
+      "inputs": "17f7c82a1b786008e00bbf555a30e87b2b38c1201e3489a5a9a8d7ba6b189ddd",
+      "sha256": "4cd86d9a562ad23851fbff0078d68e21895ed728a611762b49345bd95a82960f"
+    },
+    "examples/trapped_ion.md": {
+      "inputs": "2669cd14c6e706b2dd5a44de291e78d77d457d41522afc662a6a4db694fa8d3a",
+      "sha256": "9c36e491e5b247c4520ba59c7a9f1e9c91dbfbd9b185a7cfc22ceac578c12b1d"
+    }
+  }
+}

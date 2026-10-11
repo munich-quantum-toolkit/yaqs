@@ -120,7 +120,7 @@ def _dense_state_to_mps(psi: NDArray[np.complex128], *, length: int) -> MPS:
     """Convert a dense site-0-LSB qubit state to an MPS to numerical precision.
 
     Args:
-        psi: Dense state vector in the same order as :meth:`MPS.to_vec`.
+        psi: Dense state vector in the same order as :meth:`~mqt.yaqs.MPS.to_vec`.
         length: Number of qubits in the state.
 
     Returns:

@@ -2,228 +2,211 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
   execution_timeout: 300
 ---
 
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
-```
-
 # Initializing Quantum States
 
-YAQS separates **what you specify** (a
-{class}`~mqt.yaqs.core.data_structures.state.State`) from **how evolution runs**
-({class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`,
-Hamiltonian, noise).
+The initial state sets the starting point for a YAQS simulation. Use `State` to
+choose a named preparation or supply your own data. The default matrix product
+state (MPS) representation supports analog and circuit simulation without
+storing a full state vector.
 
-| Layer       | Role                                                                                                                                                           |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
-| **`MPS`**   | Internal tensor network; used by the simulator when needed. Prefer {class}`~mqt.yaqs.core.data_structures.state.State` in application code.                    |
+## Choose a product state
 
-**Workflow:** build a {class}`~mqt.yaqs.core.data_structures.state.State` and a
-{class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` once (both
-materialize at construction), then pass them to
-{meth}`Simulator.run <mqt.yaqs.Simulator.run>` — including in parameter loops.
+Specify the number of sites and, optionally, a preset. Sites are qubits unless
+you provide other local dimensions:
 
-```{code-cell} ipython3
+```{code-cell} python
 from mqt.yaqs import State
 
-preset = State(4, initial="x+")
-
-mcwf_state = State(4, initial="zeros", representation="vector")
+zeros = State(20)
+polarized = State(20, initial="x+")
 ```
 
-## `State` versus `MPS`
+Here, `zeros` puts every site in $|0\rangle$, while `polarized` puts every site
+in $(|0\rangle + |1\rangle)/\sqrt{2}$. Both are product states: the sites have
+no initial entanglement.
 
-Use `State` in {meth}`Simulator.run <mqt.yaqs.Simulator.run>`. Use
-{class}`~mqt.yaqs.core.data_structures.mps.MPS` directly only for low-level
-tensor-network code, or wrap an existing MPS with {meth}`State.from_mps`
-<mqt.yaqs.core.data_structures.state.State.from_mps>`.
+| `initial`           | Preparation                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| `"zeros"` (default) | Every site in $\lvert 0\rangle$.                                                                 |
+| `"ones"`            | Every site in $\lvert 1\rangle$.                                                                 |
+| `"x+"`, `"x-"`      | Every site in $(\lvert 0\rangle \pm \lvert 1\rangle)/\sqrt{2}$.                                  |
+| `"y+"`, `"y-"`      | Every site in $(\lvert 0\rangle \pm i\lvert 1\rangle)/\sqrt{2}$.                                 |
+| `"Neel"`            | Alternating levels, starting with site 0 in $\lvert 1\rangle$: `1010…` in site order.            |
+| `"wall"`            | The first `length // 2` sites in $\lvert 0\rangle$ and the remaining sites in $\lvert 1\rangle$. |
+| `"basis"`           | One computational-basis configuration, supplied with `basis_string`.                             |
+| `"random"`          | A random product state; see the random-state examples below.                                     |
 
-**Circuit simulation** requires `representation="mps"` (the preset default).
-`Simulator.run` with `DigitalSimParams` rejects vector and density-matrix
-states.
+## Place an excitation and check site order
 
-## How `representation` is chosen
+The {doc}`analog_simulation` guide follows an excitation that starts near the
+center of a chain. Prepare that state by giving one basis digit per site:
 
-| How you build `State`                 | `representation`                                                               |
-| ------------------------------------- | ------------------------------------------------------------------------------ |
-| Preset only (`length`, `initial=`, …) | Default `"mps"`; override with `representation="vector"` or `"density_matrix"` |
-| `tensors=` (MPS cores)                | Inferred `"mps"` — do **not** pass `representation=`                           |
-| `vector=`                             | Inferred `"vector"`                                                            |
-| `density_matrix=`                     | Inferred `"density_matrix"`                                                    |
+```{code-cell} python
+length = 20
+center = length // 2
+basis = "0" * center + "1" + "0" * (length - center - 1)
+localized = State(length, initial="basis", basis_string=basis)
+```
 
-```{code-cell} ipython3
+Character `i` in `basis_string` selects site `i`, starting with site 0 on the
+left. A measurement bitstring instead displays site 0 on the right:
+
+```{code-cell} python
+site_zero = State(3, initial="basis", basis_string="100")
+print(site_zero.mps.to_vec())
+```
+
+This state has site 0 in $|1\rangle$ and the other sites in $|0\rangle$. Its
+dense vector has its only nonzero entry at index 1, and its readout bitstring is
+`"001"`. Dense vectors and the rows and columns of density matrices use site 0
+as the fastest-varying subsystem. For qubits, this matches Qiskit's ordering.
+
+## Choose a representation
+
+Set `representation` when constructing a preset state, for example
+`State(4, initial="x+", representation="vector")`. YAQS selects the analog
+backend from this choice:
+
+| `representation`   | State storage and supported use                                                    |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `"mps"` (default)  | Tensor network for analog evolution, circuits, and unitary ensembles.              |
+| `"vector"`         | Dense pure state for analog evolution with Monte Carlo wave-function trajectories. |
+| `"density_matrix"` | Dense pure or mixed state for analog Lindblad evolution.                           |
+
+For $N$ qubits, a dense vector has $2^N$ entries and a density matrix has $4^N$
+entries. Keep dense calculations small; circuit simulation requires `"mps"`. See
+{doc}`representation_comparison` for a comparison on the same physical model.
+
+## Prepare random states
+
+Use `"random"` for an unentangled state with real, nonnegative random local
+amplitudes. To allow initial entanglement, use `"haar-random"` and choose an
+initial maximum bond dimension with `pad`:
+
+```{code-cell} python
+random_product = State(6, initial="random")
+random_mps = State(6, initial="haar-random", pad=4)
+```
+
+`"haar-random"` builds an MPS from random isometries. It does not sample
+uniformly from all pure states in the full Hilbert space. The bond dimensions
+are limited by `pad` and the sizes of the neighboring subsystems. Omitting `pad`
+gives a maximum bond dimension of one, so the state is then a product state.
+This initial choice is separate from `max_bond_dim` during evolution.
+
+For a reproducible random product state in a dense representation, pass `seed`:
+
+```{code-cell} python
+repeatable = State(4, initial="random", representation="vector", seed=7)
+```
+
+The same seed reproduces the same initial vector. It also works with
+`representation="density_matrix"`, which forms the corresponding pure-state
+density matrix. Currently, random MPS initialization and `"haar-random"` ignore
+`seed`. To reuse those preparations, construct the state once and pass the same
+object to successive runs. The simulation parameter `random_seed` controls
+stochastic evolution; it does not seed state preparation.
+
+## Supply a vector or a mixed state
+
+Pass exactly one of `vector`, `density_matrix`, or `tensors` for manual data.
+The representation is inferred, so omit `representation`. Do not combine manual
+data with preset options such as `initial`, `basis_string`, `seed`, or `pad`.
+
+The vector below prepares the entangled Bell state
+$(|00\rangle + |11\rangle)/\sqrt{2}$:
+
+```{code-cell} python
 import numpy as np
 
-vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
-from_vector = State(vector=vec)
-
-lindblad_ready = State(2, initial="zeros", representation="density_matrix")
+bell = State(vector=np.array([1, 0, 0, 1], dtype=complex))
+print(bell.vector)
 ```
 
-## Preset product states
+YAQS copies and normalizes the vector. The input must be a finite, nonzero,
+one-dimensional array. Without explicit local dimensions, its size must be a
+power of two; YAQS infers the number of qubits.
 
-Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`,
-`"Neel"`, `"wall"`, `"basis"`, `"random"`, etc.
+A mixed state describes a statistical preparation. This example puts the system
+in $|00\rangle$ with probability 0.6 and $|11\rangle$ with probability 0.4:
 
-For **MCWF** or **Lindblad**, set `representation` on the `State` and call
-`Simulator.run` — no extra steps:
-
-```{code-cell} ipython3
-neel_mcwf = State(4, initial="Neel", representation="vector")
+```{code-cell} python
+rho = np.diag([0.6, 0.0, 0.0, 0.4]).astype(complex)
+mixed = State(density_matrix=rho)
 ```
 
-Product presets can evolve in dense form without ever building an MPS in memory.
-**Entangled** presets (e.g. `"haar-random"`) may still require an internal MPS
-when you choose a dense representation.
+YAQS copies the matrix and normalizes its trace. The input must be finite,
+square, Hermitian, positive semidefinite, and have positive real trace. Manual
+vectors and density matrices select their dense analog backends. They cannot
+serve as circuit inputs; use a preset or MPS tensors instead.
 
-Reproducible `"random"` presets: pass `seed=` on `State`.
+## Use other local dimensions
 
-```{code-cell} ipython3
-a = State(3, initial="random", seed=7, representation="vector")
-b = State(3, initial="random", seed=7, representation="vector")
-# Same specification; run() will evolve both consistently.
-```
+Set `physical_dimensions` to an integer for a uniform chain or a list for
+different dimensions at each site:
 
-## Manual initialization
-
-Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
-is **inferred**; do not pass `representation=`. Preset-only kwargs (`initial`,
-`pad`, `basis_string`, `seed`) cannot be combined with manual data.
-
-### MPS cores (`tensors=`)
-
-```{code-cell} ipython3
-from mqt.yaqs import MPS
-
-mps_ref = MPS(3, state="zeros")
-spec = State(tensors=list(mps_ref.tensors))
-```
-
-### Dense state vector (`vector=`)
-
-`length` is inferred when the Hilbert-space dimension is a power of two.
-
-```{code-cell} ipython3
-vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)  # |00>
-spec = State(vector=vec)
-```
-
-### Density matrix (`density_matrix=`)
-
-```{code-cell} ipython3
-rho = np.diag([1.0, 0.0, 0.0, 0.0]).astype(np.complex128)
-spec = State(density_matrix=rho)
-```
-
-A `State` created only with `vector=` or `density_matrix=` cannot be used for
-circuit simulation; use `tensors=` or a preset with `representation="mps"`
-instead.
-
-## Representation and backends (analog)
-
-Set **`representation` on `State`**, not on `AnalogSimParams`.
-{meth}`Simulator.run <mqt.yaqs.Simulator.run>` materializes the correct internal
-form and dispatches:
-
-| `representation`   | Backend (analog)                      |
-| ------------------ | ------------------------------------- |
-| `"mps"` (default)  | TJM (`analog_tjm_1` / `analog_tjm_2`) |
-| `"vector"`         | MCWF                                  |
-| `"density_matrix"` | Lindblad (small systems)              |
-
-### Default: MPS / TJM
-
-```{code-cell} ipython3
-from mqt.yaqs import Hamiltonian, MPS, Simulator, AnalogSimParams, Observable
-
-sim = Simulator(show_progress=False)
-
-L = 3
-H = Hamiltonian.ising(L, J=1.0, g=0.5)
-obs = Observable("z", sites=[0])
-
-state_mps = State(L, initial="zeros")
-params = AnalogSimParams(
-    observables=[obs],
-    elapsed_time=0.2,
-    dt=0.05,
+```{code-cell} python
+qutrits = State(3, physical_dimensions=3)
+qubit_qutrit = State(
+    2, initial="basis", basis_string="12", physical_dimensions=[2, 3]
 )
-result = sim.run(state_mps, H, params, noise_model=None)
 ```
 
-### MCWF (`representation="vector"`)
+The second state has a qubit at site 0 in level 1 and a qutrit at site 1 in
+level 2. Presets such as `"ones"` still use level 1, not the highest local
+level. For manual dense data, local dimensions must multiply to the vector
+length or matrix dimension. Bitstring probabilities and shot measurements
+require qubits; digital gates currently require qubit target sites. See
+{doc}`transmon_emulation` and {doc}`trapped_ion` for device examples.
 
-For guidance on choosing a representation, see {doc}`representation_comparison`.
+## Advanced MPS preparation
 
-```{code-cell} ipython3
-state_vec = State(L, initial="zeros", representation="vector")
-obs_vec = Observable("z", sites=[0])
-params_vec = AnalogSimParams(
-    observables=[obs_vec],
-    elapsed_time=0.2,
-    dt=0.05,
-)
-result = sim.run(state_vec, H, params_vec, None)
+:::{dropdown} Supply MPS tensors or wrap an existing MPS
+
+Use `tensors=` for custom open-boundary MPS cores. Each core has axes
+`(physical, left, right)`. Neighboring bond dimensions must match, exterior
+bonds must have dimension one, and all entries must be finite. This example
+prepares the same Bell state as the vector above, now in MPS form:
+
+```python
+left = (np.eye(2) / np.sqrt(2)).reshape(2, 1, 2)
+right = np.eye(2).reshape(2, 2, 1)
+bell_mps = State(tensors=[left, right])
+wrapped = State.from_mps(bell_mps.mps)
 ```
 
-### Lindblad (`representation="density_matrix"`)
+`State(tensors=...)` infers the site count and normalizes the MPS. For other
+physical dimensions, supply matching `physical_dimensions`.
 
-For guidance on choosing a representation, see {doc}`representation_comparison`.
+When you already have an {class}`~mqt.yaqs.MPS`, use
+{meth}`~mqt.yaqs.State.from_mps` to wrap it. This method references the same MPS
+without copying or normalizing it. Changes through either reference affect the
+same state. For an independent normalized state, supply copies of its tensors
+through `State(tensors=...)` and preserve its physical dimensions.
 
-```{code-cell} ipython3
-state_dm = State(L, initial="zeros", representation="density_matrix")
-obs_dm = Observable("z", sites=[0])
-params_dm = AnalogSimParams(
-    observables=[obs_dm],
-    elapsed_time=0.2,
-    dt=0.05,
-)
-result = sim.run(state_dm, H, params_dm, None)
-```
+:::
 
-See {doc}`representation_comparison` for a side-by-side comparison of the three
-representations on the same Hamiltonian.
+:::{dropdown} Pad the initial MPS bonds
 
-### Passing dense data directly
+For product presets, `pad` adds zero entries to enlarge the initial MPS bonds
+without changing the physical state. For `"haar-random"`, it instead sets the
+maximum initial bond dimension used during random construction.
 
-If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or
-`density_matrix=` — representation is inferred:
+Padding allocates initial MPS space; it does not set the bond limit during
+evolution. That limit is `max_bond_dim` in the simulation parameters. Dense
+product-state construction does not use MPS padding.
 
-```{code-cell} ipython3
-psi = np.zeros(2**L, dtype=np.complex128)
-psi[0] = 1.0
-state_from_vec = State(vector=psi)
-result = sim.run(state_from_vec, H, params_vec, None)
-```
+:::
 
-## Practical limits
-
-- **Memory**: dense `vector` scales as $2^N$; `density_matrix` as $2^{2N}$.
-  Prefer `representation="mps"` for longer chains.
-- **Entangled presets**: `"haar-random"` may need an internal MPS for dense
-  representations.
-- **Circuits**: use `State(..., representation="mps")` (default); `vector=` /
-  `density_matrix=` states cannot run circuits.
-- **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires
-  each member with `representation="mps"`.
-- **`get_state`**: when supported, `result.output_state` is a
-  {class}`~mqt.yaqs.core.data_structures.state.State`. Use `.mps` for MPS runs,
-  `.vector` for MCWF, or `.density_matrix` for Lindblad. Not supported with
-  stochastic noise on `mps` or `vector` representations (use `density_matrix`
-  for the exact ensemble average).
-
-For MPO/TJM details without `State`, see {doc}`analog_simulation` and the
-{class}`~mqt.yaqs.core.data_structures.mps.MPS` API reference.
-
-## Related topics
-
-- {doc}`quickstart` — minimal first simulation
-- {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
-- {doc}`analog_simulation` — TJM evolution workflow
-- {doc}`simulation_parameters` — presets and trajectory settings
+Once the initial state is prepared, pass it to `Simulator.run` with the model,
+measurements, and optional noise. The {doc}`simulator_initialization` guide
+shows how to run and reuse a simulator, while {doc}`simulation_parameters`
+describes accuracy and sampling choices. Full constructor details are in the
+{class}`~mqt.yaqs.State` API reference.

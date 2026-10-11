@@ -209,7 +209,7 @@ class ProcessTensorSurrogate(nn.Module):
                 the batch size of ``e_features``.
             e_features: Per-step features of shape ``(B, T, d_e)``.
             restore_training: If ``False``, do not restore ``.train()`` after inference (for callers that
-                run many batched predictions in a loop, e.g. :meth:`entropy`).
+                run many batched predictions in a loop).
 
         Returns:
             Tensor of shape ``(B, d_rho)``.
@@ -253,7 +253,9 @@ class ProcessTensorSurrogate(nn.Module):
         return int(self.num_interventions)
 
     def evaluate_probes(self, probe_set: ProbeSet, *, initial_rho: np.ndarray | None = None) -> np.ndarray:
-        """Evaluate split-cut probe responses for :func:`run_memory_characterization`.
+        """Evaluate split-cut probe responses.
+
+        Used by :func:`~mqt.yaqs.characterization.memory.operational_memory.run.run_memory_characterization`.
 
         Args:
             probe_set: Sampled split-cut probes.

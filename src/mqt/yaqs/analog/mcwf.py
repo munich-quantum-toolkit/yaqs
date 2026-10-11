@@ -79,7 +79,7 @@ def preprocess_mcwf(
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
-    Called once per :meth:`Simulator.run` before trajectory workers start.
+    Called once per :meth:`~mqt.yaqs.Simulator.run` before trajectory workers start.
 
     Args:
         psi_initial: Dense state vector (unit norm applied here).

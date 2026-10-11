@@ -39,8 +39,7 @@ def create_ising_circuit(
         g (float): Transverse field strength.
         dt (float): Time step for the simulation.
         timesteps (int): Number of time steps to simulate.
-        periodic (bool, optional): If True, add a long-range gate between qubits 0 and L-1.
-                                   Defaults to False.
+        periodic: If True, add a long-range gate between qubits 0 and L-1. Defaults to False.
 
     Returns:
         QuantumCircuit: A quantum circuit representing the Ising model evolution.

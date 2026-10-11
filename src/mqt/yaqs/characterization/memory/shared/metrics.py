@@ -59,7 +59,7 @@ def compute_rel_fro_error(a_mat: NDArray[np.complex128], b_mat: NDArray[np.compl
         b_mat: Reference matrix.
 
     Returns:
-        Relative Frobenius error: ||A-B||_F / max(||B||_F, eps).
+        float: Relative Frobenius error, ||A-B||_F / max(||B||_F, eps).
     """
     a, b = _validate_square_matrix_pair(a_mat, b_mat, name_a="a_mat", name_b="b_mat")
     num = np.linalg.norm(a - b, "fro")
@@ -75,7 +75,7 @@ def compute_trace_distance(rho: NDArray[np.complex128], sigma: NDArray[np.comple
         sigma: Density matrix.
 
     Returns:
-        Trace distance: 0.5 * ||rho - sigma||_1.
+        float: Trace distance, 0.5 * ||rho - sigma||_1.
     """
     rho_h, sigma_h = _validate_square_matrix_pair(rho, sigma, name_a="rho", name_b="sigma")
     diff_mat = rho_h - sigma_h

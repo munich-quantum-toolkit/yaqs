@@ -2,176 +2,323 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
-  execution_timeout: 600
+  execution_timeout: 180
 ---
-
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
-```
 
 # Noisy Analog Simulation
 
-This guide walks through an open-system **analog** simulation with the tensor
-jump method (TJM): build a Hamiltonian, attach a noise model, configure
-{class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`,
-and visualize time-resolved observables.
+Relaxation can remove an excitation before it travels across a spin chain. To
+study this competition between transport and loss, we follow an excitation
+through a **20-site XY chain** and compare its motion at several relaxation
+rates. The occupation heatmaps show where the excitation travels, while the
+total occupation tells us how much survives.
 
-For log-normal disorder on strengths and static calibration spread, see
-{doc}`realistic_noise_models`. For execution options (parallelism, progress
-bars), see {doc}`simulator_initialization`. To build Ising, Hubbard,
-Pauli-string, or hardware Hamiltonians, see {doc}`hamiltonians`.
+This guide extends the analog example in {doc}`quickstart` using only the
+standard YAQS installation. YAQS represents the state as a matrix product state
+(MPS) and simulates noise with the tensor jump method (TJM), averaging
+independent quantum-jump trajectories. Run the cells in order in a notebook. In
+a script, put execution inside an `if __name__ == "__main__":` guard, as shown
+in {doc}`simulator_initialization`.
 
-## 1. Hamiltonian
+## 1. Build the Hamiltonian
 
-```{code-cell} ipython3
+The XY model lets an excitation move between neighboring spins without changing
+the total number of excitations. With open ends and the coefficients below, its
+Hamiltonian is
+
+$$
+H=-\frac{1}{2}\sum_{i=0}^{L-2}(X_iX_{i+1}+Y_iY_{i+1}).
+$$
+
+```{code-cell} python
 from mqt.yaqs import Hamiltonian
 
-L = 5
-J, g = 1.0, 0.8
-H_0 = Hamiltonian.ising(L, J, g)
+length = 20
+hamiltonian = Hamiltonian.heisenberg(length, Jx=0.5, Jy=0.5, Jz=0.0)
 ```
 
-See {doc}`hamiltonians` for Pauli sums, Fermi–Hubbard, Bose–Hubbard, and
-coupled-transmon factories.
+Setting `Jz=0` removes the ZZ interaction from the Heisenberg model. The default
+boundary condition is open, so sites 0 and 19 have one neighbor each. Because
+the Hamiltonian conserves excitation, a noiseless run gives us a baseline
+against which to measure relaxation.
 
-## 2. Initial state and noise model
+We use $\hbar=1$ and set the excitation-hopping amplitude to one. Time is
+measured in its inverse units. See {doc}`hamiltonians` for other built-in
+models, custom terms, and boundary conditions.
 
-We prepare a Néel state $\ket{01010\ldots}$ and track staggered magnetization
-under a transverse-field Ising model with on-site amplitude damping. The
-alternating $\langle Z_i \rangle$ pattern at $t=0$ spreads and decays in a
-site-dependent way.
+## 2. Prepare one localized excitation
 
-```{code-cell} ipython3
-from mqt.yaqs import NoiseModel, State
+To see the excitation spread, start every spin in $|0\rangle$ except the spin at
+site 10, which starts in $|1\rangle$. Each character of `basis_string` specifies
+the state of the corresponding site, starting at site 0.
 
-state = State(L, initial="Neel")
+```{code-cell} python
+from mqt.yaqs import State
 
-gamma = 0.08
-noise_model = NoiseModel([
-    {"name": "lowering", "sites": [i], "strength": gamma} for i in range(L)
+center = length // 2
+basis = "0" * center + "1" + "0" * (length - center - 1)
+state = State(length, initial="basis", basis_string=basis)
+```
+
+`State` uses an MPS by default. A single excitation keeps entanglement modest,
+so this example is inexpensive compared with a general interacting state on 20
+sites. For other initial states and representations, see
+{doc}`state_initialization` and {doc}`representation_comparison`.
+
+## 3. Choose observables, times, and accuracy
+
+The spatial dynamics require one observable per site. We use $Z_i$, whose
+expectation gives the occupation through
+$\langle n_i\rangle=(1-\langle Z_i\rangle)/2$.
+
+```{code-cell} python
+from mqt.yaqs import AnalogSimParams, Observable
+
+params = AnalogSimParams(
+    observables=[Observable("z", site) for site in range(length)],
+    elapsed_time=3.0,
+    dt=0.25,
+    num_traj=32,
+    preset="fast",
+    random_seed=7,
+)
+```
+
+These settings sample 13 times from $t=0$ to $t=3$, long enough to see the
+excitation spread away from the center. Time sampling is enabled by default, and
+`elapsed_time` must be an integer multiple of `dt`.
+
+The `fast` preset sets numerical tolerances for a quick example. We override its
+trajectory budget with `num_traj=32`, so each noisy run averages 32
+trajectories; the noiseless calculation needs only one. Increasing this budget
+reduces sampling error, while timestep and MPS truncation errors require
+separate convergence checks.
+
+`random_seed` fixes the jump random streams for repeat runs with the same
+configuration. It does not improve accuracy. See {doc}`simulation_parameters`
+for presets, overrides, and convergence settings.
+
+## 4. Define relaxation
+
+Relaxation competes with the motion generated by the Hamiltonian. The `lowering`
+channel turns $|1\rangle$ into $|0\rangle$ without adding new excitations. Give
+every site the same relaxation rate $\gamma$:
+
+```{code-cell} python
+from mqt.yaqs import NoiseModel
+
+relaxation_rate = 4.0
+noise = NoiseModel([
+    {"name": "lowering", "sites": [site], "strength": relaxation_rate}
+    for site in range(length)
 ])
 ```
 
-Pass a float for each `strength` here. For distribution-valued strengths
-(log-normal and other distributions), see {doc}`realistic_noise_models`.
+For analog evolution, `strength` is a Lindblad rate, with units of inverse time.
+YAQS forms the jump operator $\sqrt{\gamma}\,|0\rangle\langle1|$ internally;
+supply $\gamma$, not its square root.
 
-## 3. Simulation parameters
+The corresponding lifetime is $1/\gamma$. At $\gamma=4$, loss occurs on a
+shorter timescale than hopping between sites. For site-dependent rates, other
+channels, custom operators, and distribution-valued strengths, see
+{doc}`realistic_noise_models`.
 
-```{code-cell} ipython3
-from mqt.yaqs import AnalogSimParams, Observable
+## 5. Run the noiseless and noisy cases
 
-sim_params = AnalogSimParams(
-    observables=[Observable("z", site) for site in range(L)],
-    elapsed_time=6.0,
-    dt=0.1,
-    num_traj=20,
-    max_bond_dim=16,
-    svd_threshold=1e-6,
-    order=2,
-    sample_timesteps=True,
-)
+Initialize the simulator separately, then pass the state, Hamiltonian, and
+parameters to `run`. Omit the noise model for the noiseless baseline.
+
+```{code-cell} python
+from mqt.yaqs import Simulator
+
+simulator = Simulator(show_progress=False)
+noiseless = simulator.run(state, hamiltonian, params)
+noisy = simulator.run(state, hamiltonian, params, noise)
 ```
 
-Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per
-physical step `dt`, improving unitary accuracy without changing the noise
-timestep.
+Parallel execution remains enabled by default. `show_progress=False` keeps the
+documentation quiet; omit it to see progress. Execution and worker options are
+explained in {doc}`simulator_initialization`.
 
-**Evolution integrator:** analog simulations default to `EvolutionMode.TDVP`
-(two-site TDVP sweeps). Switch to BUG with:
+## 6. Read the results
 
-```{code-cell} ipython3
-from mqt.yaqs import AnalogSimParams, EvolutionMode
+`expectation_values` follows the order of the supplied observables. Here, row
+$i$ contains $\langle Z_i\rangle$ and columns follow `times`. Convert the
+expectations to an array of occupations:
 
-bug_params = AnalogSimParams(
-    evolution_mode=EvolutionMode.BUG,
-    elapsed_time=0.1,
-    dt=0.1,
-)
-```
-
-That uses center-augmented alternating-endpoint BUG composition with one
-compression and renormalization after each ``dt`` step.
-
-## 4. Reproducible stochastic runs
-
-With `num_traj > 1`, each {meth}`~mqt.yaqs.Simulator.run` call averages
-independent quantum-jump trajectories. Set
-{attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed`
-to fix the pseudorandom stream across trajectories (and for distribution-valued
-noise strengths):
-
-```{code-cell} ipython3
-import copy
-
+```{code-cell} python
 import numpy as np
 
-from mqt.yaqs import AnalogSimParams, Observable, Simulator
-
-repro_params = AnalogSimParams(
-    observables=[Observable("z", site) for site in range(L)],
-    elapsed_time=1.0,
-    dt=0.1,
-    num_traj=16,
-    max_bond_dim=4,
-    svd_threshold=1e-6,
-    order=2,
-    sample_timesteps=True,
-    random_seed=42,
-)
-
-sim = Simulator(parallel=True, show_progress=False)
-
-
-def run_reproducible() -> list[np.ndarray]:
-    st = copy.deepcopy(state)
-    params = copy.deepcopy(repro_params)
-    result = sim.run(st, H_0, params, copy.deepcopy(noise_model))
-    return result.expectation_values
-
-
-first_run = run_reproducible()
-second_run = run_reproducible()
+times = np.asarray(noisy.times)
+occupation = (1 - np.asarray(noisy.expectation_values)) / 2
+print(occupation.shape)
 ```
 
-Circuit simulations expose the same `random_seed` setting through
-{class}`~mqt.yaqs.DigitalSimParams`.
+The shape is `(20, 13)`: sites by sampled times. At $t=0$, only site 10 has
+occupation one. In noisy runs, each entry is a trajectory average, rather than a
+single measurement outcome. `noisy.trajectories` retains the per-trajectory
+observable data when you need to examine sampling fluctuations.
 
-## 5. Run and visualize
+## 7. Compare four relaxation strengths
 
-```{code-cell} ipython3
-result = sim.run(state, H_0, sim_params, noise_model)
+The relaxation lifetime determines how long the excitation can propagate before
+loss. To compare that timescale with the transport dynamics, keep the model and
+numerical settings fixed and add rates between the two runs above:
+
+```{code-cell} python
+rates = [0.0, 0.5, 1.5, relaxation_rate]
+results = {0.0: noiseless, relaxation_rate: noisy}
+for rate in rates[1:-1]:
+    rate_noise = NoiseModel([
+        {"name": "lowering", "sites": [site], "strength": rate}
+        for site in range(length)
+    ])
+    results[rate] = simulator.run(state, hamiltonian, params, rate_noise)
+
+occupations = np.stack([
+    (1 - np.asarray(results[rate].expectation_values)) / 2
+    for rate in rates
+])
 ```
 
-```{code-cell} ipython3
----
-mystnb:
-  image:
-    width: 80%
-    align: center
----
+The nonzero rates give lifetimes of $2$, $2/3$, and $1/4$ in the time units used
+here. The heatmaps below compare how far the excitation spreads before its
+occupation decays. All panels use one square-root color scale to keep small
+occupations visible, with no normalization by the remaining excitation.
+
+```{code-cell} python
+:tags: [hide-input]
 import matplotlib.pyplot as plt
+from matplotlib.colors import PowerNorm
+from matplotlib_inline.backend_inline import set_matplotlib_formats
 
-heatmap = result.expectation_values
-
-fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
-im = ax.imshow(heatmap, aspect="auto", extent=(0, 6, L, 0), vmin=-1, vmax=1)
-ax.set_xlabel("Time")
-ax.set_yticks([x - 0.5 for x in range(1, L + 1)], [str(x) for x in range(L)])
-ax.set_ylabel("Site")
-fig.colorbar(im, ax=ax, shrink=0.9, label=r"$\langle Z \rangle$")
+set_matplotlib_formats("svg")
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "font.size": 11,
+    "axes.labelsize": 11,
+    "axes.linewidth": 0.7,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "legend.fontsize": 9,
+    "legend.frameon": False,
+    "lines.linewidth": 1.6,
+    "figure.constrained_layout.use": True,
+    "savefig.dpi": 180,
+})
+fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.4), sharex=True, sharey=True)
+for ax, values, rate, panel in zip(
+    axes.flat, occupations, rates, "abcd", strict=True,
+):
+    image = ax.pcolormesh(
+        times, np.arange(length), values, shading="auto", cmap="cividis",
+        norm=PowerNorm(0.5, vmin=0, vmax=1), rasterized=True,
+    )
+    label = "Noiseless" if rate == 0 else rf"$\gamma={rate:g}$"
+    ax.set_title(f"({panel}) {label}", loc="left", fontsize=11)
+    ax.set(xticks=[0, 1, 2, 3], yticks=[0, 5, 10, 15, 19])
+for ax in axes[-1]:
+    ax.set_xlabel(r"Time $t$")
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"Site $i$")
+fig.colorbar(image, ax=axes.ravel().tolist(),
+             label=r"Occupation $\langle n_i\rangle$", ticks=[0, 0.1, 0.5, 1])
 plt.show()
 ```
 
+**Excitation transport under uniform relaxation.** Without noise, the excitation
+spreads outward and forms an interference pattern. Increasing the relaxation
+rate suppresses occupation at later times and more distant sites. At $\gamma=4$,
+most of the excitation is lost before it travels far from the center.
+
+The fading pattern does not imply slower propagation. Conditioned on no jump,
+the excitation follows the noiseless spatial dynamics because this Hamiltonian
+conserves excitation and the loss rate is uniform. Site-dependent relaxation or
+a different channel can change that profile. This time window mainly shows
+outward propagation; longer runs can also show reflections from the open ends.
+
+## 8. Check the total excitation
+
+The heatmaps combine spreading with loss. Summing occupation over sites removes
+the spatial information and isolates the survival probability. Since the initial
+state has exactly one excitation and every site has the same relaxation rate,
+the ensemble mean obeys
+
+$$
+N(t)=\sum_i\langle n_i(t)\rangle=e^{-\gamma t}.
+$$
+
+```{code-cell} python
+:tags: [hide-input]
+total_excitation = occupations.sum(axis=1)
+fine_times = np.linspace(times[0], times[-1], 200)
+colors = ["0.2", "#0072B2", "#009E73", "#D55E00"]
+fig, ax = plt.subplots(figsize=(6.2, 3.2))
+for rate, values, color in zip(rates, total_excitation, colors, strict=True):
+    ax.plot(times, values, "o-", color=color, markersize=4,
+            label="Noiseless" if rate == 0 else rf"$\gamma={rate:g}$")
+    ax.plot(fine_times, np.exp(-rate * fine_times), "--", color=color,
+            linewidth=1.1, alpha=0.75)
+ax.set(xlabel=r"Time $t$", ylabel=r"Total excitation $N(t)$",
+       xlim=(0, 3), ylim=(0, 1.08), xticks=[0, 1, 2, 3])
+ax.legend(ncols=4, loc="lower center", bbox_to_anchor=(0.5, 1.02))
+plt.show()
+```
+
+**Excitation survival compared with the decay law.** Markers show the YAQS
+estimates, and dashed lines show $e^{-\gamma t}$. At $t=3$, the exact survival
+probabilities are one without noise and about $0.22$, $0.011$, and
+$6\times10^{-6}$ for the three nonzero rates.
+
+Each noisy trajectory either retains its excitation or loses it to a jump. With
+only 32 trajectories, the estimated survival fraction changes in steps and may
+reach zero while the exact mean is still positive. Finite sampling can also make
+curves for different rates cross. Increase `num_traj` to reduce these
+fluctuations; the sampling error decreases as $1/\sqrt{\mathtt{num\_traj}}$.
+
+Together, the two figures distinguish loss from redistribution along the chain.
+Uniform relaxation reduces the chance of finding the excitation, while surviving
+excitations retain the coherent transport pattern. This conclusion and the decay
+law rely on uniform loss and excitation-conserving dynamics. The noiseless total
+also checks conservation, but that check alone cannot establish the accuracy of
+the spatial dynamics.
+
+## Accuracy and other options
+
+Before using a larger or more demanding model, check convergence separately:
+
+| Change                              | What to check                                                                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Increase `num_traj`                 | Whether noisy observables stabilize within sampling uncertainty.                                                                             |
+| Reduce `dt` at fixed duration       | Whether the dynamics stabilize with a finer evolution step.                                                                                  |
+| Use `balanced` or `accurate`        | Whether tighter truncation and solver settings change the observables. Keep an explicit trajectory budget when comparing numerical settings. |
+| Increase `length` or `elapsed_time` | Whether boundaries, entanglement growth, and runtime affect the question being studied.                                                      |
+
+The default MPS evolution uses TDVP updates. To use the BUG integrator, import
+`EvolutionMode` from `mqt.yaqs` and set `evolution_mode=EvolutionMode.BUG` in
+`AnalogSimParams`. For TDVP, `tdvp_sweeps` adds unitary substeps without
+changing the noise timestep. See {doc}`simulation_parameters` for these advanced
+choices.
+
 ## Related topics
 
-- {doc}`digital_analog_simulation` — combine analog evolution with digital
-  operations in one program
-- {doc}`hamiltonians` — Pauli, Hubbard, hardware, and piecewise time-dependent
+- {doc}`realistic_noise_models` — other channels, custom jumps, and static
+  disorder
+- {doc}`digital_analog_simulation` — combine analog evolution and digital
+  operations
+- {doc}`hamiltonians` — built-in, custom, hardware, and time-dependent
   Hamiltonians
-- {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
-- {doc}`scheduled_jumps` — deterministic jumps at specified times
+- {doc}`representation_comparison` — MPS, statevector, and density matrix
+  backends
+- {ref}`noise-scheduled-jumps` — deterministic jumps at specified times
 - {doc}`ensemble_evolution` — unitary ensemble correlations
-- {doc}`quickstart` — minimal first simulation

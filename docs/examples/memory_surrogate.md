@@ -2,308 +2,187 @@
 file_format: mystnb
 kernelspec:
   name: python3
+language_info:
+  name: python
 mystnb:
   number_source_lines: true
-  execution_timeout: 900
+  execution_timeout: 120
 ---
 
-```{code-cell} ipython3
-:tags: [remove-cell]
-%config InlineBackend.figure_formats = ['svg']
+# Predicting Non-Markovian Dynamics
+
+A control pulse changes a quantum system and its later interaction with the
+environment. A surrogate learns that response from simulated sequences, then
+predicts reduced system states for new controls. Here we train one small model
+and compare a pulse-angle sweep with exact two-qubit evolution.
+
+```{note}
+**Experimental feature.** Surrogate modeling is not yet supported by a published
+YAQS paper. This small example teaches the workflow; it does not demonstrate a
+speed advantage or establish accuracy for longer control sequences. Validate
+predictions against simulations or measurements for your intended use.
 ```
 
-# Memory Surrogate Training and Prediction
+Install the PyTorch extra with `uv pip install "mqt.yaqs[torch]"`. The plot also
+uses Matplotlib. Run the cells in order in a notebook; for a script, use the
+entry-point guard in {doc}`simulator_initialization`.
 
-For control sequences beyond what you can simulate exhaustively, train a
-**causal Transformer surrogate** on Hamiltonian rollouts of the open system.
-{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` returns the
-**reduced density matrix of the probe qubit** after a control sequence.
+## 1. Choose the system and train on random controls
 
-Surrogate training requires PyTorch (`uv pip install mqt.yaqs[torch]`). Over
-**short temporal horizons** (few intervention steps), compare surrogate rollouts
-to Hamiltonian training targets and to exact **dense** or
-**MPO process tensors** built with
-{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.build_process_tensor`.
-Environmental memory probing (`characterize`) is covered in
-{doc}`characterization`.
+Site 0 is the probe, and site 1 is an environment qubit initially in
+$|0\rangle$. Their Hamiltonian is $H=-Z_0Z_1-0.5(X_0+X_1)$, with $\hbar=1$. We
+apply two random single-qubit rotations to the probe, each followed by evolution
+for $0.6$. The environment can retain information about the earlier control.
 
-```{warning}
-Exact references scale exponentially with sequence length. Use them only over
-**few intervention steps** — short probes in time, not long open-system runs.
-```
-
-## Setup
-
-```{code-cell} ipython3
-import matplotlib.pyplot as plt
+```{code-cell} python
 import numpy as np
+import torch
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.shared.encoding import encode_rho_pauli, unpack_rho8
-from mqt.yaqs.characterization.memory.shared.metrics import mean_trace_distance_rho8
 
-PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+interval = 0.6
+schedule = [0.0, interval, interval]
+hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
+params = AnalogSimParams(elapsed_time=interval, dt=interval, preset="fast")
+characterizer = MemoryCharacterizer(show_progress=False)
 
-
-def z_expectation(rho8_row: np.ndarray) -> float:
-    """Return ⟨Z⟩ from a packed 8-float density-matrix row."""
-    rho = unpack_rho8(rho8_row)
-    return float(np.trace(PAULI_Z @ rho).real)
-
-length = 2
-ham = Hamiltonian.ising(length=length, J=1.0, g=1.0)
-params = AnalogSimParams(dt=0.1)
-mc = MemoryCharacterizer(show_progress=False)
-num_interventions = 2
-timesteps = [0.0, 0.0, 0.0]
-intervention_style = "measure_prepare"
-```
-
-Use a **probe + environment** chain (`length >= 2`). Match `intervention_style`
-and `timesteps` between training, `predict`, and `build_process_tensor` (length
-`num_interventions + 1`).
-
-## Train a surrogate
-
-Training fixes `num_interventions` on the model — the horizon the network was
-fit to. The settings below mirror the accuracy regression in the test suite
-(`measure_prepare` legs, short schedule).
-
-```{code-cell} ipython3
-model = mc.train(
-    ham,
-    params,
-    num_interventions=num_interventions,
-    n=60,
-    seed=0,
-    timesteps=timesteps,
-    intervention_style=intervention_style,
-    train_kwargs={
-        "epochs": 120,
-        "batch_size": 16,
-        "lr": 2e-3,
-        "device": "cpu",
-        "prefix_loss": "full",
-    },
-    model_kwargs={
-        "d_model": 32,
-        "nhead": 4,
-        "num_layers": 1,
-        "dim_ff": 64,
-        "dropout": 0.0,
-    },
+torch.manual_seed(7)
+validation = characterizer.sample(
+    hamiltonian, params, num_interventions=2, n=128, seed=99,
+    timesteps=schedule, intervention_style="haar",
+)
+model = characterizer.train(
+    hamiltonian, params, num_interventions=2, n=2048, seed=7,
+    timesteps=schedule, intervention_style="haar",
+    model_kwargs={"d_model": 64, "num_layers": 2, "dim_ff": 128},
+    train_kwargs={"epochs": 200, "lr": 1e-3, "device": "cpu", "val_dataset": validation},
 )
 ```
 
-## Evaluate on held-out Hamiltonian rollouts
+`timesteps` contains the initial delay and one duration after each intervention.
+The initial `0.0` places the first rotation immediately after preparation, and
+the final time is $1.2$. Training varies the probe preparation and draws random
+unitaries with `intervention_style="haar"`; the environment preparation stays
+fixed. YAQS restores the model with the lowest validation loss. The validation
+set selects the model, so it is not an independent accuracy test.
 
-Generate fresh training sequences with a different seed and compare the
-surrogate’s final-step predictions to the Hamiltonian targets used during
-dataset construction:
+## 2. Predict a pulse-angle sweep
 
-```{code-cell} ipython3
-held_out = mc.sample(
-    ham,
-    params,
-    num_interventions=num_interventions,
-    n=60,
-    seed=999,
-    intervention_style=intervention_style,
-    show_progress=False,
-    timesteps=timesteps,
-)
-e_test, rho0_test, rho_true = held_out.tensors
-rho_pred = model.predict(e_test.numpy(), rho0_test.numpy(), return_numpy=True)
+Prepare the probe in $|+\rangle$. Use the identity as the first control, then
+apply $R_z(\theta)$ between the two evolution intervals. These chosen controls
+were not supplied during training. At $\theta=0$ the system evolves freely;
+$\theta=\pi$ gives a phase flip halfway through.
 
-z_true = np.array([z_expectation(row) for row in rho_true.numpy()[:, -1, :]])
-z_pred = np.array([z_expectation(row) for row in rho_pred[:, -1, :]])
-mean_td = mean_trace_distance_rho8(rho_pred[:, -1, :], rho_true.numpy()[:, -1, :])
-
-fig, ax = plt.subplots(figsize=(4.5, 4))
-ax.scatter(z_true, z_pred, s=18, alpha=0.75)
-lims = (min(z_true.min(), z_pred.min()) - 0.05, max(z_true.max(), z_pred.max()) + 0.05)
-ax.plot(lims, lims, "k--", linewidth=1)
-ax.set_xlim(lims)
-ax.set_ylim(lims)
-ax.set_xlabel(r"Hamiltonian $\langle Z \rangle$ (final step)")
-ax.set_ylabel(r"Surrogate $\langle Z \rangle$ (final step)")
-ax.set_title(rf"Held-out rollouts (mean trace distance = {mean_td:.3f})")
-ax.set_aspect("equal")
-fig.tight_layout()
-```
-
-## Compare explicit control sequences
-
-The usual workflow after training is to call
-{meth}`~mqt.yaqs.memory_characterizer.MemoryCharacterizer.predict` with
-**your own control sequence** and compare outcomes across choices. Train a
-one-leg surrogate on random unitary controls, then pass different explicit
-unitary lists to the same model. This mirrors the quickstart workflow
-({doc}`quickstart`) with the longer training budget used above:
-
-```{code-cell} ipython3
-unitary_timesteps = [0.0, 0.0]
-controls_model = mc.train(
-    ham,
-    params,
-    num_interventions=1,
-    n=120,
-    seed=2,
-    timesteps=unitary_timesteps,
-    intervention_style="haar",
-    train_kwargs={
-        "epochs": 120,
-        "batch_size": 16,
-        "lr": 2e-3,
-        "device": "cpu",
-        "prefix_loss": "full",
-    },
-    model_kwargs={
-        "d_model": 32,
-        "nhead": 4,
-        "num_layers": 1,
-        "dim_ff": 64,
-        "dropout": 0.0,
-    },
-)
-
-rho0_controls = np.eye(2, dtype=np.complex128) / 2.0
-hadamard = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
-pauli_x = np.array([[0, 1], [1, 0]], dtype=np.complex128)
-control_sequences = {
-    r"$\mathrm{H}$": [{"unitary": hadamard}],
-    r"$\mathrm{X}$": [{"unitary": pauli_x}],
-}
-
-pauli_ops = {
-    "X": np.array([[0, 1], [1, 0]], dtype=np.complex128),
-    "Y": np.array([[0, -1j], [1j, 0]], dtype=np.complex128),
-    "Z": np.array([[1, 0], [0, -1]], dtype=np.complex128),
-}
-expectations = {
-    label: [
-        float(np.trace(op @ mc.predict(controls_model, rho0_controls, controls, num_interventions=1)).real)
-        for op in pauli_ops.values()
+```{code-cell} python
+plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
+rho0 = np.outer(plus, plus.conj())
+identity = np.eye(2, dtype=complex)
+pulse_angles = np.linspace(0, 2 * np.pi, 41)
+sequences = [
+    [
+        {"unitary": identity},
+        {"unitary": np.diag(np.exp(-0.5j * angle * np.array([1, -1])))},
     ]
-    for label, controls in control_sequences.items()
-}
-
-pauli_names = list(pauli_ops)
-x = np.arange(len(pauli_names))
-width = 0.35
-
-fig, ax = plt.subplots(figsize=(5.5, 3.5))
-for offset, (label, values) in zip((-width / 2, width / 2), expectations.items()):
-    ax.bar(x + offset, values, width, label=f"control {label}")
-ax.set_xticks(x, pauli_names)
-ax.set_ylabel(r"$\langle P \rangle$")
-ax.set_title("Probe Pauli expectations for two control sequences")
-ax.legend(frameon=False)
-fig.tight_layout()
+    for angle in pulse_angles
+]
+predicted = np.stack([
+    characterizer.predict(model, rho0, sequence) for sequence in sequences
+])
 ```
 
-Extend the per-leg list when `num_interventions > 1` to probe multi-step
-sequences (for example `[H, X]`).
+`predict` returns a complex `(2, 2)` density-matrix estimate. Stacking the sweep
+produces shape `(41, 2, 2)`. All entries describe the same final time, not a
+trajectory through time.
 
 (short-horizon-validation)=
 
-## Validate against exact references
+## 3. Check against exact evolution
 
-Build process tensors for the same schedule. By default, `build_process_tensor`
-returns an uncapped MPO from direct construction (noiseless). Its branch count
-grows as `16**num_interventions`, so use it only for short horizons. A finite
-`max_bond_dim` selects an experimental uncontrolled approximation and emits a
-`RuntimeWarning`. Pass `return_type="dense"` for exhaustive tomography. For
-process tensors, `rho0` in `predict` must match `pt.initial_rho` (the site-0
-state after the initial leg of the reference schedule).
+For two qubits, SciPy's matrix exponential gives a cheap reference independent
+of YAQS's solvers. Site 0 is the least significant bit, so the joint initial
+state is $|0\rangle_{\mathrm{env}}\otimes|+\rangle_{\mathrm{probe}}$ and a probe
+pulse acts as $I\otimes R_z(\theta)$. Tracing out the environment gives the
+reference probe state.
 
-**Dense** and **MPO** implementations should agree on identical interventions.
-Compare all three backends on a
-**stochastic sequence drawn from the training style** (`measure_prepare` here):
-pass a **fresh** `np.random.default_rng(seed)` to each `predict` call (reusing
-one RNG object advances its state between calls).
+```{code-cell} python
+from scipy.linalg import expm
 
-```{code-cell} ipython3
-pt_mpo = mc.build_process_tensor(ham, params, timesteps=timesteps)
-pt_dense = mc.build_process_tensor(
-    ham, params, timesteps=timesteps, return_type="dense", num_trajectories=48,
+pauli_x = np.array([[0, 1], [1, 0]], dtype=complex)
+pauli_z = np.diag([1.0, -1.0])
+dense_hamiltonian = -np.kron(pauli_z, pauli_z) - 0.5 * (
+    np.kron(identity, pauli_x) + np.kron(pauli_x, identity)
 )
+evolution = expm(-1j * interval * dense_hamiltonian)
+initial_joint = np.kron([1, 0], plus)
+states = []
+for sequence in sequences:
+    joint = evolution @ np.kron(identity, sequence[1]["unitary"]) @ evolution @ initial_joint
+    amplitudes = joint.reshape(2, 2)
+    states.append(amplitudes.T @ amplitudes.conj())
+reference = np.stack(states)
 
-rho0 = pt_mpo.initial_rho
-compare_seed = 7
-
-rho_dense = mc.predict(
-    pt_dense, rho0, intervention_style, num_interventions=num_interventions,
-    rng=np.random.default_rng(compare_seed),
-)
-rho_mpo = mc.predict(
-    pt_mpo, rho0, intervention_style, num_interventions=num_interventions,
-    rng=np.random.default_rng(compare_seed),
-)
-rho_surrogate = mc.predict(
-    model, rho0, intervention_style, num_interventions=num_interventions,
-    rng=np.random.default_rng(compare_seed),
-)
-
-pauli_labels = [r"$X$", r"$Y$", r"$Z$"]
-pauli_dense = encode_rho_pauli(rho_dense)[1:]
-pauli_mpo = encode_rho_pauli(rho_mpo)[1:]
-pauli_surrogate = encode_rho_pauli(rho_surrogate)[1:]
-x = np.arange(len(pauli_labels))
-width = 0.25
-
-fig, ax = plt.subplots(figsize=(5.5, 3.5))
-ax.bar(x - width, pauli_dense, width, label="dense", color="tab:blue")
-ax.bar(x, pauli_mpo, width, label="MPO", color="tab:orange", alpha=0.85)
-ax.bar(x + width, pauli_surrogate, width, label="surrogate", color="tab:green", alpha=0.85)
-ax.set_xticks(x, pauli_labels)
-ax.set_ylabel(r"$\langle P \rangle$")
-ax.set_title(
-    rf"Matched {intervention_style} sequence ($\|\rho_{{\mathrm{{dense}}}}-\rho_{{\mathrm{{MPO}}}}\|_F$ = "
-    rf"{np.linalg.norm(rho_dense - rho_mpo):.1e})"
-)
-ax.legend(frameon=False)
-fig.tight_layout()
+matrix_errors = 0.5 * np.sum(np.abs(np.linalg.eigvalsh(predicted - reference)), axis=1)
+trace_error = np.max(np.abs(np.trace(predicted, axis1=1, axis2=2) - 1))
+minimum_eigenvalue = np.min(np.linalg.eigvalsh(predicted))
+print(f"Maximum matrix error: {matrix_errors.max():.4f}")
+print(f"Maximum trace error: {trace_error:.4f}; minimum eigenvalue: {minimum_eigenvalue:.4f}")
 ```
 
-Dense and MPO should overlap; the surrogate approximates the same draw at the
-reference `rho0`. Held-out Hamiltonian rollouts above use random probe `rho0`
-values from data generation — a different setup than the fixed reference state
-stored on process tensors.
+The matrix error is half the trace norm of the difference. It equals trace
+distance when both matrices are normalized physical states. The public API makes
+predictions Hermitian but does not enforce unit trace or positivity. The printed
+checks expose those limitations; we do not normalize the predictions or clip
+negative eigenvalues.
 
-The same process-Choi information functionals are available on either backend.
-QMI measures total correlation between the final output and the selected
-intervention slots, including direct system transmission. It is not by itself a
-measure of non-Markovian memory. CMI tests conditional independence for the
-stated partition. For this short horizon, CMI is near zero while QMI grows when
-more past legs are included:
+```{code-cell} python
+:tags: [hide-input]
+import matplotlib.pyplot as plt
+from matplotlib_inline.backend_inline import set_matplotlib_formats
 
-```{code-cell} ipython3
-past_choices = ("all", "first", "last")
-qmi_dense = [mc.compute_qmi(pt_dense, past=p) for p in past_choices]
-qmi_mpo = [mc.compute_qmi(pt_mpo, past=p) for p in past_choices]
-cmi_dense = mc.compute_cmi(pt_dense)
-cmi_mpo = mc.compute_cmi(pt_mpo)
-
-fig, ax = plt.subplots(figsize=(5, 3.5))
-ax.plot(past_choices, qmi_dense, "o-", label="QMI (dense)")
-ax.plot(past_choices, qmi_mpo, "s--", label="QMI (MPO)", alpha=0.85)
-ax.axhline(cmi_dense, color="tab:purple", linestyle=":", linewidth=1.5, label=rf"CMI (dense) = {cmi_dense:.2e}")
-ax.axhline(cmi_mpo, color="tab:gray", linestyle="--", linewidth=1, label=rf"CMI (MPO) = {cmi_mpo:.2e}")
-ax.set_ylabel("bits")
-ax.set_xlabel(r"past legs in QMI")
-ax.set_title("Process-tensor information metrics")
-ax.legend(frameon=False, fontsize=8, loc="upper left")
-fig.tight_layout()
+set_matplotlib_formats("svg")
+plt.rcParams.update({
+    "font.family": "serif", "font.serif": ["STIXGeneral"], "mathtext.fontset": "stix",
+    "font.size": 10, "axes.labelsize": 11, "axes.linewidth": 0.7,
+    "xtick.direction": "in", "ytick.direction": "in",
+    "xtick.top": True, "ytick.right": True,
+    "legend.frameon": False, "figure.constrained_layout.use": True,
+    "savefig.bbox": "tight", "svg.fonttype": "none",
+})
+fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.8))
+axes[0].plot(pulse_angles, 2 * np.abs(predicted[:, 0, 1]), color="#0072B2",
+             linewidth=2, label="Surrogate")
+axes[0].plot(pulse_angles[::2], 2 * np.abs(reference[::2, 0, 1]), "o", color="#D55E00",
+             markerfacecolor="white", markersize=4, label="Exact evolution")
+axes[0].set_ylabel(r"Final coherence $2|\rho_{01}|$")
+axes[0].set_title("(a) Response to a control pulse", loc="left", fontsize=10)
+axes[0].legend(fontsize=9)
+axes[1].plot(pulse_angles, matrix_errors, color="#0072B2", linewidth=2)
+axes[1].fill_between(pulse_angles, 0, matrix_errors, color="#0072B2", alpha=0.12)
+axes[1].set_ylabel(r"Matrix error $\frac{1}{2}\|\rho_{\rm pred}-\rho_{\rm ref}\|_1$")
+axes[1].set_title("(b) Error against exact evolution", loc="left", fontsize=10)
+axes[1].set_ylim(bottom=0)
+for ax in axes:
+    ax.set(xlabel=r"Pulse angle $\theta$", xlim=(0, 2 * np.pi),
+           xticks=[0, np.pi, 2 * np.pi], xticklabels=["0", r"$\pi$", r"$2\pi$"])
+plt.show()
 ```
 
-These information metrics and the split-cut response metric $S_V(c)$ from
-{doc}`characterization` are complementary. The response construction tests which
-differences between past probes remain visible in future responses.
+An instantaneous $Z$ rotation preserves coherence magnitude when applied. The
+variation here arises during subsequent interaction with the environment. The
+reference and error panel show how well this small model captures that response.
+This training budget keeps the example inexpensive and leaves visible prediction
+errors. Results can vary with seeds and PyTorch versions.
 
-## Related topics
+## Scope and other options
 
-- {doc}`characterization` — split-cut probing, response matrix, reset-delay
-  sweeps
-- {doc}`quickstart` — minimal train/predict snippet
-- API reference: :class:`~mqt.yaqs.memory_characterizer.MemoryCharacterizer`
+The model uses a fixed Hamiltonian, environment preparation, and control
+schedule. Retrain and validate when those change. The public training path does
+not accept a `NoiseModel`, and this two-intervention example does not establish
+accuracy for longer protocols.
+
+Use `predict(model, rho0, sequence, return_sequence=True)` to obtain shape
+`(num_interventions, 2, 2)`, with one state after each intervention and its
+following evolution interval. Sampling and training also support `"clifford"`
+and `"measure_prepare"` controls; validate other control families separately.
+For environmental memory diagnostics and short process-tensor references, see
+{doc}`characterization`.

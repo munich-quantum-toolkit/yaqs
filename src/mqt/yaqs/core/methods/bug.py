@@ -43,8 +43,8 @@ def prepare_canonical_site_tensors(
         mpo: The MPO.
 
     Returns:
-        canon_tensors: The list of the canonical site tensors.
-        left_blocks: The list of the left environments.
+        Tuple ``(canon_tensors, left_blocks)`` containing the canonical site tensors
+        and left MPO environments.
     """
     canon_tensors = copy(state.tensors)
     left_end_dimension = state.tensors[0].shape[1]
