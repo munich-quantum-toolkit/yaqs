@@ -300,19 +300,6 @@ class MemoryCharacterizer:
         """Exception types that trigger a worker retry."""
         return self._execution.retry_exceptions
 
-    def _solver_for(self, hamiltonian: Hamiltonian) -> Literal["MCWF", "TJM"]:
-        """Resolve stochastic solver for a Hamiltonian under this characterizer's representation.
-
-        Returns:
-            ``"MCWF"`` or ``"TJM"`` from the resolved characterizer representation.
-        """
-        rep = resolve_characterizer_representation(
-            hamiltonian.length,
-            self.representation,
-            vector_max_qubits=self.vector_max_qubits,
-        )
-        return representation_to_solver(rep)
-
     def build_process_tensor(
         self,
         hamiltonian: Hamiltonian,
@@ -527,6 +514,79 @@ class MemoryCharacterizer:
             show_progress=self._execution.show_progress if show_progress is None else show_progress,
             _execution=self._execution,
         )
+
+    def predict(  # ruff:ignore[no-self-use] -- public instance API
+        self,
+        target: Any,
+        rho0: np.ndarray,
+        sequence: InterventionSequence,
+        /,
+        *,
+        num_interventions: int | None = None,
+        return_sequence: bool = False,
+        rng: Generator | None = None,
+    ) -> np.ndarray:
+        r"""Predict site-0 reduced-state dynamics under an intervention sequence.
+
+        Supports trained surrogates and reference process tensors. For process tensors,
+        ``rho0`` must match the stored reference initial state (site-0 density matrix after
+        ``U_0`` from ``|0\\rangle^{\\otimes L}``).
+
+        Args:
+            target: Trained surrogate or reference process tensor.
+            rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
+            sequence: Intervention kind string, per-slot list, or expanded sequence.
+            num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
+            return_sequence: For surrogates, return all ``num_interventions`` predicted
+                states instead of only the final state. Excludes the initial state.
+                Unsupported for process tensors.
+            rng: RNG for stochastic intervention sampling.
+
+        Returns:
+            Final site-0 matrix with shape ``(2, 2)``, or a surrogate trajectory with
+            shape ``(num_interventions, 2, 2)``. Surrogate outputs are Hermitian but
+            are not projected onto positive, trace-one density matrices.
+
+        Raises:
+            TypeError: If the explicit or inferred ``num_interventions`` is not an integer,
+                or ``target`` does not support surrogate-style prediction.
+            ValueError: If ``num_interventions`` is not positive or
+                ``return_sequence=True`` for a process-tensor target.
+        """
+        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
+        if _matches_process_tensor(target) and return_sequence:
+            msg = "return_sequence=True is not supported for process tensor targets."
+            raise ValueError(msg)
+        local_rng = rng if rng is not None else np.random.default_rng()
+        seq = sequence
+
+        if _matches_process_tensor(target):
+            rho_mat = coerce_rho_matrix(rho0)
+            target.check_initial_rho(rho_mat)
+            if isinstance(seq, str):
+                slots = expand_interventions(seq, num_interventions=resolved_num_interventions, _rng=local_rng)
+            else:
+                slots = list(seq)
+            steps, _ = encode_interventions(slots, num_interventions=resolved_num_interventions, rng=local_rng)
+            callables = [convert_probe_callable(s) for s in steps]
+            rho_out = target.predict(callables)
+            return np.asarray(rho_out, dtype=np.complex128)
+
+        rho_mat = coerce_rho_matrix(rho0)
+        predict_fn = getattr(target, "predict", None)
+        if not callable(predict_fn):
+            msg = f"Unsupported predict target type: {type(target).__name__}"
+            raise TypeError(msg)
+        _steps, e_features = encode_interventions(seq, num_interventions=resolved_num_interventions, rng=local_rng)
+        packed0 = pack_rho8(normalize_backend_rho(rho_mat)).astype(np.float32)
+        pred = predict_fn(
+            e_features[np.newaxis, ...],
+            packed0[np.newaxis, ...],
+            return_numpy=True,
+        )
+        if return_sequence:
+            return np.stack([unpack_rho8(row) for row in pred[0]], axis=0).astype(np.complex128)
+        return unpack_rho8(pred[0, -1, :])
 
     @overload
     def characterize(
@@ -765,6 +825,19 @@ class MemoryCharacterizer:
             raise TypeError(msg)
         return process_tensor.cmi(base=base)
 
+    def _solver_for(self, hamiltonian: Hamiltonian) -> Literal["MCWF", "TJM"]:
+        """Resolve stochastic solver for a Hamiltonian under this characterizer's representation.
+
+        Returns:
+            ``"MCWF"`` or ``"TJM"`` from the resolved characterizer representation.
+        """
+        rep = resolve_characterizer_representation(
+            hamiltonian.length,
+            self.representation,
+            vector_max_qubits=self.vector_max_qubits,
+        )
+        return representation_to_solver(rep)
+
     @staticmethod
     def _resolve_cut_list(
         num_interventions: int,
@@ -904,79 +977,6 @@ class MemoryCharacterizer:
             )
             parts[resolved_cut] = pack_result(out, cut=resolved_cut)
         return merge_cut_results(parts) if len(parts) > 1 else parts[cut_list[0]]
-
-    def predict(  # ruff:ignore[no-self-use] -- public instance API
-        self,
-        target: Any,
-        rho0: np.ndarray,
-        sequence: InterventionSequence,
-        /,
-        *,
-        num_interventions: int | None = None,
-        return_sequence: bool = False,
-        rng: Generator | None = None,
-    ) -> np.ndarray:
-        r"""Predict site-0 reduced-state dynamics under an intervention sequence.
-
-        Supports trained surrogates and reference process tensors. For process tensors,
-        ``rho0`` must match the stored reference initial state (site-0 density matrix after
-        ``U_0`` from ``|0\\rangle^{\\otimes L}``).
-
-        Args:
-            target: Trained surrogate or reference process tensor.
-            rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
-            sequence: Intervention kind string, per-slot list, or expanded sequence.
-            num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
-            return_sequence: For surrogates, return all ``num_interventions`` predicted
-                states instead of only the final state. Excludes the initial state.
-                Unsupported for process tensors.
-            rng: RNG for stochastic intervention sampling.
-
-        Returns:
-            Final site-0 matrix with shape ``(2, 2)``, or a surrogate trajectory with
-            shape ``(num_interventions, 2, 2)``. Surrogate outputs are Hermitian but
-            are not projected onto positive, trace-one density matrices.
-
-        Raises:
-            TypeError: If the explicit or inferred ``num_interventions`` is not an integer,
-                or ``target`` does not support surrogate-style prediction.
-            ValueError: If ``num_interventions`` is not positive or
-                ``return_sequence=True`` for a process-tensor target.
-        """
-        resolved_num_interventions = _resolve_num_interventions(target, num_interventions)
-        if _matches_process_tensor(target) and return_sequence:
-            msg = "return_sequence=True is not supported for process tensor targets."
-            raise ValueError(msg)
-        local_rng = rng if rng is not None else np.random.default_rng()
-        seq = sequence
-
-        if _matches_process_tensor(target):
-            rho_mat = coerce_rho_matrix(rho0)
-            target.check_initial_rho(rho_mat)
-            if isinstance(seq, str):
-                slots = expand_interventions(seq, num_interventions=resolved_num_interventions, _rng=local_rng)
-            else:
-                slots = list(seq)
-            steps, _ = encode_interventions(slots, num_interventions=resolved_num_interventions, rng=local_rng)
-            callables = [convert_probe_callable(s) for s in steps]
-            rho_out = target.predict(callables)
-            return np.asarray(rho_out, dtype=np.complex128)
-
-        rho_mat = coerce_rho_matrix(rho0)
-        predict_fn = getattr(target, "predict", None)
-        if not callable(predict_fn):
-            msg = f"Unsupported predict target type: {type(target).__name__}"
-            raise TypeError(msg)
-        _steps, e_features = encode_interventions(seq, num_interventions=resolved_num_interventions, rng=local_rng)
-        packed0 = pack_rho8(normalize_backend_rho(rho_mat)).astype(np.float32)
-        pred = predict_fn(
-            e_features[np.newaxis, ...],
-            packed0[np.newaxis, ...],
-            return_numpy=True,
-        )
-        if return_sequence:
-            return np.stack([unpack_rho8(row) for row in pred[0]], axis=0).astype(np.complex128)
-        return unpack_rho8(pred[0, -1, :])
 
 
 __all__ = ["MemoryCharacterizer"]
