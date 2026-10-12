@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import MPS, State
 from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
@@ -43,7 +42,7 @@ def test_state_invalid_representation() -> None:
 def test_ensure_encoded_without_argument_uses_state_representation() -> None:
     """ensure_encoded() with no argument materializes self.representation."""
     psi = State(3, initial="zeros", representation="vector")
-    psi.ensure_encoded()
+    assert psi.ensure_encoded() is psi
     assert psi.representation == "vector"
     with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = psi.mps
@@ -56,7 +55,7 @@ def test_ensure_encoded_without_argument_uses_state_representation() -> None:
 def test_ensure_encoded_materializes_representation(representation: Representation) -> None:
     """ensure_encoded materializes the requested backend representation."""
     psi = State(3, initial="zeros")
-    psi.ensure_encoded(representation)
+    assert psi.ensure_encoded(representation) is psi
     if representation == "mps":
         _ = psi.mps
     elif representation == "vector":
