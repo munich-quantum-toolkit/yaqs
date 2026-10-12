@@ -5,31 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Process-tensor construction: dense tomography or direct MPO growth.
+"""Construct process tensors by dense tomography or direct MPO growth.
 
-**Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.memory.backends.tomography`):
-:func:`build_process_tensor` (this module,
-:mod:`mqt.yaqs.characterization.memory.backends.tomography.constructor`).
-
-:func:`build_process_tensor` dispatches on ``return_type``:
-
-- ``"mpo"`` (default) — direct MPO construction (noiseless; the uncapped path
-  grows as ``16**num_interventions``); returns
-  :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor`.
-- ``"dense"`` — exhaustive discrete-basis tomography (``16**num_interventions`` sequences),
-  optionally with noise; returns
-  :class:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor`.
-
-The lower-level :func:`run_all_sequences` returns
-:class:`~mqt.yaqs.characterization.memory.backends.tomography.data.SequenceData` for the dense path.
-
-**Execution model** — Same pattern as :mod:`mqt.yaqs.simulator` and
-:mod:`mqt.yaqs.characterization.memory.backends.surrogates.workflow`: build a picklable payload, optionally
-install it as :data:`~mqt.yaqs.core.parallel_utils.WORKER_CTX`, then dispatch with
-:func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs` (parallel or serial).
-
-**Internals** — :func:`run_all_sequences` performs payload construction, aggregation, and
-:func:`mqt.yaqs.characterization.memory.backends.tomography.basis._finalize_sequence_averages`.
+Dense tomography supports noise; direct MPO construction is noiseless.
+Both have exponential uncapped cost in the intervention count.
+:func:`build_process_tensor` defines the options and construction limits.
 """
 
 from __future__ import annotations

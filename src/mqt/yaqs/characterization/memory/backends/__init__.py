@@ -5,14 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Process backends for operational-memory characterization.
-
-Subpackages:
-
-- :mod:`.sequences` — :func:`~mqt.yaqs.characterization.memory.backends.sequences.simulate_sequences` and pool workers
-- :mod:`.exact` — :class:`~mqt.yaqs.characterization.memory.backends.exact.ExactBackend` and
-  :func:`~mqt.yaqs.characterization.memory.backends.exact.simulate_exact`
-- :mod:`.tomography` — MPO process tensors via direct construction (default); dense via exhaustive tomography
-- :mod:`.surrogates` — :class:`~mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate`
-  and training-data workflow
-"""
+"""Hamiltonian simulation, process-tensor construction, and neural memory surrogates."""

@@ -5,13 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Hamiltonian simulation of quantum many-body systems using the Tensor Jump Method (TJM).
+"""First- and second-order Tensor Jump Method trajectories for MPS evolution.
 
-This module implements the Tensor Jump Method (TJM) for simulating the dynamics of quantum many-body systems.
-It provides functions for initializing the sampling state with noise (via dissipation and stochastic processes),
-evolving the state with the configured unitary evolution mode (TDVP or BUG), and sampling observable
-measurements over time. The functions analog_tjm_2 and analog_tjm_1 correspond to second-order and
-first-order TJM schemes, respectively, and return trajectories of expectation values for further analysis.
+Both schemes use TDVP or BUG for unitary intervals and return observable
+buffers, diagnostics, and an optional final state.
 """
 
 from __future__ import annotations
@@ -87,19 +84,18 @@ def _validate_sample_at(sim_params: AnalogSimParams, sample_at: Sequence[int] | 
 def initialize(
     state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSimParams, rng: np.random.Generator | None = None
 ) -> MPS:
-    """Initialize the sampling MPS for second-order Trotterization.
+    """Apply the initial half-step of dissipation for second-order TJM.
 
-    This function prepares the initial sampling MPS (denoted as Phi(0)) by applying a half time step of dissipation
-    followed by a stochastic process. It corresponds to F0 in the TJM paper.
+    A scheduled jump at the initial time replaces stochastic jump sampling.
 
     Args:
-        state (MPS): The initial state of the system.
-        noise_model (NoiseModel | None): The noise model to apply to the system.
-        sim_params (AnalogSimParams): Simulation parameters including the time step (dt).
-        rng: The random number generator to use.
+        state: Initial MPS, updated in place.
+        noise_model: Optional noise model.
+        sim_params: Analog settings, including ``dt`` and the time grid.
+        rng: Generator for stochastic jump decisions.
 
     Returns:
-        MPS: The initialized sampling MPS Phi(0).
+        The same MPS after dissipation and a scheduled or sampled jump.
     """
     apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
     # Check for scheduled jumps at start time
@@ -117,21 +113,21 @@ def step_through(
     current_time: float,
     rng: np.random.Generator | None = None,
 ) -> MPS:
-    """Perform a single time step evolution of the system state using the TJM.
+    """Advance a second-order TJM trajectory between measurement copies.
 
-    Corresponding to Fj in the TJM paper, this function evolves the state by applying the configured
-    unitary evolution mode (TDVP or BUG), dissipation, and a stochastic process in sequence.
+    Applies a unitary step, full-step dissipation, and a jump update.
+    A scheduled jump at ``current_time`` replaces stochastic jump sampling.
 
     Args:
-        state (MPS): The current state of the system.
-        hamiltonian (MPO): The Hamiltonian operator for the system.
-        noise_model (NoiseModel | None): The noise model to apply to the system.
-        sim_params (AnalogSimParams): Simulation parameters including the time step and measurement settings.
-        current_time (float): The current simulation time.
-        rng: The random number generator to use.
+        state: Trajectory MPS, updated in place.
+        hamiltonian: MPO for the interval.
+        noise_model: Optional noise model.
+        sim_params: Analog evolution settings.
+        current_time: Time used to check scheduled jumps.
+        rng: Generator for stochastic jump decisions.
 
     Returns:
-        MPS: The updated state after one time step evolution.
+        The same MPS after the update.
     """
     apply_unitary_evolution(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
@@ -153,29 +149,26 @@ def sample(
     *,
     write_results: bool = True,
 ) -> MPS | None:
-    """Sample the quantum state and record observable measurements from the sampling MPS.
+    """Evolve a measurement copy and record second-order TJM outputs.
 
-    This function evolves a deep copy of the sampling MPS, applies dissipation and a stochastic process,
-    and then measures the observables specified in sim_params. The measured values are stored in the provided
-    results array at index j (or at index 0 if only one measurement is taken).
+    Leaves ``phi`` unchanged. The copy receives one unitary step, a half-step
+    of dissipation, and a scheduled or sampled jump.
 
     Args:
-        phi (MPS): The sampling MPS prior to measurement.
-        hamiltonian (MPO): The Hamiltonian operator for the system.
-        noise_model (NoiseModel | None): The noise model to apply during evolution.
-        sim_params (AnalogSimParams): Simulation parameters including time step and measurement settings.
-        results (NDArray[np.float64]): An array to store the measured observable values.
-        j (int): The time step or shot index at which the measurement is recorded.
-        rng: RNG for jump decisions on the measurement copy. Must be independent of the
-            trajectory RNG used for ``initialize`` / ``step_through`` so intermediate
-            sampling does not alter subsequent evolution.
-        diagnostics: Optional ``(3, T)`` buffer for runtime cost, max bond, and total bond.
-        write_results: When False, evolve the measurement copy without writing
-            observables or diagnostics. Used to obtain ``get_state`` when
-            ``sample_at`` omits the final time.
+        phi: Trajectory MPS to copy.
+        hamiltonian: MPO for the interval.
+        noise_model: Optional noise model.
+        sim_params: Evolution and output settings.
+        results: Observable buffer; column ``j`` for time sampling, otherwise column zero.
+        j: Measurement time-grid index.
+        rng: Jump generator for the copy. Keep independent of the trajectory
+            generator so intermediate measurements do not change later evolution.
+        diagnostics: Optional ``(3, T)`` buffer for cost, maximum bond, and total bond.
+        write_results: Whether to write observables and diagnostics. ``False``
+            still evolves the copy for final-state output.
 
     Returns:
-        The evolved MPS when this is the final time step and ``get_state=True``, else ``None``.
+        The copy at the final time if ``get_state=True``, otherwise ``None``.
     """
     psi = copy.deepcopy(phi)
     apply_unitary_evolution(psi, hamiltonian, sim_params)
@@ -215,44 +208,31 @@ def analog_tjm_2(
     continue_trajectory: bool = False,
     sample_at: Sequence[int] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using the configured unitary evolution mode.
+    """Run a second-order TJM trajectory with TDVP or BUG unitary evolution.
 
-    This function executes a full trajectory by evolving the initial state,
-    sampling observable measurements over time, and recording the results.
-    It corresponds to the second-order TJM scheme; unitary intervals use
-    ``sim_params.evolution_mode`` (TDVP or BUG).
+    Measurement copies use separate random streams from the evolving trajectory.
+    Continuation can hand off the staggered trajectory state between program segments.
 
     Args:
-        args: A tuple containing:
-            - Trajectory identifier.
-            - The initial MPS.
-            - Optional noise model.
-            - Simulation parameters (time step, SVD threshold, etc.).
-            - Hamiltonian MPO, or one MPO per analog interval.
-        copy_initial_state: Whether to deep-copy the input MPS before evolution.
-        rng: Optional externally managed trajectory RNG. When omitted, the
-            standalone trajectory seed behavior is preserved.
-        sample_timestep_offset: Added to each local measurement timestep when
-            deriving sample RNG streams. Program execution accumulates this
-            across prior analog segments so split evolutions share one global
-            sample timeline with a single continuous run.
-        use_trajectory_rng_for_final_sample: When True with an external ``rng``,
-            the last measurement copy draws from the trajectory RNG. Programs
-            enable this only on the final order-2 instruction.
-        return_trajectory_state: When True, return the trajectory MPS (``phi``)
-            for handoff instead of the last measurement copy. Programs always
-            enable this so later segments continue the physical trajectory.
-        continue_trajectory: When True, skip ``initialize`` and continue
-            ``step_through`` from the handed-off trajectory state. Programs set
-            this for order-2 segments after the first.
-        sample_at: Optional time-grid indices to measure. When omitted,
-            ``sample_timesteps`` selects every time or only the final time.
-            Multiple indices require ``sample_timesteps=True`` so each sample
-            has its own result column. Programs set that flag on the merged
-            buffer and pass boundary indices for user ``sample_timesteps=False``.
+        args: ``(trajectory_id, initial_mps, noise_model, sim_params, hamiltonian)``.
+            The Hamiltonian is a static MPO or one MPO per analog interval.
+        copy_initial_state: Copy before evolution; ``False`` permits input mutation.
+        rng: External trajectory generator; omit to derive one from the trajectory
+            ID and ``sim_params.random_seed``.
+        sample_timestep_offset: Offset for measurement-copy RNG indices, allowing
+            split segments to share the continuous run's sample timeline.
+        use_trajectory_rng_for_final_sample: Use an external ``rng`` for the last
+            measurement copy instead of a separate sample stream.
+        return_trajectory_state: Return the staggered trajectory MPS for continuation,
+            instead of the final measurement copy, regardless of ``get_state``.
+        continue_trajectory: Skip initialization for a handed-off trajectory with
+            the same static Hamiltonian and time step.
+        sample_at: Optional time-grid indices to measure. Omit to follow
+            ``sample_timesteps``; multiple indices require time sampling.
 
     Returns:
-        Observable data, diagnostics ``(3, T)``, and optional final MPS.
+        Observable buffer, diagnostics ``(3, T)``, and optional final MPS.
+        ``T`` is the grid length for time sampling, otherwise one.
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
@@ -374,31 +354,23 @@ def analog_tjm_1(
     rng: np.random.Generator | None = None,
     sample_at: Sequence[int] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-    """Run a single trajectory of the TJM using a first-order evolution scheme.
+    """Run a first-order TJM trajectory with TDVP or BUG unitary evolution.
 
-    This function evolves the state with one unitary update per interval
-    (TDVP or BUG according to ``sim_params.evolution_mode``), applying noise
-    (if provided) and taking observable measurements over time.
+    Each interval has a unitary step followed by dissipation and a jump update.
+    Observables read the trajectory directly without extra jump draws.
 
     Args:
-        args (tuple): A tuple containing:
-            - int: Trajectory identifier.
-            - MPS: The initial state of the system.
-            - NoiseModel | None: The noise model to be applied (if any).
-            - AnalogSimParams: Simulation parameters including the time step and measurement settings.
-            - HamiltonianOperator: A static MPO, or one MPO per analog interval.
-        copy_initial_state: Whether to deep-copy the input MPS before evolution.
-        rng: Optional externally managed trajectory RNG. When omitted, the
-            standalone trajectory seed behavior is preserved.
-        sample_at: Optional time-grid indices to measure. When omitted,
-            ``sample_timesteps`` selects every time or only the final time.
-            Multiple indices require ``sample_timesteps=True`` so each sample
-            has its own result column. A single index is valid with
-            ``sample_timesteps=False``.
+        args: ``(trajectory_id, initial_mps, noise_model, sim_params, hamiltonian)``.
+            The Hamiltonian is a static MPO or one MPO per analog interval.
+        copy_initial_state: Copy before evolution; ``False`` permits input mutation.
+        rng: External jump generator; omit to derive one from the trajectory ID
+            and ``sim_params.random_seed``.
+        sample_at: Optional time-grid indices to measure. Omit to follow
+            ``sample_timesteps``; multiple indices require time sampling.
 
     Returns:
-        tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
-            Observable data, diagnostics ``(3, T)``, and optional final MPS.
+        Observable buffer, diagnostics ``(3, T)``, and final MPS if ``get_state=True``.
+        ``T`` is the grid length for time sampling, otherwise one.
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 

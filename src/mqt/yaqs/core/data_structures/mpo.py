@@ -1260,30 +1260,21 @@ class MPO:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> None:
-        """Build this MPO from a sum of Pauli-string terms.
+        """Build this MPO in place from a sum of Pauli-string terms.
 
-        Each term is given as ``(coeff, spec)`` where ``spec`` is a string like
-        ``"Z0 Z1"``, ``"X7"``, or ``""`` for the identity. Terms are assembled by
-        constructing a finite state machine (FSM) that represents the sum of terms
-        directly, resulting in an optimal or near-optimal bond dimension without
-        intermediate compression steps.
+        A finite state machine combines the terms before optional SVD compression.
 
         Args:
-            terms: List of ``(coefficient, spec)`` Pauli terms.
-            length: Number of sites (L).
-            physical_dimension: Local dimension (only ``2`` is supported).
-            tol: SVD truncation threshold used during final compression.
-            max_bond_dim: Optional hard cap on the kept MPO bond dimension.
-            n_sweeps: Number of compression sweeps (>= 0).
+            terms: ``(coefficient, spec)`` pairs; examples of ``spec`` are
+                ``"Z0 Z1"``, ``"X7"``, and ``""`` for the identity.
+            length: Number of sites.
+            physical_dimension: Local dimension; only two is supported.
+            tol: SVD threshold for final compression.
+            max_bond_dim: Optional hard cap on the kept bond dimension.
+            n_sweeps: Non-negative number of compression sweeps.
 
         Raises:
-            ValueError: If ``length <= 0``, ``physical_dimension != 2``, a site index is
-                out of bounds, an operator label is invalid, or a term spec is malformed.
-
-        Notes:
-            The resulting MPO represents the sum of all provided terms (including
-            coefficients). The construction uses an FSM approach which is significantly
-            faster than summing individual MPOs for large numbers of terms.
+            ValueError: If length, local dimension, site indices, or term specifications are invalid.
         """
         if physical_dimension != 2:
             msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
@@ -1393,9 +1384,8 @@ class MPO:
             self.tensors.append(tensor)
 
         # 4. Final Compression
-        #    The FSM construction is optimal for one-sided (suffix) uniqueness.
-        #    A standard two-sweep compression ("lr_rl") puts the MPO in canonical form
-        #    and removes any remaining redundancies (e.g., common prefixes).
+        #    Compress shared prefixes left after suffix merging, within the
+        #    configured tolerance, rank cap, and sweep count.
         self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 

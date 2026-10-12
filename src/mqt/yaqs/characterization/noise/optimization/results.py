@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class NoiseCharacterizationResult:
-    """Outcome of an analytical optimization noise-parameter fit.
+    """Outcome of a numerical noise-parameter fit.
 
     ``initial_loss`` is the mean-squared trajectory mismatch of the supplied
     initial model. ``loss_history`` contains optimizer candidate evaluations,

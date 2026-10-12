@@ -5,12 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Optimization and surrogate backends for Markovian noise characterization.
-
-Submodules:
-
-- :mod:`.cma` — CMA-ES wrapper for the analytical optimization pipeline
-"""
+"""CMA-ES and bounded scalar optimizers for noise-parameter fitting."""
 
 from .cma import cma_opt
 

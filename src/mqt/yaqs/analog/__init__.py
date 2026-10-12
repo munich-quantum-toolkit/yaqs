@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""YAQS's Hamiltonian simulator based on the the Tensor Jump Method (TJM)."""
+"""Hamiltonian evolution with TJM, MCWF, Lindblad, and unitary-ensemble solvers."""

@@ -5,12 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Process-tensor schedule sequence simulation (parallel engine for exact and surrogate paths).
-
-:func:`~mqt.yaqs.characterization.memory.backends.sequences.workflow.simulate_sequences`
-dispatches intervention sequences via :func:`~mqt.yaqs.core.parallel_utils.run_indexed_jobs`.
-Pool workers live in :mod:`.workers`.
-"""
+"""Simulate intervention sequences with Hamiltonian-based reference dynamics."""
 
 from .workflow import simulate_sequences
 

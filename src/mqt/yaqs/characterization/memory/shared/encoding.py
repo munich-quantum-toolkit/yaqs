@@ -132,16 +132,19 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
 
 
 def coerce_rho_matrix(rho0: np.ndarray) -> np.ndarray:
-    """Normalize an initial state to a ``2 x 2`` density matrix.
+    """Convert a packed state or matrix to a complex ``(2, 2)`` array.
+
+    Does not normalize the trace or check positivity. Packed input is decoded
+    by :func:`unpack_rho8`.
 
     Args:
-        rho0: Packed length-8 vector or ``2 x 2`` matrix.
+        rho0: Packed length-eight vector or ``(2, 2)`` matrix.
 
     Returns:
-        Complex density matrix.
+        Complex matrix in the single-qubit basis.
 
     Raises:
-        ValueError: If ``rho0`` has an unsupported shape.
+        ValueError: If the input shape is unsupported.
     """
     arr = np.asarray(rho0, dtype=np.complex128)
     if arr.shape == (8,):

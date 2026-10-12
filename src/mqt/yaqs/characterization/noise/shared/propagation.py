@@ -59,7 +59,7 @@ def _propagation_run_params(
 
 
 class Propagator:
-    """Run Lindblad simulations and collect observable trajectories."""
+    """Collect observable trajectories with Lindblad, MCWF, or TJM evolution."""
 
     def __init__(
         self,

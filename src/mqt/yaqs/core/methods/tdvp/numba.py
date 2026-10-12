@@ -5,14 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Numba-accelerated kernels for TDVP dense effective Hamiltonian construction.
+"""Numba kernels for dense TDVP effective operators.
 
-This module provides JIT-compiled, parallelized implementations of the dense
-effective Hamiltonian construction for both single-site and bond updates in
-Time-Dependent Variational Principle (TDVP) simulations. These kernels replace
-slower einsum-based implementations with explicit nested loops optimized by
-Numba's LLVM backend. Internal ``parallel`` loops respect ``numba.set_num_threads``
-(``1`` in parallel ``Simulator`` workers via ``worker_init``).
+Parallel loops respect ``numba.set_num_threads``. The contraction and
+flattening conventions are defined in :mod:`.primitives`.
 """
 
 from __future__ import annotations
@@ -23,43 +19,18 @@ from numba import jit, prange
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op: np.ndarray) -> np.ndarray:
-    r"""Numba-optimized construction of the dense effective operator for single-site updates.
+    """Build the single-site effective operator with parallel Numba loops.
 
-    This function is a JIT-compiled, parallelized implementation of the dense effective
-    Hamiltonian construction for TDVP single-site updates. It replaces the reference
-    ``einsum``-based implementation with explicit nested loops that are optimized by
-    Numba's LLVM backend.
-
-    The operator is defined by the contraction:
-
-        H_eff[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
-
-    This is computed in two stages to reduce memory overhead:
-      1. Partial contraction: T1[o,p,r,a,A] = sum_l op[o,p,l,r] * left_env[a,l,A]
-      2. Final contraction: H_eff = sum_r T1[o,p,r,a,A] * right_env[b,r,B]
-
-    The result is flattened to a 2D matrix using row-major (C-order) index mapping:
-      - Row index: (o * a_out + aa) * b_out + bb
-      - Col index: (p * a_in + a) * b_in + b
+    Uses the contraction and C-order flattening of
+    :func:`~mqt.yaqs.core.methods.tdvp.primitives.build_dense_heff_site`.
 
     Args:
-        left_env: Left operator block, shape ``(a, l, A)`` where lowercase/uppercase
-            denote input/output virtual dimensions.
-        right_env: Right operator block, shape ``(b, r, B)``.
-        op: Local MPO tensor, shape ``(o, p, l, r)`` where ``o`` and ``p`` are
-            physical dimensions and ``l``, ``r`` are MPO bond dimensions.
+        left_env: Left operator environment with shape ``(a, l, A)``.
+        right_env: Right operator environment with shape ``(b, r, B)``.
+        op: MPO tensor with shape ``(o, p, l, r)``.
 
     Returns:
-        Dense matrix ``H_eff`` of shape ``(o*A*B, p*a*b)`` representing the
-        effective local Hamiltonian operator.
-
-    Notes:
-        - Uses ``parallel=True`` for automatic parallelization across outer loops.
-        - Benchmarks show this is ~2-3x faster than ``einsum`` for bond dimensions
-          D >= 16, with the speedup increasing for larger tensors.
-        - The two-stage contraction pattern reduces peak memory usage compared to
-          a single 6-index intermediate tensor.
-
+        Complex128 matrix with shape ``(o*A*B, p*a*b)``.
     """
     o_dim, p_dim, mpo_l, mpo_r = op.shape
     a_in, _, a_out = left_env.shape
@@ -108,35 +79,17 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def build_dense_heff_bond_numba(left_env: np.ndarray, right_env: np.ndarray) -> np.ndarray:
-    r"""Numba-optimized construction of the dense effective operator for bond updates.
+    """Build the bond effective operator with parallel Numba loops.
 
-    This function is a JIT-compiled, parallelized implementation of the dense effective
-    Hamiltonian construction for zero-site (bond) updates in TDVP. It replaces the
-    reference ``einsum``-based implementation with explicit nested loops optimized by
-    Numba's LLVM backend.
-
-    The operator is defined by the contraction:
-
-        H_eff[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
-
-    The result is flattened to a 2D matrix using row-major (C-order) index mapping:
-      - Row index: p * w_dim + w
-      - Col index: u * v_dim + v
+    Uses the contraction and C-order flattening of
+    :func:`~mqt.yaqs.core.methods.tdvp.primitives.build_dense_heff_bond`.
 
     Args:
-        left_env: Left operator block, shape ``(u, a, p)``.
-        right_env: Right operator block, shape ``(v, a, w)``.
+        left_env: Left operator environment with shape ``(u, a, p)``.
+        right_env: Right operator environment with shape ``(v, a, w)``.
 
     Returns:
-        Dense matrix ``H_eff`` of shape ``(p*w, u*v)`` representing the
-        effective bond Hamiltonian operator.
-
-    Notes:
-        - Uses ``parallel=True`` for automatic parallelization across ``u`` dimension.
-        - Benchmarks show this is ~2-3x faster than ``einsum`` for bond dimensions
-          D >= 16.
-        - This function is called during the backward evolution steps in 1TDVP.
-
+        Complex128 matrix with shape ``(p*w, u*v)``.
     """
     u_dim, a_dim, p_dim = left_env.shape
     v_dim, _, w_dim = right_env.shape

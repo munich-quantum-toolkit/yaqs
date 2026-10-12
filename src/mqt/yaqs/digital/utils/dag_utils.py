@@ -382,18 +382,19 @@ def extract_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
 
 
 def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
-    """Extract the temporal zone from a DAGCircuit for the specified qubits.
+    """Extract a temporal zone and remove consumed operations from the input DAG.
 
-    The temporal zone is defined as the subset of operations (layers) acting solely on the specified qubits,
-    continuing until those qubits no longer participate in any further operations. The function builds a new
-    DAGCircuit containing only these operations and removes consumed nodes from ``dag``.
+    Starts with all qubits in the inclusive strip ``[min(qubits), max(qubits)]``.
+    Keeps operations whose qubits remain active. A crossing gate removes
+    its overlapping qubits from the active set for subsequent operations.
+    Skips measurement and barrier nodes encountered during extraction.
 
     Args:
-        dag (DAGCircuit): The input DAGCircuit (mutated in place).
-        qubits (list[int]): List of qubit indices for which to extract the temporal zone.
+        dag: Input DAG, mutated in place.
+        qubits: Indices defining the initial strip.
 
     Returns:
-        DAGCircuit: A new DAGCircuit containing only the operations within the temporal zone for the specified qubits.
+        New DAG containing the extracted operations.
     """
     return _build_temporal_zone(dag, qubits)
 

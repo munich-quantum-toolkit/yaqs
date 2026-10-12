@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Reference trajectories and loss assembly for analytical noise optimization."""
+"""Reference trajectories and loss assembly for noise-parameter fitting."""
 
 from __future__ import annotations
 
