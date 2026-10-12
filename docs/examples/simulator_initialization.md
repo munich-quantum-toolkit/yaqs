@@ -123,8 +123,8 @@ process.
 
 :::{dropdown} Automatic worker budgets and numerical threads
 
-With `max_workers=None`, the simulator uses `max(1, available_cpus() - 1)`. CPU
-discovery takes the first valid hint from:
+With `max_workers=None`, the simulator uses one fewer than the available CPUs,
+with a minimum of one worker. CPU discovery takes the first valid hint from:
 
 1. `YAQS_MAX_WORKERS`.
 2. A pytest-xdist worker, which reports one CPU to avoid nested pools.

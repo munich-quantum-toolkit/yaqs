@@ -804,7 +804,7 @@ def _select_final_segment_counts(segment_results: Sequence[Result]) -> dict[int,
     return None
 
 
-def stitch_program_results(
+def _stitch_program_results(
     segment_results: Sequence[Result],
     observables: Sequence[Observable],
 ) -> tuple[list[NDArray[Any]], NDArray[np.float64] | None, dict[int, int] | None]:

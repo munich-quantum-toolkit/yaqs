@@ -23,6 +23,8 @@ Per-step Arnoldi is only used when the Hilbert-space dimension is too large to
 store ``U_step``. For larger lattices use ``representation='mps'`` instead.
 """
 
+# Observable evaluation uses the private worker ordering.
+
 from __future__ import annotations
 
 import math
@@ -151,7 +153,7 @@ def preprocess_mcwf(
             step_propagator = linalg.expm(-1j * sim_params.dt * h_dense)
 
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
-    for obs in sim_params.sorted_observables:
+    for obs in sim_params._sorted_observables:  # ruff: ignore[private-member-access]
         if obs.type == "diagnostic":
             embedded_observables.append(None)
         else:
@@ -244,7 +246,7 @@ def mcwf(
         else:
             rng = np.random.default_rng()
 
-    num_obs = len(sim_params.sorted_observables)
+    num_obs = len(sim_params._sorted_observables)  # ruff: ignore[private-member-access]
     num_steps = len(sim_params.times)
     num_cols = num_steps if sim_params.sample_timesteps else 1
     results = np.zeros((num_obs, num_cols), dtype=np.float64)

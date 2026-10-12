@@ -2915,7 +2915,7 @@ def test_noiseless_run_stays_normalized_in_every_gate_mode(gate_mode: GateMode, 
 def test_layer_sampling_reads_the_state_in_b_form() -> None:
     """Mid-circuit samples see B form, so gauge-reading observables are unaffected.
 
-    ``record_diagnostics`` and the entropy observables read the tensors directly rather
+    ``_record_diagnostics`` and the entropy observables read the tensors directly rather
     than through a center-shifting copy, so the gauge they are sampled in is part of the
     result.
     """
@@ -2928,7 +2928,7 @@ def test_layer_sampling_reads_the_state_in_b_form() -> None:
         qc.barrier(label="SAMPLE_OBSERVABLES")
 
     centers: list[int | None] = []
-    original = MPS.record_diagnostics
+    original = MPS._record_diagnostics  # ruff: ignore[private-member-access] - Inspect the gauge at diagnostic samples.
 
     def recording(self: MPS, diagnostics: NDArray[np.float64], column_index: int) -> None:
         """Record the center before writing a diagnostics column.
@@ -2945,7 +2945,7 @@ def test_layer_sampling_reads_the_state_in_b_form() -> None:
     initial_mps.shift_center_to(4)
     assert initial_mps.orthogonality_center == 4
     sim_params = DigitalSimParams(observables=[Observable("z", 0)], gate_mode="mpo", preset="exact", sample_layers=True)
-    with patch.object(MPS, "record_diagnostics", recording):
+    with patch.object(MPS, "_record_diagnostics", recording):
         Simulator(parallel=False, show_progress=False).run(State.from_mps(initial_mps), qc, sim_params, None)
 
     assert len(centers) >= 3  # initial sample, one per barrier, and the final column

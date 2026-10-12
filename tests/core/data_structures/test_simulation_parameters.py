@@ -10,7 +10,7 @@
 This module contains unit tests for simulation parameter classes. It verifies that:
   - AnalogSimParams instances are created with the correct attributes (such as elapsed_time, dt, times,
     sample_timesteps, and num_traj) both with explicit and default values.
-  - allocate_observable_buffers properly sets up expectation_values and trajectories arrays
+  - _allocate_observable_buffers properly sets up expectation_values and trajectories arrays
     depending on whether sample_timesteps is True or False.
 """
 
@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.observable import Observable
-from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
+from mqt.yaqs.core.data_structures.result import Result, _aggregate_trajectories, _allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
@@ -571,7 +571,7 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:
-    """allocate_observable_buffers shapes buffers when sample_timesteps is True."""
+    """_allocate_observable_buffers shapes buffers when sample_timesteps is True."""
     sim_params = AnalogSimParams(
         observables=[Observable("x", 1)],
         elapsed_time=1.0,
@@ -579,7 +579,7 @@ def test_allocate_observable_buffers_with_sample_timesteps() -> None:
         num_traj=10,
         sample_timesteps=True,
     )
-    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=10)
+    trajectories, expectation_values, times = _allocate_observable_buffers(sim_params, 1, num_traj=10)
 
     assert times is sim_params.times
     assert expectation_values[0].shape == (3,)
@@ -587,7 +587,7 @@ def test_allocate_observable_buffers_with_sample_timesteps() -> None:
 
 
 def test_allocate_observable_buffers_without_sample_timesteps() -> None:
-    """allocate_observable_buffers uses a single time column when sample_timesteps is False."""
+    """_allocate_observable_buffers uses a single time column when sample_timesteps is False."""
     sim_params = AnalogSimParams(
         observables=[Observable("x", 0)],
         elapsed_time=1.0,
@@ -595,7 +595,7 @@ def test_allocate_observable_buffers_without_sample_timesteps() -> None:
         num_traj=5,
         sample_timesteps=False,
     )
-    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=5)
+    trajectories, expectation_values, times = _allocate_observable_buffers(sim_params, 1, num_traj=5)
 
     assert times is not None
     assert times.shape == (1,)
@@ -620,7 +620,7 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
     sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2)
     run_result = Result(sim_params=sim, observables=[z_obs], trajectories=[traj], expectation_values=[np.empty(1)])
 
-    aggregate_trajectories(run_result)
+    _aggregate_trajectories(run_result)
 
     expected = traj.mean(axis=0)
     np.testing.assert_allclose(run_result.expectation_values[0], expected)
@@ -642,18 +642,18 @@ def test_digital_params_sorting_and_fields() -> None:
         num_mid_measurements=2,
     )
 
-    assert params.sorted_observables[0] is obs_y1
-    assert params.sorted_observables[1] is obs_ssp
-    assert params.sorted_observables[2] is obs_x2
-    assert params.sorted_observables[3] is obs_z3
+    assert params._sorted_observables[0] is obs_y1
+    assert params._sorted_observables[1] is obs_ssp
+    assert params._sorted_observables[2] is obs_x2
+    assert params._sorted_observables[3] is obs_z3
 
     # Mapping from user order -> sorted worker row indices
-    assert params.observable_sorted_indices == (3, 2, 0, 1)
+    assert params._observable_sorted_indices == (3, 2, 0, 1)
 
     # Ordering is derived from the current observables list, not cached at construction.
     params.observables.append(Observable("z", sites=0))
-    assert len(params.sorted_observables) == 5
-    assert params.observable_sorted_indices == (4, 3, 1, 2, 0)
+    assert len(params._sorted_observables) == 5
+    assert params._observable_sorted_indices == (4, 3, 1, 2, 0)
 
     # Parameter fields are retained
     assert params.num_traj == 7
@@ -731,7 +731,7 @@ def test_digital_aggregate_regular_mean() -> None:
     )
     params = DigitalSimParams(observables=[x], num_traj=3)
     run_result = Result(sim_params=params, observables=[x], trajectories=[traj], expectation_values=[np.empty(3)])
-    aggregate_trajectories(run_result)
+    _aggregate_trajectories(run_result)
 
     np.testing.assert_allclose(run_result.expectation_values[0], traj.mean(axis=0))
 

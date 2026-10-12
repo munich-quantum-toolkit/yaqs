@@ -37,7 +37,7 @@ def _expect_mps(mps: MPS, obs: Observable) -> float:
 
 
 def _expect_mps_like_evaluate_observables(mps: MPS, observables: list[Observable]) -> list[float]:
-    """Compute expectations using the same center-shifting scheme as ``evaluate_observables``.
+    """Compute expectations using the same center-shifting scheme as ``_evaluate_observables``.
 
     Args:
         mps: State in MPS form.

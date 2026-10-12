@@ -203,7 +203,7 @@ def test_simulator_one_worker_runs_inline(
         parallel_runner = Simulator(parallel=True, show_progress=False)
         serial_threads = 1
     else:
-        monkeypatch.setattr(simulator, "available_cpus", lambda: 4)
+        monkeypatch.setattr(simulator, "_available_cpus", lambda: 4)
         parallel_runner = Simulator(parallel=True, max_workers=1, show_progress=False)
         serial_threads = 4
     assert parallel_runner.max_workers == 1

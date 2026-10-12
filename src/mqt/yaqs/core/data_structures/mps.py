@@ -7,6 +7,8 @@
 
 """Matrix Product State (MPS) for YAQS tensor-network simulations."""
 
+# Observable evaluation uses the private worker ordering.
+
 from __future__ import annotations
 
 import copy
@@ -440,10 +442,10 @@ class MPS:
     ) -> None:
         """Zero-pad selected internal bonds to at least ``min_dim``.
 
-        Library-internal padding helper for fixed-χ TDVP bond alignment. Bond ``b``
-        connects sites ``b`` and ``b+1``. Only the listed bonds are modified; tensors
-        are zero-padded on the shared index when needed. Shrinking a bond requires
-        SVD truncation via :func:`mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim`.
+        Bond ``b`` connects sites ``b`` and ``b+1``. Only the listed bonds are
+        modified. Zero-padding preserves the represented state and clears the
+        tracked orthogonality center when a bond changes. Use :meth:`compress`
+        for SVD truncation when bonds must shrink.
 
         Args:
             bond_indices: Internal bond indices ``0 <= b < length - 1``.
@@ -479,7 +481,7 @@ class MPS:
                 msg = (
                     f"Bond {bond} cannot be truncated from (chi_out={chi_out}, chi_in={chi_in}) "
                     f"to target_dim={target_dim}; use "
-                    f"mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim for SVD truncation."
+                    "MPS.compress for SVD truncation."
                 )
                 raise ValueError(msg)
 
@@ -1459,77 +1461,6 @@ class MPS:
 
         return validate_real(exp, name="observable expectation value")
 
-    def evaluate_observables(
-        self,
-        sim_params: AnalogSimParams | DigitalSimParams,
-        results: NDArray[np.float64],
-        column_index: int = 0,
-    ) -> None:
-        """Evaluate and record expectation values of observables for a given MPS state.
-
-        Args:
-            sim_params: Simulation parameters containing sorted observables.
-            results: 2D array where ``results[observable_index, column_index]`` stores
-                scalar values or a Schmidt-coefficient array. Spectrum requests
-                require an object buffer.
-            column_index: Time or trajectory index for the column to fill.
-
-        Raises:
-            TypeError: If an observable has an invalid site or bitstring type.
-            ValueError: If an observable has invalid sites or does not define required data.
-
-        Notes:
-            Deep-copies ``self`` once and reuses that working state for all observables.
-            When :attr:`orthogonality_center` covers the observable site(s), uses fast
-            local contraction; otherwise shifts the center on the copy or falls back to
-            full contraction when the gauge is unknown (``None``).
-        """
-        temp_state = copy.deepcopy(self)
-        for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.type == "diagnostic":
-                min_site, max_site = self._validate_bond_sites(
-                    observable.sites,
-                    name=f"{observable.name} diagnostic",
-                )
-                diagnostic_sites = [min_site, max_site]
-                if not temp_state.check_covers_sites(diagnostic_sites):
-                    if temp_state.orthogonality_center is None:
-                        temp_state.set_canonical_form(min_site)
-                    else:
-                        center = temp_state.orthogonality_center
-                        target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
-                        temp_state.shift_center_to(target)
-                if observable.name == "entropy":
-                    results[obs_index, column_index] = temp_state.get_entropy(diagnostic_sites)
-                elif observable.name == "schmidt_spectrum":
-                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(diagnostic_sites)
-
-            elif observable.type == "bitstring":
-                bitstring = observable.bitstring
-                if not isinstance(bitstring, str):
-                    msg = "Bitstring observables must define a string bitstring."
-                    raise TypeError(msg)
-                results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
-
-            else:
-                if observable.sites is None:
-                    msg = "Operator observables must have explicit sites."
-                    raise ValueError(msg)
-                sites_list = self._validate_observable_sites(observable.sites)
-                if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
-                    if len(sites_list) == 1:
-                        target = sites_list[0]
-                    else:
-                        i, j = sites_list
-                        center = temp_state.orthogonality_center
-                        target = i if abs(center - i) <= abs(center - j) else j
-                    temp_state.shift_center_to(target)
-                if temp_state.orthogonality_center is None:
-                    exp = temp_state.mixed_expectation(temp_state, observable)
-                else:
-                    exp = temp_state.local_expect(observable, sites_list)
-                results[obs_index, column_index] = validate_real(exp, name="observable expectation value")
-
     def apply_local(self, observable: Observable) -> None:
         r"""Apply a one- or two-site local observable to this MPS in-place.
 
@@ -1663,6 +1594,77 @@ class MPS:
         ket_with_op = copy.deepcopy(self)
         ket_with_op.apply_local(observable)
         return bra.scalar_product(ket_with_op)
+
+    def _evaluate_observables(
+        self,
+        sim_params: AnalogSimParams | DigitalSimParams,
+        results: NDArray[np.float64],
+        column_index: int = 0,
+    ) -> None:
+        """Evaluate and record expectation values of observables for a given MPS state.
+
+        Args:
+            sim_params: Simulation parameters containing sorted observables.
+            results: 2D array where ``results[observable_index, column_index]`` stores
+                scalar values or a Schmidt-coefficient array. Spectrum requests
+                require an object buffer.
+            column_index: Time or trajectory index for the column to fill.
+
+        Raises:
+            TypeError: If an observable has an invalid site or bitstring type.
+            ValueError: If an observable has invalid sites or does not define required data.
+
+        Notes:
+            Deep-copies ``self`` once and reuses that working state for all observables.
+            When :attr:`orthogonality_center` covers the observable site(s), uses fast
+            local contraction; otherwise shifts the center on the copy or falls back to
+            full contraction when the gauge is unknown (``None``).
+        """
+        temp_state = copy.deepcopy(self)
+        for obs_index, observable in enumerate(sim_params._sorted_observables):  # ruff: ignore[private-member-access]
+            if observable.type == "diagnostic":
+                min_site, max_site = self._validate_bond_sites(
+                    observable.sites,
+                    name=f"{observable.name} diagnostic",
+                )
+                diagnostic_sites = [min_site, max_site]
+                if not temp_state.check_covers_sites(diagnostic_sites):
+                    if temp_state.orthogonality_center is None:
+                        temp_state.set_canonical_form(min_site)
+                    else:
+                        center = temp_state.orthogonality_center
+                        target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
+                        temp_state.shift_center_to(target)
+                if observable.name == "entropy":
+                    results[obs_index, column_index] = temp_state.get_entropy(diagnostic_sites)
+                elif observable.name == "schmidt_spectrum":
+                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(diagnostic_sites)
+
+            elif observable.type == "bitstring":
+                bitstring = observable.bitstring
+                if not isinstance(bitstring, str):
+                    msg = "Bitstring observables must define a string bitstring."
+                    raise TypeError(msg)
+                results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
+
+            else:
+                if observable.sites is None:
+                    msg = "Operator observables must have explicit sites."
+                    raise ValueError(msg)
+                sites_list = self._validate_observable_sites(observable.sites)
+                if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
+                    if len(sites_list) == 1:
+                        target = sites_list[0]
+                    else:
+                        i, j = sites_list
+                        center = temp_state.orthogonality_center
+                        target = i if abs(center - i) <= abs(center - j) else j
+                    temp_state.shift_center_to(target)
+                if temp_state.orthogonality_center is None:
+                    exp = temp_state.mixed_expectation(temp_state, observable)
+                else:
+                    exp = temp_state.local_expect(observable, sites_list)
+                results[obs_index, column_index] = validate_real(exp, name="observable expectation value")
 
     # Sampling and projection
 
@@ -1987,17 +1989,6 @@ class MPS:
         cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
         return sum(cost)
 
-    def record_diagnostics(self, diagnostics: NDArray[np.float64], column_index: int) -> None:
-        """Write runtime cost, max bond, and total bond into a diagnostics row buffer.
-
-        Args:
-            diagnostics: Array shaped ``(3, T)``; rows are cost, max bond, total bond.
-            column_index: Column (time or layer index) to fill.
-        """
-        diagnostics[0, column_index] = self.get_cost()
-        diagnostics[1, column_index] = self.get_max_bond()
-        diagnostics[2, column_index] = self.get_total_bond()
-
     def check_if_valid_mps(self) -> None:
         """MPS validity check.
 
@@ -2049,6 +2040,17 @@ class MPS:
         if right_bond != 1:
             msg = f"MPS right boundary bond must have dimension 1, got {right_bond}."
             raise ValueError(msg)
+
+    def _record_diagnostics(self, diagnostics: NDArray[np.float64], column_index: int) -> None:
+        """Write runtime cost, max bond, and total bond into a diagnostics row buffer.
+
+        Args:
+            diagnostics: Array shaped ``(3, T)``; rows are cost, max bond, total bond.
+            column_index: Column (time or layer index) to fill.
+        """
+        diagnostics[0, column_index] = self.get_cost()
+        diagnostics[1, column_index] = self.get_max_bond()
+        diagnostics[2, column_index] = self.get_total_bond()
 
     # Entanglement
 

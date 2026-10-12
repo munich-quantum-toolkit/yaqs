@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from qiskit.circuit import QuantumCircuit
 
+import mqt.yaqs.simulator as simulator_module
 from mqt import yaqs
 from mqt.yaqs import (
     AnalogSimParams,
@@ -61,6 +62,13 @@ def test_public_api_all_matches_documented_surface() -> None:
     assert all(hasattr(yaqs, name) for name in EXPECTED_PUBLIC_API)
     assert not hasattr(yaqs, "SIMULATION_PRESETS")
     assert not hasattr(yaqs, "EvolutionMode")
+
+
+def test_simulator_module_exports_execution_facade() -> None:
+    """The simulator module supports the facade without a CPU-discovery shortcut."""
+    assert simulator_module.__all__ == ["Simulator"]
+    assert simulator_module.Simulator is Simulator
+    assert not hasattr(simulator_module, "available_cpus")
 
 
 def test_characterization_result_not_top_level() -> None:

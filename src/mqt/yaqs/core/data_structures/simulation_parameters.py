@@ -501,13 +501,13 @@ class _ObservableOrderingMixin:
     observables: list[Observable]
 
     @property
-    def sorted_observables(self) -> list[Observable]:
+    def _sorted_observables(self) -> list[Observable]:
         """Observables sorted by site for efficient MPS evaluation."""
         sorted_obs, _indices = _prepare_observable_ordering(self.observables)
         return sorted_obs
 
     @property
-    def observable_sorted_indices(self) -> tuple[int, ...]:
+    def _observable_sorted_indices(self) -> tuple[int, ...]:
         """Maps each user-list index to the corresponding sorted worker-buffer row."""
         _sorted_obs, indices = _prepare_observable_ordering(self.observables)
         return indices
@@ -521,8 +521,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
 
     Attributes:
         times: Sample times from zero through ``elapsed_time``, spaced by ``dt``.
-        sorted_observables: Observables sorted by site for MPS evaluation.
-        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     def __init__(
@@ -608,8 +606,6 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
     Attributes:
         dt: Compatibility time step for analog evolution helpers.
-        sorted_observables: Observables sorted by site for MPS evaluation.
-        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     dt = 1
