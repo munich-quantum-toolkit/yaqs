@@ -2512,15 +2512,27 @@ def _product_state_mps(length: int) -> MPS:
     return MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
 
-def test_get_max_bond() -> None:
-    """get_max_bond reports max over index-0/2 across tensors."""
-    # Shapes chosen so the per-tensor max(phys_dim, right_bond) are 3, 4, 2 → global 4
-    t1 = np.zeros((2, 1, 3), dtype=complex)
-    t2 = np.zeros((2, 3, 4), dtype=complex)
-    t3 = np.zeros((2, 4, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
+@pytest.mark.parametrize("physical_dimensions", [[2, 2, 2], [7, 5, 6]])
+def test_get_max_bond(physical_dimensions: list[int]) -> None:
+    """The largest virtual bond determines the diagnostic, regardless of local dimensions."""
+    t1 = np.zeros((physical_dimensions[0], 1, 3), dtype=complex)
+    t2 = np.zeros((physical_dimensions[1], 3, 4), dtype=complex)
+    t3 = np.zeros((physical_dimensions[2], 4, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=physical_dimensions)
 
     assert mps.get_max_bond() == 4
+
+
+@pytest.mark.parametrize("length", [1, 3])
+@pytest.mark.parametrize("physical_dimension", [2, 5])
+def test_get_max_bond_product_state(length: int, physical_dimension: int) -> None:
+    """Product states report bond dimension one, including in recorded diagnostics."""
+    mps = MPS(length, physical_dimensions=[physical_dimension] * length, state="zeros")
+
+    assert mps.get_max_bond() == 1
+    diagnostics = np.zeros((3, 1))
+    mps.record_diagnostics(diagnostics, 0)
+    assert diagnostics[1, 0] == 1
 
 
 def test_get_total_bond() -> None:

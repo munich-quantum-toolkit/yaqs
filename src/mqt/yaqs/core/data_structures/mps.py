@@ -747,19 +747,14 @@ class MPS:
                 raise ValueError(msg)
 
     def get_max_bond(self) -> int:
-        """Write max bond dim.
-
-        Calculate and return the maximum bond dimension of the tensors in the network.
-        This method iterates over all tensors in the network and determines the maximum
-        bond dimension by comparing the first and third dimensions of each tensor's shape.
-        The global maximum bond dimension is then returned.
+        """Return the largest virtual bond dimension, excluding physical dimensions.
 
         Returns:
-            int: The maximum bond dimension found among all tensors in the network.
+            Maximum left or right bond dimension; one for an unpadded product state.
         """
         global_max = 0
         for tensor in self.tensors:
-            local_max = max(tensor.shape[0], tensor.shape[2])
+            local_max = max(tensor.shape[1], tensor.shape[2])
             global_max = max(global_max, local_max)
 
         return global_max
