@@ -40,6 +40,8 @@ releases may include breaking changes.
 
 ### Changed
 
+- refined the public API and reference documentation ([#634])
+  ([**@aaronleesander**])
 - updated memory characterization backend ([#598])
   ([**@aaronleesander**])
 - raised minimum Qiskit version from 1.1.0 to 2.1.0 ([#597]) ([**@denialhaag**])
@@ -298,6 +300,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
 [#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623
 [#622]: https://github.com/munich-quantum-toolkit/yaqs/pull/622
