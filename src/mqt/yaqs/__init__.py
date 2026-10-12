@@ -25,7 +25,6 @@ from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
 )
 from .core.data_structures.simulation_program import SimulationProgram
 from .core.data_structures.state import State
@@ -40,7 +39,6 @@ __all__ = [
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
-    "EvolutionMode",
     "Hamiltonian",
     "MemoryCharacterizer",
     "NoiseCharacterizer",

@@ -27,7 +27,6 @@ from .observable import Observable
 from .simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     _validate_order,
     _validate_simulation_controls,
 )
@@ -587,8 +586,8 @@ def _compile_analog_segment(
     if sim_params.multi_time_observables:
         msg = f"segments[{index}] multi_time_observables are not supported in program execution."
         raise ValueError(msg)
-    if segment.hamiltonian.is_piecewise and sim_params.evolution_mode != EvolutionMode.TDVP:
-        msg = f"segments[{index}] piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+    if segment.hamiltonian.is_piecewise and sim_params.evolution_mode != "tdvp":
+        msg = f"segments[{index}] piecewise Hamiltonians require evolution_mode='tdvp'."
         raise ValueError(msg)
     execution_params = _apply_program_settings(
         sim_params,

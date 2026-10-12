@@ -42,7 +42,6 @@ from mqt.yaqs import (
     simulator,
 )
 from mqt.yaqs.analog.analog_tjm import analog_tjm_2
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.random_utils import make_sample_rng
 from tests.conftest import (
@@ -120,6 +119,16 @@ def test_run_rejects_mutated_non_observable_before_result_allocation() -> None:
         runner.run(state, Hamiltonian.ising(1, J=0.0, g=0.0), params)
 
     mock_result.assert_not_called()
+
+
+@pytest.mark.parametrize("invalid", ["not-a-mode", None, True, ["tdvp"]])
+def test_run_revalidates_mutated_evolution_mode(invalid: object) -> None:
+    """Runs reject invalid integrator settings assigned after construction."""
+    params = AnalogSimParams(get_state=True)
+    params.evolution_mode = cast("Any", invalid)
+
+    with pytest.raises(ValueError, match="evolution_mode"):
+        Simulator(parallel=False, show_progress=False).run(State(1), Hamiltonian.ising(1, J=0.0, g=0.0), params)
 
 
 def test_run_rebuilds_mutated_analog_time_grid() -> None:
@@ -2524,7 +2533,7 @@ def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
             Hamiltonian.piecewise([(first, 0.2)]),
             params,
         )
-    with pytest.raises(ValueError, match=r"evolution_mode=EvolutionMode\.TDVP"):
+    with pytest.raises(ValueError, match="evolution_mode='tdvp'"):
         sim.run(
             State(1, initial="zeros"),
             Hamiltonian.piecewise([(first, 0.2)]),
@@ -2532,7 +2541,7 @@ def test_piecewise_hamiltonian_rejects_illegal_durations_and_backends() -> None:
                 observables=[Observable("z", 0)],
                 elapsed_time=0.2,
                 dt=0.1,
-                evolution_mode=EvolutionMode.BUG,
+                evolution_mode="bug",
             ),
         )
     with pytest.raises(ValueError, match="list\\[State\\] ensemble"):

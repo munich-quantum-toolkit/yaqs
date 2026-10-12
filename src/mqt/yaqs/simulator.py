@@ -62,7 +62,6 @@ from .core.data_structures.result import (
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     _prepare_observable_ordering,
     _validate_order,
     _validate_simulation_controls,
@@ -372,7 +371,7 @@ def _analog_runs_can_merge(left: _CompiledAnalogInstruction, right: _CompiledAna
     """Return whether two adjacent analog segments share one ``analog_tjm`` schedule."""
     left_params = left.execution_params
     right_params = right.execution_params
-    if left_params.evolution_mode != EvolutionMode.TDVP or right_params.evolution_mode != EvolutionMode.TDVP:
+    if left_params.evolution_mode != "tdvp" or right_params.evolution_mode != "tdvp":
         return False
     if left.sim_params.get_state or right.sim_params.get_state:
         return False
@@ -1493,8 +1492,8 @@ class Simulator:
             if state_rep != "mps":
                 msg = "Piecewise Hamiltonians currently require State.representation='mps'."
                 raise ValueError(msg)
-            if sim_params.evolution_mode != EvolutionMode.TDVP:
-                msg = "Piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+            if sim_params.evolution_mode != "tdvp":
+                msg = "Piecewise Hamiltonians require evolution_mode='tdvp'."
                 raise ValueError(msg)
             if sim_params.multi_time_observables:
                 msg = "Piecewise Hamiltonians do not support multi_time_observables."

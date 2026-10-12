@@ -16,7 +16,6 @@ time, time steps, bond dimension limits, and thresholds. Simulation outputs are 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
 from typing import Literal, TypedDict, cast
 
 import numpy as np
@@ -350,13 +349,6 @@ def _resolve_max_bond_dim(max_bond_dim: int | object | None, preset_value: int |
     return validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
 
 
-class EvolutionMode(Enum):
-    """Enumerates the different modes of tensor evolution in the simulation."""
-
-    TDVP = "tdvp"
-    BUG = "bug"
-
-
 _ALLOWED_TRUNC_MODES = frozenset({
     "discarded_weight",
     "relative",
@@ -387,26 +379,23 @@ def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
     return cast("TruncMode", trunc_mode)
 
 
-def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
-    """Validate and coerce the analog evolution mode.
+def _validate_evolution_mode(evolution_mode: str) -> Literal["tdvp", "bug"]:
+    """Validate the analog evolution mode.
 
     Args:
-        evolution_mode: Evolution mode enum or string value.
+        evolution_mode: ``"tdvp"`` or ``"bug"``.
 
     Returns:
-        The validated :class:`EvolutionMode`.
+        The validated mode string.
 
     Raises:
         ValueError: If ``evolution_mode`` is not a supported value.
     """
-    if isinstance(evolution_mode, EvolutionMode):
+    allowed = ("tdvp", "bug")
+    if isinstance(evolution_mode, str) and evolution_mode in allowed:
         return evolution_mode
-    try:
-        return EvolutionMode(evolution_mode)
-    except ValueError as exc:
-        allowed = tuple(mode.value for mode in EvolutionMode)
-        msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
-        raise ValueError(msg) from exc
+    msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
+    raise ValueError(msg)
 
 
 def _validate_observable_mix(observables: list[Observable]) -> None:
@@ -550,7 +539,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         *,
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
-        evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
+        evolution_mode: Literal["tdvp", "bug"] = "tdvp",
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -575,7 +564,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 Sets ``num_traj``, ``max_bond_dim``, ``svd_threshold``, and ``krylov_tol``;
                 explicit values override it. ``"exact"`` still has timestep and sampling error.
             sample_timesteps: Record every time step rather than only the final values.
-            evolution_mode: ``EvolutionMode.TDVP`` or ``EvolutionMode.BUG`` for MPS evolution.
+            evolution_mode: ``"tdvp"`` (default) or ``"bug"`` for MPS evolution.
             get_state: Retain the final state in :class:`~mqt.yaqs.Result`.
             random_seed: Seed for stochastic jumps and static noise sampling.
             multi_time_observables: One- or two-site pairs ``(A, B)`` for noiseless

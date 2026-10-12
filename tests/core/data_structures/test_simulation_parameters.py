@@ -19,7 +19,7 @@ This module contains unit tests for simulation parameter classes. It verifies th
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pytest
@@ -29,7 +29,6 @@ from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories,
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     _validate_analog_time_grid,
     _validate_tdvp_sweeps,
 )
@@ -504,14 +503,22 @@ def test_simparams_allows_zero_svd_threshold() -> None:
     assert params.svd_threshold == pytest.approx(0.0)
 
 
-def test_evolution_mode_validation() -> None:
-    """AnalogSimParams accepts BUG and rejects unknown evolution modes."""
-    params = AnalogSimParams(evolution_mode=EvolutionMode.BUG)
-    assert params.evolution_mode is EvolutionMode.BUG
-    assert AnalogSimParams(evolution_mode="bug").evolution_mode is EvolutionMode.BUG
+def test_evolution_mode_defaults_to_tdvp() -> None:
+    """Analog evolution uses TDVP unless another integrator is selected."""
+    assert AnalogSimParams().evolution_mode == "tdvp"
 
+
+@pytest.mark.parametrize("evolution_mode", ["tdvp", "bug"])
+def test_evolution_mode_accepts_supported_strings(evolution_mode: Literal["tdvp", "bug"]) -> None:
+    """Analog parameters retain the requested integrator name."""
+    assert AnalogSimParams(evolution_mode=evolution_mode).evolution_mode == evolution_mode
+
+
+@pytest.mark.parametrize("invalid", ["not-a-mode", None, True, ["tdvp"]])
+def test_evolution_mode_rejects_unsupported_values(invalid: object) -> None:
+    """Unknown names and non-string values raise a clear ValueError."""
     with pytest.raises(ValueError, match="evolution_mode"):
-        _ = AnalogSimParams(evolution_mode="not-a-mode")
+        AnalogSimParams(evolution_mode=cast("Any", invalid))
 
 
 @pytest.mark.parametrize(

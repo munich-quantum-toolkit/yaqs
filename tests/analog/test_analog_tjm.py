@@ -33,7 +33,7 @@ specified Hamiltonian and noise model, and that observable measurements are prop
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -44,15 +44,16 @@ from mqt.yaqs import (
     Hamiltonian,
     NoiseModel,
     Observable,
+    SimulationProgram,
     Simulator,
     State,
 )
 from mqt.yaqs.analog import analog_tjm as analog_module
+from mqt.yaqs.analog import evolution as evolution_module
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
 from mqt.yaqs.analog.mcwf import MCWFContext, preprocess_mcwf
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.methods.stochastic_process import calculate_stochastic_factor, stochastic_process
 from mqt.yaqs.core.methods.tdvp.tdvp import tdvp
@@ -379,7 +380,7 @@ def test_tjm_and_mcwf_lowering_mean_excitation_agreement() -> None:
 
 
 def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default order-1 TJM honors EvolutionMode.BUG for each unitary interval."""
+    """Default order-1 TJM honors the BUG mode for each unitary interval."""
     calls = {"bug": 0, "tdvp": 0}
 
     def fake_bug(state: MPS, _hamiltonian: MPO, _sim_params: AnalogSimParams, *, normalize: bool = True) -> None:
@@ -403,7 +404,7 @@ def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
         dt=0.1,
         num_traj=1,
         order=1,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug",
         sample_timesteps=True,
         max_bond_dim=4,
     )
@@ -412,24 +413,43 @@ def test_analog_tjm_1_dispatches_bug(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls["tdvp"] == 0
 
 
-def test_simulator_order1_honors_bug_evolution_mode() -> None:
-    """Ordinary single-State default-order Simulator runs invoke BUG when requested."""
+@pytest.mark.parametrize("evolution_mode", ["tdvp", "bug"])
+@pytest.mark.parametrize("program", [False, True])
+def test_simulator_order1_honors_mutated_evolution_mode(
+    evolution_mode: Literal["tdvp", "bug"], *, program: bool
+) -> None:
+    """Standalone and program runs use the current integrator and reproduce local precession."""
     length = 3
     state = State(length, initial="zeros")
-    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    hamiltonian = Hamiltonian.ising(length, J=0.0, g=0.5)
+    observables = [Observable("z", site) for site in range(length)]
     sim_params = AnalogSimParams(
-        observables=[Observable("z", site) for site in range(length)],
+        observables=None if program else observables,
         elapsed_time=0.1,
-        dt=0.1,
+        dt=0.01,
         num_traj=1,
         order=1,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug" if evolution_mode == "tdvp" else "tdvp",
         max_bond_dim=8,
+        krylov_tol=1e-12,
+        svd_threshold=1e-13,
         sample_timesteps=True,
     )
-    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+    operator = SimulationProgram([(hamiltonian, sim_params)], observables=observables) if program else hamiltonian
+    sim_params.evolution_mode = evolution_mode
+
+    with (
+        patch("mqt.yaqs.analog.evolution.bug", wraps=evolution_module.bug) as bug_spy,
+        patch("mqt.yaqs.analog.evolution.tdvp", wraps=evolution_module.tdvp) as tdvp_spy,
+    ):
+        result = Simulator(parallel=False, show_progress=False).run(state, operator, None if program else sim_params)
+
+    assert bug_spy.called is (evolution_mode == "bug")
+    assert tdvp_spy.called is (evolution_mode == "tdvp")
     assert result.expectation_values is not None
     assert result.expectation_values[0].shape == (len(sim_params.times),)
+    for values in result.expectation_values:
+        np.testing.assert_allclose(values, np.cos(sim_params.times), rtol=0, atol=1e-8)
 
 
 def test_analog_tjm_1_uses_operator_for_each_interval() -> None:

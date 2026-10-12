@@ -21,7 +21,6 @@ from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.analog.evolution import apply_unitary_evolution
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 
 GaugeKind = Literal["center_zero", "center_right", "unknown"]
 
@@ -76,7 +75,7 @@ def _bug_params(*, multi_time: bool = False) -> AnalogSimParams:
         elapsed_time=0.05,
         dt=0.05,
         order=1,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug",
         sample_timesteps=True,
         get_state=True,
         max_bond_dim=8,

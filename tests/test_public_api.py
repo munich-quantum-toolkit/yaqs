@@ -41,7 +41,6 @@ EXPECTED_PUBLIC_API = frozenset({
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
-    "EvolutionMode",
     "Hamiltonian",
     "MemoryCharacterizer",
     "NoiseCharacterizer",
@@ -61,6 +60,7 @@ def test_public_api_all_matches_documented_surface() -> None:
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
     assert all(hasattr(yaqs, name) for name in EXPECTED_PUBLIC_API)
     assert not hasattr(yaqs, "SIMULATION_PRESETS")
+    assert not hasattr(yaqs, "EvolutionMode")
 
 
 def test_characterization_result_not_top_level() -> None:

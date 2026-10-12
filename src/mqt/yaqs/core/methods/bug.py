@@ -8,7 +8,7 @@
 """Implements the Basis-Update and Galerkin Method (BUG) for MPS.
 
 Refer to Ceruti et al. (2023) doi:10.1137/22M1473790 for details of the method
-for TTN. Select BUG with ``EvolutionMode.BUG``. Each physical step uses
+for TTN. Select BUG with ``evolution_mode="bug"``. Each physical step uses
 center-augmented alternating endpoints, one SVD compression after the full
 ``dt`` composition, and renormalization after compression.
 """
