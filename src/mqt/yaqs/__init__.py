@@ -14,7 +14,6 @@ of noise in quantum systems.
 
 from __future__ import annotations
 
-from . import simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
 from .core.data_structures.hamiltonian import Hamiltonian
@@ -24,7 +23,6 @@ from .core.data_structures.noise_model import NoiseModel
 from .core.data_structures.observable import Observable
 from .core.data_structures.result import Result
 from .core.data_structures.simulation_parameters import (
-    SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
@@ -39,7 +37,6 @@ from .simulator import Simulator
 __all__ = [
     "MPO",
     "MPS",
-    "SIMULATION_PRESETS",
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
@@ -54,6 +51,5 @@ __all__ = [
     "Simulator",
     "State",
     "__version__",
-    "simulator",
     "version_info",
 ]
