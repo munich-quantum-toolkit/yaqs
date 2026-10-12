@@ -501,6 +501,122 @@ class EquivalenceChecker:
         self.mp_context = mp_context
         self._validate_settings()
 
+    @overload
+    def check(
+        self,
+        circuit1: QuantumCircuit | str | Path,
+        circuit2: QuantumCircuit | str | Path,
+        *,
+        noise_model: None = None,
+        num_traj: int = 1,
+        random_seed: int | None = None,
+        return_trajectories: Literal[False] = False,
+    ) -> EquivalenceCheckResult: ...
+
+    @overload
+    def check(
+        self,
+        circuit1: QuantumCircuit | str | Path,
+        circuit2: QuantumCircuit | str | Path,
+        *,
+        noise_model: NoiseModel,
+        num_traj: int = 1,
+        random_seed: int | None = None,
+        return_trajectories: bool = False,
+    ) -> EquivalenceEnsembleResult: ...
+
+    def check(
+        self,
+        circuit1: QuantumCircuit | str | Path,
+        circuit2: QuantumCircuit | str | Path,
+        *,
+        noise_model: NoiseModel | None = None,
+        num_traj: int = 1,
+        random_seed: int | None = None,
+        return_trajectories: bool = False,
+    ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
+        """Compare two circuits up to global phase, optionally with sampled noise.
+
+        Checks the relative operator ``U1 U2†``. Noise acts on ``circuit2`` only,
+        after eligible two-qubit gates. Resolved strengths are direct branch
+        probabilities, not Lindblad rates. Processes with the same support are
+        mutually exclusive and their probabilities must sum to at most one.
+        Distinct supports are sampled independently.
+
+        Args:
+            circuit1: Circuit, QASM file path, or OpenQASM 2/3 source accepted by
+                :func:`~mqt.yaqs.digital.utils.qasm_utils.load_circuit`.
+            circuit2: Second circuit, with the same qubit count and accepted input types.
+            noise_model: Optional :class:`~mqt.yaqs.NoiseModel` with processes supported
+                by stochastic circuit sampling. Distribution-valued strengths are
+                resolved once per call.
+            num_traj: Positive number of noisy circuit realizations; must be one without noise.
+            random_seed: Non-negative seed for strength sampling and circuit draws,
+                or ``None`` for unseeded sampling.
+            return_trajectories: Include individual results; requires a noise model.
+
+        Returns:
+            :class:`EquivalenceCheckResult` without noise, or
+            :class:`EquivalenceEnsembleResult` with root-mean-square overlap and
+            Monte Carlo uncertainty. These types describe the fields and threshold decision.
+
+        Raises:
+            ValueError: If qubit counts differ, a circuit has mid-circuit measurements,
+                the MPO backend encounters a gate on more than two qubits, or an
+                ensemble option or noise probability is invalid.
+            TypeError: If an ensemble option or noise model has an invalid type.
+        """
+        self._validate_settings()
+        num_traj = validate_integer(num_traj, name="num_traj", minimum=1)
+        if random_seed is not None:
+            random_seed = validate_integer(random_seed, name="random_seed", minimum=0)
+        return_trajectories = validate_bool(return_trajectories, name="return_trajectories")
+        if noise_model is None:
+            if num_traj != 1:
+                msg = "num_traj must be 1 when noise_model is None."
+                raise ValueError(msg)
+            if return_trajectories:
+                msg = "return_trajectories requires a noise_model."
+                raise ValueError(msg)
+        elif not isinstance(noise_model, NoiseModel):
+            msg = f"noise_model must be NoiseModel or None, got {type(noise_model).__name__}."
+            raise TypeError(msg)
+
+        circuit1 = load_circuit(circuit1)
+        circuit2 = load_circuit(circuit2)
+
+        if circuit1.num_qubits != circuit2.num_qubits:
+            msg = "Circuits must have the same number of qubits."
+            raise ValueError(msg)
+
+        backend = self._resolve_representation(circuit1.num_qubits)
+        if backend == "mpo" and any(
+            instruction.operation.num_qubits > 2 and instruction.operation.name not in {"barrier", "measure"}
+            for circuit in (circuit1, circuit2)
+            for instruction in circuit.data
+        ):
+            msg = (
+                "representation='mpo' does not support gates acting on more than two qubits; "
+                "use representation='matrix'. The matrix fallback for unknown unitaries "
+                "supports at most eight qubits."
+            )
+            raise ValueError(msg)
+
+        if noise_model is None:
+            return _check_loaded_pair(self, circuit1, circuit2, backend)
+
+        noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=random_seed))
+        noise_plan = _build_circuit_noise_plan(circuit2, noise_model)
+        return self._run_noisy_ensemble(
+            circuit1,
+            circuit2,
+            noise_plan,
+            num_traj,
+            random_seed,
+            backend,
+            return_trajectories=return_trajectories,
+        )
+
     def _validate_settings(self) -> None:
         """Validate mutable checker settings before backend selection."""
         threshold = _validate_threshold(self.threshold)
@@ -640,119 +756,3 @@ class EquivalenceChecker:
         if return_trajectories:
             result["trajectories"] = trajectories
         return result
-
-    @overload
-    def check(
-        self,
-        circuit1: QuantumCircuit | str | Path,
-        circuit2: QuantumCircuit | str | Path,
-        *,
-        noise_model: None = None,
-        num_traj: int = 1,
-        random_seed: int | None = None,
-        return_trajectories: Literal[False] = False,
-    ) -> EquivalenceCheckResult: ...
-
-    @overload
-    def check(
-        self,
-        circuit1: QuantumCircuit | str | Path,
-        circuit2: QuantumCircuit | str | Path,
-        *,
-        noise_model: NoiseModel,
-        num_traj: int = 1,
-        random_seed: int | None = None,
-        return_trajectories: bool = False,
-    ) -> EquivalenceEnsembleResult: ...
-
-    def check(
-        self,
-        circuit1: QuantumCircuit | str | Path,
-        circuit2: QuantumCircuit | str | Path,
-        *,
-        noise_model: NoiseModel | None = None,
-        num_traj: int = 1,
-        random_seed: int | None = None,
-        return_trajectories: bool = False,
-    ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
-        """Compare two circuits up to global phase, optionally with sampled noise.
-
-        Checks the relative operator ``U1 U2†``. Noise acts on ``circuit2`` only,
-        after eligible two-qubit gates. Resolved strengths are direct branch
-        probabilities, not Lindblad rates. Processes with the same support are
-        mutually exclusive and their probabilities must sum to at most one.
-        Distinct supports are sampled independently.
-
-        Args:
-            circuit1: Circuit, QASM file path, or OpenQASM 2/3 source accepted by
-                :func:`~mqt.yaqs.digital.utils.qasm_utils.load_circuit`.
-            circuit2: Second circuit, with the same qubit count and accepted input types.
-            noise_model: Optional :class:`~mqt.yaqs.NoiseModel` with processes supported
-                by stochastic circuit sampling. Distribution-valued strengths are
-                resolved once per call.
-            num_traj: Positive number of noisy circuit realizations; must be one without noise.
-            random_seed: Non-negative seed for strength sampling and circuit draws,
-                or ``None`` for unseeded sampling.
-            return_trajectories: Include individual results; requires a noise model.
-
-        Returns:
-            :class:`EquivalenceCheckResult` without noise, or
-            :class:`EquivalenceEnsembleResult` with root-mean-square overlap and
-            Monte Carlo uncertainty. These types describe the fields and threshold decision.
-
-        Raises:
-            ValueError: If qubit counts differ, a circuit has mid-circuit measurements,
-                the MPO backend encounters a gate on more than two qubits, or an
-                ensemble option or noise probability is invalid.
-            TypeError: If an ensemble option or noise model has an invalid type.
-        """
-        self._validate_settings()
-        num_traj = validate_integer(num_traj, name="num_traj", minimum=1)
-        if random_seed is not None:
-            random_seed = validate_integer(random_seed, name="random_seed", minimum=0)
-        return_trajectories = validate_bool(return_trajectories, name="return_trajectories")
-        if noise_model is None:
-            if num_traj != 1:
-                msg = "num_traj must be 1 when noise_model is None."
-                raise ValueError(msg)
-            if return_trajectories:
-                msg = "return_trajectories requires a noise_model."
-                raise ValueError(msg)
-        elif not isinstance(noise_model, NoiseModel):
-            msg = f"noise_model must be NoiseModel or None, got {type(noise_model).__name__}."
-            raise TypeError(msg)
-
-        circuit1 = load_circuit(circuit1)
-        circuit2 = load_circuit(circuit2)
-
-        if circuit1.num_qubits != circuit2.num_qubits:
-            msg = "Circuits must have the same number of qubits."
-            raise ValueError(msg)
-
-        backend = self._resolve_representation(circuit1.num_qubits)
-        if backend == "mpo" and any(
-            instruction.operation.num_qubits > 2 and instruction.operation.name not in {"barrier", "measure"}
-            for circuit in (circuit1, circuit2)
-            for instruction in circuit.data
-        ):
-            msg = (
-                "representation='mpo' does not support gates acting on more than two qubits; "
-                "use representation='matrix'. The matrix fallback for unknown unitaries "
-                "supports at most eight qubits."
-            )
-            raise ValueError(msg)
-
-        if noise_model is None:
-            return _check_loaded_pair(self, circuit1, circuit2, backend)
-
-        noise_model = noise_model.sample(rng=make_disorder_rng(base_seed=random_seed))
-        noise_plan = _build_circuit_noise_plan(circuit2, noise_model)
-        return self._run_noisy_ensemble(
-            circuit1,
-            circuit2,
-            noise_plan,
-            num_traj,
-            random_seed,
-            backend,
-            return_trajectories=return_trajectories,
-        )
