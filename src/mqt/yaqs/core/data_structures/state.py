@@ -98,7 +98,8 @@ class State:
     - **Presets** — ``State(L, initial="zeros")``; default ``representation="mps"`` (TJM).
       For MCWF or Lindblad, set ``representation="vector"`` or ``"density_matrix"``.
     - **Manual data** — exactly one of ``tensors``, ``vector``, or ``density_matrix``; the
-      representation is inferred (do not pass ``representation=``).
+      representation is inferred. An explicit ``representation`` must agree with the data.
+      Dense vectors are normalized to unit norm and density matrices to trace one.
 
     Circuit simulation requires ``representation="mps"`` (checked in ``run``).
 
@@ -132,18 +133,18 @@ class State:
                 Required for preset-only construction.
             initial: Product-state preset passed to :class:`MPS` when no manual data is given.
                 Same options as ``MPS(..., state=...)`` (``"zeros"``, ``"ones"``, ``"x+"``, …).
-            representation: For preset-only states: ``"mps"`` (default, TJM), ``"vector"`` (MCWF),
-                or ``"density_matrix"`` (Lindblad). Ignored when ``tensors``, ``vector``, or
-                ``density_matrix`` is passed (inferred automatically).
+            representation: ``"mps"`` (default, TJM), ``"vector"`` (MCWF), or
+                ``"density_matrix"`` (Lindblad). Manual data determines the representation;
+                an explicit value must agree with it.
             physical_dimensions: Per-site physical dimension(s); default is
                 qubits (2). For dense manual data, the dimensions must multiply
                 to the vector or matrix dimension.
             tensors: MPS tensor cores (rank-3 arrays per site); ``representation`` inferred as ``"mps"``.
-            vector: Finite, nonzero 1-D state vector in site-0-LSB order;
-                ``representation`` inferred as ``"vector"``.
+            vector: Finite, nonzero 1-D state vector in site-0-LSB order. Normalized
+                to unit norm; ``representation`` inferred as ``"vector"``.
             density_matrix: Finite, Hermitian, positive-semidefinite 2-D square
                 array with positive real trace. Its row and column indices use
-                site-0-LSB order; ``representation`` inferred as
+                site-0-LSB order. Normalized to trace one; ``representation`` inferred as
                 ``"density_matrix"``. Hermiticity and positive semidefiniteness
                 use scale-aware ``atol=1e-12`` and ``rtol=1e-10`` checks.
             pad: Bond-dimension padding passed through to :class:`MPS` (preset/tensor paths only).
@@ -155,8 +156,8 @@ class State:
         Raises:
             ValueError: If more than one of ``tensors``, ``vector``, and
                 ``density_matrix`` is set; if ``length`` cannot be inferred or
-                is not positive; or if manual state data is malformed or not a
-                valid quantum state.
+                is not positive; if ``representation`` conflicts with manual data;
+                or if manual state data is malformed or not a valid quantum state.
         """
         if length is not None and length <= 0:
             msg = "length must be a positive integer."

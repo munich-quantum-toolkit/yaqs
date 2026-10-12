@@ -1675,7 +1675,8 @@ def test_measure_shots_basis(
 
 
 def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``measure_shots`` must not spawn extra workers inside a pytest-xdist worker."""
+    """Without a worker override, shot sampling stays serial within xdist."""
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
     psi = MPS(length=2, state="zeros")
     with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
@@ -2055,8 +2056,8 @@ def test_check_canonical_form_none() -> None:
     assert res == []
 
 
-def test_check_canonical_form_left() -> None:
-    """Test that the left canonical form is detected correctly."""
+def test_check_canonical_form_right() -> None:
+    """Right-canonical tensors allow an orthogonality center at site 0."""
     unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
     unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
     tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
@@ -2065,8 +2066,8 @@ def test_check_canonical_form_left() -> None:
     assert 0 in res
 
 
-def test_check_canonical_form_right() -> None:
-    """Test that the right canonical form is detected correctly."""
+def test_check_canonical_form_left() -> None:
+    """Left-canonical tensors allow an orthogonality center at the final site."""
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_mid = unitary_group.rvs(6).astype(np.complex128).reshape((2, 3, 6))
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]

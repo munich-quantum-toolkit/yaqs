@@ -843,18 +843,13 @@ class MPS:
         return theta.reshape(a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]).astype(np.complex128)
 
     def get_entropy(self, sites: list[int]) -> np.float64:
-        """Compute bipartite entanglement entropy.
-
-        Calculates the von Neumann entropy of the reduced density matrix
-        across the bond between two adjacent sites. The entropy is obtained
-        from the Schmidt spectrum of the two-site state.
+        """Compute von Neumann entanglement entropy across a bond in nats.
 
         Args:
-            sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
+            sites: Exactly two adjacent site indices ``[i, i + 1]``.
 
         Returns:
-            np.float64: The entanglement entropy across the specified bond.
-
+            Entropy of the normalized squared Schmidt coefficients, using natural logarithms.
         """
         i, j = self._validate_bond_sites(sites, name="entropy")
 
@@ -1725,11 +1720,13 @@ class MPS:
     def expect(self, observable: Observable) -> float:
         """Measure the expectation value of a given observable.
 
+        Rejects non-finite values and significant imaginary residuals with ``ValueError``.
+
         Args:
             observable: One-site or two-site observable to evaluate.
 
         Returns:
-            The real part of the expectation value.
+            The real expectation value, allowing only roundoff-level imaginary residuals.
 
         Notes:
             Uses fast local contraction when :attr:`orthogonality_center` covers the
@@ -1757,11 +1754,7 @@ class MPS:
         return validate_real(exp, name="observable expectation value")
 
     def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
-        """Perform a single-shot measurement on a Matrix Product State (MPS).
-
-        Simulates sequential projective measurement on every site. The state is first
-        gauged at site 0. Each outcome is then absorbed into a local tensor for the
-        unmeasured suffix without changing orthogonality-center metadata.
+        """Sample all qubits in one basis without changing the source state.
 
         Args:
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
@@ -1775,9 +1768,7 @@ class MPS:
             ValueError: If an invalid basis is provided or any measured site is not a qubit.
 
         Notes:
-            Prefer :meth:`measure` for a single-site sample when the center is already
-            positioned. This method copies the MPS only when the center must move to
-            site 0, then walks all sites through an active suffix tensor.
+            Use :meth:`measure` to collapse a single site in place.
         """
         basis = basis.upper()
         if basis not in {"X", "Y", "Z"}:
@@ -1835,11 +1826,10 @@ class MPS:
         return sum(c << i for i, c in enumerate(bitstring))
 
     def measure_shots(self, shots: int, basis: str = "Z", *, show_progress: bool = True) -> dict[int, int]:
-        """Perform multiple single-shot measurements on an MPS and aggregate the results.
+        """Sample a shot histogram without changing the source state.
 
-        This function executes a specified number of measurement shots on the given MPS. For each shot,
-        a single-shot measurement is performed, and the outcomes are aggregated into a histogram (dictionary)
-        mapping basis states (represented as integers) to the number of times they were observed.
+        Uses a process pool when multiple shots and available CPU limits permit more
+        than one worker. Otherwise, samples serially.
 
         Args:
             shots: The positive number of measurement shots to perform.
@@ -1849,11 +1839,6 @@ class MPS:
         Returns:
             A dictionary from measured basis-state integers to counts. Bit ``i``
             of each key stores the outcome at site ``i``.
-
-        Notes:
-            - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
-            - A progress bar displays measurement progress unless ``show_progress=False``.
-
         """
         return self._measure_shots(shots, basis, show_progress=show_progress, parallel=True)
 
@@ -2079,25 +2064,19 @@ class MPS:
         return np.complex128(total_norm**2)
 
     def norm(self, site: int | None = None) -> np.float64:
-        """Norm calculation.
-
-        Calculate the Euclidean norm ``sqrt(<psi|psi>)`` of the state.
+        """Return the full-state Euclidean norm ``sqrt(<psi|psi>)``.
 
         Args:
-            site: The specific site to calculate the norm from. If ``None``, the
-                norm is calculated for the entire network.
+            site: Optional center site for a local contraction. Shifts the center
+                on a copy if needed. Uses a full contraction when the gauge is unknown
+                or ``site`` is ``None``.
 
         Returns:
-            The norm of the state or the specified site.
+            The norm of the entire state, regardless of ``site``.
 
         Notes:
             For jump probabilities and other quantities proportional to ``<psi|psi>``,
             use ``norm(...) ** 2``.
-
-            For a site-specific norm, uses stable center-tensor scaling when
-            :attr:`orthogonality_center` covers that site; shifts on a copy when the
-            center is known but misaligned; falls back to the global norm when the
-            gauge is unknown (``None``).
         """
         if site is not None and self.orthogonality_center is not None:
             if not self.check_covers_sites(site):
@@ -2164,21 +2143,15 @@ class MPS:
             raise ValueError(msg)
 
     def check_canonical_form(self) -> list[int]:
-        """Checks canonical form of MPS.
+        """Find all valid orthogonality centers from the tensors.
 
-        Checks what canonical form a Matrix Product State (MPS) is in, if any.
-        This method verifies if the MPS is in left-canonical form, right-canonical
-        form, or mixed-canonical form. It returns a list indicating the canonical
-        form status:
-
-        - ``[0]`` if the MPS is in left-canonical form.
-        - ``[self.length - 1]`` if the MPS is in right-canonical form.
-        - ``[index]`` if the MPS is in mixed-canonical form, where ``index`` is the
-          position where the form changes.
-        - ``[-1]`` if the MPS is not in any canonical form.
+        For each returned site, tensors to its left are left-canonical and tensors
+        to its right are right-canonical. Center 0 gives right-canonical form;
+        center ``length - 1`` gives left-canonical form.
 
         Returns:
-            A list indicating the canonical form status of the MPS.
+            Valid center indices in ascending order, or ``[]`` if none exists.
+            Several centers can be valid, for example in a normalized product state.
         """
         a = copy.deepcopy(self.tensors)
         for i, tensor in enumerate(self.tensors):

@@ -1469,9 +1469,8 @@ class Simulator:
     ) -> None:
         """Run analog simulation trajectories for Hamiltonian evolution.
 
-        Selects the appropriate analog simulation backend based on ``sim_params.order``
-        (either one-site or two-site evolution) and runs the simulation trajectories for the given
-        Hamiltonian. The trajectories are executed and the results are aggregated.
+        Selects TJM, MCWF, or Lindblad from the state representation and aggregates
+        trajectory results. ``sim_params.order`` selects first- or second-order TJM.
 
         A ``list[State]`` ``initial_state`` triggers the deterministic unitary ensemble
         path via :meth:`_run_ensemble`.
@@ -1930,7 +1929,8 @@ class Simulator:
         Args:
             initial_states: One MPS per ensemble member; lengths must match ``operator.length``.
             operator: Hamiltonian as an MPO shared by all members.
-            sim_params: Analog parameters; ``num_traj`` is set to ``len(initial_states)``.
+            sim_params: Analog parameters. The ensemble size determines the local
+                trajectory count without changing ``num_traj``.
             noise_model: Must be absent or contain only zero-strength processes.
             result: Output container populated during this run.
 

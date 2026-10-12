@@ -364,7 +364,7 @@ def test_train_then_characterize(ham_and_params: tuple[Hamiltonian, AnalogSimPar
 
 @requires_torch
 def test_predict_surrogate_smoke(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """predict(model, rho0, sequence) returns a valid density matrix."""
+    """Surrogate prediction returns a finite site-0 matrix."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     model = mc.train(
@@ -558,7 +558,7 @@ def test_build_process_tensor_forwards_parallel_override(
 
 @requires_torch
 def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, AnalogSimParams]) -> None:
-    """Train at k=2; predict at k=1 and k=3 returns finite density matrices."""
+    """Final predictions match the last trajectory matrix at different horizons."""
     ham, params = ham_and_params
     mc = MemoryCharacterizer(parallel=False, show_progress=False)
     model = mc.train(
@@ -571,9 +571,20 @@ def test_predict_surrogate_different_k(ham_and_params: tuple[Hamiltonian, Analog
     )
     rho0 = np.eye(2, dtype=np.complex128) / 2.0
     for k_prime in (1, 3):
-        rho_out = mc.predict(model, rho0, "haar", num_interventions=k_prime)
+        rho_out = mc.predict(model, rho0, "haar", num_interventions=k_prime, rng=np.random.default_rng(7))
+        rho_sequence = mc.predict(
+            model,
+            rho0,
+            "haar",
+            num_interventions=k_prime,
+            return_sequence=True,
+            rng=np.random.default_rng(7),
+        )
         assert rho_out.shape == (2, 2)
-        assert np.all(np.isfinite(rho_out))
+        assert rho_sequence.shape == (k_prime, 2, 2)
+        assert np.all(np.isfinite(rho_sequence))
+        np.testing.assert_allclose(rho_sequence, rho_sequence.conj().transpose(0, 2, 1), atol=1e-12)
+        np.testing.assert_allclose(rho_out, rho_sequence[-1], atol=1e-12)
 
 
 @pytest.fixture

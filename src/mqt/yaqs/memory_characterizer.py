@@ -364,8 +364,9 @@ class MemoryCharacterizer:
             basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
             return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
-            check: Whether to validate CPTP properties during dense construction.
-            atol: CPTP check tolerance.
+            check: Whether dense reconstruction reproduces selected tomography responses.
+                This does not check positivity or causal normalization.
+            atol: Tolerance for the mean Frobenius-norm error in the dense self-check.
             compress_every: Positive integer interval for compressing accumulated direct-MPO terms.
             tol: MPO compression tolerance.
             max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
@@ -501,7 +502,8 @@ class MemoryCharacterizer:
             sim_params: Analog simulation parameters.
             num_interventions: Positive integer training sequence length (stored on the model).
             n: Positive integer number of training sequences.
-            seed: Optional RNG seed for data sampling and weight init.
+            seed: NumPy seed for training-data sampling (uses 0 when omitted).
+                Does not seed PyTorch weight initialization or batch shuffling.
             timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
             init_mode: Initial-state sampling mode for training sequences.
             intervention_style: Training intervention style.
@@ -612,8 +614,8 @@ class MemoryCharacterizer:
                 Hamiltonian targets). An explicit ``delay`` adds ``delay + 1`` physical interventions.
             cut: Single integer causal cut in ``[1, num_interventions]``; mutually exclusive with
                 ``cuts``.
-            cuts: ``"all"`` or a list of integer cuts in ``[1, num_interventions]`` for multi-cut
-                Hamiltonian sweeps.
+            cuts: ``"all"`` or a list of integer cuts in ``[1, num_interventions]`` for
+                multi-cut evaluation of any supported target.
             preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
             n_pasts: Optional positive integer number of past probes.
             n_futures: Optional positive integer number of future probes.
@@ -941,12 +943,15 @@ class MemoryCharacterizer:
             rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
             sequence: Intervention kind string, per-slot list, or expanded sequence.
             num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
-            return_sequence: If True, return the full ``num_interventions``-step trajectory
-                instead of the final state only.
+            return_sequence: For surrogates, return all ``num_interventions`` predicted
+                states instead of only the final state. Excludes the initial state.
+                Unsupported for process tensors.
             rng: RNG for stochastic intervention sampling.
 
         Returns:
-            Final (or full) site-0 reduced density matrix.
+            Final site-0 matrix with shape ``(2, 2)``, or a surrogate trajectory with
+            shape ``(num_interventions, 2, 2)``. Surrogate outputs are Hermitian but
+            are not projected onto positive, trace-one density matrices.
 
         Raises:
             TypeError: If the explicit or inferred ``num_interventions`` is not an integer,

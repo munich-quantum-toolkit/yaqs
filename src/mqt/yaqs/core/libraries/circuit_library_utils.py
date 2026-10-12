@@ -7,10 +7,8 @@
 
 """Utility functions for quantum circuit generation.
 
-This module provides helper routines used in the YAQS circuit library:
-- `extract_u_parameters`: decompose a 2x2 SU(2) unitary matrix into U3 gate parameters (θ, φ, λ).
-- `add_random_single_qubit_rotation`: append a random single-qubit U3 rotation to a `QuantumCircuit`,
-sampling the axis uniformly on the Bloch sphere.
+Decompose single-qubit unitaries up to global phase and append random rotations
+with uniformly sampled rotation and axis angles.
 """
 
 # ignore non-lowercase argument names for physics notation
@@ -32,16 +30,14 @@ if TYPE_CHECKING:
 def extract_u_parameters(
     matrix: NDArray[np.complex128],
 ) -> tuple[float, float, float]:
-    """Extract θ, φ, λ from a 2x2 SU(2) unitary `matrix`.
-
-    This removes any global phase and then solves
-    matrix = U3(θ,φ,λ) exactly.
+    """Extract U3 angles for a single-qubit unitary up to global phase.
 
     Args:
-        matrix: 2x2 complex array (must be SU(2), det=1 up to phase).
+        matrix: A ``2 x 2`` unitary matrix. Unitarity is assumed, not checked.
 
     Returns:
-        A tuple (θ, φ, λ) of real gate angles.
+        Real angles ``(theta, phi, lambda)`` whose U3 matrix equals ``matrix``
+        up to global phase.
 
     Raises:
         ValueError: If ``matrix`` is not a 2x2 matrix.
@@ -74,18 +70,16 @@ def add_random_single_qubit_rotation(
     qubit: int,
     rng: Generator | None = None,
 ) -> None:
-    """Append a random single-qubit rotation exp(-i θ n sigma) as a U3 gate.
+    """Append ``exp(-i theta n·sigma)`` as a U3 gate, up to global phase.
 
-    Samples:
-      - θ ∈ [0, 2π)
-      - axis n uniformly on the Bloch sphere
-
-    Decomposes the resulting 2x2 into U3(θ,φ,λ) and does `qc.u(...)`.
+    Samples ``theta`` and the axis azimuth uniformly in ``[0, 2*pi)``, and the
+    axis polar angle uniformly in ``[0, pi)``. The axes are not uniform on the
+    Bloch sphere.
 
     Args:
-        qc: the circuit to modify.
-        qubit: which wire to rotate.
-        rng: if given, used instead of the global `np.random`.
+        qc: Circuit to modify in place.
+        qubit: Wire to rotate.
+        rng: Sampling generator. Uses global ``np.random`` when omitted.
     """
     sampler = rng if rng is not None else np.random
 

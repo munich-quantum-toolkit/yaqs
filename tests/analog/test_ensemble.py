@@ -34,6 +34,7 @@ def test_unitary_ensemble_observable_average() -> None:
         observables=[observable],
         elapsed_time=0.2,
         dt=0.1,
+        num_traj=7,
         sample_timesteps=True,
     )
 
@@ -45,6 +46,7 @@ def test_unitary_ensemble_observable_average() -> None:
     assert result.expectation_values[0] is not None
     assert result.trajectories[0].shape == (len(initial_states), len(sim_params.times))
     np.testing.assert_allclose(result.expectation_values[0], np.mean(result.trajectories[0], axis=0))
+    assert sim_params.num_traj == 7
 
 
 def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:

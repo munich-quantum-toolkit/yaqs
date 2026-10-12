@@ -102,7 +102,9 @@ def extend_gate(
             ``min(sites)`` to ``max(sites)``. When omitted, every site uses dimension 2.
 
     Returns:
-        MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
+        MPO site tensors in ascending site order from ``min(sites)`` to ``max(sites)``,
+        including identity tensors between gate sites. Each tensor has axis order
+        ``(out, in, bond_left, bond_right)``.
 
     Raises:
         ValueError: If ``physical_dimensions`` does not match the site span length.
@@ -1635,8 +1637,7 @@ class GateLibrary:
 
     This library exposes gate **classes** (not instances). Each attribute points to
     a concrete `BaseGate` subclass implementing the corresponding operator. Use
-    them like `GateLibrary.rx(theta)` or `GateLibrary.cz()` (depending on your
-    constructors), or via any factory utilities you provide.
+    them like ``GateLibrary.rx([theta])`` or ``GateLibrary.cz()``.
 
     Attributes:
         x: Class for the Pauli-X gate.
