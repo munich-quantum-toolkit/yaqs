@@ -38,7 +38,6 @@ if TYPE_CHECKING:
 EXPECTED_PUBLIC_API = frozenset({
     "MPO",
     "MPS",
-    "SIMULATION_PRESETS",
     "AnalogSimParams",
     "DigitalSimParams",
     "EquivalenceChecker",
@@ -53,7 +52,6 @@ EXPECTED_PUBLIC_API = frozenset({
     "SimulationProgram",
     "State",
     "__version__",
-    "simulator",
     "version_info",
 })
 
@@ -62,6 +60,7 @@ def test_public_api_all_matches_documented_surface() -> None:
     """``__all__`` matches the documented top-level export list."""
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
     assert all(hasattr(yaqs, name) for name in EXPECTED_PUBLIC_API)
+    assert not hasattr(yaqs, "SIMULATION_PRESETS")
 
 
 def test_characterization_result_not_top_level() -> None:
