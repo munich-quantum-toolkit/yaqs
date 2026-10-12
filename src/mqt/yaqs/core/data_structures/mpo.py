@@ -772,7 +772,7 @@ class MPO:
 
         Notes:
             - The Hamiltonian for each site is modeled as a Duffing oscillator:
-                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
+                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) - J * (adag_i a_{i+1} + h.c.)
             - The MPO bond dimension is D=4.
         """
         if length <= 0:

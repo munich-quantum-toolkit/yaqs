@@ -147,7 +147,7 @@ class State:
                 site-0-LSB order. Normalized to trace one; ``representation`` inferred as
                 ``"density_matrix"``. Hermiticity and positive semidefiniteness
                 use scale-aware ``atol=1e-12`` and ``rtol=1e-10`` checks.
-            pad: Bond-dimension padding passed through to :class:`MPS` (preset/tensor paths only).
+            pad: Bond-dimension padding passed through to :class:`MPS` for presets only.
             basis_string: Computational-basis string when ``initial="basis"``.
                 Character ``i`` selects site ``i``; this site-order string is not
                 a most-significant-bit-first display string.
