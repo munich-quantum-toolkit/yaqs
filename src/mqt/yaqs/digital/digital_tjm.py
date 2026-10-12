@@ -142,71 +142,6 @@ def _validate_gate_layout(
         raise ValueError(_INVALID_SWAP_ROUTE_MESSAGE)
 
 
-def _compile_circuit(
-    circuit: QuantumCircuit,
-    physical_dimensions: tuple[int, ...] | None = None,
-    *,
-    gate_mode: GateMode | None = None,
-) -> _CompiledCircuit:
-    """Translate and validate a circuit once for repeated trajectory execution.
-
-    Args:
-        circuit: Qiskit circuit to translate.
-        physical_dimensions: Optional MPS layout. When supplied, every operated-on
-            site must be a qubit, while idle non-qubit wires remain spectators.
-        gate_mode: Two-qubit execution mode. ``"swaps"`` cannot route through a
-            non-qubit spectator and is rejected during compilation.
-
-    Returns:
-        Executor-owned layer metadata containing translated YAQS gates.
-
-    """
-    dag = circuit_to_dag(circuit)
-    layers: list[_CompiledCircuitLayer] = []
-    num_mid_measurements = 0
-    while dag.op_nodes():
-        single_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
-
-        def translate(nodes: list[DAGOpNode]) -> tuple[BaseGate, ...]:
-            gates = tuple(_freeze_gate_arrays(convert_dag_to_tensor_algorithm(node)[0]) for node in nodes)
-            if physical_dimensions is not None:
-                for gate in gates:
-                    _validate_gate_layout(gate, physical_dimensions, gate_mode)
-            return gates
-
-        single_gates = translate(single_nodes)
-        even_gates = translate(even_nodes)
-        odd_gates = translate(odd_nodes)
-        for node in (*single_nodes, *even_nodes, *odd_nodes, *measure_barriers):
-            dag.remove_op_node(node)
-        sample_points = len(measure_barriers)
-        num_mid_measurements += sample_points
-        if single_gates or even_gates or odd_gates or sample_points:
-            layers.append(_CompiledCircuitLayer(single_gates, even_gates, odd_gates, sample_points))
-
-    return _CompiledCircuit(tuple(layers), num_mid_measurements)
-
-
-def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> NoiseModel:
-    """Create local noise model.
-
-    Create a local noise model from a global noise model for a given gate. Only
-    processes whose support is a subset of the gate qubits are retained, so idle
-    sites between long-range or multi-qubit gates are not noised.
-
-    Args:
-        noise_model: The global noise model.
-        sites: Qubit indices the gate acts on.
-
-    Returns:
-        The local noise model.
-    """
-    gate_sites = set(sites)
-
-    local_processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
-    return NoiseModel(local_processes)
-
-
 def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
     """Return whether a measure node has no later gates on its qubits.
 
@@ -302,6 +237,71 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     odd_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
 
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
+
+
+def _compile_circuit(
+    circuit: QuantumCircuit,
+    physical_dimensions: tuple[int, ...] | None = None,
+    *,
+    gate_mode: GateMode | None = None,
+) -> _CompiledCircuit:
+    """Translate and validate a circuit once for repeated trajectory execution.
+
+    Args:
+        circuit: Qiskit circuit to translate.
+        physical_dimensions: Optional MPS layout. When supplied, every operated-on
+            site must be a qubit, while idle non-qubit wires remain spectators.
+        gate_mode: Two-qubit execution mode. ``"swaps"`` cannot route through a
+            non-qubit spectator and is rejected during compilation.
+
+    Returns:
+        Executor-owned layer metadata containing translated YAQS gates.
+
+    """
+    dag = circuit_to_dag(circuit)
+    layers: list[_CompiledCircuitLayer] = []
+    num_mid_measurements = 0
+    while dag.op_nodes():
+        single_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
+
+        def translate(nodes: list[DAGOpNode]) -> tuple[BaseGate, ...]:
+            gates = tuple(_freeze_gate_arrays(convert_dag_to_tensor_algorithm(node)[0]) for node in nodes)
+            if physical_dimensions is not None:
+                for gate in gates:
+                    _validate_gate_layout(gate, physical_dimensions, gate_mode)
+            return gates
+
+        single_gates = translate(single_nodes)
+        even_gates = translate(even_nodes)
+        odd_gates = translate(odd_nodes)
+        for node in (*single_nodes, *even_nodes, *odd_nodes, *measure_barriers):
+            dag.remove_op_node(node)
+        sample_points = len(measure_barriers)
+        num_mid_measurements += sample_points
+        if single_gates or even_gates or odd_gates or sample_points:
+            layers.append(_CompiledCircuitLayer(single_gates, even_gates, odd_gates, sample_points))
+
+    return _CompiledCircuit(tuple(layers), num_mid_measurements)
+
+
+def create_local_noise_model(noise_model: NoiseModel, sites: Sequence[int]) -> NoiseModel:
+    """Create local noise model.
+
+    Create a local noise model from a global noise model for a given gate. Only
+    processes whose support is a subset of the gate qubits are retained, so idle
+    sites between long-range or multi-qubit gates are not noised.
+
+    Args:
+        noise_model: The global noise model.
+        sites: Qubit indices the gate acts on.
+
+    Returns:
+        The local noise model.
+    """
+    gate_sites = set(sites)
+
+    local_processes = [process for process in noise_model.processes if set(process["sites"]).issubset(gate_sites)]
+    return NoiseModel(local_processes)
 
 
 def _renormalize(state: MPS) -> None:
@@ -678,6 +678,25 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     return _apply_two_qubit_gate(state, gate, sim_params)
 
 
+def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
+    """Return this trajectory's share of the total ``shots`` budget.
+
+    For combined noisy runs, ``WORKER_CTX["shot_distribution"]`` holds
+    ``(total_shots, num_traj)`` and this may return ``0`` for some ``traj_idx``.
+
+    Returns:
+        Non-negative shot count for the current worker invocation.
+    """
+    if "per_call_shots" in WORKER_CTX:
+        return int(WORKER_CTX["per_call_shots"])
+    if "shot_distribution" in WORKER_CTX:
+        total_shots, n_traj = WORKER_CTX["shot_distribution"]
+        base, rem = divmod(int(total_shots), int(n_traj))
+        return base + (1 if traj_idx < rem else 0)
+    assert sim_params.shots is not None
+    return sim_params.shots
+
+
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, DigitalSimParams, QuantumCircuit],
     *,
@@ -834,22 +853,3 @@ def digital_tjm(
         )
 
     return results if wants_obs else None, diagnostics, counts, final
-
-
-def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
-    """Return this trajectory's share of the total ``shots`` budget.
-
-    For combined noisy runs, ``WORKER_CTX["shot_distribution"]`` holds
-    ``(total_shots, num_traj)`` and this may return ``0`` for some ``traj_idx``.
-
-    Returns:
-        Non-negative shot count for the current worker invocation.
-    """
-    if "per_call_shots" in WORKER_CTX:
-        return int(WORKER_CTX["per_call_shots"])
-    if "shot_distribution" in WORKER_CTX:
-        total_shots, n_traj = WORKER_CTX["shot_distribution"]
-        base, rem = divmod(int(total_shots), int(n_traj))
-        return base + (1 if traj_idx < rem else 0)
-    assert sim_params.shots is not None
-    return sim_params.shots
