@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.observable import Observable
