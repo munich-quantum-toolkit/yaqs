@@ -502,27 +502,27 @@ class MPO:
 
         Without ``jordan_wigner``, builds the standard fermionic MPO on sites with
         local dimension 4. The single-site basis is
-        :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`
-        (NumPy ``kron`` ordering for :math:`|\\!\\uparrow\\rangle \\otimes |\\!\\downarrow\\rangle`).
+        :math:`|0\rangle, |\!\downarrow\rangle, |\!\uparrow\rangle, |\!\uparrow\downarrow\rangle`
+        (NumPy ``kron`` ordering for :math:`|\!\uparrow\rangle \otimes |\!\downarrow\rangle`).
         The Hamiltonian is
-        :math:`H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\mathrm{h.c.})
-        + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}`.
+        :math:`H = -t \sum_{i,\sigma} (c^\dagger_{i,\sigma} c_{i+1,\sigma} + \mathrm{h.c.})
+        + U \sum_i n_{i,\uparrow} n_{i,\downarrow}`.
 
         With ``jordan_wigner=True``, builds the Jordan-Wigner Pauli-string MPO on an
         interleaved spin chain 1↑, 1↓, 2↑, 2↓, ... (local dimension 2):
 
         .. math::
 
-            U n_{i,\\uparrow} n_{i,\\downarrow}
-            = \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
-            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
+            U n_{i,\uparrow} n_{i,\downarrow}
+            = \frac{U}{4} \left(I - Z_{i,\uparrow} - Z_{i,\downarrow}
+            + Z_{i,\uparrow} Z_{i,\downarrow}\right)
 
-            H = \\sum_i \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
-            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
-            - \\frac{t}{2} \\sum_i \\left( X_{\\uparrow,i} Z_{\\downarrow,i} X_{\\uparrow,i+1}
-            + Y_{\\uparrow,i} Z_{\\downarrow,i} Y_{\\uparrow,i+1} \\right)
-            - \\frac{t}{2} \\sum_i \\left( X_{\\downarrow,i} Z_{\\uparrow,i+1} X_{\\downarrow,i+1}
-            + Y_{\\downarrow,i} Z_{\\uparrow,i+1} Y_{\\downarrow,i+1} \\right)
+            H = \sum_i \frac{U}{4} \left(I - Z_{i,\uparrow} - Z_{i,\downarrow}
+            + Z_{i,\uparrow} Z_{i,\downarrow}\right)
+            - \frac{t}{2} \sum_i \left( X_{\uparrow,i} Z_{\downarrow,i} X_{\uparrow,i+1}
+            + Y_{\uparrow,i} Z_{\downarrow,i} Y_{\uparrow,i+1} \right)
+            - \frac{t}{2} \sum_i \left( X_{\downarrow,i} Z_{\uparrow,i+1} X_{\downarrow,i+1}
+            + Y_{\downarrow,i} Z_{\uparrow,i+1} Y_{\downarrow,i+1} \right)
 
         Without ``jordan_wigner``, the MPO uses fermionic ladder operators on composite
         dimension-4 sites (hard-core constraint per site). Inter-site algebra matches
