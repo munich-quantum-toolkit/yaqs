@@ -4,16 +4,21 @@ The Markdown files in `docs/examples/` remain the guide sources. This directory
 stores their executed notebooks so Read the Docs can publish code, figures, and
 results without running simulations or installing PyTorch.
 
-After changing example code, package code, or dependencies, regenerate the
-outputs:
+GitHub Actions executes all examples and uploads the notebooks and rendered
+pages as the `documentation-examples` artifact. The documentation check waits
+for execution and downloads that run's artifact before rendering. Pull requests
+do not need local notebook execution or regenerated notebook commits to pass
+these GitHub Actions checks. The jobs do not commit changes.
+
+Local execution remains available when you want to inspect new results:
 
 ```console
 uvx nox --non-interactive -s docs-execute
 ```
 
-Review the rendered pages in `docs/_build/executed/` and commit the notebooks
-and `manifest.json` with the source changes. Edit the Markdown sources rather
-than the saved notebooks. Changes to prose do not require another execution.
+Review the rendered pages in `docs/_build/executed/` or download the CI
+artifact. Edit the Markdown sources rather than the saved notebooks. Changes to
+prose do not require another execution.
 
 The usual documentation command renders the saved outputs:
 
@@ -21,13 +26,13 @@ The usual documentation command renders the saved outputs:
 uvx nox --non-interactive -s docs
 ```
 
-Publishing fails if outputs are missing, changed, or stale. The manifest records
+Rendering fails if outputs are missing, changed, or stale. The manifest records
 the executable cells, notebook settings, package source, dependency inputs, and
 execution environment. Generated version strings do not invalidate outputs.
 Examples that read additional data files must also include those files in the
 input check in `docs/_ext/yaqs_examples.py`.
 
-GitHub Actions executes all examples in a separate job and uploads the notebooks
-and rendered pages as the `documentation-examples` artifact. The job does not
-commit changes. Download and review the artifact if you regenerate outputs in
-CI. The documentation check validates the committed copies independently.
+Read the Docs and ordinary local builds still use the committed snapshots. They
+do not download GitHub Actions artifacts. Updating those snapshots for
+publication remains a separate step; the CI artifact can supply the new
+notebooks and manifest without local execution.

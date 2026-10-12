@@ -46,6 +46,42 @@ def _write_configuration(source: Path, extensions: list[str], extra: str = "") -
     )
 
 
+def test_documentation_ci_uses_executed_outputs() -> None:
+    """The documentation check consumes outputs from this run's example execution."""
+    yaml = pytest.importorskip("yaml")
+    workflow = Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
+    jobs = yaml.safe_load(workflow.read_text())["jobs"]
+    check = jobs["docs-check"]
+    dependencies = check["needs"]
+    if isinstance(dependencies, str):
+        dependencies = [dependencies]
+    assert "docs-execute" in dependencies
+
+    upload = next(
+        step
+        for step in jobs["docs-execute"]["steps"]
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+        and "docs/_outputs" in step["with"]["path"].splitlines()
+    )
+    steps = check["steps"]
+    download_index, download = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/download-artifact@")
+        and step["with"]["name"] == upload["with"]["name"]
+    )
+    check_index = next(index for index, step in enumerate(steps) if "-s docs-check" in step.get("run", ""))
+    assert download_index < check_index
+    assert not download.get("continue-on-error", False)
+    assert download["with"].get("run-id", "${{ github.run_id }}") == "${{ github.run_id }}"
+    assert download["with"].get("repository", "${{ github.repository }}") == "${{ github.repository }}"
+    paths = upload["with"]["path"].splitlines()
+    output = Path("docs/_outputs")
+    assert output.as_posix() in paths
+    artifact_root = Path(os.path.commonpath(paths))
+    assert Path(download["with"]["path"]) / output.relative_to(artifact_root) == output
+
+
 @pytest.mark.parametrize("missing_source", [False, True])
 def test_included_release_links(tmp_path: Path, *, missing_source: bool) -> None:
     """Included release notes link to source and guides without changing the originals."""
