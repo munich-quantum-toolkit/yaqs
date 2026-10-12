@@ -27,7 +27,6 @@ import pytest
 from mqt.yaqs.core.data_structures.observable import Observable
 from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
-    SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
     EvolutionMode,
@@ -44,6 +43,14 @@ if TYPE_CHECKING:
         SimulationPreset,
         TDVPMode,
     )
+
+
+EXPECTED_PRESETS: dict[SimulationPreset, dict[str, float | int | None]] = {
+    "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 128, "krylov_tol": 1e-3},
+    "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
+    "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
+    "exact": {"svd_threshold": 1e-13, "max_bond_dim": None, "num_traj": 1024, "krylov_tol": 1e-12},
+}
 
 
 def test_analog_simparams_basic() -> None:
@@ -162,7 +169,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.sample_timesteps is True
     # times should be 0..elapsed_time inclusive with spacing dt
     assert np.isclose(params.times[-1], 0.1)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.num_traj == balanced["num_traj"]
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -173,12 +180,7 @@ def test_analog_simparams_defaults() -> None:
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """AnalogSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
@@ -192,12 +194,7 @@ def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, 
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_digital_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """DigitalSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
@@ -212,7 +209,7 @@ def test_digital_simparams_presets(preset: SimulationPreset, expected: dict[str,
 def test_analog_simparams_default_constructor_uses_balanced() -> None:
     """AnalogSimParams() uses the balanced preset by default."""
     params = AnalogSimParams()
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -223,7 +220,7 @@ def test_analog_simparams_default_constructor_uses_balanced() -> None:
 def test_digital_simparams_shots_default_uses_balanced() -> None:
     """DigitalSimParams(shots=...) uses the balanced preset by default."""
     params = DigitalSimParams(shots=100)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -401,12 +398,7 @@ def test_analog_order_rejects_unsupported_values(invalid: int) -> None:
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_digital_simparams_shots_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """DigitalSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
@@ -430,7 +422,7 @@ def test_analog_simparams_preset_explicit_overrides() -> None:
 def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
     """Explicit ``krylov_tol`` overrides the preset without affecting other preset fields."""
     params = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -441,7 +433,7 @@ def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
 def test_analog_simparams_max_bond_dim_none_overrides_preset() -> None:
     """Explicit ``max_bond_dim=None`` removes the bond cap without changing other preset fields."""
     params = AnalogSimParams(preset="balanced", max_bond_dim=None)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.max_bond_dim is None
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
@@ -659,7 +651,7 @@ def test_digital_params_sorting_and_fields() -> None:
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
-    assert params.svd_threshold == pytest.approx(SIMULATION_PRESETS["balanced"]["svd_threshold"])
+    assert params.svd_threshold == pytest.approx(EXPECTED_PRESETS["balanced"]["svd_threshold"])
     assert params.get_state is True
     assert params.sample_layers is True
     assert params.num_mid_measurements == 2
